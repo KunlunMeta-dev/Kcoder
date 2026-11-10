@@ -6,6 +6,7 @@ use kcoder_types::workflow::{
 use serde_json::{Value, json};
 
 pub(crate) fn validate_config(node: &WorkflowNode, complete: bool) -> Result<()> {
+    crate::collaboration::validate_node(node)?;
     ensure!(
         node.config.input_bindings.len() <= 64,
         "workflow_invalid: at most 64 inputBindings"

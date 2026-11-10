@@ -9,7 +9,7 @@ impl Tool for SpecStatusTool {
     }
 
     fn description(&self) -> String {
-        "List active spec changes, show one change's quick dashboard with name, or deeply read its artifacts with change. Validation, verification, and apply preflight require the corresponding attached checking capability."
+        "Read selected project knowledge with knowledge:{paths:[project-relative Markdown paths],max_total_bytes:32768}; returns source kind, exact SHA-256 revision and host/task scope. Read at most 8 relevant files, total at most 65536 bytes. Preview updates with knowledge:{paths:[...],scope:<returned scope>,updates:[{path,expected_revision,replacement}]}; previews never save or confirm knowledge. Use existing Specs change/check/review/archive confirmation for publication; never directly overwrite authoritative specs. Without knowledge, list active spec changes, show one change's quick dashboard with name, or deeply read its artifacts with change. knowledge is mutually exclusive with name/change. Validation, verification, and apply preflight require the corresponding attached checking capability."
             .to_string()
     }
 
@@ -31,6 +31,14 @@ impl Tool for SpecStatusTool {
 
     async fn call(&self, input: Value, ctx: &ToolContext) -> Result<ToolOutput, ToolError> {
         let input: SpecStatusInput = parse_input(&input)?;
+        if let Some(knowledge) = input.knowledge {
+            if input.name.is_some() || input.change.is_some() {
+                return Err(ToolError::InvalidInput(
+                    "knowledge is mutually exclusive with name/change".into(),
+                ));
+            }
+            return project_knowledge::execute(knowledge, ctx);
+        }
         if let Some(change) = input.change {
             return StatusDeepRead
                 .call(

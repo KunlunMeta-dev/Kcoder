@@ -1,0 +1,1971 @@
+{
+  "IntegrationTaskCapabilityScopeControlOperationParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationTaskCapabilityScopeControlTarget": {
+        "additionalProperties": false,
+        "description": "These are lookup data. The native host must still observe the original private Accepted record, held session owner and saved source binding.",
+        "properties": {
+          "initialAttempt": {
+            "$ref": "#/definitions/TurnAttemptIdentity"
+          },
+          "runtimeOperationId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "initialAttempt"
+        ],
+        "type": "object"
+      },
+      "TurnAttemptIdentity": {
+        "description": "One execution attempt of a logical turn. Shared by recovery and model snapshots. The server chooses attempt_id; credentials are never part of this identity.",
+        "properties": {
+          "attemptId": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "turnId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "attemptId",
+          "threadId",
+          "turnId"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "operationId": {
+        "type": "string"
+      },
+      "target": {
+        "$ref": "#/definitions/IntegrationTaskCapabilityScopeControlTarget"
+      }
+    },
+    "required": [
+      "operationId",
+      "target"
+    ],
+    "title": "IntegrationTaskCapabilityScopeControlOperationParams",
+    "type": "object"
+  },
+  "IntegrationTaskCapabilityScopeControlReadParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationTaskCapabilityScopeControlTarget": {
+        "additionalProperties": false,
+        "description": "These are lookup data. The native host must still observe the original private Accepted record, held session owner and saved source binding.",
+        "properties": {
+          "initialAttempt": {
+            "$ref": "#/definitions/TurnAttemptIdentity"
+          },
+          "runtimeOperationId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "initialAttempt"
+        ],
+        "type": "object"
+      },
+      "IntegrationTaskCapabilityScopeReadParams": {
+        "additionalProperties": false,
+        "properties": {
+          "threadId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "threadId"
+        ],
+        "type": "object"
+      },
+      "TurnAttemptIdentity": {
+        "description": "One execution attempt of a logical turn. Shared by recovery and model snapshots. The server chooses attempt_id; credentials are never part of this identity.",
+        "properties": {
+          "attemptId": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "turnId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "attemptId",
+          "threadId",
+          "turnId"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "params": {
+        "$ref": "#/definitions/IntegrationTaskCapabilityScopeReadParams"
+      },
+      "target": {
+        "$ref": "#/definitions/IntegrationTaskCapabilityScopeControlTarget"
+      }
+    },
+    "required": [
+      "params",
+      "target"
+    ],
+    "title": "IntegrationTaskCapabilityScopeControlReadParams",
+    "type": "object"
+  },
+  "IntegrationTaskCapabilityScopeControlSetParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationNullable_for_IntegrationRevisionRef": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "$ref": "#/definitions/IntegrationRevisionRef"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationRevisionRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "revision"
+        ],
+        "type": "object"
+      },
+      "IntegrationTaskCapabilityScopeControlTarget": {
+        "additionalProperties": false,
+        "description": "These are lookup data. The native host must still observe the original private Accepted record, held session owner and saved source binding.",
+        "properties": {
+          "initialAttempt": {
+            "$ref": "#/definitions/TurnAttemptIdentity"
+          },
+          "runtimeOperationId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "initialAttempt"
+        ],
+        "type": "object"
+      },
+      "IntegrationTaskCapabilityScopeMode": {
+        "enum": [
+          "inherit_current",
+          "selected",
+          "none"
+        ],
+        "type": "string"
+      },
+      "IntegrationTaskCapabilityScopeSelection": {
+        "additionalProperties": false,
+        "properties": {
+          "mode": {
+            "$ref": "#/definitions/IntegrationTaskCapabilityScopeMode"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/definitions/IntegrationTaskCapabilitySourceChoice"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "mode",
+          "sources"
+        ],
+        "type": "object"
+      },
+      "IntegrationTaskCapabilityScopeSetParams": {
+        "additionalProperties": false,
+        "properties": {
+          "resourceBindings": {
+            "description": "Independent resource locators. None preserves the prior resource policy; Some(empty) explicitly permits no external resource access.",
+            "items": {
+              "$ref": "#/definitions/IntegrationTaskResourceBinding"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "selection": {
+            "$ref": "#/definitions/IntegrationTaskCapabilityScopeSelection"
+          },
+          "threadId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "selection",
+          "threadId"
+        ],
+        "type": "object"
+      },
+      "IntegrationTaskCapabilitySourceChoice": {
+        "additionalProperties": false,
+        "properties": {
+          "accountRef": {
+            "allOf": [
+              {
+                "$ref": "#/definitions/IntegrationNullable_for_IntegrationRevisionRef"
+              }
+            ],
+            "description": "Null means no separately configured third-party account, never an inferred identity."
+          },
+          "sourceRef": {
+            "$ref": "#/definitions/IntegrationRevisionRef"
+          }
+        },
+        "required": [
+          "accountRef",
+          "sourceRef"
+        ],
+        "type": "object"
+      },
+      "IntegrationTaskResourceBinding": {
+        "additionalProperties": false,
+        "description": "Selection metadata only. The native owner resolves current granted resources and their URI/epoch from the existing owned application source.",
+        "properties": {
+          "connectionRef": {
+            "$ref": "#/definitions/IntegrationRevisionRef"
+          },
+          "resourceRefs": {
+            "items": {
+              "$ref": "#/definitions/IntegrationTaskResourceRef"
+            },
+            "type": "array"
+          },
+          "source": {
+            "$ref": "#/definitions/IntegrationTaskCapabilitySourceChoice"
+          }
+        },
+        "required": [
+          "connectionRef",
+          "resourceRefs",
+          "source"
+        ],
+        "type": "object"
+      },
+      "IntegrationTaskResourceRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "revision"
+        ],
+        "type": "object"
+      },
+      "TurnAttemptIdentity": {
+        "description": "One execution attempt of a logical turn. Shared by recovery and model snapshots. The server chooses attempt_id; credentials are never part of this identity.",
+        "properties": {
+          "attemptId": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "turnId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "attemptId",
+          "threadId",
+          "turnId"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "params": {
+        "$ref": "#/definitions/IntegrationTaskCapabilityScopeSetParams"
+      },
+      "target": {
+        "$ref": "#/definitions/IntegrationTaskCapabilityScopeControlTarget"
+      }
+    },
+    "required": [
+      "params",
+      "target"
+    ],
+    "title": "IntegrationTaskCapabilityScopeControlSetParams",
+    "type": "object"
+  },
+  "IntegrationTaskCapabilityScopeControlTarget": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "TurnAttemptIdentity": {
+        "description": "One execution attempt of a logical turn. Shared by recovery and model snapshots. The server chooses attempt_id; credentials are never part of this identity.",
+        "properties": {
+          "attemptId": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "turnId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "attemptId",
+          "threadId",
+          "turnId"
+        ],
+        "type": "object"
+      }
+    },
+    "description": "These are lookup data. The native host must still observe the original private Accepted record, held session owner and saved source binding.",
+    "properties": {
+      "initialAttempt": {
+        "$ref": "#/definitions/TurnAttemptIdentity"
+      },
+      "runtimeOperationId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "initialAttempt"
+    ],
+    "title": "IntegrationTaskCapabilityScopeControlTarget",
+    "type": "object"
+  },
+  "IntegrationTaskCapabilityScopeDirectoryEntry": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationNullable_for_IntegrationRevisionRef": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "$ref": "#/definitions/IntegrationRevisionRef"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationRevisionRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "revision"
+        ],
+        "type": "object"
+      },
+      "IntegrationTaskCapabilityScopeBoundary": {
+        "enum": [
+          "current_snapshot",
+          "next_tool_boundary"
+        ],
+        "type": "string"
+      },
+      "IntegrationTaskCapabilityScopeControlTarget": {
+        "additionalProperties": false,
+        "description": "These are lookup data. The native host must still observe the original private Accepted record, held session owner and saved source binding.",
+        "properties": {
+          "initialAttempt": {
+            "$ref": "#/definitions/TurnAttemptIdentity"
+          },
+          "runtimeOperationId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "initialAttempt"
+        ],
+        "type": "object"
+      },
+      "IntegrationTaskCapabilityScopeDirectoryState": {
+        "enum": [
+          "saved_only",
+          "unknown"
+        ],
+        "type": "string"
+      },
+      "IntegrationTaskCapabilityScopeMode": {
+        "enum": [
+          "inherit_current",
+          "selected",
+          "none"
+        ],
+        "type": "string"
+      },
+      "IntegrationTaskCapabilityScopeSelection": {
+        "additionalProperties": false,
+        "properties": {
+          "mode": {
+            "$ref": "#/definitions/IntegrationTaskCapabilityScopeMode"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/definitions/IntegrationTaskCapabilitySourceChoice"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "mode",
+          "sources"
+        ],
+        "type": "object"
+      },
+      "IntegrationTaskCapabilityScopeSnapshot": {
+        "additionalProperties": false,
+        "properties": {
+          "effectiveFrom": {
+            "$ref": "#/definitions/IntegrationTaskCapabilityScopeBoundary"
+          },
+          "effectiveResourceBindings": {
+            "items": {
+              "$ref": "#/definitions/IntegrationTaskResourceBinding"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "effectiveSources": {
+            "items": {
+              "$ref": "#/definitions/IntegrationTaskCapabilitySourceChoice"
+            },
+            "type": "array"
+          },
+          "resourceBindings": {
+            "items": {
+              "$ref": "#/definitions/IntegrationTaskResourceBinding"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "revision": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "selection": {
+            "$ref": "#/definitions/IntegrationTaskCapabilityScopeSelection"
+          },
+          "threadId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "effectiveFrom",
+          "effectiveSources",
+          "revision",
+          "selection",
+          "threadId"
+        ],
+        "type": "object"
+      },
+      "IntegrationTaskCapabilitySourceChoice": {
+        "additionalProperties": false,
+        "properties": {
+          "accountRef": {
+            "allOf": [
+              {
+                "$ref": "#/definitions/IntegrationNullable_for_IntegrationRevisionRef"
+              }
+            ],
+            "description": "Null means no separately configured third-party account, never an inferred identity."
+          },
+          "sourceRef": {
+            "$ref": "#/definitions/IntegrationRevisionRef"
+          }
+        },
+        "required": [
+          "accountRef",
+          "sourceRef"
+        ],
+        "type": "object"
+      },
+      "IntegrationTaskResourceBinding": {
+        "additionalProperties": false,
+        "description": "Selection metadata only. The native owner resolves current granted resources and their URI/epoch from the existing owned application source.",
+        "properties": {
+          "connectionRef": {
+            "$ref": "#/definitions/IntegrationRevisionRef"
+          },
+          "resourceRefs": {
+            "items": {
+              "$ref": "#/definitions/IntegrationTaskResourceRef"
+            },
+            "type": "array"
+          },
+          "source": {
+            "$ref": "#/definitions/IntegrationTaskCapabilitySourceChoice"
+          }
+        },
+        "required": [
+          "connectionRef",
+          "resourceRefs",
+          "source"
+        ],
+        "type": "object"
+      },
+      "IntegrationTaskResourceRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "revision"
+        ],
+        "type": "object"
+      },
+      "TurnAttemptIdentity": {
+        "description": "One execution attempt of a logical turn. Shared by recovery and model snapshots. The server chooses attempt_id; credentials are never part of this identity.",
+        "properties": {
+          "attemptId": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "turnId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "attemptId",
+          "threadId",
+          "turnId"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "observationState": {
+        "$ref": "#/definitions/IntegrationTaskCapabilityScopeDirectoryState"
+      },
+      "reasonCode": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "referenceId": {
+        "type": "string"
+      },
+      "savedSnapshot": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/IntegrationTaskCapabilityScopeSnapshot"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "target": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/IntegrationTaskCapabilityScopeControlTarget"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      }
+    },
+    "required": [
+      "observationState",
+      "referenceId"
+    ],
+    "title": "IntegrationTaskCapabilityScopeDirectoryEntry",
+    "type": "object"
+  },
+  "IntegrationTaskCapabilityScopeDirectoryReadParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "cursor": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "threadId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "title": "IntegrationTaskCapabilityScopeDirectoryReadParams",
+    "type": "object"
+  },
+  "IntegrationTaskCapabilityScopeDirectorySnapshot": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationNullable_for_IntegrationRevisionRef": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "$ref": "#/definitions/IntegrationRevisionRef"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationRevisionRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "revision"
+        ],
+        "type": "object"
+      },
+      "IntegrationTaskCapabilityScopeBoundary": {
+        "enum": [
+          "current_snapshot",
+          "next_tool_boundary"
+        ],
+        "type": "string"
+      },
+      "IntegrationTaskCapabilityScopeControlTarget": {
+        "additionalProperties": false,
+        "description": "These are lookup data. The native host must still observe the original private Accepted record, held session owner and saved source binding.",
+        "properties": {
+          "initialAttempt": {
+            "$ref": "#/definitions/TurnAttemptIdentity"
+          },
+          "runtimeOperationId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "initialAttempt"
+        ],
+        "type": "object"
+      },
+      "IntegrationTaskCapabilityScopeDirectoryEntry": {
+        "additionalProperties": false,
+        "properties": {
+          "observationState": {
+            "$ref": "#/definitions/IntegrationTaskCapabilityScopeDirectoryState"
+          },
+          "reasonCode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "referenceId": {
+            "type": "string"
+          },
+          "savedSnapshot": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationTaskCapabilityScopeSnapshot"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "target": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationTaskCapabilityScopeControlTarget"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "observationState",
+          "referenceId"
+        ],
+        "type": "object"
+      },
+      "IntegrationTaskCapabilityScopeDirectoryState": {
+        "enum": [
+          "saved_only",
+          "unknown"
+        ],
+        "type": "string"
+      },
+      "IntegrationTaskCapabilityScopeMode": {
+        "enum": [
+          "inherit_current",
+          "selected",
+          "none"
+        ],
+        "type": "string"
+      },
+      "IntegrationTaskCapabilityScopeSelection": {
+        "additionalProperties": false,
+        "properties": {
+          "mode": {
+            "$ref": "#/definitions/IntegrationTaskCapabilityScopeMode"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/definitions/IntegrationTaskCapabilitySourceChoice"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "mode",
+          "sources"
+        ],
+        "type": "object"
+      },
+      "IntegrationTaskCapabilityScopeSnapshot": {
+        "additionalProperties": false,
+        "properties": {
+          "effectiveFrom": {
+            "$ref": "#/definitions/IntegrationTaskCapabilityScopeBoundary"
+          },
+          "effectiveResourceBindings": {
+            "items": {
+              "$ref": "#/definitions/IntegrationTaskResourceBinding"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "effectiveSources": {
+            "items": {
+              "$ref": "#/definitions/IntegrationTaskCapabilitySourceChoice"
+            },
+            "type": "array"
+          },
+          "resourceBindings": {
+            "items": {
+              "$ref": "#/definitions/IntegrationTaskResourceBinding"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "revision": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "selection": {
+            "$ref": "#/definitions/IntegrationTaskCapabilityScopeSelection"
+          },
+          "threadId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "effectiveFrom",
+          "effectiveSources",
+          "revision",
+          "selection",
+          "threadId"
+        ],
+        "type": "object"
+      },
+      "IntegrationTaskCapabilitySourceChoice": {
+        "additionalProperties": false,
+        "properties": {
+          "accountRef": {
+            "allOf": [
+              {
+                "$ref": "#/definitions/IntegrationNullable_for_IntegrationRevisionRef"
+              }
+            ],
+            "description": "Null means no separately configured third-party account, never an inferred identity."
+          },
+          "sourceRef": {
+            "$ref": "#/definitions/IntegrationRevisionRef"
+          }
+        },
+        "required": [
+          "accountRef",
+          "sourceRef"
+        ],
+        "type": "object"
+      },
+      "IntegrationTaskResourceBinding": {
+        "additionalProperties": false,
+        "description": "Selection metadata only. The native owner resolves current granted resources and their URI/epoch from the existing owned application source.",
+        "properties": {
+          "connectionRef": {
+            "$ref": "#/definitions/IntegrationRevisionRef"
+          },
+          "resourceRefs": {
+            "items": {
+              "$ref": "#/definitions/IntegrationTaskResourceRef"
+            },
+            "type": "array"
+          },
+          "source": {
+            "$ref": "#/definitions/IntegrationTaskCapabilitySourceChoice"
+          }
+        },
+        "required": [
+          "connectionRef",
+          "resourceRefs",
+          "source"
+        ],
+        "type": "object"
+      },
+      "IntegrationTaskResourceRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "revision"
+        ],
+        "type": "object"
+      },
+      "TurnAttemptIdentity": {
+        "description": "One execution attempt of a logical turn. Shared by recovery and model snapshots. The server chooses attempt_id; credentials are never part of this identity.",
+        "properties": {
+          "attemptId": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "turnId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "attemptId",
+          "threadId",
+          "turnId"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "entries": {
+        "items": {
+          "$ref": "#/definitions/IntegrationTaskCapabilityScopeDirectoryEntry"
+        },
+        "type": "array"
+      },
+      "nextCursor": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "observationState": {
+        "$ref": "#/definitions/IntegrationTaskCapabilityScopeDirectoryState"
+      },
+      "reasonCode": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "entries",
+      "observationState"
+    ],
+    "title": "IntegrationTaskCapabilityScopeDirectorySnapshot",
+    "type": "object"
+  },
+  "IntegrationTaskCapabilityScopeDirectoryState": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "saved_only",
+      "unknown"
+    ],
+    "title": "IntegrationTaskCapabilityScopeDirectoryState",
+    "type": "string"
+  },
+  "IntegrationTaskCapabilityScopeReadParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "threadId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "threadId"
+    ],
+    "title": "IntegrationTaskCapabilityScopeReadParams",
+    "type": "object"
+  },
+  "IntegrationTaskCapabilityScopeSelection": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationNullable_for_IntegrationRevisionRef": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "$ref": "#/definitions/IntegrationRevisionRef"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationRevisionRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "revision"
+        ],
+        "type": "object"
+      },
+      "IntegrationTaskCapabilityScopeMode": {
+        "enum": [
+          "inherit_current",
+          "selected",
+          "none"
+        ],
+        "type": "string"
+      },
+      "IntegrationTaskCapabilitySourceChoice": {
+        "additionalProperties": false,
+        "properties": {
+          "accountRef": {
+            "allOf": [
+              {
+                "$ref": "#/definitions/IntegrationNullable_for_IntegrationRevisionRef"
+              }
+            ],
+            "description": "Null means no separately configured third-party account, never an inferred identity."
+          },
+          "sourceRef": {
+            "$ref": "#/definitions/IntegrationRevisionRef"
+          }
+        },
+        "required": [
+          "accountRef",
+          "sourceRef"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "mode": {
+        "$ref": "#/definitions/IntegrationTaskCapabilityScopeMode"
+      },
+      "sources": {
+        "items": {
+          "$ref": "#/definitions/IntegrationTaskCapabilitySourceChoice"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "mode",
+      "sources"
+    ],
+    "title": "IntegrationTaskCapabilityScopeSelection",
+    "type": "object"
+  },
+  "IntegrationTaskCapabilityScopeSetParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationNullable_for_IntegrationRevisionRef": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "$ref": "#/definitions/IntegrationRevisionRef"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationRevisionRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "revision"
+        ],
+        "type": "object"
+      },
+      "IntegrationTaskCapabilityScopeMode": {
+        "enum": [
+          "inherit_current",
+          "selected",
+          "none"
+        ],
+        "type": "string"
+      },
+      "IntegrationTaskCapabilityScopeSelection": {
+        "additionalProperties": false,
+        "properties": {
+          "mode": {
+            "$ref": "#/definitions/IntegrationTaskCapabilityScopeMode"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/definitions/IntegrationTaskCapabilitySourceChoice"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "mode",
+          "sources"
+        ],
+        "type": "object"
+      },
+      "IntegrationTaskCapabilitySourceChoice": {
+        "additionalProperties": false,
+        "properties": {
+          "accountRef": {
+            "allOf": [
+              {
+                "$ref": "#/definitions/IntegrationNullable_for_IntegrationRevisionRef"
+              }
+            ],
+            "description": "Null means no separately configured third-party account, never an inferred identity."
+          },
+          "sourceRef": {
+            "$ref": "#/definitions/IntegrationRevisionRef"
+          }
+        },
+        "required": [
+          "accountRef",
+          "sourceRef"
+        ],
+        "type": "object"
+      },
+      "IntegrationTaskResourceBinding": {
+        "additionalProperties": false,
+        "description": "Selection metadata only. The native owner resolves current granted resources and their URI/epoch from the existing owned application source.",
+        "properties": {
+          "connectionRef": {
+            "$ref": "#/definitions/IntegrationRevisionRef"
+          },
+          "resourceRefs": {
+            "items": {
+              "$ref": "#/definitions/IntegrationTaskResourceRef"
+            },
+            "type": "array"
+          },
+          "source": {
+            "$ref": "#/definitions/IntegrationTaskCapabilitySourceChoice"
+          }
+        },
+        "required": [
+          "connectionRef",
+          "resourceRefs",
+          "source"
+        ],
+        "type": "object"
+      },
+      "IntegrationTaskResourceRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "revision"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "resourceBindings": {
+        "description": "Independent resource locators. None preserves the prior resource policy; Some(empty) explicitly permits no external resource access.",
+        "items": {
+          "$ref": "#/definitions/IntegrationTaskResourceBinding"
+        },
+        "type": [
+          "array",
+          "null"
+        ]
+      },
+      "selection": {
+        "$ref": "#/definitions/IntegrationTaskCapabilityScopeSelection"
+      },
+      "threadId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "selection",
+      "threadId"
+    ],
+    "title": "IntegrationTaskCapabilityScopeSetParams",
+    "type": "object"
+  },
+  "IntegrationTaskCapabilityScopeSnapshot": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationNullable_for_IntegrationRevisionRef": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "$ref": "#/definitions/IntegrationRevisionRef"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationRevisionRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "revision"
+        ],
+        "type": "object"
+      },
+      "IntegrationTaskCapabilityScopeBoundary": {
+        "enum": [
+          "current_snapshot",
+          "next_tool_boundary"
+        ],
+        "type": "string"
+      },
+      "IntegrationTaskCapabilityScopeMode": {
+        "enum": [
+          "inherit_current",
+          "selected",
+          "none"
+        ],
+        "type": "string"
+      },
+      "IntegrationTaskCapabilityScopeSelection": {
+        "additionalProperties": false,
+        "properties": {
+          "mode": {
+            "$ref": "#/definitions/IntegrationTaskCapabilityScopeMode"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/definitions/IntegrationTaskCapabilitySourceChoice"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "mode",
+          "sources"
+        ],
+        "type": "object"
+      },
+      "IntegrationTaskCapabilitySourceChoice": {
+        "additionalProperties": false,
+        "properties": {
+          "accountRef": {
+            "allOf": [
+              {
+                "$ref": "#/definitions/IntegrationNullable_for_IntegrationRevisionRef"
+              }
+            ],
+            "description": "Null means no separately configured third-party account, never an inferred identity."
+          },
+          "sourceRef": {
+            "$ref": "#/definitions/IntegrationRevisionRef"
+          }
+        },
+        "required": [
+          "accountRef",
+          "sourceRef"
+        ],
+        "type": "object"
+      },
+      "IntegrationTaskResourceBinding": {
+        "additionalProperties": false,
+        "description": "Selection metadata only. The native owner resolves current granted resources and their URI/epoch from the existing owned application source.",
+        "properties": {
+          "connectionRef": {
+            "$ref": "#/definitions/IntegrationRevisionRef"
+          },
+          "resourceRefs": {
+            "items": {
+              "$ref": "#/definitions/IntegrationTaskResourceRef"
+            },
+            "type": "array"
+          },
+          "source": {
+            "$ref": "#/definitions/IntegrationTaskCapabilitySourceChoice"
+          }
+        },
+        "required": [
+          "connectionRef",
+          "resourceRefs",
+          "source"
+        ],
+        "type": "object"
+      },
+      "IntegrationTaskResourceRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "revision"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "effectiveFrom": {
+        "$ref": "#/definitions/IntegrationTaskCapabilityScopeBoundary"
+      },
+      "effectiveResourceBindings": {
+        "items": {
+          "$ref": "#/definitions/IntegrationTaskResourceBinding"
+        },
+        "type": [
+          "array",
+          "null"
+        ]
+      },
+      "effectiveSources": {
+        "items": {
+          "$ref": "#/definitions/IntegrationTaskCapabilitySourceChoice"
+        },
+        "type": "array"
+      },
+      "resourceBindings": {
+        "items": {
+          "$ref": "#/definitions/IntegrationTaskResourceBinding"
+        },
+        "type": [
+          "array",
+          "null"
+        ]
+      },
+      "revision": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "selection": {
+        "$ref": "#/definitions/IntegrationTaskCapabilityScopeSelection"
+      },
+      "threadId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "effectiveFrom",
+      "effectiveSources",
+      "revision",
+      "selection",
+      "threadId"
+    ],
+    "title": "IntegrationTaskCapabilityScopeSnapshot",
+    "type": "object"
+  },
+  "IntegrationTaskCapabilitySourceCatalogState": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "observed",
+      "unknown"
+    ],
+    "title": "IntegrationTaskCapabilitySourceCatalogState",
+    "type": "string"
+  },
+  "IntegrationTaskCapabilitySourceChoice": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationNullable_for_IntegrationRevisionRef": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "$ref": "#/definitions/IntegrationRevisionRef"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationRevisionRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "revision"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "accountRef": {
+        "allOf": [
+          {
+            "$ref": "#/definitions/IntegrationNullable_for_IntegrationRevisionRef"
+          }
+        ],
+        "description": "Null means no separately configured third-party account, never an inferred identity."
+      },
+      "sourceRef": {
+        "$ref": "#/definitions/IntegrationRevisionRef"
+      }
+    },
+    "required": [
+      "accountRef",
+      "sourceRef"
+    ],
+    "title": "IntegrationTaskCapabilitySourceChoice",
+    "type": "object"
+  },
+  "IntegrationTaskCapabilitySourceChoicesPage": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationNullable_for_IntegrationRevisionRef": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "$ref": "#/definitions/IntegrationRevisionRef"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationNullable_for_String": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationRevisionRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "revision"
+        ],
+        "type": "object"
+      },
+      "IntegrationTaskCapabilityScopeControlTarget": {
+        "additionalProperties": false,
+        "description": "These are lookup data. The native host must still observe the original private Accepted record, held session owner and saved source binding.",
+        "properties": {
+          "initialAttempt": {
+            "$ref": "#/definitions/TurnAttemptIdentity"
+          },
+          "runtimeOperationId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "initialAttempt"
+        ],
+        "type": "object"
+      },
+      "IntegrationTaskCapabilitySourceCapability": {
+        "enum": [
+          "tools",
+          "resources",
+          "app_views"
+        ],
+        "type": "string"
+      },
+      "IntegrationTaskCapabilitySourceCatalogState": {
+        "enum": [
+          "observed",
+          "unknown"
+        ],
+        "type": "string"
+      },
+      "IntegrationTaskCapabilitySourceDescriptor": {
+        "additionalProperties": false,
+        "properties": {
+          "accountDisplayName": {
+            "$ref": "#/definitions/IntegrationNullable_for_String"
+          },
+          "accountRef": {
+            "$ref": "#/definitions/IntegrationNullable_for_IntegrationRevisionRef"
+          },
+          "capabilities": {
+            "items": {
+              "$ref": "#/definitions/IntegrationTaskCapabilitySourceCapability"
+            },
+            "type": "array",
+            "uniqueItems": true
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/definitions/IntegrationTaskCapabilitySourceKind"
+          },
+          "reasonCode": {
+            "$ref": "#/definitions/IntegrationNullable_for_String"
+          },
+          "sourceRef": {
+            "$ref": "#/definitions/IntegrationRevisionRef"
+          },
+          "state": {
+            "$ref": "#/definitions/IntegrationTaskCapabilitySourceState"
+          }
+        },
+        "required": [
+          "accountDisplayName",
+          "accountRef",
+          "capabilities",
+          "displayName",
+          "kind",
+          "reasonCode",
+          "sourceRef",
+          "state"
+        ],
+        "type": "object"
+      },
+      "IntegrationTaskCapabilitySourceKind": {
+        "enum": [
+          "mcp",
+          "plugin_mcp",
+          "application"
+        ],
+        "type": "string"
+      },
+      "IntegrationTaskCapabilitySourceState": {
+        "enum": [
+          "ready",
+          "unavailable",
+          "unauthorized",
+          "unknown"
+        ],
+        "type": "string"
+      },
+      "TurnAttemptIdentity": {
+        "description": "One execution attempt of a logical turn. Shared by recovery and model snapshots. The server chooses attempt_id; credentials are never part of this identity.",
+        "properties": {
+          "attemptId": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "turnId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "attemptId",
+          "threadId",
+          "turnId"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "catalogRevision": {
+        "type": "string"
+      },
+      "catalogState": {
+        "$ref": "#/definitions/IntegrationTaskCapabilitySourceCatalogState"
+      },
+      "items": {
+        "items": {
+          "$ref": "#/definitions/IntegrationTaskCapabilitySourceDescriptor"
+        },
+        "type": "array"
+      },
+      "nextCursor": {
+        "$ref": "#/definitions/IntegrationNullable_for_String"
+      },
+      "target": {
+        "$ref": "#/definitions/IntegrationTaskCapabilityScopeControlTarget"
+      }
+    },
+    "required": [
+      "catalogRevision",
+      "catalogState",
+      "items",
+      "nextCursor",
+      "target"
+    ],
+    "title": "IntegrationTaskCapabilitySourceChoicesPage",
+    "type": "object"
+  },
+  "IntegrationTaskCapabilitySourceChoicesParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationTaskCapabilityScopeControlTarget": {
+        "additionalProperties": false,
+        "description": "These are lookup data. The native host must still observe the original private Accepted record, held session owner and saved source binding.",
+        "properties": {
+          "initialAttempt": {
+            "$ref": "#/definitions/TurnAttemptIdentity"
+          },
+          "runtimeOperationId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "initialAttempt"
+        ],
+        "type": "object"
+      },
+      "TurnAttemptIdentity": {
+        "description": "One execution attempt of a logical turn. Shared by recovery and model snapshots. The server chooses attempt_id; credentials are never part of this identity.",
+        "properties": {
+          "attemptId": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "turnId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "attemptId",
+          "threadId",
+          "turnId"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "catalogRevision": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "cursor": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "target": {
+        "$ref": "#/definitions/IntegrationTaskCapabilityScopeControlTarget"
+      }
+    },
+    "required": [
+      "target"
+    ],
+    "title": "IntegrationTaskCapabilitySourceChoicesParams",
+    "type": "object"
+  },
+  "IntegrationTaskCapabilitySourceDescriptor": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationNullable_for_IntegrationRevisionRef": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "$ref": "#/definitions/IntegrationRevisionRef"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationNullable_for_String": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationRevisionRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "revision"
+        ],
+        "type": "object"
+      },
+      "IntegrationTaskCapabilitySourceCapability": {
+        "enum": [
+          "tools",
+          "resources",
+          "app_views"
+        ],
+        "type": "string"
+      },
+      "IntegrationTaskCapabilitySourceKind": {
+        "enum": [
+          "mcp",
+          "plugin_mcp",
+          "application"
+        ],
+        "type": "string"
+      },
+      "IntegrationTaskCapabilitySourceState": {
+        "enum": [
+          "ready",
+          "unavailable",
+          "unauthorized",
+          "unknown"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "accountDisplayName": {
+        "$ref": "#/definitions/IntegrationNullable_for_String"
+      },
+      "accountRef": {
+        "$ref": "#/definitions/IntegrationNullable_for_IntegrationRevisionRef"
+      },
+      "capabilities": {
+        "items": {
+          "$ref": "#/definitions/IntegrationTaskCapabilitySourceCapability"
+        },
+        "type": "array",
+        "uniqueItems": true
+      },
+      "displayName": {
+        "type": "string"
+      },
+      "kind": {
+        "$ref": "#/definitions/IntegrationTaskCapabilitySourceKind"
+      },
+      "reasonCode": {
+        "$ref": "#/definitions/IntegrationNullable_for_String"
+      },
+      "sourceRef": {
+        "$ref": "#/definitions/IntegrationRevisionRef"
+      },
+      "state": {
+        "$ref": "#/definitions/IntegrationTaskCapabilitySourceState"
+      }
+    },
+    "required": [
+      "accountDisplayName",
+      "accountRef",
+      "capabilities",
+      "displayName",
+      "kind",
+      "reasonCode",
+      "sourceRef",
+      "state"
+    ],
+    "title": "IntegrationTaskCapabilitySourceDescriptor",
+    "type": "object"
+  },
+  "IntegrationTaskResourceBinding": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationNullable_for_IntegrationRevisionRef": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "$ref": "#/definitions/IntegrationRevisionRef"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationRevisionRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "revision"
+        ],
+        "type": "object"
+      },
+      "IntegrationTaskCapabilitySourceChoice": {
+        "additionalProperties": false,
+        "properties": {
+          "accountRef": {
+            "allOf": [
+              {
+                "$ref": "#/definitions/IntegrationNullable_for_IntegrationRevisionRef"
+              }
+            ],
+            "description": "Null means no separately configured third-party account, never an inferred identity."
+          },
+          "sourceRef": {
+            "$ref": "#/definitions/IntegrationRevisionRef"
+          }
+        },
+        "required": [
+          "accountRef",
+          "sourceRef"
+        ],
+        "type": "object"
+      },
+      "IntegrationTaskResourceRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "revision"
+        ],
+        "type": "object"
+      }
+    },
+    "description": "Selection metadata only. The native owner resolves current granted resources and their URI/epoch from the existing owned application source.",
+    "properties": {
+      "connectionRef": {
+        "$ref": "#/definitions/IntegrationRevisionRef"
+      },
+      "resourceRefs": {
+        "items": {
+          "$ref": "#/definitions/IntegrationTaskResourceRef"
+        },
+        "type": "array"
+      },
+      "source": {
+        "$ref": "#/definitions/IntegrationTaskCapabilitySourceChoice"
+      }
+    },
+    "required": [
+      "connectionRef",
+      "resourceRefs",
+      "source"
+    ],
+    "title": "IntegrationTaskResourceBinding",
+    "type": "object"
+  },
+  "IntegrationTaskResourceRef": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "id": {
+        "type": "string"
+      },
+      "kind": {
+        "type": "string"
+      },
+      "revision": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "id",
+      "kind",
+      "revision"
+    ],
+    "title": "IntegrationTaskResourceRef",
+    "type": "object"
+  },
+  "TaskCapabilityScopeDirectoryMethod": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "integrations/tasks/readSavedTaskSourceBindings"
+    ],
+    "title": "TaskCapabilityScopeDirectoryMethod",
+    "type": "string"
+  },
+  "TaskCapabilityScopeMethod": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "integrations/tasks/readTaskSources",
+      "integrations/tasks/setTaskSources",
+      "integrations/tasks/readTaskSourceOperation"
+    ],
+    "title": "TaskCapabilityScopeMethod",
+    "type": "string"
+  },
+  "TaskCapabilitySourceChoicesMethod": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "integrations/tasks/listTaskSourceChoices"
+    ],
+    "title": "TaskCapabilitySourceChoicesMethod",
+    "type": "string"
+  }
+}

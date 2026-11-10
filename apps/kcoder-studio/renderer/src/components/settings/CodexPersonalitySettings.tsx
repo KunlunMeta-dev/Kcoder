@@ -95,7 +95,7 @@ export function CodexPersonalitySettings({ deviceId }: { deviceId?: string }) {
   return (
     <section
       data-testid="interaction-style-settings"
-      className="mt-4 rounded-xl border border-border bg-background px-4 py-4"
+      className="studio-card-spacing mt-4 rounded-xl border border-border bg-background"
     >
       <div className="flex items-center justify-between gap-6">
         <div className="min-w-0 flex-1">

@@ -1,4 +1,4 @@
-import { defaultQuickPhrases } from '@/tauri/appPreferences'
+import { defaultQuickPhrases } from '@/host/appPreferences'
 import { LEGACY_KCODER_STUDIO_STORAGE_KEYS } from '../../legacyRuntimeAbi'
 import { record } from '../runtime/contracts'
 
@@ -9,7 +9,6 @@ export const KCODER_RUNTIME_CONFIG_KEY = 'kcoder-studio:kcoder-runtime-config-v1
 export const defaultPreferences = {
   closeToTrayEnabled: false,
   showMainWindowOnLaunch: true,
-  systemDragEnabled: false,
   preventSleepWhileTasksRunning: true,
   closeToTrayHintSeen: true,
   language: 'zh-CN',
@@ -25,6 +24,13 @@ export const defaultPreferences = {
   browserAskBeforeDownload: false,
   appshotsPlaySound: true,
   quickPhrases: defaultQuickPhrases.map(phrase => ({ ...phrase })),
+  conversationFontScale: 'normal',
+  conversationLineSpacing: 'normal',
+  conversationBlockSpacing: 'normal',
+  conversationLetterSpacing: 'normal',
+  conversationFontFamily: 'noto-sans-sc',
+  thinkingCollapsedByDefault: true,
+  toolsCollapsedByDefault: true,
 }
 
 export function readPreferences(): Record<string, unknown> {

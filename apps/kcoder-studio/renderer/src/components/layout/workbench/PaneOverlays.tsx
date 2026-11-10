@@ -92,6 +92,7 @@ export function PaneOverlays({ model }: { model: ReturnType<typeof usePaneChrome
         {...continueInIm.dialog}
       />
       <TaskFeedbackDialog
+        target={currentRuntimeTask ?? undefined}
         open={feedbackDialogOpen}
         onClose={() => setFeedbackDialogOpen(false)}
         getTaskContext={async () => {

@@ -1,0 +1,394 @@
+{
+  "MigrationBranchBlocksParams": [
+    {
+      "decoded": {
+        "cursor": null,
+        "jobId": "job",
+        "position": 0,
+        "viewId": "view"
+      },
+      "name": "bound_read_only_branch",
+      "value": {
+        "jobId": "job",
+        "position": 0,
+        "viewId": "view"
+      }
+    }
+  ],
+  "MigrationBranchCancelResult": [
+    {
+      "decoded": {
+        "cancelRequested": true,
+        "viewId": "view"
+      },
+      "name": "bound_read_only_branch",
+      "value": {
+        "cancelRequested": true,
+        "viewId": "view"
+      }
+    }
+  ],
+  "MigrationBranchOperationParams": [
+    {
+      "decoded": {
+        "jobId": "job",
+        "viewId": "view"
+      },
+      "name": "bound_read_only_branch",
+      "value": {
+        "jobId": "job",
+        "viewId": "view"
+      }
+    }
+  ],
+  "MigrationBranchPageParams": [
+    {
+      "decoded": {
+        "cursor": null,
+        "jobId": "job",
+        "viewId": "view"
+      },
+      "name": "bound_read_only_branch",
+      "value": {
+        "jobId": "job",
+        "viewId": "view"
+      }
+    }
+  ],
+  "MigrationBranchPageResult": [
+    {
+      "decoded": {
+        "items": [],
+        "nextCursor": null,
+        "progress": {
+          "cancelRequested": false,
+          "checks": 1,
+          "failureCode": null,
+          "issues": [],
+          "sequence": 1,
+          "source": "codex",
+          "sourceRecordsWithDiagnostics": 0,
+          "stage": "ready",
+          "structuralComplete": false,
+          "totalItems": 0,
+          "viewId": "view",
+          "writtenItems": 0
+        },
+        "sourceSessionId": "root-session",
+        "title": null
+      },
+      "name": "bound_read_only_branch",
+      "value": {
+        "items": [],
+        "nextCursor": null,
+        "progress": {
+          "cancelRequested": false,
+          "checks": 1,
+          "failureCode": null,
+          "issues": [],
+          "sequence": 1,
+          "source": "codex",
+          "sourceRecordsWithDiagnostics": 0,
+          "stage": "ready",
+          "structuralComplete": false,
+          "totalItems": 0,
+          "viewId": "view",
+          "writtenItems": 0
+        },
+        "sourceSessionId": "root-session",
+        "title": null
+      }
+    }
+  ],
+  "MigrationBranchPrepareParams": [
+    {
+      "decoded": {
+        "jobId": "job",
+        "relatedJobIds": []
+      },
+      "name": "bound_read_only_branch",
+      "value": {
+        "jobId": "job"
+      }
+    }
+  ],
+  "MigrationBranchReadParams": [
+    {
+      "decoded": {
+        "jobId": "job",
+        "viewId": null
+      },
+      "name": "bound_read_only_branch",
+      "value": {
+        "jobId": "job"
+      }
+    }
+  ],
+  "MigrationBranchResumeParams": [
+    {
+      "decoded": {
+        "expectedSequence": 4,
+        "jobId": "job",
+        "viewId": "view"
+      },
+      "name": "bound_read_only_branch",
+      "value": {
+        "expectedSequence": 4,
+        "jobId": "job",
+        "viewId": "view"
+      }
+    }
+  ],
+  "MigrationBranchStateResult": [
+    {
+      "decoded": {
+        "choice": {
+          "relatedJobIds": [
+            "parent"
+          ],
+          "viewId": "view"
+        },
+        "progress": {
+          "cancelRequested": false,
+          "checks": 1,
+          "failureCode": null,
+          "issues": [],
+          "sequence": 1,
+          "source": "codex",
+          "sourceRecordsWithDiagnostics": 0,
+          "stage": "reconstructing",
+          "structuralComplete": null,
+          "totalItems": null,
+          "viewId": "view",
+          "writtenItems": 0
+        },
+        "workerError": null,
+        "workerRunning": true
+      },
+      "name": "bound_read_only_branch",
+      "value": {
+        "choice": {
+          "relatedJobIds": [
+            "parent"
+          ],
+          "viewId": "view"
+        },
+        "progress": {
+          "cancelRequested": false,
+          "checks": 1,
+          "failureCode": null,
+          "issues": [],
+          "sequence": 1,
+          "source": "codex",
+          "sourceRecordsWithDiagnostics": 0,
+          "stage": "reconstructing",
+          "structuralComplete": null,
+          "totalItems": null,
+          "viewId": "view",
+          "writtenItems": 0
+        },
+        "workerError": null,
+        "workerRunning": true
+      }
+    }
+  ],
+  "MigrationBranchTextParams": [
+    {
+      "decoded": {
+        "blockIndex": 0,
+        "cursor": null,
+        "jobId": "job",
+        "position": 0,
+        "viewId": "view"
+      },
+      "name": "bound_read_only_branch",
+      "value": {
+        "blockIndex": 0,
+        "jobId": "job",
+        "position": 0,
+        "viewId": "view"
+      }
+    }
+  ],
+  "MigrationBranchToolsPageParams": [
+    {
+      "decoded": {
+        "cursor": null,
+        "jobId": "job",
+        "viewId": "view"
+      },
+      "name": "historical_tools_only",
+      "value": {
+        "jobId": "job",
+        "viewId": "view"
+      }
+    }
+  ],
+  "MigrationBranchToolsPageResult": [
+    {
+      "decoded": {
+        "links": [
+          {
+            "call": {
+              "block": 0,
+              "record": 12,
+              "sequence": 0
+            },
+            "callId": "call",
+            "executionEvent": null,
+            "executionOutcome": null,
+            "id": "link",
+            "name": "write",
+            "namespace": null,
+            "outcome": "outcome_unknown",
+            "result": null,
+            "sourceTurnId": null,
+            "status": "missing_result"
+          }
+        ],
+        "nextCursor": null,
+        "progress": {
+          "processedRecords": 1,
+          "recordedLinks": 1,
+          "sealed": true,
+          "unresolvedLinks": 1
+        }
+      },
+      "name": "historical_tools_only",
+      "value": {
+        "links": [
+          {
+            "call": {
+              "block": 0,
+              "record": 12,
+              "sequence": 0
+            },
+            "callId": "call",
+            "executionEvent": null,
+            "id": "link",
+            "name": "write",
+            "namespace": null,
+            "outcome": "outcome_unknown",
+            "result": null,
+            "sourceTurnId": null,
+            "status": "missing_result"
+          }
+        ],
+        "nextCursor": null,
+        "progress": {
+          "processedRecords": 1,
+          "recordedLinks": 1,
+          "sealed": true,
+          "unresolvedLinks": 1
+        }
+      }
+    },
+    {
+      "decoded": {
+        "links": [
+          {
+            "call": {
+              "block": 0,
+              "record": 12,
+              "replacementIndex": 2,
+              "sequence": 0,
+              "sourceBlock": 4,
+              "sourceIndex": 1
+            },
+            "callId": "call",
+            "executionEvent": null,
+            "executionOutcome": null,
+            "id": "link",
+            "name": "write",
+            "namespace": null,
+            "outcome": "outcome_unknown",
+            "result": null,
+            "sourceTurnId": null,
+            "status": "missing_result"
+          }
+        ],
+        "nextCursor": null,
+        "progress": {
+          "processedRecords": 1,
+          "recordedLinks": 1,
+          "sealed": true,
+          "unresolvedLinks": 1
+        }
+      },
+      "name": "parent_replacement_origin",
+      "value": {
+        "links": [
+          {
+            "call": {
+              "block": 0,
+              "record": 12,
+              "replacementIndex": 2,
+              "sequence": 0,
+              "sourceBlock": 4,
+              "sourceIndex": 1
+            },
+            "callId": "call",
+            "executionEvent": null,
+            "id": "link",
+            "name": "write",
+            "namespace": null,
+            "outcome": "outcome_unknown",
+            "result": null,
+            "sourceTurnId": null,
+            "status": "missing_result"
+          }
+        ],
+        "nextCursor": null,
+        "progress": {
+          "processedRecords": 1,
+          "recordedLinks": 1,
+          "sealed": true,
+          "unresolvedLinks": 1
+        }
+      }
+    }
+  ],
+  "MigrationBranchToolsStateResult": [
+    {
+      "decoded": {
+        "state": {
+          "cancelRequested": false,
+          "progress": {
+            "processedRecords": 1,
+            "recordedLinks": 1,
+            "sealed": false,
+            "unresolvedLinks": 1
+          },
+          "run": {
+            "failureCode": null,
+            "sequence": 2,
+            "stage": "correlating"
+          },
+          "viewId": "view",
+          "workerRunning": true
+        },
+        "workerError": null
+      },
+      "name": "historical_tools_only",
+      "value": {
+        "state": {
+          "cancelRequested": false,
+          "progress": {
+            "processedRecords": 1,
+            "recordedLinks": 1,
+            "sealed": false,
+            "unresolvedLinks": 1
+          },
+          "run": {
+            "failureCode": null,
+            "sequence": 2,
+            "stage": "correlating"
+          },
+          "viewId": "view",
+          "workerRunning": true
+        },
+        "workerError": null
+      }
+    }
+  ]
+}

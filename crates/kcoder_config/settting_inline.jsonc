@@ -4,22 +4,9 @@
     "config_version": 1,
   },
   // Product behavior shared by clean installations and development launches.
-  "active_provider": "kunlunmeta",
-  "providers": {
-    "kunlunmeta": {
-      "credential_env": ["KUNLUNMETA_BASE_API_KEY"],
-      "api_format": "anthropic_messages",
-      "endpoint": "http://127.0.0.1:8000",
-      "default_model": "MiniMax-M3",
-      "reasoning_effort": "high",
-      "context_window_tokens": 1048576,
-      "output_headroom_tokens": 100000,
-      "max_output_tokens": 262144,
-      "request_timeout_secs": 300,
-      "no_proxy": true,
-      "extra_body": {},
-    },
-  },
+  // Fresh installations have no configured model deployments.
+  "active_provider": null,
+  "providers": {},
 
   // `/model` lazily lists additional models published by each provider; explicit provider configuration remains authoritative.
   "model_discovery": {
@@ -27,6 +14,21 @@
     "request_timeout_secs": 8,
     "cache_ttl_secs": 300,
     "max_models_per_provider": 200,
+  },
+
+  // Search sources are managed by the target; tool selection remains in tools.
+  "web": {
+    "search": {
+      "mode": "auto",
+      "preferredProvider": null,
+      "fallbackScope": "builtin",
+      "providers": [
+        { "id": "exa-public", "kind": "exa_mcp", "enabled": true },
+        { "id": "searxng-bundled", "kind": "searxng", "enabled": true },
+        { "id": "bing-html", "kind": "bing_html", "enabled": true }
+      ]
+    },
+    "fetch": { "networkPolicy": "public", "proxyMode": "inherit" }
   },
 
   // When auto_compact_threshold_tokens is unset, derive the hard-input budget ratio from the context window.
@@ -47,6 +49,10 @@
   "auto_tool_memory_enabled": true,
   "goal_enabled": true,
   "goal_max_auto_continuations": 8,
+  // Host-owned valve for automatic continuous-work dispatch. No tool or RPC lets the model change it; disabling blocks automatic continuation, background follow-up and source dispatch while ordinary sessions, reads, reconciliation, pause and stop stay available.
+  "continuous_work": {
+    "dispatch_enabled": true,
+  },
   "goal_pro": {
     "verifier_profile": null,
     "verifier_provider": null,
@@ -204,6 +210,48 @@
 
   // Long-term and session memory.
   "memory_directory": null,
+  // Expert and channel management are available by default; platform connections remain explicit.
+  // Settings contain no credentials or grants.
+  "integrations": {
+    "remotes": { "enabled": false, "nativeAcpPeers": [], "nativeSshPeers": [], "outbound": { "enabled": false, "maximumTotalTokens": 16384, "maximumModelCalls": 1, "maximumDurationSeconds": 120 }, "receiver": { "enabled": false, "allowSameAccountAcp": false, "allowedSenderAccounts": [], "acceptMaterials": false, "maximumMaterialBytes": 0, "office": { "enabled": false, "allowedFormats": [], "allowedTools": [], "startupConfiguration": null }, "maximumTotalTokens": 16384, "maximumModelCalls": 1, "maximumDurationSeconds": 120 } },
+    // Optional channelTaskBudget is omitted to preserve existing task limits.
+    "core": { "modelPolicies": [] },
+    "office": {
+      "enabled": true,
+      "allowOrganizationTemplates": false,
+      "allowExternalDelivery": false,
+      "allowedFormats": [
+        "docx",
+        "xlsx",
+        "pptx",
+        "csv",
+        "json"
+      ],
+      "maxOutputBytes": 20971520,
+      "maxDatasetRows": 10000,
+      "datasetPageRows": 100,
+      "projectionPreviewChars": 2000,
+      "generationTimeoutMs": 30000
+    },
+    "connectivity": {
+      "enabled": true,
+      "maxConnections": 16,
+      "maxPendingEvents": 1000,
+      "maxMetadataBytes": 67108864,
+      "maxAttachmentBytes": 104857600,
+      "replayRetentionMs": 2592000000
+    },
+    "knowledge": {
+      "memory_center_enabled": false,
+      "publications_enabled": false,
+      "business_automation_enabled": false,
+      "observer_candidates_enabled": false,
+      "auxiliary_extraction_enabled": false,
+      "extraction_maximum_tokens": 2000,
+      "extraction_maximum_input_bytes": 65536,
+      "extraction_maximum_candidates": 8
+    }
+  },
   "memory": {
     "structured_enabled": true,
     "skip_tools": [],
@@ -294,9 +342,14 @@
     },
   },
   "mcp_servers": [],
+  // Project settings may explicitly inherit selected lower-layer server names.
+  "mcp_inherited_servers": null,
+  "mcp_disabled_servers": [],
 
   // Tool-input normalization and execution limits.
   "tools": {
+    // Exact names only. Omitted/null keeps mode defaults; [] selects no tools.
+    "studio": {},
     "profile": "full",
     "coerce": {
       "semantic_boolean": true,
@@ -314,8 +367,12 @@
       },
     },
     "foreground_budget_ms": {
-      "default_ms": 300000,
+      "default_ms": 120000,
       "tools": {},
+    },
+    "execution_timeout_ms": {
+      "bash": 1800000,
+      "PowerShell": 1800000,
     },
     "task_output_timeout_ms": {
       "default_ms": 5000,

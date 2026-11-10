@@ -1,3 +1,5 @@
+import { THREAD_RUNTIME_HANDOFF_RELEASE } from '../shared/threadRuntimeHandoff.mjs';
+import { ASYNC_ANSWER_FINGERPRINT, asyncAnswerFingerprint } from './broker-async-question-answer.js';
 import { gatewayRequestTimeoutMs } from '../shared/gatewayRequestDeadline.js';
 // Admission bounds include expired unanswered work. Expiration releases payload
 // bytes, never a slot: a late response must still have an owner/cleanup receipt.
@@ -28,12 +30,26 @@ export class BrokerRequestBudget {
   snapshot() { let retainedBytes = 0, expired = 0; for (const entry of this.records.values()) { retainedBytes += entry.bytes; if (entry.expired) expired++; } return { admitted: this.records.size, retainedBytes, expired }; }
 }
 
-export function compactRequestParams(params) {
+export function compactRequestParams(params, method) {
   const compact = {};
-  for (const key of ['threadId', 'thread_id', 'session_id', 'terminalId', 'upload_id', 'path', 'flowId', 'clientRequestId']) {
+  for (const key of ['threadId', 'thread_id', 'ownerThreadId', 'session_id', 'terminalId', 'upload_id', 'path', 'flowId', 'clientRequestId', 'questionId', 'submissionId']) {
     if (typeof params?.[key] === 'string' && params[key].length <= 32768) compact[key] = params[key];
   }
-  if (typeof params?.thread?.id === 'string') compact.threadId = params.thread.id;
-  if (typeof params?.thread?.threadId === 'string') compact.threadId = params.thread.threadId;
+  if (method === THREAD_RUNTIME_HANDOFF_RELEASE) {
+    // A late release receipt still needs the original operation/owner binding.
+    for (const key of ['operationId', 'expectedServerId', 'expectedOwnerRef']) {
+      if (typeof params?.[key] === 'string' && params[key].length <= 256) compact[key] = params[key];
+    }
+  }
+  // Keep the broker's original routing precedence across timeout and detach.
+  // Nested compatibility fields must never replace an explicit task identity.
+  if (typeof params?.threadId !== 'string' && typeof params?.thread_id !== 'string') {
+    const threadId = typeof params?.thread?.threadId === 'string' ? params.thread.threadId : params?.thread?.id;
+    if (typeof threadId === 'string' && threadId.length <= 32768) compact.threadId = threadId;
+  }
+  if (typeof compact.questionId === 'string' && typeof compact.submissionId === 'string') {
+    const fingerprint = params?.[ASYNC_ANSWER_FINGERPRINT] ?? asyncAnswerFingerprint(params?.answers);
+    if (fingerprint !== null) compact[ASYNC_ANSWER_FINGERPRINT] = fingerprint;
+  }
   return compact;
 }

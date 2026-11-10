@@ -211,13 +211,52 @@ fn parse_vitest_json(source: &str) -> Result<TestSummary> {
 
 fn parse_assertions_json(source: &str) -> Result<TestSummary> {
     let value: Value = serde_json::from_str(source).context("解析 assertions.json 失败")?;
+    let flag = |name: &str, default: bool| -> Result<bool> {
+        Ok(value
+            .get(name)
+            .map(|field| field.as_bool().context("assertions 状态必须是布尔值"))
+            .transpose()?
+            .unwrap_or(default))
+    };
+    anyhow::ensure!(
+        !flag("skipped", false)? && flag("executed", true)?,
+        "assertions 被跳过或未执行"
+    );
     let checks = value["checks"]
         .as_array()
         .context("assertions.json 缺少 checks 数组")?;
-    let passed = checks.iter().filter(|check| check["ok"] == true).count() as u64;
-    let failed = checks.len() as u64 - passed;
+    let mut passed = 0_u64;
+    let mut failed = 0_u64;
+    let mut skipped = 0_u64;
+    for check in checks {
+        let object = check.as_object().context("assertion check 必须是对象")?;
+        let ok = object
+            .get("ok")
+            .and_then(Value::as_bool)
+            .context("assertion check 缺少布尔 ok")?;
+        let flag = |name: &str| -> Result<Option<bool>> {
+            object
+                .get(name)
+                .map(|value| value.as_bool().context("assertion 状态必须是布尔值"))
+                .transpose()
+        };
+        let explicit_skip = flag("skipped")?.unwrap_or(false);
+        let executed = flag("executed")?;
+        anyhow::ensure!(
+            !(explicit_skip && executed == Some(true)),
+            "assertion skipped 与 executed 冲突"
+        );
+        if explicit_skip || executed == Some(false) {
+            anyhow::ensure!(!ok, "未执行或跳过的 assertion 不能成功");
+            skipped += 1;
+        } else if ok {
+            passed += 1;
+        } else {
+            failed += 1;
+        }
+    }
     anyhow::ensure!(
-        value["ok"].as_bool() == Some(failed == 0),
+        value["ok"].as_bool() == Some(failed == 0 && skipped == 0),
         "assertions ok 与 checks 不一致"
     );
     Ok(TestSummary {
@@ -225,7 +264,7 @@ fn parse_assertions_json(source: &str) -> Result<TestSummary> {
         total: checks.len() as u64,
         passed,
         failed,
-        skipped: 0,
+        skipped,
     })
 }
 
@@ -331,6 +370,36 @@ mod tests {
     fn assertions_contract_rejects_mismatched_top_level_status() {
         assert!(parse_assertions_json(r#"{"ok":true,"checks":[{"ok":true}]}"#).is_ok());
         assert!(parse_assertions_json(r#"{"ok":true,"checks":[{"ok":false}]}"#).is_err());
+    }
+
+    #[test]
+    fn assertions_never_count_skipped_or_unexecuted_checks_as_passed() {
+        for source in [
+            r#"{"ok":false,"checks":[{"ok":false,"skipped":true}]}"#,
+            r#"{"ok":false,"checks":[{"ok":false,"executed":false}]}"#,
+        ] {
+            let summary = parse_assertions_json(source).unwrap();
+            assert_eq!((summary.passed, summary.failed, summary.skipped), (0, 0, 1));
+        }
+        for source in [
+            r#"{"ok":true,"checks":[{"ok":true,"skipped":true}]}"#,
+            r#"{"ok":true,"checks":[{"ok":true,"executed":false}]}"#,
+            r#"{"ok":true,"skipped":true,"checks":[{"ok":true}]}"#,
+            r#"{"ok":true,"executed":false,"checks":[{"ok":true}]}"#,
+            r#"{"ok":true,"skipped":"false","checks":[{"ok":true}]}"#,
+            r#"{"ok":true,"executed":null,"checks":[{"ok":true}]}"#,
+            r#"{"ok":false,"checks":[{"ok":false,"skipped":true,"executed":true}]}"#,
+            r#"{"ok":true,"checks":[{"ok":true,"skipped":"false"}]}"#,
+            r#"{"ok":true,"checks":[{"ok":true,"executed":null}]}"#,
+        ] {
+            assert!(parse_assertions_json(source).is_err(), "{source}");
+        }
+        assert!(
+            parse_assertions_json(
+                r#"{"ok":true,"skipped":false,"executed":true,"checks":[{"ok":true}]}"#
+            )
+            .is_ok()
+        );
     }
 
     #[test]

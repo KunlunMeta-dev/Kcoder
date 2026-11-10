@@ -509,6 +509,7 @@ impl RetentionService {
     ) -> Result<OwnerCreation> {
         let (id, params) = self.owner_request_locator(scope, request)?;
         let mut tx = self.store.transaction()?;
+        self.require_live_scope(&tx, scope)?;
         if let Some(mut owner) = tx.read::<Owner>(Area::Owners, &id)? {
             self.owner_request_match(&owner, scope, request, &id, &params)?;
             // Reconcile the original owner before admitting a new upload. Existing
@@ -559,6 +560,7 @@ impl RetentionService {
             manifest: None,
             manifest_retirement: None,
             cleanup_capacity: RECORD_BYTES,
+            device_cleanup: None,
         };
         if let Some(upload) = upload {
             self.reserve_wire_upload(&mut tx, scope, &mut owner, upload)?;

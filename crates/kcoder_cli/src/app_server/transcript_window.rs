@@ -3,26 +3,29 @@
 use super::{
     ApprovalDecisionArtifact, ThreadMessage, TurnOutcomeArtifact, Value,
     apply_turn_client_message_ids, apply_turn_outcomes, attach_approval_decision_blocks,
-    attach_turn_file_change_blocks, coalesce_assistant_tool_fragments,
-    history_entry_thread_message,
+    attach_turn_file_captures, attach_turn_file_change_blocks, attach_turn_review_evidence,
+    coalesce_assistant_tool_fragments, history_entry_thread_message,
 };
 use kcoder_state::HistoryEntry;
 use std::collections::{HashMap, VecDeque};
 
 #[derive(Default)]
-pub(super) struct Artifacts {
-    pub(super) attempts: Vec<kcoder_state::turn_attempt_store::TurnAttemptRecord>,
-    pub(super) turn_ids: HashMap<String, String>,
-    pub(super) client_ids: HashMap<String, String>,
-    pub(super) outcomes: HashMap<String, TurnOutcomeArtifact>,
-    pub(super) approvals: Vec<ApprovalDecisionArtifact>,
-    pub(super) file_changes: HashMap<String, Value>,
+pub struct Artifacts {
+    pub thread_id: String,
+    pub attempts: Vec<kcoder_state::turn_attempt_store::TurnAttemptRecord>,
+    pub turn_ids: HashMap<String, String>,
+    pub client_ids: HashMap<String, String>,
+    pub outcomes: HashMap<String, TurnOutcomeArtifact>,
+    pub approvals: Vec<ApprovalDecisionArtifact>,
+    pub file_changes: HashMap<String, Value>,
+    pub review_evidence: HashMap<String, kcoder_app_protocol::TurnReviewEvidence>,
+    pub file_captures: HashMap<String, kcoder_app_protocol::TurnFileChangesCapture>,
 }
 
-pub(super) struct Page {
-    pub(super) start: usize,
-    pub(super) end: usize,
-    pub(super) messages: Vec<ThreadMessage>,
+pub struct Page {
+    pub start: usize,
+    pub end: usize,
+    pub messages: Vec<ThreadMessage>,
 }
 
 struct Window<T> {
@@ -62,7 +65,7 @@ impl<T> Window<T> {
     }
 }
 
-pub(super) fn project(
+pub fn project(
     entries: Vec<HistoryEntry>,
     artifacts: Artifacts,
     limit: Option<u32>,
@@ -87,7 +90,7 @@ pub(super) fn project(
 /// Emit final UI rows in global order after complete-turn projection. A durable
 /// index sink can consume rows without accumulating the full rendered transcript.
 /// Source loading and the global tool association pass remain caller-owned costs.
-pub(super) fn visit_rows(
+pub fn visit_rows(
     entries: Vec<HistoryEntry>,
     artifacts: Artifacts,
     mut sink: impl FnMut(usize, ThreadMessage) -> anyhow::Result<bool>,
@@ -112,20 +115,20 @@ fn take_turn<T>(artifacts: &mut HashMap<String, T>, turn_id: &str) -> HashMap<St
 
 type TurnEntry = (usize, HistoryEntry, Option<String>);
 
-pub(super) struct TranscriptAssociationScan {
+pub struct TranscriptAssociationScan {
     entries: Vec<HistoryEntry>,
     processed: usize,
     contexts: super::TranscriptToolContexts,
 }
 impl TranscriptAssociationScan {
-    pub(super) fn new(entries: Vec<HistoryEntry>) -> Self {
+    pub fn new(entries: Vec<HistoryEntry>) -> Self {
         Self {
             entries,
             processed: 0,
             contexts: HashMap::new(),
         }
     }
-    pub(super) fn step(&mut self, limit: usize) -> anyhow::Result<bool> {
+    pub fn step(&mut self, limit: usize) -> anyhow::Result<bool> {
         anyhow::ensure!(
             (1..=4096).contains(&limit),
             "invalid association scan budget"
@@ -139,7 +142,7 @@ impl TranscriptAssociationScan {
         self.processed = end;
         Ok(end == self.entries.len())
     }
-    pub(super) fn finish(self, artifacts: Artifacts) -> anyhow::Result<TranscriptTurns> {
+    pub fn finish(self, artifacts: Artifacts) -> anyhow::Result<TranscriptTurns> {
         anyhow::ensure!(
             self.processed == self.entries.len(),
             "tool association scan is incomplete"
@@ -154,8 +157,8 @@ impl TranscriptAssociationScan {
 
 /// Resumable complete-turn projection. Construction still builds global tool
 /// associations; a single large turn is not a fixed CPU or memory budget.
-pub(super) struct TranscriptTurns {
-    attempt_rows: super::turn_attempts::AttemptRows,
+pub struct TranscriptTurns {
+    attempt_rows: super::AttemptRows,
     entries: std::iter::Peekable<Box<dyn Iterator<Item = TurnEntry> + Send>>,
     contexts: super::TranscriptToolContexts,
     artifacts: Artifacts,
@@ -164,7 +167,7 @@ pub(super) struct TranscriptTurns {
 }
 
 impl TranscriptTurns {
-    pub(super) fn new(entries: Vec<HistoryEntry>, artifacts: Artifacts) -> Self {
+    pub fn new(entries: Vec<HistoryEntry>, artifacts: Artifacts) -> Self {
         let mut scan = TranscriptAssociationScan::new(entries);
         while !scan.step(128).expect("fixed association budget is valid") {}
         scan.finish(artifacts).expect("association scan completed")
@@ -182,34 +185,51 @@ impl TranscriptTurns {
                 .or_default()
                 .push(approval);
         }
-        let mut turn = 0usize;
-        let mut active_turn = None;
+        let attempts = artifacts
+            .attempts
+            .iter()
+            .filter(|record| {
+                record.validate().is_ok() && record.identity.thread_id == artifacts.thread_id
+            })
+            .map(|record| record.identity.clone())
+            .collect::<std::collections::HashSet<_>>();
         let turn_ids = std::mem::take(&mut artifacts.turn_ids);
         let admitted_users = turn_ids
             .values()
             .cloned()
             .collect::<std::collections::HashSet<_>>();
+        // Validate once against the preloaded catalog, before either positional
+        // legacy grouping or row construction can consume optional metadata.
+        let entries = entries
+            .into_iter()
+            .map(|mut entry| {
+                entry.history_attempt = super::validated_history_attempt(
+                    &entry,
+                    &artifacts.thread_id,
+                    &turn_ids,
+                    &attempts,
+                );
+                entry
+            })
+            .collect::<Vec<_>>();
         let visible_uuids = entries
             .iter()
             .filter_map(|entry| entry.uuid.clone())
             .collect::<std::collections::HashSet<_>>();
-        let represented = entries
-            .iter()
-            .filter(|entry| kcoder_engine::agent::is_real_user_message(&entry.message))
+        let mut turn = 0usize;
+        let mut active_turn = None;
+        let mut represented = std::collections::HashSet::new();
+        let entries = entries
+            .into_iter()
             .enumerate()
             .map(|(index, entry)| {
-                entry
-                    .uuid
-                    .as_ref()
-                    .and_then(|uuid| turn_ids.get(uuid))
-                    .cloned()
-                    .unwrap_or_else(|| format!("turn-{}", index + 1))
-            })
-            .collect::<std::collections::HashSet<_>>();
-        let entries: Box<dyn Iterator<Item = TurnEntry> + Send> =
-            Box::new(entries.into_iter().enumerate().map(move |(index, entry)| {
-                if kcoder_engine::agent::is_real_user_message(&entry.message) {
+                let real_user = kcoder_types::is_real_user_message(&entry.message);
+                if real_user {
                     turn = turn.saturating_add(1);
+                }
+                if let Some(identity) = &entry.history_attempt {
+                    active_turn = Some(identity.turn_id.clone());
+                } else if real_user {
                     active_turn = Some(
                         entry
                             .uuid
@@ -219,10 +239,17 @@ impl TranscriptTurns {
                             .unwrap_or_else(|| format!("turn-{turn}")),
                     );
                 }
+                if (real_user || entry.history_attempt.is_some())
+                    && let Some(turn) = &active_turn
+                {
+                    represented.insert(turn.clone());
+                }
                 (index, entry, active_turn.clone())
-            }));
+            })
+            .collect::<Vec<_>>();
+        let entries: Box<dyn Iterator<Item = TurnEntry> + Send> = Box::new(entries.into_iter());
         Self {
-            attempt_rows: super::turn_attempts::AttemptRows::new(
+            attempt_rows: super::AttemptRows::new(
                 std::mem::take(&mut artifacts.attempts),
                 &represented,
                 &admitted_users,
@@ -236,14 +263,16 @@ impl TranscriptTurns {
         }
     }
 
-    pub(super) fn next_turn(&mut self) -> Option<Vec<ThreadMessage>> {
+    pub fn next_turn(&mut self) -> Option<Vec<ThreadMessage>> {
         let orphan = match self.entries.peek() {
             Some((_, _, Some(turn))) => self.attempt_rows.before_turn(Some(turn)),
             None => self.attempt_rows.before_turn(None),
             _ => None,
         };
-        if orphan.is_some() {
-            return orphan;
+        if let Some(mut orphan) = orphan {
+            attach_turn_file_captures(&mut orphan, &mut self.artifacts.file_captures);
+            attach_turn_review_evidence(&mut orphan, &mut self.artifacts.review_evidence);
+            return Some(orphan);
         }
         let (index, entry, turn_id) = self.entries.next()?;
         let mut messages = Vec::new();
@@ -287,6 +316,11 @@ impl TranscriptTurns {
                 &mut messages,
                 take_turn(&mut self.artifacts.file_changes, turn_id),
             );
+        }
+        attach_turn_file_captures(&mut messages, &mut self.artifacts.file_captures);
+        attach_turn_review_evidence(&mut messages, &mut self.artifacts.review_evidence);
+        for message in &mut messages {
+            crate::tool_images::bound_desktop_history_row(message);
         }
         Some(messages)
     }
@@ -621,10 +655,64 @@ mod tests {
         assert_eq!(tool["tool_output"], "desktop");
     }
 
+    #[test]
+    fn restored_large_desktop_screenshot_uses_row_budget_without_dropping_the_tool() {
+        let image_bytes = kcoder_types::computer_use::DESKTOP_SCREENSHOT_BASE64_BYTES;
+        for (name, text, retained) in [
+            (
+                "mcp__kcoder_computer_use__Snapshot",
+                "UI tree".to_owned(),
+                true,
+            ),
+            (
+                "mcp__kcoder_computer_use__Snapshot",
+                "\0".repeat(64 * 1024),
+                false,
+            ),
+            ("mcp__external__Screenshot", "UI tree".to_owned(), false),
+        ] {
+            let history = entries(vec![
+                user("inspect screen"),
+                json!({"role":"assistant","content":[call("shot", name)]}),
+                json!({"role":"user","content":[{"type":"tool_result","tool_use_id":"shot","content":[
+                    {"type":"text","text":text},
+                    {"type":"image","source":{"type":"base64","media_type":"image/jpeg","data":"A".repeat(image_bytes)}}
+                ]}]}),
+            ]);
+            let page = project(history, Artifacts::default(), Some(50), None);
+            let row = page
+                .messages
+                .iter()
+                .find(|message| {
+                    message
+                        .blocks
+                        .iter()
+                        .any(|block| block["tool_use_id"] == "shot")
+                })
+                .unwrap();
+            let tool = row
+                .blocks
+                .iter()
+                .find(|block| block["tool_use_id"] == "shot")
+                .unwrap();
+            assert_eq!(tool["outputImagesOmitted"], !retained, "{name}");
+            assert_eq!(
+                tool["outputImages"].as_array().unwrap().len(),
+                usize::from(retained)
+            );
+            assert!(
+                serde_json::to_vec(row).unwrap().len()
+                    <= crate::tool_images::TRANSCRIPT_RESPONSE_BYTES - 4096
+            );
+        }
+    }
+
     fn entries(raw: Vec<Value>) -> Vec<HistoryEntry> {
         raw.into_iter()
             .enumerate()
             .map(|(index, message)| HistoryEntry {
+                web_sources: Vec::new(),
+                history_attempt: None,
                 session_id: "session".into(),
                 timestamp_ms: 100 + index as u64,
                 uuid: (index % 2 == 0).then(|| format!("entry-{index}")),
@@ -684,6 +772,7 @@ mod tests {
             .enumerate()
         {
             artifacts.approvals.push(ApprovalDecisionArtifact {
+                tool_call_id: None,
                 version: 1,
                 artifact_id: format!("approval-{index}"),
                 thread_id: "session".into(),
@@ -784,9 +873,7 @@ mod tests {
             user("empty interrupted"),
             user("empty failed"),
         ]);
-        assert!(kcoder_engine::agent::is_real_user_message(
-            &history[5].message
-        ));
+        assert!(kcoder_types::is_real_user_message(&history[5].message));
         let visible = history_entry_thread_message(
             5,
             history[5].clone(),

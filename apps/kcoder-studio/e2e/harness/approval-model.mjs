@@ -2,6 +2,7 @@ import { createServer } from "node:http";
 
 export async function startApprovalModelFixture(context, options = {}) {
   const requests = [];
+  const modelListRequests = [];
   const requestOutcomes = [];
   let activeBackgroundRequests = 0;
   const activeResponses = new Set();
@@ -9,6 +10,15 @@ export async function startApprovalModelFixture(context, options = {}) {
   const activeTimers = new Set();
   let matchedHttpErrorCount = 0;
   const handleRequest = async (request, response) => {
+    if (options.modelList && request.method === 'GET' && request.url === '/v1/models') {
+      const authorized = !options.modelList.apiKey || request.headers.authorization === `Bearer ${options.modelList.apiKey}`;
+      modelListRequests.push({ path: request.url, authorized });
+      response.writeHead(authorized ? 200 : 401, { 'content-type': 'application/json' });
+      response.end(JSON.stringify(authorized
+        ? { data: options.modelList.ids.map(id => ({ id })) }
+        : { error: { message: 'Unauthorized model listing' } }));
+      return;
+    }
     if (request.method === "GET" && request.url === "/health") {
       response.writeHead(200, { "content-type": "application/json" });
       response.end(JSON.stringify({ ok: true }));
@@ -300,6 +310,7 @@ export async function startApprovalModelFixture(context, options = {}) {
   return {
     baseUrl: `http://127.0.0.1:${address.port}/v1`,
     requests,
+    modelListRequests,
     requestOutcomes,
     get activeBackgroundRequests() { return activeBackgroundRequests; },
     get activeResponseCount() { return activeResponses.size; },

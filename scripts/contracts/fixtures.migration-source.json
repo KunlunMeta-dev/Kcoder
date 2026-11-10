@@ -1,0 +1,1831 @@
+{
+  "MigrationSourceTransferReadParams": {
+    "valid": [
+      {
+        "name": "explicit_request",
+        "value": {
+          "requestId": "22222222-2222-4222-8222-222222222222",
+          "source": {
+            "sessionId": "22222222-2222-4222-8222-222222222222",
+            "purpose": "source",
+            "targetId": "source"
+          },
+          "target": {
+            "sessionId": "22222222-2222-4222-8222-222222222222",
+            "purpose": "target",
+            "targetId": "target"
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "no_private_authority",
+        "value": {
+          "requestId": "22222222-2222-4222-8222-222222222222",
+          "source": {
+            "sessionId": "22222222-2222-4222-8222-222222222222",
+            "purpose": "source",
+            "targetId": "source"
+          },
+          "target": {
+            "sessionId": "22222222-2222-4222-8222-222222222222",
+            "purpose": "target",
+            "targetId": "target"
+          },
+          "sourceAuthority": {
+            "instanceId": "22222222-2222-4222-8222-222222222222"
+          }
+        }
+      },
+      {
+        "name": "malformed_request_id",
+        "value": {
+          "requestId": "not-a-uuid",
+          "source": {
+            "sessionId": "22222222-2222-4222-8222-222222222222",
+            "purpose": "source",
+            "targetId": "source"
+          },
+          "target": {
+            "sessionId": "22222222-2222-4222-8222-222222222222",
+            "purpose": "target",
+            "targetId": "target"
+          }
+        }
+      }
+    ]
+  },
+  "MigrationSourceTransferRunParams": {
+    "valid": [
+      {
+        "name": "explicit_request",
+        "value": {
+          "requestId": "22222222-2222-4222-8222-222222222222",
+          "source": {
+            "sessionId": "22222222-2222-4222-8222-222222222222",
+            "purpose": "source",
+            "targetId": "source"
+          },
+          "target": {
+            "sessionId": "22222222-2222-4222-8222-222222222222",
+            "purpose": "target",
+            "targetId": "target"
+          },
+          "attemptId": "22222222-2222-4222-8222-222222222222",
+          "selections": [
+            {
+              "kind": "configuration",
+              "sourceId": "source-view"
+            }
+          ]
+        }
+      },
+      {
+        "name": "reconcile_original_intent",
+        "value": {
+          "requestId": "22222222-2222-4222-8222-222222222222",
+          "source": {
+            "sessionId": "22222222-2222-4222-8222-222222222222",
+            "purpose": "source",
+            "targetId": "source"
+          },
+          "target": {
+            "sessionId": "22222222-2222-4222-8222-222222222222",
+            "purpose": "target",
+            "targetId": "target"
+          },
+          "attemptId": "22222222-2222-4222-8222-222222222222"
+        }
+      },
+      {
+        "name": "explicit_two_domain_resume",
+        "value": {
+          "requestId": "22222222-2222-4222-8222-222222222222",
+          "source": {
+            "sessionId": "22222222-2222-4222-8222-222222222222",
+            "purpose": "source",
+            "targetId": "source"
+          },
+          "target": {
+            "sessionId": "22222222-2222-4222-8222-222222222222",
+            "purpose": "target",
+            "targetId": "target"
+          },
+          "attemptId": "22222222-2222-4222-8222-222222222222",
+          "selections": [
+            {
+              "kind": "configuration",
+              "sourceId": "source-view"
+            }
+          ],
+          "resume": {
+            "source": {
+              "sequence": 1,
+              "cancelWatermark": 1,
+              "snapshotControl": null
+            },
+            "target": {
+              "admissionControl": {
+                "sequence": 1,
+                "cancelWatermark": 1,
+                "cancelled": true,
+                "ready": false
+              }
+            }
+          }
+        }
+      },
+      {
+        "name": "opaque_plugin_selection",
+        "value": {
+          "requestId": "22222222-2222-4222-8222-222222222222",
+          "source": {
+            "sessionId": "22222222-2222-4222-8222-222222222222",
+            "purpose": "source",
+            "targetId": "source"
+          },
+          "target": {
+            "sessionId": "22222222-2222-4222-8222-222222222222",
+            "purpose": "target",
+            "targetId": "target"
+          },
+          "attemptId": "22222222-2222-4222-8222-222222222222",
+          "selections": [
+            {
+              "kind": "plugin",
+              "candidateId": "plug-owned"
+            }
+          ]
+        }
+      },
+      {
+        "name": "explicit_instruction_capture",
+        "value": {
+          "requestId": "22222222-2222-4222-8222-222222222222",
+          "source": {
+            "sessionId": "22222222-2222-4222-8222-222222222222",
+            "purpose": "source",
+            "targetId": "source"
+          },
+          "target": {
+            "sessionId": "22222222-2222-4222-8222-222222222222",
+            "purpose": "target",
+            "targetId": "target"
+          },
+          "attemptId": "22222222-2222-4222-8222-222222222222",
+          "selections": [
+            {
+              "kind": "instructions",
+              "captureId": "bdaeb662-a7fe-4412-974c-18c4f9e78005"
+            }
+          ]
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "no_private_authority",
+        "value": {
+          "requestId": "22222222-2222-4222-8222-222222222222",
+          "source": {
+            "sessionId": "22222222-2222-4222-8222-222222222222",
+            "purpose": "source",
+            "targetId": "source"
+          },
+          "target": {
+            "sessionId": "22222222-2222-4222-8222-222222222222",
+            "purpose": "target",
+            "targetId": "target"
+          },
+          "attemptId": "22222222-2222-4222-8222-222222222222",
+          "selections": [
+            {
+              "kind": "configuration",
+              "sourceId": "source-view"
+            }
+          ],
+          "sourceAuthority": {
+            "instanceId": "22222222-2222-4222-8222-222222222222"
+          }
+        }
+      },
+      {
+        "name": "malformed_request_id",
+        "value": {
+          "requestId": "not-a-uuid",
+          "source": {
+            "sessionId": "22222222-2222-4222-8222-222222222222",
+            "purpose": "source",
+            "targetId": "source"
+          },
+          "target": {
+            "sessionId": "22222222-2222-4222-8222-222222222222",
+            "purpose": "target",
+            "targetId": "target"
+          },
+          "attemptId": "22222222-2222-4222-8222-222222222222",
+          "selections": [
+            {
+              "kind": "configuration",
+              "sourceId": "source-view"
+            }
+          ]
+        }
+      },
+      {
+        "name": "no_empty_selection",
+        "value": {
+          "requestId": "22222222-2222-4222-8222-222222222222",
+          "source": {
+            "sessionId": "22222222-2222-4222-8222-222222222222",
+            "purpose": "source",
+            "targetId": "source"
+          },
+          "target": {
+            "sessionId": "22222222-2222-4222-8222-222222222222",
+            "purpose": "target",
+            "targetId": "target"
+          },
+          "attemptId": "22222222-2222-4222-8222-222222222222",
+          "selections": []
+        }
+      },
+      {
+        "name": "bounded_selection",
+        "value": {
+          "requestId": "22222222-2222-4222-8222-222222222222",
+          "source": {
+            "sessionId": "22222222-2222-4222-8222-222222222222",
+            "purpose": "source",
+            "targetId": "source"
+          },
+          "target": {
+            "sessionId": "22222222-2222-4222-8222-222222222222",
+            "purpose": "target",
+            "targetId": "target"
+          },
+          "attemptId": "22222222-2222-4222-8222-222222222222",
+          "selections": [
+            {
+              "kind": "configuration",
+              "sourceId": "source-0"
+            },
+            {
+              "kind": "configuration",
+              "sourceId": "source-1"
+            },
+            {
+              "kind": "configuration",
+              "sourceId": "source-2"
+            },
+            {
+              "kind": "configuration",
+              "sourceId": "source-3"
+            },
+            {
+              "kind": "configuration",
+              "sourceId": "source-4"
+            },
+            {
+              "kind": "configuration",
+              "sourceId": "source-5"
+            },
+            {
+              "kind": "configuration",
+              "sourceId": "source-6"
+            },
+            {
+              "kind": "configuration",
+              "sourceId": "source-7"
+            },
+            {
+              "kind": "configuration",
+              "sourceId": "source-8"
+            },
+            {
+              "kind": "configuration",
+              "sourceId": "source-9"
+            },
+            {
+              "kind": "configuration",
+              "sourceId": "source-10"
+            },
+            {
+              "kind": "configuration",
+              "sourceId": "source-11"
+            },
+            {
+              "kind": "configuration",
+              "sourceId": "source-12"
+            },
+            {
+              "kind": "configuration",
+              "sourceId": "source-13"
+            },
+            {
+              "kind": "configuration",
+              "sourceId": "source-14"
+            },
+            {
+              "kind": "configuration",
+              "sourceId": "source-15"
+            },
+            {
+              "kind": "configuration",
+              "sourceId": "source-16"
+            },
+            {
+              "kind": "configuration",
+              "sourceId": "source-17"
+            },
+            {
+              "kind": "configuration",
+              "sourceId": "source-18"
+            },
+            {
+              "kind": "configuration",
+              "sourceId": "source-19"
+            },
+            {
+              "kind": "configuration",
+              "sourceId": "source-20"
+            },
+            {
+              "kind": "configuration",
+              "sourceId": "source-21"
+            },
+            {
+              "kind": "configuration",
+              "sourceId": "source-22"
+            },
+            {
+              "kind": "configuration",
+              "sourceId": "source-23"
+            },
+            {
+              "kind": "configuration",
+              "sourceId": "source-24"
+            },
+            {
+              "kind": "configuration",
+              "sourceId": "source-25"
+            },
+            {
+              "kind": "configuration",
+              "sourceId": "source-26"
+            },
+            {
+              "kind": "configuration",
+              "sourceId": "source-27"
+            },
+            {
+              "kind": "configuration",
+              "sourceId": "source-28"
+            },
+            {
+              "kind": "configuration",
+              "sourceId": "source-29"
+            },
+            {
+              "kind": "configuration",
+              "sourceId": "source-30"
+            },
+            {
+              "kind": "configuration",
+              "sourceId": "source-31"
+            },
+            {
+              "kind": "configuration",
+              "sourceId": "source-32"
+            },
+            {
+              "kind": "configuration",
+              "sourceId": "source-33"
+            },
+            {
+              "kind": "configuration",
+              "sourceId": "source-34"
+            },
+            {
+              "kind": "configuration",
+              "sourceId": "source-35"
+            },
+            {
+              "kind": "configuration",
+              "sourceId": "source-36"
+            },
+            {
+              "kind": "configuration",
+              "sourceId": "source-37"
+            },
+            {
+              "kind": "configuration",
+              "sourceId": "source-38"
+            },
+            {
+              "kind": "configuration",
+              "sourceId": "source-39"
+            },
+            {
+              "kind": "configuration",
+              "sourceId": "source-40"
+            },
+            {
+              "kind": "configuration",
+              "sourceId": "source-41"
+            },
+            {
+              "kind": "configuration",
+              "sourceId": "source-42"
+            },
+            {
+              "kind": "configuration",
+              "sourceId": "source-43"
+            },
+            {
+              "kind": "configuration",
+              "sourceId": "source-44"
+            },
+            {
+              "kind": "configuration",
+              "sourceId": "source-45"
+            },
+            {
+              "kind": "configuration",
+              "sourceId": "source-46"
+            },
+            {
+              "kind": "configuration",
+              "sourceId": "source-47"
+            },
+            {
+              "kind": "configuration",
+              "sourceId": "source-48"
+            },
+            {
+              "kind": "configuration",
+              "sourceId": "source-49"
+            },
+            {
+              "kind": "configuration",
+              "sourceId": "source-50"
+            },
+            {
+              "kind": "configuration",
+              "sourceId": "source-51"
+            },
+            {
+              "kind": "configuration",
+              "sourceId": "source-52"
+            },
+            {
+              "kind": "configuration",
+              "sourceId": "source-53"
+            },
+            {
+              "kind": "configuration",
+              "sourceId": "source-54"
+            },
+            {
+              "kind": "configuration",
+              "sourceId": "source-55"
+            },
+            {
+              "kind": "configuration",
+              "sourceId": "source-56"
+            },
+            {
+              "kind": "configuration",
+              "sourceId": "source-57"
+            },
+            {
+              "kind": "configuration",
+              "sourceId": "source-58"
+            },
+            {
+              "kind": "configuration",
+              "sourceId": "source-59"
+            },
+            {
+              "kind": "configuration",
+              "sourceId": "source-60"
+            },
+            {
+              "kind": "configuration",
+              "sourceId": "source-61"
+            },
+            {
+              "kind": "configuration",
+              "sourceId": "source-62"
+            },
+            {
+              "kind": "configuration",
+              "sourceId": "source-63"
+            },
+            {
+              "kind": "configuration",
+              "sourceId": "source-64"
+            }
+          ]
+        }
+      },
+      {
+        "name": "missing_snapshot_observation",
+        "value": {
+          "requestId": "22222222-2222-4222-8222-222222222222",
+          "source": {
+            "sessionId": "22222222-2222-4222-8222-222222222222",
+            "purpose": "source",
+            "targetId": "source"
+          },
+          "target": {
+            "sessionId": "22222222-2222-4222-8222-222222222222",
+            "purpose": "target",
+            "targetId": "target"
+          },
+          "attemptId": "22222222-2222-4222-8222-222222222222",
+          "selections": [
+            {
+              "kind": "configuration",
+              "sourceId": "source-view"
+            }
+          ],
+          "resume": {
+            "source": {
+              "sequence": 1,
+              "cancelWatermark": 1
+            }
+          }
+        }
+      },
+      {
+        "name": "instruction_selector_does_not_grant_path",
+        "value": {
+          "requestId": "22222222-2222-4222-8222-222222222222",
+          "source": {
+            "sessionId": "22222222-2222-4222-8222-222222222222",
+            "purpose": "source",
+            "targetId": "source"
+          },
+          "target": {
+            "sessionId": "22222222-2222-4222-8222-222222222222",
+            "purpose": "target",
+            "targetId": "target"
+          },
+          "attemptId": "22222222-2222-4222-8222-222222222222",
+          "selections": [
+            {
+              "kind": "instructions",
+              "captureId": "bdaeb662-a7fe-4412-974c-18c4f9e78005",
+              "sourceRoot": "/private"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "MigrationSourceTransferCancelParams": {
+    "valid": [
+      {
+        "name": "explicit_request",
+        "value": {
+          "requestId": "22222222-2222-4222-8222-222222222222",
+          "source": {
+            "sessionId": "22222222-2222-4222-8222-222222222222",
+            "purpose": "source",
+            "targetId": "source"
+          },
+          "target": {
+            "sessionId": "22222222-2222-4222-8222-222222222222",
+            "purpose": "target",
+            "targetId": "target"
+          },
+          "commandId": "22222222-2222-4222-8222-222222222222"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "no_private_authority",
+        "value": {
+          "requestId": "22222222-2222-4222-8222-222222222222",
+          "source": {
+            "sessionId": "22222222-2222-4222-8222-222222222222",
+            "purpose": "source",
+            "targetId": "source"
+          },
+          "target": {
+            "sessionId": "22222222-2222-4222-8222-222222222222",
+            "purpose": "target",
+            "targetId": "target"
+          },
+          "commandId": "22222222-2222-4222-8222-222222222222",
+          "sourceAuthority": {
+            "instanceId": "22222222-2222-4222-8222-222222222222"
+          }
+        }
+      },
+      {
+        "name": "malformed_request_id",
+        "value": {
+          "requestId": "not-a-uuid",
+          "source": {
+            "sessionId": "22222222-2222-4222-8222-222222222222",
+            "purpose": "source",
+            "targetId": "source"
+          },
+          "target": {
+            "sessionId": "22222222-2222-4222-8222-222222222222",
+            "purpose": "target",
+            "targetId": "target"
+          },
+          "commandId": "22222222-2222-4222-8222-222222222222"
+        }
+      }
+    ]
+  },
+  "MigrationSourceTransferTargetReadParams": {
+    "valid": [
+      {
+        "name": "explicit_target_action",
+        "value": {
+          "requestId": "22222222-2222-4222-8222-222222222222",
+          "target": {
+            "sessionId": "22222222-2222-4222-8222-222222222222",
+            "purpose": "target_recovery",
+            "targetId": "target"
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "no_source_in_recovery",
+        "value": {
+          "requestId": "22222222-2222-4222-8222-222222222222",
+          "target": {
+            "sessionId": "22222222-2222-4222-8222-222222222222",
+            "purpose": "target_recovery",
+            "targetId": "target"
+          },
+          "source": {
+            "sessionId": "22222222-2222-4222-8222-222222222222",
+            "purpose": "target_recovery",
+            "targetId": "target"
+          }
+        }
+      }
+    ]
+  },
+  "MigrationSourceTransferTargetCancelParams": {
+    "valid": [
+      {
+        "name": "explicit_target_action",
+        "value": {
+          "requestId": "22222222-2222-4222-8222-222222222222",
+          "target": {
+            "sessionId": "22222222-2222-4222-8222-222222222222",
+            "purpose": "target_recovery",
+            "targetId": "target"
+          },
+          "commandId": "22222222-2222-4222-8222-222222222222"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "no_source_in_recovery",
+        "value": {
+          "requestId": "22222222-2222-4222-8222-222222222222",
+          "target": {
+            "sessionId": "22222222-2222-4222-8222-222222222222",
+            "purpose": "target_recovery",
+            "targetId": "target"
+          },
+          "commandId": "22222222-2222-4222-8222-222222222222",
+          "source": {
+            "sessionId": "22222222-2222-4222-8222-222222222222",
+            "purpose": "target_recovery",
+            "targetId": "target"
+          }
+        }
+      }
+    ]
+  },
+  "MigrationSourceTransferTargetFinishParams": {
+    "valid": [
+      {
+        "name": "explicit_target_action",
+        "value": {
+          "requestId": "22222222-2222-4222-8222-222222222222",
+          "target": {
+            "sessionId": "22222222-2222-4222-8222-222222222222",
+            "purpose": "target_recovery",
+            "targetId": "target"
+          },
+          "attemptId": "22222222-2222-4222-8222-222222222222"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "no_source_in_recovery",
+        "value": {
+          "requestId": "22222222-2222-4222-8222-222222222222",
+          "target": {
+            "sessionId": "22222222-2222-4222-8222-222222222222",
+            "purpose": "target_recovery",
+            "targetId": "target"
+          },
+          "attemptId": "22222222-2222-4222-8222-222222222222",
+          "source": {
+            "sessionId": "22222222-2222-4222-8222-222222222222",
+            "purpose": "target_recovery",
+            "targetId": "target"
+          }
+        }
+      }
+    ]
+  },
+  "MigrationSourceTransferTargetResumeParams": {
+    "valid": [
+      {
+        "name": "explicit_target_action",
+        "value": {
+          "requestId": "22222222-2222-4222-8222-222222222222",
+          "target": {
+            "sessionId": "22222222-2222-4222-8222-222222222222",
+            "purpose": "target_recovery",
+            "targetId": "target"
+          },
+          "attemptId": "22222222-2222-4222-8222-222222222222",
+          "expectedAdmissionControl": {
+            "sequence": 1,
+            "cancelWatermark": 1,
+            "cancelled": true,
+            "ready": false
+          },
+          "expectedOperationControl": null
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "no_source_in_recovery",
+        "value": {
+          "requestId": "22222222-2222-4222-8222-222222222222",
+          "target": {
+            "sessionId": "22222222-2222-4222-8222-222222222222",
+            "purpose": "target_recovery",
+            "targetId": "target"
+          },
+          "attemptId": "22222222-2222-4222-8222-222222222222",
+          "expectedAdmissionControl": {
+            "sequence": 1,
+            "cancelWatermark": 1,
+            "cancelled": true,
+            "ready": false
+          },
+          "expectedOperationControl": null,
+          "source": {
+            "sessionId": "22222222-2222-4222-8222-222222222222",
+            "purpose": "target_recovery",
+            "targetId": "target"
+          }
+        }
+      },
+      {
+        "name": "missing_is_not_null",
+        "value": {
+          "requestId": "22222222-2222-4222-8222-222222222222",
+          "target": {
+            "sessionId": "22222222-2222-4222-8222-222222222222",
+            "purpose": "target_recovery",
+            "targetId": "target"
+          },
+          "attemptId": "22222222-2222-4222-8222-222222222222",
+          "expectedAdmissionControl": {
+            "sequence": 1,
+            "cancelWatermark": 1,
+            "cancelled": true,
+            "ready": false
+          }
+        }
+      },
+      {
+        "name": "unsafe_sequence",
+        "value": {
+          "requestId": "22222222-2222-4222-8222-222222222222",
+          "target": {
+            "sessionId": "22222222-2222-4222-8222-222222222222",
+            "purpose": "target_recovery",
+            "targetId": "target"
+          },
+          "attemptId": "22222222-2222-4222-8222-222222222222",
+          "expectedAdmissionControl": {
+            "sequence": 9007199254740992,
+            "cancelWatermark": 1,
+            "cancelled": true,
+            "ready": false
+          },
+          "expectedOperationControl": null
+        }
+      }
+    ]
+  },
+  "MigrationSourceTransferResult": {
+    "valid": [
+      {
+        "name": "unconfirmed_after_restart",
+        "value": {
+          "requestId": "22222222-2222-4222-8222-222222222222",
+          "coordinatorState": "unknown",
+          "observation": "unobserved",
+          "result": null,
+          "progress": null,
+          "errorCode": null
+        }
+      },
+      {
+        "name": "source_offline",
+        "value": {
+          "requestId": "22222222-2222-4222-8222-222222222222",
+          "coordinatorState": "unknown",
+          "observation": "observed",
+          "result": {
+            "requestId": "22222222-2222-4222-8222-222222222222",
+            "scope": "target",
+            "sourceObserved": false,
+            "phase": "pending",
+            "sourceState": null,
+            "sourceCapture": null,
+            "sourceSnapshotControl": null,
+            "targetState": null,
+            "targetAdmissionControl": null,
+            "targetWorkerRunning": false,
+            "receipt": null,
+            "progress": null
+          },
+          "progress": null,
+          "errorCode": null
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "admission_is_not_completion",
+        "value": {
+          "requestId": "22222222-2222-4222-8222-222222222222",
+          "coordinatorState": "completed",
+          "observation": "unobserved",
+          "result": null,
+          "progress": null,
+          "errorCode": null
+        }
+      },
+      {
+        "name": "missing_is_not_an_unobserved_result",
+        "value": {
+          "requestId": "22222222-2222-4222-8222-222222222222",
+          "coordinatorState": "unknown",
+          "observation": "unobserved",
+          "progress": null,
+          "errorCode": null
+        }
+      },
+      {
+        "name": "no_private_binding",
+        "value": {
+          "requestId": "22222222-2222-4222-8222-222222222222",
+          "coordinatorState": "unknown",
+          "observation": "unobserved",
+          "result": null,
+          "progress": null,
+          "errorCode": null,
+          "sourceAuthority": {
+            "instanceId": "22222222-2222-4222-8222-222222222222"
+          }
+        }
+      }
+    ]
+  },
+  "MigrationSourceReceivedParams": {
+    "valid": [
+      {
+        "name": "owned_original_receipt",
+        "value": {
+          "target": {
+            "sessionId": "22222222-2222-4222-8222-222222222222",
+            "purpose": "target_recovery",
+            "targetId": "local"
+          },
+          "requestId": "33333333-3333-4333-8333-333333333333",
+          "manifestSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "pageIndex": 0
+        }
+      },
+      {
+        "name": "plugin_catalog_explicit_opt_in",
+        "value": {
+          "target": {
+            "sessionId": "22222222-2222-4222-8222-222222222222",
+            "purpose": "target_recovery",
+            "targetId": "local"
+          },
+          "requestId": "33333333-3333-4333-8333-333333333333",
+          "manifestSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "pageIndex": 0,
+          "includePlugins": true
+        }
+      },
+      {
+        "name": "explicit_projects_opt_in",
+        "value": {
+          "target": {
+            "sessionId": "22222222-2222-4222-8222-222222222222",
+            "purpose": "target_recovery",
+            "targetId": "local"
+          },
+          "requestId": "33333333-3333-4333-8333-333333333333",
+          "manifestSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "pageIndex": 0,
+          "includeProjects": true
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "no_raw_source_authority",
+        "value": {
+          "target": {
+            "sessionId": "22222222-2222-4222-8222-222222222222",
+            "purpose": "target_recovery",
+            "targetId": "local"
+          },
+          "requestId": "33333333-3333-4333-8333-333333333333",
+          "manifestSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "pageIndex": 0,
+          "sourceAuthority": {}
+        }
+      },
+      {
+        "name": "bounded_pages",
+        "value": {
+          "target": {
+            "sessionId": "22222222-2222-4222-8222-222222222222",
+            "purpose": "target_recovery",
+            "targetId": "local"
+          },
+          "requestId": "33333333-3333-4333-8333-333333333333",
+          "manifestSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "pageIndex": 103
+        }
+      }
+    ]
+  },
+  "MigrationSourceReceivedResult": {
+    "valid": [
+      {
+        "name": "receipt_is_not_publication",
+        "value": {
+          "receipt": {
+            "requestId": "33333333-3333-4333-8333-333333333333",
+            "manifestSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "entries": 1,
+            "bytes": 42
+          },
+          "items": [
+            {
+              "entryId": "e0000-0000",
+              "source": "claude-code",
+              "class": "configuration",
+              "category": null,
+              "projectScoped": false,
+              "files": 1,
+              "bytes": 42
+            }
+          ],
+          "totalSources": 1,
+          "nextPage": null
+        }
+      },
+      {
+        "name": "project_metadata_only_no_target_mapping",
+        "value": {
+          "receipt": {
+            "requestId": "33333333-3333-4333-8333-333333333333",
+            "manifestSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "entries": 1,
+            "bytes": 42
+          },
+          "items": [
+            {
+              "entryId": "e0000-0000",
+              "source": "codex",
+              "class": "project",
+              "category": "project",
+              "projectScoped": false,
+              "files": 1,
+              "bytes": 123,
+              "project": {
+                "displayName": "Owned project",
+                "labelOrigin": "registry_name",
+                "originalProjectId": "project-original",
+                "roots": 1,
+                "formatRevision": "codex-project-registry/sqlite/1"
+              }
+            }
+          ],
+          "totalSources": 1,
+          "nextPage": null
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "page_is_bounded",
+        "value": {
+          "receipt": {
+            "requestId": "33333333-3333-4333-8333-333333333333",
+            "manifestSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "entries": 1,
+            "bytes": 42
+          },
+          "items": [
+            {
+              "entryId": "e0000-0000",
+              "source": "claude-code",
+              "class": "configuration",
+              "category": null,
+              "projectScoped": false,
+              "files": 1,
+              "bytes": 42
+            },
+            {
+              "entryId": "e0000-0000",
+              "source": "claude-code",
+              "class": "configuration",
+              "category": null,
+              "projectScoped": false,
+              "files": 1,
+              "bytes": 42
+            },
+            {
+              "entryId": "e0000-0000",
+              "source": "claude-code",
+              "class": "configuration",
+              "category": null,
+              "projectScoped": false,
+              "files": 1,
+              "bytes": 42
+            },
+            {
+              "entryId": "e0000-0000",
+              "source": "claude-code",
+              "class": "configuration",
+              "category": null,
+              "projectScoped": false,
+              "files": 1,
+              "bytes": 42
+            },
+            {
+              "entryId": "e0000-0000",
+              "source": "claude-code",
+              "class": "configuration",
+              "category": null,
+              "projectScoped": false,
+              "files": 1,
+              "bytes": 42
+            },
+            {
+              "entryId": "e0000-0000",
+              "source": "claude-code",
+              "class": "configuration",
+              "category": null,
+              "projectScoped": false,
+              "files": 1,
+              "bytes": 42
+            },
+            {
+              "entryId": "e0000-0000",
+              "source": "claude-code",
+              "class": "configuration",
+              "category": null,
+              "projectScoped": false,
+              "files": 1,
+              "bytes": 42
+            },
+            {
+              "entryId": "e0000-0000",
+              "source": "claude-code",
+              "class": "configuration",
+              "category": null,
+              "projectScoped": false,
+              "files": 1,
+              "bytes": 42
+            },
+            {
+              "entryId": "e0000-0000",
+              "source": "claude-code",
+              "class": "configuration",
+              "category": null,
+              "projectScoped": false,
+              "files": 1,
+              "bytes": 42
+            },
+            {
+              "entryId": "e0000-0000",
+              "source": "claude-code",
+              "class": "configuration",
+              "category": null,
+              "projectScoped": false,
+              "files": 1,
+              "bytes": 42
+            },
+            {
+              "entryId": "e0000-0000",
+              "source": "claude-code",
+              "class": "configuration",
+              "category": null,
+              "projectScoped": false,
+              "files": 1,
+              "bytes": 42
+            }
+          ],
+          "totalSources": 1,
+          "nextPage": null
+        }
+      }
+    ]
+  },
+  "MigrationSourceAdoptionParams": {
+    "valid": [
+      {
+        "name": "target_owned_locator",
+        "value": {
+          "target": {
+            "sessionId": "22222222-2222-4222-8222-222222222222",
+            "purpose": "target_recovery",
+            "targetId": "local"
+          },
+          "requestId": "33333333-3333-4333-8333-333333333333",
+          "adoptionId": "44444444-4444-4444-8444-444444444444"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "no_principal_override",
+        "value": {
+          "target": {
+            "sessionId": "22222222-2222-4222-8222-222222222222",
+            "purpose": "target_recovery",
+            "targetId": "local",
+            "principal": {
+              "kind": "localOs"
+            }
+          },
+          "requestId": "33333333-3333-4333-8333-333333333333",
+          "adoptionId": "44444444-4444-4444-8444-444444444444"
+        }
+      },
+      {
+        "name": "source_role_cannot_adopt",
+        "value": {
+          "target": {
+            "sessionId": "22222222-2222-4222-8222-222222222222",
+            "purpose": "source",
+            "targetId": "local"
+          },
+          "requestId": "33333333-3333-4333-8333-333333333333",
+          "adoptionId": "44444444-4444-4444-8444-444444444444"
+        }
+      }
+    ]
+  },
+  "MigrationSourceAdoptionPrepareParams": {
+    "valid": [
+      {
+        "name": "explicit_mapping_without_path",
+        "value": {
+          "locator": {
+            "target": {
+              "sessionId": "22222222-2222-4222-8222-222222222222",
+              "purpose": "target_recovery",
+              "targetId": "local"
+            },
+            "requestId": "33333333-3333-4333-8333-333333333333",
+            "adoptionId": "44444444-4444-4444-8444-444444444444"
+          },
+          "manifestSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "selections": [
+            {
+              "entryId": "e0000-0000",
+              "projectMapping": "current_workspace"
+            }
+          ]
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "no_raw_target_mapping",
+        "value": {
+          "locator": {
+            "target": {
+              "sessionId": "22222222-2222-4222-8222-222222222222",
+              "purpose": "target_recovery",
+              "targetId": "local"
+            },
+            "requestId": "33333333-3333-4333-8333-333333333333",
+            "adoptionId": "44444444-4444-4444-8444-444444444444"
+          },
+          "manifestSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "selections": [
+            {
+              "entryId": "e0000-0000",
+              "projectMapping": "current_workspace",
+              "targetPath": "/caller/path"
+            }
+          ]
+        }
+      },
+      {
+        "name": "bounded_empty_selection",
+        "value": {
+          "locator": {
+            "target": {
+              "sessionId": "22222222-2222-4222-8222-222222222222",
+              "purpose": "target_recovery",
+              "targetId": "local"
+            },
+            "requestId": "33333333-3333-4333-8333-333333333333",
+            "adoptionId": "44444444-4444-4444-8444-444444444444"
+          },
+          "manifestSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "selections": []
+        }
+      },
+      {
+        "name": "no_content_parameter",
+        "value": {
+          "locator": {
+            "target": {
+              "sessionId": "22222222-2222-4222-8222-222222222222",
+              "purpose": "target_recovery",
+              "targetId": "local"
+            },
+            "requestId": "33333333-3333-4333-8333-333333333333",
+            "adoptionId": "44444444-4444-4444-8444-444444444444"
+          },
+          "manifestSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "selections": [
+            {
+              "entryId": "e0000-0000",
+              "projectMapping": "current_workspace"
+            }
+          ],
+          "content": "not an upload API"
+        }
+      }
+    ]
+  },
+  "MigrationSourceAdoptionResumeParams": {
+    "valid": [
+      {
+        "name": "explicit_own_control",
+        "value": {
+          "locator": {
+            "target": {
+              "sessionId": "22222222-2222-4222-8222-222222222222",
+              "purpose": "target_recovery",
+              "targetId": "local"
+            },
+            "requestId": "33333333-3333-4333-8333-333333333333",
+            "adoptionId": "44444444-4444-4444-8444-444444444444"
+          },
+          "expectedControl": {
+            "sequence": 2,
+            "cancelWatermark": 1
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "no_unsafe_counter",
+        "value": {
+          "locator": {
+            "target": {
+              "sessionId": "22222222-2222-4222-8222-222222222222",
+              "purpose": "target_recovery",
+              "targetId": "local"
+            },
+            "requestId": "33333333-3333-4333-8333-333333333333",
+            "adoptionId": "44444444-4444-4444-8444-444444444444"
+          },
+          "expectedControl": {
+            "sequence": 9007199254740992,
+            "cancelWatermark": 1
+          }
+        }
+      },
+      {
+        "name": "no_snapshot_watermark",
+        "value": {
+          "locator": {
+            "target": {
+              "sessionId": "22222222-2222-4222-8222-222222222222",
+              "purpose": "target_recovery",
+              "targetId": "local"
+            },
+            "requestId": "33333333-3333-4333-8333-333333333333",
+            "adoptionId": "44444444-4444-4444-8444-444444444444"
+          },
+          "expectedControl": {
+            "sequence": 2,
+            "cancelWatermark": 1
+          },
+          "snapshotControl": {
+            "sequence": 3
+          }
+        }
+      }
+    ]
+  },
+  "MigrationSourceAdoptionCancelParams": {
+    "valid": [
+      {
+        "name": "fixed_cancel_command",
+        "value": {
+          "locator": {
+            "target": {
+              "sessionId": "22222222-2222-4222-8222-222222222222",
+              "purpose": "target_recovery",
+              "targetId": "local"
+            },
+            "requestId": "33333333-3333-4333-8333-333333333333",
+            "adoptionId": "44444444-4444-4444-8444-444444444444"
+          },
+          "commandId": "55555555-5555-4555-8555-555555555555"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "no_new_random_actor",
+        "value": {
+          "locator": {
+            "target": {
+              "sessionId": "22222222-2222-4222-8222-222222222222",
+              "purpose": "target_recovery",
+              "targetId": "local"
+            },
+            "requestId": "33333333-3333-4333-8333-333333333333",
+            "adoptionId": "44444444-4444-4444-8444-444444444444"
+          },
+          "commandId": "55555555-5555-4555-8555-555555555555",
+          "actor": "caller"
+        }
+      }
+    ]
+  },
+  "MigrationSourceAdoptionResult": {
+    "valid": [
+      {
+        "name": "untracked_is_not_not_executed",
+        "value": {
+          "state": null
+        }
+      },
+      {
+        "name": "only_preview_ready",
+        "value": {
+          "state": {
+            "adoptionId": "44444444-4444-4444-8444-444444444444",
+            "requestId": "33333333-3333-4333-8333-333333333333",
+            "phase": "preview_ready",
+            "workerState": "stopped",
+            "control": {
+              "sequence": 3,
+              "cancelWatermark": 0
+            },
+            "cancelRequested": false,
+            "jobs": [
+              {
+                "source": "claude-code",
+                "jobId": "mig-66666666666666666666666666666666",
+                "targetScope": "user",
+                "previewReady": true
+              }
+            ],
+            "totalSources": 1,
+            "completedSources": 1,
+            "blockedItems": 0,
+            "errorCode": null
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "not_installed_state",
+        "value": {
+          "state": {
+            "adoptionId": "44444444-4444-4444-8444-444444444444",
+            "requestId": "33333333-3333-4333-8333-333333333333",
+            "phase": "installed",
+            "workerState": "stopped",
+            "control": {
+              "sequence": 3,
+              "cancelWatermark": 0
+            },
+            "cancelRequested": false,
+            "jobs": [
+              {
+                "source": "claude-code",
+                "jobId": "mig-66666666666666666666666666666666",
+                "targetScope": "user",
+                "previewReady": true
+              }
+            ],
+            "totalSources": 1,
+            "completedSources": 1,
+            "blockedItems": 0,
+            "errorCode": null
+          }
+        }
+      },
+      {
+        "name": "unknown_control_is_required",
+        "value": {
+          "state": {
+            "adoptionId": "44444444-4444-4444-8444-444444444444",
+            "requestId": "33333333-3333-4333-8333-333333333333",
+            "phase": "preview_ready",
+            "workerState": "stopped",
+            "cancelRequested": false,
+            "jobs": [
+              {
+                "source": "claude-code",
+                "jobId": "mig-66666666666666666666666666666666",
+                "targetScope": "user",
+                "previewReady": true
+              }
+            ],
+            "totalSources": 1,
+            "completedSources": 1,
+            "blockedItems": 0,
+            "errorCode": null
+          }
+        }
+      }
+    ]
+  },
+  "MigrationSourceBindingsParams": {
+    "valid": [
+      {
+        "name": "ordered_refs",
+        "value": {
+          "sourceIds": [
+            "opaque-configuration",
+            "opaque-assets"
+          ]
+        }
+      },
+      {
+        "name": "utf8_boundary",
+        "value": {
+          "sourceIds": [
+            "中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中x"
+          ]
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "empty",
+        "value": {
+          "sourceIds": []
+        }
+      },
+      {
+        "name": "too_many",
+        "value": {
+          "sourceIds": [
+            "0",
+            "1",
+            "2",
+            "3",
+            "4",
+            "5",
+            "6",
+            "7",
+            "8",
+            "9",
+            "10"
+          ]
+        }
+      },
+      {
+        "name": "duplicate",
+        "value": {
+          "sourceIds": [
+            "same",
+            "same"
+          ]
+        }
+      },
+      {
+        "name": "empty_ref",
+        "value": {
+          "sourceIds": [
+            ""
+          ]
+        }
+      },
+      {
+        "name": "control",
+        "value": {
+          "sourceIds": [
+            "bad\n"
+          ]
+        }
+      },
+      {
+        "name": "unicode_control",
+        "value": {
+          "sourceIds": [
+            "bad"
+          ]
+        }
+      },
+      {
+        "name": "utf8_budget",
+        "value": {
+          "sourceIds": [
+            "中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中"
+          ]
+        }
+      },
+      {
+        "name": "too_long",
+        "value": {
+          "sourceIds": [
+            "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+          ]
+        }
+      },
+      {
+        "name": "no_path",
+        "value": {
+          "sourceIds": [
+            "opaque"
+          ],
+          "path": "/unauthorized"
+        }
+      }
+    ]
+  },
+  "MigrationSourceBindingsResult": {
+    "valid": [
+      {
+        "name": "native_families",
+        "value": {
+          "bindings": [
+            {
+              "sourceId": "opaque-configuration",
+              "family": "configuration"
+            },
+            {
+              "sourceId": "opaque-assets",
+              "family": "assets"
+            }
+          ]
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown_family",
+        "value": {
+          "bindings": [
+            {
+              "sourceId": "opaque",
+              "family": "provider"
+            }
+          ]
+        }
+      },
+      {
+        "name": "no_private_binding",
+        "value": {
+          "bindings": [
+            {
+              "sourceId": "opaque",
+              "family": "configuration",
+              "path": "/private"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "MigrationSourceCodexLayersReadParams": {
+    "valid": [
+      {
+        "name": "source_page",
+        "value": {
+          "sourceId": "opaque",
+          "pageIndex": 1
+        }
+      },
+      {
+        "name": "first_page",
+        "value": {
+          "sourceId": "opaque"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "no_job",
+        "value": {
+          "target": {
+            "kind": "job",
+            "jobId": "other"
+          }
+        }
+      },
+      {
+        "name": "no_path",
+        "value": {
+          "sourceId": "opaque",
+          "path": "/private"
+        }
+      },
+      {
+        "name": "unsigned_page",
+        "value": {
+          "sourceId": "opaque",
+          "pageIndex": -1
+        }
+      }
+    ]
+  },
+  "MigrationSourceDirectorySelectParams": {
+    "valid": [
+      {
+        "name": "explicit_source_runtime_directory",
+        "value": {
+          "selectionId": "11111111-1111-4111-8111-111111111111",
+          "source": "codex",
+          "directory": "/owned/product"
+        }
+      },
+      {
+        "name": "windows_source_directory",
+        "value": {
+          "selectionId": "11111111-1111-4111-8111-111111111111",
+          "source": "codex",
+          "directory": "C:\\owned\\product"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "empty",
+        "value": {
+          "selectionId": "11111111-1111-4111-8111-111111111111",
+          "source": "codex",
+          "directory": ""
+        }
+      },
+      {
+        "name": "blank",
+        "value": {
+          "selectionId": "11111111-1111-4111-8111-111111111111",
+          "source": "codex",
+          "directory": "  "
+        }
+      },
+      {
+        "name": "control",
+        "value": {
+          "selectionId": "11111111-1111-4111-8111-111111111111",
+          "source": "codex",
+          "directory": "a\nb"
+        }
+      },
+      {
+        "name": "too_long",
+        "value": {
+          "selectionId": "11111111-1111-4111-8111-111111111111",
+          "source": "codex",
+          "directory": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        }
+      },
+      {
+        "name": "utf8_budget",
+        "value": {
+          "selectionId": "11111111-1111-4111-8111-111111111111",
+          "source": "codex",
+          "directory": "中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中中"
+        }
+      },
+      {
+        "name": "no_authority_override",
+        "value": {
+          "selectionId": "11111111-1111-4111-8111-111111111111",
+          "source": "codex",
+          "directory": "/owned/product",
+          "principal": {
+            "kind": "localOs"
+          }
+        }
+      },
+      {
+        "name": "no_invalid_identity",
+        "value": {
+          "selectionId": "wizard",
+          "source": "codex",
+          "directory": "/owned/product"
+        }
+      }
+    ]
+  },
+  "MigrationSourceDirectoryResult": {
+    "valid": [
+      {
+        "name": "original_directory_grant",
+        "value": {
+          "selectionId": "11111111-1111-4111-8111-111111111111",
+          "source": "codex",
+          "remainingMs": 600000
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "no_path_disclosure",
+        "value": {
+          "selectionId": "11111111-1111-4111-8111-111111111111",
+          "source": "codex",
+          "remainingMs": 600000,
+          "directory": "/private"
+        }
+      },
+      {
+        "name": "no_negative_lifetime",
+        "value": {
+          "selectionId": "11111111-1111-4111-8111-111111111111",
+          "source": "codex",
+          "remainingMs": -1
+        }
+      }
+    ]
+  },
+  "MigrationSourceConfigurationLayersReadParams": {
+    "valid": [
+      {
+        "name": "source_page",
+        "value": {
+          "sourceId": "opaque",
+          "pageIndex": 1
+        }
+      },
+      {
+        "name": "first_page",
+        "value": {
+          "sourceId": "opaque"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "no_job",
+        "value": {
+          "target": {
+            "kind": "job",
+            "jobId": "other"
+          }
+        }
+      },
+      {
+        "name": "no_path",
+        "value": {
+          "sourceId": "opaque",
+          "path": "/private"
+        }
+      },
+      {
+        "name": "unsigned_page",
+        "value": {
+          "sourceId": "opaque",
+          "pageIndex": -1
+        }
+      }
+    ]
+  }
+}

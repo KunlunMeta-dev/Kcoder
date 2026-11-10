@@ -146,6 +146,7 @@ fn build_http_client(
     let mut headers = HeaderMap::new();
     headers.insert(USER_AGENT, HeaderValue::from_str(user_agent)?);
     let mut builder = reqwest_genai::Client::builder()
+        .redirect(reqwest_genai::redirect::Policy::none())
         .connect_timeout(connect_timeout)
         // Kimi's coding SSE is occasionally truncated by intermediaries when
         // content encoding is negotiated, which reqwest reports as a body
@@ -845,19 +846,21 @@ fn map_usage(usage: &genai::chat::Usage) -> Usage {
         output_tokens: non_negative_u32(usage.completion_tokens),
         total_tokens: usage
             .total_tokens
-            .map(|tokens| tokens.max(0) as u32)
-            .or_else(|| {
-                Some(
-                    non_negative_u32(usage.prompt_tokens)
-                        .saturating_add(non_negative_u32(usage.completion_tokens)),
-                )
+            .filter(|tokens| *tokens >= 0)
+            .map(|tokens| tokens as u32)
+            .or_else(|| match (usage.prompt_tokens, usage.completion_tokens) {
+                (Some(input), Some(output)) if input >= 0 && output >= 0 => {
+                    Some((input as u32).saturating_add(output as u32))
+                }
+                _ => None,
             }),
         cache_creation_input_tokens: None,
         cache_read_input_tokens: usage
             .prompt_tokens_details
             .as_ref()
             .and_then(|details| details.cached_tokens)
-            .map(|tokens| tokens.max(0) as u32),
+            .filter(|tokens| *tokens >= 0)
+            .map(|tokens| tokens as u32),
         iterations: None,
     }
 }
@@ -1898,5 +1901,69 @@ mod raw_tool_stream_tests {
             end.iter()
                 .all(|event| !matches!(event, StreamEvent::ContentBlockDelta { .. }))
         );
+    }
+}
+
+#[cfg(test)]
+mod usage_presence_tests {
+    use super::*;
+    #[test]
+    fn missing_and_negative_usage_never_invent_explicit_zero_totals() {
+        assert_eq!(map_usage(&genai::chat::Usage::default()).total_tokens, None);
+        let missing_output = genai::chat::Usage {
+            prompt_tokens: Some(0),
+            ..Default::default()
+        };
+        assert_eq!(map_usage(&missing_output).total_tokens, None);
+        let invalid = genai::chat::Usage {
+            total_tokens: Some(-1),
+            prompt_tokens: Some(-2),
+            completion_tokens: Some(3),
+            prompt_tokens_details: Some(genai::chat::PromptTokensDetails {
+                cached_tokens: Some(-1),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let actual = map_usage(&invalid);
+        assert_eq!(actual.total_tokens, None);
+        assert_eq!(actual.cache_read_input_tokens, None);
+    }
+    #[test]
+    fn explicitly_reported_zero_and_complete_known_counter_pairs_are_preserved() {
+        let wire: genai::chat::Usage = serde_json::from_value(
+            serde_json::json!({"total_tokens":0,"prompt_tokens_details":{"cached_tokens":0}}),
+        )
+        .unwrap();
+        assert_eq!(map_usage(&wire).total_tokens, Some(0));
+        assert_eq!(map_usage(&wire).cache_read_input_tokens, Some(0));
+        for raw in [
+            serde_json::json!({}),
+            serde_json::json!({"prompt_tokens_details":null}),
+            serde_json::json!({"prompt_tokens_details":{"cached_tokens":null}}),
+        ] {
+            let missing: genai::chat::Usage = serde_json::from_value(raw).unwrap();
+            assert_eq!(map_usage(&missing).cache_read_input_tokens, None);
+            assert_eq!(map_usage(&missing).total_tokens, None);
+        }
+        let explicit = genai::chat::Usage {
+            total_tokens: Some(0),
+            prompt_tokens_details: Some(genai::chat::PromptTokensDetails {
+                cached_tokens: Some(0),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let actual = map_usage(&explicit);
+        assert_eq!(actual.total_tokens, Some(0));
+        assert_eq!(actual.cache_read_input_tokens, Some(0));
+        for (input, output, expected) in [(0, 0, 0), (31, 7, 38)] {
+            let pair = genai::chat::Usage {
+                prompt_tokens: Some(input),
+                completion_tokens: Some(output),
+                ..Default::default()
+            };
+            assert_eq!(map_usage(&pair).total_tokens, Some(expected));
+        }
     }
 }

@@ -132,6 +132,7 @@ await runE2E(import.meta.url, {
     await execute('tar', ['-czf', archive, '-C', resolve(repoRoot, 'apps/kcoder-studio'), 'renderer/dist', 'dev-server.mjs', 'src', '-C', repoRoot, 'logo/logo.png']);
     await execute('scp', ['-o', `ControlPath=${control}`, archive, `${target}:${remoteDirectory}/ui-overlay.tar.gz`]);
     await execute('scp', ['-o', `ControlPath=${control}`, resolve(repoRoot, 'apps/kcoder-studio/e2e/harness/windows-studio-ui-probe.cjs'), `${target}:${remoteDirectory}/studio-ui-probe.cjs`]);
+    await execute('scp', ['-o', `ControlPath=${control}`, resolve(repoRoot, 'apps/kcoder-studio/e2e/harness/windows-cdp-document.cjs'), `${target}:${remoteDirectory}/windows-cdp-document.cjs`]);
     if (process.env.KCODER_E2E_WINDOWS_NATIVE_INPUT === '1') await execute('scp', ['-o', `ControlPath=${control}`, resolve(repoRoot, 'apps/kcoder-studio/e2e/harness/windows-owned-input.ps1'), `${target}:${remoteDirectory}/windows-owned-input.ps1`]);
     await ps(`[IO.Directory]::CreateDirectory('${directory}\\overlay')|Out-Null; & tar -xf '${directory}\\ui-overlay.tar.gz' -C '${directory}\\overlay'; if($LASTEXITCODE -ne 0){throw 'Overlay extraction failed'}`);
     const ui = process.env.KCODER_E2E_WINDOWS_INTERACTIVE_INPUT === '1'

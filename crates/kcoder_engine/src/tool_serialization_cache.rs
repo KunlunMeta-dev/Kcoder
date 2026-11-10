@@ -257,8 +257,8 @@ mod tests {
     #[test]
     fn engine_static_prefix_path_uses_final_definition_cache() {
         let root = tempfile::tempdir().unwrap();
-        let engine =
-            crate::test_support::engine_builder::TestEngineBuilder::new(root.path()).build();
+        let engine = crate::test_support::engine_builder::TestEngineBuilder::new(root.path())
+            .build_with_profile_directory();
         let mut request = request();
         assert!(engine.note_static_prefix(&request).0);
         assert!(!engine.note_static_prefix(&request).0);

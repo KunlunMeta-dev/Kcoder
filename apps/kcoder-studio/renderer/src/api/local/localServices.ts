@@ -1,4 +1,6 @@
+import { isRuntimeDebugEnabled } from '@/lib/diagnosticPreferences'
 import { uploadWorkspaceFile } from '@/kcoder/workspaceFileUpload'
+import { readThreadGoalStatusObservation } from '@/kcoder/threadGoalStatus'
 import { normalizeWorkspaceChunkRevision } from '@/lib/workspace-file-chunk-revision'
 import { subscribeSubagentConversation } from './subagentConversation'
 import type {
@@ -52,6 +54,9 @@ import type {
   RuntimeGoalSetResponse,
   RuntimeGoalStatus,
   RuntimeTaskAddress,
+  RuntimeTaskCancelRequest,
+  RuntimeModelSelectionRequest,
+  RuntimeModelSelectionResponse,
   RuntimeTaskArchiveResponse,
   RuntimeTaskCancelResponse,
   RuntimeTaskShortenWaitResponse,
@@ -112,7 +117,7 @@ import {
   subscribeLocalExecutorEvents,
   type LocalExecutorEvent,
   type LocalExecutorStatus,
-} from '@/tauri/localExecutor'
+} from '@/host/localExecutor'
 import { KCODER_STUDIO_MIN_EXECUTOR_VERSION } from '@/lib/device-capabilities'
 import { normalizeModelOptionAliases, normalizeModelOptionValue } from '@/lib/model-ui'
 import { requestLocalCodexOfficialModels } from './codexOfficialModels'
@@ -169,10 +174,6 @@ const LOCAL_DEVICE_ID = 'local-device'
 
 function nowMs(): number {
   return typeof performance !== 'undefined' ? performance.now() : Date.now()
-}
-
-function isRuntimeDebugEnabled(): boolean {
-  return globalThis.localStorage?.getItem('wework:debug-runtime') === '1'
 }
 
 const OPENAI_RESPONSES_PROTOCOL = 'openai-responses'
@@ -623,6 +624,7 @@ function normalizeRuntimeTaskSummary(
     modelSelectionValue(taskRecord.modelSelection ?? taskRecord.model_selection) ??
     modelSelectionValue(runtimeHandle.modelSelection ?? runtimeHandle.model_selection)
   const goalStatus = runtimeGoalStatusValue(taskRecord.goalStatus ?? taskRecord.goal_status)
+  const goalStatusObservation = readThreadGoalStatusObservation(taskRecord)
   const threadStatus = stringValue(taskRecord.threadStatus ?? taskRecord.thread_status)
   const turnStatus = stringValue(taskRecord.turnStatus ?? taskRecord.turn_status)
   const continuableValue = taskRecord.continuable
@@ -644,6 +646,7 @@ function normalizeRuntimeTaskSummary(
     ...(Object.keys(runtimeHandle).length > 0 ? { runtimeHandle } : {}),
     ...(modelSelection ? { modelSelection } : {}),
     ...(goalStatus ? { goalStatus } : {}),
+    ...(goalStatusObservation ? { goalStatusObservation } : {}),
     ...(threadStatus ? { threadStatus } : {}),
     ...(turnStatus ? { turnStatus } : {}),
     ...(continuable !== undefined ? { continuable } : {}),
@@ -1184,21 +1187,20 @@ interface BuildLocalRuntimeExecutionRequestInput {
 
 function messageWithApplicationContext(
   message: string,
-  context?: RuntimeTaskCreateRequest['additionalContext']
+  context: RuntimeTaskCreateRequest['additionalContext'],
+  deliveryMcpUrl?: string
 ): string {
   const entries = Object.entries(context ?? {}).filter(([, entry]) => entry.kind === 'application')
-  if (message.includes('cloud://projects') && !context?.projectSpaceCapability) {
+  if (deliveryMcpUrl && message.includes('cloud://projects') && !context?.projectSpaceCapability) {
     entries.push([
       'projectSpaceCapability',
       {
         kind: 'application',
         value: [
-          'The user activated the Wegent project-space capability.',
+          'The user referenced a cloud project space.',
           'Project storage and task source are independent.',
-          'Use wegent_tasks for local project spaces and for GitHub or GitLab Issues, even when the project space is stored in the Backend.',
           'Use wegent_delivery for cloud project metadata, files, deliveries, and Backend-native TODOs only.',
-          'wegent_delivery and wegent_tasks are server ids, not callable tools.',
-          'List both sources when resolving a project name.',
+          'wegent_delivery is an MCP server ID, not a callable tool.',
           'Never create or copy a cloud project merely because a local project is not returned by list_cloud_projects.',
           'Use resolve_cloud_reference to resolve cloud:// references.',
           'MCP resources describe addressable data; do not use list_mcp_resources to discover tools.',
@@ -1276,7 +1278,11 @@ function buildLocalRuntimeExecutionRequest(
         ? { permission_mode: input.modelOptions.kcoderPermissionMode }
         : {}),
     },
-    prompt: messageWithApplicationContext(input.message, input.additionalContext),
+    prompt: messageWithApplicationContext(
+      input.message,
+      input.additionalContext,
+      input.cloudModelGateway?.mcpUrl
+    ),
     enable_tools: true,
     enable_deep_thinking: true,
     skill_names: skillNames,
@@ -2050,6 +2056,18 @@ export function createRuntimeWorkApiFromIpc(
       })
       return request('runtime.tasks.send', payload, localDeviceId)
     },
+    async queueRuntimeModelSelection(
+      data: RuntimeModelSelectionRequest
+    ): Promise<RuntimeModelSelectionResponse> {
+      const localDeviceId = await resolveDeviceId({ address: data.address })
+      const address = normalizeDeviceRecord({ address: data.address }, localDeviceId)
+        .address as RuntimeTaskAddress
+      return request(
+        'runtime.tasks.model_switch',
+        { address, taskId: address.taskId, model: data.model },
+        localDeviceId
+      )
+    },
     async rollbackRuntimeTask(data: RuntimeRollbackRequest): Promise<RuntimeSendResponse> {
       const localDeviceId = await resolveDeviceId(data as unknown as Record<string, unknown>)
       const payload = createLocalRuntimeSendPayload(
@@ -2109,6 +2127,8 @@ export function createRuntimeWorkApiFromIpc(
     },
     async listRuntimeSubagents(data: {
       address: RuntimeTaskAddress
+      agentId?: string
+      expectedBackgroundRun?: import('@/types/subagents').RuntimeSubagentRun
     }): Promise<RuntimeSubagentListResponse> {
       const localDeviceId = await resolveDeviceId({ address: data.address })
       const address = normalizeDeviceRecord({ address: data.address }, localDeviceId)
@@ -2206,6 +2226,8 @@ export function createRuntimeWorkApiFromIpc(
           agentId: data.agentId,
           message: data.message,
           ...(data.clientMessageId ? { clientMessageId: data.clientMessageId } : {}),
+          ...(data.expectedBackgroundRun ? { expectedBackgroundRun: data.expectedBackgroundRun } : {}),
+          ...(data.continueOriginalRun === true ? { continueOriginalRun: true } : {}),
         },
         localDeviceId
       )
@@ -2411,7 +2433,7 @@ export function createRuntimeWorkApiFromIpc(
     cleanupArchivedConversations(data: RuntimeArchivedConversationBulkRequest) {
       return requestWithLocalDevice('runtime.archived_conversations.cleanup', data)
     },
-    cancelRuntimeTask(data: RuntimeTaskAddress): Promise<RuntimeTaskCancelResponse> {
+    cancelRuntimeTask(data: RuntimeTaskCancelRequest): Promise<RuntimeTaskCancelResponse> {
       return requestWithLocalDevice('runtime.tasks.cancel', data)
     },
     shortenWaitRuntimeTask(data: RuntimeTaskAddress): Promise<RuntimeTaskShortenWaitResponse> {
@@ -2478,7 +2500,7 @@ function debugLocalRuntimeCreatePayload(
   request: RuntimeTaskCreateRequest,
   payload: Record<string, unknown>
 ) {
-  if (globalThis.localStorage?.getItem('wework:debug-runtime') !== '1') return
+  if (!isRuntimeDebugEnabled()) return
   const executionRequest = recordValue(payload.executionRequest)
   console.debug('[KCoder Studio] Local runtime create payload', {
     taskId: request.taskId,
@@ -2623,7 +2645,7 @@ export function createLocalAppServices(deps: LocalAppServicesDeps = {}): Workben
             status: deviceStatus,
             is_default: server.id === selectedDeviceId,
             // Even a same-host KCoder target is remote from the browser renderer: all terminal I/O
-            // crosses the authenticated gateway instead of a Tauri/local-IPC bridge. Classifying it
+            // crosses the authenticated gateway instead of a native IPC bridge. Classifying it
             // as local makes the upstream workspace panel stop before calling startDeviceTerminal.
             device_type: 'remote' as const,
             bind_shell: 'claudecode' as const,
@@ -2855,6 +2877,7 @@ export function createLocalAppServices(deps: LocalAppServicesDeps = {}): Workben
         options?.signal?.throwIfAborted()
         let codexOfficialModels: CodexOfficialModel[]
         let supportsModelSelectionMode = false
+        let supportsTurnModelSwitch = false
         let codexOfficialError: string | null
         let codexAuthConfigured: boolean
         try {
@@ -2877,6 +2900,8 @@ export function createLocalAppServices(deps: LocalAppServicesDeps = {}): Workben
           codexOfficialModels = codexOfficialResult.value?.models ?? []
           supportsModelSelectionMode =
             kcoderGateway && codexOfficialResult.value?.supportsModelSelectionMode === true
+          supportsTurnModelSwitch =
+            kcoderGateway && codexOfficialResult.value?.supportsTurnModelSwitch === true
           if (kcoderGateway && codexOfficialResult.error) throw new Error(codexOfficialResult.error)
           codexOfficialError = codexOfficialResult.error
           codexAuthConfigured = nextCodexAuthConfigured
@@ -2893,8 +2918,15 @@ export function createLocalAppServices(deps: LocalAppServicesDeps = {}): Workben
             codexAuthConfigured,
             !kcoderGateway
           ).map(model =>
-            supportsModelSelectionMode
-              ? { ...model, config: { ...model.config, supportsModelSelectionMode: true } }
+            supportsModelSelectionMode || supportsTurnModelSwitch
+              ? {
+                  ...model,
+                  config: {
+                    ...model.config,
+                    ...(supportsModelSelectionMode ? { supportsModelSelectionMode: true } : {}),
+                    ...(supportsTurnModelSwitch ? { supportsTurnModelSwitch: true } : {}),
+                  },
+                }
               : model
           ),
         }

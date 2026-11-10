@@ -18,6 +18,18 @@ test('image decode failure becomes a readable status', () => {
   expect(screen.getByRole('status')).toHaveTextContent('toolImages.failed')
   expect(screen.queryByRole('img')).not.toBeInTheDocument()
 })
+
+test('renders a desktop screenshot larger than the ordinary image budget', () => {
+  const data = 'A'.repeat(1024 * 1024 + 4)
+  render(
+    <ToolImageObservations
+      toolName="mcp__kcoder_computer_use__Screenshot"
+      output={{ images: [{ mimeType: 'image/jpeg', data }] }}
+    />
+  )
+  expect(screen.getByRole('img').getAttribute('src')).toBe(`data:image/jpeg;base64,${data}`)
+  expect(screen.queryByText('toolImages.omitted')).not.toBeInTheDocument()
+})
 test('rejects active image formats and reports omitted observations', () => {
   render(
     <ToolImageObservations

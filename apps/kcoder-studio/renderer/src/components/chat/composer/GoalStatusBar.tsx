@@ -2,9 +2,12 @@ import { useEffect, useMemo, useState } from 'react'
 import { ChevronRight, Pause, Pencil, Play, Target, Trash2 } from 'lucide-react'
 import { useTranslation } from '@/hooks/useTranslation'
 import type { RuntimeGoal, RuntimeGoalStatus } from '@/types/api'
+import { ComposerStatusItem } from './ComposerStatusRegion'
 
 interface GoalStatusBarProps {
   goal: RuntimeGoal
+  readOnly?: boolean
+  presentation?: 'detail' | 'embedded'
   continuing?: boolean
   onEditGoal?: () => void
   onPauseGoal?: () => void
@@ -25,6 +28,8 @@ const goalStatusLabelKeys: Record<RuntimeGoalStatus, { key: string; fallback: st
 export function GoalStatusBar({
   goal,
   continuing = false,
+  readOnly = false,
+  presentation,
   onEditGoal,
   onPauseGoal,
   onResumeGoal,
@@ -34,11 +39,11 @@ export function GoalStatusBar({
   const statusLabel = continuing
     ? { key: 'workbench.goal_status_continuing', fallback: '目标继续执行中' }
     : (goalStatusLabelKeys[goal.status] ?? goalStatusLabelKeys.active)
-  const timerKey = goalTimerKey(goal)
+  const timerKey = `${goalTimerKey(goal)}:${readOnly}`
   const [timerState, setTimerState] = useState(() => createTimerState(timerKey, Date.now()))
   const elapsedSeconds = useMemo(
-    () => getLiveElapsedSeconds(goal, timerState, timerKey),
-    [goal, timerKey, timerState]
+    () => (readOnly ? goal.timeUsedSeconds : getLiveElapsedSeconds(goal, timerState, timerKey)),
+    [goal, timerKey, timerState, readOnly]
   )
   const elapsed = formatGoalElapsed(elapsedSeconds)
   const resumable = goal.status === 'paused' || goal.status === 'blocked'
@@ -48,37 +53,16 @@ export function GoalStatusBar({
     ? t('workbench.goal_resume', '继续目标')
     : t('workbench.goal_pause', '暂停目标')
   const toggleAction = resumable ? onResumeGoal : onPauseGoal
+  const statusText = t(statusLabel.key, statusLabel.fallback)
+  const goalTitle = t('workbench.goal_chip', '目标')
+  const attention =
+    goal.status === 'paused' ||
+    goal.status === 'blocked' ||
+    goal.status === 'usageLimited' ||
+    goal.status === 'budgetLimited'
 
-  useEffect(() => {
-    if (goal.status !== 'active') return
-
-    const interval = window.setInterval(() => {
-      const nowMs = Date.now()
-      setTimerState(current =>
-        current.key === timerKey ? { ...current, nowMs } : createTimerState(timerKey, nowMs)
-      )
-    }, 1000)
-    return () => window.clearInterval(interval)
-  }, [goal.status, timerKey])
-
-  return (
-    <div
-      data-testid="goal-status-bar"
-      className="mb-2 flex h-11 w-full items-center gap-2 rounded-2xl border border-border/45 bg-background px-4 text-sm leading-[18px] text-text-secondary shadow-[0_8px_24px_rgba(15,23,42,0.05)]"
-    >
-      <Target className="h-4 w-4 shrink-0 text-text-muted" />
-      <div className="min-w-0 flex-1 truncate">
-        <span className="font-semibold text-text-primary">
-          {goal.mode === 'strict'
-            ? '/goal-pro'
-            : goal.mode === 'arrangement'
-              ? '/ultgoal'
-              : '/goal'}{' '}
-          · {t(statusLabel.key, statusLabel.fallback)}
-        </span>
-        <span className="ml-1 truncate text-text-secondary">{goal.objective}</span>
-      </div>
-      {elapsed && <span className="shrink-0 text-text-secondary">{elapsed}</span>}
+  const actionButtons = !readOnly ? (
+    <div className="flex shrink-0 items-center gap-1">
       <button
         type="button"
         data-testid="edit-goal-button"
@@ -114,6 +98,79 @@ export function GoalStatusBar({
       >
         <Trash2 className="h-4 w-4" />
       </button>
+    </div>
+  ) : null
+
+  const detail = (
+    <div data-testid="goal-status-detail" className="flex min-w-0 items-start gap-3">
+      <Target className="mt-0.5 h-4 w-4 shrink-0 text-text-muted" aria-hidden="true" />
+      <div className="min-w-0 flex-1">
+        <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+          <span className="font-medium text-text-primary">{statusText}</span>
+          <span className="text-xs text-text-muted">
+            {goal.mode === 'strict'
+              ? '/goal-pro'
+              : goal.mode === 'arrangement'
+                ? '/ultgoal'
+                : '/goal'}
+          </span>
+          {elapsed && <span className="text-xs text-text-muted">{elapsed}</span>}
+        </div>
+        <p className="mt-1 whitespace-pre-wrap break-words text-sm text-text-secondary">
+          {goal.objective}
+        </p>
+      </div>
+      {actionButtons}
+    </div>
+  )
+
+  useEffect(() => {
+    if (readOnly || goal.status !== 'active') return
+
+    const interval = window.setInterval(() => {
+      const nowMs = Date.now()
+      setTimerState(current =>
+        current.key === timerKey ? { ...current, nowMs } : createTimerState(timerKey, nowMs)
+      )
+    }, 1000)
+    return () => window.clearInterval(interval)
+  }, [goal.status, timerKey, readOnly])
+
+  if (presentation === 'detail') return detail
+  if (presentation === 'embedded') {
+    return (
+      <ComposerStatusItem
+        id="goal"
+        title={goalTitle}
+        summary={`${statusText} · ${goal.objective}`}
+        icon={Target}
+        attention={attention}
+        order={0}
+      >
+        {detail}
+      </ComposerStatusItem>
+    )
+  }
+
+  return (
+    <div
+      data-testid="goal-status-bar"
+      className="mb-2 flex h-11 w-full items-center gap-2 rounded-2xl border border-border/45 bg-background px-4 text-sm leading-[18px] text-text-secondary shadow-[0_8px_24px_rgba(15,23,42,0.05)]"
+    >
+      <Target className="h-4 w-4 shrink-0 text-text-muted" />
+      <div className="min-w-0 flex-1 truncate">
+        <span className="font-semibold text-text-primary">
+          {goal.mode === 'strict'
+            ? '/goal-pro'
+            : goal.mode === 'arrangement'
+              ? '/ultgoal'
+              : '/goal'}{' '}
+          · {statusText}
+        </span>
+        <span className="ml-1 truncate text-text-secondary">{goal.objective}</span>
+      </div>
+      {elapsed && <span className="shrink-0 text-text-secondary">{elapsed}</span>}
+      {actionButtons}
       <ChevronRight className="h-4 w-4 shrink-0 text-text-muted" />
     </div>
   )

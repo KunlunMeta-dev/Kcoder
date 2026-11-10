@@ -9,6 +9,7 @@ install_dir="${KCODER_INSTALL_DIR:-${HOME:?HOME is required}/.local/bin}"
 formal_home="${KCODER_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/kcoder}"
 cargo_bin="${KCODER_CARGO_BIN:-cargo}"
 source "$repo_dir/scripts/install/lib/ripgrep.sh"
+source "$repo_dir/scripts/install/lib/binary.sh"
 export KCODER_HOME="$formal_home"
 if [[ -z "${KCODER_CONFIG_DIR:-}" ]]; then
   export KCODER_CONFIG_DIR="$formal_home"
@@ -18,12 +19,8 @@ fi
 if [[ "$repo_dir" != /* ]]; then
   repo_dir="$(cd -P "$repo_dir" && pwd)"
 fi
-target_dir="${KCODER_TARGET_DIR:-$repo_dir/target}"
+target_dir="$(kcoder_cargo_target_dir "$repo_dir")"
 binary="${KCODER_RELEASE_BIN:-$target_dir/release/kcoder}"
-if [[ "$target_dir" != /* ]]; then
-  target_dir="$repo_dir/$target_dir"
-  [[ -n "${KCODER_RELEASE_BIN:-}" ]] || binary="$target_dir/release/kcoder"
-fi
 
 if [[ -z "${KCODER_RELEASE_BIN:-}" ]]; then
   command -v "$cargo_bin" >/dev/null 2>&1 || {

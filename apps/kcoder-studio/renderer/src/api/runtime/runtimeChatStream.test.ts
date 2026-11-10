@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest'
-import type { LocalExecutorEvent } from '@/tauri/localExecutor'
+import type { LocalExecutorEvent } from '@/host/localExecutor'
 import { createRuntimeChatStream, setRuntimeChatStreamDebugEnabled } from './runtimeChatStream'
 
 describe('createRuntimeChatStream', () => {
@@ -58,6 +58,35 @@ describe('createRuntimeChatStream', () => {
       offset: 0,
       result: { delta: 'hello', offset: 0 },
     })
+  })
+
+  test('reports a reconnect gap only to the owning transcript and drops its buffered suffix', () => {
+    let listener!: (event: LocalExecutorEvent) => void
+    subscribe.mockImplementation(async handler => { listener = handler; return vi.fn() })
+    const stream = createRuntimeChatStream({ subscribe, request })
+    const scope = { deviceId: 'server', taskId: 'task' }
+    const otherGap = vi.fn()
+    const otherText = vi.fn()
+    const closeOther = stream.subscribe({
+      scope: { ...scope, deviceId: 'other' }, onStreamGap: otherGap, onChatChunk: otherText,
+    })
+    for (const deviceId of ['server', 'other']) {
+      listener({ event: 'response.output_text.delta', payload: {
+        ...scope, deviceId, subtaskId: 'turn', data: { delta: 'partial text' },
+      } })
+    }
+    listener({ event: 'executor.task_stream_gap', payload: scope })
+    const gap = vi.fn()
+    const text = vi.fn()
+    const closeOwner = stream.subscribe({ scope, onStreamGap: gap, onChatChunk: text })
+    expect(gap).toHaveBeenCalledOnce()
+    expect(text).not.toHaveBeenCalled()
+    listener({ event: 'executor.task_stream_gap', payload: scope })
+    expect(gap).toHaveBeenCalledTimes(2)
+    expect(otherGap).not.toHaveBeenCalled()
+    expect(otherText).toHaveBeenCalledOnce()
+    closeOwner()
+    closeOther()
   })
 
   test('forwards task-plan events outside a subscription scope for task-level caching', async () => {

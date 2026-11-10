@@ -24,6 +24,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { useWorkbenchPaneSession } from '../useWorkbenchPaneSession'
 import { getWorkbenchPaneKey } from '../workbenchPaneIdentity'
 import { useWorkbenchPaneActive } from '../workbenchPaneStack'
+import { getActiveWorkbenchDeviceId, resolveLocalWorkbenchDeviceId } from '@/lib/workbench-device'
 import { cloudBindingState, pendingProjectForTask, pendingTodoForTask } from './cloudBindings'
 import { type DesktopWorkbenchPaneProps, type PendingBlankBrowserMigration } from './types'
 import { consumeLatestBlankBrowserMigration } from './workspacePanelPersistence'
@@ -96,7 +97,13 @@ export function usePaneIdentity({
     return () => cancelAnimationFrame(frame)
   }, [])
 
-  const paneSession = useWorkbenchPaneSession({ currentRuntimeTask })
+  const feedbackDeviceId = currentRuntimeTask?.deviceId ?? resolveLocalWorkbenchDeviceId(state.devices,
+    getActiveWorkbenchDeviceId({ currentProject, standaloneDeviceId: state.standaloneDeviceId })) ?? undefined
+  const paneSession = useWorkbenchPaneSession({
+    currentRuntimeTask,
+    feedbackDeviceId,
+    feedbackOwnerScope: JSON.stringify([paneKey, feedbackDeviceId, currentRuntimeTask ? null : state.standaloneWorkspacePath]),
+  })
 
   const workflowComposerInput = useRef(paneSession.input)
 

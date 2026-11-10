@@ -1,7 +1,24 @@
 //! Bounded, connection-owned observation of workspace changes across all tools.
-use super::*;
+use crate::{native_file_progress, private_files::hex_sha256};
+use anyhow::{Context, Result};
+use futures::StreamExt;
+use kcoder_engine::EngineEvent;
 use kcoder_types::tool_ui::WorkspaceFileProgress;
+#[cfg(test)]
+use kcoder_workspace_resources::git::run_git_command;
+#[cfg(test)]
+use kcoder_workspace_resources::snapshots::capture_worktree_tree_with_policy;
+use kcoder_workspace_resources::snapshots::{
+    GitSnapshotBackend, GitTreeSnapshot, RemovePrivateFileOnDrop, private_snapshot_repository,
+    run_snapshot_git_command,
+};
+use kcoder_workspace_resources::{workspace_io, workspace_revision};
 use std::{collections::HashSet, future::Future, pin::Pin};
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+    time::Duration,
+};
 
 const INTERVAL: Duration = Duration::from_secs(2);
 const PROBE_TIMEOUT: Duration = Duration::from_secs(2);
@@ -10,11 +27,11 @@ const MAX_NEW_FILE_BYTES: u64 = 8 * 1024 * 1024;
 type Probe = Pin<Box<dyn Future<Output = Result<WorkspaceFileProgress>> + Send>>;
 type EngineStream = Pin<Box<dyn futures::Stream<Item = EngineEvent> + Send>>;
 
-pub(super) fn may_mutate_workspace(registry: &kcoder_tools::ToolRegistry, name: &str) -> bool {
+pub fn may_mutate_workspace(registry: &kcoder_tools::ToolRegistry, name: &str) -> bool {
     !registry.get(name).is_some_and(|tool| tool.is_read_only())
 }
 
-pub(super) enum Update {
+pub enum Update {
     Engine(EngineEvent),
     Files(WorkspaceFileProgress),
     ToolFiles {
@@ -36,7 +53,7 @@ struct ToolProbe {
     future: Probe,
 }
 
-pub(super) struct LiveFileProgress {
+pub struct LiveFileProgress {
     workspace: PathBuf,
     artifact_dir: PathBuf,
     turn_id: String,
@@ -54,7 +71,7 @@ pub(super) struct LiveFileProgress {
 }
 
 impl LiveFileProgress {
-    pub(super) fn new(
+    pub fn new(
         workspace: PathBuf,
         artifact_dir: PathBuf,
         turn_id: String,
@@ -78,11 +95,11 @@ impl LiveFileProgress {
         }
     }
 
-    pub(super) fn set_baseline(&mut self, before: &GitTreeSnapshot) {
+    pub fn set_baseline(&mut self, before: &GitTreeSnapshot) {
         self.baseline = Some((before.tree.clone(), before.backend));
     }
 
-    pub(super) async fn set_native_baseline(&mut self) {
+    pub async fn set_native_baseline(&mut self) {
         if let Ok(Ok(before)) = tokio::time::timeout(
             PROBE_TIMEOUT,
             native_file_progress::capture(&self.workspace, &self.policy, None),
@@ -95,7 +112,7 @@ impl LiveFileProgress {
 
     // Called while ToolExecutionStarted has yielded, before polling Engine again.
     // A tool baseline never reuses the turn's cumulative diff.
-    pub(super) async fn start_tool(&mut self, id: &str) {
+    pub async fn start_tool(&mut self, id: &str) {
         if !self.policy.enabled || !self.active_writers.insert(id.to_owned()) {
             return;
         }
@@ -133,7 +150,7 @@ impl LiveFileProgress {
 
     // Called before projecting item/completed. Reap the owned probe and capture a
     // final observation while Engine is still paused at this tool's terminal event.
-    pub(super) async fn finish_tool(&mut self, id: &str) -> Option<WorkspaceFileProgress> {
+    pub async fn finish_tool(&mut self, id: &str) -> Option<WorkspaceFileProgress> {
         if !self.active_writers.remove(id) {
             return None;
         }
@@ -157,7 +174,7 @@ impl LiveFileProgress {
     }
 
     // No detached task: stopping the turn also stops polling and owns the current probe.
-    pub(super) async fn next(&mut self, engine: &mut EngineStream) -> Option<Update> {
+    pub async fn next(&mut self, engine: &mut EngineStream) -> Option<Update> {
         loop {
             tokio::select! {
                 event = engine.next() => return event.map(Update::Engine),
@@ -240,7 +257,7 @@ impl LiveFileProgress {
         }
     }
 
-    pub(super) async fn stop(&mut self) {
+    pub async fn stop(&mut self) {
         // Reap the bounded owned Git probe before releasing the baseline repository.
         if let Some(probe) = self.probe.take() {
             let _ = probe.await;
@@ -410,6 +427,7 @@ fn parse_numstat(text: &str) -> Result<WorkspaceFileProgress> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
 
     fn observer(workspace: &Path, artifacts: &Path) -> LiveFileProgress {
         LiveFileProgress::new(

@@ -372,7 +372,7 @@ fn resume_reapplies_the_recorded_settings_template() {
 }
 
 #[test]
-fn resume_reports_a_missing_template_without_blocking_the_baseline() {
+fn resume_keeps_frozen_template_restrictions_after_the_template_is_deleted() {
     let (_temp, workspace, config, overlay) = template_sandbox();
     let thread_id = persisted_thread_with_template(&workspace, &config, &overlay);
 
@@ -392,9 +392,145 @@ fn resume_reports_a_missing_template_without_blocking_the_baseline() {
     assert!(resumed.get("error").is_none(), "{resumed}");
     assert_eq!(resumed["result"]["thread"]["settingsTemplate"]["id"], "no-bash");
     assert!(
-        catalog_names(&mut server, 4, &thread_id).contains(&"bash".to_string()),
-        "missing template must fall back to baseline settings"
+        !catalog_names(&mut server, 4, &thread_id).contains(&"bash".to_string()),
+        "removing a mutable template must not weaken a recorded session"
     );
+    server.shutdown();
+}
+
+#[test]
+fn editing_a_template_affects_new_sessions_but_not_the_recorded_session() {
+    let (_temp, workspace, config, overlay) = template_sandbox();
+    let thread_id = persisted_thread_with_template(&workspace, &config, &overlay);
+    let mut server = TestAppServer::builder(&workspace, &overlay)
+        .config_dir(&config)
+        .without_scenario()
+        .spawn();
+    assert!(server.initialize(1).get("error").is_none());
+    server.send(json!({
+        "jsonrpc": "2.0", "id": 2, "method": "settings/templates/save",
+        "params": {"id": "no-bash", "name": "No Bash", "content": "{}"}
+    }));
+    let saved = server.response(2);
+    assert!(saved.get("error").is_none(), "{saved}");
+    server.send(json!({
+        "jsonrpc": "2.0", "id": 3, "method": "thread/resume", "params": {"threadId": thread_id}
+    }));
+    let resumed = server.response(3);
+    assert!(resumed.get("error").is_none(), "{resumed}");
+    assert_ne!(
+        resumed["result"]["thread"]["settingsTemplate"]["revisionSha256"],
+        saved["result"]["template"]["revisionSha256"]
+    );
+    assert!(!catalog_names(&mut server, 4, &thread_id).contains(&"bash".to_string()));
+    server.send(json!({
+        "jsonrpc": "2.0", "id": 5, "method": "thread/start", "params": {"settingsTemplate": "no-bash"}
+    }));
+    let created = server.response(5);
+    assert!(created.get("error").is_none(), "{created}");
+    let created_id = created["result"]["thread"]["id"].as_str().unwrap();
+    assert!(catalog_names(&mut server, 6, created_id).contains(&"bash".to_string()));
+    server.shutdown();
+}
+
+#[test]
+fn unavailable_recorded_template_versions_reject_resume_without_changing_the_binding() {
+    for damage in ["changed_snapshot", "missing_version", "hard_link"] {
+        let (_temp, workspace, config, overlay) = template_sandbox();
+        let thread_id = persisted_thread_with_template(&workspace, &config, &overlay);
+        let snapshot_directory = config.join("templates/.bindings");
+        let snapshot = std::fs::read_dir(&snapshot_directory)
+            .unwrap()
+            .next()
+            .unwrap()
+            .unwrap()
+            .path();
+        match damage {
+            "changed_snapshot" => std::fs::write(&snapshot, "{}").unwrap(),
+            "hard_link" => std::fs::hard_link(&snapshot, config.join("linked-snapshot")).unwrap(),
+            _ => {
+                std::fs::remove_file(snapshot).unwrap();
+                std::fs::remove_file(config.join("templates/no-bash.jsonc")).unwrap();
+            }
+        }
+        let mut server = TestAppServer::builder(&workspace, &overlay)
+            .config_dir(&config)
+            .without_scenario()
+            .spawn();
+        assert!(server.initialize(1).get("error").is_none());
+        server.send(json!({
+            "jsonrpc": "2.0", "id": 2, "method": "thread/resume", "params": {"threadId": thread_id}
+        }));
+        let rejected = server.response(2);
+        assert_eq!(rejected["error"]["code"], -32022, "{damage}: {rejected}");
+        server.send(json!({
+            "jsonrpc": "2.0", "id": 3, "method": "thread/read", "params": {"threadId": thread_id}
+        }));
+        let read = server.response(3);
+        assert_eq!(read["result"]["thread"]["settingsTemplate"]["id"], "no-bash", "{read}");
+        server.shutdown();
+    }
+}
+
+#[test]
+fn default_template_resolution_errors_do_not_silently_start_a_baseline_session() {
+    for damage in ["missing_body", "changed_snapshot"] {
+        let (_temp, workspace, config, overlay) = template_sandbox();
+        let mut server = TestAppServer::builder(&workspace, &overlay)
+            .config_dir(&config)
+            .without_scenario()
+            .spawn();
+        assert!(server.initialize(1).get("error").is_none());
+        let revision = save_no_bash_template(&mut server, 2);
+        server.send(json!({
+            "jsonrpc": "2.0", "id": 3, "method": "settings/templates/default", "params": {"id": "no-bash"}
+        }));
+        assert!(server.response(3).get("error").is_none());
+        if damage == "missing_body" {
+            std::fs::remove_file(config.join("templates/no-bash.jsonc")).unwrap();
+        } else {
+            server.send(json!({"jsonrpc":"2.0", "id":4, "method":"thread/start", "params":{}}));
+            let started = server.response(4);
+            assert!(started.get("error").is_none(), "{started}");
+            std::fs::write(config.join(format!("templates/.bindings/no-bash-{revision}.jsonc")), "{}").unwrap();
+        }
+        server.send(json!({"jsonrpc":"2.0", "id":5, "method":"thread/start", "params":{}}));
+        let rejected = server.response(5);
+        assert_eq!(rejected["error"]["code"], -32602, "{damage}: {rejected}");
+        server.shutdown();
+    }
+}
+
+#[test]
+fn durable_forks_keep_the_recorded_template_version_after_edits_deletion_and_restart() {
+    let (_temp, workspace, config, overlay) = template_sandbox();
+    let parent_id = persisted_thread_with_template(&workspace, &config, &overlay);
+    let mut server = TestAppServer::builder(&workspace, &overlay)
+        .config_dir(&config).without_scenario().spawn();
+    assert!(server.initialize(1).get("error").is_none());
+    server.send(json!({"jsonrpc":"2.0","id":2,"method":"thread/resume","params":{"threadId":parent_id}}));
+    let resumed = server.response(2);
+    assert!(resumed.get("error").is_none(), "{resumed}");
+    let original_binding = resumed["result"]["thread"]["settingsTemplate"].clone();
+    server.send(json!({"jsonrpc":"2.0","id":3,"method":"settings/templates/save","params":{"id":"no-bash","name":"No Bash","content":"{}"}}));
+    assert!(server.response(3).get("error").is_none());
+    server.send(json!({"jsonrpc":"2.0","id":4,"method":"thread/fork","params":{"threadId":parent_id,"lastTurnId":"turn-1"}}));
+    let forked = server.response(4);
+    assert!(forked.get("error").is_none(), "{forked}");
+    assert_eq!(forked["result"]["thread"]["settingsTemplate"], original_binding);
+    let child_id = forked["result"]["thread"]["id"].as_str().unwrap().to_owned();
+    assert_ne!(child_id, parent_id);
+    server.send(json!({"jsonrpc":"2.0","id":5,"method":"settings/templates/delete","params":{"id":"no-bash"}}));
+    assert!(server.response(5).get("error").is_none());
+    server.shutdown();
+    let mut server = TestAppServer::builder(&workspace, &overlay)
+        .config_dir(&config).without_scenario().spawn();
+    assert!(server.initialize(1).get("error").is_none());
+    server.send(json!({"jsonrpc":"2.0","id":2,"method":"thread/resume","params":{"threadId":child_id}}));
+    let resumed = server.response(2);
+    assert!(resumed.get("error").is_none(), "{resumed}");
+    assert_eq!(resumed["result"]["thread"]["settingsTemplate"], original_binding);
+    assert!(!catalog_names(&mut server, 3, &child_id).contains(&"bash".to_string()));
     server.shutdown();
 }
 

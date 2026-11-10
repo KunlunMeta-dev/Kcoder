@@ -1,5 +1,9 @@
 {
+  "organizationDescription": "Turn selected original materials into connected knowledge pages.",
+  "retrievalDescription": "Find and cite sources in conversations. Original materials stay unchanged.",
   "title": "Wiki",
+  "workspaceTabs": "Wiki sections",
+  "workspaceSections": {"library": "Knowledge library", "memory": "Memory"},
   "imageFormat": "images",
   "contentActions": "Manage {{title}}",
   "openPage": "Open knowledge page",
@@ -77,6 +81,8 @@
   "applyChanges": "Apply changes",
   "closeReview": "Close review",
   "jobErrors": {
+    "authorization_unavailable": "Source authorization is unavailable. Check permission and the connection before continuing.",
+    "authorization_changed": "Source authorization needs to be checked again. Confirm access before continuing.",
     "invalid_model_output": "The model returned an invalid Wiki result. Sources are retained; you can retry.",
     "model_output_truncated": "The model output was cut off before the proposal was complete.",
     "context_budget_exceeded": "This batch exceeds the current context budget. Progress is retained.",
@@ -138,7 +144,10 @@
   "errorEncoding": "Save this document as UTF-8 or BOM-marked UTF-16, then import again.",
   "errorSize": "This file or operation exceeds its size limit. Use smaller files or batches.",
   "errorUnavailable": "This item is unavailable or archived. Refresh the Wiki to check its state.",
-  "errorRequest": "The operation did not finish. Check the selected target and try again.",
+  "errorRequest": "The operation did not finish. View the details for the cause.",
+  "errorBusy": "The knowledge service is busy. Try again shortly.",
+  "errorConnection": "Unable to communicate with the selected target. Check the connection and try again.",
+  "reload": "Reload",
   "errorDetails": "Technical details",
   "invalidMarkdownBundle": "Invalid Markdown package. Use a Wiki export and keep its manifest and filenames.",
   "exportMarkdown": "Export Markdown to edit",
@@ -252,7 +261,7 @@
   "pdfRuntimeUnavailable": "The execution target has no usable PDF text reader. Reinstall the full Studio package or install Poppler pdftotext on that target; OCR is not used.",
   "archiveImported": "Imported “{{name}}”. Your existing default Wiki is preserved; select the imported Wiki from the list to make it current.",
   "supportedFormats": "Formats and file limits",
-  "spaceHint": "Keep your sources. Build connected knowledge.",
+  "spaceHint": "Keep your sources together. Find and cite them in conversation when you need them.",
   "organizedPage": "Organized knowledge",
   "close": "Close",
   "jobModelSection": "Model configuration",
@@ -329,7 +338,7 @@
       "organization_disabled": "Organization was disabled. Resume explicitly after enabling it."
     }
   },
-  "dropFiles": "Drop files here, or",
+  "dropFiles": "Drop files here, or select the upload icon",
   "upload": "browse files",
   "supportedExtensions": "Supports {{extensions}}",
   "documentSize": "Documents up to {{size}} MiB",

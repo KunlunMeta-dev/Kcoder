@@ -1,6 +1,7 @@
 import type { ChatCancelAck, ChatCancelPayload, ChatGuideAck, ChatGuidePayload } from '@/types/api'
 import type { ChatStreamHandlers } from '@/stream/chatStream'
-import type { LocalExecutorEvent } from '@/tauri/localExecutor'
+import type { LocalExecutorEvent } from '@/host/localExecutor'
+import { isDiagnosticEnabled, setDiagnosticEnabled } from '@/lib/diagnosticPreferences'
 import {
   createResponseApiStreamState,
   clearRuntimeTargetPlans,
@@ -22,18 +23,12 @@ interface RuntimeChatStreamSubscription {
 
 let nextRuntimeChatStreamSubscriptionId = 1
 let activeRuntimeChatStreamSubscriptions = 0
-const RUNTIME_CHAT_STREAM_DEBUG_STORAGE_KEY = 'wework:debug-runtime-chat-stream'
-
 export function isRuntimeChatStreamDebugEnabled(): boolean {
-  return globalThis.localStorage?.getItem(RUNTIME_CHAT_STREAM_DEBUG_STORAGE_KEY) === '1'
+  return isDiagnosticEnabled('debug-runtime-chat-stream')
 }
 
 export function setRuntimeChatStreamDebugEnabled(enabled: boolean): void {
-  if (enabled) {
-    globalThis.localStorage?.setItem(RUNTIME_CHAT_STREAM_DEBUG_STORAGE_KEY, '1')
-    return
-  }
-  globalThis.localStorage?.removeItem(RUNTIME_CHAT_STREAM_DEBUG_STORAGE_KEY)
+  setDiagnosticEnabled('debug-runtime-chat-stream', enabled)
 }
 
 export function createRuntimeChatStream(deps: RuntimeChatStreamDeps) {
@@ -46,6 +41,18 @@ export function createRuntimeChatStream(deps: RuntimeChatStreamDeps) {
   const eventScopeKey = (event: LocalExecutorEvent) => {
     const payload = asRecord(event.payload)
     return scopeKey(stringField(payload, 'taskId') ?? '', stringField(payload, 'deviceId'))
+  }
+  function markIncompleteScope(key: string) {
+    for (let index = pendingEvents.length - 1; index >= 0; index--) {
+      if (eventScopeKey(pendingEvents[index]) === key) pendingEvents.splice(index, 1)
+    }
+    if (allScopesIncomplete) return
+    incompleteScopes.add(key)
+    if (incompleteScopes.size > maxPendingEvents) {
+      pendingEvents.length = 0
+      incompleteScopes.clear()
+      allScopesIncomplete = true
+    }
   }
   let nativeCleanup: (() => void) | null = null
   let nativeSubscribePromise: Promise<void> | null = null
@@ -78,6 +85,22 @@ export function createRuntimeChatStream(deps: RuntimeChatStreamDeps) {
     if (nativeCleanup || nativeSubscribePromise) return
     nativeSubscribePromise = Promise.resolve(
       deps.subscribe(event => {
+        if (event.event === 'executor.task_stream_gap') {
+          const payload = asRecord(event.payload)
+          const taskId = stringField(payload, 'taskId')
+          const deviceId = stringField(payload, 'deviceId')
+          if (!taskId || !deviceId) return
+          let delivered = false
+          for (const subscription of subscriptions.values()) {
+            const { scope, onStreamGap } = subscription.handlers
+            if (scope?.taskId !== taskId || scope.deviceId !== deviceId || !onStreamGap) continue
+            subscription.state = createResponseApiStreamState()
+            onStreamGap()
+            delivered = true
+          }
+          if (!delivered) markIncompleteScope(scopeKey(taskId, deviceId))
+          return
+        }
         if (event.event === 'executor.account_context_invalidated') {
           const targetId = stringField(asRecord(event.payload), 'deviceId')
           if (!targetId) return
@@ -159,20 +182,12 @@ export function createRuntimeChatStream(deps: RuntimeChatStreamDeps) {
               const lostKey = eventScopeKey(pendingEvents[0])
               // Do not replay a suffix as if it were a complete stream. Keep a
               // bounded dirty marker until a history-capable pane subscribes.
-              incompleteScopes.add(lostKey)
-              for (let index = pendingEvents.length - 1; index >= 0; index--) {
-                if (eventScopeKey(pendingEvents[index]) === lostKey) pendingEvents.splice(index, 1)
-              }
-              if (incompleteScopes.size > maxPendingEvents) {
-                incompleteScopes.clear()
-                pendingEvents.length = 0
-                allScopesIncomplete = true
-              }
+              markIncompleteScope(lostKey)
             }
           }
         }
         if (event.event === 'runtime.plan.updated') {
-          globalThis.dispatchEvent(new Event('wework-runtime-plan-updated'))
+          globalThis.dispatchEvent(new Event('kcoder-runtime-plan-updated'))
         }
       })
     )

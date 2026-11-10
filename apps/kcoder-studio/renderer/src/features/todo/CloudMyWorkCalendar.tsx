@@ -50,7 +50,7 @@ export function CloudMyWorkCalendar({ items, onSelectItem }: CloudMyWorkCalendar
     <div>
       <div
         data-testid="my-work-calendar"
-        className="cloud-my-work-calendar rounded-2xl border border-border bg-background p-4 shadow-sm"
+        className="studio-card-spacing cloud-my-work-calendar rounded-2xl border border-border bg-background shadow-sm"
       >
         <FullCalendar
           plugins={[dayGridPlugin]}

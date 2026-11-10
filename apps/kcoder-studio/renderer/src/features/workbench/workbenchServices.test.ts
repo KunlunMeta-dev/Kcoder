@@ -69,7 +69,7 @@ vi.mock('@/lib/runtime-mode', () => ({
 }))
 
 vi.mock('@/lib/runtime-environment', () => ({
-  isTauriRuntime: vi.fn(() => true),
+  isGatewayRuntime: vi.fn(() => true),
 }))
 
 import { createDefaultWorkbenchServices } from './workbenchServices'

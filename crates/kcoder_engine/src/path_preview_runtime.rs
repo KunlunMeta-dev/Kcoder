@@ -304,7 +304,7 @@ mod tests {
                 ..settings_using_main_summary_runtime(kcoder_config::Settings::default())
             })
             .tool_registry(registry)
-            .build();
+            .build_with_profile_directory();
         engine.state.add_message(Message::user_text("run tools"));
         (engine, inputs, request_flags)
     }

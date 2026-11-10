@@ -1,0 +1,17 @@
+[package]
+name = "kcoder_app_rpc_codec"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+kcoder_app_protocol = { path = "../.." }
+kcoder_types = { path = "../../../kcoder_types" }
+serde_json = { workspace = true }
+
+[lib]
+path = "../../src/internal/app_rpc_codec/lib.rs"

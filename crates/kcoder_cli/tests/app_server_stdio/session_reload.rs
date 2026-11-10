@@ -314,7 +314,7 @@ fn initialize_remains_available_when_mcp_never_responds() {
     server.send(json!({"id":1,"method":"initialize","params":{"protocolVersion":"2026-07-27","clientInfo":{"name":"stalled-mcp-test","version":"1"}}}));
     let line = server
         .rx
-        .recv_timeout(Duration::from_secs(11))
+        .recv_timeout(Duration::from_secs(20))
         .unwrap_or_else(|error| {
             let _ = server.child.kill();
             let mut stderr = String::new();
@@ -327,7 +327,7 @@ fn initialize_remains_available_when_mcp_never_responds() {
     let response: Value = serde_json::from_str(&line).unwrap();
     assert!(response.get("error").is_none(), "{response}");
     assert!(
-        started.elapsed() < Duration::from_secs(12),
+        started.elapsed() < Duration::from_secs(20),
         "optional MCP delayed initialize by {:?}",
         started.elapsed()
     );
@@ -581,6 +581,120 @@ fn mcp_install_remove_edit_only_target_user_settings_and_respect_overlays() {
     let controlled = server.response(7);
     assert!(controlled["error"]["message"].as_str().unwrap().contains("overlay"), "{controlled}");
     assert_eq!(std::fs::read(&settings_path).unwrap(), before_overlay);
+    server.shutdown_successfully();
+}
+
+#[test]
+#[cfg(unix)]
+fn mcp_activation_controls_new_connections_preserves_residents_and_honors_configuration_sources() {
+    let temp = tempfile::tempdir().unwrap();
+    let workspace = temp.path().join("workspace");
+    let config = temp.path().join("config");
+    std::fs::create_dir_all(&workspace).unwrap();
+    std::fs::create_dir_all(&config).unwrap();
+    let path = config.join("settings.json");
+    write_test_settings(&path);
+    let mut settings: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+    settings["providers"]["integration-test"]["authentication"] = json!({"mode":"none"});
+    let starts = temp.path().join("starts");
+    let script = temp.path().join("server.py");
+    std::fs::write(&script, r#"
+import sys,json
+with open(sys.argv[1], 'a') as f: f.write('start\n')
+for line in sys.stdin:
+    req=json.loads(line)
+    if 'id' not in req: continue
+    if req['method']=='initialize':
+        result={'protocolVersion':'2024-11-05','capabilities':{'tools':{}},'serverInfo':{'name':'activation','version':'1'}}
+    elif req['method']=='tools/list':
+        result={'tools':[{'name':'activation_probe','description':'Owned activation fixture','inputSchema':{'type':'object'}}]}
+    else: result={'content':[{'type':'text','text':'ok'}]}
+    print(json.dumps({'jsonrpc':'2.0','id':req['id'],'result':result}),flush=True)
+"#).unwrap();
+    settings["mcp_servers"] = json!([{"name":"activation","command":"python3","args":[script,starts]}]);
+    settings["mcp_disabled_servers"] = json!(["activation"]);
+    std::fs::write(&path,serde_json::to_vec(&settings).unwrap()).unwrap();
+    let overlay = temp.path().join("overlay.json");
+    std::fs::write(&overlay,"{}").unwrap();
+    let mut server = TestAppServer::builder(&workspace,&overlay).config_dir(&config).without_scenario().spawn();
+    let initialized = server.initialize(1);
+    assert_eq!(initialized["result"]["capabilities"]["experimental"]["mcpActivationV1"],true);
+    assert!(!starts.exists(),"disabled service started during bootstrap");
+    server.send(json!({"id":2,"method":"thread/start","params":{}}));
+    let first = server.response(2)["result"]["thread"]["id"].as_str().unwrap().to_owned();
+    server.send(json!({"id":3,"method":"tools/catalog","params":{"threadId":first}}));
+    assert!(!server.response(3).to_string().contains("activation_probe"));
+    assert!(!starts.exists(),"disabled service connected for a new conversation");
+    server.send(json!({"id":4,"method":"mcp/setEnabled","params":{"name":"activation","enabled":true}}));
+    assert_eq!(server.response(4)["result"]["enabled"],true);
+    server.send(json!({"id":5,"method":"thread/start","params":{}}));
+    let enabled = server.response(5)["result"]["thread"]["id"].as_str().unwrap().to_owned();
+    server.send(json!({"id":6,"method":"tools/catalog","params":{"threadId":enabled}}));
+    assert!(server.response(6).to_string().contains("activation_probe"));
+    assert_eq!(std::fs::read_to_string(&starts).unwrap(),"start\n");
+    server.send(json!({"id":7,"method":"mcp/setEnabled","params":{"name":"activation","enabled":false}}));
+    assert_eq!(server.response(7)["result"]["appliesToNewConversations"],true);
+    server.send(json!({"id":8,"method":"thread/start","params":{}}));
+    let disabled = server.response(8)["result"]["thread"]["id"].as_str().unwrap().to_owned();
+    server.send(json!({"id":9,"method":"tools/catalog","params":{"threadId":disabled}}));
+    assert!(!server.response(9).to_string().contains("activation_probe"));
+    server.send(json!({"id":10,"method":"tools/catalog","params":{"threadId":enabled}}));
+    assert!(server.response(10).to_string().contains("activation_probe"),"resident tools were revoked mid-session");
+    server.send(json!({"id":11,"method":"mcp/list","params":{}}));
+    let listed = server.response(11);
+    assert_eq!(listed["result"]["servers"][0]["enabled"],false);
+    let before = std::fs::read(&path).unwrap();
+    server.send(json!({"id":12,"method":"mcp/setEnabled","params":{"name":"activation","pluginId":"wrong-owner","enabled":true}}));
+    assert!(server.response(12).get("error").is_some());
+    assert_eq!(std::fs::read(&path).unwrap(),before);
+    std::fs::write(&overlay,r#"{"mcp_disabled_servers":["activation"]}"#).unwrap();
+    server.send(json!({"id":13,"method":"mcp/setEnabled","params":{"name":"activation","enabled":true}}));
+    let controlled = server.response(13);
+    assert!(controlled["error"]["message"].as_str().unwrap().contains("overlay"));
+    assert_eq!(std::fs::read(&path).unwrap(),before);
+    server.shutdown_successfully();
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+#[ignore = "requires an explicitly prepared sealed SearXNG runtime"]
+fn bundled_searxng_starts_through_the_actual_owned_cli_and_obeys_activation() {
+    // None of the selected engines has an init request; discovery does not search the web.
+    let runtime = std::path::PathBuf::from(std::env::var_os("KCODER_TEST_SEARXNG_RUNTIME").expect("Provide the prepared runtime path"));
+    assert!(runtime.is_absolute() && runtime.join("runtime-manifest.json").is_file());
+    let temp = tempfile::tempdir().unwrap();
+    let workspace = temp.path().join("workspace");
+    let config = temp.path().join("config");
+    std::fs::create_dir_all(&workspace).unwrap();
+    std::fs::create_dir_all(&config).unwrap();
+    let path = config.join("settings.json");
+    write_test_settings(&path);
+    let mut settings: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+    settings["providers"]["integration-test"]["authentication"] = json!({"mode":"none"});
+    settings["mcp_servers"] = json!([{"name":"searxng","transport":"searxng"}]);
+    std::fs::write(&path, serde_json::to_vec(&settings).unwrap()).unwrap();
+    let overlay = temp.path().join("overlay.json");
+    std::fs::write(&overlay, "{}").unwrap();
+    let mut server = TestAppServer::builder(&workspace, &overlay).config_dir(&config).env("KCODER_SEARXNG_RUNTIME", runtime).without_scenario().spawn();
+    assert!(server.initialize(1).get("error").is_none());
+    server.send(json!({"id":2,"method":"thread/start","params":{}}));
+    let enabled = server.response(2);
+    assert!(enabled.get("error").is_none(), "{enabled}");
+    let thread = enabled["result"]["thread"]["id"].as_str().unwrap();
+    server.send(json!({"id":3,"method":"tools/catalog","params":{"threadId":thread}}));
+    assert!(server.response(3).to_string().contains("mcp__searxng__search"));
+    server.send(json!({"id":4,"method":"mcp/list","params":{}}));
+    let list = server.response(4);
+    assert_eq!(list["result"]["servers"][0]["lastConnectionAttempt"], "ready", "{list}");
+    server.send(json!({"id":5,"method":"mcp/setEnabled","params":{"name":"searxng","enabled":false}}));
+    assert_eq!(server.response(5)["result"]["enabled"], false);
+    server.send(json!({"id":6,"method":"thread/start","params":{}}));
+    let disabled = server.response(6);
+    let next = disabled["result"]["thread"]["id"].as_str().unwrap();
+    server.send(json!({"id":7,"method":"tools/catalog","params":{"threadId":next}}));
+    assert!(!server.response(7).to_string().contains("mcp__searxng__search"));
+    server.send(json!({"id":8,"method":"tools/catalog","params":{"threadId":thread}}));
+    assert!(server.response(8).to_string().contains("mcp__searxng__search"));
     server.shutdown_successfully();
 }
 

@@ -39,6 +39,7 @@ it("authorization scope separates route, authorization generation, and device, w
   expect(profileAuthorizationScopeKey(profile({ authorizationGeneration: "authorization-2" }))).not.toBe(scope);
   expect(profileAuthorizationScopeKey(profile({ deviceId: "device-2" }))).not.toBe(scope);
   expect(profileAuthorizationScopeKey(profile({ id: "other-profile" }))).not.toBe(scope);
+  expect(profileAuthorizationScopeKey(profile({ authMode: "legacy" }))).not.toBe(scope);
 });
 
 it("a new same-profile authorization can refresh before an old generation settles; rotations still join their generation", async () => {

@@ -62,7 +62,7 @@ export function ArchivedConversationPreview({
   return (
     <section
       data-testid="archived-preview"
-      className="mb-4 rounded-xl border border-border bg-surface p-4"
+      className="studio-card-spacing mb-4 rounded-xl border border-border bg-surface"
     >
       <div className="mb-3 flex items-center justify-between gap-3">
         <div>

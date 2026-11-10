@@ -70,7 +70,7 @@ export function SubagentArtifactDrawer({
           ) : error !== null ? (
             <div
               data-testid="subagent-artifact-error"
-              className="rounded-lg border border-dashed border-border bg-surface px-4 py-6 text-sm leading-6 text-text-secondary"
+              className="studio-card-spacing rounded-lg border border-dashed border-border bg-surface text-sm leading-6 text-text-secondary"
             >
               {error || t('workbench.subagent_artifact_error')}
             </div>

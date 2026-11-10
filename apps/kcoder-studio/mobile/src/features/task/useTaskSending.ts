@@ -19,7 +19,7 @@ import {
 } from "./failedTaskSubmissions";
 import type { ComposerStagedAttachment } from "./types";
 import type { useTaskCommands } from "./useTaskCommands";
-import type { WorkspaceFailedSubmission } from "@/storage/workspace-preferences";
+import { normalizeWorkspaceSubmissionAcceptedTurn, type WorkspaceFailedSubmission } from "@/storage/workspace-preferences";
 
 function newComposerMessageId(): string {
   return `composer-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
@@ -41,7 +41,9 @@ function persistedFailedSubmissions(
     attachments: item.attachments.map(wireAttachment),
     createdAt: item.createdAt,
     outcome: item.outcome,
+    ...(item.acceptedTurn ? { acceptedTurn: item.acceptedTurn } : {}),
     ...(item.error ? { error: item.error } : {}),
+    ...(item.permissionMode ? { permissionMode: item.permissionMode } : {}),
   }));
 }
 
@@ -157,6 +159,9 @@ export function useTaskSending(context: ReturnType<typeof useTaskCommands>) {
   };
 
   const submit = async () => {
+    // Freeze this user's choice before any slash-command, attachment, or
+    // workspace persistence await can let the composer selection change.
+    const capturedPermissionMode = task.getSnapshot().permissionMode ?? "default";
     const value = input.trim();
     if (
       (!value && attachments.length === 0) ||
@@ -230,12 +235,14 @@ export function useTaskSending(context: ReturnType<typeof useTaskCommands>) {
       };
       const queuedId = `queued-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       const createdAt = Date.now();
-      clearSubmitted();
       messageQueue.enqueue({ id: queuedId, content: value, attachments: wireOutgoing, createdAt, staging: true });
       failedSubmissionStore.add({ id: queuedId, content: value, attachments: outgoing, createdAt, outcome: "failed", retrying: true, phase: "preparing" });
       try {
         await persistFailedSubmissions();
         assertCurrent();
+        // Preserve the draft through the first durable recovery write, just as
+        // for direct sends. Only the submitted revision can clear the input.
+        clearSubmitted();
         if (context.inputIntentRef.current.value === "") await onDraftChange?.(undefined);
         assertCurrent();
         if (!demo && wireOutgoing.length > 0) {
@@ -282,7 +289,6 @@ export function useTaskSending(context: ReturnType<typeof useTaskCommands>) {
       if (isCurrent()) setQueueError(null);
       return;
     }
-    clearSubmitted();
     const clientMessageId = newComposerMessageId();
     const createdAt = Date.now();
     failedSubmissionStore.add({
@@ -291,15 +297,18 @@ export function useTaskSending(context: ReturnType<typeof useTaskCommands>) {
       attachments: outgoing,
       createdAt,
       outcome: "failed",
+      permissionMode: capturedPermissionMode,
       retrying: true,
       phase: "preparing",
     });
     let turnDispatched = false;
     try {
-      await Promise.all([
-        context.inputIntentRef.current.value === "" ? onDraftChange?.(undefined) : undefined,
-        persistFailedSubmissions(),
-      ]);
+      // Keep the draft visible to lifecycle saves until its stable recovery
+      // record is durable. A failed draft clear then still has the same ID.
+      await persistFailedSubmissions();
+      assertCurrent();
+      clearSubmitted();
+      if (context.inputIntentRef.current.value === "") await onDraftChange?.(undefined);
       assertCurrent();
       failedSubmissionStore.update(clientMessageId, (item) => ({ ...item, phase: "retaining" }));
       if (!demo && wireOutgoing.length > 0) {
@@ -319,7 +328,10 @@ export function useTaskSending(context: ReturnType<typeof useTaskCommands>) {
       assertCurrent();
       failedSubmissionStore.update(clientMessageId, (item) => ({ ...item, phase: "sending" }));
       turnDispatched = true;
-      await task.send(value, wireOutgoing, undefined, { clientMessageId });
+      await task.send(value, wireOutgoing, undefined, {
+        clientMessageId,
+        permissionMode: capturedPermissionMode,
+      });
       if (task.getSnapshot().sendAcceptanceUnknown) {
         failedSubmissionStore.update(clientMessageId, (item) => ({
           ...item,
@@ -371,6 +383,7 @@ export function useTaskSending(context: ReturnType<typeof useTaskCommands>) {
 
   const canSend =
     snapshot.connected &&
+    !snapshot.transcriptActionPending &&
     !pending.current.has(draftKey) &&
     snapshot.configurationReady !== false &&
     !snapshot.sendAcceptanceUnknown &&
@@ -380,7 +393,7 @@ export function useTaskSending(context: ReturnType<typeof useTaskCommands>) {
   const assertDispatchReady = () => {
     requireOwner();
     const live = task.getSnapshot();
-    if (live.sendAcceptanceUnknown || live.configurationReady === false ||
+    if (live.transcriptActionPending || live.sendAcceptanceUnknown || live.configurationReady === false ||
         live.connected === false || live.running || live.interaction || live.archivedAt)
       throw new MobileRpcError(
         t("task.task_state_changed_message_not_dispatched"),
@@ -419,6 +432,9 @@ export function useTaskSending(context: ReturnType<typeof useTaskCommands>) {
       snapshot.sendAcceptanceUnknown
     )
       return;
+    // Legacy failed entries without a captured value always mean server
+    // default. Never let a later, more permissive UI choice rewrite an old id.
+    const capturedPermissionMode = failed.permissionMode ?? "default";
     failedSubmissionStore.update(id, (item) => ({
       ...item,
       outcome: "failed",
@@ -439,6 +455,7 @@ export function useTaskSending(context: ReturnType<typeof useTaskCommands>) {
       dispatched = true;
       await task.send(failed.content, wireAttachments, undefined, {
         clientMessageId: failed.id,
+        permissionMode: capturedPermissionMode,
       });
       if (task.getSnapshot().sendAcceptanceUnknown) {
         failedSubmissionStore.update(id, (item) => ({
@@ -481,16 +498,53 @@ export function useTaskSending(context: ReturnType<typeof useTaskCommands>) {
     try {
       const client = await task.acceptanceClient();
       requireOwner();
-      await readTurnReceipt(client, {
+      const receiptGeneration = task.clientGeneration;
+      const receipt = await readTurnReceipt(client, {
         threadId: snapshot.threadId,
         clientMessageId: failed.id,
       });
       requireOwner();
+      if (task.clientGeneration !== receiptGeneration)
+        throw new MobileRpcError("Acceptance client changed during receipt read", -1, "transport", "not-sent");
+      const acceptedTurn = normalizeWorkspaceSubmissionAcceptedTurn({
+        threadId: snapshot.threadId, turnId: receipt.turn?.id,
+        ...(receipt.turn?.attemptId !== undefined ? { attemptId: receipt.turn.attemptId } : {}),
+      });
+      const previous = failed.acceptedTurn;
+      if (!acceptedTurn || (previous && (previous.threadId !== acceptedTurn.threadId ||
+        previous.turnId !== acceptedTurn.turnId ||
+        (previous.attemptId !== undefined && previous.attemptId !== acceptedTurn.attemptId))))
+        throw new Error(t("task.execution_receipt_not_confirmed"));
+      // Persist the observed acceptance before history IO; absence from a page cannot undo it.
+      failedSubmissionStore.update(id, item => ({ ...item, acceptedTurn }));
+      await persistFailedSubmissions();
+      requireOwner();
+      if (task.clientGeneration !== receiptGeneration)
+        throw new MobileRpcError("Acceptance client changed during recovery persistence", -1, "transport", "not-sent");
+      let historyRead;
       if (
         task.getSnapshot().sendAcceptanceUnknown &&
         task.uncertainSend?.clientMessageId === failed.id
       ) {
-        await task.reconcileSendAcceptance();
+        historyRead = await task.reconcileSendAcceptance({
+          client, clientGeneration: receiptGeneration, result: receipt, threadId: snapshot.threadId,
+          clientMessageId: failed.id, isCurrent: ownerCurrent,
+        });
+      }
+      requireOwner();
+      const visible = await task.reconcileSubmissionHistory(client, receipt, {
+        threadId: snapshot.threadId,
+        clientMessageId: failed.id,
+        content: failed.content,
+        attachments: failed.attachments.map(wireAttachment),
+      }, ownerCurrent, historyRead);
+      requireOwner();
+      if (!visible) {
+        failedSubmissionStore.update(id, item => ({ ...item, retrying: false,
+          error: `${t("task.target_receipt_applied_does_not_mean_the_task", { p0: receipt.turn?.status ?? "" })} ${t("task.restoring_history")}`,
+        }));
+        await persistFailedSubmissions();
+        return;
       }
       await removeFailedSubmission(id, false);
     } catch (error) {
@@ -503,6 +557,7 @@ export function useTaskSending(context: ReturnType<typeof useTaskCommands>) {
             ? error.message
             : t("task.execution_receipt_not_confirmed"),
       }));
+      if (!ownerCurrent()) return;
       try {
         await persistFailedSubmissions();
       } catch {
@@ -559,17 +614,42 @@ export function useTaskSending(context: ReturnType<typeof useTaskCommands>) {
       return;
     const next = messageQueue.first();
     if (!next) return;
+    // Queue items without a stored mode select it at the first dispatch
+    // boundary, then durably freeze it with
+    // this queue identity before attachment retention or turn/start awaits.
+    const capturedPermissionMode =
+      next.permissionMode ?? task.getSnapshot().permissionMode ?? "default";
     sendingQueued.current = true;
     setQueueError(null);
     let dispatched = false;
     const queuedCurrent = () => messageQueue.getSnapshot().some((item) => item.id === next.id && !item.staging);
     void (async () => {
       if (!queuedCurrent()) return;
+      const frozenPermissionMode = await messageQueue.freezePermissionMode(
+        next.id,
+        capturedPermissionMode,
+        async (messages) => {
+          requireOwner();
+          if (!demo && !onQueueCommit)
+            throw new Error(t("task.queued_message_save_unavailable"));
+          await onQueueCommit?.({
+            queuedMessages: messages,
+            failedSubmissions: persistedFailedSubmissions(
+              failedSubmissionStore.getSnapshot(),
+            ),
+          });
+          requireOwner();
+        },
+      );
+      if (!queuedCurrent()) return;
       await retainForDispatch(next.attachments);
       if (!queuedCurrent()) return;
       assertDispatchReady();
       dispatched = true;
-      await task.send(next.content, next.attachments, undefined, { clientMessageId: next.id });
+      await task.send(next.content, next.attachments, undefined, {
+        clientMessageId: next.id,
+        permissionMode: frozenPermissionMode,
+      });
       if (!ownerCurrent() || task.getSnapshot().sendAcceptanceUnknown) return;
       messageQueue.remove(next.id);
     })()
@@ -589,6 +669,7 @@ export function useTaskSending(context: ReturnType<typeof useTaskCommands>) {
     snapshot.connected,
     snapshot.configurationReady,
     snapshot.interaction,
+    snapshot.permissionMode,
     snapshot.running,
     snapshot.sendAcceptanceUnknown,
     failedSubmissionItems,

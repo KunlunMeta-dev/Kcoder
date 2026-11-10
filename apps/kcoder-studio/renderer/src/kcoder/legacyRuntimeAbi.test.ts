@@ -23,7 +23,7 @@ describe('Wework 遗留 runtime ABI 边界', () => {
     expect(isKCoderRuntimeMethod('runtime.codex.unknown', 'modelsList')).toBe(false)
   })
 
-  test('非 KCoder 的上游 Tauri 宿主继续使用其原生 ABI', () => {
+  test('旧协议文档仍使用原有 ABI', () => {
     const upstreamDocument = { querySelector: () => null }
 
     expect(runtimeNameForCurrentHost(upstreamDocument)).toBe('codex')

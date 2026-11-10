@@ -4,7 +4,7 @@ use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
 #[derive(Clone, Copy)]
-pub(super) enum Kind {
+pub enum Kind {
     TurnClientMessages,
     TurnAdmissions,
     TurnAttempts,
@@ -12,6 +12,8 @@ pub(super) enum Kind {
     TurnOutcomes,
     ApprovalDecisions,
     TurnFileChanges,
+    TurnFileCaptures,
+    TurnReviewEvidence,
 }
 
 impl Kind {
@@ -24,6 +26,8 @@ impl Kind {
             Self::TurnOutcomes => "turn-outcomes",
             Self::ApprovalDecisions => "approval-decisions",
             Self::TurnFileChanges => "turn-file-changes",
+            Self::TurnFileCaptures => "turn-file-captures",
+            Self::TurnReviewEvidence => "turn-review-evidence",
         }
     }
 }
@@ -54,15 +58,26 @@ fn finish(mutation: JournalMutation<'_>, thread_id: &str) {
     }
 }
 
-pub(super) fn write<T>(
+pub fn write<T>(
     directory: &Path,
     thread_id: &str,
     kind: Kind,
     authority: impl FnOnce() -> Result<T>,
 ) -> Result<T> {
+    write_after_preflight(directory, thread_id, kind, || Ok(()), authority)
+}
+
+pub fn write_after_preflight<T>(
+    directory: &Path,
+    thread_id: &str,
+    kind: Kind,
+    preflight: impl FnOnce() -> Result<()>,
+    authority: impl FnOnce() -> Result<T>,
+) -> Result<T> {
     let root = root(directory, thread_id, kind)?;
     super::ensure_private_artifact_directory(&root)?;
     let mut fence = JournalFence::acquire_for_write(&root, JournalDomain::ClientMetadata)?;
+    preflight()?;
     let mutation = fence.begin(thread_id)?;
     super::ensure_private_artifact_directory(directory)?;
     let result = authority()?;
@@ -70,7 +85,7 @@ pub(super) fn write<T>(
     Ok(result)
 }
 
-pub(super) fn remove(path: &Path, thread_id: &str, kind: Kind) -> Result<()> {
+pub fn remove(path: &Path, thread_id: &str, kind: Kind) -> Result<()> {
     let directory = path.parent().context("artifact file has no parent")?;
     let root = root(directory, thread_id, kind)?;
     super::ensure_private_artifact_directory(&root)?;

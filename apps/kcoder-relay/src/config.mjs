@@ -1,7 +1,8 @@
-import { closeSync, fstatSync, openSync, readFileSync, readSync } from 'node:fs';
+import { closeSync, fstatSync, openSync, readFileSync, readSync, constants } from 'node:fs';
 import { TextDecoder } from 'node:util';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { validAdminPasswordHash } from './admin-auth.mjs';
 
 const MAX_REGISTRY_BYTES = 256 * 1024;
 const MAX_GATEWAYS = 256;
@@ -10,7 +11,7 @@ const DEFAULT_MAX_CONNECTIONS = 128;
 const DEFAULT_MAX_BYTES_PER_WINDOW = 64 * 1024 * 1024;
 const DEFAULT_TRAFFIC_WINDOW_MS = 60_000;
 const GATEWAY_KEYS = new Set([
-  'id', 'secret', 'pairingToken', 'maxConnections', 'maxBytesPerWindow', 'trafficWindowMs',
+  'id', 'secret', 'gatewaySecret', 'maxConnections', 'maxBytesPerWindow', 'trafficWindowMs',
 ]);
 
 // Existing environment wins; never execute the env file as shell code.
@@ -50,6 +51,25 @@ export function credentials(env = process.env) {
   // Keep the existing return shape; the device value now also resolves the
   // Gateway ID alias used by the multi-Gateway protocol.
   return { secret, device: gatewayId };
+}
+
+/** Selected Relay profiles pass a private credential path, never a secret in argv. */
+export function clientGatewaySecret(env = process.env) {
+  if (!env.KCODER_RELAY_GATEWAY_SECRET_FILE) return env.KCODER_RELAY_GATEWAY_SECRET;
+  const path = env.KCODER_RELAY_GATEWAY_SECRET_FILE;
+  let fd;
+  try {
+    fd = openSync(path, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0));
+    const info = fstatSync(fd);
+    if (!info.isFile() || info.nlink !== 1 || info.size > 513 ||
+        (process.platform !== 'win32' && (info.uid !== process.getuid() || (info.mode & 0o077))))
+      throw Error('Invalid private Relay Gateway credential');
+    const buffer = Buffer.alloc(514);
+    const length = readSync(fd, buffer, 0, buffer.length, 0);
+    const value = buffer.subarray(0, length).toString('utf8').trim();
+    if (length > 513 || !/^[A-Za-z0-9._~-]{32,512}$/.test(value)) throw Error('Invalid private Relay Gateway credential');
+    return value;
+  } finally { if (fd !== undefined) closeSync(fd); }
 }
 
 function isCredential(value) {
@@ -122,27 +142,27 @@ function validateRegistry(value) {
   const sharedHosts = validateHostList(value.sharedHosts, 'sharedHosts');
   const ids = new Set();
   const secrets = new Set();
-  const pairingTokens = new Set();
+  const gatewaySecrets = new Set();
   const gateways = value.gateways.map((entry, index) => {
     exactKeys(entry, GATEWAY_KEYS, `gateways[${index}]`);
-    const { id, secret, pairingToken } = entry;
+    const { id, secret, gatewaySecret } = entry;
     if (typeof id !== 'string' || !/^[a-zA-Z0-9_-]{1,64}$/.test(id)) throw new Error(`Invalid Gateway ID at gateways[${index}]`);
     const normalizedId = id.toLowerCase();
     if (ids.has(normalizedId)) throw new Error('Duplicate Gateway ID');
     ids.add(normalizedId);
     if (!isCredential(secret)) throw new Error(`Gateway ${id} requires a secret of at least 32 characters`);
-    if (!isCredential(pairingToken)) throw new Error(`Gateway ${id} requires a pairing token of at least 32 characters`);
+    if (!isCredential(gatewaySecret)) throw new Error(`Gateway ${id} requires a pairing token of at least 32 characters`);
     if (secrets.has(secret)) throw new Error('Different Gateways cannot share a relay secret');
-    if (pairingTokens.has(pairingToken)) throw new Error('Different Gateways cannot share a pairing token');
-    if (secrets.has(pairingToken) || pairingTokens.has(secret) || secret === pairingToken) {
+    if (gatewaySecrets.has(gatewaySecret)) throw new Error('Different Gateways cannot share a pairing token');
+    if (secrets.has(gatewaySecret) || gatewaySecrets.has(secret) || secret === gatewaySecret) {
       throw new Error('Relay secrets and pairing tokens must be distinct');
     }
     secrets.add(secret);
-    pairingTokens.add(pairingToken);
+    gatewaySecrets.add(gatewaySecret);
     return {
       id,
       secret,
-      pairingToken,
+      gatewaySecret,
       maxConnections: boundedInteger(entry.maxConnections, 1, 100_000, `maxConnections for ${id}`),
       maxBytesPerWindow: boundedInteger(entry.maxBytesPerWindow, 1, Number.MAX_SAFE_INTEGER, `maxBytesPerWindow for ${id}`),
       trafficWindowMs: boundedInteger(entry.trafficWindowMs, 1, 86_400_000, `trafficWindowMs for ${id}`),
@@ -209,6 +229,13 @@ function registrationSharedHosts(env) {
 }
 
 function registrationOptions(env) {
+  const adminPasswordHash = env.KCODER_RELAY_ADMIN_PASSWORD_HASH;
+  const adminUsername = env.KCODER_RELAY_ADMIN_USERNAME || 'admin';
+  if (adminPasswordHash !== undefined && !validAdminPasswordHash(adminPasswordHash)) throw new Error('Invalid KCODER_RELAY_ADMIN_PASSWORD_HASH');
+  if (typeof adminUsername !== 'string' || adminUsername.length > 100 || /[\r\n\0]/.test(adminUsername)) throw new Error('Invalid KCODER_RELAY_ADMIN_USERNAME');
+  const requireAccount = env.KCODER_RELAY_REQUIRE_ACCOUNT;
+  if (requireAccount !== undefined && !['0', '1'].includes(requireAccount)) throw new Error('Invalid KCODER_RELAY_REQUIRE_ACCOUNT');
+  if (requireAccount === '1' && !adminPasswordHash) throw new Error('KCODER_RELAY_REQUIRE_ACCOUNT requires an enabled administrator panel');
   const rawKey = env.KCODER_RELAY_REGISTRATION_KEY;
   const registrationKey = rawKey === undefined || rawKey === '' ? undefined : rawKey;
   if (registrationKey !== undefined &&
@@ -222,10 +249,12 @@ function registrationOptions(env) {
     throw new Error('Invalid KCODER_RELAY_REGISTRATION_STORE_FILE');
   }
   const configuredStorePath = rawStorePath === undefined || rawStorePath === '' ? undefined : resolve(rawStorePath);
-  const registrationStoreFile = configuredStorePath ?? (registrationKey
+  const registrationStoreFile = configuredStorePath ?? (registrationKey || adminPasswordHash
     ? resolve(dirname(fileURLToPath(import.meta.url)), '../../../target/kcoder-relay/registered-gateways.json')
     : undefined);
   return {
+    ...(adminPasswordHash ? { adminPasswordHash, adminUsername } : {}),
+    ...(requireAccount === undefined ? {} : { requireAccount: requireAccount === '1' }),
     ...(registrationKey === undefined ? {} : { registrationKey }),
     ...(registrationStoreFile === undefined ? {} : { registrationStoreFile }),
   };
@@ -261,13 +290,13 @@ export function relayServerConfig(env = process.env) {
   }
 
   const { secret, device: gatewayId } = credentials(env);
-  const pairingToken = env.KCODER_RELAY_GATEWAY_TOKEN || '';
-  if (pairingToken && !isCredential(pairingToken)) throw new Error('Gateway pairing token must be at least 32 characters');
-  if (pairingToken && pairingToken === secret) throw new Error('Relay secret and Gateway pairing token must be distinct');
+  const gatewaySecret = env.KCODER_RELAY_GATEWAY_SECRET || '';
+  if (gatewaySecret && !isCredential(gatewaySecret)) throw new Error('Gateway internal secret must be at least 32 characters');
+  if (gatewaySecret && gatewaySecret === secret) throw new Error('Relay secret and Gateway internal secret must be distinct');
   const gateway = {
     id: gatewayId,
     secret,
-    pairingToken,
+    gatewaySecret,
     maxConnections: legacyInteger(env.KCODER_RELAY_MAX_CONNECTIONS, DEFAULT_MAX_CONNECTIONS, 'KCODER_RELAY_MAX_CONNECTIONS', 1, 100_000),
     maxBytesPerWindow: legacyInteger(env.KCODER_RELAY_MAX_BYTES_PER_WINDOW, DEFAULT_MAX_BYTES_PER_WINDOW, 'KCODER_RELAY_MAX_BYTES_PER_WINDOW', 1, Number.MAX_SAFE_INTEGER),
     trafficWindowMs: legacyInteger(env.KCODER_RELAY_TRAFFIC_WINDOW_MS, DEFAULT_TRAFFIC_WINDOW_MS, 'KCODER_RELAY_TRAFFIC_WINDOW_MS', 1, 86_400_000),

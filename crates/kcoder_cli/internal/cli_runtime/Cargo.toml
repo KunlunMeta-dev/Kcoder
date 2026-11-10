@@ -1,0 +1,134 @@
+[package]
+name = "kcoder_cli_runtime"
+version = { workspace = true }
+publish = false
+edition = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+rust-version = { workspace = true }
+
+[lib]
+path = "../../src/cli_runtime.rs"
+
+[features]
+web-network-test-fixture = ["kcoder_engine/web-network-test-fixture", "kcoder_tools/web-network-test-fixture", "kcoder_engine_factory/web-network-test-fixture"]
+
+[dependencies]
+kcoder_async_box = { path = "../../../kcoder_engine/internal/async_box" }
+kcoder_engine_factory = { path = "../engine_factory" }
+kcoder_native_outbound = { path = "../native_outbound" }
+kcoder_application_host_runtime = { path = "../application_host_runtime" }
+kcoder_foreground_runtime = { path = "../foreground_runtime" }
+kcoder_native_service_runtime = { path = "../native_service_runtime" }
+kcoder_session_configuration = { path = "../session_configuration" }
+kcoder_native_scope = { path = "../native_scope" }
+kcoder_app_interactions = { path = "../app_interactions" }
+kcoder_turn_evidence = { path = "../turn_evidence" }
+kcoder_turn_lifecycle = { path = "../turn_lifecycle" }
+kcoder_foreground_work = { path = "../foreground_work" }
+kcoder_application_receipts = { path = "../application_receipts" }
+kcoder_runtime_driver = { path = "../runtime_driver" }
+kcoder_native_model_admission = { path = "../native_model_admission" }
+kcoder_app_events = { path = "../app_events" }
+kcoder_host_transport = { path = "../host_transport" }
+kcoder_project_automation = { path = "../project_automation" }
+kcoder_cli_commands = { path = "../cli_commands" }
+kcoder_cli_storage = { path = "../cli_storage" }
+kcoder_workspace_resources = { path = "../workspace_resources" }
+kcoder_migration_client = { path = "../migration_client" }
+kcoder_migration_rpc = { path = "../migration_rpc" }
+kcoder_connectivity_storage = { path = "../connectivity_storage" }
+kcoder_native_journal = { path = "../native_journal" }
+kcoder_browser = { path = "../browser" }
+kcoder_workspace_rpc = { path = "../workspace_rpc" }
+kcoder_attachment_retention = { path = "../attachment_retention" }
+kcoder_attachments = { path = "../attachments" }
+kcoder_office_worker = { path = "../office_worker" }
+kcoder_acp = { path = "../../../kcoder_acp" }
+kcoder_process_supervisor = { path = "../../../kcoder_process_supervisor" }
+kcoder_computer_use = { path = "../../../kcoder_computer_use" }
+kcoder_types = { path = "../../../kcoder_types" }
+kcoder_transcript = { path = "../transcript" }
+kcoder_transcript_observation = { path = "../transcript_observation" }
+kcoder_app_protocol = { path = "../../../kcoder_app_protocol" }
+kcoder_app_rpc_codec = { path = "../../../kcoder_app_protocol/internal/app_rpc_codec" }
+kcoder_task_delivery = { path = "../task_delivery" }
+kcoder_thread_metadata = { path = "../thread_metadata" }
+kcoder_api = { path = "../../../kcoder_api" }
+kcoder_provider_transactions = { path = "../provider_transactions" }
+kcoder_state = { path = "../../../kcoder_state" }
+kcoder_config = { path = "../../../kcoder_config" }
+kcoder_tools = { path = "../../../kcoder_tools" }
+kcoder_workflow = { path = "../../../kcoder_workflow" }
+kcoder_permissions = { path = "../../../kcoder_permissions" }
+kcoder_desktop_recovery = { path = "../desktop_recovery" }
+kcoder_engine = { path = "../../../kcoder_engine" }
+kcoder_cli_support = { path = "../cli_support" }
+kcoder_hooks = { path = "../../../kcoder_hooks" }
+kcoder_memory = { path = "../../../kcoder_memory" }
+kcoder_knowledge = { path = "../../../kcoder_knowledge" }
+kcoder_knowledge_management = { path = "../knowledge_management" }
+kcoder_knowledge_rpc = { path = "../knowledge_rpc" }
+kcoder_workflow_rpc = { path = "../workflow_rpc" }
+kcoder_skills = { path = "../../../kcoder_skills" }
+kcoder_plugins = { path = "../../../kcoder_plugins" }
+kcoder_plugin_rpc = { path = "../plugin_rpc" }
+kcoder_mcp = { path = "../../../kcoder_mcp" }
+kcoder_mcp_app_runtime = { path = "../mcp_app_runtime" }
+kcoder_mcp_app_storage = { path = "../mcp_app_storage" }
+kcoder_migration = { path = "../../../kcoder_migration" }
+globset = { workspace = true }
+async-trait = { workspace = true }
+async-stream = { workspace = true }
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+clap = { version = "4.5", features = ["derive", "env"] }
+anyhow = { workspace = true }
+futures = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+jsonc-parser = { workspace = true }
+sha2 = { workspace = true }
+ring = "0.17.14"
+hmac = "0.12"
+similar = { workspace = true }
+chrono = { workspace = true }
+dotenvy = "0.15"
+dunce = { workspace = true }
+dirs = { workspace = true }
+base64 = "0.22"
+portable-pty = "0.9"
+fs2 = "0.4"
+libc = { workspace = true }
+reqwest = { workspace = true }
+tempfile = { workspace = true }
+walkdir = { workspace = true }
+which = { workspace = true }
+
+[dev-dependencies]
+kcoder_native_delegation = { path = "../../../kcoder_permissions/internal/native_delegation" }
+kcoder_native_service_runtime = { path = "../native_service_runtime", features = ["test-oracle"] }
+kcoder_host_transport = { path = "../host_transport", features = ["test-oracle"] }
+kcoder_thread_metadata = { path = "../thread_metadata", features = ["test-oracle"] }
+kcoder_office_worker = { path = "../office_worker", features = ["test-oracle"] }
+kcoder_desktop_recovery = { path = "../desktop_recovery", features = ["test-oracle"] }
+kcoder_workspace_rpc = { path = "../workspace_rpc", features = ["test-oracle"] }
+kcoder_native_journal = { path = "../native_journal", features = ["test-oracle"] }
+kcoder_app_interactions = { path = "../app_interactions", features = ["test-oracle"] }
+kcoder_runtime_driver = { path = "../runtime_driver", features = ["test-oracle"] }
+kcoder_cli_storage = { path = "../cli_storage", features = ["test-oracle"] }
+kcoder_transcript = { path = "../transcript", features = ["test-oracle"] }
+kcoder_native_scope = { path = "../native_scope", features = ["native-identity-test-hooks"] }
+tokio-tungstenite = { version = "0.28", features = ["rustls-tls-native-roots"] }
+rusqlite = { workspace = true }
+kcoder_test_harness = { path = "../../../../tests/harness" }
+kcoder_config = { path = "../../../kcoder_config", features = ["private-file-test-hooks", "provider-test-fixtures"] }
+jsonschema = { workspace = true }
+tempfile = { workspace = true }
+
+[target."cfg(windows)".dependencies]
+windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Storage_FileSystem", "Win32_System_ProcessStatus", "Win32_System_Pipes", "Win32_System_SystemInformation", "Win32_System_IO", "Win32_System_Ioctl", "Win32_System_Threading", "Win32_Security", "Win32_Security_Authorization", "Win32_System_Console", "Win32_System_Diagnostics_ToolHelp"] }

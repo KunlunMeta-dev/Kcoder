@@ -1,5 +1,5 @@
 import type { TFunction } from 'i18next'
-import { defaultQuickPhrases, type QuickPhrase } from '@/tauri/appPreferences'
+import { defaultQuickPhrases, type QuickPhrase } from '@/host/appPreferences'
 
 /** Reserved default IDs plus an unchanged payload identify shipped presets.
  * Any user edit converts the phrase to user content and preserves its language. */

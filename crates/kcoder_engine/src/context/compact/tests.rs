@@ -1,7 +1,6 @@
 use super::history::{
     COMPACT_CONTINUATION_MARKER, COMPACT_SUMMARY_PREFIX, LEGACY_COMPACT_SUMMARY_PREFIX,
-    PTL_RETRY_MARKER, TAIL_SPLIT_PRESERVE_MESSAGES, compact_summary_text,
-    is_tool_result_only_content,
+    TAIL_SPLIT_PRESERVE_MESSAGES, compact_summary_text, is_tool_result_only_content,
 };
 use super::protocol::{
     contains_pseudo_tool_wrapper, is_tool_syntax_default_ignorable,
@@ -17,6 +16,8 @@ use support::*;
 
 #[path = "tests/history.rs"]
 mod history;
+#[path = "tests/partitioned.rs"]
+mod partitioned;
 #[path = "tests/prefire.rs"]
 mod prefire;
 #[path = "tests/protocol.rs"]

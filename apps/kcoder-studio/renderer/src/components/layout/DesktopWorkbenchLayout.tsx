@@ -1,9 +1,21 @@
-import { KnowledgeWorkspace } from '@/features/knowledge/KnowledgeWorkspace'
-import { WorkflowWorkspace } from '@/features/workflows/WorkflowWorkspace'
+import { ExpertConversationShell } from '@/features/experts/ExpertConversationShell'
+import {
+  DeferredWorkbenchPage,
+  DeferredExpertsPage as ExpertsPage,
+  DeferredChannelsPage as ChannelsPage,
+  DeferredPersonalizationPage as PersonalizationPage,
+  DeferredSettingsPage as ConnectionsSettingsPage,
+  DeferredCloudTodoWorkspace as CloudTodoWorkspace,
+  DeferredWorkflowWorkspace as WorkflowWorkspace,
+  DeferredKnowledgeWorkspace as KnowledgeWorkspace,
+  DeferredTaskWorkspace as TaskWorkspacePage,
+  DeferredScheduledTasks as ScheduledTasksPanel,
+} from './DeferredWorkbenchPage'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { PointerEventHandler } from 'react'
 import type { ProjectCreateMode } from '@/components/chat/ChatInput'
 import { useWorkbench } from '@/features/workbench/useWorkbench'
+import { currentHostDeviceId } from '@/features/runtime-target/currentHostTarget'
 import { useAuth } from '@/features/auth/useAuth'
 import type {
   IMPrivateSession,
@@ -12,7 +24,10 @@ import type {
   RuntimeIMNotificationSettingsResponse,
 } from '@/types/api'
 import { stripAppBasePath } from '@/config/runtime'
-import { isSettingsRoute, navigateTo } from '@/lib/navigation'
+import { isSettingsRoute, navigateTo, navigateToParentPage } from '@/lib/navigation'
+import { RetainedPage } from './retainedPages'
+import { prefetchWorkspacePanelChunks } from './workspace-panels/workspacePanelChunks'
+import { useRetainedPages } from './retainedPageState'
 import { createRandomUuid } from '@/lib/random-id'
 import { shouldUseNativeProjectDirectoryPicker } from '@/e2e/automation'
 import { cn } from '@/lib/utils'
@@ -32,14 +47,11 @@ import {
   useDesktopSidebarCollapsed,
   useDesktopSidebarToggleRequest,
 } from './useDesktopSidebarCollapsed'
-import { ConnectionsSettingsPage } from '@/components/settings/ConnectionsSettingsPage'
 import { useTranslation } from '@/hooks/useTranslation'
 import { useWorkbenchShellEventHandlers } from './workbenchShellEvents'
 import { EMPTY_RUNTIME_TASK_REMINDERS } from '@/features/workbench/runtimeTaskReminders'
-import { CloudTodoWorkspace } from '@/features/todo/CloudTodoWorkspace'
 import { resolveLocalTodoProjects } from '@/features/todo/localTodoProjects'
 import { WorkbenchBackground } from '@/features/appearance'
-import { ScheduledTasksPanel } from '@/components/chat/ScheduledTasksPanel'
 import { subscribeDesktopFileAction } from '@/kcoder/desktopFileActions'
 
 type ImNotificationDialogMode = { type: 'global' } | { type: 'task'; address: RuntimeTaskAddress }
@@ -111,21 +123,43 @@ export function DesktopWorkbenchLayout() {
     () => resolveLocalTodoProjects(state.projects, state.runtimeWork),
     [state.projects, state.runtimeWork]
   )
-  const initialPath = stripAppBasePath(window.location.pathname)
+  const initialPath =
+    stripAppBasePath(window.location.pathname) === '/connections'
+      ? '/'
+      : stripAppBasePath(window.location.pathname)
   const [currentPath, setCurrentPath] = useState(initialPath)
   const todoOpen = currentPath === '/todo'
   const automationsOpen = currentPath === '/automations'
   const knowledgeOpen = currentPath === '/knowledge'
+  const contextOpen = currentPath === '/context'
+  const memoryOpen = currentPath === '/memory' || contextOpen
+  const taskSpaceOpen = currentPath === '/tasks'
   const workflowsOpen = currentPath === '/workflows'
-  const activeItem = knowledgeOpen
-    ? 'knowledge'
-    : workflowsOpen
-      ? 'workflows'
-      : todoOpen
-        ? 'todo'
-        : automationsOpen
-          ? 'automation'
-          : 'chat'
+  const expertsOpen = currentPath === '/experts'
+  const expertConversationsOpen = currentPath === '/expert-conversations'
+  const channelsOpen = currentPath === '/channels'
+  const personalizationOpen =
+    currentPath === '/personalization' || currentPath.startsWith('/personalization/')
+  const activeItem =
+    expertsOpen || expertConversationsOpen
+      ? 'experts'
+      : personalizationOpen
+        ? 'personalization'
+        : channelsOpen
+          ? 'channels'
+          : taskSpaceOpen
+            ? 'task-space'
+            : memoryOpen
+              ? 'knowledge'
+              : knowledgeOpen
+                ? 'knowledge'
+                : workflowsOpen
+                  ? 'workflows'
+                  : todoOpen
+                    ? 'todo'
+                    : automationsOpen
+                      ? 'automation'
+                      : 'chat'
   const taskReminders = runtimeTaskReminders ?? EMPTY_RUNTIME_TASK_REMINDERS
   const createPermanentWorktree = useCallback(
     async ({
@@ -189,6 +223,19 @@ export function DesktopWorkbenchLayout() {
   const [sidebarPreviewOpen, setSidebarPreviewOpen] = useState(false)
   const [sidebarResizing, setSidebarResizing] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(() => isSettingsRoute(initialPath))
+  // Recently visited pages stay mounted (hidden) so returning shows their last
+  // content immediately instead of a loading state and a height jump.
+  const pages = useRetainedPages({
+    settings: settingsOpen,
+    todo: todoOpen,
+    experts: expertsOpen,
+    channels: channelsOpen,
+    personalization: personalizationOpen,
+    workflows: workflowsOpen,
+    knowledge: knowledgeOpen || memoryOpen,
+    tasks: taskSpaceOpen,
+    automations: automationsOpen,
+  })
   const [autoOpenAddCloudDeviceDialog, setAutoOpenAddCloudDeviceDialog] = useState(false)
   const [blankProjectDialogOpen, setBlankProjectDialogOpen] = useState(false)
   const [standaloneWorkspaceDialogMode, setStandaloneWorkspaceDialogMode] =
@@ -213,6 +260,12 @@ export function DesktopWorkbenchLayout() {
   } | null>(null)
   const imSessionsRequestSequence = useRef(0)
   const effectiveSidebarCollapsed = sidebarCollapsed || sidebarAutoCollapsed
+
+  useEffect(() => {
+    // Unit tests mount the layout without the real panel modules.
+    if (import.meta.env.MODE === 'test') return
+    return prefetchWorkspacePanelChunks()
+  }, [])
 
   useEffect(() => {
     const handlePopState = () => {
@@ -352,9 +405,12 @@ export function DesktopWorkbenchLayout() {
     updateSidebarCollapsed(true)
   }, [updateSidebarCollapsed])
 
-  useDesktopSidebarToggleRequest(() => {
-    updateSidebarCollapsed(!effectiveSidebarCollapsed)
-  }, !['/plugins', '/plugins/manage', '/plugins/create'].includes(currentPath))
+  useDesktopSidebarToggleRequest(
+    () => {
+      updateSidebarCollapsed(!effectiveSidebarCollapsed)
+    },
+    !settingsOpen && !['/plugins', '/plugins/manage', '/plugins/create'].includes(currentPath)
+  )
 
   useWorkbenchShellEventHandlers({
     onCreateProjectMode: openProjectFromWorkMenu,
@@ -586,7 +642,6 @@ export function DesktopWorkbenchLayout() {
       onResizeStateChange={setSidebarResizing}
       onPointerEnter={onPointerEnter}
       onPointerLeave={onPointerLeave}
-      onToggleSidebar={() => updateSidebarCollapsed(!collapsed)}
       onOpenWorkbench={() => navigateTo('/')}
       onOpenTodo={() => navigateTo('/todo')}
       onOpenApps={() => navigateTo('/apps')}
@@ -656,7 +711,7 @@ export function DesktopWorkbenchLayout() {
             onPointerEnter={openSidebarPreview}
             onPointerLeave={closeSidebarPreview}
             className={cn(
-              'absolute left-0 top-0 z-popover h-full bg-background transition-transform duration-[180ms] ease-out motion-reduce:transition-none will-change-transform',
+              'absolute left-0 top-0 z-popover h-full bg-background transition-transform duration-[180ms] ease-out will-change-transform',
               sidebarPreviewOpen
                 ? 'pointer-events-auto translate-x-0 opacity-100 shadow-[6px_0_24px_rgba(15,23,42,0.10)]'
                 : 'pointer-events-none -translate-x-full opacity-100'
@@ -672,94 +727,179 @@ export function DesktopWorkbenchLayout() {
           </div>
         </>
       )}
-      {settingsOpen && (
-        <ConnectionsSettingsPage
-          autoOpenAddCloudDeviceDialog={autoOpenAddCloudDeviceDialog}
-          services={services}
-          devices={state.devices}
-          onOpenRuntimeTask={onOpenRuntimeTask}
-          onRefreshWorkLists={refreshWorkLists}
-          onLeaveToRuntimeTask={() => {
-            setSettingsOpen(false)
-            setAutoOpenAddCloudDeviceDialog(false)
-          }}
-          onBack={() => {
-            setSettingsOpen(false)
-            setAutoOpenAddCloudDeviceDialog(false)
-            navigateTo('/')
-          }}
-        />
-      )}
-      <div style={{ display: settingsOpen ? 'none' : 'contents' }} aria-hidden={settingsOpen}>
-        {todoOpen &&
-          (state.user && services.deliveryApi ? (
-            <CloudTodoWorkspace
-              user={state.user}
-              localProjects={localTodoProjects}
+      {pages.retained('settings') && (
+        <RetainedPage key={pages.mountKey('settings')} open={settingsOpen}>
+          <DeferredWorkbenchPage>
+            <ConnectionsSettingsPage
+              autoOpenAddCloudDeviceDialog={autoOpenAddCloudDeviceDialog}
               services={services}
-              onRunTodo={({
-                project,
-                message,
-                goal,
-                attachments,
-                collaborationMode,
-                deliveryId,
-                cloudProjectId,
-              }) =>
-                onCreateProjectRuntimeTask(message, {
-                  project,
-                  attachments,
-                  initialGoal: goal ? { objective: goal } : null,
-                  collaborationMode,
-                  deliveryId,
-                  cloudProjectId,
-                })
-              }
-              onOpenRuntimeTask={async address => {
-                navigateTo('/')
-                await onOpenRuntimeTask?.(address)
+              devices={state.devices}
+              onOpenRuntimeTask={onOpenRuntimeTask}
+              onRefreshWorkLists={refreshWorkLists}
+              onLeaveToRuntimeTask={() => {
+                setSettingsOpen(false)
+                setAutoOpenAddCloudDeviceDialog(false)
+              }}
+              onBack={() => {
+                setSettingsOpen(false)
+                setAutoOpenAddCloudDeviceDialog(false)
+                navigateToParentPage()
               }}
             />
-          ) : (
-            <div
-              data-testid="cloud-board-loading"
-              className="flex h-full flex-1 items-center justify-center text-sm text-text-muted"
-            >
-              {t('workbench.cloud_board_loading', '正在加载云端看板…')}
-            </div>
-          ))}
-        {workflowsOpen && <WorkflowWorkspace />}
-        {knowledgeOpen && <KnowledgeWorkspace />}
-        {automationsOpen && (
-          <ScheduledTasksPanel
-            runtimeWork={state.runtimeWork}
-            onOpenTask={async address => {
-              navigateTo('/')
-              await onOpenRuntimeTask(address)
-            }}
-          />
+          </DeferredWorkbenchPage>
+        </RetainedPage>
+      )}
+      <div style={{ display: settingsOpen ? 'none' : 'contents' }} aria-hidden={settingsOpen}>
+        {pages.retained('todo') && (
+          <RetainedPage key={pages.mountKey('todo')} open={todoOpen}>
+            {state.user && services.deliveryApi ? (
+              <DeferredWorkbenchPage>
+                <CloudTodoWorkspace
+                  user={state.user}
+                  localProjects={localTodoProjects}
+                  services={services}
+                  onRunTodo={({
+                    project,
+                    message,
+                    goal,
+                    attachments,
+                    collaborationMode,
+                    deliveryId,
+                    cloudProjectId,
+                  }) =>
+                    onCreateProjectRuntimeTask(message, {
+                      project,
+                      attachments,
+                      initialGoal: goal ? { objective: goal } : null,
+                      collaborationMode,
+                      deliveryId,
+                      cloudProjectId,
+                    })
+                  }
+                  onOpenRuntimeTask={async address => {
+                    navigateTo('/')
+                    await onOpenRuntimeTask?.(address)
+                  }}
+                />
+              </DeferredWorkbenchPage>
+            ) : (
+              <div
+                data-testid="cloud-board-loading"
+                className="flex h-full flex-1 items-center justify-center text-sm text-text-muted"
+              >
+                {t('workbench.cloud_board_loading', '正在加载云端看板…')}
+              </div>
+            )}
+          </RetainedPage>
         )}
-        <div
-          style={{
-            display:
-              todoOpen || automationsOpen || workflowsOpen || knowledgeOpen ? 'none' : 'contents',
-          }}
-          aria-hidden={todoOpen || automationsOpen || workflowsOpen || knowledgeOpen}
-        >
-          <DesktopWorkbenchMain
-            visible={
-              !settingsOpen && !todoOpen && !automationsOpen && !workflowsOpen && !knowledgeOpen
-            }
-            sidebarCollapsed={effectiveSidebarCollapsed}
-            sidebarResizing={sidebarResizing}
-            onSidebarCollapsedChange={updateSidebarCollapsed}
-            activePane={{
-              currentRuntimeTask: state.currentRuntimeTask,
-              currentProject: state.currentProject,
-              standaloneChatKey: state.standaloneChatKey,
+        {pages.retained('experts') && (
+          <RetainedPage key={pages.mountKey('experts')} open={expertsOpen}>
+            <DeferredWorkbenchPage>
+              <ExpertsPage />
+            </DeferredWorkbenchPage>
+          </RetainedPage>
+        )}
+        {pages.retained('channels') && (
+          <RetainedPage key={pages.mountKey('channels')} open={channelsOpen}>
+            <DeferredWorkbenchPage>
+              <ChannelsPage />
+            </DeferredWorkbenchPage>
+          </RetainedPage>
+        )}
+        {pages.retained('personalization') && (
+          <RetainedPage key={pages.mountKey('personalization')} open={personalizationOpen}>
+            <DeferredWorkbenchPage>
+              <PersonalizationPage />
+            </DeferredWorkbenchPage>
+          </RetainedPage>
+        )}
+        {pages.retained('workflows') && (
+          <RetainedPage key={pages.mountKey('workflows')} open={workflowsOpen}>
+            <DeferredWorkbenchPage>
+              <WorkflowWorkspace />
+            </DeferredWorkbenchPage>
+          </RetainedPage>
+        )}
+        {pages.retained('knowledge') && (
+          <RetainedPage key={pages.mountKey('knowledge')} open={knowledgeOpen || memoryOpen}>
+            <DeferredWorkbenchPage>
+              <KnowledgeWorkspace initialSection={memoryOpen ? 'memory' : 'library'} />
+            </DeferredWorkbenchPage>
+          </RetainedPage>
+        )}
+        {pages.retained('tasks') && (
+          <RetainedPage key={pages.mountKey('tasks')} open={taskSpaceOpen}>
+            <DeferredWorkbenchPage>
+              <TaskWorkspacePage />
+            </DeferredWorkbenchPage>
+          </RetainedPage>
+        )}
+        {pages.retained('automations') && (
+          <RetainedPage key={pages.mountKey('automations')} open={automationsOpen}>
+            <DeferredWorkbenchPage>
+              <ScheduledTasksPanel
+                runtimeWork={state.runtimeWork}
+                currentHostId={currentHostDeviceId(state.devices)}
+                onOpenTask={async address => {
+                  navigateTo('/')
+                  await onOpenRuntimeTask(address)
+                }}
+              />
+            </DeferredWorkbenchPage>
+          </RetainedPage>
+        )}
+        <ExpertConversationShell active={expertConversationsOpen}>
+          <div
+            style={{
+              display:
+                todoOpen ||
+                expertsOpen ||
+                channelsOpen ||
+                personalizationOpen ||
+                automationsOpen ||
+                workflowsOpen ||
+                knowledgeOpen ||
+                memoryOpen ||
+                taskSpaceOpen
+                  ? 'none'
+                  : 'contents',
             }}
-          />
-        </div>
+            aria-hidden={
+              todoOpen ||
+              expertsOpen ||
+              channelsOpen ||
+              personalizationOpen ||
+              automationsOpen ||
+              workflowsOpen ||
+              knowledgeOpen ||
+              memoryOpen ||
+              taskSpaceOpen
+            }
+          >
+            <DesktopWorkbenchMain
+              visible={
+                !settingsOpen &&
+                !todoOpen &&
+                !expertsOpen &&
+                !channelsOpen &&
+                !personalizationOpen &&
+                !automationsOpen &&
+                !workflowsOpen &&
+                !knowledgeOpen &&
+                !memoryOpen &&
+                !taskSpaceOpen
+              }
+              sidebarCollapsed={effectiveSidebarCollapsed}
+              sidebarResizing={sidebarResizing}
+              onSidebarCollapsedChange={updateSidebarCollapsed}
+              activePane={{
+                currentRuntimeTask: state.currentRuntimeTask,
+                currentProject: state.currentProject,
+                standaloneChatKey: state.standaloneChatKey,
+              }}
+            />
+          </div>
+        </ExpertConversationShell>
       </div>
       <StandaloneBlankProjectDialog
         open={blankProjectDialogOpen}

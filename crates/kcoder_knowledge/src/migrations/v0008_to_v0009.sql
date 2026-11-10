@@ -1,0 +1,1 @@
+ALTER TABLE libraries ADD COLUMN metadata_revision INTEGER NOT NULL DEFAULT 1;

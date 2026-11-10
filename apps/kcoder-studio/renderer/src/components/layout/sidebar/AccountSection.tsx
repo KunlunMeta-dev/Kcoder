@@ -1,3 +1,7 @@
+import { useEffect, useRef, useState } from 'react'
+import { isKCoderGatewayPage } from '@/kcoder/gatewayRpc'
+import { fetchKCoderAccount, type KCoderAccountStatus } from '@/kcoder/mobilePairing'
+import { KCoderAccountDialog } from '../KCoderAccountDialog'
 import { ClientAvatar } from '@/features/appearance/ClientAvatar'
 import { cn } from '@/lib/utils'
 import { DesktopSettingsMenu } from '../DesktopSettingsMenu'
@@ -33,6 +37,26 @@ export function AccountSection({ model }: { model: SidebarModel }) {
     setStandaloneWorkspaceDialogMode,
     setStandaloneRemoteDialogIntent,
   } = model
+  const [productAccount, setProductAccount] = useState<KCoderAccountStatus | null>(null)
+  const [productDialog, setProductDialog] = useState<'login' | 'logout' | null>(null)
+  const accountLoaded = useRef(false)
+  useEffect(() => {
+    if (!isKCoderGatewayPage() || (!settingsMenuOpen && accountLoaded.current)) return
+    const controller = new AbortController()
+    void fetchKCoderAccount(controller.signal).then(status => {
+      if (!controller.signal.aborted) {
+        accountLoaded.current = true
+        setProductAccount(status)
+      }
+    }).catch(error => {
+      if (!controller.signal.aborted && error?.code === 'KCODER_ACCOUNT_UNAVAILABLE') {
+        setProductAccount(current => current ?? { available: true, account: null })
+      }
+    })
+    return () => controller.abort()
+  }, [settingsMenuOpen])
+  const useProductAccount = Boolean(productAccount?.available)
+  const signedIn = useProductAccount && Boolean(productAccount?.account)
   return (
     <>
       <div ref={settingsMenuRef} className="group/account relative shrink-0">
@@ -60,10 +84,10 @@ export function AccountSection({ model }: { model: SidebarModel }) {
             </span>
             <span className="min-w-0 flex-1">
               <span className="block truncate text-base font-semibold leading-[18px]">
-                {sidebarAccount.label}
+                {signedIn ? t('workbench.kcoder_account_label') : sidebarAccount.label}
               </span>
               <span className="block truncate text-xs font-medium leading-4 text-[rgb(var(--color-sidebar-text-secondary))]">
-                {sidebarAccount.detail}
+                {signedIn ? productAccount?.account?.username : sidebarAccount.detail}
               </span>
             </span>
           </button>
@@ -105,7 +129,9 @@ export function AccountSection({ model }: { model: SidebarModel }) {
           {settingsMenuOpen && (
             <DesktopSettingsMenu
               user={user}
-              showLogout={usesCloudAccount ? cloud.isConnected : undefined}
+              showLogout={signedIn || (usesCloudAccount ? cloud.isConnected : undefined)}
+              productLogin={useProductAccount}
+              logoutLabel={signedIn ? t('workbench.kcoder_account_logout') : useProductAccount && !usesCloudAccount ? t('workbench.kcoder_account_disconnect_web') : undefined}
               accountTargets={gatewayAccountTargets}
               onAccountLogout={handleGatewayAccountLogout}
               onOpenSettings={() => {
@@ -113,7 +139,12 @@ export function AccountSection({ model }: { model: SidebarModel }) {
                 onOpenSettings()
               }}
               onLogin={
-                requiresCloudLogin
+                useProductAccount
+                  ? signedIn ? undefined : () => {
+                      setSettingsMenuOpen(false)
+                      setProductDialog('login')
+                    }
+                  : requiresCloudLogin
                   ? () => {
                       setSettingsMenuOpen(false)
                       setAccountCloudDialogOpen(true)
@@ -122,6 +153,10 @@ export function AccountSection({ model }: { model: SidebarModel }) {
               }
               onLogout={() => {
                 setSettingsMenuOpen(false)
+                if (signedIn) {
+                  setProductDialog('logout')
+                  return
+                }
                 if (usesCloudAccount) {
                   cloud.disconnect()
                   return
@@ -132,6 +167,11 @@ export function AccountSection({ model }: { model: SidebarModel }) {
           )}
         </div>
       </div>
+      {productDialog && <KCoderAccountDialog signOut={productDialog === 'logout'} portalUrl={productAccount?.portalUrl}
+        onClose={() => setProductDialog(null)} onDone={status => {
+          setProductAccount(status)
+          if (!status.revocationUnconfirmed && !status.relayRegistrationFailed) setProductDialog(null)
+        }} />}
     </>
   )
 }

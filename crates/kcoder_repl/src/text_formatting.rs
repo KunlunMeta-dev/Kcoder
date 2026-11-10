@@ -38,7 +38,8 @@ pub(crate) fn format_and_truncate_tool_result(
 /// `,` so Ratatui has useful wrap points without expanding the payload across
 /// many rows.
 pub(crate) fn format_json_compact(text: &str) -> Option<String> {
-    let json = serde_json::from_str::<serde_json::Value>(text).ok()?;
+    let mut json = serde_json::from_str::<serde_json::Value>(text).ok()?;
+    json.sort_all_objects();
     let json_pretty = serde_json::to_string_pretty(&json).unwrap_or_else(|_| json.to_string());
 
     let mut result = String::new();

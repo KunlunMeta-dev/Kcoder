@@ -64,22 +64,27 @@ pub mod agent_live_view;
 mod attempt_diagnostic_requests;
 pub mod background;
 mod background_runtime;
+pub mod integrations;
 mod managed_artifacts;
 mod session_inspection;
+mod session_tools;
 mod subagent_projection;
 mod token_estimate_cache;
 mod tool_input_hints;
 mod tool_serialization_cache;
 mod turn_driver;
 pub use background_runtime::BackgroundWorkIdleReservation;
+pub use turn_steering::TurnSteerSettlement;
 pub mod checkpoint;
 mod client_model_configuration;
 mod client_session_runtime;
 mod compaction_runtime;
 pub mod context;
+pub mod continuous_work;
 mod event;
 mod forking;
 pub mod goal_continuation;
+pub mod historical_context_projection;
 mod lifecycle;
 mod memory_idle;
 mod memory_observer;
@@ -91,11 +96,18 @@ pub mod orchestrate;
 mod path_preview;
 mod path_preview_runtime;
 mod permission_runtime;
+mod project_knowledge_prompt;
 mod prompt_runtime;
 mod provider_runtime;
 mod skill_catalog_runtime;
+mod skill_visibility_runtime;
 mod tool_compaction_runtime;
+mod unattended;
 pub use client_model_configuration::{ClientModelConfiguration, ClientModelContinuationOptions};
+mod deferred_tool_dispatch;
+#[cfg(test)]
+#[path = "../../kcoder_config/src/test_isolated_profile.rs"]
+mod isolated_test_profile;
 mod recovery_deadline;
 mod recovery_record;
 mod request_admission;
@@ -118,8 +130,12 @@ mod tool_input_lines;
 mod tool_input_log;
 mod tool_repair;
 mod tool_schema_runtime;
+mod tool_search_context;
+mod tool_search_runtime;
 mod usage;
 mod verification_target;
+mod widget_input;
+mod widget_render_verification;
 mod write_preview;
 
 pub use background::{BackgroundJobEvent, BackgroundJobManager};
@@ -235,21 +251,24 @@ enum WorkspacePersistenceMode {
 /// state such as `AppState`, permission sessions, background task managers, or checkpoints.
 #[derive(Clone)]
 pub struct WorkspaceRuntimeServices {
+    web_search_runtime: Arc<kcoder_tools::web_search::WebSearchRuntime>,
     diagnostic_writer: kcoder_state::DiagnosticWriter,
     cron_scheduler: Arc<CronScheduler>,
     shell_environment_snapshot: ShellEnvironmentSnapshot,
     provider_prewarmed: Arc<AtomicBool>,
+    model_health: Arc<integrations::core::model_health::ModelHealthTracker>,
     client_storage: Option<(PathBuf, Option<Arc<kcoder_config::PrivateTempDir>>)>,
 }
 
 /// Non-interactive questioner used by yolo mode for internal trust prompts.
 ///
-/// The model-facing AskUserQuestion tool is hidden/rejected in yolo mode, but
-/// some internal tools still use the same questioner for "activate/cancel"
-/// style confirmations. Yolo means the session should not block on those
-/// prompts, so choose the first option and continue.
-#[derive(Debug, Clone, Copy, Default)]
-struct YoloUserQuestioner;
+/// Synchronous internal trust prompts select their first option in yolo mode.
+/// A separately negotiated asynchronous registrar may still persist a question.
+#[derive(Clone, Default)]
+struct YoloUserQuestioner {
+    async_questioner: Option<Arc<dyn UserQuestioner>>,
+    allow_internal_auto_answers: bool,
+}
 
 #[derive(Debug, Clone)]
 struct ToolUseItem {
@@ -287,18 +306,56 @@ const TURN_STEER_QUEUE_MAX: usize = 64;
 pub enum TurnSteerError {
     NoActiveTurn,
     QueueFull { max: usize },
+    TemporarilyUnavailable,
+    SessionChanged,
 }
 
-#[derive(Debug, Clone)]
+/// Admission of a steer bound to an actual State lifecycle.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GuardedTurnSteer {
+    Queued,
+    Busy,
+    OwnerChanged,
+    NoActiveTurn,
+    QueueFull { max: usize },
+}
+
+#[derive(Clone)]
 struct PendingTurnSteer {
     id: u64,
     message: Message,
+    owner: kcoder_state::AppStateLifecycleIdentity,
+    async_question_delivery: Option<kcoder_types::async_user_questions::AsyncQuestionDeliveryClaim>,
 }
 
-#[derive(Debug)]
+impl std::fmt::Debug for PendingTurnSteer {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("PendingTurnSteer")
+            .field("id", &self.id)
+            .field("owner_bound", &true)
+            .field(
+                "async_question_delivery",
+                &self.async_question_delivery.is_some(),
+            )
+            .finish_non_exhaustive()
+    }
+}
+
 struct ActiveTurnSteers {
     turn_id: u64,
     pending: VecDeque<PendingTurnSteer>,
+    owner: kcoder_state::AppStateLifecycleIdentity,
+}
+
+impl std::fmt::Debug for ActiveTurnSteers {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("ActiveTurnSteers")
+            .field("turn_id", &self.turn_id)
+            .field("pending", &self.pending)
+            .finish_non_exhaustive()
+    }
 }
 
 #[derive(Debug, Default)]
@@ -312,6 +369,7 @@ pub struct TurnSteerSession {
     mailbox: Arc<Mutex<TurnSteerMailbox>>,
     turn_id: u64,
     closed: bool,
+    undrained: Arc<Mutex<Vec<u64>>>,
 }
 
 enum TurnSteerBoundary {
@@ -322,6 +380,7 @@ enum TurnSteerBoundary {
 /// High-level conversation orchestrator.
 #[derive(Debug, Clone, Default)]
 enum SettingsPersistenceTarget {
+    ReadOnlyUserFile(PathBuf),
     #[default]
     Disabled,
     UserFile(PathBuf),
@@ -339,6 +398,18 @@ struct SubagentRuntimeControl {
 #[async_trait::async_trait]
 trait SubagentCheckpointWriter: Send + Sync {
     async fn write(&self, path: &Path, messages: &[Message]) -> anyhow::Result<()>;
+    async fn write_with_context(
+        &self,
+        path: &Path,
+        messages: &[Message],
+        context: Option<&kcoder_state::context_archive::ContextHistoryCheckpoint>,
+    ) -> anyhow::Result<()> {
+        anyhow::ensure!(
+            context.is_none(),
+            "checkpoint writer does not support context archive references"
+        );
+        self.write(path, messages).await
+    }
 }
 
 #[derive(Debug, Default)]
@@ -346,21 +417,58 @@ struct FilesystemSubagentCheckpointWriter;
 
 #[derive(Clone)]
 pub struct QueryEngine {
+    #[cfg(feature = "web-network-test-fixture")]
+    web_network_test_dns: Option<kcoder_tools::web_network::test_fixture::WebNetworkTestDns>,
+    /// Presentation identity for an actual turn; it grants no Accepted/task authority.
+    native_web_source_identity: Option<kcoder_types::TurnAttemptIdentity>,
+    native_input_only_context:
+        Option<Arc<integrations::core::input_context::NativeInputOnlyContext>>,
+    /// A native-owned resident requires its original private source admission.
+    /// This marker narrows input and never grants source authorization.
+    native_host_source_admission_required: Option<kcoder_state::AppStateLifecycleIdentity>,
     desktop_binding: desktop_binding::DesktopBindings,
     provider: Arc<RwLock<Arc<dyn Provider>>>,
+    model_request_binding: Option<Arc<native_model_requests::ModelRequestBinding>>,
+    model_health: Arc<integrations::core::model_health::ModelHealthTracker>,
+    native_auto_model_health:
+        Option<Arc<integrations::core::model_health::NativeAutoModelHealthBinding>>,
     client_model_configuration: Option<Arc<dyn ClientModelConfiguration>>,
     client_model_options: Arc<RwLock<client_model_configuration::ClientModelOptions>>,
     request_class: request_admission::RequestClass,
     pub state: AppState,
     pub tools: ToolRegistry,
+    session_tool_contributions: Option<Arc<session_tools::SessionToolContributions>>,
+    client_questions_supported: bool,
+    async_user_questions_supported: bool,
+    unattended_input: bool,
+    channel_tool_restrictions: kcoder_types::channel_tool_restrictions::ChannelToolRestrictions,
+    owned_command_program: Option<PathBuf>,
+    bundled_search_backend: Option<Arc<dyn kcoder_tools::web_search::BundledSearchBackend>>,
+    web_search_runtime: Arc<kcoder_tools::web_search::WebSearchRuntime>,
+    web_session_resources: kcoder_tools::web_network::WebSessionResources,
+    /// Immutable native host ceiling; a Some(empty) value grants no tools.
+    native_tool_ceiling: Option<Arc<HashSet<String>>>,
+    agent_tool_ceiling: Option<Arc<HashSet<String>>>,
+    agent_uses_own_tool_selection: bool,
+    agent_turn_configuration: Option<Arc<kcoder_types::agent_definition::AgentTurnConfiguration>>,
+    native_tool_authorization: Option<Arc<dyn integrations::core::NativeToolAuthorization>>,
+    native_turn_admission: Option<Arc<integrations::core::NativeTurnAdmission>>,
+    native_office_projection:
+        Option<Arc<dyn integrations::office::NativeOfficeToolProjectionAuthority>>,
+    native_reviewed_memory_turn:
+        Option<Arc<dyn integrations::knowledge::NativeReviewedMemoryTurnContext>>,
+    native_wiki_read_factory: Option<Arc<dyn integrations::knowledge::NativeWikiReadFactory>>,
     /// Base registry used for sub-agents before role filtering.
     subagent_tools: Arc<RwLock<ToolRegistry>>,
+    /// Explicit host overrides are literal ceilings, including an empty registry.
+    subagent_tools_explicit: bool,
     /// Model-facing tool definitions are immutable for the lifetime of an
     /// engine, so build them once instead of regenerating schemars output on
     /// every provider continuation.
     tool_definitions: Arc<Vec<kcoder_types::ToolDefinition>>,
     tool_input_hints: Arc<tool_input_hints::ToolInputHints>,
     tool_schema_revision: kcoder_tools::ToolRegistryRevision,
+    discovered_tools: Arc<RwLock<tool_search_runtime::DiscoveredTools>>,
     /// Raw input schemas used for local coercion/validation before a tool runs.
     tool_input_schemas: Arc<HashMap<String, Value>>,
     pub permissions: Arc<RwLock<PermissionEngine>>,
@@ -378,7 +486,9 @@ pub struct QueryEngine {
     pub memory_manager: Arc<MemoryManager>,
     pub memory_store: Arc<MemoryStore>,
     memory_prompt_counter: Arc<RwLock<u64>>,
-    memory_observer_queue: Arc<RwLock<MemoryObserverQueue>>,
+    memory_observer_queue: Arc<RwLock<memory_observer::runtime_queue::ObserverRuntimeQueue>>,
+    curated_memory_observer_sink:
+        Option<Arc<dyn integrations::knowledge::CuratedMemoryObserverSink>>,
     memory_idle_gate: Arc<RwLock<()>>,
     memory_idle_reserved: Arc<AtomicBool>,
     memory_observer_last_validation_failure:
@@ -388,6 +498,7 @@ pub struct QueryEngine {
     memory_observer_worker_handle: Arc<Mutex<Option<tokio::task::JoinHandle<()>>>>,
     memory_session_end_summary_recorded: Arc<AtomicBool>,
     pub skill_registry: Arc<RwLock<SkillRegistry>>,
+    agent_skill_resources: Option<Arc<agent_definition_context::AgentSkillResources>>,
     pub active_skills: Arc<RwLock<Vec<String>>>,
     skill_registry_generation: Arc<AtomicU64>,
     /// Skill-mutation identity for internal reviewer/curator forks; None for regular foreground engines.
@@ -405,6 +516,8 @@ pub struct QueryEngine {
     cancel_token: CancellationToken,
     /// Fail closed after an input durability failure until the session is reloaded.
     input_persistence_failed: Arc<AtomicBool>,
+    /// Keeps SessionEnd from observing an input whose original writer reply is pending.
+    input_session_end_gate: Arc<tokio::sync::RwLock<()>>,
     /// One-shot signal that collapses running wait-style tools (Sleep, wait) to
     /// a short grace period without cancelling the turn. Shared across clones.
     shorten_signal: Arc<tokio::sync::Notify>,
@@ -429,6 +542,9 @@ pub struct QueryEngine {
     /// Arrangement runtime mode for this engine/fork.
     arrangement_mode: Arc<AtomicBool>,
     luna_mode: Arc<AtomicBool>,
+    /// Foreground presentation is copied into the turn clone, never shared with other entrypoints.
+    client_presentation: Option<kcoder_types::ClientPresentationV1>,
+    studio_tool_selection: kcoder_types::StudioToolSelections,
     /// Optional write scope inherited by forked Arrangement worker agents.
     allowed_write_paths: Arc<RwLock<Vec<String>>>,
     /// Shell prefixes explicitly delegated to a forked Arrangement worker.
@@ -460,12 +576,18 @@ pub struct QueryEngine {
     /// Cache-safe params from the most recent main-thread turn, used for
     /// forked-agent prompt-cache sharing.
     last_cache_safe_params: Arc<RwLock<Option<Arc<crate::agent::CacheSafeParams>>>>,
+    side_question_cache_binding: Arc<RwLock<Option<forking::SideQuestionCacheBinding>>>,
     /// Project instructions frozen at engine creation and prepended as the
     /// same synthetic user message on every provider request. Keeping this
     /// byte-identical preserves the prompt-cache prefix across turns.
     project_user_context: Arc<Option<Message>>,
+    project_instruction_facts: Arc<Vec<kcoder_types::imported_instructions::NativeInstructionFact>>,
+    imported_instruction_gate: Arc<imported_instruction_gate::InstructionActivationGate>,
+    imported_context_notice: Arc<std::sync::atomic::AtomicBool>,
     /// Role identity for a forked sub-agent. This is kept separate from the
     /// delegated user task so role constraints have system-level priority.
+    agent_definition_context:
+        Option<Arc<kcoder_types::integrations::office::OfficeAssistantDefinition>>,
     subagent_system_prompt: Arc<Option<String>>,
     /// Parent-task control state read by a forked child at every provider/tool safety boundary.
     subagent_runtime_control: Arc<Option<SubagentRuntimeControl>>,
@@ -535,6 +657,7 @@ use workspace_services::*;
 
 mod desktop_binding;
 mod tool_context_runtime;
+mod web_local_access;
 pub use desktop_binding::{DesktopTurnGuard, DesktopTurnRevoker};
 
 mod subagent_finish_runtime;
@@ -549,6 +672,9 @@ mod memory_extraction_runtime;
 use memory_extraction_runtime::*;
 
 mod context_injection;
+mod imported_context_snapshot;
+mod imported_instruction_activation;
+mod imported_instruction_gate;
 use context_injection::*;
 
 mod response_accounting;
@@ -572,8 +698,13 @@ mod workflow_agent_runtime;
 mod turn_entry;
 
 mod stream_response;
+mod tool_argument_recovery;
 
+mod agent_definition_context;
+pub mod agent_tool_policy;
 mod request_assembly;
+mod studio_presentation;
+mod studio_tool_selection;
 
 #[cfg(test)]
 #[path = "tests/retry_marker.rs"]
@@ -582,3 +713,13 @@ mod retry_marker_tests;
 #[cfg(test)]
 #[path = "tests/mod.rs"]
 mod tests;
+
+#[path = "integrations/core/model_requests/mod.rs"]
+pub mod native_model_requests;
+
+mod web_source_runtime;
+
+#[cfg(feature = "web-network-test-fixture")]
+mod web_network_test_fixture;
+
+mod web_settings_runtime;

@@ -1,0 +1,189 @@
+{
+  "MigrationHistoryParentResourceAttachParams": [
+    {
+      "decoded": {
+        "confirm": false,
+        "expectedSequence": 0,
+        "jobId": "parent",
+        "limits": {
+          "maxPayloadFiles": 8,
+          "maxTotalBytes": 2097152,
+          "minFreeBytes": 1048576,
+          "minFreeFileNodes": 0
+        },
+        "planId": "plan"
+      },
+      "name": "original_target_owned_budget",
+      "value": {
+        "expectedSequence": 0,
+        "jobId": "parent",
+        "limits": {
+          "maxPayloadFiles": 8,
+          "maxTotalBytes": 2097152,
+          "minFreeBytes": 1048576,
+          "minFreeFileNodes": 0
+        },
+        "planId": "plan"
+      }
+    }
+  ],
+  "MigrationHistoryResourceAttachParams": [
+    {
+      "decoded": {
+        "confirm": false,
+        "expectedSequence": 0,
+        "jobId": "original",
+        "limits": {
+          "maxPayloadFiles": 8,
+          "maxTotalBytes": 2097152,
+          "minFreeBytes": 1048576,
+          "minFreeFileNodes": 0
+        }
+      },
+      "name": "original_target_owned_budget",
+      "value": {
+        "expectedSequence": 0,
+        "jobId": "original",
+        "limits": {
+          "maxPayloadFiles": 8,
+          "maxTotalBytes": 2097152,
+          "minFreeBytes": 1048576,
+          "minFreeFileNodes": 0
+        }
+      }
+    }
+  ],
+  "MigrationHistoryResourceAttachmentReadParams": [
+    {
+      "decoded": {
+        "jobId": "4c6d9ee9-d145-4da4-ac73-35c2dce251ea"
+      },
+      "name": "original_job_only",
+      "value": {
+        "jobId": "4c6d9ee9-d145-4da4-ac73-35c2dce251ea"
+      }
+    }
+  ],
+  "MigrationHistoryResourceAttachmentResult": [
+    {
+      "decoded": {
+        "currentPlanId": null,
+        "currentSequence": 4,
+        "issueCode": null,
+        "jobId": "4c6d9ee9-d145-4da4-ac73-35c2dce251ea",
+        "originalIntent": null,
+        "ownerJobId": "4c6d9ee9-d145-4da4-ac73-35c2dce251ea",
+        "phase": "untracked"
+      },
+      "name": "explicit_no_original_intent",
+      "value": {
+        "currentPlanId": null,
+        "currentSequence": 4,
+        "issueCode": null,
+        "jobId": "4c6d9ee9-d145-4da4-ac73-35c2dce251ea",
+        "originalIntent": null,
+        "ownerJobId": "4c6d9ee9-d145-4da4-ac73-35c2dce251ea",
+        "phase": "untracked"
+      }
+    },
+    {
+      "decoded": {
+        "currentPlanId": null,
+        "currentSequence": 4,
+        "issueCode": null,
+        "jobId": "4c6d9ee9-d145-4da4-ac73-35c2dce251ea",
+        "originalIntent": {
+          "expectedSequence": 2,
+          "initialLimits": {
+            "maxPayloadFiles": 16,
+            "maxTotalBytes": 4194304,
+            "minFreeBytes": 1048576,
+            "minFreeFileNodes": 0
+          },
+          "planId": null
+        },
+        "ownerJobId": "4c6d9ee9-d145-4da4-ac73-35c2dce251ea",
+        "phase": "pending"
+      },
+      "name": "old_sequence_not_current_sequence",
+      "value": {
+        "currentPlanId": null,
+        "currentSequence": 4,
+        "issueCode": null,
+        "jobId": "4c6d9ee9-d145-4da4-ac73-35c2dce251ea",
+        "originalIntent": {
+          "expectedSequence": 2,
+          "initialLimits": {
+            "maxPayloadFiles": 16,
+            "maxTotalBytes": 4194304,
+            "minFreeBytes": 1048576,
+            "minFreeFileNodes": 0
+          },
+          "planId": null
+        },
+        "ownerJobId": "4c6d9ee9-d145-4da4-ac73-35c2dce251ea",
+        "phase": "pending"
+      }
+    }
+  ],
+  "MigrationHistoryResourceIncreaseParams": [
+    {
+      "decoded": {
+        "confirm": false,
+        "expectedPolicyRevision": 0,
+        "jobId": "original",
+        "limits": {
+          "maxPayloadFiles": 8,
+          "maxTotalBytes": 2097152,
+          "minFreeBytes": 1048576,
+          "minFreeFileNodes": 0
+        },
+        "requestId": "change"
+      },
+      "name": "original_target_owned_budget",
+      "value": {
+        "expectedPolicyRevision": 0,
+        "jobId": "original",
+        "limits": {
+          "maxPayloadFiles": 8,
+          "maxTotalBytes": 2097152,
+          "minFreeBytes": 1048576,
+          "minFreeFileNodes": 0
+        },
+        "requestId": "change"
+      }
+    }
+  ],
+  "MigrationHistoryResourceReadParams": [
+    {
+      "decoded": {
+        "jobId": "original"
+      },
+      "name": "original_target_owned_budget",
+      "value": {
+        "jobId": "original"
+      }
+    }
+  ],
+  "MigrationHistoryResourceResult": [
+    {
+      "decoded": {
+        "budget": {
+          "jobId": "original",
+          "phase": "legacy_untracked"
+        },
+        "initialLimits": null,
+        "ownerJobId": null
+      },
+      "name": "original_target_owned_budget",
+      "value": {
+        "budget": {
+          "jobId": "original",
+          "phase": "legacy_untracked"
+        },
+        "initialLimits": null,
+        "ownerJobId": null
+      }
+    }
+  ]
+}

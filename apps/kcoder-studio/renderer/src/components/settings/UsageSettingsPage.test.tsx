@@ -42,11 +42,13 @@ beforeEach(() => {
   vi.mocked(readUsageStats).mockResolvedValue(stats)
 })
 
-test('shows real totals, coverage, missing usage and model breakdown with explicit refresh', async () => {
+test('defaults to the current host and shows target-reported totals and partial usage', async () => {
   render(<UsageSettingsPage />)
+  await waitFor(() => expect(readUsageStats).toHaveBeenCalledWith('local'))
   expect(await screen.findByTestId('usage-totalTokens')).toHaveTextContent('120')
   expect(screen.getByTestId('usage-coverage')).toHaveTextContent('已被清理')
   expect(screen.getByRole('status')).toHaveTextContent('未报告不代表没有消耗')
+  expect(screen.getByTestId('usage-cost-unavailable')).toHaveTextContent('不会根据 Token 数估算')
   fireEvent.click(screen.getByTestId('usage-view-models'))
   expect(screen.getByTestId('usage-table')).toHaveTextContent('model')
   fireEvent.click(screen.getByTestId('usage-refresh'))
@@ -55,16 +57,51 @@ test('shows real totals, coverage, missing usage and model breakdown with explic
 
 test('target changes clear old results and failed reads never render stale totals', async () => {
   render(<UsageSettingsPage />)
+  await screen.findByTestId('usage-choose-target')
+  fireEvent.change(screen.getByTestId('usage-target'), { target: { value: 'local' } })
   await screen.findByTestId('usage-totalTokens')
   vi.mocked(readUsageStats).mockRejectedValue(new Error('Target offline'))
   fireEvent.change(screen.getByTestId('usage-target'), { target: { value: 'remote' } })
   expect(screen.queryByTestId('usage-totalTokens')).not.toBeInTheDocument()
   expect(await screen.findByRole('alert')).toHaveTextContent('无法读取用量')
-  expect(screen.getByRole('alert')).not.toHaveTextContent('Target offline')
+  expect(screen.getByRole('alert')).toHaveTextContent('Target offline')
   expect(readUsageStats).toHaveBeenLastCalledWith('remote')
   vi.mocked(readUsageStats).mockResolvedValue({ ...stats, history: null })
   fireEvent.click(screen.getByTestId('usage-refresh'))
-  expect(await screen.findByTestId('usage-coverage')).toHaveTextContent('暂无已记录请求')
+  expect(await screen.findByTestId('usage-empty')).toHaveTextContent('暂无已记录请求')
+  expect(screen.queryByTestId('usage-totalTokens')).not.toBeInTheDocument()
+})
+
+test('clearing the target during a pending read clears busy state and fences the late response', async () => {
+  let resolveRead!: (value: UsageStats) => void
+  vi.mocked(readUsageStats).mockImplementationOnce(() => new Promise(resolve => {
+    resolveRead = resolve
+  }))
+  render(<UsageSettingsPage />)
+  await screen.findByTestId('usage-choose-target')
+  fireEvent.change(screen.getByTestId('usage-target'), { target: { value: 'local' } })
+  await waitFor(() => expect(readUsageStats).toHaveBeenCalledWith('local'))
+  expect(await screen.findByTestId('usage-loading')).toBeInTheDocument()
+
+  fireEvent.change(screen.getByTestId('usage-target'), { target: { value: '' } })
+  expect(screen.queryByTestId('usage-loading')).not.toBeInTheDocument()
+  expect(screen.queryByTestId('usage-totalTokens')).not.toBeInTheDocument()
+  expect(screen.getByTestId('usage-refresh')).toHaveTextContent('刷新')
+
+  resolveRead(stats)
+  await waitFor(() => expect(screen.getByTestId('usage-choose-target')).toBeInTheDocument())
+  expect(screen.queryByTestId('usage-totalTokens')).not.toBeInTheDocument()
+})
+
+test('reports the explicit-profile requirement without showing fabricated zero totals', async () => {
+  vi.mocked(readUsageStats).mockRejectedValueOnce(
+    new Error('Token usage tracking requires an explicit user profile'),
+  )
+  render(<UsageSettingsPage />)
+  await screen.findByTestId('usage-choose-target')
+  fireEvent.change(screen.getByTestId('usage-target'), { target: { value: 'local' } })
+  expect(await screen.findByRole('alert')).toHaveTextContent('需要显式指定 KCoder 用户配置目录')
+  expect(screen.queryByTestId('usage-totalTokens')).not.toBeInTheDocument()
 })
 
 test('dates and models paginate independently without changing the aggregate totals', async () => {
@@ -84,6 +121,8 @@ test('dates and models paginate independently without changing the aggregate tot
   }
   vi.mocked(readUsageStats).mockResolvedValue(many)
   render(<UsageSettingsPage />)
+  await screen.findByTestId('usage-choose-target')
+  fireEvent.change(screen.getByTestId('usage-target'), { target: { value: 'local' } })
   await screen.findByTestId('usage-table')
   const rows = () => within(screen.getByTestId('usage-table')).getAllByRole('row').slice(1)
   expect(rows()).toHaveLength(10)

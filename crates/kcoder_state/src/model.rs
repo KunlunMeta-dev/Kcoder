@@ -740,8 +740,18 @@ fn is_default_delivery_max_attempts(value: &u32) -> bool {
 }
 
 /// A persisted history entry with metadata.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct HistoryEntry {
+    /// Native-only observations kept outside model messages. Old history has none.
+    #[serde(default, rename = "webSources", skip_serializing_if = "Vec::is_empty")]
+    pub web_sources: Vec<kcoder_types::web_sources::WebSourcesV1>,
+    /// Producer-bound provenance; legacy and model-only rows remain unknown.
+    #[serde(
+        default,
+        rename = "historyAttempt",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub history_attempt: Option<kcoder_types::TurnAttemptIdentity>,
     pub session_id: String,
     pub timestamp_ms: u64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -785,6 +795,7 @@ pub(super) struct CompactionTranscriptMetadata {
     pub(super) parent_uuid: Option<String>,
     pub(super) preserved_ids: Vec<Option<String>>,
     pub(super) preserved_segment: Option<PreservedTranscriptSegment>,
+    pub(super) context_source: kcoder_types::context_archive::ContextBlockSource,
 }
 
 /// Result of pruning persisted session history files.
@@ -809,6 +820,18 @@ pub struct ConversationRewindOutcome {
 /// Serializable snapshot of a session for export/import and debugging.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SessionSnapshot {
+    #[serde(default)]
+    pub studio_work_mode: kcoder_types::StudioWorkMode,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub studio_tool_selection: Option<kcoder_types::StudioToolSelections>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent_definition: Option<kcoder_types::agent_definition::AgentTaskBinding>,
+    #[serde(default)]
+    pub agent_configuration_revision: u64,
+    #[serde(default)]
+    pub session_lifetime: kcoder_types::session_lifetime::SessionLifetimeSetting,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub channel_task_source: Option<kcoder_types::agent_definition::ChannelTaskSource>,
     pub session_id: String,
     pub cwd: PathBuf,
     #[serde(default, skip_serializing_if = "SessionMode::is_default")]
@@ -833,6 +856,9 @@ pub struct SessionSnapshot {
     pub goal_history: Vec<Goal>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session_memory: Option<SessionMemorySnapshot>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub imported_context_snapshot:
+        Option<kcoder_types::imported_context_snapshot::ImportedContextSnapshot>,
     /// Wall-clock time of the latest assistant message. This lets a resumed
     /// session decide whether its provider prompt cache has gone cold.
     #[serde(default, skip_serializing_if = "Option::is_none")]

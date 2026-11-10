@@ -89,7 +89,7 @@ await runE2E(import.meta.url, {
     clients[name] = await startRegisteredClient({
       url: `http://127.0.0.1:${relay.controlPort}`,
       registrationKey,
-      pairingToken: pairingTokens[name],
+      gatewaySecret: pairingTokens[name],
       identityFile,
       gateway: gateways[name].baseUrl,
       allowInsecure: true,
@@ -99,7 +99,7 @@ await runE2E(import.meta.url, {
     const registered = await readRegisteredClientIdentity({
       identityFile,
       relayUrl: `http://127.0.0.1:${relay.controlPort}`,
-      pairingToken: pairingTokens[name],
+      gatewaySecret: pairingTokens[name],
     });
     context.registerSecret(registered.secret);
     ids[name] = registered.id;

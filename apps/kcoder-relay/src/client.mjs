@@ -4,9 +4,10 @@ import { existsSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import WebSocket from 'ws';
 import { bridge, heartbeat } from './transport.mjs';
-import { loadEnv, credentials } from './config.mjs';
+import { loadEnv, credentials, clientGatewaySecret } from './config.mjs';
 import {
   prepareClientIdentity,
+  readRegisteredClientIdentity,
   resolveIdentityFile,
   saveRegisteredClientIdentity,
 } from './client-identity.mjs';
@@ -35,6 +36,9 @@ function validateGateway(gateway) {
 
 function diagnosticError(error) {
   // Never forward error messages, stacks, URLs or credential-bearing objects.
+  if (Number.isInteger(error) && error >= 100 && error <= 599) {
+    return { errorKind: 'handshake_status', handshakeStatus: error };
+  }
   const status = typeof error?.message === 'string' && /^Unexpected server response: ([1-5][0-9]{2})$/.exec(error.message);
   if (status) return { errorKind: 'handshake_status', handshakeStatus: Number(status[1]) };
   if (error?.message === 'Opening handshake has timed out' || error?.code === 'ETIMEDOUT') return { errorKind: 'timeout' };
@@ -84,6 +88,13 @@ function startControlClient({ base, secret, gatewayId, target, retryMs, onOnline
     if (stopped) return;
     const currentGeneration = ++generation;
     control = socket('/_relay/control', currentGeneration);
+    control.once('unexpected-response', (_request, response) => {
+      diagnostic('control_error', currentGeneration, undefined, response.statusCode);
+      // Invalid/revoked credentials require operator action, not an endless retry loop.
+      if (response.statusCode === 401 || response.statusCode === 403) stopped = true;
+      response.resume();
+      control.terminate();
+    });
     control.once('open', () => { diagnostic('control_open', currentGeneration); heartbeat(control); onOnline(); });
     control.on('message', raw => {
       let message;
@@ -167,13 +178,13 @@ async function readBoundedJson(response, maxBytes = 16 * 1024) {
   catch { throw new Error('Relay returned an invalid registration response'); }
 }
 
-function validateRegistrationResponse(value, pairingToken, registrationKey) {
-  const keys = ['id', 'secret', 'pairingToken', 'maxConnections', 'maxBytesPerWindow', 'trafficWindowMs'];
+function validateRegistrationResponse(value, gatewaySecret, registrationKey) {
+  const keys = ['id', 'secret', 'gatewaySecret', 'maxConnections', 'maxBytesPerWindow', 'trafficWindowMs'];
   if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).length !== keys.length || Object.keys(value).some(key => !keys.includes(key))) {
     throw new Error('Relay returned an invalid registration response');
   }
   if (typeof value.id !== 'string' || !GATEWAY_ID.test(value.id) || typeof value.secret !== 'string' || !CREDENTIAL.test(value.secret)
-      || value.secret === registrationKey || value.secret === pairingToken || value.pairingToken !== pairingToken) {
+      || value.secret === registrationKey || value.secret === gatewaySecret || value.gatewaySecret !== gatewaySecret) {
     throw new Error('Relay returned invalid registered Gateway credentials');
   }
   for (const name of ['maxConnections', 'maxBytesPerWindow', 'trafficWindowMs']) {
@@ -182,71 +193,135 @@ function validateRegistrationResponse(value, pairingToken, registrationKey) {
   return { id: value.id, secret: value.secret };
 }
 
-async function registerClient({ base, registrationKey, pairingToken, enrollmentToken, fetchImpl }) {
-  if (typeof registrationKey !== 'string' || !CREDENTIAL.test(registrationKey)) throw new Error('Configure a relay registration key of at least 32 URL-safe characters');
+async function registerClient({ base, registrationKey, activationCode, accountLoginToken, accountCredentials, accountSessionToken, gatewaySecret, enrollmentToken, fetchImpl, signal }) {
+  const credential = accountSessionToken ?? accountLoginToken ?? activationCode ?? registrationKey;
+  let authorization;
+  if (accountCredentials) {
+    const { username, password } = accountCredentials;
+    if (typeof username !== 'string' || !/^[a-z0-9][a-z0-9._-]{0,63}$/.test(username)
+        || typeof password !== 'string' || password.length < 12 || password.length > 256) {
+      throw new Error('Invalid Relay account credentials');
+    }
+    authorization = `Basic ${Buffer.from(`${username}:${password}`, 'utf8').toString('base64')}`;
+  } else {
+    if (typeof credential !== 'string' || !CREDENTIAL.test(credential)) throw new Error('Sign in to a Relay account or provide a private registration key');
+    authorization = `Bearer ${credential}`;
+  }
   if (typeof fetchImpl !== 'function') throw new Error('HTTP fetch is unavailable for relay registration');
-  const endpoint = new URL('/_relay/register', base.origin);
+  const endpoint = new URL(accountSessionToken ? '/_relay/account/enroll' : accountCredentials || accountLoginToken ? '/_relay/account/register'
+    : activationCode ? '/_relay/activate-device' : '/_relay/register', base.origin);
   let response;
   try {
     response = await fetchImpl(endpoint, {
       method: 'POST',
-      headers: { authorization: `Bearer ${registrationKey}`, 'content-type': 'application/json' },
-      body: JSON.stringify({ enrollmentToken, pairingToken }),
+      headers: { authorization, 'content-type': 'application/json' },
+      body: JSON.stringify({ enrollmentToken, gatewaySecret }),
       redirect: 'error',
-      signal: AbortSignal.timeout(10_000),
+      signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(10_000)]) : AbortSignal.timeout(10_000),
     });
   } catch {
     throw new Error('Relay registration request failed; the saved enrollment proof can be retried');
   }
   if (response.status !== 200 && response.status !== 201) {
     await response.body?.cancel?.().catch(() => {});
-    throw new Error(`Relay registration failed with HTTP ${response.status}`);
+    const error = new Error(`Relay registration failed with HTTP ${response.status}`);
+    error.status = response.status;
+    if (response.status === 429 && response.headers?.get('x-kcoder-relay-error') === 'RELAY_ACCOUNT_CAPACITY') {
+      error.code = 'RELAY_ACCOUNT_CAPACITY';
+    }
+    throw error;
   }
   const body = await readBoundedJson(response);
-  return validateRegistrationResponse(body, pairingToken, registrationKey);
+  return validateRegistrationResponse(body, gatewaySecret, credential);
 }
 
-/** Register once, cache the assigned identity, and then connect with its private secret. */
-export async function startRegisteredClient({
+/** Resolve registration before the owned Gateway publishes its public origin. */
+export async function ensureRegisteredClientIdentity({
   url,
   registrationKey,
-  pairingToken,
+  activationCode,
+  accountLoginToken,
+  accountCredentials,
+  accountSessionToken,
+  gatewaySecret,
   identityFile = resolveIdentityFile(),
-  gateway = 'http://127.0.0.1:4186',
   allowInsecure = false,
-  retryMs = 2000,
-  onOnline = () => {},
-  onDiagnostic,
   fetchImpl = globalThis.fetch,
+  signal,
 } = {}) {
-  validateDiagnosticObserver(onDiagnostic);
+  signal?.throwIfAborted();
   const base = validateRelayUrl(url, allowInsecure);
-  const target = validateGateway(gateway);
-  const local = await prepareClientIdentity({ identityFile, relayUrl: base.origin, pairingToken });
+  if ((accountCredentials || accountLoginToken || accountSessionToken) && base.protocol !== 'https:'
+      && !['127.0.0.1', 'localhost', '[::1]'].includes(base.hostname)) {
+    throw new Error('Relay account sign-in requires HTTPS');
+  }
+  const local = await prepareClientIdentity({ identityFile, relayUrl: base.origin, gatewaySecret });
   let assigned;
   if (local.status === 'registered') {
     assigned = { id: local.id, secret: local.secret };
   } else {
-    if (!registrationKey) throw new Error('Configure KCODER_RELAY_REGISTRATION_KEY to complete client registration');
-    if (!pairingToken) throw new Error('Configure KCODER_RELAY_GATEWAY_TOKEN to complete client registration');
-    assigned = await registerClient({ base, registrationKey, pairingToken, enrollmentToken: local.enrollmentToken, fetchImpl });
-    await saveRegisteredClientIdentity({ identityFile, relayUrl: base.origin, pairingToken, enrollmentToken: local.enrollmentToken, ...assigned });
+    if (!registrationKey && !activationCode && !accountLoginToken && !accountCredentials && !accountSessionToken)
+      throw new Error('Sign in to a Relay account to complete client registration');
+    if (!gatewaySecret) throw new Error('Configure KCODER_RELAY_GATEWAY_SECRET to complete client registration');
+    assigned = await registerClient({ base, registrationKey, activationCode, accountLoginToken, accountCredentials, accountSessionToken, gatewaySecret,
+      enrollmentToken: local.enrollmentToken, fetchImpl, signal });
+    await saveRegisteredClientIdentity({ identityFile, relayUrl: base.origin, gatewaySecret, enrollmentToken: local.enrollmentToken, ...assigned });
   }
+  return assigned;
+}
+
+/** Probe the live authorization of an existing owned device without opening a tunnel. */
+export async function checkRegisteredClientAccess({
+  url, identityFile, gatewaySecret, fetchImpl = globalThis.fetch, signal, allowInsecure = false, revoke = false,
+}) {
+  try {
+    const base = validateRelayUrl(url, allowInsecure);
+    if (base.protocol !== 'https:' && !['127.0.0.1', 'localhost', '[::1]'].includes(base.hostname)) return 'unknown';
+    const identity = await readRegisteredClientIdentity({
+      identityFile, relayUrl: base.origin, gatewaySecret, requireSingleLink: true,
+    });
+    const deadline = AbortSignal.timeout(3_000);
+    const response = await fetchImpl(new URL('/_relay/account/access', base.origin), {
+      ...(revoke ? { method: 'DELETE' } : {}),
+      headers: { authorization: `Bearer ${identity.secret}`, 'x-kcoder-device': identity.id },
+      redirect: 'error',
+      signal: signal ? AbortSignal.any([signal, deadline]) : deadline,
+    });
+    await response.body?.cancel?.().catch(() => {});
+    if (response.status === 204) return revoke ? 'revoked' : 'authorized';
+    if (response.status === 401 || response.status === 403) return 'denied';
+  } catch { /* Reachability and older servers do not prove revocation. */ }
+  return 'unknown';
+}
+
+/** Register once, cache the assigned identity, and then connect with its private secret. */
+export async function startRegisteredClient(options = {}) {
+  const { url, gateway = 'http://127.0.0.1:4186', allowInsecure = false,
+    retryMs = 2000, onOnline = () => {}, onDiagnostic, signal } = options;
+  validateDiagnosticObserver(onDiagnostic);
+  const base = validateRelayUrl(url, allowInsecure);
+  const target = validateGateway(gateway);
+  const assigned = await ensureRegisteredClientIdentity(options);
+  signal?.throwIfAborted();
   return startControlClient({ base, secret: assigned.secret, gatewayId: assigned.id, target, retryMs, onOnline, onDiagnostic });
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   loadEnv();
+  process.env.KCODER_RELAY_GATEWAY_SECRET = clientGatewaySecret() || '';
   const identityFile = resolveIdentityFile();
   const registrationKey = process.env.KCODER_RELAY_REGISTRATION_KEY;
   const hasRegistrationKey = registrationKey !== undefined && registrationKey !== '';
+  const accountLoginToken = process.env.KCODER_RELAY_ACCOUNT_LOGIN_TOKEN || undefined;
+  if (accountLoginToken && !/^[A-Za-z0-9_-]{43}$/.test(accountLoginToken)) throw new Error('Invalid KCODER_RELAY_ACCOUNT_LOGIN_TOKEN');
   if (hasRegistrationKey && !CREDENTIAL.test(registrationKey)) throw new Error('Invalid KCODER_RELAY_REGISTRATION_KEY');
   let client;
-  if (hasRegistrationKey || Boolean(process.env.KCODER_RELAY_IDENTITY_FILE) || existsSync(identityFile)) {
+  if (accountLoginToken || hasRegistrationKey || Boolean(process.env.KCODER_RELAY_IDENTITY_FILE) || existsSync(identityFile)) {
     client = await startRegisteredClient({
       url: process.env.KCODER_RELAY_PUBLIC_URL,
       registrationKey: hasRegistrationKey ? registrationKey : undefined,
-      pairingToken: process.env.KCODER_RELAY_GATEWAY_TOKEN || undefined,
+      accountLoginToken,
+      gatewaySecret: process.env.KCODER_RELAY_GATEWAY_SECRET || undefined,
       identityFile,
       gateway: process.env.KCODER_RELAY_LOCAL_GATEWAY,
       onOnline: () => console.log('KCoder relay connected'),

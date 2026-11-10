@@ -1,0 +1,2298 @@
+{
+  "AutomationSubscription": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "AutomationDestination": {
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "studio"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "destinationRef": {
+                "type": "string"
+              },
+              "destinationRevision": {
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "channel"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "destinationRef",
+              "destinationRevision",
+              "kind"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "AutomationPeriodBudget": {
+        "additionalProperties": false,
+        "properties": {
+          "maximumModelCalls": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maximumTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "windowSeconds": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "maximumModelCalls",
+          "maximumTokens",
+          "windowSeconds"
+        ],
+        "type": "object"
+      },
+      "AutomationSubscriptionDraft": {
+        "additionalProperties": false,
+        "properties": {
+          "delivery": {
+            "$ref": "#/definitions/AutomationDestination"
+          },
+          "eventSource": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "inputs": true,
+          "maximumRuntimeSeconds": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maximumTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "modelSelection": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationModelSelectionIntent"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Only an explicitly saved selection can authorize AUTO candidate resolution. Missing legacy intent remains InheritCurrent and serializes unchanged."
+          },
+          "periodBudget": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/AutomationPeriodBudget"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "schedule": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/CronSchedule"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "workflowId": {
+            "type": "string"
+          },
+          "workflowVersion": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "delivery",
+          "id",
+          "inputs",
+          "maximumRuntimeSeconds",
+          "maximumTokens",
+          "title",
+          "workflowId",
+          "workflowVersion"
+        ],
+        "type": "object"
+      },
+      "CronSchedule": {
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "at": {
+                "description": "RFC3339 timestamp, for example `2026-07-18T09:00:00Z`.",
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "at"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "at",
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "every_seconds": {
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "kind": {
+                "enum": [
+                  "every"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "every_seconds",
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "Legacy schedules retain UTC evaluation.",
+            "properties": {
+              "expression": {
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "cron"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "expression",
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "Evaluate calendar fields in an explicit IANA timezone. Persisted instants remain UTC.",
+            "properties": {
+              "expression": {
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "zoned_cron"
+                ],
+                "type": "string"
+              },
+              "timezone": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "expression",
+              "kind",
+              "timezone"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "IntegrationModelSelectionIntent": {
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "inherit_current"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "explicit"
+                ],
+                "type": "string"
+              },
+              "model": {
+                "type": "string"
+              },
+              "provider": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "model",
+              "provider"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "auto_policy"
+                ],
+                "type": "string"
+              },
+              "version": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "kind",
+              "version"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "configurationRevision": {
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "verifier_locked"
+                ],
+                "type": "string"
+              },
+              "model": {
+                "type": "string"
+              },
+              "provider": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "configurationRevision",
+              "kind",
+              "model",
+              "provider"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "IntegrationNullable_for_String": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationOwner": {
+        "additionalProperties": false,
+        "description": "Stable owner identity excludes refreshable authorization/configuration generations.",
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "organizationId": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationNullable_for_String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "$ref": "#/definitions/IntegrationNullable_for_String"
+          }
+        },
+        "required": [
+          "accountId",
+          "targetId",
+          "workspaceId"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "consentRef": {
+        "type": "string"
+      },
+      "createdAtMs": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "draft": {
+        "$ref": "#/definitions/AutomationSubscriptionDraft"
+      },
+      "enabled": {
+        "type": "boolean"
+      },
+      "nextFireAtMs": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "owner": {
+        "$ref": "#/definitions/IntegrationOwner"
+      },
+      "revision": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "updatedAtMs": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "consentRef",
+      "createdAtMs",
+      "draft",
+      "enabled",
+      "owner",
+      "revision",
+      "updatedAtMs"
+    ],
+    "title": "AutomationSubscription",
+    "type": "object"
+  },
+  "AutomationSubscriptionDraft": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "AutomationDestination": {
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "studio"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "destinationRef": {
+                "type": "string"
+              },
+              "destinationRevision": {
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "channel"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "destinationRef",
+              "destinationRevision",
+              "kind"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "AutomationPeriodBudget": {
+        "additionalProperties": false,
+        "properties": {
+          "maximumModelCalls": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maximumTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "windowSeconds": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "maximumModelCalls",
+          "maximumTokens",
+          "windowSeconds"
+        ],
+        "type": "object"
+      },
+      "CronSchedule": {
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "at": {
+                "description": "RFC3339 timestamp, for example `2026-07-18T09:00:00Z`.",
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "at"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "at",
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "every_seconds": {
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "kind": {
+                "enum": [
+                  "every"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "every_seconds",
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "Legacy schedules retain UTC evaluation.",
+            "properties": {
+              "expression": {
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "cron"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "expression",
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "Evaluate calendar fields in an explicit IANA timezone. Persisted instants remain UTC.",
+            "properties": {
+              "expression": {
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "zoned_cron"
+                ],
+                "type": "string"
+              },
+              "timezone": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "expression",
+              "kind",
+              "timezone"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "IntegrationModelSelectionIntent": {
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "inherit_current"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "explicit"
+                ],
+                "type": "string"
+              },
+              "model": {
+                "type": "string"
+              },
+              "provider": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "model",
+              "provider"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "auto_policy"
+                ],
+                "type": "string"
+              },
+              "version": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "kind",
+              "version"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "configurationRevision": {
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "verifier_locked"
+                ],
+                "type": "string"
+              },
+              "model": {
+                "type": "string"
+              },
+              "provider": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "configurationRevision",
+              "kind",
+              "model",
+              "provider"
+            ],
+            "type": "object"
+          }
+        ]
+      }
+    },
+    "properties": {
+      "delivery": {
+        "$ref": "#/definitions/AutomationDestination"
+      },
+      "eventSource": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "id": {
+        "type": "string"
+      },
+      "inputs": true,
+      "maximumRuntimeSeconds": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "maximumTokens": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "modelSelection": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/IntegrationModelSelectionIntent"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "Only an explicitly saved selection can authorize AUTO candidate resolution. Missing legacy intent remains InheritCurrent and serializes unchanged."
+      },
+      "periodBudget": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/AutomationPeriodBudget"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "schedule": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/CronSchedule"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "title": {
+        "type": "string"
+      },
+      "workflowId": {
+        "type": "string"
+      },
+      "workflowVersion": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "delivery",
+      "id",
+      "inputs",
+      "maximumRuntimeSeconds",
+      "maximumTokens",
+      "title",
+      "workflowId",
+      "workflowVersion"
+    ],
+    "title": "AutomationSubscriptionDraft",
+    "type": "object"
+  },
+  "SubscriptionEnableParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "enabled": {
+        "type": "boolean"
+      },
+      "subscriptionId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "enabled",
+      "subscriptionId"
+    ],
+    "title": "SubscriptionEnableParams",
+    "type": "object"
+  },
+  "SubscriptionListResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "AutomationDestination": {
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "studio"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "destinationRef": {
+                "type": "string"
+              },
+              "destinationRevision": {
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "channel"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "destinationRef",
+              "destinationRevision",
+              "kind"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "AutomationPeriodBudget": {
+        "additionalProperties": false,
+        "properties": {
+          "maximumModelCalls": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maximumTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "windowSeconds": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "maximumModelCalls",
+          "maximumTokens",
+          "windowSeconds"
+        ],
+        "type": "object"
+      },
+      "AutomationSubscription": {
+        "additionalProperties": false,
+        "properties": {
+          "consentRef": {
+            "type": "string"
+          },
+          "createdAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "draft": {
+            "$ref": "#/definitions/AutomationSubscriptionDraft"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "nextFireAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "owner": {
+            "$ref": "#/definitions/IntegrationOwner"
+          },
+          "revision": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "updatedAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "consentRef",
+          "createdAtMs",
+          "draft",
+          "enabled",
+          "owner",
+          "revision",
+          "updatedAtMs"
+        ],
+        "type": "object"
+      },
+      "AutomationSubscriptionDraft": {
+        "additionalProperties": false,
+        "properties": {
+          "delivery": {
+            "$ref": "#/definitions/AutomationDestination"
+          },
+          "eventSource": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "inputs": true,
+          "maximumRuntimeSeconds": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maximumTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "modelSelection": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationModelSelectionIntent"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Only an explicitly saved selection can authorize AUTO candidate resolution. Missing legacy intent remains InheritCurrent and serializes unchanged."
+          },
+          "periodBudget": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/AutomationPeriodBudget"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "schedule": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/CronSchedule"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "workflowId": {
+            "type": "string"
+          },
+          "workflowVersion": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "delivery",
+          "id",
+          "inputs",
+          "maximumRuntimeSeconds",
+          "maximumTokens",
+          "title",
+          "workflowId",
+          "workflowVersion"
+        ],
+        "type": "object"
+      },
+      "CronSchedule": {
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "at": {
+                "description": "RFC3339 timestamp, for example `2026-07-18T09:00:00Z`.",
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "at"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "at",
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "every_seconds": {
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "kind": {
+                "enum": [
+                  "every"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "every_seconds",
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "Legacy schedules retain UTC evaluation.",
+            "properties": {
+              "expression": {
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "cron"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "expression",
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "Evaluate calendar fields in an explicit IANA timezone. Persisted instants remain UTC.",
+            "properties": {
+              "expression": {
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "zoned_cron"
+                ],
+                "type": "string"
+              },
+              "timezone": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "expression",
+              "kind",
+              "timezone"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "IntegrationModelSelectionIntent": {
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "inherit_current"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "explicit"
+                ],
+                "type": "string"
+              },
+              "model": {
+                "type": "string"
+              },
+              "provider": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "model",
+              "provider"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "auto_policy"
+                ],
+                "type": "string"
+              },
+              "version": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "kind",
+              "version"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "configurationRevision": {
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "verifier_locked"
+                ],
+                "type": "string"
+              },
+              "model": {
+                "type": "string"
+              },
+              "provider": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "configurationRevision",
+              "kind",
+              "model",
+              "provider"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "IntegrationNullable_for_String": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationOwner": {
+        "additionalProperties": false,
+        "description": "Stable owner identity excludes refreshable authorization/configuration generations.",
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "organizationId": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationNullable_for_String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "$ref": "#/definitions/IntegrationNullable_for_String"
+          }
+        },
+        "required": [
+          "accountId",
+          "targetId",
+          "workspaceId"
+        ],
+        "type": "object"
+      },
+      "KnowledgePage_for_AutomationSubscription": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/definitions/AutomationSubscription"
+            },
+            "type": "array"
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "page": {
+        "$ref": "#/definitions/KnowledgePage_for_AutomationSubscription"
+      }
+    },
+    "required": [
+      "page"
+    ],
+    "title": "SubscriptionListResult",
+    "type": "object"
+  },
+  "SubscriptionPreviewResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "AutomationBudgetWindow": {
+        "additionalProperties": false,
+        "properties": {
+          "endsAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "startsAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "endsAtMs",
+          "startsAtMs"
+        ],
+        "type": "object"
+      },
+      "AutomationPeriodBudget": {
+        "additionalProperties": false,
+        "properties": {
+          "maximumModelCalls": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maximumTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "windowSeconds": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "maximumModelCalls",
+          "maximumTokens",
+          "windowSeconds"
+        ],
+        "type": "object"
+      },
+      "AutomationPeriodBudgetPreview": {
+        "additionalProperties": false,
+        "description": "Preview is observation only; no policy or subscription authority is serialized.",
+        "properties": {
+          "activeCalls": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "activeTasks": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "chargedModelCalls": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "chargedTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "configuration": {
+            "$ref": "#/definitions/AutomationPeriodBudget"
+          },
+          "createsSubscription": {
+            "type": "boolean"
+          },
+          "currentWindow": {
+            "$ref": "#/definitions/AutomationBudgetWindow"
+          },
+          "effectiveMaximumModelCalls": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "effectiveMaximumTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "increasesApplyNextWindow": {
+            "type": "boolean"
+          },
+          "unknownCostReservations": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "activeCalls",
+          "activeTasks",
+          "chargedModelCalls",
+          "chargedTokens",
+          "configuration",
+          "createsSubscription",
+          "currentWindow",
+          "effectiveMaximumModelCalls",
+          "effectiveMaximumTokens",
+          "increasesApplyNextWindow",
+          "unknownCostReservations"
+        ],
+        "type": "object"
+      },
+      "IntegrationModelSelectionIntent": {
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "inherit_current"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "explicit"
+                ],
+                "type": "string"
+              },
+              "model": {
+                "type": "string"
+              },
+              "provider": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "model",
+              "provider"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "auto_policy"
+                ],
+                "type": "string"
+              },
+              "version": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "kind",
+              "version"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "configurationRevision": {
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "verifier_locked"
+                ],
+                "type": "string"
+              },
+              "model": {
+                "type": "string"
+              },
+              "provider": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "configurationRevision",
+              "kind",
+              "model",
+              "provider"
+            ],
+            "type": "object"
+          }
+        ]
+      }
+    },
+    "properties": {
+      "createsSubscription": {
+        "type": "boolean"
+      },
+      "maximumRuntimeSeconds": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "maximumTokens": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "modelSelection": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/IntegrationModelSelectionIntent"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "nextFireAtMs": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "periodBudget": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/AutomationPeriodBudgetPreview"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "workflowId": {
+        "type": "string"
+      },
+      "workflowVersion": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "createsSubscription",
+      "maximumRuntimeSeconds",
+      "maximumTokens",
+      "workflowId",
+      "workflowVersion"
+    ],
+    "title": "SubscriptionPreviewResult",
+    "type": "object"
+  },
+  "SubscriptionReadResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "AutomationDestination": {
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "studio"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "destinationRef": {
+                "type": "string"
+              },
+              "destinationRevision": {
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "channel"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "destinationRef",
+              "destinationRevision",
+              "kind"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "AutomationPeriodBudget": {
+        "additionalProperties": false,
+        "properties": {
+          "maximumModelCalls": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maximumTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "windowSeconds": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "maximumModelCalls",
+          "maximumTokens",
+          "windowSeconds"
+        ],
+        "type": "object"
+      },
+      "AutomationSubscription": {
+        "additionalProperties": false,
+        "properties": {
+          "consentRef": {
+            "type": "string"
+          },
+          "createdAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "draft": {
+            "$ref": "#/definitions/AutomationSubscriptionDraft"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "nextFireAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "owner": {
+            "$ref": "#/definitions/IntegrationOwner"
+          },
+          "revision": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "updatedAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "consentRef",
+          "createdAtMs",
+          "draft",
+          "enabled",
+          "owner",
+          "revision",
+          "updatedAtMs"
+        ],
+        "type": "object"
+      },
+      "AutomationSubscriptionDraft": {
+        "additionalProperties": false,
+        "properties": {
+          "delivery": {
+            "$ref": "#/definitions/AutomationDestination"
+          },
+          "eventSource": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "inputs": true,
+          "maximumRuntimeSeconds": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maximumTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "modelSelection": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationModelSelectionIntent"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Only an explicitly saved selection can authorize AUTO candidate resolution. Missing legacy intent remains InheritCurrent and serializes unchanged."
+          },
+          "periodBudget": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/AutomationPeriodBudget"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "schedule": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/CronSchedule"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "workflowId": {
+            "type": "string"
+          },
+          "workflowVersion": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "delivery",
+          "id",
+          "inputs",
+          "maximumRuntimeSeconds",
+          "maximumTokens",
+          "title",
+          "workflowId",
+          "workflowVersion"
+        ],
+        "type": "object"
+      },
+      "CronSchedule": {
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "at": {
+                "description": "RFC3339 timestamp, for example `2026-07-18T09:00:00Z`.",
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "at"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "at",
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "every_seconds": {
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "kind": {
+                "enum": [
+                  "every"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "every_seconds",
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "Legacy schedules retain UTC evaluation.",
+            "properties": {
+              "expression": {
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "cron"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "expression",
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "Evaluate calendar fields in an explicit IANA timezone. Persisted instants remain UTC.",
+            "properties": {
+              "expression": {
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "zoned_cron"
+                ],
+                "type": "string"
+              },
+              "timezone": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "expression",
+              "kind",
+              "timezone"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "IntegrationModelSelectionIntent": {
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "inherit_current"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "explicit"
+                ],
+                "type": "string"
+              },
+              "model": {
+                "type": "string"
+              },
+              "provider": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "model",
+              "provider"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "auto_policy"
+                ],
+                "type": "string"
+              },
+              "version": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "kind",
+              "version"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "configurationRevision": {
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "verifier_locked"
+                ],
+                "type": "string"
+              },
+              "model": {
+                "type": "string"
+              },
+              "provider": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "configurationRevision",
+              "kind",
+              "model",
+              "provider"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "IntegrationNullable_for_String": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationOwner": {
+        "additionalProperties": false,
+        "description": "Stable owner identity excludes refreshable authorization/configuration generations.",
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "organizationId": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationNullable_for_String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "$ref": "#/definitions/IntegrationNullable_for_String"
+          }
+        },
+        "required": [
+          "accountId",
+          "targetId",
+          "workspaceId"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "subscription": {
+        "$ref": "#/definitions/AutomationSubscription"
+      }
+    },
+    "required": [
+      "subscription"
+    ],
+    "title": "SubscriptionReadResult",
+    "type": "object"
+  },
+  "SubscriptionSaveParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "AutomationDestination": {
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "studio"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "destinationRef": {
+                "type": "string"
+              },
+              "destinationRevision": {
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "channel"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "destinationRef",
+              "destinationRevision",
+              "kind"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "AutomationPeriodBudget": {
+        "additionalProperties": false,
+        "properties": {
+          "maximumModelCalls": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maximumTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "windowSeconds": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "maximumModelCalls",
+          "maximumTokens",
+          "windowSeconds"
+        ],
+        "type": "object"
+      },
+      "AutomationSubscriptionDraft": {
+        "additionalProperties": false,
+        "properties": {
+          "delivery": {
+            "$ref": "#/definitions/AutomationDestination"
+          },
+          "eventSource": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "inputs": true,
+          "maximumRuntimeSeconds": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maximumTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "modelSelection": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationModelSelectionIntent"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Only an explicitly saved selection can authorize AUTO candidate resolution. Missing legacy intent remains InheritCurrent and serializes unchanged."
+          },
+          "periodBudget": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/AutomationPeriodBudget"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "schedule": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/CronSchedule"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "workflowId": {
+            "type": "string"
+          },
+          "workflowVersion": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "delivery",
+          "id",
+          "inputs",
+          "maximumRuntimeSeconds",
+          "maximumTokens",
+          "title",
+          "workflowId",
+          "workflowVersion"
+        ],
+        "type": "object"
+      },
+      "CronSchedule": {
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "at": {
+                "description": "RFC3339 timestamp, for example `2026-07-18T09:00:00Z`.",
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "at"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "at",
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "every_seconds": {
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "kind": {
+                "enum": [
+                  "every"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "every_seconds",
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "Legacy schedules retain UTC evaluation.",
+            "properties": {
+              "expression": {
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "cron"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "expression",
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "Evaluate calendar fields in an explicit IANA timezone. Persisted instants remain UTC.",
+            "properties": {
+              "expression": {
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "zoned_cron"
+                ],
+                "type": "string"
+              },
+              "timezone": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "expression",
+              "kind",
+              "timezone"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "IntegrationModelSelectionIntent": {
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "inherit_current"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "explicit"
+                ],
+                "type": "string"
+              },
+              "model": {
+                "type": "string"
+              },
+              "provider": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "model",
+              "provider"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "auto_policy"
+                ],
+                "type": "string"
+              },
+              "version": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "kind",
+              "version"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "configurationRevision": {
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "verifier_locked"
+                ],
+                "type": "string"
+              },
+              "model": {
+                "type": "string"
+              },
+              "provider": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "configurationRevision",
+              "kind",
+              "model",
+              "provider"
+            ],
+            "type": "object"
+          }
+        ]
+      }
+    },
+    "properties": {
+      "consentRef": {
+        "type": "string"
+      },
+      "draft": {
+        "$ref": "#/definitions/AutomationSubscriptionDraft"
+      }
+    },
+    "required": [
+      "consentRef",
+      "draft"
+    ],
+    "title": "SubscriptionSaveParams",
+    "type": "object"
+  }
+}

@@ -63,11 +63,20 @@ impl ConfigPaths {
 /// `KCODER_CONFIG_DIR` is the highest-priority explicit override; `KCODER_HOME`
 /// selects an explicit profile directory. When neither is set, choose the
 /// development profile from the executable name, while regular `kcoder` uses
-/// `$HOME/.config/kcoder`。
+/// `$HOME/.config/kcoder`。 A cargo test harness without either override gets a
+/// private per-process profile instead, so tests never write the personal one.
 pub fn user_config_dir() -> Result<PathBuf> {
+    let config_override = std::env::var_os(CONFIG_DIR_ENV).filter(|path| !path.is_empty());
+    let kcoder_home = std::env::var_os(KCODER_HOME_ENV).filter(|path| !path.is_empty());
+    if config_override.is_none()
+        && kcoder_home.is_none()
+        && let Some(profile) = super::test_harness_profile::test_harness_profile()
+    {
+        return Ok(profile);
+    }
     resolve_user_config_dir(
-        std::env::var_os(CONFIG_DIR_ENV),
-        std::env::var_os(KCODER_HOME_ENV),
+        config_override,
+        kcoder_home,
         std::env::current_exe()
             .ok()
             .and_then(|path| path.file_stem().map(|stem| stem.to_os_string())),

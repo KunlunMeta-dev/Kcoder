@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { ApiError, createHttpClient } from '@/api/http'
 import { getConfiguredSocketBaseUrl, getRuntimeConfig } from '@/config/runtime'
+import { isKCoderGatewayPage } from '@/kcoder/gatewayRpc'
 import type { User } from '@/types/api'
 import {
   CloudConnectionContext,
@@ -20,7 +21,7 @@ import {
   type CloudConnectionSnapshot,
 } from './cloudConnectionStorage'
 
-interface WeworkAuthSessionCreateResponse {
+interface LegacyCloudAuthSessionCreateResponse {
   session_id: string
   poll_token: string
   authorize_url: string
@@ -29,7 +30,7 @@ interface WeworkAuthSessionCreateResponse {
   poll_interval_seconds: number
 }
 
-interface WeworkAuthSessionPollResponse {
+interface LegacyCloudAuthSessionPollResponse {
   status: 'pending' | 'success' | 'declined' | 'failed'
   access_token?: string
   token_type?: string
@@ -37,7 +38,7 @@ interface WeworkAuthSessionPollResponse {
   error?: string
 }
 
-interface WeworkCloudConfigResponse {
+interface LegacyCloudConfigResponse {
   web_url?: unknown
   socket_url?: unknown
 }
@@ -139,7 +140,6 @@ function createCloudClient(config: CloudConnectionRuntimeConfig, token: string |
   return createHttpClient({
     baseUrl: config.apiBaseUrl,
     getToken: () => token,
-    redirectOnUnauthorized: false,
   })
 }
 
@@ -153,11 +153,6 @@ function rawErrorMessage(error: unknown): string {
   return 'Cloud connection failed'
 }
 
-function isTauriHttpScopeError(error: unknown): boolean {
-  const message = rawErrorMessage(error).toLowerCase()
-  return message.includes('scope') || message.includes('not allowed') || message.includes('denied')
-}
-
 function cloudStepErrorMessage(
   stage: string,
   config: CloudConnectionRuntimeConfig,
@@ -165,9 +160,6 @@ function cloudStepErrorMessage(
   error: unknown
 ): string {
   const url = cloudRequestUrl(config, endpoint)
-  if (isTauriHttpScopeError(error)) {
-    return `${stage}失败（${url}）：桌面端 HTTP 权限拦截了这个 Backend 地址。请重启 App 后再试。`
-  }
   return `${stage}失败（${url}）：${rawErrorMessage(error)}`
 }
 
@@ -200,7 +192,7 @@ async function runCloudRequest<T>(
 async function checkCloudHealth(config: CloudConnectionRuntimeConfig): Promise<void> {
   const client = createCloudClient(config, null)
   await runCloudRequest('健康检查', config, '/health', () =>
-    client.get('/health', { redirectOnUnauthorized: false })
+    client.get('/health')
   )
 }
 
@@ -208,9 +200,7 @@ async function fetchCloudConfig(
   config: CloudConnectionRuntimeConfig
 ): Promise<{ webUrl: string; socketUrl?: string }> {
   const client = createCloudClient(config, null)
-  const metadata = await client.get<WeworkCloudConfigResponse>('/auth/wework/config', {
-    redirectOnUnauthorized: false,
-  })
+  const metadata = await client.get<LegacyCloudConfigResponse>('/auth/wework/config')
   if (typeof metadata.web_url !== 'string' || !metadata.web_url.trim()) {
     throw new Error('Cloud Backend did not provide a Web URL')
   }
@@ -227,29 +217,29 @@ async function fetchCloudConfig(
 async function fetchCloudUser(config: CloudConnectionRuntimeConfig, token: string): Promise<User> {
   const client = createCloudClient(config, token)
   return runCloudRequest('读取云端用户', config, '/users/me', () =>
-    client.get<User>('/users/me', { redirectOnUnauthorized: false })
+    client.get<User>('/users/me')
   )
 }
 
-async function createWeworkAuthSession(
+async function createLegacyCloudAuthSession(
   config: CloudConnectionRuntimeConfig
-): Promise<WeworkAuthSessionCreateResponse> {
+): Promise<LegacyCloudAuthSessionCreateResponse> {
   const client = createCloudClient(config, null)
   return runCloudRequest('创建云端授权会话', config, '/auth/wework/sessions', () =>
-    client.post<WeworkAuthSessionCreateResponse>('/auth/wework/sessions')
+    client.post<LegacyCloudAuthSessionCreateResponse>('/auth/wework/sessions')
   )
 }
 
-async function pollWeworkAuthSession(
+async function pollLegacyCloudAuthSession(
   config: CloudConnectionRuntimeConfig,
-  session: WeworkAuthSessionCreateResponse
-): Promise<WeworkAuthSessionPollResponse> {
+  session: LegacyCloudAuthSessionCreateResponse
+): Promise<LegacyCloudAuthSessionPollResponse> {
   const client = createCloudClient(config, null)
   const endpoint = `/auth/wework/sessions/${encodeURIComponent(
     session.session_id
   )}/poll?poll_token=${encodeURIComponent(session.poll_token)}`
   return runCloudRequest('等待云端授权', config, endpoint, () =>
-    client.get<WeworkAuthSessionPollResponse>(endpoint, { redirectOnUnauthorized: false })
+    client.get<LegacyCloudAuthSessionPollResponse>(endpoint)
   )
 }
 
@@ -307,7 +297,9 @@ function getCloudErrorMessage(error: unknown): string {
 }
 
 export function CloudConnectionProvider({ children }: { children: ReactNode }) {
-  const [snapshot, setSnapshot] = useState<CloudConnectionSnapshot>(() => snapshotFromStored())
+  const [snapshot, setSnapshot] = useState<CloudConnectionSnapshot>(() =>
+    isKCoderGatewayPage() ? DISCONNECTED_STATE : snapshotFromStored()
+  )
   const initialRefreshStartedRef = useRef(false)
 
   const applyConnectedSnapshot = useCallback((nextSnapshot: CloudConnectionSnapshot) => {
@@ -347,6 +339,7 @@ export function CloudConnectionProvider({ children }: { children: ReactNode }) {
       openAuthorizationUrl?: OpenCloudAuthorizationUrl,
       socketBaseUrlOverride?: string
     ): Promise<User> => {
+      if (isKCoderGatewayPage()) throw new Error('Legacy cloud authorization is unavailable in Gateway Studio')
       let config = resolveCloudRuntimeConfig(backendUrl, socketBaseUrlOverride)
       setSnapshot(current => ({
         ...current,
@@ -363,7 +356,7 @@ export function CloudConnectionProvider({ children }: { children: ReactNode }) {
           ...current,
           ...config,
         }))
-        const session = await createWeworkAuthSession(config)
+        const session = await createLegacyCloudAuthSession(config)
         const authorizationHandle = await openAuthorizationUrl?.(session.authorize_url)
         const windowClosed = authWindowClosedPromise(authorizationHandle)
 
@@ -380,8 +373,8 @@ export function CloudConnectionProvider({ children }: { children: ReactNode }) {
             await delay(pollIntervalMs)
           }
           const pollResult = windowClosed
-            ? await Promise.race([pollWeworkAuthSession(config, session), windowClosed])
-            : await pollWeworkAuthSession(config, session)
+            ? await Promise.race([pollLegacyCloudAuthSession(config, session), windowClosed])
+            : await pollLegacyCloudAuthSession(config, session)
           if (pollResult.status === 'pending') continue
           if (pollResult.status === 'declined') {
             throw new Error('云端授权已取消')

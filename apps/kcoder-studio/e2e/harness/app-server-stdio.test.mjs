@@ -111,3 +111,36 @@ test("app-server JSONL client rejects malformed stdout frames", async () => {
   client.closeReader();
   closeFakeChild(child);
 });
+
+test("server approvals retain their exact request identity and can only be answered once", async () => {
+  const { child, sent } = createFakeChild();
+  const client = new AppServerStdioClient("approval", child);
+  const request = { jsonrpc: "2.0", id: 41, method: "approval/request", params: { approvalId: "a", threadId: "t", turnId: "r" } };
+  child.stdout.write(JSON.stringify(request) + "\n");
+  assert.deepEqual(client.pendingServerRequests(), [request]);
+  assert.deepEqual(client.discardedResponseIds, []);
+  const result = { decision: "decline", ...request.params };
+  await client.respond(request.id, result);
+  assert.deepEqual(JSON.parse(sent[0]), { jsonrpc: "2.0", id: 41, result });
+  assert.deepEqual(client.pendingServerRequests(), []);
+  await assert.rejects(client.respond(request.id, result), /no pending server request/);
+  assert.equal(sent.length, 1);
+  client.closeReader(); closeFakeChild(child);
+});
+
+test("duplicate server requests fail closed and transport loss cannot replay an approval", async () => {
+  const { child, sent } = createFakeChild();
+  const client = new AppServerStdioClient("approval-duplicate", child);
+  const request = { jsonrpc: "2.0", id: 9, method: "approval/request", params: {} };
+  child.stdout.write(JSON.stringify(request) + "\n" + JSON.stringify(request) + "\n");
+  assert.throws(() => client.pendingServerRequests(), /repeated/);
+  await assert.rejects(client.respond(9, { decision: "accept" }), /repeated/);
+  assert.equal(sent.length, 0);
+  client.closeReader(); closeFakeChild(child);
+  const next = createFakeChild(), closed = new AppServerStdioClient("approval-closed", next.child);
+  next.child.stdout.write(JSON.stringify(request) + "\n");
+  next.child.emit("close", 0, null);
+  await assert.rejects(closed.respond(9, { decision: "accept" }), /already closed/);
+  assert.equal(next.sent.length, 0);
+  closed.closeReader(); next.child.stdin.destroy(); next.child.stdout.destroy();
+});

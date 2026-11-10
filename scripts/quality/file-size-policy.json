@@ -2,14 +2,14 @@
   "maxLines": 3000,
   "warnLines": 2400,
   "baselineCommit": "0a2e1d5b0cadf6073c487ec79bc43d1f9f6ba6de",
-  "debt": {},
+  "debt": {
+    "apps/kcoder-studio/e2e/README.md": {
+      "lines": 3008,
+      "reason": "Already over the limit on main; capped at its current size (blank-line runs collapsed) until the E2E guide is split by suite."
+    }
+  },
   "resources": {
     "apps/kcoder-studio/renderer/packages/chat-core/public/vendor/pdf/pdf.worker.mjs": {
-      "category": "third-party-pdf-worker",
-      "reason": "Preserve upstream/resource and native package-manager format; tracked separately in splitting plan section 8.",
-      "sha256": "913e24da1c2a5cc0c3fd595c83eaee15694438001b68ba8cadd4f583af53a15e"
-    },
-    "apps/kcoder-studio/renderer/src-tauri/public/vendor/pdf/pdf.worker.mjs": {
       "category": "third-party-pdf-worker",
       "reason": "Preserve upstream/resource and native package-manager format; tracked separately in splitting plan section 8.",
       "sha256": "913e24da1c2a5cc0c3fd595c83eaee15694438001b68ba8cadd4f583af53a15e"
@@ -24,10 +24,6 @@
       "reason": "Preserve upstream/resource and native package-manager format; tracked separately in splitting plan section 8."
     },
     "apps/kcoder-studio/renderer/pnpm-lock.yaml": {
-      "category": "lockfile",
-      "reason": "Preserve upstream/resource and native package-manager format; tracked separately in splitting plan section 8."
-    },
-    "apps/kcoder-studio/renderer/src-tauri/Cargo.lock": {
       "category": "lockfile",
       "reason": "Preserve upstream/resource and native package-manager format; tracked separately in splitting plan section 8."
     },
@@ -95,21 +91,6 @@
       "reason": "PDF.js binary character mapping; not UTF-8 source.",
       "sha256": "1018c777a8910b5bb46d7d54a4aee9d51ca5cff8addb2b41c969d9101cb3fd1c"
     },
-    "apps/kcoder-studio/renderer/src-tauri/public/vendor/pdf/cmaps/CNS2-V.bcmap": {
-      "category": "third-party-binary-cmap",
-      "reason": "PDF.js binary character mapping; not UTF-8 source.",
-      "sha256": "2e4f70a8afd23a121030fc2e5b5f3816e903b11e7ba8b8c09654b31c80399c38"
-    },
-    "apps/kcoder-studio/renderer/src-tauri/public/vendor/pdf/cmaps/ETenms-B5-H.bcmap": {
-      "category": "third-party-binary-cmap",
-      "reason": "PDF.js binary character mapping; not UTF-8 source.",
-      "sha256": "d5f5a73da4173b7da9a3a20e16f26f9cd5d12deb1553409919e0cec6fd37fdee"
-    },
-    "apps/kcoder-studio/renderer/src-tauri/public/vendor/pdf/cmaps/GB-H.bcmap": {
-      "category": "third-party-binary-cmap",
-      "reason": "PDF.js binary character mapping; not UTF-8 source.",
-      "sha256": "1018c777a8910b5bb46d7d54a4aee9d51ca5cff8addb2b41c969d9101cb3fd1c"
-    },
     "dist/vendor/pdf/cmaps/CNS2-V.bcmap": {
       "category": "third-party-binary-cmap",
       "reason": "PDF.js binary character mapping; not UTF-8 source.",
@@ -124,6 +105,44 @@
       "category": "third-party-binary-cmap",
       "reason": "PDF.js binary character mapping; not UTF-8 source.",
       "sha256": "1018c777a8910b5bb46d7d54a4aee9d51ca5cff8addb2b41c969d9101cb3fd1c"
+    },
+    "crates/kcoder_config/resources/octop/experts.json": {
+      "category": "third-party-expert-catalog",
+      "reason": "Octop expert catalog retained under MIT (renderer DESIGN.md 1.1); upstream data format is preserved, so review provenance before regenerating.",
+      "sha256": "32bd2ba52e31fe4cd13f4e09b9d6ad1c420c806793fb3081c99956d769d8405c"
+    },
+    "docs/phone/figma-reference.json": {
+      "category": "figma-sync-evidence",
+      "reason": "Generated Figma reference index for the mobile design atlas (docs/phone/figma-sync.md); regenerate with the sync tool, never hand-edit.",
+      "sha256": "23ccf7c3d17d2c3b77080f55a8851dfa6b5973b0545a1cffb987cec69c21f986"
+    },
+    "docs/phone/figma-sync-checkpoint.json": {
+      "category": "figma-sync-evidence",
+      "reason": "Figma sync checkpoint mapping stable state IDs to frame IDs (docs/phone/figma-sync.md); written by the sync tool.",
+      "sha256": "843dae6935623126c8c745e1a2425bfa94017ee2a47a79a712cc32271689462a"
+    },
+    "docs/phone/show/catalog.json": {
+      "category": "mobile-showcase-evidence",
+      "reason": "Generated mobile showcase catalog snapshot (docs/phone/show); data export, not source.",
+      "sha256": "bc9806cccff290337e52a74412841046518e4c8a9c87e795ed98005ba0421632"
+    },
+    "docs/phone/show/provenance.json": {
+      "category": "mobile-showcase-evidence",
+      "reason": "Provenance record for the mobile showcase snapshot (docs/phone/show); data export, not source.",
+      "sha256": "14448f6da36113efaa0eb7e1b041ed20a530aacc7ede190c93b02696b03e1fa7"
+    },
+    "apps/kcoder-studio/shared/generated/schemas.integrations-connectivity.json": {
+      "category": "generated-contract-schema",
+      "reason": "Generated from kcoder_app_protocol by scripts/contracts/generate.mjs; `--check` enforces byte equality with the Rust contracts, so no hash is pinned here. Split the domain in the generator if it keeps growing."
+    },
+    "apps/kcoder-studio/shared/generated/schemas.integrations-office.json": {
+      "category": "generated-contract-schema",
+      "reason": "Generated from kcoder_app_protocol by scripts/contracts/generate.mjs; `--check` enforces byte equality with the Rust contracts, so no hash is pinned here. Split the domain in the generator if it keeps growing."
+    },
+    "crates/kcoder_cli/tests/fixtures/office-load-boundary-probe/Cargo.lock": {
+      "category": "fixture-lockfile",
+      "reason": "Cargo-generated lockfile of the office load boundary probe for the current workspace dependencies; regenerate with Cargo.",
+      "sha256": "412321b07122d9fa1040793bdd0cb38550e026ac8118264d10f4ad3a606303a7"
     }
   }
 }

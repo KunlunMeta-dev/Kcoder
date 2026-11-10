@@ -18,8 +18,12 @@ describe('conversation mentions', () => {
   test('round trips and deduplicates a conversation address', () => {
     const reference = createConversationMentionReference('Fix auth ] flow', SOURCE_ADDRESS)
 
-    expect(reference).toContain('[$Fix auth   flow](wework-conversation://')
-    expect(parseConversationMentions(`${reference} ${reference}`)).toEqual([
+    const legacy = reference.replace('kcoder-conversation://', 'wework-conversation://')
+    expect(reference).toContain('[$Fix auth   flow](kcoder-conversation://')
+    expect(parseConversationMentions(legacy)).toEqual([
+      expect.objectContaining({ address: { ...SOURCE_ADDRESS, runtimeHandle: null }, reference: legacy }),
+    ])
+    expect(parseConversationMentions(`${reference} ${legacy}`)).toEqual([
       {
         title: 'Fix auth   flow',
         address: {

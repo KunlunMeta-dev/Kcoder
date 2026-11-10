@@ -104,7 +104,7 @@ mod tests {
     #[tokio::test]
     async fn mode_observation_reports_state_without_exposing_instructions() {
         let root = tempfile::tempdir().unwrap();
-        let engine = TestEngineBuilder::new(root.path()).build();
+        let engine = TestEngineBuilder::new(root.path()).build_with_profile_directory();
         assert_eq!(
             engine.session_inspection_observation()["modes"]["plan_active"],
             false
@@ -132,7 +132,7 @@ mod tests {
         };
         let engine = TestEngineBuilder::new(root.path())
             .settings(settings)
-            .build();
+            .build_with_profile_directory();
         engine
             .state
             .add_message(Message::user_text("current context"));
@@ -198,7 +198,7 @@ mod tests {
                     requests: requests.clone(),
                 },
             ))
-            .build();
+            .build_with_profile_directory();
         let events = engine
             .submit_message("inspectable request", &kcoder_permissions::AutoDenyPrompt)
             .await;

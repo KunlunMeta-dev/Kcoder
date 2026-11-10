@@ -150,7 +150,7 @@ async function login(page, baseUrl, token) {
 
 async function instrumentRuntimeRequests(page) {
   await page.evaluate(() => {
-    const internals = window.__TAURI_INTERNALS__;
+    const internals = window.__ELECTRON_INTERNALS__;
     if (!internals || typeof internals.invoke !== "function") throw new Error("KCoder gateway invoke shim is unavailable");
     const originalInvoke = internals.invoke;
     window.__queueRpcResults = [];

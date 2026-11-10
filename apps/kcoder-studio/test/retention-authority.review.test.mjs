@@ -140,7 +140,7 @@ function brokerFixture(t, { retentionParentV1 = true } = {}) {
     async initialize(client, id, experimental = { residentThreads: true, stagedAttachmentRetentionReceiptsV1: true }) {
       const before = frames.length;
       broker.receive(client, JSON.stringify({ jsonrpc: '2.0', id, method: 'initialize',
-        params: { capabilities: { experimental } } }));
+        params: { protocolVersion: '2026-07-27', clientInfo: { name: 'retention-review', version: '1' }, capabilities: { experimental } } }));
       if (frames.length > before) {
         const request = frames.at(-1);
         assert.equal(request.method, 'initialize');
@@ -391,12 +391,13 @@ test('account principal and role changes invalidate a captured broker authority'
 test('workspace receipt capability is projected for the first response, waiters, and cached initialize', async t => {
   const f = brokerFixture(t);
   const authorized = f.attach(() => ({ workspaceTargetId: 'target-a' }));
-  f.broker.receive(authorized, JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: {} }));
+  const initializeParams = { protocolVersion: '2026-07-27', clientInfo: { name: 'retention-review', version: '1' } };
+  f.broker.receive(authorized, JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: initializeParams }));
   const backendInitialize = f.frames.at(-1);
   assert.equal(backendInitialize.method, 'initialize');
 
   const missingAuthority = f.attach(() => null);
-  f.broker.receive(missingAuthority, JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'initialize', params: {} }));
+  f.broker.receive(missingAuthority, JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'initialize', params: initializeParams }));
   assert.equal(f.frames.length, 1, 'the second initialize waits on the same child response');
   await f.reply(backendInitialize, { capabilities: { experimental: {
     residentThreads: true,

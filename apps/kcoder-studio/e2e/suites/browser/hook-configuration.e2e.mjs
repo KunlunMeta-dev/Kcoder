@@ -50,7 +50,7 @@ await runE2E(import.meta.url,{testId:'studio-user-hook-crud-and-target-scope',ti
   assert.deepEqual(JSON.parse(await readFile(context.pathInState('alpha/settings.json'),'utf8')).hooks,external);
   await page.getByTestId('hooks-refresh').click();await page.getByTestId('hooks-confirm-confirm').click();
   await waitFor(async()=> (await page.getByTestId('hooks-json').inputValue()).includes('external-hook-count'),10000,'explicit reload');
-  await page.evaluate(()=>{const bridge=window.__TAURI_INTERNALS__,invoke=bridge.invoke;bridge.invoke=async(command,args)=>{const result=await invoke(command,args);if(!window.__hookHeld&&command==='local_executor_request'&&args?.method==='runtime.hooks.configuration.read'&&args.params?.deviceId==='alpha'){window.__hookHeld=true;await new Promise(resolve=>{window.__releaseHook=resolve})}return result}});
+  await page.evaluate(()=>{const bridge=window.__ELECTRON_INTERNALS__,invoke=bridge.invoke;bridge.invoke=async(command,args)=>{const result=await invoke(command,args);if(!window.__hookHeld&&command==='local_executor_request'&&args?.method==='runtime.hooks.configuration.read'&&args.params?.deviceId==='alpha'){window.__hookHeld=true;await new Promise(resolve=>{window.__releaseHook=resolve})}return result}});
   await page.getByTestId('hooks-refresh').click();await waitFor(()=>page.evaluate(()=>window.__hookHeld===true),10000,'actual Alpha response held');
   await page.getByTestId('hooks-target').selectOption('beta');await page.getByTestId('hooks-json').waitFor();
   const beta=hook('printf beta >> beta-hook-count');await page.getByTestId('hooks-json').fill(JSON.stringify(beta));await page.getByTestId('hooks-save').click();

@@ -43,7 +43,7 @@ const CASE_TIMEOUT_MS = 75_000;
 
 await runE2E(import.meta.url, {
   testId: "mobile-workspace-task-handoff-browser-review",
-  tier: "full-integration",
+  tier: "manual-live",
   modelPolicy: "actual Mobile Web and Gateway/app-server protocol with a loopback deterministic provider; no real Provider or model-quality claim",
   retainSuccessLogs: true,
   processSignalTimeoutMs: 5_000,

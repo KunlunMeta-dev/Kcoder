@@ -7,6 +7,175 @@ use kcoder_tools::{BashTool, TaskOutputTool, TaskStopTool, Tool, ToolContext, To
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
+#[tokio::test]
+async fn repl_preserves_typed_errors_through_managed_execution() {
+    let root = tempfile::tempdir().unwrap();
+    let state = AppState::new(root.path());
+    let (manager, mut events) = BackgroundJobManager::new(state.clone());
+    let ctx = ToolContext::new(state).with_background_job_manager(Arc::new(manager));
+    let error = kcoder_tools::REPLTool
+        .call(
+            serde_json::json!({
+                "language":"unsupported-language", "code":"", "timeout":1
+            }),
+            &ctx,
+        )
+        .await
+        .unwrap_err();
+    assert!(matches!(error, kcoder_tools::ToolError::InvalidInput(_)));
+    assert!(matches!(
+        events.try_recv(),
+        Err(tokio::sync::broadcast::error::TryRecvError::Empty)
+    ));
+    let delayed = kcoder_tools::REPLTool
+        .call(
+            serde_json::json!({
+                "language":"shell", "code":"sleep 2", "timeout":1
+            }),
+            &ctx,
+        )
+        .await
+        .unwrap_err();
+    assert!(matches!(delayed, kcoder_tools::ToolError::Execution(_)));
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn repl_publishes_bounded_progress_before_its_final_result() {
+    let root = tempfile::tempdir().unwrap();
+    let state = AppState::new(root.path());
+    state.with_history_path(root.path().join("session.jsonl"));
+    let (manager, mut events) = BackgroundJobManager::new(state.clone());
+    let ctx = ToolContext::new(state.clone()).with_background_job_manager(Arc::new(manager));
+    let running =
+        tokio::spawn(async move {
+            kcoder_tools::REPLTool.call(serde_json::json!({
+            "language":"shell",
+            "code":"printf early; while [ ! -f release ]; do sleep 0.02; done; printf late",
+            "timeout":3
+        }), &ctx).await
+        });
+    let observed = tokio::time::timeout(Duration::from_secs(2), async {
+        loop {
+            if let BackgroundJobEvent::Progress {
+                id,
+                message,
+                detail,
+                ..
+            } = events.recv().await.unwrap().into_payload()
+            {
+                assert!(message.starts_with("REPL · "));
+                assert!(
+                    detail.is_none(),
+                    "raw output must not enter lifecycle metadata"
+                );
+                let task = state.task(&id).unwrap();
+                assert_eq!(task.status, TaskStatus::Running);
+                let text = std::fs::read_to_string(task.output_path.unwrap()).unwrap();
+                assert!(text.contains("early"));
+                assert!(!text.contains("late"));
+                break;
+            }
+        }
+    })
+    .await;
+    std::fs::write(root.path().join("release"), "ready").unwrap();
+    let output = running.await.unwrap().unwrap();
+    assert!(
+        observed.is_ok(),
+        "progress must arrive while the script is running"
+    );
+    assert!(!output.is_error);
+    assert!(output_text(&output).contains("late"));
+}
+
+#[tokio::test]
+async fn explicit_original_continuation_cannot_claim_a_replacement_worker() {
+    let root = tempfile::tempdir().unwrap();
+    let state = AppState::new(root.path());
+    state.with_history_path(root.path().join("history.jsonl"));
+    let mut task = kcoder_state::Task::new("continue-original", "Original continuation");
+    task.kind = TaskKind::Subagent;
+    task.managed = true;
+    task.parent_session_id = Some(state.session_id());
+    let original = state.start_background_task_run(task).unwrap();
+    state
+        .commit_background_terminal(
+            &kcoder_types::BackgroundEventIdentity::terminal(original.clone()),
+            TaskStatus::Completed,
+            None,
+        )
+        .unwrap();
+    let (manager, _events) = BackgroundJobManager::new(state.clone());
+    let hold = Arc::new(tokio::sync::Notify::new());
+    let waiter = hold.clone();
+    manager
+        .respawn_original_subagent(
+            &original,
+            "Explicit original continuation".into(),
+            Box::pin(async move {
+                waiter.notified().await;
+                ToolOutput::text("done")
+            }),
+            Arc::new(|| {}),
+            Some(4),
+        )
+        .unwrap();
+    let replacement = state
+        .task(&original.agent_id)
+        .unwrap()
+        .background_run
+        .unwrap();
+    assert_ne!(replacement, original);
+    assert!(
+        manager
+            .respawn_original_subagent(
+                &original,
+                "Must not retarget".into(),
+                Box::pin(async { ToolOutput::text("wrong") }),
+                Arc::new(|| {}),
+                Some(4)
+            )
+            .is_err()
+    );
+    assert!(manager.has_live_run(&replacement.agent_id, &replacement));
+    hold.notify_waiters();
+    manager
+        .abort_and_wait_for_run(&replacement.agent_id, &replacement)
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn exact_paused_stop_cannot_claim_a_worker_whose_cleanup_is_still_owned() {
+    let root = tempfile::tempdir().unwrap();
+    let state = AppState::new(root.path());
+    state.with_history_path(root.path().join("parent.jsonl"));
+    let mut task = kcoder_state::Task::new("paused-exact", "Paused original run");
+    task.kind = TaskKind::Subagent;
+    task.managed = true;
+    task.parent_session_id = Some(state.session_id());
+    let run = state.start_background_task_run(task).unwrap();
+    state.update_task(&run.agent_id, |task| task.status = TaskStatus::Paused);
+    let (manager, _events) = BackgroundJobManager::new(state.clone());
+    crate::recover_write_lock(&manager.cancelled, "background_job_cancelled")
+        .insert(run.agent_id.clone());
+    assert!(!manager.can_cancel_paused_run(&run));
+    assert!(!manager.cancel_paused_for_run(&run).unwrap());
+    assert_eq!(
+        state.task(&run.agent_id).unwrap().status,
+        TaskStatus::Paused
+    );
+    crate::recover_write_lock(&manager.cancelled, "background_job_cancelled").remove(&run.agent_id);
+    assert!(manager.can_cancel_paused_run(&run));
+    assert!(manager.cancel_paused_for_run(&run).unwrap());
+    state.confirm_stopped_subagent_run(&run).unwrap();
+    assert_eq!(
+        state.background_run_record(&run).unwrap().status,
+        TaskStatus::Cancelled
+    );
+}
+
 #[cfg(unix)]
 #[tokio::test]
 async fn managed_output_does_not_follow_an_existing_symlink() {
@@ -629,7 +798,7 @@ async fn panicked_subagent_commits_failed_state_and_closes_message_queue() {
         .into_payload();
     assert!(matches!(
         failed,
-        BackgroundJobEvent::Failed { id: got, error }
+        BackgroundJobEvent::Failed { id: got, error, .. }
             if got == id && error.contains("deliberate subagent panic")
     ));
 

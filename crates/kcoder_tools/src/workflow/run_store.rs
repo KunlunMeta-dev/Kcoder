@@ -61,6 +61,7 @@ impl WorkflowRunStore {
                 status: "running".to_string(),
                 source,
                 definition_sha256: None,
+                native_definition: false,
                 script_path,
                 args_path,
                 journal_path,

@@ -15,6 +15,7 @@ import tomllib
 
 ROOT = Path(__file__).resolve().parents[2]
 PNPM_ROOTS = ("apps/kcoder-studio", "apps/kcoder-studio/renderer")
+NATIVE_CLI_SUITES = ("cli-kcoder-unit", "cli-app-server-stdio")
 
 
 def cli_targets(root):
@@ -68,6 +69,24 @@ def check(root=ROOT):
     workspace = next(suite for suite in matrix["suite"] if suite["id"] == "rust-workspace")
     if workspace["summary"]["expected_skips"]["linux"] != len(roster["cases"]):
         errors.append("Linux ignored count disagrees with the reviewed named roster")
+    cli_suites = [suite for suite in matrix["suite"] if suite["id"] in NATIVE_CLI_SUITES]
+    if cli_suites:
+        cli_roster = root / "tests/ignored-tests.cli.json"
+        if not cli_roster.is_file():
+            errors.append("Native CLI suites require their separate reviewed named roster")
+        else:
+            reviewed = json.loads(cli_roster.read_text()).get("suites", {})
+            for suite in cli_suites:
+                cases = reviewed.get(suite["id"], {}).get("cases", {})
+                expected = suite["summary"].get("expected_skips", {})
+                for platform in ("linux", "macos", "windows"):
+                    names = cases.get(platform)
+                    if not isinstance(names, list) or any(not isinstance(name, str) or not name for name in names):
+                        errors.append(f"Invalid named CLI roster: {suite['id']}/{platform}")
+                    elif len(names) != len(set(names)):
+                        errors.append(f"Duplicate named CLI case: {suite['id']}/{platform}")
+                    elif not isinstance(expected, dict) or expected.get(platform) != len(names):
+                        errors.append(f"CLI ignored count disagrees with named roster: {suite['id']}/{platform}")
     for tier in ("pr", "full"):
         covered = set()
         for suite in matrix["suite"]:
@@ -89,13 +108,18 @@ def ignored_differences(expected, output):
     return errors
 
 
-def check_runtime_ignored(root=ROOT):
+def ignored_listing_command(command):
+    # Replace runner flags after Cargo's separator; never append a second `--`.
+    command = list(command)
+    if "--" in command:
+        command = command[:command.index("--")]
+    return command + ["--", "--list", "--ignored"]
+
+
+def run_ignored_listing(root, command):
     if sys.platform != "linux":
-        return ["Linux ignored inventory requires an actual Linux test build"]
-    matrix = tomllib.loads((root / "tests/matrix.toml").read_text())
-    suite = next(suite for suite in matrix["suite"] if suite["id"] == "rust-workspace")
-    command = suite["command"] + ["--", "--list", "--ignored"]
-    allowed = ("PATH", "HOME", "CARGO_HOME", "RUSTUP_HOME", "RUSTC_WRAPPER", "CC", "CXX", "PKG_CONFIG_PATH", "RUSTFLAGS", "RUSTDOCFLAGS", "LD_LIBRARY_PATH", "TMPDIR", "CARGO_TARGET_DIR")
+        return None, ["Linux ignored inventory requires an actual Linux test build"]
+    allowed = ("PATH", "HOME", "CARGO_HOME", "RUSTUP_HOME", "RUSTC_WRAPPER", "CC", "CXX", "PKG_CONFIG_PATH", "RUSTFLAGS", "RUSTDOCFLAGS", "LD_LIBRARY_PATH", "TMPDIR", "CARGO_TARGET_DIR", "CARGO_BUILD_JOBS", "CARGO_INCREMENTAL")
     environment = {name: os.environ[name] for name in allowed if name in os.environ}
     process = subprocess.Popen(command, cwd=root, env=environment, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, start_new_session=True)
     try:
@@ -113,11 +137,29 @@ def check_runtime_ignored(root=ROOT):
             except ProcessLookupError:
                 pass
             process.communicate()
-        return ["Ignored inventory compilation/listing timed out; owned process group stopped"]
+        return None, ["Ignored inventory compilation/listing timed out; owned process group stopped"]
     if process.returncode:
-        return [f"Ignored inventory compilation/listing failed ({process.returncode}); no tests were executed"]
-    expected = json.loads((root / "tests/ignored-tests.linux.json").read_text())["cases"]
-    return ignored_differences(expected, stdout)
+        return None, [f"Ignored inventory compilation/listing failed ({process.returncode}); no tests were executed"]
+    return stdout, []
+
+
+def check_runtime_ignored(root=ROOT):
+    if sys.platform != "linux":
+        return ["Linux ignored inventory requires an actual Linux test build"]
+    matrix = tomllib.loads((root / "tests/matrix.toml").read_text())
+    workspace = json.loads((root / "tests/ignored-tests.linux.json").read_text())["cases"]
+    cli_path = root / "tests/ignored-tests.cli.json"
+    cli = json.loads(cli_path.read_text())["suites"] if cli_path.is_file() else {}
+    expected = {"rust-workspace": workspace, **{name: value["cases"]["linux"] for name, value in cli.items()}}
+    errors = []
+    for suite in matrix["suite"]:
+        if suite["id"] not in expected:
+            continue
+        stdout, failed = run_ignored_listing(root, ignored_listing_command(suite["command"]))
+        errors.extend(f"{suite['id']}: {error}" for error in failed)
+        if not failed:
+            errors.extend(f"{suite['id']}: {error}" for error in ignored_differences(expected[suite["id"]], stdout))
+    return errors
 
 
 def main():

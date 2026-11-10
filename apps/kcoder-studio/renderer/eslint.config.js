@@ -11,7 +11,6 @@ export default defineConfig([
     'dist',
     '**/dummy-non-existing-folder/**',
     '**/public/vendor/**',
-    'src-tauri/target',
     'test-results',
   ]),
   {

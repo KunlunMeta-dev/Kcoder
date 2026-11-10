@@ -118,7 +118,8 @@ await runE2E(import.meta.url, {
   await waitFor(() => readFile(changedFile, "utf8").then(value => value === "ARTIFACT_B\n").catch(() => false), 60_000, "回合 B 真实文件变更");
   await page.getByText("权限确认后的命令已执行。", { exact: true }).last().waitFor({ state: "visible", timeout: 60_000 });
 
-  await page.getByTestId("workspace-tab-switcher").click();
+  await page.getByTestId("task-more").click();
+  await page.getByTestId("task-menu-workspace").click();
   await page.getByTestId("workspace-tab-changes").click();
   await page.getByTestId("changes-mode-turn").click();
   const changes = page.getByTestId("changes-panel");

@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "tasks": {
+    "legacy-agent": {
+      "id": "legacy-agent",
+      "description": "Historical migration fixture",
+      "status": "completed",
+      "output": "saved result",
+      "pending_messages": ["first", "second"],
+      "created_at_ms": 1,
+      "updated_at_ms": 1
+    }
+  },
+  "session_memory": null
+}

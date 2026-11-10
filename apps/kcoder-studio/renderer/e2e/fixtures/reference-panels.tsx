@@ -1,17 +1,25 @@
+import { ScheduleTimeFixture } from './schedule-time'
+import { DesktopSidebarChromeFixture } from './desktop-sidebar-chrome'
 import { createRoot } from 'react-dom/client'
+import SettingsSidebarLoader from './settings-sidebar-loader'
+import { PageTransitionController } from '../../src/components/layout/pageTransitions'
 import i18n from '../../src/i18n'
 import '../../src/styles/globals.css'
-import examples from '../../../shared/generated/examples.json'
+import '../../src/styles/disclosures.css'
+import coreExamples from '../../../shared/generated/examples.json'
+import knowledgeExamples from '../../../shared/generated/examples.knowledge.json'
+import nativeExamples from '../../../shared/generated/examples.integrations-core.json'
+import memoryExamples from '../../../shared/generated/examples.integrations-knowledge-memory.json'
+import taskExamples from '../../../shared/generated/examples.integrations-tasks.json'
+import type { TaskWorkspaceSnapshot } from '../../../shared/generated/contracts'
+import { NativeTaskWorkspace } from '../../src/features/task-workspace/NativeTaskWorkspace'
 import { readModelConfiguration } from '../../../shared/modelConfiguration'
 import { KCoderProviderSettingsPage } from '../../src/components/settings/KCoderProviderSettingsPage'
 import { UsageSettingsPage } from '../../src/components/settings/UsageSettingsPage'
 import { KnowledgeWorkspace } from '../../src/features/knowledge/KnowledgeWorkspace'
-import {
-  WorkflowVerification,
-  type WorkflowVersionVerification,
-} from '../../src/features/workflows/WorkflowVerification'
-import { SettingsDialog } from '../../src/components/settings/settings-ui'
-import { Button } from '../../src/components/ui/button'
+import { type WorkflowVersionVerification } from '../../src/features/workflows/WorkflowVerification'
+import { WorkflowVersionSettings } from '../../src/features/workflows/WorkflowVersionSettings'
+import { WorkflowVerificationHistory } from '../../src/features/workflows/WorkflowVerificationHistory'
 import { WorkbenchContext } from '../../src/features/workbench/useWorkbench'
 import type { WorkbenchContextValue } from '../../src/features/workbench/workbenchContextTypes'
 import { initialWorkbenchState } from '../../src/features/workbench/workbenchReducer'
@@ -20,13 +28,22 @@ import { wikiFileCapabilities } from '../../src/features/knowledge/wikiFileCapab
 import { KCoderPluginManagementWorkspace } from '../../src/kcoder/KCoderPluginManagementWorkspace'
 import { emptyUsage } from '../../src/kcoder/usageHistory'
 import { ProcessingWindowFixture } from './processing-window'
-import { defaultAppPreferences } from '../../src/tauri/appPreferences'
+import { WaitingTransitionFixture } from './waiting-transition'
+import { WorkModeFixture } from './work-mode'
+import { ComposerTransitionFixture } from './composer-transition'
+import { InputHistoryFixture } from './input-history'
+import { ConversationWidgetsFixture } from './conversation-widgets'
+import { WidgetPerformanceFixture } from './widget-performance'
+import { defaultAppPreferences } from '../../src/host/appPreferences'
 import { resolveUiTypographyVariables } from '../../src/features/appearance/typography'
 
 // UI-only fixtures use the actual renderer and safe synthetic DTOs. They do not
 // substitute for backend, provider, account or native desktop acceptance.
-await i18n.changeLanguage('zh-CN')
+const examples = { ...coreExamples, ...knowledgeExamples }
 const query = new URLSearchParams(location.search)
+const wikiBusyProbe = { statusReads: 0, operations: [] as string[] }
+;(window as Window & { wikiBusyProbe?: typeof wikiBusyProbe }).wikiBusyProbe = wikiBusyProbe
+await i18n.changeLanguage(query.get('locale') ?? 'zh-CN')
 document.documentElement.classList.toggle('dark', query.get('theme') === 'dark')
 for (const [key, value] of Object.entries(
   resolveUiTypographyVariables(Number(query.get('fontSize') ?? 14))
@@ -160,6 +177,11 @@ const pluginInventory = [
     { kind: 'hook', name: 'UserPromptSubmit', path: `/fixture/plugins/${name}/hooks.json` },
   ],
 }))
+let completeSkillSave: (() => void) | undefined
+;(window as Window & { completeSkillSave?: () => void }).completeSkillSave = () =>
+  completeSkillSave?.()
+if (query.has('skillsSaving')) pluginInventory[0].enabled = false
+
 registerGatewayCommandTransport((command, args) => {
   if (command === 'get_app_preferences') return defaultAppPreferences
   if (command !== 'local_executor_request')
@@ -177,7 +199,58 @@ registerGatewayCommandTransport((command, args) => {
       history: { version: 1, trackedSinceMs: now, lastRecordedAtMs: now, days },
     }
   const method = request.params.method
+  if (query.has('wikiBusy') && method?.startsWith('knowledge/'))
+    wikiBusyProbe.operations.push(method)
   switch (method) {
+    // Read-only synthetic Native memory preview. Mutations are not implemented.
+    case 'integrations/scope/read':
+      return structuredClone(nativeExamples.IntegrationScope[0].value)
+    case 'integrations/tasks/readWorkspace': {
+      const snapshot = structuredClone(taskExamples.TaskWorkspaceSnapshot[0].value) as TaskWorkspaceSnapshot
+      snapshot.scope = structuredClone(nativeExamples.IntegrationScope[0].value)
+      snapshot.thread.title = '资料整理与报告交付'
+      snapshot.entries = query.has('emptyTaskDetails') ? [] : [
+        { title: '整理并核对原始资料', nativeStatus: 'completed', nativeRevision: '1', sourceMethod: 'goal/get',
+          reference: { kind: 'goal', threadId: 'thread-one', goalId: 'sample-goal', revision: 1 } },
+        { title: '汇总报告工作流', nativeStatus: 'completed', nativeRevision: '1', sourceMethod: 'workflow/runs/read',
+          reference: { kind: 'workflow_run', threadId: 'thread-one', runId: 'sample-run', revision: 1, definitionRef: null } },
+      ]
+      snapshot.artifactRefs = query.has('emptyTaskDetails') ? [] : [
+        { kind: 'artifact', id: 'sample-research-report', revision: '1' },
+        { kind: 'artifact', id: 'sample-source-index', revision: '2' },
+      ]
+      return { contractVersion: 'parallel-v1', requestId: request.params.params?.requestId,
+        operationId: null, entityRevision: null, status: 'completed', observedAt: new Date(now).toISOString(),
+        error: null, result: snapshot }
+    }
+    case 'settings/integrations/knowledge/read': {
+      const flags = {
+        memoryCenterEnabled: true,
+        publicationsEnabled: false,
+        businessAutomationEnabled: false,
+      }
+      return {
+        revision: 'a'.repeat(64),
+        persisted: flags,
+        effective: flags,
+        connection: flags,
+        restartRequired: false,
+      }
+    }
+    case 'integrations/memory/list': {
+      const envelope = request.params.params ?? {}
+      return {
+        contractVersion: 'parallel-v1',
+        requestId: envelope.requestId,
+        operationId: envelope.operationId ?? null,
+        entityRevision: null,
+        observedAt: new Date(now).toISOString(),
+        status: 'completed',
+        result: structuredClone(memoryExamples.MemoryListResult[0].value),
+        error: null,
+      }
+    }
+
     case 'marketplace/list':
       return {
         marketplaces: [
@@ -216,12 +289,25 @@ registerGatewayCommandTransport((command, args) => {
       return {
         items: pluginInventory.map(plugin => ({
           name: `${plugin.name}-skill`,
-          description: plugin.description,
+          description: query.has('skillsSaving')
+            ? `${plugin.description} ${'产品方向探索与问题框定，整理资料、比较假设并核对来源。 '.repeat(18)}`
+            : plugin.description,
           path: `${plugin.root}/SKILL.md`,
           enabled: plugin.enabled,
           can_set_enabled: true,
         })),
       }
+    case 'skills/setEnabled': {
+      const { name, enabled } = request.params.params as { name: string; enabled: boolean }
+      return new Promise(resolve => {
+        completeSkillSave = () => {
+          const plugin = pluginInventory.find(item => `${item.name}-skill` === name)!
+          plugin.enabled = enabled
+          resolve({ name, enabled, appliesToNewConversations: true })
+          completeSkillSave = undefined
+        }
+      })
+    }
     case 'mcp/list':
       return {
         servers: [
@@ -258,6 +344,8 @@ registerGatewayCommandTransport((command, args) => {
     case 'settings/templates/list':
       return { templates: [] }
     case 'knowledge/status':
+      if (query.has('wikiBusy') && ++wikiBusyProbe.statusReads === 1)
+        throw new Error('knowledge service is busy')
       return { enabled: true, retrievalEnabled: false, organizationEnabled: true }
     case 'knowledge/list':
       return {
@@ -414,41 +502,109 @@ const state: typeof initialWorkbenchState = {
 }
 const context = { state } as WorkbenchContextValue
 const panel = query.get('panel')
+if (panel === 'desktop-sidebar' || panel === 'settings-sidebar') {
+  // Deterministic IPC verifies renderer chrome, not native menu execution.
+  Object.defineProperty(window, 'kcoderDesktopMenu', {
+    configurable: true,
+    value: {
+      list: async () => ['文件', '编辑', '视图'].map((label, index) => ({ label, index })),
+      setVisible: async () => {},
+      open: async () => {},
+    },
+  })
+}
 createRoot(document.getElementById('root')!).render(
   <WorkbenchContext.Provider value={context}>
-    {panel === 'processing' ? (
+    <PageTransitionController />
+    {panel === 'settings-sidebar' ? (
+      <SettingsSidebarLoader />
+    ) : panel === 'desktop-sidebar' ? (
+      <DesktopSidebarChromeFixture />
+    ) : panel === 'schedule-time' ? (
+      <ScheduleTimeFixture />
+    ) : panel === 'widget-performance' ? (
+      <WidgetPerformanceFixture />
+    ) : panel === 'widgets' ? (
+      <ConversationWidgetsFixture />
+    ) : panel === 'input-history' ? (
+      <InputHistoryFixture />
+    ) : panel === 'task-details' ? (
+      <div className={query.has('taskScrollFrame') ? 'min-h-[calc(100dvh+200px)]' : ''}>
+        <div className="flex h-dvh flex-col">
+          {query.has('taskScrollFrame') && <header data-testid="fixture-task-header" className="h-16 shrink-0 border-b border-border p-5">Studio</header>}
+          <div className="flex min-h-0 flex-1">
+            {query.has('taskScrollFrame') && <aside data-testid="fixture-task-sidebar" className="w-48 shrink-0 bg-surface p-5">会话列表</aside>}
+            <div className="min-w-0 flex-1"><NativeTaskWorkspace target={{ serverId: 'local', workspacePath: '/fixture' }}
+              tasks={[{ threadId: 'thread-one', title: '资料整理与报告交付', workspacePath: '/fixture',
+                board: { targetLabel: '当前计算机', stale: false, task: { taskId: 'thread-one', threadId: 'thread-one',
+                  title: '资料整理与报告交付', runtime: 'kcoder', updatedAt: new Date().toISOString() } } }]}
+              canOpenReference={() => true} onOpenReference={() => {}} onOpenArtifacts={() => {}} /></div>
+          </div>
+        </div>
+      </div>
+    ) : panel === 'composer-transition' ? (
+      <ComposerTransitionFixture />
+    ) : panel === 'work-mode' ? (
+      <WorkModeFixture />
+    ) : panel === 'waiting-transition' ? (
+      <WaitingTransitionFixture />
+    ) : panel === 'processing' ? (
       <ProcessingWindowFixture />
     ) : panel === 'plugins' ? (
       <div className="flex h-dvh">
         <KCoderPluginManagementWorkspace targetDeviceId="local" />
       </div>
     ) : panel === 'wiki' ? (
-      <div className="flex h-dvh">
+      <div className="flex h-dvh flex-col">
+        {query.has('memoryPreview') && (
+          <div className="shrink-0 border-b border-border bg-surface px-5 py-2 text-sm text-text-secondary">
+            Wiki 记忆界面预览 · 示例数据 · 只读，不写入实际记忆
+          </div>
+        )}
         <KnowledgeWorkspace />
       </div>
     ) : panel === 'workflow' ? (
-      <SettingsDialog
-        title="版本与设置"
-        testId="reference-workflow-dialog"
-        closeLabel="关闭"
+      <WorkflowVersionSettings
+        definitionId="reference"
+        version={query.has('workflowSummary') ? 1 : 3}
+        verification={
+          query.has('workflowSummary')
+            ? {
+                ...evidence,
+                savedVersion: 1,
+                staticCheck: { ...evidence.staticCheck!, savedVersion: 1 },
+                runs: [],
+                totalRunCount: 0,
+              }
+            : evidence
+        }
+        capacity={{
+          backend: 'immutable_objects',
+          workflowCount: 3,
+          workflowLimit: 256,
+          savedVersionCount: 1,
+          versionsPerWorkflowLimit: 32,
+          usedBytes: 4096,
+          byteLimit: 8388608,
+          nearLimit: false,
+          versions: { reference: 1 },
+        }}
+        onPrepareVerification={() => {}}
         onClose={() => {}}
       >
-        <div className="pt-5">
-          <WorkflowVerification
-            definitionId="reference"
-            version={3}
-            verification={evidence}
-            onPrepareVerification={() => {}}
-          />
-        </div>
-        <div className="sticky bottom-0 mt-5 flex justify-end border-t border-border/50 bg-popover pt-4">
-          <Button variant="secondary">关闭</Button>
-        </div>
-      </SettingsDialog>
+        <WorkflowVerificationHistory
+          definitionId="reference"
+          version={3}
+          disabled
+          isCurrent={() => true}
+          onInspect={() => {}}
+          onArchive={async () => {}}
+        />
+      </WorkflowVersionSettings>
     ) : (
       <div
         data-testid="reference-settings-scroll"
-        className="h-dvh overflow-y-auto px-8 py-8 max-md:px-4 max-md:py-4"
+        className="studio-page-gutter h-dvh overflow-y-auto py-8 max-md:py-4"
       >
         {panel === 'usage' ? <UsageSettingsPage /> : <KCoderProviderSettingsPage />}
       </div>

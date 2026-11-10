@@ -1,9 +1,30 @@
+#[path = "../internal/session_configuration/temporary_mcp/mod.rs"]
+pub mod temporary_mcp;
+
+#[path = "../internal/session_configuration/registry.rs"]
+mod registry;
+pub use registry::{builtin_tools_for_profile, builtin_tools_for_settings};
+#[path = "../internal/session_configuration/startup.rs"]
+mod startup;
+pub use startup::configure_startup_tools;
 #[cfg(test)]
+#[path = "session_configuration/credential_http_tests.rs"]
 mod credential_http_tests;
+#[path = "session_configuration/tool_profiles.rs"]
 mod tool_profiles;
+#[path = "session_configuration/tool_selections.rs"]
+mod tool_selections;
+pub use tool_selections::editable as tool_selection_editable;
 
 use anyhow::{Context, Result};
 use kcoder_api::{Provider, ProviderKind};
+use kcoder_cli_commands::{
+    cli_args::{self, Cli},
+    credentials::apply_credential_env_file,
+    entry_modes::project_mcp_server_names,
+    mcp_connection, model_configuration,
+    settings_overrides::{apply_cli_settings_overrides, resolve_cli_provider_kind},
+};
 use kcoder_config::{Settings, SettingsLoader};
 use kcoder_plugins::{EffectiveMcpContribution, EffectivePluginSnapshot};
 use kcoder_tools::{Tool, ToolRegistry};
@@ -13,9 +34,9 @@ use std::time::Duration;
 use tokio::sync::Mutex;
 
 #[derive(Clone)]
-pub(super) struct SessionConfiguration {
+pub struct SessionConfiguration {
     loader: SettingsLoader,
-    cli: crate::Cli,
+    cli: Cli,
     mcp_cache: Arc<Mutex<Option<CachedMcpSnapshot>>>,
     server_cache: Arc<Mutex<Vec<CachedMcpServer>>>,
     mcp_health: Arc<std::sync::Mutex<Vec<TrackedMcpConnection>>>,
@@ -24,6 +45,12 @@ pub(super) struct SessionConfiguration {
             std::collections::BTreeMap<String, (Value, kcoder_app_protocol::McpConnectionAttempt)>,
         >,
     >,
+}
+
+pub struct PluginCredentialRefresh {
+    pub settings: Settings,
+    pub tools: ToolRegistry,
+    pub snapshot: EffectivePluginSnapshot,
 }
 
 struct CachedMcpSnapshot {
@@ -74,6 +101,7 @@ struct McpServerKey {
     project_root: std::path::PathBuf,
     project_server: bool,
     authorization: Vec<String>,
+    credential_store: kcoder_config::CredentialStoreMode,
 }
 
 #[derive(PartialEq)]
@@ -86,7 +114,9 @@ struct McpSnapshotKey {
     sources: Vec<EffectiveMcpContribution>,
     generation: u64,
     disabled: Vec<String>,
+    disabled_servers: Vec<String>,
     authorization_revisions: Vec<String>,
+    credential_store: kcoder_config::CredentialStoreMode,
 }
 
 impl McpSnapshotKey {
@@ -98,19 +128,98 @@ impl McpSnapshotKey {
         Ok(Self {
             builtin_names: Vec::new(),
             configs: serde_json::to_value(&settings.mcp_servers)?,
-            project_servers: crate::project_mcp_server_names(&paths.project_root),
+            project_servers: project_mcp_server_names(&paths.project_root),
             trust_profile: paths.config_dir.clone(),
             project_root: paths.project_root.clone(),
             sources: plugins.mcp_config_sources.clone(),
             generation: plugins.generation,
             disabled: settings.tools.disabled.clone(),
+            disabled_servers: settings.mcp_disabled_servers.clone(),
             authorization_revisions: Vec::new(),
+            credential_store: settings.credential_store,
         })
     }
 }
 
 impl SessionConfiguration {
-    pub(super) fn new(loader: SettingsLoader, cli: crate::Cli) -> Self {
+    /// Reconnect only the credential bindings for an unchanged frozen plugin set.
+    pub async fn refresh_plugin_credentials(
+        &self,
+        cwd: &std::path::Path,
+        folder_trusted: bool,
+        settings: Settings,
+        settings_path: &std::path::Path,
+        frozen: &EffectivePluginSnapshot,
+    ) -> Result<Option<PluginCredentialRefresh>> {
+        let manager = kcoder_plugins::PluginManager::open_default_for_cwd_with_effective_settings(
+            cwd,
+            settings.plugins.clone(),
+        )?;
+        if manager.store().generation()? != frozen.generation {
+            return Ok(None);
+        }
+        let fresh = kcoder_plugin_rpc::runtime_snapshot::runtime_plugin_snapshot_with_profile(
+            cwd,
+            folder_trusted,
+            &settings,
+            &settings_path.with_file_name("credentials.json"),
+        )?;
+        if fresh.generation != frozen.generation
+            || fresh.plugin_ids != frozen.plugin_ids
+            || fresh.managed_operations != frozen.managed_operations
+        {
+            return Ok(None);
+        }
+        if serde_json::to_value(&fresh.mcp_configs)? == serde_json::to_value(&frozen.mcp_configs)? {
+            return Ok(None);
+        }
+        let mut next = frozen.clone();
+        // Unmanaged project/user extensions are not rediscovered or granted private values.
+        let frozen_unmanaged = frozen
+            .mcp_configs
+            .iter()
+            .cloned()
+            .zip(frozen.mcp_config_sources.iter().cloned())
+            .filter(|(_, source)| !frozen.managed_operations.contains_key(&source.plugin_id));
+        let refreshed_managed = fresh
+            .mcp_configs
+            .into_iter()
+            .zip(fresh.mcp_config_sources)
+            .filter(|(_, source)| frozen.managed_operations.contains_key(&source.plugin_id));
+        let pairs = frozen_unmanaged
+            .chain(refreshed_managed)
+            .collect::<Vec<_>>();
+        next.mcp_configs = pairs.iter().map(|(config, _)| config.clone()).collect();
+        next.mcp_config_sources = pairs.into_iter().map(|(_, source)| source).collect();
+        next.mcp_tool_policies = frozen.mcp_tool_policies.clone();
+        for source in &next.mcp_config_sources {
+            if frozen.managed_operations.contains_key(&source.plugin_id) {
+                for config in &next.mcp_configs {
+                    if let Some(policy) = fresh.mcp_tool_policies.get(&config.name) {
+                        next.mcp_tool_policies
+                            .insert(config.name.clone(), policy.clone());
+                    }
+                }
+            }
+        }
+        let mut next_settings = settings;
+        next_settings
+            .mcp_servers
+            .extend(next.mcp_configs.iter().cloned());
+        next_settings.runtime_plugin_mcp_count = next.mcp_configs.len();
+        let tools = self.tools(&next_settings, &next).await?;
+        // Installation changes while connecting never update this resident's frozen version set.
+        if manager.store().generation()? != frozen.generation {
+            anyhow::bail!("plugin_scope_changed: retry this turn");
+        }
+        Ok(Some(PluginCredentialRefresh {
+            settings: next_settings,
+            tools,
+            snapshot: next,
+        }))
+    }
+
+    pub fn new(loader: SettingsLoader, cli: Cli) -> Self {
         Self {
             loader,
             cli,
@@ -121,24 +230,37 @@ impl SessionConfiguration {
         }
     }
 
-    pub(super) fn freeze_model_overlays(mut self) -> Result<Self> {
+    pub fn freeze_model_overlays(mut self) -> Result<Self> {
         self.loader = self.loader.freeze_overlays()?;
         Ok(self)
     }
 
-    pub(super) fn model_source(&self) -> Arc<dyn kcoder_engine::ClientModelConfiguration> {
-        Arc::new(crate::model_configuration::ModelConfiguration::new(
+    pub fn model_source(&self) -> Arc<dyn kcoder_api::ClientModelConfiguration> {
+        Arc::new(model_configuration::ModelConfiguration::new(
             self.loader.clone(),
             self.cli.clone(),
         ))
     }
 
+    pub fn cli_permission_mode_override(&self) -> Result<Option<kcoder_config::PermissionMode>> {
+        if let Some(mode) = self.cli.permission_mode {
+            return Ok(Some(mode.into()));
+        }
+        for path in &self.cli.settings_files {
+            let value = kcoder_config::read_settings_file(path)?;
+            if value.get("permission_mode").is_some() {
+                return Ok(Some(self.loader.load()?.settings.permission_mode));
+            }
+        }
+        Ok(None)
+    }
+
     /// Returns this configuration with a session settings template layered in.
     ///
     /// The template sits *below* explicit CLI overlays, so `--settings-file`
-    /// keeps the final word. Content is read live; the recorded binding
-    /// revision is what lets callers detect drift after the fact.
-    pub(super) fn with_template(&self, path: std::path::PathBuf) -> Self {
+    /// keeps the final word. The host supplies the frozen native version, so
+    /// editing the management template cannot alter a recorded session overlay.
+    pub fn with_template(&self, path: std::path::PathBuf) -> Self {
         Self {
             loader: self.loader.clone().with_prepended_overlay_files([path]),
             cli: self.cli.clone(),
@@ -149,7 +271,17 @@ impl SessionConfiguration {
         }
     }
 
-    pub(super) fn mcp_connection_attempt(
+    pub fn template_sets_permission_mode(&self, path: std::path::PathBuf) -> Result<bool> {
+        let template = kcoder_config::read_settings_file(&path).with_context(|| {
+            format!(
+                "failed to read session settings template {}",
+                path.display()
+            )
+        })?;
+        Ok(template.get("permission_mode").is_some())
+    }
+
+    pub fn mcp_connection_attempt(
         &self,
         config: &kcoder_mcp::McpServerConfig,
     ) -> Option<kcoder_app_protocol::McpConnectionAttempt> {
@@ -179,7 +311,7 @@ impl SessionConfiguration {
         Some(status)
     }
 
-    pub(super) fn mcp_connection_attempt_for_registry(
+    pub fn mcp_connection_attempt_for_registry(
         &self,
         config: &kcoder_mcp::McpServerConfig,
         registry: &ToolRegistry,
@@ -239,13 +371,13 @@ impl SessionConfiguration {
         }
     }
 
-    pub(super) fn seed_mcp(
+    pub fn seed_mcp(
         &mut self,
         settings: &Settings,
         plugins: &EffectivePluginSnapshot,
         tools: &ToolRegistry,
     ) -> Result<()> {
-        let builtins = crate::builtin_tools_for_settings(&self.cli, settings);
+        let builtins = builtin_tools_for_settings(&self.cli, settings);
         if builtins.names().is_empty() {
             return Ok(());
         }
@@ -275,18 +407,18 @@ impl SessionConfiguration {
         Ok(())
     }
 
-    pub(super) fn settings(&self, cwd: &std::path::Path, trusted: bool) -> Result<Settings> {
+    pub fn settings(&self, cwd: &std::path::Path, trusted: bool) -> Result<Settings> {
         let mut settings = self
             .loader
             .load()
             .context("Cannot reload configuration for a new conversation")?
             .settings;
-        crate::apply_cli_settings_overrides(&mut settings, &self.cli)?;
+        apply_cli_settings_overrides(&mut settings, &self.cli)?;
         if let Some(path) = self.cli.credential_env_file.as_deref() {
-            crate::apply_credential_env_file(&mut settings, path)?;
+            apply_credential_env_file(&mut settings, path)?;
         }
         if !trusted {
-            let project_names = crate::project_mcp_server_names(cwd);
+            let project_names = project_mcp_server_names(cwd);
             settings
                 .mcp_servers
                 .retain(|server| !project_names.contains(&server.name));
@@ -294,31 +426,83 @@ impl SessionConfiguration {
         Ok(settings)
     }
 
-    pub(super) fn hook_user_settings_path(&self) -> Result<std::path::PathBuf> {
+    pub fn connectivity_settings_sources(&self) -> Result<kcoder_config::LoadedSettings> {
+        let mut loaded = self.loader.load()?;
+        apply_cli_settings_overrides(&mut loaded.settings, &self.cli)?;
+        Ok(loaded)
+    }
+
+    pub fn connectivity_policy_settings(&self) -> Result<Settings> {
+        self.loader.load_policy_configuration()
+    }
+
+    /// Public policy observation must not hydrate credentials or initialize a profile.
+    pub fn public_runtime_settings(&self) -> Result<Settings> {
+        let mut loaded = self.loader.load_read_only_configuration()?;
+        apply_cli_settings_overrides(&mut loaded.settings, &self.cli)?;
+        Ok(loaded.settings)
+    }
+
+    pub fn hook_user_settings_path(&self) -> Result<std::path::PathBuf> {
         Ok(self.loader.load()?.paths.user_settings)
     }
 
-    pub(super) fn mcp_user_settings_path(&self) -> Result<std::path::PathBuf> {
+    pub fn mcp_user_settings_path(&self) -> Result<std::path::PathBuf> {
+        self.mcp_editable_field_path("mcp_servers")
+    }
+
+    pub fn migration_project_settings_path(&self, names: &[&str]) -> Result<std::path::PathBuf> {
         let loaded = self.loader.load()?;
-        let covered = |field: &str| field == "mcp_servers" || field.starts_with("mcp_servers.");
+        let covered = |field: &str| {
+            names
+                .iter()
+                .any(|name| field == *name || field.starts_with(&format!("{name}.")))
+        };
+        anyhow::ensure!(
+            !loaded.overlay_fields.iter().any(|field| covered(field))
+                && !loaded
+                    .field_sources
+                    .iter()
+                    .any(|(field, scope)| covered(field)
+                        && *scope == kcoder_config::ConfigScope::Local),
+            "migration_target_controlled_by_overlay"
+        );
+        Ok(loaded.paths.project_settings)
+    }
+
+    pub fn migration_user_settings_path(&self) -> Result<std::path::PathBuf> {
+        self.mcp_editable_field_path("providers")
+    }
+
+    pub fn mcp_activation_user_settings_path(&self) -> Result<std::path::PathBuf> {
+        self.mcp_editable_field_path("mcp_disabled_servers")
+    }
+
+    fn mcp_editable_field_path(&self, name: &str) -> Result<std::path::PathBuf> {
+        let loaded = self.loader.load()?;
+        let prefix = format!("{name}.");
+        let covered = |field: &str| field == name || field.starts_with(&prefix);
         if loaded.overlay_fields.iter().any(|field| covered(field))
             || loaded.field_sources.iter().any(|(field, scope)| {
                 covered(field)
                     && matches!(
                         scope,
-                        kcoder_config::ConfigScope::Project | kcoder_config::ConfigScope::Local
+                        kcoder_config::ConfigScope::Executable
+                            | kcoder_config::ConfigScope::Project
+                            | kcoder_config::ConfigScope::Local
                     )
             })
         {
             anyhow::bail!(
-                "MCP settings are controlled by a project or read-only overlay; edit that source instead"
+                "MCP settings are controlled by higher-priority configuration or a read-only overlay; edit that source instead"
             );
         }
         Ok(loaded.paths.user_settings)
     }
 
-    pub(super) fn provider(&self, settings: &Settings) -> Result<Arc<dyn Provider>> {
-        let kind = crate::resolve_cli_provider_kind(&self.cli, ProviderKind::from_env(), settings)?;
+    pub fn provider(&self, settings: &Settings) -> Result<Arc<dyn Provider>> {
+        let kind = resolve_cli_provider_kind(&self.cli, ProviderKind::from_env(), settings)?
+            .context("No model Provider is configured")?;
         self.provider_for_kind(settings, kind)
     }
 
@@ -327,17 +511,17 @@ impl SessionConfiguration {
         settings: &Settings,
         kind: ProviderKind,
     ) -> Result<Arc<dyn Provider>> {
-        crate::model_configuration::ModelConfiguration::new(self.loader.clone(), self.cli.clone())
+        model_configuration::ModelConfiguration::new(self.loader.clone(), self.cli.clone())
             .provider_for_kind(settings, kind)
     }
 
-    pub(super) async fn tools(
+    pub async fn tools(
         &self,
         settings: &Settings,
         plugins: &EffectivePluginSnapshot,
     ) -> Result<ToolRegistry> {
         // Rebuild per newly activated conversation; resident engines keep their own registry.
-        let builtin_tools = crate::builtin_tools_for_settings(&self.cli, settings);
+        let builtin_tools = builtin_tools_for_settings(&self.cli, settings);
         if builtin_tools.names().is_empty() {
             return Ok(builtin_tools);
         }
@@ -346,26 +530,37 @@ impl SessionConfiguration {
             &paths.project_root,
             settings.plugins.clone(),
         )?;
-        let private_values = crate::plugin_credentials::by_operation(
+        let private_values = kcoder_plugin_rpc::credentials::by_operation(
             &paths.credentials,
             settings.credential_store,
             &manager,
         )?;
-        let project_mcp_names = crate::project_mcp_server_names(&paths.project_root);
+        let project_mcp_names = project_mcp_server_names(&paths.project_root);
         let mut key = McpSnapshotKey::new(settings, plugins, &paths)?;
         key.builtin_names = builtin_tools.names();
         key.builtin_names.sort();
-        let revision_valid =
-            match crate::mcp_connection::authorization_revisions(&settings.mcp_servers).await {
-                Ok(revisions) => {
-                    key.authorization_revisions = revisions;
-                    true
-                }
-                Err(error) => {
-                    tracing::warn!("Cannot inspect optional MCP authorization cache: {error}");
-                    false
-                }
-            };
+        let enabled_configs = settings
+            .mcp_servers
+            .iter()
+            .filter(|config| settings.mcp_server_enabled(&config.name))
+            .cloned()
+            .collect::<Vec<_>>();
+        let revision_valid = match mcp_connection::authorization_revisions(
+            &enabled_configs,
+            &paths.config_dir,
+            settings.credential_store,
+        )
+        .await
+        {
+            Ok(revisions) => {
+                key.authorization_revisions = revisions;
+                true
+            }
+            Err(error) => {
+                tracing::warn!("Cannot inspect optional MCP authorization cache: {error}");
+                false
+            }
+        };
         let mut cache = self.mcp_cache.lock().await;
         if revision_valid
             && let Some(cached) = cache.as_ref()
@@ -382,7 +577,12 @@ impl SessionConfiguration {
         // Lock order: full snapshot cache, then bounded per-server cache. Existing
         // turn registries retain their Arc handles when a host entry is evicted.
         let mut servers = self.server_cache.lock().await;
-        servers.retain(|cached| connection_failure(&cached.handle).is_none());
+        servers.retain(|cached| {
+            cached.key.config["name"]
+                .as_str()
+                .is_some_and(|name| settings.mcp_server_enabled(name))
+                && connection_failure(&cached.handle).is_none()
+        });
         let mut current_keys = Vec::new();
         let mut current_handles = Vec::new();
         let mut complete = revision_valid;
@@ -393,6 +593,9 @@ impl SessionConfiguration {
                 .len()
                 .saturating_sub(plugins.mcp_configs.len());
             for (index, server) in settings.mcp_servers.iter().enumerate() {
+                if !settings.mcp_server_enabled(&server.name) {
+                    continue;
+                }
                 let source = if index < configured_count {
                     None
                 } else {
@@ -412,8 +615,11 @@ impl SessionConfiguration {
                     trust_profile: paths.config_dir.clone(),
                     project_root: paths.project_root.clone(),
                     project_server: project_mcp_names.contains(&server.name),
-                    authorization: crate::mcp_connection::authorization_revisions(
+                    credential_store: settings.credential_store,
+                    authorization: mcp_connection::authorization_revisions(
                         std::slice::from_ref(server),
+                        &paths.config_dir,
+                        settings.credential_store,
                     )
                     .await
                     .unwrap_or_default(),
@@ -441,7 +647,12 @@ impl SessionConfiguration {
                 )?;
                 let (handle, mut definitions) = match tokio::time::timeout_at(
                     deadline,
-                    crate::mcp_connection::connect_private(server, Arc::clone(&private)),
+                    mcp_connection::connect_private(
+                        server,
+                        Arc::clone(&private),
+                        &paths.config_dir,
+                        settings.credential_store,
+                    ),
                 )
                 .await
                 {
@@ -480,7 +691,13 @@ impl SessionConfiguration {
                 let mut server_tools = ToolRegistry::new();
                 for definition in definitions {
                     let tool =
-                        kcoder_mcp::McpTool::new(&server.name, Arc::clone(&handle), definition);
+                        kcoder_mcp::McpTool::new(&server.name, Arc::clone(&handle), definition)
+                            .with_credential_context(
+                                kcoder_mcp::server_policy::CredentialContext {
+                                    config_dir: paths.config_dir.clone(),
+                                    mode: settings.credential_store,
+                                },
+                            );
                     let tool = match source {
                         Some(source) => tool
                             .with_plugin_source(&source.plugin_id)
@@ -509,6 +726,7 @@ impl SessionConfiguration {
                         servers.remove(0);
                     }
                     current_keys.push(McpServerKey {
+                        credential_store: server_key.credential_store,
                         config: serde_json::to_value(server)?,
                         source: source.cloned(),
                         operation_id: source
@@ -544,9 +762,107 @@ impl SessionConfiguration {
 }
 
 #[cfg(test)]
+mod permission_override_tests {
+    use super::*;
+    use clap::Parser;
+    use std::fs;
+
+    fn configuration(cwd: &std::path::Path, args: &[&str]) -> SessionConfiguration {
+        let cli = Cli::try_parse_from(args).expect("valid test CLI arguments");
+        let loader = SettingsLoader::new(cwd)
+            .with_config_dir(cwd.join("user-config"))
+            .with_executable_dir(cwd.join("executable"))
+            .with_overlay_files(cli.settings_files.clone());
+        SessionConfiguration::new(loader, cli)
+    }
+
+    #[test]
+    fn user_settings_default_is_not_reported_as_a_cli_permission_override() {
+        let temp = tempfile::tempdir().unwrap();
+        fs::create_dir_all(temp.path().join("user-config")).unwrap();
+        fs::write(
+            temp.path().join("user-config/settings.json"),
+            r#"{"permission_mode":"auto"}"#,
+        )
+        .unwrap();
+
+        let configuration = configuration(temp.path(), &["kcoder"]);
+
+        assert_eq!(configuration.cli_permission_mode_override().unwrap(), None);
+        assert_eq!(
+            configuration
+                .loader
+                .load()
+                .unwrap()
+                .settings
+                .permission_mode,
+            kcoder_config::PermissionMode::Auto
+        );
+    }
+
+    #[test]
+    fn template_permission_detection_reads_the_template_file_not_merged_overlays() {
+        let temp = tempfile::tempdir().unwrap();
+        let overlay = temp.path().join("cli-settings.json");
+        let template = temp.path().join("template.json");
+        fs::write(&overlay, r#"{"permission_mode":"bypass"}"#).unwrap();
+        fs::write(&template, r#"{"model":"template-model"}"#).unwrap();
+        let configuration = configuration(
+            temp.path(),
+            &["kcoder", "--settings-file", overlay.to_str().unwrap()],
+        );
+
+        assert_eq!(
+            configuration.cli_permission_mode_override().unwrap(),
+            Some(kcoder_config::PermissionMode::Bypass)
+        );
+        assert!(
+            !configuration
+                .template_sets_permission_mode(template.clone())
+                .unwrap()
+        );
+
+        fs::write(&template, r#"{"permission_mode":"ask"}"#).unwrap();
+        assert!(
+            configuration
+                .template_sets_permission_mode(template)
+                .unwrap()
+        );
+    }
+}
+
+#[cfg(test)]
 mod model_refresh_source_tests {
     use super::*;
     use clap::Parser;
+
+    #[test]
+    fn mcp_activation_participates_in_snapshot_identity() {
+        let root = tempfile::tempdir().unwrap();
+        let paths = SettingsLoader::new(root.path())
+            .with_config_dir(root.path())
+            .paths()
+            .unwrap();
+        let plugins = EffectivePluginSnapshot::default();
+        let mut settings = Settings::default();
+        settings.mcp_servers.push(
+            serde_json::from_value(serde_json::json!({
+                "name":"disabled-service", "command":"must-not-start-nonexistent-mcp"
+            }))
+            .unwrap(),
+        );
+        settings
+            .mcp_disabled_servers
+            .push("disabled-service".into());
+        let disabled = McpSnapshotKey::new(&settings, &plugins, &paths).unwrap();
+        settings.mcp_disabled_servers.clear();
+        let enabled = McpSnapshotKey::new(&settings, &plugins, &paths).unwrap();
+        assert!(disabled != enabled);
+        settings.credential_store = kcoder_config::CredentialStoreMode::File;
+        let file = McpSnapshotKey::new(&settings, &plugins, &paths).unwrap();
+        settings.credential_store = kcoder_config::CredentialStoreMode::Keyring;
+        assert!(file != McpSnapshotKey::new(&settings, &plugins, &paths).unwrap());
+    }
 
     #[test]
     fn model_refresh_preserves_root_overlay_and_cli_priority() {
@@ -571,7 +887,7 @@ mod model_refresh_source_tests {
             .with_config_dir(&home)
             .with_executable_dir(temp.path())
             .with_overlay_files([overlay.clone()]);
-        let mut cli = crate::Cli::parse_from(["kcoder"]);
+        let mut cli = Cli::parse_from(["kcoder"]);
         cli.max_tokens = None;
         let config = SessionConfiguration::new(loader, cli)
             .freeze_model_overlays()
@@ -602,7 +918,7 @@ mod model_refresh_source_tests {
         let temp = tempfile::tempdir().unwrap();
         let config = SessionConfiguration::new(
             SettingsLoader::new(temp.path()).with_config_dir(temp.path()),
-            crate::Cli::parse_from(["kcoder"]),
+            Cli::parse_from(["kcoder"]),
         );
         let plugins = EffectivePluginSnapshot::default();
         let mut settings = Settings::default();
@@ -653,7 +969,7 @@ mod model_refresh_source_tests {
         let temp = tempfile::tempdir().unwrap();
         let config = SessionConfiguration::new(
             SettingsLoader::new(temp.path()).with_config_dir(temp.path()),
-            crate::Cli::parse_from(["kcoder", "--tool-profile", "nano"]),
+            Cli::parse_from(["kcoder", "--tool-profile", "nano"]),
         );
         let mut settings = Settings::default();
         settings.tools.profile = kcoder_config::ToolProfile::None;
@@ -683,12 +999,14 @@ mod model_refresh_source_tests {
         settings.provider = Some("openai".into());
         settings.api_format = Some(kcoder_config::ApiFormat::OpenaiChatCompletions);
         settings.model = "fixture-model".into();
+        settings.openai_base_url = Some("http://127.0.0.1:9/v1".into());
         settings.openai_api_key = Some("fixture-old".into());
+        settings.openai_base_url = Some("http://127.0.0.1:1/v1".into());
         settings.credential_store = kcoder_config::CredentialStoreMode::File;
         loader
             .refresh_stored_provider_credentials(&mut settings)
             .unwrap();
-        let config = SessionConfiguration::new(loader, crate::Cli::parse_from(["kcoder"]));
+        let config = SessionConfiguration::new(loader, Cli::parse_from(["kcoder"]));
         let provider = config
             .provider_for_kind(&settings, ProviderKind::Openai)
             .unwrap();
@@ -743,7 +1061,7 @@ mod mcp_connection_attempt_tests {
         let make = || {
             SessionConfiguration::new(
                 SettingsLoader::new(temp.path()).with_config_dir(temp.path()),
-                crate::Cli::parse_from(["kcoder"]),
+                Cli::parse_from(["kcoder"]),
             )
         };
         let configuration = make();

@@ -1,0 +1,8 @@
+// Earlier Gateway settings layout; synthetic preferences, never real credentials.
+{
+  "config_version": 1,
+  "mirror_client_turns": true,
+  // Unrelated preferences must survive the upgrade.
+  "appearance": { "theme": "dark" },
+  "note": "retain this value",
+}

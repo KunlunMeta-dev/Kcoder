@@ -16,6 +16,8 @@ import {
   RuntimeTaskLifecycleStore,
 } from '@/features/workbench/runtimeTaskLifecycle'
 import '@/i18n'
+// Exercise page selection without charging Vite's cold module transform to the click deadline.
+import '@/components/settings/MobileSettingsPage'
 
 const paneSessionMockRef = vi.hoisted(() => ({
   current: undefined as unknown,
@@ -593,6 +595,37 @@ describe('MobileWorkbenchLayout', () => {
       },
       { appendUserMessage: true, forceDefaultCollaborationMode: true }
     )
+  })
+
+  test('answers a plan-like Native question on its original interaction without changing collaboration mode', async () => {
+    const onRequestUserInputSubmit = vi.fn().mockResolvedValue(true)
+    const message = createPendingRequestUserInputMessage(true)
+    message.blocks![0].renderPayload = {
+      ...(message.blocks![0].renderPayload as object),
+      allowImplementationPlanShortcut: false,
+    }
+    renderAtMobileWidth(
+      <MobileWorkbenchLayout
+        state={{ ...baseState, currentRuntimeTask: {
+          deviceId: 'device-1', workspacePath: '/workspace/project-alpha', taskId: 'native-task',
+        } }}
+        messages={[message]}
+        projectChat={baseProjectChat}
+        onRequestUserInputSubmit={onRequestUserInputSubmit}
+      />
+    )
+    fireEvent.change(screen.getByTestId('request-user-input-custom-adjustment'), {
+      target: { value: 'Only the selected module' },
+    })
+    fireEvent.click(screen.getByTestId('request-user-input-option-implement-0'))
+    expect(onRequestUserInputSubmit).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByTestId('request-user-input-submit-button'))
+    expect(onRequestUserInputSubmit).toHaveBeenCalledExactlyOnceWith({
+      requestId: 42, itemId: undefined, answers: {
+        implement: { answers: ['是的，执行此计划'] },
+        adjustment: { answers: ['Only the selected module'] },
+      },
+    }, { appendUserMessage: false, forceDefaultCollaborationMode: false })
   })
 
   test('keeps plan mode when submitting implementation plan adjustments on mobile', async () => {
@@ -1721,7 +1754,10 @@ describe('MobileWorkbenchLayout', () => {
     await userEvent.click(screen.getByTestId('open-mobile-drawer-button'))
     await userEvent.click(screen.getByTestId('mobile-settings-button'))
 
-    expect(screen.getByTestId('mobile-settings-page')).toBeInTheDocument()
+    // The mobile settings page is lazy-loaded; allow the first cold module import to settle.
+    expect(
+      await screen.findByTestId('mobile-settings-page', {}, { timeout: 5000 })
+    ).toBeInTheDocument()
     expect(screen.queryByTestId('studio-settings-page')).not.toBeInTheDocument()
     await userEvent.click(screen.getByTestId('mobile-settings-plugins-button'))
     expect(window.location.pathname).toBe('/plugins')

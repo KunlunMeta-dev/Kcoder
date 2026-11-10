@@ -9,7 +9,7 @@ import {
   requestLocalExecutor,
   subscribeLocalExecutorEvents,
   type LocalExecutorEvent,
-} from '@/tauri/localExecutor'
+} from '@/host/localExecutor'
 import { SubagentWorkspace } from './SubagentWorkspace'
 import { useSubagentConversation } from './useSubagentConversation'
 import { rememberConversationProcessingWindow } from '@/features/appearance/conversationProcessPreferences'
@@ -17,7 +17,7 @@ import { forwardAcceptedNotification } from '@/kcoder/gateway/runtime/notificati
 import type { GatewayRuntimeCore } from '@/kcoder/gateway/runtime/core'
 import type { GatewayClient } from '@/kcoder/gatewayRuntimeTypes'
 
-vi.mock('@/tauri/localExecutor', () => ({
+vi.mock('@/host/localExecutor', () => ({
   requestLocalExecutor: vi.fn(),
   subscribeLocalExecutorEvents: vi.fn(),
 }))
@@ -45,6 +45,9 @@ const listeners = new Set<(event: LocalExecutorEvent) => void>()
 const onReadArtifact = vi.fn()
 const sourceClient = {} as GatewayClient
 const notificationOwner = {
+  threadKey: (serverId: string, threadId: string) => `${serverId}::${threadId}`,
+  taskByThread: new Map([[`${address.deviceId}::${address.threadId}`, address.taskId]]),
+  clientByTask: new Map([[address.taskId, sourceClient]]),
   agentConversationSubscriptions: new Map([
     [
       identity.subscriptionId,

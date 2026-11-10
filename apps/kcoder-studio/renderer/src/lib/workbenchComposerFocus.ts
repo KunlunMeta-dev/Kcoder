@@ -1,4 +1,4 @@
-export const WORKBENCH_NEW_CHAT_FOCUS_EVENT = 'wework:focus-new-chat-composer'
+export const WORKBENCH_NEW_CHAT_FOCUS_EVENT = 'kcoder:focus-new-chat-composer'
 
 export function focusComposerAtEnd(element: HTMLElement | null | undefined) {
   if (!element) return

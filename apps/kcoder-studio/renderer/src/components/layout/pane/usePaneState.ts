@@ -35,10 +35,10 @@ import type {
   RuntimeSubagentStatus,
   WorkbenchMessage,
 } from '@/types/workbench'
-import type { CodeCommentContext } from '@/types/workspace-files'
 import { reduceWorkbenchMessages } from '@wegent/chat-core'
 import { useCallback, useEffect, useMemo, useRef, useState, type SetStateAction } from 'react'
 import { TranscriptPageGate } from '../transcriptPageGate'
+import { usePaneCommentContexts } from './usePaneCommentContexts'
 import {
   debugRuntimePaneMessageFlow,
   isBatchableRuntimePaneMessageAction,
@@ -129,7 +129,10 @@ export function usePaneState(options: WorkbenchPaneSessionOptions) {
 
   const [guidanceMessages] = useState<GuidanceWorkbenchMessage[]>([])
 
-  const [codeCommentContexts, setCodeCommentContexts] = useState<CodeCommentContext[]>([])
+  const { codeCommentContexts, setCodeCommentContexts, hasCodeCommentDrafts } = usePaneCommentContexts(
+    options.feedbackOwnerScope ?? queuedMessageScopeKey ?? 'blank',
+    currentRuntimeTask?.deviceId ?? options.feedbackDeviceId,
+  )
 
   const input = projectChat.input ?? ''
 
@@ -275,6 +278,7 @@ export function usePaneState(options: WorkbenchPaneSessionOptions) {
   const pendingMessageActionsRef = useRef<RuntimePaneMessageAction[]>([])
 
   const rebuildingTranscriptRef = useRef(false)
+  const showLiveDuringTranscriptLoadRef = useRef(false)
 
   const transcriptGapGenerationRef = useRef(0)
 
@@ -368,14 +372,23 @@ export function usePaneState(options: WorkbenchPaneSessionOptions) {
   }, [applyMessageActions])
 
   const dispatchMessages = useCallback(
-    (action: RuntimePaneMessageAction) => {
-      if (!isBatchableRuntimePaneMessageAction(action)) {
+    (action: RuntimePaneMessageAction | readonly RuntimePaneMessageAction[]) => {
+      // A group (for example a transcript reset plus the live actions buffered
+      // while it loaded) commits in one state update, so the pane never paints
+      // the intermediate snapshot and then grows again on the next frame.
+      if (Array.isArray(action)) {
         flushPendingMessageActions()
-        applyMessageActions([action])
+        applyMessageActions([...action])
+        return
+      }
+      const single = action as RuntimePaneMessageAction
+      if (!isBatchableRuntimePaneMessageAction(single)) {
+        flushPendingMessageActions()
+        applyMessageActions([single])
         return
       }
 
-      pendingMessageActionsRef.current.push(action)
+      pendingMessageActionsRef.current.push(single)
       if (messageActionFrameRef.current !== null) return
       messageActionFrameRef.current = requestAnimationFrame(() => {
         messageActionFrameRef.current = null
@@ -399,6 +412,7 @@ export function usePaneState(options: WorkbenchPaneSessionOptions) {
         messagesRef.current = []
         pendingMessageActionsRef.current = []
         bufferedTranscriptActionsRef.current = []
+        showLiveDuringTranscriptLoadRef.current = false
         transcriptGapGenerationRef.current += 1
         if (messageActionFrameRef.current !== null)
           cancelAnimationFrame(messageActionFrameRef.current)
@@ -504,6 +518,7 @@ export function usePaneState(options: WorkbenchPaneSessionOptions) {
     setQueuedMessagesPaused,
     guidanceMessages,
     codeCommentContexts,
+    hasCodeCommentDrafts,
     setCodeCommentContexts,
     input,
     scopedSetInput,
@@ -567,6 +582,7 @@ export function usePaneState(options: WorkbenchPaneSessionOptions) {
     queuedMessageSendInFlightIdsRef,
     pendingMessageActionsRef,
     rebuildingTranscriptRef,
+    showLiveDuringTranscriptLoadRef,
     transcriptGapGenerationRef,
     forceAuthoritativeTranscriptRef,
     rebuildingTranscriptIdentityRef,

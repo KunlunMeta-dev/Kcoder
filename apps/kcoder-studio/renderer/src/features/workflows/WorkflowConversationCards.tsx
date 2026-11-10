@@ -137,7 +137,7 @@ function Card({
   }, [serverId, id, version, isCurrent, retry, reference.revision, t])
   return (
     <section
-      className="rounded-xl border border-border/70 bg-background px-3 py-2"
+      className="studio-card-spacing rounded-xl border border-border/70 bg-background px-3 py-2"
       data-testid="workflow-conversation-card"
       data-workflow-id={id}
     >

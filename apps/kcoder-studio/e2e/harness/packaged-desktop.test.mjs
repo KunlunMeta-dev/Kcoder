@@ -14,7 +14,7 @@ function fixture({ failReady = false } = {}) {
     } }),
   };
   const context = {
-    pathInState: name => `/owned-run/state/${name}`,
+    pathInState: (...names) => `/owned-run/state/${names.join('/')}`,
     isolatedEnvironment: overrides => overrides,
     spawnOwned(label, executable, args, options) {
       calls.push(['spawn', label, executable, args, options]);
@@ -62,4 +62,28 @@ test('startup failure still registers the CDP cleanup before readiness', async (
   assert.equal(value.cleanup.length, 1);
   await value.cleanup[0][1]();
   assert.equal(value.calls.filter(call => call[0] === 'disconnect').length, 1);
+});
+
+test('native lifecycle rounds use separate owned configuration and desktop profiles', async () => {
+  const value = fixture();
+  await startPackagedDesktop(value.context, { root: '/fixture-package', label: 'native-success', servers: '/owned-run/servers.json', workspace: '/owned-run/workspace', profileNamespace: 'native-success' }, value.dependencies);
+  const env = value.calls.find(call => call[0] === 'spawn')[4].env;
+  assert.equal(env.KCODER_CONFIG_DIR, '/owned-run/state/native-success/home');
+  assert.equal(env.KCODER_STUDIO_DESKTOP_USER_DATA_DIR, '/owned-run/state/native-success/desktop-profile');
+  await assert.rejects(startPackagedDesktop(value.context, { root: '/fixture-package', profileNamespace: '../other' }, value.dependencies), /Invalid owned profile/);
+});
+
+test('Linux AppRun accepts the owned display but protects profile identity', { skip: process.platform !== 'linux' }, async () => {
+  const value = fixture();
+  await startPackagedDesktop(value.context, {
+    root: '/owned-installed-appdir', entry: 'AppRun', label: 'installed',
+    servers: '/owned-run/servers.json', workspace: '/owned-run/workspace',
+    environment: { DISPLAY: ':123', XAUTHORITY: '/owned-run/state/display.xauthority', KCODER_CONFIG_DIR: '/peer' },
+  }, value.dependencies);
+  const spawn = value.calls.find(call => call[0] === 'spawn');
+  assert.equal(spawn[2], '/owned-installed-appdir/AppRun');
+  assert.equal(spawn[4].env.DISPLAY, ':123');
+  assert.equal(spawn[4].env.XAUTHORITY, '/owned-run/state/display.xauthority');
+  assert.equal(spawn[4].env.KCODER_CONFIG_DIR, '/owned-run/state/home');
+  await assert.rejects(startPackagedDesktop(value.context, { root: '/owned', entry: '../AppRun' }, value.dependencies), /Invalid owned packaged entry/);
 });

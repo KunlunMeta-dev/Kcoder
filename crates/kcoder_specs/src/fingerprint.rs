@@ -24,8 +24,14 @@ pub struct RequirementFingerprint {
 
 /// Full base snapshot stored alongside a change.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(
+    try_from = "crate::base_format::BaseSnapshotWire",
+    into = "crate::base_format::BaseSnapshotWire"
+)]
 pub struct BaseSnapshot {
     pub requirements: Vec<RequirementFingerprint>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub knowledge_sources: Vec<crate::project_knowledge::ProjectKnowledgeSourceGuard>,
 }
 
 impl BaseSnapshot {
@@ -41,7 +47,10 @@ impl BaseSnapshot {
             }
         }
         requirements.sort_by(|a, b| a.domain.cmp(&b.domain).then_with(|| a.name.cmp(&b.name)));
-        Self { requirements }
+        Self {
+            requirements,
+            knowledge_sources: Vec::new(),
+        }
     }
 
     fn key(&self, domain: &str, name: &str) -> Option<&RequirementFingerprint> {
@@ -58,8 +67,33 @@ pub fn base_snapshot_path(change_dir: &Path) -> PathBuf {
 
 /// Capture the current authoritative specs and write them as the change base.
 pub fn capture_base_snapshot(specs_dir: &Path, change_dir: &Path) -> Result<()> {
+    capture_base_snapshot_with_knowledge(specs_dir, change_dir, &[])
+}
+
+pub(crate) fn capture_base_snapshot_with_knowledge(
+    specs_dir: &Path,
+    change_dir: &Path,
+    guards: &[crate::project_knowledge::ProjectKnowledgeSourceGuard],
+) -> Result<()> {
+    let requires_guarded = change_requires_guarded_base(change_dir)?;
+    anyhow::ensure!(
+        requires_guarded != guards.is_empty(),
+        "project_knowledge_guarded_metadata_required: guarded base and change metadata must agree"
+    );
+    match fs::read(base_snapshot_path(change_dir)) {
+        Ok(bytes) => {
+            let previous: BaseSnapshot = serde_json::from_slice(&bytes)?;
+            anyhow::ensure!(
+                previous.knowledge_sources.is_empty() || previous.knowledge_sources == guards,
+                "project_knowledge_base_recapture_denied: preserve the original candidate source guards"
+            );
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => return Err(error).context("failed to inspect existing spec base"),
+    }
     let specs = load_authoritative_specs(specs_dir)?;
-    let snapshot = BaseSnapshot::from_specs(&specs);
+    let mut snapshot = BaseSnapshot::from_specs(&specs);
+    snapshot.knowledge_sources = guards.to_vec();
     let path = base_snapshot_path(change_dir);
     let json = serde_json::to_string_pretty(&snapshot)
         .with_context(|| "failed to serialize base snapshot")?;
@@ -70,12 +104,48 @@ pub fn capture_base_snapshot(specs_dir: &Path, change_dir: &Path) -> Result<()> 
 /// Load a previously captured base snapshot.
 pub fn load_base_snapshot(change_dir: &Path) -> Result<BaseSnapshot> {
     let path = base_snapshot_path(change_dir);
-    if !path.exists() {
-        return Ok(BaseSnapshot::default());
+    let bytes = match fs::read(&path) {
+        Ok(bytes) => Some(bytes),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+        Err(error) => {
+            return Err(error).with_context(|| format!("failed to read {}", path.display()));
+        }
+    };
+    decode_change_base(change_dir, bytes.as_deref())
+}
+
+fn change_requires_guarded_base(change_dir: &Path) -> Result<bool> {
+    let path = change_dir.join(".spec.yaml");
+    match fs::read(&path) {
+        Ok(bytes) => Ok(serde_yaml::from_slice::<crate::ChangeMetadata>(&bytes)
+            .with_context(|| format!("failed to parse {}", path.display()))?
+            .requires_guarded_base),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(error).with_context(|| format!("failed to read {}", path.display())),
     }
-    let text =
-        fs::read_to_string(&path).with_context(|| format!("failed to read {}", path.display()))?;
-    serde_json::from_str(&text).with_context(|| format!("failed to parse {}", path.display()))
+}
+
+pub(crate) fn decode_change_base(change_dir: &Path, bytes: Option<&[u8]>) -> Result<BaseSnapshot> {
+    let required = change_requires_guarded_base(change_dir)?;
+    anyhow::ensure!(
+        !required || bytes.is_some(),
+        "project_knowledge_guarded_base_missing: restore the original guarded base; do not recapture or downgrade it"
+    );
+    let snapshot: BaseSnapshot = bytes
+        .map(serde_json::from_slice)
+        .transpose()
+        .with_context(|| {
+            format!(
+                "failed to parse {}",
+                base_snapshot_path(change_dir).display()
+            )
+        })?
+        .unwrap_or_default();
+    anyhow::ensure!(
+        required != snapshot.knowledge_sources.is_empty(),
+        "project_knowledge_guarded_base_required: change metadata and guarded base must agree; legacy fallback is forbidden"
+    );
+    Ok(snapshot)
 }
 
 /// Check a change against the current authoritative specs.
@@ -88,6 +158,14 @@ pub fn check_change(specs_dir: &Path, change_dir: &Path) -> Result<Vec<String>> 
     let current_specs = load_authoritative_specs(specs_dir).unwrap_or_default();
     let current = build_current_map(&current_specs);
     let base = load_base_snapshot(change_dir)?;
+    let workspace = specs_dir
+        .parent()
+        .and_then(Path::parent)
+        .context("invalid specs workspace")?;
+    errors.extend(crate::project_knowledge::source_guard_errors(
+        workspace,
+        &base.knowledge_sources,
+    )?);
     let deltas = load_change_deltas(change_dir)?;
 
     if deltas.is_empty() {

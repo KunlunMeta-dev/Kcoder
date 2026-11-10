@@ -1,19 +1,90 @@
-import { PRIVATE_RETENTION_FIELD, RETENTION_METHODS, WORKSPACE_RECEIPT_METHODS_V2, RetentionAuthorityError, hasRawReservedRetentionFields, hasRawDuplicateRetentionFields, hasReservedRetentionFields, injectRetentionAuthority, injectWorkspaceReceiptAuthority } from "./retention-context.js";
+import { BrokerSessionAttachments } from './broker-session-attachments.js';
+import { BrokerSharedThreads, SHARED_THREADS_CAPABILITY, SHARED_RESUME } from './broker-shared-threads.js';
+import { ASYNC_QUESTIONS_CAPABILITY, ASYNC_QUESTION_METHODS, asyncQuestionAdmissionError, projectAsyncQuestionRequest,
+  projectAsyncQuestionCapabilities, allowsAsyncQuestionNotification, projectAsyncQuestionResponse } from './broker-async-questions.js';
+import { TASK_EXPERT_CAPABILITY, EXPERT_CREATION_CAPABILITY, taskExpertAdmissionError, projectTaskExpertCapabilities } from './broker-task-expert.js';
+import { assertThreadRuntimeHandoffAdmission, projectThreadRuntimeHandoffResponse } from './broker-thread-runtime-handoff.js';
+import { THREAD_RUNTIME_HANDOFF_CAPABILITY, THREAD_RUNTIME_HANDOFF_READ, THREAD_RUNTIME_HANDOFF_RELEASE, confirmsReleasedThreadRuntime } from '../shared/threadRuntimeHandoff.mjs';
+import { BrokerSharedInteractions, hasConflictingTurnIdentity } from './broker-shared-interactions.js';
+import { BrokerWebSearchDiagnostics, SearchDiagnosticOwnerError, WEB_SEARCH_CAPABILITIES } from './broker-web-search.js';
+import { acceptedOfficeTask, isOfficeTaskAdoption, BrokerOfficeTaskOwnerHandoff } from './broker-office-task-owner.js';
+import { isNativeRemoteHostMethod, isNativeRemoteHostRequestId } from "./remotes/host-backchannel.mjs";
+import { projectMigrationHistoryWorkerState } from "./broker-migration-history.js";
+import { BrokerStudioPresentation } from "./broker-studio-presentation.js";
+import { BrokerContinuousWork, CONTINUOUS_WORK_CAPABILITY, CONTINUOUS_WORK_READ_CAPABILITY, CONTINUOUS_WORK_PARTIAL_LIST_CAPABILITY, CONTINUOUS_WORK_NO_EPHEMERAL_CAPABILITY, CONTINUOUS_WORK_INPUT_CAPABILITY, CONTINUOUS_WORK_CONTROL_CAPABILITY } from "./broker-continuous-work.mjs";
+import { PRIVATE_RETENTION_FIELD, RETENTION_METHODS, WORKSPACE_RECEIPT_METHODS_V2, RetentionAuthorityError, hasRawReservedRetentionFields, hasRawDuplicateRetentionFields, hasReservedRetentionFields, injectRetentionAuthority, injectWorkspaceReceiptAuthority, isRetainedTurn, injectRetainedTurnAuthority } from "./retention-context.js";
 import { GATEWAY_EXPIRED_REQUEST_DATA } from '../shared/gatewayRequestDeadline.js';
 import { BrokerMcpOAuth, MCP_OAUTH_RECEIVER, MCP_OAUTH_COMPLETION } from "./broker-mcp-oauth.js";
 import { BoundedJsonlDecoder } from "./bounded-jsonl-decoder.js";
 import { inspectGatewayChannelMessage } from "./gateway-channel.js";
-import { isAbsolute } from "node:path";
+import { isTargetWorkspaceAbsolute } from './remotes/target-workspace-path.mjs';
 import { BrokerLifecycleMetrics } from "./broker-lifecycle-metrics.js";
 import { BrokerIdleShutdown } from "./broker-idle-shutdown.js";
 import { BrokerHistoryRefresh, HISTORY_REFRESH_METHOD, HistoryRefreshRequestError } from "./broker-history-refresh.js";
+import { BrokerMigrationViewLeases, MIGRATION_VIEW_CREATIONS, MigrationViewOwnerError } from './broker-migration-view-leases.js';
 import { BrokerRequestBudget, compactRequestParams } from "./broker-request-budget.js";
 import { RequestLoadTracker } from "./request-load.js";
-import { projectThreadRunSummary } from "./broker-thread-summary.js";
+import { projectThreadRunSummary, projectThreadTranscriptObservation, projectThreadTranscriptSnapshot } from "./broker-thread-summary.js";
+import { BrokerResumeNotificationBuffer, makeResumeNotificationHandoffIncompleteResponse } from "./broker-resume-notification-buffer.js";
+import { isContract } from "../shared/generated/validator.mjs";
+import { INTEGRATION_CLIENT_CAPABILITIES, IntegrationAdmissionError, assertIntegrationAdmission, projectIntegrationCapabilities, projectTaskStateNotification } from './integrations/core/admission.mjs';
+import { publicSharedCapabilities, requestsDedicatedCapabilities, suppliesTemporaryThreadMcp, requestsNativeManagement, nativeManagementMethodAllowed } from './broker-native-session-capabilities.js';
+import { MIGRATION_SOURCE_INTERNAL_PREFIX, MIGRATION_SOURCE_INTERNAL_CAPABILITY, MIGRATION_SOURCE_PRIVATE_CREDENTIALS_CAPABILITY, MIGRATION_SOURCE_PRIVATE_CREDENTIAL_PREPARATIONS_CAPABILITY, MIGRATION_SOURCE_PRIVATE_CREDENTIAL_BUNDLES_CAPABILITY, MIGRATION_SOURCE_PRIVATE_CREDENTIAL_SOURCE_OBSERVATION_CAPABILITY, MIGRATION_SOURCE_TARGET_RECOVERY_CAPABILITY, MIGRATION_SOURCE_ATTEMPT_CAPABILITY, MIGRATION_SOURCE_ADOPTION_CAPABILITY, MigrationSourceBridgeError, hasPrivateMigrationSourceField, migrationSourcePrivateFrame } from './migration-source-private.js';
+
+const PROTOCOL_VERSION = "2026-07-27";
+const THREAD_PRESENCE_READ_METHOD = "thread/presence/read";
+const THREAD_PRESENCE_READ_CAPABILITY = "threadPresenceReadV1";
+const INTERACTION_STATUS_READ_METHOD = "interaction/status/read";
+const INTERACTION_STATUS_READ_CAPABILITY = "interactionStatusReadV1";
+const TASK_COMPARISON_METHODS = new Set([
+  "runtime.worktrees.comparison.bind", "runtime.worktrees.comparison.read", "runtime.worktrees.comparison.select",
+]);
+const CLIENT_EXPERIMENTAL_CHOICES = ["acpInboundV1", "migrationHistoryWorkerStateV1", "toolPathPreviewV1", "computerUseSessionAuthorizationV1",
+  "sessionLifetimeV1", "computerUseRecoveryV1", "threadRunSummaryV1", "threadGoalStatusBatchV1", "threadTranscriptSnapshotV1", "threadTranscriptObservationV1", "threadStreamContextV1", THREAD_PRESENCE_READ_CAPABILITY,
+  INTERACTION_STATUS_READ_CAPABILITY, THREAD_RUNTIME_HANDOFF_CAPABILITY, ASYNC_QUESTIONS_CAPABILITY, TASK_EXPERT_CAPABILITY, EXPERT_CREATION_CAPABILITY, CONTINUOUS_WORK_CAPABILITY, CONTINUOUS_WORK_READ_CAPABILITY, CONTINUOUS_WORK_PARTIAL_LIST_CAPABILITY, CONTINUOUS_WORK_INPUT_CAPABILITY, CONTINUOUS_WORK_CONTROL_CAPABILITY, ...WEB_SEARCH_CAPABILITIES, ...INTEGRATION_CLIENT_CAPABILITIES];
+function backendInitializeParams(params, nativeManagementOnly) {
+  const experimental = publicSharedCapabilities(params?.capabilities?.experimental);
+  delete experimental.migrationHistoryWorkerStateClientV1;
+  delete experimental[SHARED_THREADS_CAPABILITY];
+  return { ...params, capabilities: { ...params?.capabilities, experimental: {
+    ...experimental, projectAutomations: true, sessionLifetimeV1: true,
+    studioWorkModesV1: true, inlineWidgetsV1: true, isolatedWidgetsV1: true, mcpAppsV1: true,
+    // Native binding must not depend on which presentation client connects first.
+    interactionBindingV1: true,
+    [MIGRATION_SOURCE_INTERNAL_CAPABILITY]: true,
+    [CONTINUOUS_WORK_NO_EPHEMERAL_CAPABILITY]: true,
+    ...Object.fromEntries(CLIENT_EXPERIMENTAL_CHOICES.map(name => [name, true])),
+    // Only a dedicated legacy backend opts out of task routing. A control
+    // client on the task broker cannot change the original host's capabilities.
+    ...(nativeManagementOnly ? { taskSourcesV1: false, [THREAD_RUNTIME_HANDOFF_CAPABILITY]: false } : {}),
+  } } };
+}
+function finishClientInitialize(client, response) {
+  if (!client) return;
+  client.initialized = !response.error;
+  if (!response.error) Object.assign(client, client.pendingInitializeChoices);
+  client.pendingInitializeChoices = null;
+}
+function projectClientResponse(message, pending) {
+  message = projectMigrationHistoryWorkerState(message, pending.method, pending.client.migrationHistoryWorkerStateV1 === true);
+  if (pending.method === "thread/resume" && message.result?.streamContext && pending.client.threadStreamContextV1 !== true) {
+    const { streamContext, ...result } = message.result;
+    message = { ...message, result };
+  }
+  message = projectThreadTranscriptObservation(message, pending.method, pending.client.threadTranscriptObservationV1 === true);
+  return projectThreadRunSummary(projectThreadTranscriptSnapshot(message, pending.method,
+    pending.client.threadTranscriptSnapshotV1 === true), pending.client.threadRunSummaryV1 === true);
+}
 
 function threadIdFrom(message) {
   const params = message?.params ?? message;
   if (!params || typeof params !== "object") return null;
+  if (TASK_COMPARISON_METHODS.has(message?.method)) {
+    // Comparison threadId identifies candidate B; only ownerThreadId names the requesting runtime A.
+    const owner = params.ownerThreadId;
+    return typeof owner === "string" && owner.length > 0 && owner.length <= 512 && !/[\x00-\x1f\x7f]/.test(owner)
+      ? owner : null;
+  }
   return typeof params.threadId === "string"
     ? params.threadId
     : typeof params.thread_id === "string"
@@ -22,6 +93,8 @@ function threadIdFrom(message) {
         ? params.thread.threadId
         : typeof params.thread?.id === "string"
           ? params.thread.id
+          : typeof params.widget?.threadId === "string"
+            ? params.widget.threadId
           : null;
 }
 
@@ -90,6 +163,7 @@ const WIKI_ARCHIVE_OWNED_METHODS = new Set(["knowledge/archiveTransfer/status", 
 
 
 const LATE_CREATION_METHODS = new Set([
+  ...MIGRATION_VIEW_CREATIONS,
   ...WIKI_ARTIFACT_METHODS,
   ...WIKI_ARCHIVE_START_METHODS,
   "knowledge/source/directoryStage",
@@ -105,6 +179,7 @@ const LATE_CREATION_METHODS = new Set([
 
 const CLIENT_NOTIFICATION_METHODS = new Set(["initialized"]);
 const THREAD_READONLY_METHODS = new Set([
+  "asyncQuestion/list",
   "session/modes",
   "thread/read",
   "turn/receipt/read",
@@ -112,6 +187,9 @@ const THREAD_READONLY_METHODS = new Set([
   "thread/read/indexed",
   "thread/goal/get",
   "thread/goal/history",
+  THREAD_PRESENCE_READ_METHOD,
+  THREAD_RUNTIME_HANDOFF_READ,
+  INTERACTION_STATUS_READ_METHOD,
   "attachment/read",
   "attachment/read/chunk",
 ]);
@@ -123,6 +201,11 @@ const INTERNAL_REQUEST_TIMEOUT_MS = 30_000;
 // are not about the transcript must therefore carry their own codes.
 const RESOURCE_OWNERSHIP_CONFLICT = -32048;
 const RESOURCE_NOT_READY = -32049;
+const THREAD_RESUME_CLAIM = Symbol("thread-resume-claim");
+
+function threadClaimOwner(claim) {
+  return claim?.[THREAD_RESUME_CLAIM] === true ? claim.client : claim;
+}
 
 /**
  * Multiplex several gateway WebSockets over one workspace app-server stdio connection.
@@ -135,6 +218,11 @@ export class WorkspaceAppServerBroker {
   #requestLoad = new RequestLoadTracker();
   #onLifecycleMetrics;
   #pendingBudget;
+  #resumeNotificationBuffer = new BrokerResumeNotificationBuffer();
+  sessionAttachments = new BrokerSessionAttachments(this);
+  #resumePreappliedNotifications = new WeakSet();
+  #officeTaskOwnerHandoff = new BrokerOfficeTaskOwnerHandoff();
+  #nativeRemoteHostBackchannel;
   #internalRequestOwner = { channel: "other" };
   #lifecycleRequestOwner = { channel: "other" };
 
@@ -143,6 +231,8 @@ export class WorkspaceAppServerBroker {
     adapter,
     maxMessageBytes,
     serverId,
+    targetTransport,
+    remotePlatform,
     onClose,
     onRestart,
     onIdleStateChange,
@@ -152,24 +242,48 @@ export class WorkspaceAppServerBroker {
     monotonicNow,
     onLifecycleMetrics,
     retentionParentV1 = false,
+    migrationSourceParentV1 = false,
+    retentionRevocationTrusted = false,
+    registerRetentionRoute,
     pendingBudget,
+    nativeRemoteHostBackchannel,
+    nativeManagementOnly = false,
+    ownsChannelHost = false,
   }) {
+    this.nativeManagementOnly = nativeManagementOnly === true;
+    this.ownsChannelHost = ownsChannelHost === true;
     this.#lifecycleMetrics = new BrokerLifecycleMetrics(monotonicNow);
     this.#onLifecycleMetrics = onLifecycleMetrics;
     this.#pendingBudget = new BrokerRequestBudget(pendingBudget, id => this.expireRequest(id));
     if (typeof retentionParentV1 !== "boolean") throw new RetentionAuthorityError();
     this.retentionParentV1 = retentionParentV1;
+    if (typeof migrationSourceParentV1 !== 'boolean') throw new MigrationSourceBridgeError('source_transfer_authority_unavailable');
+    this.migrationSourceParentV1 = migrationSourceParentV1;
+    if (typeof retentionRevocationTrusted !== "boolean" || (retentionRevocationTrusted && !retentionParentV1)) throw new RetentionAuthorityError();
+    this.retentionRevocationTrusted = retentionRevocationTrusted;
+    this.registerRetentionRoute = registerRetentionRoute;
+    if (nativeRemoteHostBackchannel !== undefined &&
+        (typeof nativeRemoteHostBackchannel?.receiveBackend !== "function" ||
+         typeof nativeRemoteHostBackchannel?.close !== "function")) throw new Error("Native Remote host callbacks are required");
+    this.#nativeRemoteHostBackchannel = nativeRemoteHostBackchannel;
     this.child = child;
     this.adapter = adapter;
     this.maxMessageBytes = maxMessageBytes;
     this.serverId = serverId;
+    this.targetTransport = targetTransport;
+    this.remotePlatform = remotePlatform;
     this.onClose = onClose;
     this.onRestart = onRestart;
     this.onIdleStateChange = onIdleStateChange;
     this.onWorkspaceRemoved = onWorkspaceRemoved;
     this.onReleaseWorkspace = onReleaseWorkspace;
     this.clients = new Set();
+    this.restartAdmissionRetired = false;
     this.threadOwners = new Map();
+    this.sharedThreads = new BrokerSharedThreads(this);
+    this.sharedInteractions = new BrokerSharedInteractions(this);
+    this.studioPresentation = new BrokerStudioPresentation();
+    this.continuousWork = new BrokerContinuousWork();
     this.mcpFlowOwners = new Map();
     this.mcpOAuth = new BrokerMcpOAuth({
       attached: client => this.clients.has(client) && !this.closed,
@@ -187,6 +301,8 @@ export class WorkspaceAppServerBroker {
     this.detachedRequestIds = new Set();
     this.detachedRequestsUnknown = false;
     this.historyRefresh = new BrokerHistoryRefresh();
+    this.historyViewLeases = new BrokerMigrationViewLeases();
+    this.webSearchDiagnostics = new BrokerWebSearchDiagnostics();
     this.serverRequests = new Map();
     this.repliedServerRequests = new Map();
     this.resourceOwners = new Map();
@@ -311,7 +427,9 @@ export class WorkspaceAppServerBroker {
       !this.closed &&
       !this.idleShutdown.closing &&
       !this.restartRequest &&
-      (this.shareability === "resident" || this.clientCount === 0)
+      !this.restartAdmissionRetired &&
+      (this.shareability === "resident" || this.clientCount === 0 ||
+        (this.ownsChannelHost && this.shareability === "unknown"))
     );
   }
 
@@ -319,21 +437,52 @@ export class WorkspaceAppServerBroker {
     return this.shareabilityPromise;
   }
 
+  retireAdmissionForRestart() {
+    if (this.restartAdmissionRetired) return;
+    this.restartAdmissionRetired = true;
+    this.onIdleStateChange?.(this);
+  }
+
   attach(client) {
-    if (this.closed || this.restartRequest || this.idleShutdown.closing) throw new Error("workspace app-server broker is closed or restarting");
+    if (this.closed || this.restartRequest || this.restartAdmissionRetired || this.idleShutdown.closing) throw new Error("workspace app-server broker is closed or restarting");
     this.#lifecycleMetrics.attach(this.clientCount === 0);
     this.lastUsedAt = this.idleShutdown.now();
+    client.nativeManagementOnly = this.nativeManagementOnly || client.nativeManagementOnly === true;
     client.browserStarted = false;
     client.initialized = false;
     client.toolPathPreviewV1 = undefined;
     client.threadStreamContextV1 = undefined;
     client.threadRunSummaryV1 = undefined;
+    client.threadGoalStatusBatchV1 = undefined;
+    client.migrationHistoryWorkerStateV1 = undefined;
+    client.threadTranscriptSnapshotV1 = undefined;
+    client.threadTranscriptObservationV1 = undefined;
+    client[CONTINUOUS_WORK_CAPABILITY] = undefined;
+    client[CONTINUOUS_WORK_READ_CAPABILITY] = undefined;
+    client[CONTINUOUS_WORK_PARTIAL_LIST_CAPABILITY] = undefined;
+    client.pendingInitializeChoices = null;
+    client[SHARED_THREADS_CAPABILITY] = undefined;
     client.computerUseRecoveryV1 = undefined;
     client.computerUseSessionAuthorizationV1 = undefined;
+    this.studioPresentation.attach(client);
+    this.continuousWork.attach(client);
     this.clients.add(client);
   }
 
   detach(client) {
+    const hostOwnsLifetime = this.sessionAttachments.enabled();
+    this.sessionAttachments.detach(client);
+    this.sharedThreads.detach(client);
+    this.continuousWork.detach(client);
+    for (const request of this.historyViewLeases.detach(client)) this.sendInternalRequest(request.method, request.params);
+    for (const request of this.webSearchDiagnostics.detach(client)) this.sendInternalRequest(request.method, request.params);
+    if (this.initializeResponse?.result?.capabilities?.experimental?.mcpAppsV1 === true) {
+      for (const [threadId, owner] of this.threadOwners) {
+        if (owner !== client) continue;
+        // A retained shared backend is not the detached Studio owner's authority.
+        this.sendInternalRequest('mcp/apps/revoke', { threadId });
+      }
+    }
     this.mcpOAuth.detach(client);
     for (const [flowId, owner] of this.mcpFlowOwners) {
       if (owner.client === client) {
@@ -347,7 +496,7 @@ export class WorkspaceAppServerBroker {
         this.sendInternalRequest("computerUse/revoke", { threadId });
       }
     }
-    if (this.initializeResponse?.result?.capabilities?.experimental?.goalContinuation) {
+    if (!hostOwnsLifetime && this.initializeResponse?.result?.capabilities?.experimental?.goalContinuation) {
       for (const [threadId, owner] of this.threadOwners) {
         if (owner !== client) continue;
         // Disarm idle automatic work as well as any currently running turn.
@@ -357,37 +506,45 @@ export class WorkspaceAppServerBroker {
     }
     for (const [threadId, owner] of this.ephemeralThreadOwners) {
       if (owner !== client) continue;
+      const retirement = this.continuousWork.retireEphemeral(threadId);
       this.ephemeralThreadOwners.delete(threadId);
-      this.sendInternalRequest("thread/dispose", { threadId });
+      this.sendInternalRequest("thread/dispose", { threadId }, { onResponse: response =>
+        this.continuousWork.settleEphemeral(threadId, retirement, response,
+          this.initializeResponse?.result?.capabilities?.experimental, this.ephemeralThreadOwners) });
     }
     if (this.clients.delete(client) && this.clientCount === 0) {
       this.#lifecycleMetrics.clientFree();
       this.lastUsedAt = this.idleShutdown.now();
     }
     this.releaseStdout(client);
+    this.sharedThreads.handoff(client);
+    this.sharedInteractions.detach(client);
     for (const [threadId, active] of this.activeTurns) {
-      if (active.owner !== client) continue;
+      if (active.owner !== client || hostOwnsLifetime) continue;
       this.beginThreadDrain(threadId, active.turnId);
       this.sendInternalRequest("turn/interrupt", { threadId, turnId: active.turnId });
       this.activeTurns.delete(threadId);
     }
     for (const [id, pending] of this.pending) {
       if (pending.client !== client) continue;
-      pending.params = compactRequestParams(pending.params);
+      pending.params = compactRequestParams(pending.params, pending.method);
       this.#pendingBudget.compact(id, Buffer.byteLength(JSON.stringify({ params: pending.params, attachmentPaths: pending.attachmentPaths })));
       pending.clientId = null;
       delete pending.oauthReceiver;
       delete pending.oauthCompletion;
       if (pending.refreshTicket) pending.client = null;
       else if (pending.method === "initialize") pending.client = null;
-      else if (["turn/start", "computerUse/recover"].includes(pending.method)) {
-        // The protocol requires threadId and turnId for interruption. Before the start
-        // response arrives, retain a tombstone detached from the client; interrupt
-        // immediately when the response arrives without restoring owner state.
+      else if (pending.method === 'asyncQuestion/answer') {
+        // A legacy host can interrupt only a newly admitted turn, never peer steering.
         pending.client = null;
-        pending.interruptOnResponse = true;
-        const threadId = threadIdFrom({ params: pending.params });
-        if (threadId) this.beginThreadDrain(threadId);
+        pending.interruptOnResponse = !hostOwnsLifetime;
+      }
+      else if (["turn/start", "computerUse/recover"].includes(pending.method)) {
+        // Retain a detached tombstone until the original admission settles.
+        pending.client = null;
+        pending.interruptOnResponse = !hostOwnsLifetime;
+        const threadId = threadIdFrom({ method: pending.method, params: pending.params });
+        if (threadId && pending.interruptOnResponse) this.beginThreadDrain(threadId);
       } else if (pending.method === "thread/start"
           && typeof pending.params?.clientRequestId === "string"
           && pending.params.clientRequestId.trim()
@@ -402,11 +559,13 @@ export class WorkspaceAppServerBroker {
         // the response arrives, preventing disconnect retries from exhausting resident slots or session resources.
         pending.client = null;
         pending.cleanupOnResponse = true;
-      } else if (pending.method === "terminal/close") {
-        // close already reached app-server; retain the tombstone until the authoritative response updates the live set.
+      } else if (["terminal/close", "thread/delete", "thread/dispose", THREAD_RUNTIME_HANDOFF_RELEASE].includes(pending.method)) {
+        // Retain the authoritative close/release receipt so earlier answer
+        // admissions cannot recreate a binding after its owner disconnects.
         pending.client = null;
       } else {
         this.#lifecycleMetrics.resumeAbandoned(pending.resumeStartedAt);
+        this.#resumeNotificationBuffer.discard(pending);
         this.releaseThreadClaim(pending);
         this.releaseTerminalClaim(pending);
         this.pending.delete(id);
@@ -416,6 +575,7 @@ export class WorkspaceAppServerBroker {
         else this.detachedRequestsUnknown = true;
       }
     }
+    this.pruneOfficeTaskOwnerHandoff();
     this.sendRefreshCleanup(this.historyRefresh.detach(client));
     for (const drain of this.threadDrains.values()) {
       drain.queue = drain.queue.filter((entry) => entry.client !== client);
@@ -423,15 +583,18 @@ export class WorkspaceAppServerBroker {
     for (const [threadId, owner] of this.threadOwners) {
       if (owner === client) this.threadOwners.delete(threadId);
     }
-    for (const [threadId, owner] of this.threadClaims) {
-      if (owner === client) this.threadClaims.delete(threadId);
+    for (const [threadId, claim] of this.threadClaims) {
+      if (threadClaimOwner(claim) === client) this.threadClaims.delete(threadId);
     }
     for (const [sessionId, owner] of this.terminalClaims) {
       if (owner === client) this.terminalClaims.delete(sessionId);
     }
-    this.initializeWaiters = this.initializeWaiters.filter(
-      (waiter) => waiter.client !== client,
-    );
+    this.initializeWaiters = this.initializeWaiters.filter(waiter => {
+      if (waiter.client !== client) return true;
+      this.settleRequest(waiter.budgetId);
+      client.pendingInitializeChoices = null;
+      return false;
+    });
     for (const [id, owner] of this.repliedServerRequests) {
       if (owner === client) this.repliedServerRequests.delete(id);
     }
@@ -481,12 +644,20 @@ export class WorkspaceAppServerBroker {
   }
 
   clearTransientState() {
+    this.sharedThreads.clear();
+    this.sharedInteractions.clear();
+    this.#nativeRemoteHostBackchannel?.close();
+    this.historyViewLeases.clear();
+    this.webSearchDiagnostics.clear();
     this.historyRefresh.reset();
     this.ephemeralThreadOwners.clear();
     this.threadOwners.clear();
     this.mcpFlowOwners.clear();
     this.mcpOAuth.close();
     this.threadClaims.clear();
+    this.#resumeNotificationBuffer.clear();
+    this.sessionAttachments.clear();
+    this.#officeTaskOwnerHandoff.clear();
     this.activeTurns.clear();
     this.activeAutomationThreads.clear();
     this.automationThreads.clear();
@@ -519,6 +690,7 @@ export class WorkspaceAppServerBroker {
     this.persistentResources.clear();
     this.retainedAttachmentBindings.clear();
     this.materializedAttachments.clear();
+    for (const waiter of this.initializeWaiters) waiter.client.pendingInitializeChoices = null;
     this.initializeWaiters.length = 0;
     this.initializePending = null;
     this.initializeResponse = null;
@@ -558,6 +730,32 @@ export class WorkspaceAppServerBroker {
       return;
     }
 
+    if (client.nativeManagementOnly && request?.method !== 'gateway/client/detach' &&
+        !nativeManagementMethodAllowed(request?.method)) {
+      client.send({ jsonrpc: '2.0', id: request?.id ?? null,
+        error: { code: -32601, message: 'Native management transport cannot execute task commands' } });
+      return;
+    }
+    if (isNativeRemoteHostMethod(request?.method) || isNativeRemoteHostRequestId(request?.id) ||
+        request?.method === 'kcoder/nativeRemote/controlV1') {
+      client.send({ jsonrpc: "2.0", id: request?.id ?? null, error: { code: -32601, message: "Native Remote host methods are private to the owning Gateway" } });
+      return;
+    }
+    // Desktop authority belongs to this host. Shell/SSH target access and a
+    // client-supplied approval cannot select or grant another host's desktop.
+    if (this.targetTransport !== 'local' &&
+        (typeof request?.method === 'string' && request.method.startsWith('computerUse/') ||
+         request?.method === 'turn/start' && request.params?.computerUse != null)) {
+      client.send({ jsonrpc: '2.0', id: request?.id ?? null, error: { code: -32602,
+        message: 'Computer Use requires a local target and explicit local desktop authorization' } });
+      return;
+    }
+    if (hasPrivateMigrationSourceField(raw) ||
+        (typeof request?.method === 'string' && request.method.startsWith(MIGRATION_SOURCE_INTERNAL_PREFIX))) {
+      client.send({ jsonrpc: "2.0", id: request?.id ?? null,
+        error: { code: -32602, message: "Migration source authority is private to the Gateway" } });
+      return;
+    }
     if (RETENTION_METHODS.has(request.method) && hasRawDuplicateRetentionFields(raw)) {
       client.send({ jsonrpc: "2.0", id: request?.id ?? null,
         error: { code: -32602, message: "Retention fields must be unique and bounded" } });
@@ -603,6 +801,24 @@ export class WorkspaceAppServerBroker {
       } });
       return;
     }
+    if (['thread/attach', 'thread/detach'].includes(request.method)) {
+      client.send({ jsonrpc:'2.0', id:request.id ?? null,
+        error:{code:-32601,message:'Attachment handles belong to the authenticated Gateway transport'} });
+      return;
+    }
+    if (['gateway/thread/attach', 'gateway/thread/detach'].includes(request.method)) {
+      const threadId = request.params?.threadId, viewId = request.params?.viewId;
+      const owned = this.threadOwners.get(threadId) === client || this.sharedThreads.has(threadId, client);
+      if (request.id == null || !this.clients.has(client) || !client.initialized || !owned ||
+          typeof viewId !== 'string' || viewId.length === 0 || viewId.length > 64) {
+        client.send({jsonrpc:'2.0', id:request.id ?? null,
+          error:{code:-32023,message:'A current authorized conversation view is required'}}); return;
+      }
+      const changed = request.method === 'gateway/thread/attach'
+        ? this.sessionAttachments.attach(client, threadId, viewId)
+        : this.sessionAttachments.release(client, threadId, viewId);
+      client.send({jsonrpc:'2.0',id:request.id,result:{changed}}); return;
+    }
     if (request.method === "gateway/client/detach") {
       const reject = (code, message) => client.send({ jsonrpc: "2.0", id: request.id ?? null, error: { code, message } });
       const params = request.params;
@@ -616,9 +832,9 @@ export class WorkspaceAppServerBroker {
       if (!client.initialized) { reject(-32002, "Initialize is required before detach"); return; }
       const ownThreads = new Set([...this.activeTurns].filter(([, turn]) => turn.owner === client).map(([threadId]) => threadId));
       for (const pending of this.pending.values()) {
-        if (pending.client === client && pending.method === "turn/start") ownThreads.add(threadIdFrom({ params: pending.params }));
+        if (pending.client === client && pending.method === "turn/start") ownThreads.add(threadIdFrom({ method: pending.method, params: pending.params }));
       }
-      if (ownThreads.size && !params.force) { reject(-32043, "Client has active turns; explicit cancellation is required"); return; }
+      if (!this.sessionAttachments.enabled() && ownThreads.size && !params.force) { reject(-32043, "Client has active turns; explicit cancellation is required"); return; }
       this.detach(client);
       const drains = [...ownThreads].map(threadId => this.threadDrains.get(threadId)?.done ?? Promise.resolve(true));
       Promise.all(drains).then(results => {
@@ -668,7 +884,7 @@ export class WorkspaceAppServerBroker {
     if (request.method === "gateway/workspace/release") {
       if (request.id === undefined) return;
       const workspacePath = request.params?.workspacePath;
-      if (typeof workspacePath !== "string" || !isAbsolute(workspacePath)) {
+      if (!isTargetWorkspaceAbsolute({ transport: this.targetTransport, remotePlatform: this.remotePlatform }, workspacePath)) {
         client.send({
           jsonrpc: "2.0",
           id: request.id,
@@ -778,29 +994,44 @@ export class WorkspaceAppServerBroker {
       return;
     }
     if (request.method === "initialize") {
-      // Cache backend initialization, not another client's opt-in preferences.
-      if (client.toolPathPreviewV1 === undefined) {
-        client.toolPathPreviewV1 =
-          request.params?.capabilities?.experimental?.toolPathPreviewV1 === true;
+      // Rust RequestId also accepts u64; JSON/JS transports deliberately admit
+      // only its exactly representable nonnegative safe-integer/string subset.
+      if (request.id === undefined) return;
+      const validId = typeof request.id === "string" || (Number.isSafeInteger(request.id) && request.id >= 0);
+      const reject = (code, message) => client.send({ jsonrpc: "2.0", id: validId ? request.id : null, error: { code, message } });
+      if (!validId || (request.jsonrpc !== undefined && request.jsonrpc !== "2.0")) {
+        reject(-32600, "Initialize requires a valid JSON-RPC request ID"); return;
       }
-      if (client.threadStreamContextV1 === undefined) client.threadStreamContextV1 =
-        request.params?.capabilities?.experimental?.threadStreamContextV1 === true;
-      if (client.computerUseSessionAuthorizationV1 === undefined) {
-        client.computerUseSessionAuthorizationV1 = request.params?.capabilities?.experimental?.computerUseSessionAuthorizationV1 === true;
+      if (client.initialized || client.pendingInitializeChoices) {
+        reject(-32600, "Initialize already completed or pending"); return;
       }
-      if (client.computerUseRecoveryV1 === undefined) {
-        client.computerUseRecoveryV1 = request.params?.capabilities?.experimental?.computerUseRecoveryV1 === true;
+      if (!isContract("InitializeParams", request.params) || request.params.protocolVersion !== PROTOCOL_VERSION) {
+        reject(-32602, "Invalid initialize parameters or protocol version"); return;
       }
-      if (client.threadRunSummaryV1 === undefined) {
-        client.threadRunSummaryV1 = request.params?.capabilities?.experimental?.threadRunSummaryV1 === true;
+      if (requestsNativeManagement(request.params) !== client.nativeManagementOnly) {
+        reject(-32602, "Native management requires its control transport and task opt-outs"); return;
       }
+      if (requestsDedicatedCapabilities(request.params)) {
+        reject(-32602, "Requested capabilities require a dedicated native app-server connection"); return;
+      }
+      this.studioPresentation.initialize(client, request);
+      client.pendingInitializeChoices = Object.fromEntries(CLIENT_EXPERIMENTAL_CHOICES.map(name =>
+        [name, request.params.capabilities?.experimental?.[name === "migrationHistoryWorkerStateV1" ? "migrationHistoryWorkerStateClientV1" : name] === true]));
+      client.pendingInitializeChoices[SHARED_THREADS_CAPABILITY] = request.params.capabilities?.experimental?.[SHARED_THREADS_CAPABILITY] === true;
       if (this.initializeResponse) {
-        client.initialized = !this.initializeResponse.error;
-        client.send(this.projectWorkspaceReceiptCapability(cloneWithId(this.initializeResponse, request.id ?? null), client));
+        finishClientInitialize(client, this.initializeResponse);
+        client.send(this.studioPresentation.project(
+          this.projectWorkspaceReceiptCapability(cloneWithId(this.initializeResponse, request.id), client), client));
         return;
       }
-      if (this.initializePending) {
-        this.initializeWaiters.push({ client, clientId: request.id ?? null });
+      if (this.initializePending !== null) {
+        const budgetId = this.nextRequestId++;
+        if (!this.#pendingBudget.admit(budgetId, client, request)) {
+          client.pendingInitializeChoices = null;
+          reject(-32000, "Gateway request capacity reached; request was not forwarded");
+          return;
+        }
+        this.initializeWaiters.push({ client, clientId: request.id, budgetId });
         return;
       }
     }
@@ -811,6 +1042,11 @@ export class WorkspaceAppServerBroker {
     ) {
       // Every current client-protocol operation except initialized requires a response.
       // Reject ID-less operations so they cannot create threads, terminals, browsers, or attachments without ownership and cleanup.
+      return;
+    }
+    if (suppliesTemporaryThreadMcp(request)) {
+      client.send({ jsonrpc: '2.0', id: request.id ?? null, error: { code: -32602,
+        message: 'Temporary MCP servers require a dedicated native app-server connection' } });
       return;
     }
     const commandKey = request.params?.command_key;
@@ -842,7 +1078,42 @@ export class WorkspaceAppServerBroker {
       client.send({ jsonrpc: "2.0", id: request.id ?? null, error: { code: -32602, message: "computerUseSessionAuthorizationV1 negotiation is required" } });
       return;
     }
+    const expertError = taskExpertAdmissionError(request, client, this.initializeResponse?.result?.capabilities?.experimental);
+    if (expertError) {
+      client.send({ jsonrpc: '2.0', id: request.id ?? null, error: { code: -32602, message: expertError } });
+      return;
+    }
+    const asyncQuestionError = asyncQuestionAdmissionError(request, client, this.initializeResponse?.result?.capabilities?.experimental);
+    if (asyncQuestionError) {
+      client.send({ jsonrpc: '2.0', id: request.id ?? null, error: { code: -32602, message: asyncQuestionError } });
+      return;
+    }
+    request = projectAsyncQuestionRequest(request, client, this.initializeResponse?.result?.capabilities?.experimental);
     const requestedThreadId = threadIdFrom(request);
+    // A resident backend can outlive its Gateway owner. An absent owner or an
+    // in-flight resume claim does not bind this client to the original task.
+    if (ASYNC_QUESTION_METHODS.has(request.method) &&
+        this.threadOwners.get(requestedThreadId) !== client &&
+        !this.sharedThreads.has(requestedThreadId, client)) {
+      client.send({ jsonrpc: '2.0', id: request.id, error: { code: -32023,
+        message: 'Async question operations require a task resumed by this Gateway client' } });
+      return;
+    }
+    if (TASK_COMPARISON_METHODS.has(request.method) &&
+        (!requestedThreadId || client.initialized !== true || this.threadOwners.get(requestedThreadId) !== client)) {
+      client.send({ jsonrpc: "2.0", id: request.id ?? null, error: {
+        code: -32023, message: "comparison requires ownerThreadId resumed by this Gateway client",
+      } });
+      return;
+    }
+    const presentationError = this.studioPresentation.validate(client, request,
+      this.initializeResponse?.result?.capabilities?.experimental,
+      requestedThreadId ? this.threadOwners.get(requestedThreadId) : null,
+      this.sharedThreads.has(requestedThreadId, client));
+    if (presentationError) {
+      client.send({ jsonrpc: "2.0", id: request.id ?? null, error: { code: -32602, message: presentationError } });
+      return;
+    }
     if (["computerUse/recover", "computerUse/revoke"].includes(request.method) &&
         (!requestedThreadId || this.threadOwners.get(requestedThreadId) !== client)) {
       client.send({ jsonrpc: "2.0", id: request.id ?? null, error: {
@@ -857,7 +1128,8 @@ export class WorkspaceAppServerBroker {
     // Catalogs describe the effective resident session, not public thread history.
     // An in-flight resume claim or detached resident is not completed ownership.
     if (request.method === "tools/catalog" && requestedThreadId &&
-        this.threadOwners.get(requestedThreadId) !== client) {
+        this.threadOwners.get(requestedThreadId) !== client &&
+        !this.sharedThreads.allowsRead(requestedThreadId, client, request.method)) {
       client.send({ jsonrpc: "2.0", id: request.id ?? null, error: {
         code: -32023, message: "tools/catalog requires a thread resumed by this Gateway client",
       } });
@@ -890,15 +1162,30 @@ export class WorkspaceAppServerBroker {
       ? this.threadClaims.get(requestedThreadId)
       : null;
     const currentOwner = requestedThreadId
-      ? (this.threadOwners.get(requestedThreadId) ?? currentClaim)
+      ? (this.threadOwners.get(requestedThreadId) ?? threadClaimOwner(currentClaim))
       : null;
+    const sharedResume = request.method === "thread/resume" && requestedThreadId &&
+      this.sharedThreads.canJoin(client, requestedThreadId, currentOwner) &&
+      (currentOwner !== client || !currentClaim);
+    if (sharedResume && currentOwner && currentOwner !== client) request[SHARED_RESUME] = true;
+    const sharedControl = this.sharedThreads.has(requestedThreadId, client) &&
+      ["turn/start", "turn/steer", "turn/interrupt", "thread/expert", "thread/lifetime/read", "thread/lifetime/set",
+        'asyncQuestion/answer', 'asyncQuestion/cancel'].includes(request.method);
+    const sharedAdmissionError = this.sharedThreads.admissionError(requestedThreadId, client, request.method);
+    if (sharedAdmissionError) {
+      client.send({ jsonrpc: "2.0", id: request.id ?? null,
+        error: { code: -32044, message: sharedAdmissionError,
+          ...(sharedAdmissionError.startsWith('Another device') ? { data: { gatewaySharedThreadsV1: { kind: 'turn_busy' } } } : {}) } });
+      return;
+    }
     if (
       request.method &&
       requestedThreadId &&
       currentOwner &&
       (currentOwner !== client ||
         (request.method === "thread/resume" && currentClaim)) &&
-      !THREAD_READONLY_METHODS.has(request.method) && !ephemeralFork
+      !THREAD_READONLY_METHODS.has(request.method) && !ephemeralFork && !sharedResume && !sharedControl &&
+      !this.sharedThreads.allowsRead(requestedThreadId, client, request.method)
     ) {
       if (request.id !== undefined) {
         client.send({
@@ -1021,11 +1308,13 @@ export class WorkspaceAppServerBroker {
       }
     }
     if (!request.method && request.id !== undefined) {
+      if (this.sharedInteractions.reply(client, request)) return;
       const owner = this.serverRequests.get(request.id) ?? this.repliedServerRequests.get(request.id);
       if (!owner)
         throw new Error("unsolicited app-server response from Gateway client");
       if (owner !== client)
         throw new Error("server request belongs to another client");
+      request = this.sharedInteractions.bindExclusiveReply(client, request);
       this.serverRequests.delete(request.id);
       // Only an interaction actually delivered to this owner may be replayed.
       // The app-server returns its existing receipt; closing the owner here would
@@ -1047,29 +1336,51 @@ export class WorkspaceAppServerBroker {
     for (const response of translated.client) client.send(response);
   }
 
+  completeInitialization(response, originClient) {
+    this.#lifecycleMetrics.initialize(!response.error);
+    finishClientInitialize(originClient, response);
+    this.initializeResponse = response.error ? null : cloneWithId(response, null);
+    this.initializePending = null;
+    const resident = response.result?.capabilities?.experimental?.residentThreads === true;
+    if (!response.error) {
+      this.shareability = resident ? "resident" : "legacy";
+      this.resolveShareability?.(this.shareability);
+      this.resolveShareability = null;
+    }
+    for (const waiter of this.initializeWaiters.splice(0)) {
+      this.settleRequest(waiter.budgetId);
+      if (!this.clients.has(waiter.client)) {
+        waiter.client.pendingInitializeChoices = null;
+        continue;
+      }
+      if (response.error || resident) {
+        finishClientInitialize(waiter.client, response);
+        waiter.client.send(this.studioPresentation.project(
+          this.projectWorkspaceReceiptCapability(cloneWithId(response, waiter.clientId), waiter.client), waiter.client));
+      } else {
+        waiter.client.pendingInitializeChoices = null;
+        waiter.client.send({ jsonrpc: "2.0", method: "server/transportError", params: {
+          serverId: this.serverId, message: "legacy app-server requires a dedicated connection",
+        } });
+        waiter.client.close();
+      }
+    }
+  }
+
   rewriteClientRequest(client, message) {
     if (!message?.method || message.id === undefined) return message;
     const upstreamId = this.nextRequestId++;
     if (!this.#pendingBudget.admit(upstreamId, client, message)) {
+      if (message.method === "initialize") client.pendingInitializeChoices = null;
       client.send({ jsonrpc: "2.0", id: message.id, error: { code: -32000,
         message: "Gateway request capacity reached; request was not forwarded" } });
       return null;
     }
+    const webSearchTicket = this.webSearchDiagnostics.claim(client, message, this.initializeResponse?.result?.capabilities?.experimental, this.threadOwners);
+    message = this.webSearchDiagnostics.rewrite(message, webSearchTicket);
     const refreshTicket = message.method === HISTORY_REFRESH_METHOD
       ? this.historyRefresh.claim(client, message.params) : null;
-    if (message.method === 'initialize') {
-      message = { ...message, params: { ...message.params, capabilities: {
-        ...message.params?.capabilities, experimental: {
-          ...message.params?.capabilities?.experimental,
-          projectAutomations: true,
-          toolPathPreviewV1: true,
-          threadStreamContextV1: true,
-          computerUseRecoveryV1: true,
-          computerUseSessionAuthorizationV1: true,
-          threadRunSummaryV1: true,
-        },
-      } } };
-    }
+    if (message.method === "initialize") message = { ...message, params: backendInitializeParams(message.params, this.nativeManagementOnly) };
     if (message.method === "browser/start") client.browserStarted = true;
     const claimedThreadId =
       message.method === "thread/resume" ? threadIdFrom(message) : null;
@@ -1077,26 +1388,80 @@ export class WorkspaceAppServerBroker {
       message.method === "terminal/attach"
         ? terminalSessionIdFrom(message)
         : null;
-    if (claimedThreadId && !this.threadOwners.has(claimedThreadId)) {
-      this.threadClaims.set(claimedThreadId, client);
-    }
     if (claimedTerminalId) this.terminalClaims.set(claimedTerminalId, client);
-    this.pending.set(upstreamId, {
+    const pending = {
+      upstreamId,
       client,
       clientId: message.id,
       method: message.method,
       params: message.params,
+      historyViewTicket: this.historyViewLeases.claim(client, message),
+      webSearchTicket,
       ...(message[MCP_OAUTH_RECEIVER] ? { oauthReceiver: message[MCP_OAUTH_RECEIVER] } : {}),
       ...(message[MCP_OAUTH_COMPLETION] ? { oauthCompletion: message[MCP_OAUTH_COMPLETION] } : {}),
       ...(refreshTicket ? { refreshTicket } : {}),
       ...(claimedThreadId ? { claimedThreadId } : {}),
       ...(claimedTerminalId ? { claimedTerminalId } : {}),
-    });
+    };
+    if (message[SHARED_RESUME]) {
+      pending.sharedResume = true;
+      this.sharedThreads.pendingResume(pending);
+    }
+    if (claimedThreadId && !pending.sharedResume && !this.threadOwners.has(claimedThreadId)) {
+      const claim = { [THREAD_RESUME_CLAIM]: true, client, pending };
+      pending.threadClaim = claim;
+      this.threadClaims.set(claimedThreadId, claim);
+    }
+    this.sharedThreads.start(pending);
+    this.pending.set(upstreamId, pending);
     if (message.method === "initialize") this.initializePending = upstreamId;
     return cloneWithId(message, upstreamId);
   }
 
   forwardClientRequest(client, message) {
+    const workError = this.continuousWork.admit(client, message,
+      this.initializeResponse?.result?.capabilities?.experimental, this.threadOwners, this.ephemeralThreadOwners);
+    if (workError) {
+      client?.send({ jsonrpc: "2.0", id: message.id ?? null, error: workError });
+      return;
+    }
+    if (message.method === "thread/goal/status/readMany" &&
+        (client?.initialized !== true || client.threadGoalStatusBatchV1 !== true ||
+         this.initializeResponse?.result?.capabilities?.experimental?.threadGoalStatusBatchV1 !== true)) {
+      client?.send({ jsonrpc: "2.0", id: message.id ?? null, error: {
+        code: -32601, message: "threadGoalStatusBatchV1 is unsupported or was not negotiated",
+      } });
+      return;
+    }
+    if (message.method === INTERACTION_STATUS_READ_METHOD) {
+      if (client?.initialized !== true || client[INTERACTION_STATUS_READ_CAPABILITY] !== true ||
+          this.initializeResponse?.result?.capabilities?.experimental?.[INTERACTION_STATUS_READ_CAPABILITY] !== true) {
+        client?.send({ jsonrpc: "2.0", id: message.id ?? null, error: {
+          code: -32601, message: `${INTERACTION_STATUS_READ_CAPABILITY} is unsupported or was not negotiated`,
+        } });
+        return;
+      }
+      const threadId = threadIdFrom(message);
+      if (!threadId || (this.threadOwners.get(threadId) !== client &&
+          !this.sharedInteractions.canRead(client, message.params))) {
+        client.send({ jsonrpc: "2.0", id: message.id ?? null, error: {
+          code: -32023, message: "interaction status read requires the current Gateway thread owner",
+        } });
+        return;
+      }
+    }
+    if (message.method === THREAD_PRESENCE_READ_METHOD &&
+        (client?.initialized !== true || client.threadPresenceReadV1 !== true ||
+          this.initializeResponse?.result?.capabilities?.experimental?.[THREAD_PRESENCE_READ_CAPABILITY] !== true)) {
+      client.send({ jsonrpc: "2.0", id: message.id ?? null, error: {
+        code: -32602, message: `${THREAD_PRESENCE_READ_CAPABILITY} negotiation is required`,
+      } });
+      return;
+    }
+    if (message.method === 'attachment/retention/deviceRevoked') {
+      client.send({ jsonrpc: '2.0', id: message.id ?? null, error: { code: -32001, message: 'Parent-only retention operation' } });
+      return;
+    }
     if (message.method === HISTORY_REFRESH_METHOD) {
       const validId = typeof message.id === "string" ||
         (Number.isSafeInteger(message.id) && message.id >= 0);
@@ -1112,13 +1477,37 @@ export class WorkspaceAppServerBroker {
       if (!upstream) return;
     } catch (error) {
       this.settleRequest(this.nextRequestId - 1);
-      if (!(error instanceof HistoryRefreshRequestError)) throw error;
+      if (!(error instanceof HistoryRefreshRequestError) && !(error instanceof MigrationViewOwnerError) && !(error instanceof SearchDiagnosticOwnerError)) throw error;
       client.send({ jsonrpc: "2.0", id: message.id,
         error: { code: error.code, message: error.message } });
       return;
     }
     const expectsResponse = Boolean(upstream.method) && upstream.id !== undefined;
     if (expectsResponse) this.#requestLoad.begin(client?.channel, upstream.id);
+    const allocation = ['attachment/retention/upload/start', 'attachment/retention/upload/save', 'attachment/retention/reserve'].includes(message.method) || isRetainedTurn(message);
+    if (allocation && this.registerRetentionRoute && this.retentionParentV1 && client?.initialized && this.clients.has(client) &&
+        this.initializeResponse?.result?.capabilities?.experimental?.stagedAttachmentRetentionReceiptsV1 === true) {
+      Promise.resolve().then(() => this.registerRetentionRoute(client.retentionAuthority?.())).then(() => {
+        // Registration may have raced revoke/disconnect/timeout. writeMessage
+        // repeats the full live-authority check at the exact stdio send point.
+        if (this.closed || !this.clients.has(client) || !this.pending.has(upstream.id)) throw new RetentionAuthorityError();
+        this.finishClientForward(client, message, upstream, expectsResponse);
+      }).catch(() => {
+        if (!this.pending.has(upstream.id)) return;
+        const pending = this.pending.get(upstream.id);
+        this.pending.delete(upstream.id); this.settleRequest(upstream.id);
+        this.sharedThreads.response(pending, { error: true });
+        this.sharedThreads.abandon(pending);
+        this.#resumeNotificationBuffer.discard(pending);
+        this.releaseThreadClaim(pending); this.releaseTerminalClaim(pending);
+        if (this.clients.has(client)) client.send({ jsonrpc: '2.0', id: message.id, error: { code: -32001, message: 'Durable retention route unavailable; original outcome unknown' } });
+      });
+      return;
+    }
+    this.finishClientForward(client, message, upstream, expectsResponse);
+  }
+
+  finishClientForward(client, message, upstream, expectsResponse) {
     try {
       this.writeMessage(upstream, client);
     } catch (error) {
@@ -1127,13 +1516,19 @@ export class WorkspaceAppServerBroker {
       const pending = this.pending.get(upstream.id);
       if (pending) {
         this.pending.delete(upstream.id);
-        if (this.initializePending === upstream.id) this.initializePending = null;
+        this.sharedThreads.response(pending, { error: true });
+        this.sharedThreads.abandon(pending);
+        this.#resumeNotificationBuffer.discard(pending);
+        if (this.initializePending === upstream.id) {
+          this.initializePending = null;
+          client.pendingInitializeChoices = null;
+        }
         this.releaseThreadClaim(pending);
         this.releaseTerminalClaim(pending);
         if (pending.method === "browser/start") client.browserStarted = false;
         if (pending.refreshTicket) this.historyRefresh.abortWrite(pending.refreshTicket);
       }
-      if (error instanceof RetentionAuthorityError) {
+      if (error instanceof RetentionAuthorityError || error instanceof IntegrationAdmissionError) {
         this.pending.delete(upstream.id);
         client.send({ jsonrpc: "2.0", id: message.id ?? null, error: { code: error.code, message: error.message } });
         return;
@@ -1184,36 +1579,57 @@ export class WorkspaceAppServerBroker {
   }
 
   expireRequest(id) {
+    const waiterIndex = this.initializeWaiters.findIndex(waiter => waiter.budgetId === id);
+    if (waiterIndex !== -1) {
+      const [waiter] = this.initializeWaiters.splice(waiterIndex, 1);
+      // This correlation was never forwarded. Release only its local budget;
+      // the shared upstream request keeps its late-response tombstone.
+      this.settleRequest(id);
+      waiter.client.pendingInitializeChoices = null;
+      if (this.clients.has(waiter.client)) waiter.client.send({ jsonrpc: "2.0", id: waiter.clientId,
+        error: { code: -32000, message: "Gateway request expired; upstream outcome is unknown. Check its receipt before retrying.", data: GATEWAY_EXPIRED_REQUEST_DATA } });
+      return;
+    }
     const pending = this.pending.get(id);
     if (!pending) return;
     const client = pending.client;
+    const viewCleanup = this.historyViewLeases.abandon(pending.historyViewTicket);
+    if (viewCleanup) this.sendInternalRequest(viewCleanup.method, viewCleanup.params);
+    this.#resumeNotificationBuffer.discard(pending);
+    this.sharedThreads.abandon(pending);
+    if (pending.method === "initialize" && client) client.pendingInitializeChoices = null;
     if (this.clients.has(client)) client.send({ jsonrpc: "2.0", id: pending.clientId,
       error: { code: -32000, message: "Gateway request expired; upstream outcome is unknown. Check its receipt before retrying.", data: GATEWAY_EXPIRED_REQUEST_DATA } });
     this.releaseThreadClaim(pending);
     this.releaseTerminalClaim(pending);
     if (pending.method === "turn/start") pending.attachmentPaths = attachmentPathsFromTurn({ params: pending.params });
-    pending.params = compactRequestParams(pending.params);
+    pending.params = compactRequestParams(pending.params, pending.method);
     this.#pendingBudget.compact(id, Buffer.byteLength(JSON.stringify({ params: pending.params, attachmentPaths: pending.attachmentPaths })));
     if (pending.refreshTicket && client) this.historyRefresh.detach(client);
     delete pending.oauthReceiver;
     delete pending.oauthCompletion;
-    const keepTurnOwner = this.clients.has(client) && ["turn/start", "computerUse/recover"].includes(pending.method);
-    pending.client = keepTurnOwner ? client : null;
+    const keepRequestOwner = this.clients.has(client) && ["turn/start", "computerUse/recover", 'asyncQuestion/answer',
+      "thread/delete", "thread/dispose", THREAD_RUNTIME_HANDOFF_RELEASE].includes(pending.method);
+    pending.client = keepRequestOwner ? client : null;
     pending.clientId = null;
     pending.expired = true;
+    this.pruneOfficeTaskOwnerHandoff();
     if (pending.method === "thread/start" && pending.params.clientRequestId &&
         this.initializeResponse?.result?.capabilities?.experimental?.threadCreationReceiptsV1 === true) pending.preserveCreationOnResponse = true;
     else if (LATE_CREATION_METHODS.has(pending.method)) pending.cleanupOnResponse = true;
-    if (!keepTurnOwner && ["turn/start", "computerUse/recover"].includes(pending.method)) {
-      pending.interruptOnResponse = true;
-      const threadId = threadIdFrom({ params: pending.params });
-      if (threadId) this.beginThreadDrain(threadId);
+    if (!keepRequestOwner && !this.sessionAttachments.enabled()) {
+      if (pending.method === 'asyncQuestion/answer') pending.interruptOnResponse = true;
+      if (["turn/start", "computerUse/recover"].includes(pending.method)) {
+        pending.interruptOnResponse = true;
+        const threadId = threadIdFrom({ method: pending.method, params: pending.params });
+        if (threadId) this.beginThreadDrain(threadId);
+      }
     }
     if (pending.method === "browser/start" && client) client.browserStarted = false;
     // A late ordinary reply must not bind resources/threads to a null owner.
-    if (!keepTurnOwner && !pending.cleanupOnResponse && !pending.preserveCreationOnResponse &&
+    if (!keepRequestOwner && !pending.cleanupOnResponse && !pending.preserveCreationOnResponse &&
         !pending.interruptOnResponse && !pending.refreshTicket &&
-        !["initialize", "terminal/close"].includes(pending.method)) {
+        !["initialize", "terminal/close", "thread/delete", "thread/dispose", THREAD_RUNTIME_HANDOFF_RELEASE].includes(pending.method)) {
       this.pending.delete(id);
       this.#pendingBudget.compact(id);
       this.detachedRequestIds.add(id);
@@ -1228,8 +1644,12 @@ export class WorkspaceAppServerBroker {
   }
 
   sendInternalRequest(method, params, pendingFields = {}) {
+    if (method === "initialize") params = backendInitializeParams(params, this.nativeManagementOnly);
     const id = this.nextRequestId++;
-    const message = { jsonrpc: "2.0", id, method, params };
+    let message = { jsonrpc: "2.0", id, method, params };
+    if (Object.hasOwn(pendingFields, 'migrationSourceProof')) {
+      message = migrationSourcePrivateFrame(message, pendingFields.migrationSourceProof);
+    }
     const pending = {
       ...pendingFields,
       client: null,
@@ -1241,6 +1661,7 @@ export class WorkspaceAppServerBroker {
     const finish = error => {
       if (this.pending.get(id) !== pending) return false;
       this.pending.delete(id);
+      if (method === 'initialize' && this.initializePending === id) this.completeInitialization({ error }, null);
       this.settleRequest(id);
       clearTimeout(pending.internalRequestTimer);
       pending.internalRequestTimer = null;
@@ -1263,9 +1684,64 @@ export class WorkspaceAppServerBroker {
     return id;
   }
 
+  sendMigrationSourceRequest(method, params, proof) {
+    if (method === MIGRATION_SOURCE_INTERNAL_PREFIX + 'target/private/prepare-status' &&
+        this.initializeResponse?.result?.capabilities?.experimental?.[MIGRATION_SOURCE_PRIVATE_CREDENTIAL_PREPARATIONS_CAPABILITY] !== true) {
+      return Promise.reject(new MigrationSourceBridgeError('private_credentials_update_required'));
+    }
+    if (method === MIGRATION_SOURCE_INTERNAL_PREFIX + 'source/private/observe' &&
+        this.initializeResponse?.result?.capabilities?.experimental?.[MIGRATION_SOURCE_PRIVATE_CREDENTIAL_SOURCE_OBSERVATION_CAPABILITY] !== true) {
+      return Promise.reject(new MigrationSourceBridgeError('private_credentials_update_required'));
+    }
+    if (method === MIGRATION_SOURCE_INTERNAL_PREFIX + 'target/private/prepare' && Object.hasOwn(params ?? {}, 'additionalOffers') &&
+        this.initializeResponse?.result?.capabilities?.experimental?.[MIGRATION_SOURCE_PRIVATE_CREDENTIAL_BUNDLES_CAPABILITY] !== true) {
+      return Promise.reject(new MigrationSourceBridgeError('private_credentials_update_required'));
+    }
+    if (['source/private/', 'target/private/'].some(prefix => method.startsWith(MIGRATION_SOURCE_INTERNAL_PREFIX + prefix)) &&
+        this.initializeResponse?.result?.capabilities?.experimental?.[MIGRATION_SOURCE_PRIVATE_CREDENTIALS_CAPABILITY] !== true) {
+      return Promise.reject(new MigrationSourceBridgeError('private_credentials_update_required'));
+    }
+    if ((method === MIGRATION_SOURCE_INTERNAL_PREFIX + 'target/received/read' ||
+        method.startsWith(MIGRATION_SOURCE_INTERNAL_PREFIX + 'target/adoption/')) &&
+        this.initializeResponse?.result?.capabilities?.experimental?.[MIGRATION_SOURCE_ADOPTION_CAPABILITY] !== true) {
+      throw new MigrationSourceBridgeError('source_transfer_unsupported_native');
+    }
+    if (method.startsWith(MIGRATION_SOURCE_INTERNAL_PREFIX + 'target/attempt/') &&
+        this.initializeResponse?.result?.capabilities?.experimental?.[MIGRATION_SOURCE_ATTEMPT_CAPABILITY] !== true) {
+      return Promise.reject(new MigrationSourceBridgeError('source_transfer_authority_unavailable'));
+    }
+    if (this.closed || !(this.retentionParentV1 || this.migrationSourceParentV1) ||
+        this.initializeResponse?.result?.capabilities?.experimental?.[MIGRATION_SOURCE_INTERNAL_CAPABILITY] !== true) {
+      return Promise.reject(new MigrationSourceBridgeError('source_transfer_authority_unavailable'));
+    }
+    if (['peer/recover-target', 'target/summary'].some(suffix => method === MIGRATION_SOURCE_INTERNAL_PREFIX + suffix) &&
+        this.initializeResponse?.result?.capabilities?.experimental?.[MIGRATION_SOURCE_TARGET_RECOVERY_CAPABILITY] !== true) {
+      return Promise.reject(new MigrationSourceBridgeError('source_transfer_authority_unavailable'));
+    }
+    // Validate before allocating a pending request. This explicit lane is not
+    // reachable through receive(), and never accepts client authority fields.
+    migrationSourcePrivateFrame({ method, params }, proof);
+    return new Promise(resolve => this.sendInternalRequest(method, params, {
+      migrationSourceProof: proof, onResponse: resolve,
+    }));
+  }
+
+  async revokeRetainedDevice(params) {
+    if (!this.retentionParentV1 || !this.retentionRevocationTrusted || this.closed) throw new RetentionAuthorityError();
+    if (!this.initializeResponse) {
+      if (this.initializePending !== null) throw new Error('Initialization pending');
+      const initialized = await new Promise(resolve => {
+        const id = this.sendInternalRequest('initialize', { protocolVersion: PROTOCOL_VERSION, clientInfo: { name: 'kcoder-retention-cleanup', version: '1' } }, { onResponse: resolve });
+        if (this.pending.has(id)) this.initializePending = id;
+      });
+      if (initialized.error) throw new RetentionAuthorityError();
+    }
+    return new Promise(resolve => this.sendInternalRequest('attachment/retention/deviceRevoked', params, { onResponse: resolve }));
+  }
+
   releaseThreadClaim(pending) {
     if (!pending.claimedThreadId) return;
-    if (this.threadClaims.get(pending.claimedThreadId) === pending.client) {
+    if (pending.threadClaim && this.threadClaims.get(pending.claimedThreadId) === pending.threadClaim) {
       this.threadClaims.delete(pending.claimedThreadId);
     }
   }
@@ -1312,25 +1788,59 @@ export class WorkspaceAppServerBroker {
     } catch { /* Missing/stale identity is not a capability. */ }
     // The producer descriptor is private until the full lifecycle capability is enabled.
     const { attachmentUploadAdmission: _privateUploadAdmission, ...publicResult } = message.result;
+    const experimental = { ...publicSharedCapabilities(message.result.capabilities.experimental), workspaceOperationReceiptsV2: ready,
+      stagedAttachmentRetentionReceiptsV1: false };
+    delete experimental[SHARED_THREADS_CAPABILITY];
+    if (this.shareability === "resident" && client?.[SHARED_THREADS_CAPABILITY] === true) experimental[SHARED_THREADS_CAPABILITY] = true;
+    if (this.targetTransport !== 'local') {
+      for (const capability of ['computerUseTurnV1', 'computerUseStatusV1', 'computerUseRecoveryV1', 'computerUseSessionAuthorizationV1']) {
+        if (Object.hasOwn(experimental, capability)) experimental[capability] = false;
+      }
+    }
+    if (Object.hasOwn(message.result.capabilities.experimental ?? {}, "acpInboundV1")) {
+      experimental.acpInboundV1 = client?.acpInboundV1 === true && message.result.capabilities.experimental.acpInboundV1 === true;
+    }
+    if (Object.hasOwn(message.result.capabilities.experimental ?? {}, "migrationHistoryWorkerStateV1")) {
+      experimental.migrationHistoryWorkerStateV1 = client?.migrationHistoryWorkerStateV1 === true &&
+        message.result.capabilities.experimental.migrationHistoryWorkerStateV1 === true;
+    }
+    if (Object.hasOwn(message.result.capabilities.experimental ?? {}, THREAD_PRESENCE_READ_CAPABILITY)) {
+      experimental[THREAD_PRESENCE_READ_CAPABILITY] = client?.threadPresenceReadV1 === true &&
+        message.result.capabilities.experimental[THREAD_PRESENCE_READ_CAPABILITY] === true;
+    }
+    if (Object.hasOwn(experimental, THREAD_RUNTIME_HANDOFF_CAPABILITY)) {
+      experimental[THREAD_RUNTIME_HANDOFF_CAPABILITY] = client?.[THREAD_RUNTIME_HANDOFF_CAPABILITY] === true
+        && experimental[THREAD_RUNTIME_HANDOFF_CAPABILITY] === true;
+    }
+    if (Object.hasOwn(message.result.capabilities.experimental ?? {}, INTERACTION_STATUS_READ_CAPABILITY)) {
+      experimental[INTERACTION_STATUS_READ_CAPABILITY] = client?.[INTERACTION_STATUS_READ_CAPABILITY] === true &&
+        message.result.capabilities.experimental[INTERACTION_STATUS_READ_CAPABILITY] === true;
+    }
+    if (Object.hasOwn(message.result.capabilities.experimental ?? {}, "threadTranscriptObservationV1")) {
+      experimental.threadTranscriptObservationV1 = client?.threadTranscriptObservationV1 === true &&
+        message.result.capabilities.experimental.threadTranscriptObservationV1 === true;
+    }
     return { ...message, result: { ...publicResult, capabilities: { ...message.result.capabilities,
-      experimental: { ...message.result.capabilities.experimental, workspaceOperationReceiptsV2: ready,
-        stagedAttachmentRetentionReceiptsV1: false },
+      experimental: this.webSearchDiagnostics.capabilities(projectIntegrationCapabilities(
+        this.continuousWork.projectCapabilities(projectTaskExpertCapabilities(projectAsyncQuestionCapabilities(experimental, client), client), client), client), client),
     } } };
   }
 
   writeMessage(message, client) {
-    if (RETENTION_METHODS.has(message.method) && this.initializeResponse?.result?.capabilities?.experimental?.stagedAttachmentRetentionReceiptsV1 !== true)
+    assertThreadRuntimeHandoffAdmission(message,client,this.initializeResponse?.result?.capabilities?.experimental,this.clients.has(client));
+    assertIntegrationAdmission(message, client, this.initializeResponse?.result?.capabilities?.experimental, this.clients.has(client));
+    if ((RETENTION_METHODS.has(message.method) || isRetainedTurn(message)) && this.initializeResponse?.result?.capabilities?.experimental?.stagedAttachmentRetentionReceiptsV1 !== true)
       throw new RetentionAuthorityError();
     if (WORKSPACE_RECEIPT_METHODS_V2.has(message.method) && this.initializeResponse?.result?.capabilities?.experimental?.workspaceOperationReceiptsV2 !== true)
       throw new RetentionAuthorityError();
-    if (RETENTION_METHODS.has(message.method) || WORKSPACE_RECEIPT_METHODS_V2.has(message.method)) {
+    if (RETENTION_METHODS.has(message.method) || WORKSPACE_RECEIPT_METHODS_V2.has(message.method) || isRetainedTurn(message)) {
       if (!this.retentionParentV1 || !client?.initialized || !this.clients.has(client)) throw new RetentionAuthorityError();
       // Revalidate at the exact synchronous stdio send point, never at cached initialize.
       const authority = client.retentionAuthority?.();
       message = WORKSPACE_RECEIPT_METHODS_V2.has(message.method)
         ? injectWorkspaceReceiptAuthority(message, authority)
-        : injectRetentionAuthority(message, authority);
-      if (WORKSPACE_RECEIPT_METHODS_V2.has(message.method) || RETENTION_METHODS.has(message.method)) {
+        : isRetainedTurn(message) ? injectRetainedTurnAuthority(message, authority) : injectRetentionAuthority(message, authority);
+      if (WORKSPACE_RECEIPT_METHODS_V2.has(message.method) || RETENTION_METHODS.has(message.method) || isRetainedTurn(message)) {
         const pending = this.pending.get(message.id);
         if (!pending || pending.client !== client) throw new RetentionAuthorityError();
         if (WORKSPACE_RECEIPT_METHODS_V2.has(message.method)) pending.workspaceReceiptAuthority = JSON.stringify(message[PRIVATE_RETENTION_FIELD]);
@@ -1416,12 +1926,20 @@ export class WorkspaceAppServerBroker {
 
   processStdoutLine(line) {
     if (!line.trim()) return;
-    const message = JSON.parse(line);
+    let message;
+    try { message = JSON.parse(line); }
+    catch { throw new Error('Invalid app-server JSON-RPC frame'); }
     if (message.id === null && [-32700, -32600].includes(message.error?.code)) {
       // All forwarded frames were already parsed and assigned IDs here. An
       // unattributed rejection indicates a corrupted upstream protocol stream;
       // never leave clients waiting or replay potentially mutating requests.
       this.fail(new Error("KCoder app-server rejected a protocol frame; reconnect before retrying"));
+      return;
+    }
+    if (isNativeRemoteHostMethod(message?.method)) {
+      if (!this.#nativeRemoteHostBackchannel?.receiveBackend(message)) {
+        this.safeWriteMessage({ jsonrpc: "2.0", id: message.id ?? null, error: { code: -32601, message: "Native Remote host owner unavailable" } });
+      }
       return;
     }
     const translated = this.adapter.fromUpstream(message);
@@ -1431,12 +1949,77 @@ export class WorkspaceAppServerBroker {
   }
 
   routeServerMessage(message) {
+    this.pruneOfficeTaskOwnerHandoff();
+    // Question snapshots are notifications, never transport waiters. Request
+    // envelopes could overwrite another input's owner or reject its waiter.
+    if (message.method === 'asyncQuestion/changed' && message.id !== undefined) return;
+    if (hasConflictingTurnIdentity(message)) return;
+    // A task/turn pair is local to its app-server lifetime. Check explicit
+    // producer identity before changing client turns, closing input or buffering replay.
+    const sessionId = this.initializeResponse?.result?.sessionId;
+    if (message.id === undefined && ['turn/started', 'turn/completed', 'turn/failed', 'turn/interrupted', 'asyncQuestion/changed'].includes(message.method) &&
+        sessionId && message.params?.serverId !== undefined &&
+        message.params.serverId !== `server-${sessionId}`) return;
+    if (message.id === undefined && ['turn/completed', 'turn/failed', 'turn/interrupted'].includes(message.method) &&
+        !threadIdFrom(message)) {
+      const turnId = turnIdFrom(message);
+      if (!turnId) return;
+      // Compatibility turn IDs are task-local. Resolve one original task before
+      // buffering, closing input, fencing answer receipts or notifying clients.
+      const nestedThreadId = message.params?.turn?.threadId;
+      const threads = new Set();
+      if (typeof nestedThreadId === 'string' && nestedThreadId) threads.add(nestedThreadId);
+      else {
+        for (const threadId of this.sharedInteractions.threadsForTurn(turnId)) threads.add(threadId);
+        for (const turns of [this.activeTurns, this.threadDrains]) {
+          for (const [threadId, turn] of turns) if (turn.turnId === turnId) threads.add(threadId);
+        }
+        for (const pending of this.pending.values()) {
+          if (['turn/start', 'computerUse/recover', 'asyncQuestion/answer'].includes(pending.method) && pending.params?.threadId)
+            threads.add(pending.params.threadId);
+        }
+        // A terminal may arrive before its admission or first question. Keep the
+        // single-task legacy path without guessing across multiple task bindings.
+        if (!threads.size) {
+          for (const bindings of [this.threadOwners, this.threadClaims])
+            for (const threadId of bindings.keys()) threads.add(threadId);
+        }
+      }
+      if (threads.size !== 1) return;
+      message = { ...message, params: { ...message.params, threadId: threads.values().next().value } };
+    }
+    if (message.method && message.id === undefined) {
+      const threadId = threadIdFrom(message);
+      if (!this.#resumePreappliedNotifications.has(message)) this.sharedThreads.capture(threadId, message);
+      const claim = threadId ? this.threadClaims.get(threadId) : null;
+      const pending = claim?.[THREAD_RESUME_CLAIM] === true ? claim.pending : null;
+      if (
+        pending &&
+        pending.method === "thread/resume" &&
+        pending.claimedThreadId === threadId &&
+        pending.threadClaim === claim &&
+        this.pending.get(pending.upstreamId) === pending &&
+        !pending.expired &&
+        pending.clientId !== null &&
+        this.clients.has(pending.client) &&
+        !this.threadOwners.has(threadId) &&
+        this.ownerFor(message) === null
+      ) {
+        // Apply live interaction and question fences before reserving recovery capacity.
+        if (!this.sharedInteractions.acceptsResolution(message)) return;
+        if (!allowsAsyncQuestionNotification(message, pending.client,
+          this.initializeResponse?.result?.capabilities?.experimental)) return;
+        this.#applyResumeHeldNotificationLifecycle(message);
+        this.#resumeNotificationBuffer.capture(pending, message);
+        return;
+      }
+    }
     if (!message.method && message.id !== undefined) this.settleRequest(message.id);
     if (this.idleShutdown.response(message)) return;
     if (
       ["turn/completed", "turn/failed", "turn/interrupted"].includes(
         message.method,
-      )
+      ) && !this.#resumePreappliedNotifications.has(message)
     ) {
       this.clearTerminalTurn(message);
     }
@@ -1469,12 +2052,18 @@ export class WorkspaceAppServerBroker {
       this.#lifecycleMetrics.resumeFinished(pending.resumeStartedAt, !message.error);
       if (pending.internalRequest) this.onIdleStateChange?.(this);
       let response = cloneWithId(message, pending.clientId);
-      if (WORKSPACE_RECEIPT_METHODS_V2.has(pending.method) || RETENTION_METHODS.has(pending.method)) {
+      response = projectThreadRuntimeHandoffResponse(response,pending);
+      response = projectAsyncQuestionResponse(response, pending);
+      const terminalTurnReceipt = pending.method === 'turn/start' && !response.error &&
+        ['completed', 'failed', 'interrupted'].includes(response.result?.turn?.status);
+      let resumeHandoffMessages = [];
+      let resumeFreshOwnerCommitted = false;
+      if (WORKSPACE_RECEIPT_METHODS_V2.has(pending.method) || RETENTION_METHODS.has(pending.method) || isRetainedTurn({ method: pending.method, params: pending.params })) {
         const workspaceReceipt = WORKSPACE_RECEIPT_METHODS_V2.has(pending.method);
         let currentAuthority = null;
         try {
           if (this.clients.has(pending.client) && pending.client.initialized) {
-            const inject = workspaceReceipt ? injectWorkspaceReceiptAuthority : injectRetentionAuthority;
+            const inject = workspaceReceipt ? injectWorkspaceReceiptAuthority : isRetainedTurn({ method: pending.method, params: pending.params }) ? injectRetainedTurnAuthority : injectRetentionAuthority;
             const current = inject({ jsonrpc: "2.0", id: pending.clientId,
               method: pending.method, params: pending.params }, pending.client.retentionAuthority?.());
             currentAuthority = JSON.stringify(current[PRIVATE_RETENTION_FIELD]);
@@ -1488,46 +2077,29 @@ export class WorkspaceAppServerBroker {
               : "Retention authority changed; original outcome remains unknown" } };
         }
       }
+      this.sharedThreads.response(pending, response);
+      response = this.webSearchDiagnostics.response(response, pending.webSearchTicket);
       pending.onResponse?.(response);
+      try {
+        const cleanup = this.historyViewLeases.response(pending.historyViewTicket, response,
+          !pending.expired && this.clients.has(pending.client));
+        if (cleanup) this.sendInternalRequest(cleanup.method, cleanup.params);
+        if (this.historyViewLeases.abandoned(pending.historyViewTicket) && response.result?.lease?.state === 'active')
+          response = { jsonrpc: '2.0', id: pending.clientId, error: { code: -32020, message: 'Expired history view cleanup is unconfirmed; explicitly open a new view' } };
+      } catch (error) {
+        if (!(error instanceof MigrationViewOwnerError)) throw error;
+        response = { jsonrpc: '2.0', id: pending.clientId, error: { code: error.code, message: error.message } };
+      }
       if (pending.refreshTicket) {
         this.sendRefreshCleanup(this.historyRefresh.complete(pending.refreshTicket, response));
-        if (!pending.expired && this.clients.has(pending.client)) pending.client.send(projectThreadRunSummary(response, pending.client.threadRunSummaryV1 === true));
+        if (!pending.expired && this.clients.has(pending.client)) pending.client.send(projectClientResponse(response, pending));
         return;
       }
-      if (pending.method === "initialize") {
-        this.#lifecycleMetrics.initialize(!response.error);
-        if (pending.client) pending.client.initialized = !response.error;
-        this.initializeResponse = cloneWithId(response, null);
-        this.initializePending = null;
-        const resident =
-          response.result?.capabilities?.experimental?.residentThreads === true;
-        this.shareability = resident ? "resident" : "legacy";
-        this.resolveShareability?.(this.shareability);
-        this.resolveShareability = null;
-        const waiters = this.initializeWaiters.splice(0);
-        for (const waiter of waiters) {
-          if (!this.clients.has(waiter.client)) continue;
-          if (resident) {
-            waiter.client.initialized = !response.error;
-            waiter.client.send(
-              this.projectWorkspaceReceiptCapability(cloneWithId(this.initializeResponse, waiter.clientId), waiter.client),
-            );
-          } else {
-            waiter.client.send({
-              jsonrpc: "2.0",
-              method: "server/transportError",
-              params: {
-                serverId: this.serverId,
-                message: "legacy app-server requires a dedicated connection",
-              },
-            });
-            waiter.client.close();
-          }
-        }
-      }
-      this.releaseThreadClaim(pending);
-      if (["turn/start", "computerUse/recover"].includes(pending.method) && pending.interruptOnResponse && response.error) {
-        const rejectedThread = threadIdFrom({ params: pending.params });
+      if (pending.method === "initialize") this.completeInitialization(response, pending.client);
+      if (pending.method !== "thread/resume") this.releaseThreadClaim(pending);
+      if (["turn/start", "computerUse/recover"].includes(pending.method) && pending.interruptOnResponse &&
+          (response.error || terminalTurnReceipt)) {
+        const rejectedThread = threadIdFrom({ method: pending.method, params: pending.params });
         const drain = rejectedThread ? this.threadDrains.get(rejectedThread) : null;
         if (drain && !drain.turnId && !this.activeTurns.has(rejectedThread)) this.finishThreadDrain(rejectedThread);
       }
@@ -1550,50 +2122,200 @@ export class WorkspaceAppServerBroker {
       if (!response.error && ["mcp/callback", "mcp/cancel"].includes(pending.method)) {
         this.mcpFlowOwners.delete(pending.params?.flowId);
       }
-      const threadId =
-        threadIdFrom(response.result) ??
-        threadIdFrom({ params: pending.params });
+      if (pending.method === "thread/resume" && !pending.sharedResume) {
+        const requestedThreadId = pending.claimedThreadId;
+        const resumedThreadId = threadIdFrom(response.result);
+        const currentOwner = requestedThreadId ? this.threadOwners.get(requestedThreadId) : null;
+        const claim = pending.threadClaim;
+        const claimIsCurrent = Boolean(
+          claim &&
+          claim[THREAD_RESUME_CLAIM] === true &&
+          claim.pending === pending &&
+          claim.client === pending.client &&
+          this.threadClaims.get(requestedThreadId) === claim
+        );
+        const alreadyOwnedByClient = !claim && currentOwner === pending.client;
+        if (response.error || pending.expired || !this.clients.has(pending.client)) {
+          this.#resumeNotificationBuffer.discard(pending);
+          this.releaseThreadClaim(pending);
+        } else if (
+          !requestedThreadId ||
+          resumedThreadId !== requestedThreadId ||
+          (!claimIsCurrent && !alreadyOwnedByClient) ||
+          (currentOwner && currentOwner !== pending.client)
+        ) {
+          this.#resumeNotificationBuffer.discard(pending);
+          this.releaseThreadClaim(pending);
+          response = { jsonrpc: "2.0", id: pending.clientId, error: {
+            code: -32023,
+            message: "thread resume ownership changed before its response; reconcile the current owner before retrying",
+          } };
+        } else {
+          const handoff = this.#resumeNotificationBuffer.take(pending);
+          this.releaseThreadClaim(pending);
+          if (handoff.overflowed) {
+            response = makeResumeNotificationHandoffIncompleteResponse(pending.clientId);
+          } else {
+            if (!currentOwner) {
+              this.threadOwners.set(requestedThreadId, pending.client);
+              resumeFreshOwnerCommitted = true;
+            }
+            resumeHandoffMessages = handoff.messages;
+          }
+        }
+      }
+      let sharedHandoffMessages = [];
+      if (pending.sharedResume) {
+        const handoff = this.sharedThreads.finishResume(pending);
+        if (!response.error && !pending.expired && this.clients.has(pending.client)) {
+          if (threadIdFrom(response.result) !== pending.claimedThreadId || handoff.overflowed) {
+            response = makeResumeNotificationHandoffIncompleteResponse(pending.clientId);
+          } else {
+            if (!this.threadOwners.has(pending.claimedThreadId)) {
+              this.threadOwners.set(pending.claimedThreadId, pending.client);
+              resumeFreshOwnerCommitted = true;
+            }
+            this.sharedThreads.join(pending.claimedThreadId, pending.client);
+            sharedHandoffMessages = handoff.messages;
+          }
+        }
+      }
+      let officeTask = acceptedOfficeTask(pending, response);
+      if (officeTask && this.clients.has(pending.client)) {
+        const owner = this.threadOwners.get(officeTask.threadId);
+        if (owner && owner !== pending.client) {
+          officeTask = null;
+          response = { jsonrpc: '2.0', id: pending.clientId, error: { code: -32023,
+            message: 'Office task already has another connected owner; reconcile the original operation' } };
+        } else {
+          this.threadOwners.set(officeTask.threadId, pending.client);
+          if (['queued', 'running', 'waiting_for_user'].includes(officeTask.state))
+            this.activeTurns.set(officeTask.threadId, { owner: pending.client, turnId: officeTask.turnId });
+        }
+      } else officeTask = null;
+      if (!response.error) this.studioPresentation.response(pending.method, response.result);
+      // Async-question receipts already certify the captured request's task.
+      // Result metadata must never be interpreted as another routing envelope.
+      const threadId = ASYNC_QUESTION_METHODS.has(pending.method)
+        ? pending.params?.threadId
+        : threadIdFrom(response.result) ??
+          threadIdFrom({ method: pending.method, params: pending.params });
       if (
         !response.error &&
         threadId &&
-        (["thread/start", "thread/resume"].includes(pending.method) ||
+        (pending.method === "thread/start" ||
           (pending.method === "thread/fork" && response.result?.ephemeral === true))
       ) {
+        const previousOwner=this.threadOwners.get(threadId);
+        if(previousOwner&&previousOwner!==pending.client&&this.initializeResponse?.result?.capabilities?.experimental?.mcpAppsV1===true)
+          this.sendInternalRequest('mcp/apps/revoke',{threadId});
         this.threadOwners.set(threadId, pending.client);
         if (pending.method === "thread/fork" && response.result?.ephemeral === true) {
+          this.continuousWork.noteEphemeralOwner(threadId);
           this.ephemeralThreadOwners.set(threadId, pending.client);
         }
       }
       if (
         !response.error &&
         threadId &&
-        ["thread/delete", "thread/dispose"].includes(pending.method) &&
+        (["thread/delete", "thread/dispose"].includes(pending.method)
+          || (pending.method === THREAD_RUNTIME_HANDOFF_RELEASE && confirmsReleasedThreadRuntime(pending.params,response.result))) &&
         this.threadOwners.get(threadId) === pending.client
       ) {
         this.threadOwners.delete(threadId);
+        this.studioPresentation.deleteThread(threadId);
+        const retirement = this.ephemeralThreadOwners.has(threadId) ? this.continuousWork.retireEphemeral(threadId) : null;
         this.ephemeralThreadOwners.delete(threadId);
+        this.continuousWork.settleEphemeral(threadId, retirement, response,
+          this.initializeResponse?.result?.capabilities?.experimental, this.ephemeralThreadOwners);
       }
-      if (!response.error && threadId && ["turn/start", "computerUse/recover"].includes(pending.method)) {
+      // A retry can return a saved terminal turn without admitting execution.
+      // Preserve any newer async answer's owner and never interrupt the old turn.
+      if (!response.error && !terminalTurnReceipt && threadId && ["turn/start", "computerUse/recover"].includes(pending.method)) {
         const turnId = turnIdFrom(response.result);
         if (turnId && pending.interruptOnResponse) {
           this.beginThreadDrain(threadId, turnId);
           this.sendInternalRequest("turn/interrupt", { threadId, turnId });
         } else if (turnId && pending.client && !(pending.method === "computerUse/recover" && response.result?.status === "completed")) {
-          this.activeTurns.set(threadId, { owner: pending.client, turnId });
+          this.activeTurns.set(threadId, { owner: pending.client, turnId,
+            ...(pending.params?.clientPresentation ? { clientPresentation: structuredClone(pending.params.clientPresentation) } : {}) });
+        }
+      }
+      // startedTurn describes only a new admission by this RPC, including a
+      // retry that recovers a durably saved but previously unclaimed answer.
+      if (!response.error && threadId && pending.method === 'asyncQuestion/answer' && !pending.asyncQuestionBindingReleased &&
+          response.result?.accepted === true && response.result?.startedTurn?.status === 'running') {
+        const turnId = turnIdFrom({ turn: response.result.startedTurn });
+        const alreadyTerminal = pending.asyncQuestionTerminalUnknown || pending.asyncQuestionTerminalTurns?.has(turnId);
+        const active = this.activeTurns.get(threadId);
+        // A late receipt cannot replace a different observed turn. Still cancel
+        // the disconnected client's exact admission without draining its peer.
+        const canTrackTurn = !active || active.turnId === turnId;
+        if (turnId && !alreadyTerminal && pending.interruptOnResponse) {
+          if (canTrackTurn) this.beginThreadDrain(threadId, turnId);
+          this.sendInternalRequest('turn/interrupt', { threadId, turnId });
+        } else if (turnId && !alreadyTerminal && canTrackTurn && this.clients.has(pending.client)) {
+          this.threadOwners.set(threadId, pending.client);
+          this.activeTurns.set(threadId, { turnId, owner: pending.client });
+        }
+      }
+      if (!response.error && threadId && pending.client && !pending.expired &&
+          this.clients.has(pending.client) && ["thread/start", "thread/resume"].includes(pending.method)) {
+        this.sharedThreads.join(threadId, pending.client);
+        if (pending.method === 'thread/start' || pending.client.sessionLifetimeV1 !== true)
+          this.sessionAttachments.attach(pending.client, threadId);
+      }
+      if (!response.error && (["thread/delete", "thread/dispose"].includes(pending.method) ||
+          (pending.method === THREAD_RUNTIME_HANDOFF_RELEASE && confirmsReleasedThreadRuntime(pending.params, response.result)))) {
+        this.sharedThreads.delete(threadId);
+        // Confirmed deletion or runtime release ends the original binding even
+        // while an answer admission receipt is in transit. Preserve the answer
+        // fact without recreating ownership or sending stale cleanup work.
+        for (const answer of this.pending.values()) {
+          if (threadId === pending.params?.threadId && answer.method === 'asyncQuestion/answer' &&
+              answer.params?.threadId === threadId)
+            answer.asyncQuestionBindingReleased = true;
         }
       }
       this.bindCreatedResource(pending, response);
       this.releaseTerminalClaim(pending);
       this.promoteReferencedAttachments(pending, response);
+      let resumeResponseSent = false;
       if (!pending.expired && this.clients.has(pending.client)) {
-        let projected = pending.method === "initialize" ? this.projectWorkspaceReceiptCapability(response, pending.client) : response;
-        if (pending.method === 'thread/resume' && projected.result?.streamContext && pending.client.threadStreamContextV1 !== true) {
-          const { streamContext, ...result } = projected.result;
-          projected = { ...projected, result };
+        const projected = pending.method === "initialize"
+          ? this.studioPresentation.project(this.projectWorkspaceReceiptCapability(response, pending.client), pending.client)
+          : response;
+        try {
+          const clientResponse = this.continuousWork.projectResponse(projectClientResponse(projected, pending), pending,
+            this.threadOwners, this.ephemeralThreadOwners);
+          let sendResult;
+          if ((pending.method?.startsWith('work/') || pending.method === 'thread/resume') &&
+              typeof pending.client.sendWithQueueStatus === 'function') {
+            const delivery = pending.client.sendWithQueueStatus(clientResponse);
+            // Backpressure can leave a successfully queued resume awaiting drain.
+            // Keep its membership and question handoff once the frame is queued.
+            sendResult = delivery.queued;
+            if (delivery.queued === true) this.continuousWork.observe(pending.client, pending, clientResponse);
+          } else {
+            sendResult = pending.client.send(clientResponse);
+            if (sendResult !== false) this.continuousWork.observe(pending.client, pending, clientResponse);
+          }
+          resumeResponseSent = sendResult !== false;
+        } catch (error) {
+          if (pending.method === 'thread/resume') this.sharedThreads.leave(pending.claimedThreadId, pending.client);
+          if (resumeFreshOwnerCommitted && this.threadOwners.get(pending.claimedThreadId) === pending.client) {
+            this.threadOwners.delete(pending.claimedThreadId);
+          }
+          throw error;
         }
-        pending.client.send(projectThreadRunSummary(projected, pending.client.threadRunSummaryV1 === true));
+      }
+      if (resumeResponseSent && pending.sharedResume) {
+        for (const notification of sharedHandoffMessages) this.sendServerNotification(pending.client, notification);
+      } else if (pending.sharedResume && !resumeResponseSent) {
+        this.sharedThreads.leave(pending.claimedThreadId, pending.client);
       }
       if (!response.error && pending.method === 'thread/resume' && this.clients.has(pending.client)) {
+        this.sharedInteractions.replay(threadId, pending.client);
         const failure = this.automationFailures.get(threadId);
         if (failure) pending.client.send(failure);
       }
@@ -1605,10 +2327,35 @@ export class WorkspaceAppServerBroker {
       ) {
         this.onWorkspaceRemoved?.(pending.params);
       }
+      if (
+        resumeResponseSent &&
+        resumeHandoffMessages.length > 0 &&
+        this.clients.has(pending.client) &&
+        this.threadOwners.get(pending.claimedThreadId) === pending.client
+      ) {
+        for (const notification of resumeHandoffMessages) this.routeServerMessage(notification);
+      } else if (
+        resumeFreshOwnerCommitted &&
+        !resumeResponseSent &&
+        this.threadOwners.get(pending.claimedThreadId) === pending.client
+      ) {
+        this.threadOwners.delete(pending.claimedThreadId);
+        this.sharedThreads.leave(pending.claimedThreadId, pending.client);
+      }
+      this.#officeTaskOwnerHandoff.settle(pending, resumeResponseSent ? officeTask : null,
+        held => this.routeServerMessage(held), held => this.refuseUnownedOfficeInteraction(held));
+      if (officeTask && !resumeResponseSent && this.threadOwners.get(officeTask.threadId) === pending.client) {
+        this.threadOwners.delete(officeTask.threadId);
+        this.activeTurns.delete(officeTask.threadId);
+      }
       return;
     }
 
-    if (message.method === 'turn/started') this.automationFailures.delete(threadIdFrom(message));
+    if (message.method && message.id === undefined && !this.ownerFor(message)
+      && this.#officeTaskOwnerHandoff.capture(message, this.pending.values())) return;
+    const resumePreapplied = this.#resumePreappliedNotifications.has(message);
+    if (!resumePreapplied && !this.sharedInteractions.resolved(message)) return;
+    if (message.method === 'turn/started' && !resumePreapplied) this.automationFailures.delete(threadIdFrom(message));
     if (message.method === 'automation/stateChanged' && message.id === undefined) {
       const { jobCount, pendingCount } = message.params ?? {};
       if (Number.isSafeInteger(jobCount) && jobCount >= 0 && Number.isSafeInteger(pendingCount) && pendingCount >= 0) {
@@ -1621,39 +2368,45 @@ export class WorkspaceAppServerBroker {
     if (message.method === 'automation/runStarted' && message.id === undefined) {
       const threadId = threadIdFrom(message);
       if (threadId) {
-        this.automationThreads.add(threadId);
-        if (typeof message.params?.requestId === 'string') {
-          this.automationAdmissions.set(message.params.requestId, { threadId, jobId: message.params.jobId });
+        if (!resumePreapplied) {
+          this.automationThreads.add(threadId);
+          if (typeof message.params?.requestId === 'string') {
+            this.automationAdmissions.set(message.params.requestId, { threadId, jobId: message.params.jobId });
+          }
+          this.activeAutomationThreads.add(threadId);
+          this.onIdleStateChange?.(this);
+          while (this.automationThreads.size > 2048) this.automationThreads.delete(this.automationThreads.values().next().value);
         }
-        this.activeAutomationThreads.add(threadId);
-        this.onIdleStateChange?.(this);
-        while (this.automationThreads.size > 2048) this.automationThreads.delete(this.automationThreads.values().next().value);
-        this.broadcast(message);
+        if (resumePreapplied) {
+          const owner = this.ownerFor(message);
+          if (owner) this.sendServerNotification(owner, message);
+        } else this.broadcast(message);
       }
       return;
     }
     if (message.method && message.id !== undefined) {
+      // An early Office interaction owns its transport ID before adoption.
+      // A collision cannot bypass that binding by naming an already-owned task,
+      // or settle its waiter through another task's lifecycle refusal.
+      if (this.#officeTaskOwnerHandoff.hasRequest(message.id)) return;
+      if (this.sharedInteractions.rejectUnownedRequest(message)) return;
       const owner = this.ownerFor(message) ?? (this.automationThreads.has(threadIdFrom(message))
-        ? [...this.clients].find(client => client.channel === 'runtime' && client.initialized) : null);
+        ? [...this.clients].find(client => client.channel === 'runtime' && client.initialized && !client.nativeManagementOnly) : null);
       if (!owner) {
-        this.safeWriteMessage({
-          jsonrpc: "2.0",
-          id: message.id,
-          error: {
-            code: -32040,
-            message: `app-server request has no connected owner: ${message.method}`,
-          },
-        });
+        if (this.#officeTaskOwnerHandoff.capture(message, this.pending.values())) return;
+        this.refuseUnownedOfficeInteraction(message);
         return;
       }
       this.serverRequests.set(message.id, owner);
+      this.sharedInteractions.request(message, owner);
       owner.send(message);
       return;
     }
-    if (message.method === 'turn/completed' && this.activeAutomationThreads.delete(threadIdFrom(message))) {
+    if (message.method === 'turn/completed' && !resumePreapplied && this.activeAutomationThreads.delete(threadIdFrom(message))) {
       this.onIdleStateChange?.(this);
     }
     const owner = this.ownerFor(message);
+    this.sharedThreads.notify(threadIdFrom(message), message, owner);
     if (owner) this.sendServerNotification(owner, message);
     else if (this.automationThreads.has(threadIdFrom(message))) this.broadcast(message);
     else if (!threadIdFrom(message) && !this.resourceKeyFrom(message))
@@ -1670,6 +2423,43 @@ export class WorkspaceAppServerBroker {
         this.forgetTerminal(sessionId);
       }
     }
+  }
+
+  #applyResumeHeldNotificationLifecycle(message) {
+    // Settle the first valid interaction receipt before buffering delivery.
+    // Conflicting replays must not consume recovery capacity or reopen input.
+    this.sharedInteractions.resolved(message);
+    this.#resumePreappliedNotifications.add(message);
+    if (["turn/completed", "turn/failed", "turn/interrupted"].includes(message.method)) {
+      this.clearTerminalTurn(message);
+    }
+    const threadId = threadIdFrom(message);
+    if (message.method === "turn/started") this.automationFailures.delete(threadId);
+    if (message.method === "automation/runStarted" && threadId) {
+      this.automationThreads.add(threadId);
+      if (typeof message.params?.requestId === "string") {
+        this.automationAdmissions.set(message.params.requestId, { threadId, jobId: message.params.jobId });
+      }
+      this.activeAutomationThreads.add(threadId);
+      this.onIdleStateChange?.(this);
+      while (this.automationThreads.size > 2048) this.automationThreads.delete(this.automationThreads.values().next().value);
+    }
+    if (message.method === "turn/completed" && this.activeAutomationThreads.delete(threadId)) {
+      this.onIdleStateChange?.(this);
+    }
+  }
+
+  refuseUnownedOfficeInteraction(message) {
+    if (message.id === undefined) return;
+    if (this.sharedInteractions.rejectUnownedRequest(message, true)) return;
+    this.safeWriteMessage({ jsonrpc: '2.0', id: message.id, error: { code: -32040,
+      message: `app-server request has no connected owner: ${message.method}` } });
+  }
+
+  pruneOfficeTaskOwnerHandoff() {
+    this.#officeTaskOwnerHandoff.prune(pending => isOfficeTaskAdoption(pending)
+      && this.pending.get(pending.upstreamId) === pending && this.clients.has(pending.client),
+    held => this.refuseUnownedOfficeInteraction(held));
   }
 
   ownerFor(message) {
@@ -1692,22 +2482,22 @@ export class WorkspaceAppServerBroker {
   clearTerminalTurn(message) {
     const threadId = threadIdFrom(message);
     const turnId = turnIdFrom(message);
-    if (threadId) {
-      const active = this.activeTurns.get(threadId);
-      if (active && (!turnId || active.turnId === turnId))
-        this.activeTurns.delete(threadId);
-      const drain = this.threadDrains.get(threadId);
-      if (drain && (!turnId || !drain.turnId || drain.turnId === turnId)) {
-        this.finishThreadDrain(threadId);
-      }
-      return;
+    if (!threadId) return;
+    for (const pending of this.pending.values()) {
+      if (pending.method !== 'asyncQuestion/answer' || pending.params?.threadId !== threadId) continue;
+      if (!turnId) { pending.asyncQuestionTerminalUnknown = true; continue; }
+      pending.asyncQuestionTerminalTurns ??= new Set();
+      // Replayed terminal frames do not consume another completion identity.
+      if (pending.asyncQuestionTerminalTurns.has(turnId)) continue;
+      if (pending.asyncQuestionTerminalTurns.size < 64) pending.asyncQuestionTerminalTurns.add(turnId);
+      else pending.asyncQuestionTerminalUnknown = true;
     }
-    if (!turnId) return;
-    for (const [activeThreadId, active] of this.activeTurns) {
-      if (active.turnId === turnId) this.activeTurns.delete(activeThreadId);
-    }
-    for (const [drainingThreadId, drain] of this.threadDrains) {
-      if (drain.turnId === turnId) this.finishThreadDrain(drainingThreadId);
+    const active = this.activeTurns.get(threadId);
+    if (active && (!turnId || active.turnId === turnId))
+      this.activeTurns.delete(threadId);
+    const drain = this.threadDrains.get(threadId);
+    if (drain && (!turnId || !drain.turnId || drain.turnId === turnId)) {
+      this.finishThreadDrain(threadId);
     }
   }
 
@@ -1795,6 +2585,7 @@ export class WorkspaceAppServerBroker {
     const browserId =
       params.browserId ??
       params.sessionId ??
+      (method === 'browser/profile/humanAction' ? params.action?.session_id : null) ??
       (method.startsWith("browser/") ? params.session_id : null) ??
       params.browser?.id ??
       params.session?.id;
@@ -2010,7 +2801,7 @@ export class WorkspaceAppServerBroker {
   promoteReferencedAttachments(pending, response) {
     if (response.error || pending.method !== "turn/start") return;
     const paths = new Set(pending.attachmentPaths ?? attachmentPathsFromTurn({ params: pending.params }));
-    const threadId = threadIdFrom({ params: pending.params });
+    const threadId = threadIdFrom({ method: pending.method, params: pending.params });
     for (const [key, owner] of this.resourceOwners) {
       if (owner !== pending.client || !key.startsWith("attachment\0")) continue;
       const path = key.slice("attachment\0".length);
@@ -2022,6 +2813,16 @@ export class WorkspaceAppServerBroker {
   }
 
   sendServerNotification(client, message) {
+    if (client.nativeManagementOnly && !['server/transportError', 'server/disconnected'].includes(message.method) &&
+        !nativeManagementMethodAllowed(message.method)) return;
+    if (!allowsAsyncQuestionNotification(message, client, this.initializeResponse?.result?.capabilities?.experimental)) return;
+    message = this.continuousWork.notification(client, message,
+      this.initializeResponse?.result?.capabilities?.experimental, this.ephemeralThreadOwners);
+    if (!message) return;
+    message = projectTaskStateNotification(message, client, this.initializeResponse?.result?.capabilities?.experimental);
+    if (!message) return;
+    message = this.studioPresentation.notification(client, message);
+    if (!message) return;
     if (message.method === "computerUse/stateChanged" && client.computerUseRecoveryV1 !== true) {
       const { diagnostic, recoveryAvailable, ...params } = message.params ?? {};
       message = { ...message, params };

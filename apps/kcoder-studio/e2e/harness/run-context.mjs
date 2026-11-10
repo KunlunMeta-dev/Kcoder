@@ -1,13 +1,14 @@
 import { execFile, spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { createWriteStream, lstatSync } from "node:fs";
-import { access, mkdir, open, readFile, rename, rm } from "node:fs/promises";
-import { basename, dirname, relative, resolve, sep } from "node:path";
+import { constants as fsConstants, createWriteStream, existsSync, lstatSync, realpathSync } from "node:fs";
+import { access, chmod, lstat, mkdir, mkdtemp, open, readFile, realpath, rename, rm, statfs } from "node:fs/promises";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Transform } from "node:stream";
 import { StringDecoder } from "node:string_decoder";
 import { promisify } from "node:util";
 import { enforceRetention } from "./retention.mjs";
+import { secureWindowsRunState } from "./windows-state-directory.mjs";
 import {
   processTreeAlive,
   processTreeIdentity,
@@ -17,7 +18,10 @@ import {
 
 export const appRoot = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 export const repoRoot = resolve(appRoot, "../..");
-const artifactBoundary = resolve(repoRoot, "target/test/apps/kcoder-studio/e2e");
+const artifactBoundary = resolve(repoRoot, "target/e2e");
+const artifactDate = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit",
+});
 const execFileAsync = promisify(execFile);
 
 export async function runE2E(sourceUrl, metadata, body) {
@@ -78,13 +82,14 @@ export class RunContext {
     if (sourceRelative.startsWith(".." + sep) || !sourceRelative.startsWith(`apps${sep}kcoder-studio${sep}e2e${sep}`)) {
       throw new Error(`E2E source must be under apps/kcoder-studio/e2e: ${sourcePath}`);
     }
-    const sourceRoot = resolve(repoRoot, "target/test", sourceRelative);
+    const startedAt = new Date();
+    const sourceRoot = artifactSourceRoot(sourcePath, startedAt);
     if (sourceRoot !== artifactBoundary && !sourceRoot.startsWith(artifactBoundary + sep)) {
       throw new Error(`artifact path escaped KCoder Studio E2E boundary: ${sourceRoot}`);
     }
     await enforceRetention(artifactBoundary);
     await mkdir(sourceRoot, { recursive: true });
-    const runRoot = await createCollisionSafeRunRoot(sourceRoot);
+    const runRoot = await createCollisionSafeRunRoot(sourceRoot, startedAt);
     const context = new RunContext(sourcePath, sourceRelative.split(sep).join("/"), runRoot, metadata);
     await context.initialize();
     return context;
@@ -103,6 +108,7 @@ export class RunContext {
     this.cleanupSteps = [];
     this.ports = [];
     this.temporaryDirectories = [this.stateDir];
+    this.scratchDirectories = [];
     this.workspaceFixtures = [];
     this.startedAt = new Date();
     this.finished = false;
@@ -120,6 +126,10 @@ export class RunContext {
       mkdir(this.logsDir, { recursive: true }),
       mkdir(this.artifactsDir, { recursive: true }),
     ]);
+    if (process.platform === 'win32') {
+      const receipt = await secureWindowsRunState(this.stateDir, this.runRoot);
+      await this.writeArtifactJson('windows-state-owner.json', receipt);
+    }
     this.gitCommit = await gitCommit();
     this.seed = randomBytes(8).toString("hex");
     await this.writeManifest("running");
@@ -128,6 +138,171 @@ export class RunContext {
   pathInState(...parts) {
     this.assertActive();
     return checkedChild(this.stateDir, ...parts);
+  }
+
+  async createOwnedScratchDirectory(label, {
+    baseDirectory,
+    requiredBytes = 0n,
+    reserveBytes = 0n,
+    requiredMemoryBytes,
+    expectedFilesystemType,
+    availableMemoryBytes,
+    requireCleanupConfirmation = false,
+    ownedWorkerTraversal = false,
+  } = {}) {
+    this.assertActive();
+    if (typeof requireCleanupConfirmation !== "boolean") throw new Error("invalid scratch cleanup confirmation policy");
+    if (typeof ownedWorkerTraversal !== "boolean") throw new Error("invalid owned worker traversal policy");
+    if (typeof process.getuid !== "function") {
+      throw new Error("UNMET_PREREQUISITE: owned scratch requires POSIX uid ownership checks");
+    }
+    if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,99}$/.test(label)) {
+      throw new Error("invalid owned scratch directory label");
+    }
+    if (typeof baseDirectory !== "string" || !isAbsolute(baseDirectory)) {
+      throw new Error("owned scratch base directory must be an absolute path");
+    }
+    const required = nonNegativeByteCount(requiredBytes, "scratch required bytes");
+    const reserve = nonNegativeByteCount(reserveBytes, "scratch reserved bytes");
+    const memoryRequired = requiredMemoryBytes === undefined
+      ? required + reserve
+      : nonNegativeByteCount(requiredMemoryBytes, "scratch required memory bytes");
+    const memoryAvailable = availableMemoryBytes === undefined
+      ? null
+      : nonNegativeByteCount(availableMemoryBytes, "scratch available memory bytes");
+    const basePath = resolve(baseDirectory);
+    const baseIdentity = await inspectScratchBase(basePath);
+    const stat = await statfs(basePath, { bigint: true });
+    const filesystemAvailable = stat.bavail * stat.bsize;
+    const filesystemType = formatFilesystemType(stat.type);
+    if (expectedFilesystemType !== undefined && filesystemType !== formatFilesystemType(expectedFilesystemType)) {
+      throw new Error("owned scratch filesystem type changed during capacity preflight");
+    }
+    const capacityRequired = required + reserve;
+    if (filesystemAvailable < capacityRequired) {
+      throw scratchCapacityError("filesystem", filesystemAvailable, capacityRequired);
+    }
+    if (memoryAvailable !== null && memoryAvailable < memoryRequired) {
+      throw scratchCapacityError("memory", memoryAvailable, memoryRequired);
+    }
+    await access(basePath, fsConstants.W_OK);
+    await assertScratchBaseIdentity(baseIdentity);
+
+    const scratchPath = await mkdtemp(join(basePath, `.kcoder-e2e-${label}-${process.pid}-`));
+    const uid = currentUid();
+    const initialIdentity = await inspectCreatedScratch(scratchPath, baseIdentity, uid);
+    const record = {
+      label,
+      path: scratchPath,
+      basePath: baseIdentity.path,
+      baseRealPath: baseIdentity.realPath,
+      baseDev: baseIdentity.dev,
+      baseIno: baseIdentity.ino,
+      baseUid: baseIdentity.uid,
+      baseMode: baseIdentity.mode,
+      realPath: initialIdentity.realPath,
+      dev: initialIdentity.dev,
+      ino: initialIdentity.ino,
+      uid,
+      mode: ownedWorkerTraversal ? "0711" : "0700",
+      requiredBytes: required.toString(),
+      reserveBytes: reserve.toString(),
+      requiredMemoryBytes: memoryRequired.toString(),
+      filesystemType,
+      filesystemAvailableBytes: filesystemAvailable.toString(),
+      memoryAvailableBytes: memoryAvailable?.toString() ?? null,
+      createdAt: new Date().toISOString(),
+      cleanedAt: null,
+      cleanupStatus: "allocated",
+      requireCleanupConfirmation,
+      cleanupConfirmed: !requireCleanupConfirmation,
+    };
+    this.scratchDirectories.push(record);
+    this.addCleanup(`remove owned scratch ${label}`, () => this.removeOwnedScratchDirectory(record));
+    try {
+      await chmod(scratchPath, ownedWorkerTraversal ? 0o711 : 0o700);
+      await assertOwnedScratchIdentity(record);
+    } catch (error) {
+      record.cleanupStatus = "allocation-verification-failed";
+      throw error;
+    }
+    await this.writeManifest("running");
+    return record;
+  }
+
+  pathInScratch(scratch, ...parts) {
+    this.assertActive();
+    if (!this.scratchDirectories.includes(scratch)) {
+      throw new Error("owned scratch directory does not belong to this RunContext");
+    }
+    assertOwnedScratchIdentitySync(scratch);
+    return checkedChild(scratch.path, ...parts);
+  }
+
+  async removeOwnedScratchDirectory(scratch) {
+    if (!this.scratchDirectories.includes(scratch)) {
+      throw new Error("owned scratch directory does not belong to this RunContext");
+    }
+    if (scratch.cleanupStatus === "removed" || scratch.cleanupStatus === "already-absent") return;
+    if (scratch.requireCleanupConfirmation && !scratch.cleanupConfirmed) {
+      scratch.cleanupStatus = "retained-unconfirmed";
+      await this.writeManifest(this.finishing ? "cleaning" : "running");
+      throw new Error("owned scratch retained until original external cleanup is confirmed");
+    }
+    try {
+      await assertScratchBaseIdentity({
+        path: scratch.basePath,
+        realPath: scratch.baseRealPath,
+        dev: scratch.baseDev,
+        ino: scratch.baseIno,
+        uid: scratch.baseUid,
+        mode: scratch.baseMode,
+      });
+    } catch {
+      scratch.cleanupStatus = "identity-mismatch";
+      throw new Error("owned scratch base identity changed; refusing cleanup");
+    }
+    try {
+      await assertOwnedScratchIdentity(scratch);
+    } catch (error) {
+      if (error?.code === "ENOENT") {
+        scratch.cleanupStatus = "already-absent";
+        scratch.cleanedAt = new Date().toISOString();
+        return;
+      }
+      scratch.cleanupStatus = "identity-mismatch";
+      throw error;
+    }
+    await rm(scratch.path, { recursive: true, force: false });
+    try {
+      await lstat(scratch.path);
+      scratch.cleanupStatus = "replacement-remains";
+      throw new Error("owned scratch path was replaced during cleanup; refusing further cleanup");
+    } catch (error) {
+      if (error?.code !== "ENOENT") throw error;
+    }
+    scratch.cleanupStatus = "removed";
+    scratch.cleanedAt = new Date().toISOString();
+    await this.writeManifest(this.finishing ? "cleaning" : "running");
+  }
+
+  async confirmOwnedScratchCleanup(scratch) {
+    if (this.finished || !this.scratchDirectories.includes(scratch)) throw new Error("scratch cleanup confirmation has no active owner");
+    await assertOwnedScratchIdentity(scratch);
+    scratch.cleanupConfirmed = true;
+    await this.writeManifest(this.finishing ? "cleaning" : "running");
+  }
+
+  async resumeOwnedScratchDirectory(snapshot) {
+    this.assertActive();
+    if (snapshot.requireCleanupConfirmation !== true || dirname(snapshot.path) !== snapshot.basePath ||
+        !basename(snapshot.path).startsWith(".kcoder-e2e-")) throw new Error("invalid original scratch recovery proof");
+    await assertOwnedScratchIdentity(snapshot);
+    const scratch = { ...snapshot, cleanupStatus: "resumed", cleanupConfirmed: false };
+    this.scratchDirectories.push(scratch);
+    this.addCleanup(`remove resumed owned scratch ${scratch.label}`, () => this.removeOwnedScratchDirectory(scratch));
+    await this.writeManifest("running");
+    return scratch;
   }
 
   pathInArtifacts(...parts) {
@@ -188,6 +363,8 @@ export class RunContext {
     return redact(value, "", this.secrets);
   }
 
+  // Generic owned JSON storage. Native Windows profile settings must use
+  // writeWindowsProfileSettings; POSIX mode is not a protected Windows DACL.
   async writeStateJson(name, value, mode = 0o600) {
     this.assertActive();
     const path = this.pathInState(name);
@@ -230,6 +407,15 @@ export class RunContext {
 
   spawnOwned(label, command, args, options = {}) {
     this.assertActive();
+    return this.#spawnTrackedOwned(label, command, args, options, false);
+  }
+
+  spawnCleanupOwned(label, command, args, options = {}) {
+    if (!this.finishing || this.finished) throw new Error("cleanup processes require an active finish transaction");
+    return this.#spawnTrackedOwned(label, command, args, options, true);
+  }
+
+  #spawnTrackedOwned(label, command, args, options, cleanupOnly) {
     if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/.test(label)) {
       throw new Error(`invalid owned process label: ${label}`);
     }
@@ -240,7 +426,9 @@ export class RunContext {
     const stderrRedactor = createRedactingStream(value => this.redactText(value), () => this.secrets);
     const spawnOptions = {
       ...options,
-      env: options.env || this.isolatedEnvironment(),
+      env: options.env || isolatedEnvironment({}, [], {
+        HOME: checkedChild(this.stateDir, "home"), USERPROFILE: checkedChild(this.stateDir, "home"),
+      }),
       detached: process.platform !== "win32",
       stdio: [options.stdin || "ignore", "pipe", "pipe"],
     };
@@ -249,7 +437,7 @@ export class RunContext {
         command,
         args,
         spawnOptions,
-        this.pathInState("process-supervisors", safeSlug(label)),
+        checkedChild(this.stateDir, "process-supervisors", safeSlug(label)),
       )
       : null;
     const child = supervised?.child || spawn(command, args, spawnOptions);
@@ -268,12 +456,13 @@ export class RunContext {
       stopped: false,
       stopPromise: null,
       spawnError: null,
+      cleanupOnly,
       redactors: [stdoutRedactor, stderrRedactor],
     };
     child.once("error", error => { record.spawnError = errorMessage(error); });
     this.processes.set(label, record);
-    this.addCleanup(`stop process ${label}`, () => this.stopOwned(label));
-    void this.writeManifest("running");
+    if (!cleanupOnly) this.addCleanup(`stop process ${label}`, () => this.stopOwned(label));
+    void this.writeManifest(cleanupOnly ? "cleaning" : "running");
     return child;
   }
 
@@ -343,6 +532,11 @@ export class RunContext {
         this.cleanupSteps.push({ label: cleanup.label, status: "failed", error: errorMessage(error) });
       }
     }
+    for (const record of this.processes.values()) {
+      if (!record.cleanupOnly) continue;
+      try { await this.stopOwned(record.label); }
+      catch (error) { cleanupErrors.push(error); }
+    }
     const aliveStates = await Promise.all([...this.processes.values()].map(async record => {
       try {
         return {
@@ -356,8 +550,14 @@ export class RunContext {
     }));
     const survivors = aliveStates.filter(item => item.alive).map(item => item.record);
     if (survivors.length) cleanupErrors.push(new Error(`owned process groups survived cleanup: ${survivors.map(item => item.label).join(", ")}`));
-    await rm(this.stateDir, { recursive: true, force: true }).catch(error => finalizationErrors.push(error));
-    if (status === "passed" && !failure && cleanupErrors.length === 0 && !this.metadata.retainSuccessLogs) {
+    // Unknown cleanup outcomes may still have an owner writing this state.
+    if (cleanupErrors.length === 0 && survivors.length === 0) {
+      await rm(this.stateDir, {
+        recursive: true, force: true,
+        ...(process.platform === "win32" ? { maxRetries: 10, retryDelay: 100 } : {}),
+      }).catch(error => finalizationErrors.push(error));
+    }
+    if (status === "passed" && !failure && cleanupErrors.length === 0 && finalizationErrors.length === 0 && !this.metadata.retainSuccessLogs) {
       await rm(this.logsDir, { recursive: true, force: true }).catch(error => finalizationErrors.push(error));
     }
     await enforceRetention(artifactBoundary).catch(error => finalizationErrors.push(error));
@@ -423,6 +623,7 @@ export class RunContext {
       status,
       ports: this.ports,
       temporaryDirectories: this.temporaryDirectories.map(path => relative(this.runRoot, path) || "."),
+      scratchDirectories: this.scratchDirectories.map(scratch => ({ ...scratch })),
       workspaceFixtures: this.workspaceFixtures,
       processes: [...this.processes.values()].map(record => ({
         label: record.label,
@@ -431,6 +632,7 @@ export class RunContext {
         command: record.command,
         stopped: record.stopped,
         spawnError: record.spawnError,
+        cleanupOnly: record.cleanupOnly,
       })),
       cleanupSteps: this.cleanupSteps,
       error: failure ? errorMessage(failure) : null,
@@ -502,6 +704,7 @@ const BASE_ENV_NAMES = [
   "PATH", "TMPDIR", "TMP", "TEMP", "SystemRoot", "WINDIR", "COMSPEC", "PATHEXT",
   "CI", "TERM", "COLORTERM", "NO_COLOR", "DISPLAY", "WAYLAND_DISPLAY", "XDG_RUNTIME_DIR",
   "USER", "USERNAME",
+  "LANG", "LC_ALL", "LC_CTYPE",
 ];
 
 export function isolatedEnvironment(overrides = {}, passNames = [], defaults = {}) {
@@ -515,8 +718,8 @@ export function isolatedEnvironment(overrides = {}, passNames = [], defaults = {
   return env;
 }
 
-async function createCollisionSafeRunRoot(sourceRoot) {
-  const timestamp = portableTimestamp(new Date());
+async function createCollisionSafeRunRoot(sourceRoot, startedAt) {
+  const timestamp = portableTimestamp(startedAt);
   for (let attempt = 0; attempt < 100; attempt += 1) {
     const suffix = attempt === 0 ? "" : `-p${process.pid}-${attempt}-${randomBytes(2).toString("hex")}`;
     const candidate = resolve(sourceRoot, `${timestamp}${suffix}`);
@@ -530,6 +733,132 @@ async function createCollisionSafeRunRoot(sourceRoot) {
   throw new Error(`unable to create collision-safe run root under ${sourceRoot}`);
 }
 
+function nonNegativeByteCount(value, label) {
+  let parsed;
+  if (typeof value === "bigint") parsed = value;
+  else if (typeof value === "number" && Number.isSafeInteger(value)) parsed = BigInt(value);
+  else if (typeof value === "string" && /^\d+$/.test(value)) parsed = BigInt(value);
+  else throw new Error(`${label} must be a non-negative integer byte count`);
+  if (parsed < 0n) throw new Error(`${label} must be a non-negative integer byte count`);
+  return parsed;
+}
+
+function currentUid() {
+  return typeof process.getuid === "function" ? String(process.getuid()) : null;
+}
+
+async function inspectScratchBase(path) {
+  const info = await lstat(path, { bigint: true });
+  if (!info.isDirectory() || info.isSymbolicLink()) {
+    throw new Error("owned scratch base must be a real directory");
+  }
+  const realPath = await realpath(path);
+  if (realPath !== path) throw new Error("owned scratch base realpath does not match its selected path");
+  const mode = Number(info.mode & 0o7777n);
+  if ((mode & 0o022) !== 0 && (mode & 0o1000) === 0) {
+    throw new Error("owned scratch base is writable by other users without a sticky bit");
+  }
+  return {
+    path,
+    realPath,
+    dev: info.dev.toString(),
+    ino: info.ino.toString(),
+    uid: info.uid.toString(),
+    mode: mode.toString(8).padStart(4, "0"),
+  };
+}
+
+async function assertScratchBaseIdentity(expected) {
+  const info = await lstat(expected.path, { bigint: true });
+  if (!info.isDirectory() || info.isSymbolicLink()) {
+    throw new Error("owned scratch base identity changed");
+  }
+  const realPath = await realpath(expected.path);
+  const mode = Number(info.mode & 0o7777n).toString(8).padStart(4, "0");
+  if (realPath !== expected.realPath || info.dev.toString() !== expected.dev ||
+      info.ino.toString() !== expected.ino || info.uid.toString() !== expected.uid ||
+      (expected.mode !== undefined && mode !== expected.mode)) {
+    throw new Error("owned scratch base identity changed");
+  }
+}
+
+function scratchCapacityError(kind, available, required) {
+  const error = new Error(
+    `owned scratch ${kind} capacity is insufficient (${available} available bytes; ${required} required including reserve)`,
+  );
+  error.code = "KCODER_E2E_SCRATCH_CAPACITY";
+  return error;
+}
+
+function formatFilesystemType(type) {
+  const value = typeof type === "bigint" ? type : BigInt(type);
+  return `0x${value.toString(16)}`;
+}
+
+async function inspectCreatedScratch(path, base, uid) {
+  const info = await lstat(path, { bigint: true });
+  if (!info.isDirectory() || info.isSymbolicLink() || dirname(path) !== base.path) {
+    throw new Error("new owned scratch directory is not a real direct child of its selected base");
+  }
+  const realPath = await realpath(path);
+  if (realPath !== path || info.dev.toString() !== base.dev ||
+      (uid !== null && info.uid.toString() !== uid)) {
+    throw new Error("new owned scratch directory failed identity verification");
+  }
+  return {
+    realPath,
+    dev: info.dev.toString(),
+    ino: info.ino.toString(),
+    mode: Number(info.mode & 0o7777n).toString(8).padStart(4, "0"),
+  };
+}
+
+async function assertOwnedScratchIdentity(expected) {
+  const base = {
+    path: expected.basePath,
+    realPath: expected.baseRealPath,
+    dev: expected.baseDev,
+    ino: expected.baseIno,
+    uid: expected.baseUid,
+    mode: expected.baseMode,
+  };
+  await assertScratchBaseIdentity(base);
+  const info = await lstat(expected.path, { bigint: true });
+  if (!info.isDirectory() || info.isSymbolicLink()) {
+    throw new Error("owned scratch directory identity changed");
+  }
+  const realPath = await realpath(expected.path);
+  const uid = currentUid();
+  if (realPath !== expected.realPath || info.dev.toString() !== expected.dev ||
+      info.ino.toString() !== expected.ino || (uid !== null && info.uid.toString() !== uid) ||
+      (info.mode & 0o7777n) !== BigInt("0o" + expected.mode) || !["0700", "0711"].includes(expected.mode)) {
+    throw new Error("owned scratch directory identity changed");
+  }
+}
+
+function assertOwnedScratchIdentitySync(expected) {
+  const baseInfo = lstatSync(expected.basePath, { bigint: true });
+  if (!baseInfo.isDirectory() || baseInfo.isSymbolicLink()) {
+    throw new Error("owned scratch base identity changed");
+  }
+  const baseMode = Number(baseInfo.mode & 0o7777n).toString(8).padStart(4, "0");
+  if (realpathSync(expected.basePath) !== expected.baseRealPath ||
+      baseInfo.dev.toString() !== expected.baseDev || baseInfo.ino.toString() !== expected.baseIno ||
+      baseInfo.uid.toString() !== expected.baseUid || baseMode !== expected.baseMode) {
+    throw new Error("owned scratch base identity changed");
+  }
+  const info = lstatSync(expected.path, { bigint: true });
+  if (!info.isDirectory() || info.isSymbolicLink()) {
+    throw new Error("owned scratch directory identity changed");
+  }
+  const uid = currentUid();
+  if (realpathSync(expected.path) !== expected.realPath || info.dev.toString() !== expected.dev ||
+      info.ino.toString() !== expected.ino || (uid !== null && info.uid.toString() !== uid) ||
+      (info.mode & 0o7777n) !== BigInt("0o" + expected.mode) || !["0700", "0711"].includes(expected.mode)) {
+    throw new Error("owned scratch directory identity changed");
+  }
+}
+
 function portableTimestamp(date) {
   return date.toISOString().replace(/[-:]/g, "").replace("T", "-");
 }
@@ -538,7 +867,19 @@ function safeSlug(value) {
   return value.toLowerCase().replace(/[^a-z0-9._-]+/g, "-").replace(/^-|-$/g, "") || "process";
 }
 
+const PUBLIC_TOKEN_COUNTS = new Set([
+  "contextwindowtokens", "outputheadroomtokens", "maxoutputtokens", "maxtokens", "summarymaxtokens",
+  "inputtokens", "outputtokens", "totaltokens", "cachedinputtokens", "cachecreationinputtokens", "cachereadinputtokens",
+  "cachereadtokens", "cachecreationtokens",
+]);
+
 export function redact(value, key = "", secrets = []) {
+  // Public numeric limits and usage are not authentication tokens. Keep their
+  // types intact so retained model snapshots remain replayable; a registered
+  // secret or a non-numeric value never receives this exception.
+  if (PUBLIC_TOKEN_COUNTS.has(key.replace(/[_-]/g, "").toLowerCase())
+      && Number.isSafeInteger(value) && value >= 0
+      && ![...secrets].includes(String(value))) return value;
   if (/token|secret|credential|cookie|password|api.?key|private.?key/i.test(key)) return "[REDACTED]";
   if (typeof value === "string") return redactString(value, secrets);
   if (Array.isArray(value)) return value.map(item => redact(item, "", secrets));
@@ -652,11 +993,44 @@ async function gitCommit() {
   }
 }
 
-export function artifactSourceRoot(sourcePath) {
-  const normalized = resolve(sourcePath);
-  const sourceRelative = relative(repoRoot, normalized);
-  if (sourceRelative.startsWith(".." + sep)) throw new Error("source path escaped repository");
-  return resolve(repoRoot, "target/test", sourceRelative);
+export function e2eDayRoot(date = new Date()) {
+  const parts = Object.fromEntries(artifactDate.formatToParts(date).map(({ type, value }) => [type, value]));
+  return resolve(artifactBoundary, parts.year, parts.month, parts.day);
+}
+
+export function artifactSourceRoot(sourcePath, date = new Date()) {
+  const sourceRelative = relative(appRoot, resolve(sourcePath));
+  if (!sourceRelative.startsWith(`e2e${sep}`)) throw new Error("source path escaped Studio E2E");
+  return resolve(e2eDayRoot(date), sourceRelative.slice(4));
+}
+
+export function retainedE2EArtifactBoundary(candidate, workspaceRoot = repoRoot) {
+  const datedRoot = resolve(workspaceRoot, "target/e2e");
+  const relativePath = relative(datedRoot, candidate).split(sep).join("/");
+  if (/^\d{4}\/\d{2}\/\d{2}\/[^/]+\//.test(relativePath)) return datedRoot;
+  const archiveRoot = resolve(workspaceRoot, "target/evidence");
+  const archivePath = relative(archiveRoot, candidate).split(sep).join("/");
+  if (/^\d{4}\/\d{2}\/\d{2}\/studio-e2e\//.test(archivePath)) {
+    return resolve(archiveRoot, ...archivePath.split("/").slice(0, 4));
+  }
+  return resolve(workspaceRoot, "target/test/apps/kcoder-studio/e2e");
+}
+
+export function retainedArtifactRunRoot(sourcePath, runId) {
+  const match = /^(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})\.(\d{3})Z(?:-p\d+-\d+-[a-f0-9]{4})?$/.exec(runId);
+  if (!match) throw new Error("invalid retained E2E run ID");
+  const [, year, month, day, hour, minute, second, ms] = match;
+  const date = new Date(`${year}-${month}-${day}T${hour}:${minute}:${second}.${ms}Z`);
+  if (!Number.isFinite(date.getTime()) || portableTimestamp(date) !== runId.slice(0, 20)) {
+    throw new Error("invalid retained E2E run date");
+  }
+  const current = resolve(artifactSourceRoot(sourcePath, date), runId);
+  if (existsSync(current)) return current;
+  const legacy = resolve(repoRoot, "target/test", relative(repoRoot, resolve(sourcePath)), runId);
+  if (existsSync(legacy)) return legacy;
+  const archived = resolve(repoRoot, "target/evidence", relative(artifactBoundary, e2eDayRoot(date)),
+    "studio-e2e", relative(e2eDayRoot(date), current));
+  return existsSync(archived) ? archived : current;
 }
 
 export { portableTimestamp };

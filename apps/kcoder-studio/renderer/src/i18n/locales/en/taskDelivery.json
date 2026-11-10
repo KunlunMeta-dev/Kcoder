@@ -1,0 +1,65 @@
+{
+  "title": "PR and CI delivery",
+  "unsupported": "This target does not support delivery preparation. Upgrade the target to use this flow.",
+  "originalUnavailable": "The original task is unavailable. Reopen it before preparing delivery or adding CI feedback.",
+  "scope": "Prepare an editable PR draft from the actual target repository and commit. GitHub.com requires git and authenticated gh on that target. Publication enters this task's draft and runs only after you send it through normal tool permissions.",
+  "base": "Base branch",
+  "prepare": "Prepare PR draft",
+  "refresh": "Check original delivery",
+  "loading": "Reading delivery evidence…",
+  "failed": "Delivery could not be read. Check the repository, base branch and target prerequisites; your edits are retained.",
+  "requestUnknown": "The request receipt is unknown. Check the original delivery; do not resend publication.",
+  "queued": "The publication request was added to this task's draft. Review and send it to continue.",
+  "sourceChanged": "The source changed. These results belong to the recorded commit. Prepare the current source again; previous CI success does not apply.",
+  "dirty": "Uncommitted changes are excluded from this commit. Commit them and prepare again before requesting publication.",
+  "noPr": "No matching PR has been observed for this commit.",
+  "prTitle": "PR title",
+  "prBody": "PR body",
+  "queuePublication": "Add publication request to task draft",
+  "requestPrepared": "A stable publication intent exists. Its receipt does not prove push or PR creation. Use Check original delivery to reconcile; this panel will not resend it.",
+  "requestNotMatched": "PR observed; original request identity not confirmed",
+  "queueFailure": "Add this failure to task draft",
+  "checksTruncated": "Only a bounded set of checks is available; missing checks cannot count as passing.",
+  "pages": "CI check pages",
+  "previous": "Previous",
+  "next": "Next",
+  "push": {
+    "unknown": "Push unknown",
+    "notPushed": "Recorded commit not pushed to this branch",
+    "pushed": "Recorded commit pushed"
+  },
+  "ci": {
+    "unknown": "CI unknown",
+    "none": "No CI checks observed",
+    "waiting": "CI waiting",
+    "failed": "CI failed",
+    "passed": "Observed checks passed",
+    "skipped": "Check skipped",
+    "neutral": "Check neutral"
+  },
+  "pr": {
+    "OPEN": "Open",
+    "CLOSED": "Closed",
+    "MERGED": "Merged",
+    "UNKNOWN": "PR state unknown"
+  },
+  "review": {
+    "APPROVED": "Review approved",
+    "CHANGES_REQUESTED": "Changes requested",
+    "REVIEW_REQUIRED": "Review required",
+    "UNKNOWN": "Review unknown"
+  },
+  "limitations": {
+    "notRefreshed": "Remote state has not been checked.",
+    "githubUnavailable": "GitHub state is partly unknown. Ensure gh is installed, authenticated and able to reach the repository on this target.",
+    "checksTruncated": "CI coverage is incomplete."
+  },
+  "recipient": "Publication and fixes go to task {{taskId}} ({{deviceId}}).",
+  "references": "Source and request references",
+  "deliveryIdentity": "Delivery ID",
+  "requestIdentity": "Original request ID",
+  "sourceThread": "Source thread",
+  "currentStatusUnknown": "Current PR and CI status is unknown. The last observed source and your draft are retained; refresh after reviewing the selected alternative.",
+  "recoverRequest": "Add the verified original request to its task draft",
+  "recoverUncertain": "The previous draft append is unconfirmed. Inspect the original task draft before deciding to append it again. Nothing is retried automatically."
+}

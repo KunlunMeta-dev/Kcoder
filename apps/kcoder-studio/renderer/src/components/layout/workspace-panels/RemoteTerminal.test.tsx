@@ -4,6 +4,8 @@ import { StrictMode } from 'react'
 import { openExternalUrl } from '@/lib/external-links'
 import { createRemoteTerminalClient } from '@/lib/remote-terminal-socket'
 import { RemoteTerminal } from './RemoteTerminal'
+import '@/i18n'
+import type { RemoteTerminalExitPayload } from '@/lib/remote-terminal-socket'
 
 const testState = vi.hoisted(() => ({
   terminalConstructorOptions: [] as Array<Record<string, unknown>>,
@@ -230,6 +232,23 @@ describe('RemoteTerminal', () => {
     expect(testState.terminalInstances[0].writeln).not.toHaveBeenCalledWith(
       expect.stringContaining('Process exited')
     )
+  })
+
+  test('an unconfirmed exit keeps the panel available for cleanup and disables further input', () => {
+    let exitHandler: ((payload: RemoteTerminalExitPayload) => void) | undefined
+    const client = createClient({
+      attach: vi.fn(() => new Promise(() => undefined)),
+      onExit: vi.fn(handler => { exitHandler = handler; return vi.fn() }),
+    })
+    const onExit = vi.fn()
+    createRemoteTerminalClientMock.mockReturnValue(client)
+    render(<RemoteTerminal sessionId="terminal-unknown" clientFactory={createRemoteTerminalClient} active={false} onExit={onExit} />)
+    exitHandler?.({ session_id: 'terminal-unknown', exit_code: null })
+    expect(onExit).not.toHaveBeenCalled()
+    expect(testState.terminalInstances[0].writeln).toHaveBeenCalledWith(expect.stringMatching(/unconfirmed|尚未确认/))
+    testState.terminalInstances[0].emitData('do not send')
+    expect(client.write).not.toHaveBeenCalled()
+    expect(client.close).not.toHaveBeenCalled()
   })
 
   test('skips resize observer syncs while inactive', () => {

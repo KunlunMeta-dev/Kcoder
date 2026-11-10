@@ -1,17 +1,19 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { installTestTransport, clearTestTransports } from '@/test/runtime-transport'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import { ConnectionsSettingsPage } from './ConnectionsSettingsPage'
 import { createDeviceApi } from '@/api/devices'
 import { createUserApi } from '@/api/users'
 import { AppearanceProvider } from '@/features/appearance'
+import { requestDesktopSidebarToggle } from '@/components/layout/useDesktopSidebarCollapsed'
 import {
   CloudConnectionContext,
   DISCONNECTED_STATE,
 } from '@/features/cloud-connection/CloudConnectionContext'
 import type { CloudConnectionContextValue } from '@/features/cloud-connection/CloudConnectionContext'
 import { openExternalUrl } from '@/lib/external-links'
-import { requestLocalExecutor } from '@/tauri/localExecutor'
+import { requestLocalExecutor } from '@/host/localExecutor'
 import '@/i18n'
 import type { DeviceInfo } from '@/types/devices'
 
@@ -23,6 +25,9 @@ vi.mock('./KCoderProviderSettingsPage', () => ({
 }))
 vi.mock('./MobileConnectionSettingsPage', () => ({
   MobileConnectionSettingsPage: () => <div data-testid="mobile-connection-settings-page" />,
+}))
+vi.mock('@/features/execution-settings/ExecutionDefaultsSettingsPage', () => ({
+  ExecutionDefaultsSettingsPage: () => <div data-testid="execution-defaults-settings-page" />,
 }))
 
 const runtimeConfigMock = vi.hoisted(() => ({
@@ -56,7 +61,7 @@ vi.mock('@/config/runtime', () => ({
 
 vi.mock('@/api/http', () => ({
   createHttpClient: vi.fn((options: unknown) => ({ options })),
-  shouldUseTauriFetch: vi.fn(() => false),
+  shouldUseGatewayFetch: vi.fn(() => false),
 }))
 
 vi.mock('@/api/models', () => ({
@@ -100,7 +105,7 @@ vi.mock('@/lib/external-links', () => ({
   openExternalUrl: vi.fn(),
 }))
 
-vi.mock('@/tauri/localExecutor', () => ({
+vi.mock('@/host/localExecutor', () => ({
   ensureLocalExecutorStarted: vi.fn().mockResolvedValue({
     running: true,
     ready: true,
@@ -156,26 +161,15 @@ function localDevice(overrides: Partial<DeviceInfo> = {}): DeviceInfo {
   })
 }
 
-function remoteDevice(overrides: Partial<DeviceInfo> = {}): DeviceInfo {
-  return cloudDevice({
-    id: 3,
-    device_id: 'remote-device',
-    name: 'Docker Remote Device',
-    device_type: 'remote',
-    bind_shell: 'claudecode',
-    client_ip: '203.0.113.11',
-    cloud_config: undefined,
-    remote_config: {
-      provider: 'docker',
-      image: 'ghcr.io/wecode-ai/wegent-device:latest',
-      deviceId: 'remote-device',
-      deviceName: 'Docker Remote Device',
-    },
-    ...overrides,
-  })
-}
-
 describe('ConnectionsSettingsPage', () => {
+  test('removes cloud settings navigation and falls back safely for old links', () => {
+    window.history.replaceState({}, '', '/settings/connections')
+    render(<ConnectionsSettingsPage onBack={vi.fn()} />)
+    expect(screen.queryByTestId('settings-nav-connections')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('settings-cloud-connect-button')).not.toBeInTheDocument()
+    expect(screen.getByTestId('general-settings-page')).toBeInTheDocument()
+  })
+
   test('opens the separate SSH settings page only on a KCoder Gateway host', async () => {
     const marker = document.createElement('meta')
     marker.name = 'kcoder-rpc-token'
@@ -190,6 +184,49 @@ describe('ConnectionsSettingsPage', () => {
     } finally {
       marker.remove()
     }
+  })
+
+  test('routes new-session defaults to the Gateway-only target settings page', async () => {
+    const marker = document.createElement('meta')
+    marker.name = 'kcoder-rpc-token'
+    marker.content = 'synthetic-settings-test'
+    document.head.append(marker)
+    try {
+      render(<ConnectionsSettingsPage onBack={vi.fn()} />)
+      const nav = screen.getByTestId('settings-nav-execution-defaults')
+      expect(nav).toBeInTheDocument()
+      await userEvent.click(nav)
+      expect(screen.getByTestId('execution-defaults-settings-page')).toBeInTheDocument()
+      expect(window.location.pathname).toBe('/settings/execution-defaults')
+      expect(screen.queryByTestId('settings-nav-target-extensions')).not.toBeInTheDocument()
+    } finally {
+      marker.remove()
+    }
+  })
+
+  test('removes the duplicate target extensions entry and handles its old URL safely', () => {
+    const marker = document.createElement('meta')
+    marker.name = 'kcoder-rpc-token'
+    marker.content = 'synthetic-settings-test'
+    document.head.append(marker)
+    const onBack = vi.fn()
+    try {
+      window.history.replaceState({}, '', '/settings/target-extensions')
+      render(<ConnectionsSettingsPage onBack={onBack} />)
+      expect(screen.queryByTestId('settings-nav-target-extensions')).not.toBeInTheDocument()
+      expect(screen.getByTestId('general-settings-page')).toBeInTheDocument()
+      expect(onBack).not.toHaveBeenCalled()
+    } finally {
+      marker.remove()
+    }
+  })
+
+  test('keeps a direct new-session defaults route on non-Gateway hosts for an explicit unsupported page', () => {
+    window.history.pushState({}, '', '/settings/execution-defaults')
+    render(<ConnectionsSettingsPage onBack={vi.fn()} />)
+    expect(screen.queryByTestId('settings-nav-execution-defaults')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('settings-nav-target-extensions')).not.toBeInTheDocument()
+    expect(screen.getByTestId('execution-defaults-settings-page')).toBeInTheDocument()
   })
 
   test('combines phone pairing and browser access under Access links', async () => {
@@ -242,7 +279,7 @@ describe('ConnectionsSettingsPage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     localStorage.clear()
-    delete (window as typeof window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__
+    clearTestTransports()
     Object.defineProperty(navigator, 'clipboard', {
       configurable: true,
       value: {
@@ -421,11 +458,8 @@ describe('ConnectionsSettingsPage', () => {
     expect(screen.getByTestId('worktrees-settings-page')).toBeInTheDocument()
   })
 
-  test('adds titlebar clearance for the settings back button in Tauri', () => {
-    Object.defineProperty(window, '__TAURI_INTERNALS__', {
-      configurable: true,
-      value: {},
-    })
+  test('adds titlebar clearance for the settings back button in Gateway', () => {
+    installTestTransport(() => null)
     api.getAllDevices.mockResolvedValue([])
 
     render(<ConnectionsSettingsPage onBack={vi.fn()} />)
@@ -436,7 +470,7 @@ describe('ConnectionsSettingsPage', () => {
       within(screen.getByTestId('settings-main-titlebar-drag-region')).getByTestId(
         'macos-titlebar-drag-region'
       )
-    ).toHaveAttribute('data-tauri-drag-region')
+    ).toHaveAttribute('data-kcoder-drag-region')
   })
 
   test('keeps the settings navigation scrollable within the sidebar', () => {
@@ -452,36 +486,26 @@ describe('ConnectionsSettingsPage', () => {
     )
   })
 
-  test('keeps the cloud device creation notice visible after the create request resolves', async () => {
-    api.getAllDevices.mockResolvedValue([])
-    api.createCloudDevice.mockResolvedValue({
-      id: 1,
-      device_id: 'device-1',
-      name: 'dev-executor-device-1',
-      status: 'offline',
-      device_type: 'cloud',
-      message: 'created',
+  test('the titlebar sidebar request collapses and restores the settings navigation', async () => {
+    const onBack = vi.fn()
+    render(<ConnectionsSettingsPage onBack={onBack} />)
+    const sidebar = screen.getByTestId('settings-sidebar')
+    const width = sidebar.style.width
+    expect(Number.parseInt(width, 10)).toBeGreaterThan(0)
+    act(() => {
+      expect(requestDesktopSidebarToggle()).toBe(true)
     })
-
-    render(<ConnectionsSettingsPage onBack={vi.fn()} />)
-
-    await userEvent.click(await screen.findByTestId('connection-add-device-button'))
-    const createDialog = screen.getByTestId('add-cloud-device-dialog')
-    expect(createDialog.querySelector('.text-\\[\\#0d9488\\]')).toBeNull()
-    expect(createDialog).toHaveClass('bg-popover')
-    expect(screen.queryByTestId('add-cloud-device-start-command')).not.toBeInTheDocument()
-    expect(screen.getByTestId('add-cloud-device-confirm')).toHaveClass(
-      'bg-text-primary',
-      'text-background'
-    )
-    await userEvent.click(screen.getByTestId('add-cloud-device-confirm'))
-
-    await waitFor(() => expect(api.createCloudDevice).toHaveBeenCalledTimes(1))
-    const creatingNotice = screen.getByText(
-      '云设备创建中，初始化约需 2-3 分钟，完成后将自动出现在列表中'
-    )
-    expect(creatingNotice).toHaveClass('text-text-secondary')
-    expect(creatingNotice).not.toHaveClass('text-primary')
+    expect(sidebar).toHaveStyle({ width: '0px' })
+    expect(sidebar).toHaveAttribute('aria-hidden', 'true')
+    expect(sidebar).toHaveAttribute('inert')
+    expect(screen.getByTestId('settings-sidebar-resize-handle')).toBeDisabled()
+    act(() => {
+      expect(requestDesktopSidebarToggle()).toBe(true)
+    })
+    expect(sidebar).toHaveStyle({ width })
+    expect(sidebar).toHaveAttribute('aria-hidden', 'false')
+    await userEvent.click(screen.getByTestId('settings-back-button'))
+    expect(onBack).toHaveBeenCalledTimes(1)
   })
 
   test('opens appearance settings from desktop settings navigation', async () => {
@@ -1061,9 +1085,7 @@ describe('ConnectionsSettingsPage', () => {
     expect(
       within(screen.getByTestId('cloud-models-section')).getByText('云端模型')
     ).toBeInTheDocument()
-    expect(screen.getByTestId('cloud-models-configure-button')).toHaveTextContent(
-      '旧版云凭据同步不可用'
-    )
+    expect(screen.queryByTestId('cloud-models-configure-button')).not.toBeInTheDocument()
     expect(screen.getByTestId('codex-auth-settings')).toHaveTextContent('KCoder 设置')
     expect(screen.getByTestId('runtime-config-cloud-required')).toHaveTextContent('未连接云端')
     expect(screen.queryByTestId('runtime-config-toggle')).not.toBeInTheDocument()
@@ -1076,14 +1098,10 @@ describe('ConnectionsSettingsPage', () => {
     expect(screen.getByTestId('runtime-config-sync-auth-button')).toHaveTextContent(
       '旧版云凭据同步不可用'
     )
-    expect(screen.getByTestId('runtime-config-sync-auth-button')).not.toBeDisabled()
+    expect(screen.getByTestId('runtime-config-sync-auth-button')).toBeDisabled()
     expect(userApi.getRuntimeConfig).not.toHaveBeenCalled()
 
-    await userEvent.click(screen.getByTestId('runtime-config-sync-auth-button'))
-
-    expect(screen.getByRole('heading', { name: '云端连接' })).toBeInTheDocument()
-    expect(screen.getByTestId('settings-cloud-connect-button')).toHaveTextContent('连接云端')
-    expect(window.location.pathname).toBe('/settings/connections')
+    expect(screen.queryByTestId('settings-nav-connections')).not.toBeInTheDocument()
   })
 
   test('saves personal proxy from proxy settings', async () => {
@@ -1192,454 +1210,5 @@ describe('ConnectionsSettingsPage', () => {
     expect(screen.getByTestId('settings-nav-appearance')).toHaveClass(
       'bg-[rgb(var(--color-sidebar-active))]'
     )
-  })
-
-  test('keeps uncommon cloud device actions in a compact more menu with confirmation', async () => {
-    api.getAllDevices.mockResolvedValue([cloudDevice()])
-    api.restartCloudDevice.mockResolvedValue({ message: 'restart sent' })
-    api.deleteCloudDevice.mockResolvedValue({ message: 'deleted' })
-
-    render(<ConnectionsSettingsPage onBack={vi.fn()} />)
-
-    await screen.findByTestId('connection-device-device-1')
-    expect(screen.queryByTestId('connection-restart-button-device-1')).not.toBeInTheDocument()
-    expect(screen.queryByTestId('connection-delete-button-device-1')).not.toBeInTheDocument()
-
-    const moreButton = screen.getByTestId('connection-more-button-device-1')
-    expect(moreButton).toHaveClass('h-7', 'w-7')
-    expect(moreButton).toHaveAccessibleName('更多操作')
-
-    await userEvent.click(moreButton)
-    const restartMenuItem = screen.getByTestId('connection-restart-menu-item-device-1')
-    const deleteMenuItem = screen.getByTestId('connection-delete-menu-item-device-1')
-    expect(restartMenuItem).toHaveTextContent('重启设备')
-    expect(deleteMenuItem).toHaveTextContent('删除设备')
-
-    await userEvent.click(restartMenuItem)
-    expect(api.restartCloudDevice).not.toHaveBeenCalled()
-    const restartDialog = screen.getByTestId('confirm-restart-device-dialog')
-    const restartConfirmButton = screen.getByTestId('confirm-restart-device-button')
-    expect(restartDialog.querySelector('.text-\\[\\#0d9488\\]')).toBeNull()
-    expect(restartDialog).toHaveClass('bg-popover')
-    expect(restartConfirmButton).toHaveClass('bg-text-primary', 'text-background')
-    await userEvent.click(restartConfirmButton)
-
-    await userEvent.click(moreButton)
-    await userEvent.click(screen.getByTestId('connection-delete-menu-item-device-1'))
-    expect(api.deleteCloudDevice).not.toHaveBeenCalled()
-    await userEvent.click(screen.getByTestId('confirm-delete-device-button'))
-
-    expect(api.restartCloudDevice).toHaveBeenCalledWith('device-1')
-    expect(api.deleteCloudDevice).toHaveBeenCalledWith('device-1')
-  })
-
-  test('keeps connection settings open after the cloud desktop extension opens', async () => {
-    const onBack = vi.fn()
-    api.getAllDevices.mockResolvedValue([cloudDevice()])
-
-    render(<ConnectionsSettingsPage onBack={onBack} />)
-
-    const button = await screen.findByTestId('connection-cloud-desktop-button-device-1')
-    expect(cloudDesktopExtensionMock.DeviceAction).toHaveBeenCalledWith(
-      expect.objectContaining({
-        deviceId: 'device-1',
-        disabled: false,
-        onOpened: expect.any(Function),
-      }),
-      undefined
-    )
-    await userEvent.click(button)
-
-    expect(onBack).not.toHaveBeenCalled()
-  })
-
-  test('does not render a cloud desktop action when the extension is unavailable', async () => {
-    cloudDesktopExtensionMock.available = false
-    api.getAllDevices.mockResolvedValue([cloudDevice()])
-
-    render(<ConnectionsSettingsPage onBack={vi.fn()} />)
-
-    await screen.findByTestId('connection-device-device-1')
-    expect(screen.queryByTestId('connection-cloud-desktop-button-device-1')).not.toBeInTheDocument()
-  })
-
-  test('passes an offline device as disabled to the cloud desktop action', async () => {
-    api.getAllDevices.mockResolvedValue([cloudDevice({ status: 'offline' })])
-
-    render(<ConnectionsSettingsPage onBack={vi.fn()} />)
-
-    expect(await screen.findByTestId('connection-cloud-desktop-button-device-1')).toBeDisabled()
-    expect(cloudDesktopExtensionMock.DeviceAction).toHaveBeenCalledWith(
-      expect.objectContaining({ deviceId: 'device-1', disabled: true }),
-      undefined
-    )
-  })
-
-  test('shows cloud device connection info from the compact more menu and copies values', async () => {
-    api.getAllDevices.mockResolvedValue([cloudDevice()])
-
-    render(<ConnectionsSettingsPage onBack={vi.fn()} />)
-
-    await screen.findByTestId('connection-device-device-1')
-    await userEvent.click(screen.getByTestId('connection-more-button-device-1'))
-    await userEvent.click(screen.getByTestId('connection-info-menu-item-device-1'))
-
-    const dialog = screen.getByTestId('connection-info-dialog')
-    expect(dialog).toHaveTextContent('连接信息')
-    expect(dialog).toHaveTextContent('sandbox-1')
-    expect(dialog).toHaveTextContent('cloud-runtime-device-1')
-    expect(dialog).toHaveTextContent('ubuntu')
-    expect(dialog).toHaveTextContent('initial-password-1')
-
-    await userEvent.click(screen.getByTestId('copy-connection-info-password'))
-    expect(navigator.clipboard.writeText).toHaveBeenCalledWith('initial-password-1')
-
-    await userEvent.click(screen.getByTestId('copy-connection-info-all'))
-    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
-      [
-        'Sandbox ID: sandbox-1',
-        'Device ID: cloud-runtime-device-1',
-        'Username: ubuntu',
-        'Password: initial-password-1',
-      ].join('\n')
-    )
-  })
-
-  test('falls back to legacy ubuntu password field in cloud device connection info', async () => {
-    api.getAllDevices.mockResolvedValue([
-      cloudDevice({
-        cloud_config: {
-          sandboxId: 'sandbox-legacy',
-          deviceId: 'device-legacy',
-          ubuntuPassword: 'legacy-password',
-        },
-      }),
-    ])
-
-    render(<ConnectionsSettingsPage onBack={vi.fn()} />)
-
-    await screen.findByTestId('connection-device-device-1')
-    await userEvent.click(screen.getByTestId('connection-more-button-device-1'))
-    await userEvent.click(screen.getByTestId('connection-info-menu-item-device-1'))
-
-    expect(screen.getByTestId('connection-info-dialog')).toHaveTextContent('legacy-password')
-  })
-
-  test.each([
-    {
-      name: 'missing',
-      cloudConfig: {
-        sandboxId: 'sandbox-without-password',
-        deviceId: 'device-without-password',
-      },
-    },
-    {
-      name: 'empty',
-      cloudConfig: {
-        sandboxId: 'sandbox-empty-password',
-        deviceId: 'device-empty-password',
-        ubuntuInitialPassword: '',
-      },
-    },
-  ])('falls back to ubuntu when the initial password is $name', async ({ cloudConfig }) => {
-    api.getAllDevices.mockResolvedValue([
-      cloudDevice({
-        cloud_config: cloudConfig,
-      }),
-    ])
-
-    render(<ConnectionsSettingsPage onBack={vi.fn()} />)
-
-    await screen.findByTestId('connection-device-device-1')
-    await userEvent.click(screen.getByTestId('connection-more-button-device-1'))
-    await userEvent.click(screen.getByTestId('connection-info-menu-item-device-1'))
-    await userEvent.click(screen.getByTestId('copy-connection-info-password'))
-
-    expect(navigator.clipboard.writeText).toHaveBeenCalledWith('ubuntu')
-  })
-
-  test('lists cloud Claude Code devices while excluding local and unsupported devices', async () => {
-    api.getAllDevices.mockResolvedValue([
-      cloudDevice({
-        device_id: 'cloud-claude',
-        name: 'Cloud Claude Device',
-        device_type: 'cloud',
-        bind_shell: 'claudecode',
-      }),
-      cloudDevice({
-        device_id: 'cloud-openclaw',
-        name: 'Cloud OpenClaw Device',
-        device_type: 'cloud',
-        bind_shell: 'openclaw',
-      }),
-      localDevice({
-        device_id: 'local-claude',
-        name: 'Local Claude Device',
-      }),
-    ])
-
-    render(<ConnectionsSettingsPage onBack={vi.fn()} />)
-
-    expect(await screen.findByText('Cloud Claude Device')).toBeInTheDocument()
-    expect(screen.queryByText('Local Claude Device')).not.toBeInTheDocument()
-    expect(screen.queryByTestId('connection-device-local-claude')).not.toBeInTheDocument()
-    expect(screen.queryByText('Cloud OpenClaw Device')).not.toBeInTheDocument()
-  })
-
-  test('lists remote Claude Code devices in a separate section', async () => {
-    api.getAllDevices.mockResolvedValue([
-      cloudDevice({ device_id: 'cloud-claude', name: 'Cloud Claude Device' }),
-      remoteDevice({ device_id: 'remote-docker', name: 'Remote Alias' }),
-      localDevice({ device_id: 'local-claude', name: 'Local Claude Device' }),
-    ])
-
-    render(<ConnectionsSettingsPage onBack={vi.fn()} />)
-
-    expect(await screen.findByText('Cloud Claude Device')).toBeInTheDocument()
-    expect(screen.getByText('Remote Alias')).toBeInTheDocument()
-    expect(screen.queryByText('Local Claude Device')).not.toBeInTheDocument()
-    expect(screen.getByText('远程设备')).toBeInTheDocument()
-    expect(screen.queryByTestId('connection-more-button-remote-docker')).not.toBeInTheDocument()
-  })
-
-  test('hides the IDE action for a KCoder gateway without code-server support', async () => {
-    api.getAllDevices.mockResolvedValue([
-      remoteDevice({
-        device_id: 'kcoder-remote',
-        name: 'KCoder Remote',
-        capabilities: ['kcoder-gateway'],
-      }),
-    ])
-
-    render(<ConnectionsSettingsPage onBack={vi.fn()} />)
-
-    expect(await screen.findByTestId('connection-device-kcoder-remote')).toBeInTheDocument()
-    expect(screen.getByTestId('connection-terminal-button-kcoder-remote')).toBeInTheDocument()
-    expect(
-      screen.queryByTestId('connection-code-server-button-kcoder-remote')
-    ).not.toBeInTheDocument()
-  })
-
-  test('does not show the current app backend registration in cloud connections', async () => {
-    api.getAllDevices.mockResolvedValue([
-      localDevice({
-        device_id: 'local-claude',
-        name: 'Current App Backend Registration',
-        device_type: 'app',
-        app_device_id: 'local-claude',
-        status: 'online',
-      }),
-    ])
-
-    render(<ConnectionsSettingsPage onBack={vi.fn()} />)
-
-    await waitFor(() => expect(api.getAllDevices).toHaveBeenCalledTimes(1))
-    expect(screen.queryByTestId('connection-device-local-claude')).not.toBeInTheDocument()
-    expect(screen.queryByText('Current App Backend Registration')).not.toBeInTheDocument()
-    expect(screen.queryByText('本地设备')).not.toBeInTheDocument()
-    expect(screen.queryByText('远程设备')).not.toBeInTheDocument()
-    expect(screen.getByTestId('cloud-connection-status-card')).toHaveTextContent(/在线云设备.*0/)
-  })
-
-  test('shows device IP until the user assigns an alias', async () => {
-    api.getAllDevices.mockResolvedValue([
-      cloudDevice(),
-      remoteDevice(),
-      cloudDevice({
-        id: 4,
-        device_id: 'aliased-device',
-        name: 'Build Box',
-        client_ip: '203.0.113.12',
-      }),
-      cloudDevice({
-        id: 5,
-        device_id: '9562a3b4-61a3-4217-9655-0341b231eb06',
-        name: 'build-executor-0341b231eb06',
-        client_ip: '203.0.113.13',
-        cloud_config: {
-          sandboxId: 'sandbox-generated-name',
-          deviceId: 'runtime-generated-name',
-          deviceName: 'build-executor-0341b231eb06',
-        },
-      }),
-    ])
-
-    render(<ConnectionsSettingsPage onBack={vi.fn()} />)
-
-    expect(await screen.findByText('203.0.113.10')).toBeInTheDocument()
-    expect(screen.getByText('203.0.113.11')).toBeInTheDocument()
-    expect(screen.getByText('Build Box')).toBeInTheDocument()
-    expect(screen.getByText('203.0.113.13')).toBeInTheDocument()
-    expect(screen.queryByText('device-1')).not.toBeInTheDocument()
-    expect(screen.queryByText('Docker Remote Device')).not.toBeInTheDocument()
-    expect(screen.queryByText('build-executor-0341b231eb06')).not.toBeInTheDocument()
-    expect(screen.queryByText('203.0.113.12')).not.toBeInTheDocument()
-  })
-
-  test('generates and copies a remote Docker device command from the add device dialog', async () => {
-    api.getAllDevices.mockResolvedValue([cloudDevice()])
-    api.createDockerRemoteDeviceCommand.mockResolvedValue({
-      device_id: 'remote-device',
-      name: 'Docker Remote Device',
-      image: 'ghcr.io/wecode-ai/wegent-device:latest',
-      env: {
-        DEVICE_TYPE: 'remote',
-        EXECUTOR_MODE: 'local',
-      },
-      command:
-        'docker run -d -e DEVICE_TYPE=remote -e EXECUTOR_MODE=local ghcr.io/wecode-ai/wegent-device:latest',
-    })
-
-    render(<ConnectionsSettingsPage onBack={vi.fn()} />)
-
-    await userEvent.click(await screen.findByTestId('connection-add-device-button'))
-    expect(screen.queryByTestId('remote-docker-image-input')).not.toBeInTheDocument()
-    expect(screen.queryByTestId('remote-docker-backend-url-input')).not.toBeInTheDocument()
-    expect(screen.queryByTestId('remote-docker-public-url-input')).not.toBeInTheDocument()
-    await userEvent.click(screen.getByTestId('add-remote-docker-button'))
-
-    await waitFor(() => expect(api.createDockerRemoteDeviceCommand).toHaveBeenCalledTimes(1))
-    expect(api.createDockerRemoteDeviceCommand).toHaveBeenCalledWith({
-      client_origin: window.location.origin,
-    })
-    expect(screen.getByTestId('remote-docker-command')).toHaveTextContent('DEVICE_TYPE=remote')
-    expect(screen.getByTestId('remote-docker-command')).toHaveTextContent('EXECUTOR_MODE=local')
-
-    await userEvent.click(screen.getByTestId('copy-remote-docker-command'))
-    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
-      'docker run -d -e DEVICE_TYPE=remote -e EXECUTOR_MODE=local ghcr.io/wecode-ai/wegent-device:latest'
-    )
-  })
-
-  test('disables cloud device creation when the user already has one cloud device', async () => {
-    api.getAllDevices.mockResolvedValue([cloudDevice()])
-    api.createDockerRemoteDeviceCommand.mockResolvedValue({
-      device_id: 'remote-device',
-      name: 'Docker Remote Device',
-      image: 'ghcr.io/wecode-ai/wegent-device:latest',
-      env: {
-        DEVICE_TYPE: 'remote',
-        EXECUTOR_MODE: 'local',
-      },
-      command:
-        'docker run -d -e DEVICE_TYPE=remote -e EXECUTOR_MODE=local ghcr.io/wecode-ai/wegent-device:latest',
-    })
-
-    render(<ConnectionsSettingsPage onBack={vi.fn()} />)
-
-    await userEvent.click(await screen.findByTestId('connection-add-device-button'))
-
-    expect(screen.getByTestId('add-cloud-device-confirm')).toBeDisabled()
-    expect(screen.getByText(/每个用户只能创建一个云设备/)).toBeInTheDocument()
-
-    await userEvent.click(screen.getByTestId('add-remote-docker-button'))
-
-    expect(api.createCloudDevice).not.toHaveBeenCalled()
-    await waitFor(() => expect(api.createDockerRemoteDeviceCommand).toHaveBeenCalledTimes(1))
-  })
-
-  test('uses theme-aware surfaces for device cards and controls', async () => {
-    api.getAllDevices.mockResolvedValue([cloudDevice()])
-
-    render(<ConnectionsSettingsPage onBack={vi.fn()} />)
-
-    const deviceCard = await screen.findByTestId('connection-device-device-1')
-    const terminalButton = screen.getByTestId('connection-terminal-button-device-1')
-    const moreButton = screen.getByTestId('connection-more-button-device-1')
-
-    expect(deviceCard).toHaveClass('bg-background', 'border-border')
-    expect(deviceCard).not.toHaveClass('bg-white')
-    expect(terminalButton).toHaveClass('bg-background', 'text-text-primary')
-    expect(moreButton).toHaveClass('bg-background', 'text-text-secondary')
-  })
-
-  test('omits local devices, metrics, and scaling guidance from cloud connections', async () => {
-    runtimeConfigMock.value = {
-      appBasePath: '',
-      apiBaseUrl: '/api',
-      socketBaseUrl: 'http://203.0.113.10:8000',
-      socketPath: '/socket.io',
-      cloudDeviceScalingWikiUrl: 'https://wiki.example.com/cloud-device-scaling',
-    }
-    api.getAllDevices.mockResolvedValue([cloudDevice(), localDevice()])
-
-    render(<ConnectionsSettingsPage onBack={vi.fn()} />)
-
-    await screen.findByTestId('connection-device-device-1')
-    expect(screen.queryByTestId('connection-device-local-device')).not.toBeInTheDocument()
-    expect(screen.queryByTestId('device-metrics')).not.toBeInTheDocument()
-    expect(screen.queryByTestId('connection-scale-wiki')).not.toBeInTheDocument()
-    expect(screen.queryByTestId('connection-scale-wiki-link')).not.toBeInTheDocument()
-    expect(api.getMetrics).not.toHaveBeenCalled()
-  })
-
-  test('embeds a remote terminal for socketio cloud device terminal sessions', async () => {
-    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null)
-    api.getAllDevices.mockResolvedValue([cloudDevice()])
-    api.startTerminal.mockResolvedValue({
-      session_id: 'terminal-1',
-      device_id: 'device-1',
-      type: 'terminal',
-      path: '/workspace',
-      url: '',
-      transport: 'socketio',
-    })
-
-    render(<ConnectionsSettingsPage onBack={vi.fn()} />)
-
-    await userEvent.click(await screen.findByTestId('connection-terminal-button-device-1'))
-
-    await waitFor(() => expect(api.startTerminal).toHaveBeenCalledWith('device-1'))
-    expect(openSpy).not.toHaveBeenCalled()
-    expect(screen.getByTestId('settings-device-terminal-panel')).toBeInTheDocument()
-    expect(screen.getByTestId('settings-device-remote-terminal')).toHaveAttribute(
-      'data-session-id',
-      'terminal-1'
-    )
-  })
-
-  test('opens URL-based terminal sessions through the external URL helper', async () => {
-    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null)
-    api.getAllDevices.mockResolvedValue([cloudDevice()])
-    api.startTerminal.mockResolvedValue({
-      session_id: 'terminal-1',
-      device_id: 'device-1',
-      type: 'terminal',
-      path: '/workspace',
-      url: 'http://localhost/terminal',
-      transport: 'http',
-    })
-
-    render(<ConnectionsSettingsPage onBack={vi.fn()} />)
-
-    await userEvent.click(await screen.findByTestId('connection-terminal-button-device-1'))
-
-    await waitFor(() => expect(api.startTerminal).toHaveBeenCalledWith('device-1'))
-    expect(openExternalUrlMock).toHaveBeenCalledWith('http://localhost/terminal')
-    expect(openSpy).not.toHaveBeenCalled()
-  })
-
-  test('allows deleting offline remote device registrations', async () => {
-    api.getAllDevices.mockResolvedValue([
-      remoteDevice({
-        device_id: 'offline-remote',
-        name: 'Offline Remote Device',
-        status: 'offline',
-      }),
-    ])
-    api.deleteDevice.mockResolvedValue({ message: 'deleted' })
-
-    render(<ConnectionsSettingsPage onBack={vi.fn()} />)
-
-    expect(await screen.findByTestId('connection-device-offline-remote')).toBeInTheDocument()
-    expect(screen.queryByTestId('connection-more-button-offline-remote')).not.toBeInTheDocument()
-
-    await userEvent.click(screen.getByTestId('connection-delete-button-offline-remote'))
-    expect(screen.getByTestId('confirm-delete-device-dialog')).toHaveTextContent('删除远程设备')
-    expect(screen.getByTestId('confirm-delete-device-dialog')).toHaveTextContent('远程设备注册记录')
-    await userEvent.click(screen.getByTestId('confirm-delete-device-button'))
-
-    await waitFor(() => expect(api.deleteDevice).toHaveBeenCalledWith('offline-remote'))
-    expect(api.deleteCloudDevice).not.toHaveBeenCalled()
   })
 })

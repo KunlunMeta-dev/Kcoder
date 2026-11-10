@@ -33,7 +33,7 @@ async fn write_tool_checkpoint_enables_rewind() {
     let tmp = tempfile::tempdir().unwrap();
     let file = tmp.path().join("a.txt");
     std::fs::write(&file, b"original").unwrap();
-    let settings = Settings::default();
+    let settings = crate::test_support::engine_builder::fixture_settings();
     let engine = QueryEngine::new_with_folder_trust(
         Arc::new(EmptyProvider),
         AppState::new(tmp.path()),
@@ -94,7 +94,7 @@ async fn write_tool_checkpoint_enables_rewind() {
 #[test]
 fn user_request_turn_previews_number_only_genuine_requests() {
     let tmp = tempfile::tempdir().unwrap();
-    let settings = Settings::default();
+    let settings = crate::test_support::engine_builder::fixture_settings();
     let engine = QueryEngine::new_with_folder_trust(
         Arc::new(EmptyProvider),
         AppState::new(tmp.path()),
@@ -138,7 +138,7 @@ fn user_request_turn_previews_number_only_genuine_requests() {
 async fn allow_always_persists_command_rule_for_shell_and_tool_grant_for_others() {
     let tmp = tempfile::tempdir().unwrap();
     let settings_path = tmp.path().join("test-config").join("settings.json");
-    let engine = TestEngineBuilder::new(tmp.path()).build();
+    let engine = TestEngineBuilder::new(tmp.path()).build_with_profile_directory();
 
     // bash approval persists a command-specific rule, not a tool-wide grant.
     let input = serde_json::json!({"command": "cargo test"});
@@ -230,7 +230,7 @@ async fn allow_always_persists_command_rule_for_shell_and_tool_grant_for_others(
 #[tokio::test]
 async fn settings_persistence_is_disabled_until_the_host_provides_a_user_path() {
     let tmp = tempfile::tempdir().unwrap();
-    let mut settings = Settings::default();
+    let mut settings = crate::test_support::engine_builder::fixture_settings();
     settings.allowed_tools.push("write".to_string());
     let engine = QueryEngine::new_with_folder_trust(
         Arc::new(EmptyProvider),
@@ -283,13 +283,13 @@ async fn field_persistence_preserves_user_text_without_materializing_effective_l
         permission_mode: PermissionMode::Yolo,
         model: "project-model".to_string(),
         code_theme: "overlay-theme".to_string(),
-        ..Settings::default()
+        ..crate::test_support::engine_builder::fixture_settings()
     };
     effective.goal_pro.verifier_max_turns = 99;
     effective.allowed_tools = vec!["read".to_string(), "write".to_string()];
     let engine = TestEngineBuilder::new(tmp.path())
         .settings(effective.clone())
-        .build()
+        .build_with_profile_directory()
         .with_settings_persistence_path(settings_path.clone());
 
     engine
@@ -313,7 +313,7 @@ async fn field_persistence_preserves_user_text_without_materializing_effective_l
 async fn concurrent_permission_rules_are_ordered_and_never_restore_an_old_snapshot() {
     let tmp = tempfile::tempdir().unwrap();
     let settings_path = tmp.path().join("test-config/settings.json");
-    let engine = TestEngineBuilder::new(tmp.path()).build();
+    let engine = TestEngineBuilder::new(tmp.path()).build_with_profile_directory();
     let first = serde_json::json!({"command": "cargo test first"});
     let second = serde_json::json!({"command": "cargo test second"});
 
@@ -349,8 +349,8 @@ async fn concurrent_permission_rules_are_ordered_and_never_restore_an_old_snapsh
 async fn independent_engines_merge_permission_rules_from_stale_snapshots() {
     let tmp = tempfile::tempdir().unwrap();
     let settings_path = tmp.path().join("test-config/settings.json");
-    let first_engine = TestEngineBuilder::new(tmp.path()).build();
-    let second_engine = TestEngineBuilder::new(tmp.path()).build();
+    let first_engine = TestEngineBuilder::new(tmp.path()).build_with_profile_directory();
+    let second_engine = TestEngineBuilder::new(tmp.path()).build_with_profile_directory();
     assert!(!Arc::ptr_eq(
         &first_engine.settings_persistence_order,
         &second_engine.settings_persistence_order
@@ -391,12 +391,12 @@ async fn config_tool_runtime_refresh_preserves_session_permissions() {
     let tmp = tempfile::tempdir().unwrap();
     let settings = Settings {
         permission_mode: PermissionMode::Bypass,
-        ..Settings::default()
+        ..crate::test_support::engine_builder::fixture_settings()
     };
     let engine = TestEngineBuilder::new(tmp.path())
         .settings(settings)
         .tool_registry(kcoder_tools::default_registry().register(kcoder_tools::ConfigTool))
-        .build();
+        .build_with_profile_directory();
     {
         let mut permissions = recover_write_lock(&engine.permissions, "permissions");
         permissions.allow_for_session("write");
@@ -437,7 +437,7 @@ async fn config_tool_runtime_refresh_preserves_session_permissions() {
 #[tokio::test]
 async fn doom_loop_aborts_after_six_identical_tool_calls() {
     let tmp = tempfile::tempdir().unwrap();
-    let settings = Settings::default();
+    let settings = crate::test_support::engine_builder::fixture_settings();
     let engine = QueryEngine::new_with_folder_trust(
         Arc::new(DoomLoopProvider),
         AppState::new(tmp.path()),

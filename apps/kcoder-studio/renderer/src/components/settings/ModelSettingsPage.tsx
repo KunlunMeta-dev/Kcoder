@@ -1,3 +1,4 @@
+import { SettingsSelect } from '@/components/settings/SettingsSelect'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
   AlertCircle,
@@ -59,7 +60,7 @@ import {
 import { useTranslation } from '@/hooks/useTranslation'
 import { runtimeMethodForCurrentHost } from '@/kcoder/legacyRuntimeAbi'
 import { isClaudeCodeDevice } from '@/lib/device-capabilities'
-import { ensureLocalExecutorStarted, requestLocalExecutor } from '@/tauri/localExecutor'
+import { ensureLocalExecutorStarted, requestLocalExecutor } from '@/host/localExecutor'
 import type { UnifiedModel } from '@/types/api'
 import type { DeviceInfo } from '@/types/devices'
 import { SettingsPage, SettingsPageHeader } from './settings-ui'
@@ -78,7 +79,6 @@ function createRuntimeSettingsApis(connection: CloudRuntimeSettingsConnection) {
   const client = createHttpClient({
     baseUrl: connection.apiBaseUrl,
     getToken: () => connection.token,
-    redirectOnUnauthorized: false,
   })
   return {
     deviceApi: createDeviceApi(client),
@@ -146,7 +146,7 @@ function LocalCodexModelRow({
   return (
     <div
       data-testid="local-codex-model-row"
-      className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-background px-3 py-3"
+      className="studio-card-spacing flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-background px-3 py-3"
     >
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
@@ -564,16 +564,16 @@ function CodexOfficialModelsSection({
       </div>
 
       {loading ? (
-        <div className="rounded-lg border border-border bg-background px-3 py-3 text-sm text-text-secondary">
+        <div className="studio-card-spacing rounded-lg border border-border bg-background px-3 py-3 text-sm text-text-secondary">
           {t('workbench.codex_official_models_loading')}
         </div>
       ) : error ? (
-        <div className="flex items-start gap-2 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-3 text-sm text-red-500">
+        <div className="studio-card-spacing flex items-start gap-2 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-3 text-sm text-red-500">
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
           <span>{error}</span>
         </div>
       ) : providers.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-border bg-background px-3 py-3 text-sm text-text-secondary">
+        <div className="studio-card-spacing rounded-lg border border-dashed border-border bg-background px-3 py-3 text-sm text-text-secondary">
           {t('workbench.codex_official_models_empty')}
         </div>
       ) : (
@@ -583,7 +583,7 @@ function CodexOfficialModelsSection({
             <div
               key={provider.id}
               data-testid={`codex-model-provider-${provider.id}`}
-              className="rounded-lg border border-border bg-background"
+              className="studio-card rounded-lg border border-border bg-background"
             >
               <button
                 type="button"
@@ -1110,7 +1110,7 @@ function LocalModelSettingsSection({
 
       <div
         data-testid="local-model-settings"
-        className="mt-4 grid gap-3 rounded-lg border border-border bg-background p-4"
+        className="studio-card-spacing mt-4 grid gap-3 rounded-lg border border-border bg-background"
       >
         {formVisible && (
           <form
@@ -1119,7 +1119,7 @@ function LocalModelSettingsSection({
           >
             <label className="grid gap-1.5 text-xs font-medium text-text-secondary">
               {t('workbench.local_model_provider_label')}
-              <select
+              <SettingsSelect
                 data-testid="local-model-provider-select"
                 value={form.providerProfileId}
                 onChange={event =>
@@ -1137,7 +1137,7 @@ function LocalModelSettingsSection({
                       : profile.displayName}
                   </option>
                 ))}
-              </select>
+              </SettingsSelect>
             </label>
 
             {form.providerProfileId && form.providerProfileId !== 'custom' ? (
@@ -1192,7 +1192,7 @@ function LocalModelSettingsSection({
                 {providerModels.length > 0 && (
                   <label className="grid gap-1.5 text-xs font-medium text-text-secondary">
                     {t('workbench.local_model_provider_model_label')}
-                    <select
+                    <SettingsSelect
                       data-testid="local-model-provider-model-select"
                       value={form.modelId}
                       onChange={event => {
@@ -1217,7 +1217,7 @@ function LocalModelSettingsSection({
                           {model.displayName}
                         </option>
                       ))}
-                    </select>
+                    </SettingsSelect>
                   </label>
                 )}
                 <label className="grid gap-1.5 text-xs font-medium text-text-secondary">
@@ -1274,7 +1274,7 @@ function LocalModelSettingsSection({
                 <div className="grid items-start gap-3 sm:grid-cols-2">
                   <label className="grid content-start gap-1.5 text-xs font-medium text-text-secondary">
                     {t('workbench.local_model_api_format_label', 'API 格式')}
-                    <select
+                    <SettingsSelect
                       data-testid="local-model-api-format-select"
                       value={form.apiFormat}
                       onChange={event => {
@@ -1306,7 +1306,7 @@ function LocalModelSettingsSection({
                           {t(option.labelKey)}
                         </option>
                       ))}
-                    </select>
+                    </SettingsSelect>
                     <span className="text-xs font-normal leading-5 text-text-muted">
                       {t(
                         'workbench.local_model_api_format_hint',
@@ -1316,7 +1316,7 @@ function LocalModelSettingsSection({
                   </label>
                   <label className="grid content-start gap-1.5 text-xs font-medium text-text-secondary">
                     {t('workbench.local_model_tool_profile_label', '工具模式')}
-                    <select
+                    <SettingsSelect
                       data-testid="local-model-tool-profile-select"
                       value={form.toolProfile}
                       onChange={event => {
@@ -1346,7 +1346,7 @@ function LocalModelSettingsSection({
                       <option value="shell">
                         {t('workbench.local_model_tool_profile_shell', '仅 Shell 编辑')}
                       </option>
-                    </select>
+                    </SettingsSelect>
                     <span className="text-xs font-normal leading-5 text-text-muted">
                       {t(
                         'workbench.local_model_tool_profile_hint',
@@ -1466,7 +1466,7 @@ function LocalModelSettingsSection({
                   <div className="grid gap-3 sm:grid-cols-2">
                     <label className="grid gap-1.5 text-xs font-medium text-text-secondary">
                       {t('workbench.local_model_web_search_label')}
-                      <select
+                      <SettingsSelect
                         data-testid="local-model-web-search-select"
                         value={form.webSearchMode}
                         onChange={event =>
@@ -1481,7 +1481,7 @@ function LocalModelSettingsSection({
                             {t(option.labelKey)}
                           </option>
                         ))}
-                      </select>
+                      </SettingsSelect>
                     </label>
                     <fieldset className="grid gap-1.5 text-xs font-medium text-text-secondary">
                       <legend className="mb-1.5">
@@ -1596,7 +1596,7 @@ function LocalModelSettingsSection({
             {testResult && (
               <div
                 data-testid="local-model-test-result"
-                className={`flex items-start gap-2 rounded-lg border px-3 py-2 text-sm ${
+                className={`studio-card-spacing flex items-start gap-2 rounded-lg border text-sm ${
                   testResult.kind === 'success'
                     ? 'border-primary/20 bg-primary/10 text-primary'
                     : 'border-red-500/20 bg-red-500/10 text-red-500'
@@ -1616,7 +1616,7 @@ function LocalModelSettingsSection({
         {error && (
           <div
             data-testid="local-model-error"
-            className="mt-4 flex items-start gap-2 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-red-500"
+            className="studio-card-spacing mt-4 flex items-start gap-2 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-red-500"
           >
             <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
             <span>{error}</span>
@@ -1628,7 +1628,7 @@ function LocalModelSettingsSection({
             <div
               key={model.id}
               data-testid={`local-model-row-${model.id}`}
-              className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-background px-3 py-3"
+              className="studio-card-spacing flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-background px-3 py-3"
             >
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
@@ -1801,16 +1801,17 @@ function CloudModelsSection({
   return (
     <div data-testid="cloud-models-section" className="grid gap-2">
       {cloudSummaryRow}
-      {loading ? (
-        <div className="rounded-lg border border-border bg-background px-3 py-3 text-sm text-text-secondary">
+      {/* Reconnect refreshes keep the loaded models visible. */}
+      {loading && models.length === 0 ? (
+        <div className="studio-card-spacing rounded-lg border border-border bg-background px-3 py-3 text-sm text-text-secondary">
           {t('workbench.cloud_models_loading', '正在加载云端模型...')}
         </div>
       ) : error ? (
-        <div className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-3 text-sm text-red-500">
+        <div className="studio-card-spacing rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-3 text-sm text-red-500">
           {error}
         </div>
       ) : models.length === 0 ? (
-        <div className="rounded-lg border border-border bg-background px-3 py-3 text-sm text-text-secondary">
+        <div className="studio-card-spacing rounded-lg border border-border bg-background px-3 py-3 text-sm text-text-secondary">
           {t('workbench.cloud_models_empty', '暂无云端模型')}
         </div>
       ) : (
@@ -1928,7 +1929,7 @@ function DisconnectedCloudCodexSyncSection({
 
         <div
           data-testid="runtime-config-shared-auth-unavailable"
-          className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-dashed border-border bg-background px-4 py-3 text-text-muted"
+          className="studio-card-spacing flex flex-wrap items-center justify-between gap-4 rounded-lg border border-dashed border-border bg-background px-4 py-3 text-text-muted"
         >
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
@@ -1948,7 +1949,7 @@ function DisconnectedCloudCodexSyncSection({
           </div>
 
           <div className="flex min-w-[320px] flex-wrap items-center justify-end gap-2">
-            <select
+            <SettingsSelect
               data-testid="runtime-config-sync-source-select"
               disabled
               className="h-8 w-[152px] cursor-not-allowed rounded-md border border-border bg-muted px-2 text-sm text-text-muted"
@@ -1957,7 +1958,7 @@ function DisconnectedCloudCodexSyncSection({
               <option value="">
                 {t('workbench.runtime_config_current_device_source', '当前设备')}
               </option>
-            </select>
+            </SettingsSelect>
             <button
               type="button"
               data-testid="runtime-config-sync-auth-button"
@@ -2036,7 +2037,7 @@ function CodexAuthSettingsSection({
       </div>
       <div
         data-testid="runtime-config-cloud-sync"
-        className="mt-4 grid gap-3 rounded-lg border border-border bg-background p-4"
+        className="studio-card-spacing mt-4 grid gap-3 rounded-lg border border-border bg-background"
       >
         {children}
       </div>
@@ -2351,7 +2352,7 @@ export function ModelSettingsPage({
                   onRefresh={() => void loadLocalAuthStatus()}
                 />
 
-                <div className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-border bg-background px-4 py-3">
+                <div className="studio-card-spacing flex flex-wrap items-center justify-between gap-4 rounded-lg border border-border bg-background px-4 py-3">
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <h3 className="text-sm font-semibold text-text-primary">
@@ -2408,7 +2409,7 @@ export function ModelSettingsPage({
                       className="hidden"
                       onChange={event => void handleFileChange(event)}
                     />
-                    <select
+                    <SettingsSelect
                       data-testid="runtime-config-sync-source-select"
                       value={selectedAuthSyncSource}
                       onChange={event => setSelectedAuthSyncSource(event.target.value)}
@@ -2424,7 +2425,7 @@ export function ModelSettingsPage({
                           {device.name}
                         </option>
                       ))}
-                    </select>
+                    </SettingsSelect>
                     <button
                       type="button"
                       data-testid="runtime-config-sync-auth-button"
@@ -2446,7 +2447,7 @@ export function ModelSettingsPage({
               {notice && (
                 <div
                   data-testid="runtime-config-notice"
-                  className="rounded-lg border border-primary/20 bg-primary/10 px-3 py-2 text-sm text-primary"
+                  className="studio-card-spacing rounded-lg border border-primary/20 bg-primary/10 px-3 py-2 text-sm text-primary"
                 >
                   {notice}
                 </div>
@@ -2454,7 +2455,7 @@ export function ModelSettingsPage({
               {error && (
                 <div
                   data-testid="runtime-config-error"
-                  className="flex items-start gap-2 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-red-500"
+                  className="studio-card-spacing flex items-start gap-2 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-red-500"
                 >
                   <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
                   <span>{error}</span>

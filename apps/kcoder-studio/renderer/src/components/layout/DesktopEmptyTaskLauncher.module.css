@@ -8,6 +8,19 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.modeEntry {
+  animation: mode-content-enter var(--duration-base) var(--ease-standard) both;
+}
+
+@keyframes mode-content-enter {
+  from {
+    opacity: 0.35;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
 @container (min-width: 42rem) {
   .suggestionGrid {
     grid-template-columns: repeat(4, minmax(0, 1fr));

@@ -1535,12 +1535,17 @@ describe('createLocalAppServices', () => {
     expect(sendPayload.executionRequest.prompt).toContain('Current TODO: WEG-1')
   })
 
-  test('activates project-space capabilities for a generic cloud reference', async () => {
+  test.each([false, true])('adds cloud delivery guidance only when its MCP is configured (%s)', async configured => {
     const request = vi.fn().mockResolvedValue({ accepted: true })
     const services = createLocalAppServices({
       ensure: vi.fn().mockResolvedValue({ running: true, ready: true, deviceId: 'device-uuid' }),
       request,
       subscribe: vi.fn(),
+      cloudModelGateway: configured ? {
+        baseUrl: 'https://cloud.example.com/api/runtime-work/llm-responses-proxy',
+        apiKey: 'test-token',
+        mcpUrl: 'https://cloud.example.com/api/mcp/delivery/sse',
+      } : undefined,
     })
 
     await services.runtimeWorkApi?.createRuntimeTask({
@@ -1554,10 +1559,17 @@ describe('createLocalAppServices', () => {
 
     const payload = request.mock.calls.find(([method]) => method === 'runtime.tasks.create')?.[1]
     const prompt = payload.executionRequest.prompt as string
-    expect(prompt).toContain('[projectSpaceCapability]')
-    expect(prompt).toContain('wegent_delivery and wegent_tasks are server ids')
-    expect(prompt).toContain('Never create or copy a cloud project')
-    expect(prompt).toContain('do not use list_mcp_resources to discover tools')
+    expect(prompt).not.toContain('wegent_tasks')
+    if (configured) {
+      expect(prompt).toContain('[projectSpaceCapability]')
+      expect(prompt).toContain('wegent_delivery is an MCP server ID')
+      expect(payload.executionRequest.mcp_servers).toEqual([
+        expect.objectContaining({ name: 'wegent_delivery' }),
+      ])
+    } else {
+      expect(prompt).toBe('[$项目空间](cloud://projects) 帮我创建一个新项目')
+      expect(payload.executionRequest.mcp_servers).toEqual([])
+    }
   })
 
   test('workflow creation preserves the ordinary selected model, reasoning and proxy payload', async () => {
@@ -1799,6 +1811,7 @@ describe('createLocalAppServices', () => {
               title: 'Build',
               runtime: 'codex',
               goal_status: 'active',
+              goalStatusObservation: { availability: 'available', status: 'active' },
               continuable: true,
               thread_status: 'idle',
               turn_status: 'completed',
@@ -1816,6 +1829,7 @@ describe('createLocalAppServices', () => {
               title: 'Chat',
               runtime: 'codex',
               workspaceKind: 'chat',
+              goalStatusObservation: { availability: 'future' },
             },
           ],
         },
@@ -1858,6 +1872,7 @@ describe('createLocalAppServices', () => {
                   workspaceKind: 'worktree',
                   worktreeId: '42',
                   goalStatus: 'active',
+                  goalStatusObservation: { availability: 'available', status: 'active' },
                   continuable: true,
                   threadStatus: 'idle',
                   turnStatus: 'completed',
@@ -1876,6 +1891,7 @@ describe('createLocalAppServices', () => {
           tasks: [
             expect.objectContaining({
               taskId: 'chat-1',
+              goalStatusObservation: { availability: 'unavailable' },
             }),
           ],
         }),
@@ -1956,6 +1972,7 @@ describe('createLocalAppServices', () => {
       const request = vi.fn().mockImplementation(async (method: string) => {
         if (method === 'runtime.models.list') {
           return {
+            supportsTurnModelSwitch: true,
             providers: [
               {
                 id: 'minimax',
@@ -1984,7 +2001,13 @@ describe('createLocalAppServices', () => {
       expect(localStorage.getItem('wework.localModelSettings.v1')).toBeNull()
       expect(localStorage.getItem('wework.local-proxy-settings')).toBeNull()
       await expect(services.modelApi.listModels()).resolves.toMatchObject({
-        data: [expect.objectContaining({ name: 'minimax::MiniMax-M2.5', modelId: 'MiniMax-M2.5' })],
+        data: [
+          expect.objectContaining({
+            name: 'minimax::MiniMax-M2.5',
+            modelId: 'MiniMax-M2.5',
+            config: expect.objectContaining({ supportsTurnModelSwitch: true }),
+          }),
+        ],
       })
       expect(request).not.toHaveBeenCalledWith('runtime.catalog.custom.write', expect.anything())
 

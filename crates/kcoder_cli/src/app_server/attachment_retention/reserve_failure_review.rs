@@ -1,6 +1,6 @@
 //! Real store + production dispatcher ordering; no capability advertisement.
 use super::*;
-use crate::app_server::attachment_retention_dispatch;
+use crate::dispatch as attachment_retention_dispatch;
 
 #[test]
 fn reserve_failure_legacy_sealed_slot_unavailable_is_entry_local_and_zero_commit() {
@@ -29,7 +29,12 @@ fn reserve_failure_legacy_sealed_slot_unavailable_is_entry_local_and_zero_commit
     let before = serde_json::to_vec(&service.store.transaction().unwrap().state).unwrap();
     for _ in 0..2 {
         let error = service
-            .reserve(&scope, &request, "thread-a", &[reference.clone()])
+            .reserve(
+                &scope,
+                &request,
+                "thread-a",
+                std::slice::from_ref(&reference),
+            )
             .unwrap_err();
         assert_eq!(
             error.downcast_ref::<RetentionFailure>(),
@@ -98,7 +103,7 @@ fn reserve_failure_consumed_entry_is_conflict_but_original_id_stays_idempotent()
             &scope,
             &wire_id(service.namespace(), reference.epoch),
             "thread-a",
-            &[reference.clone()],
+            std::slice::from_ref(&reference),
         )
         .unwrap_err();
     assert_eq!(

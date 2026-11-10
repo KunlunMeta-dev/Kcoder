@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { EventEmitter } from 'node:events'
 import { createServer } from 'node:http'
 import { readFile, writeFile } from 'node:fs/promises'
+import { dirname, join } from 'node:path'
 import { PassThrough, Transform, Writable } from 'node:stream'
 import test from 'node:test'
 import { processTreeAlive } from '../../../e2e/harness/owned-process.mjs'
@@ -29,18 +30,56 @@ test('parallel owned runs use distinct OS-selected ports and report real READY a
     }
     assert.equal((await fetch(`${firstUrls.responses}/health`)).status, 200)
     assert.equal((await fetch(`${secondUrls.connector}/health`)).status, 200)
+    for (const url of [firstUrls.vite, secondUrls.vite]) {
+      const client = await (await fetch(`${url}/@vite/client`)).text()
+      const token = JSON.parse(client.match(/const wsToken = ("[^"]+")/)[1])
+      const socket = new WebSocket(`${url.replace('http:', 'ws:')}/?token=${encodeURIComponent(token)}`, 'vite-hmr')
+      try {
+        await new Promise((resolve, reject) => {
+          const timer = setTimeout(() => reject(new Error('owned HMR socket did not connect')), 5000)
+          socket.addEventListener('message', event => {
+            clearTimeout(timer)
+            try { assert.equal(JSON.parse(event.data).type, 'connected'); resolve() }
+            catch (error) { reject(error) }
+          }, { once: true })
+          socket.addEventListener('error', () => { clearTimeout(timer); reject(new Error('owned HMR socket failed')) }, { once: true })
+        })
+      } finally { socket.close() }
+    }
   } finally {
     await Promise.all([first.finish('passed'), second.finish('passed')])
   }
 })
 
-test('occupied legacy ports remain untouched while owned services bind dynamic ports', async () => {
-  let probes = 0
-  const occupied = await Promise.all(
-    [9996, 9997, 9998, 4174].map(port => occupy(port, () => probes++))
-  )
+test('Vite shutdown keeps file-viewer asset copies in the run-owned output', async () => {
   const run = await OwnedPlaywrightRun.create()
   try {
+    await run.startServices()
+  } finally {
+    await run.finish('passed')
+  }
+  const log = await readFile(`${run.logsDir}/vite.log`, 'utf8')
+  const copyTargets = [...log.matchAll(/Copied \d+\/\d+ renderer assets to ([^\r\n]+)/g)]
+    .map(match => match[1])
+  assert.ok(copyTargets.some(target => target === join(run.stateDir, 'vite-public')))
+  assert.ok(copyTargets.some(target => target === join(run.stateDir, 'vite-dist')))
+  assert.ok(copyTargets.every(target => dirname(target) === run.stateDir),
+    'startup and closeBundle must never write shared public/dist assets')
+})
+
+test('occupied legacy ports remain untouched while owned services bind dynamic ports', async t => {
+  let probes = 0, run
+  const occupied = []
+  try {
+    for (const port of [9996, 9997, 9998, 4174]) {
+      try { occupied.push(await occupy(port, () => probes++)) }
+      catch (error) {
+        if (error.code !== 'EADDRINUSE') throw error
+        t.skip(`Legacy port ${port} is already owned by another service`)
+        return
+      }
+    }
+    run = await OwnedPlaywrightRun.create()
     const urls = await run.startServices()
     assert.equal(
       Object.values(run.services).some(item => [9996, 9997, 9998, 4174].includes(item.port)),
@@ -49,8 +88,8 @@ test('occupied legacy ports remain untouched while owned services bind dynamic p
     assert.equal(probes, 0, 'owner must trust child READY, not a pre-existing health endpoint')
     assert.equal((await fetch(`${urls.sites}/health`)).status, 200)
   } finally {
-    await run.finish('passed')
-    await Promise.all(occupied.map(server => close(server)))
+    try { await run?.finish('passed') }
+    finally { await Promise.all(occupied.map(server => close(server))) }
   }
 })
 

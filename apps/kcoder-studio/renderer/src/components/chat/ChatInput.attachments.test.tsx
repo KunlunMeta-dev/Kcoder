@@ -14,13 +14,23 @@ vi.mock('@/hooks/useTranslation', () => ({
   useTranslation: () => ({
     t: (
       key: string,
-      options?: string | { action?: string; count?: number; device?: string; location?: string },
+      options?:
+        | string
+        | {
+            action?: string
+            count?: number
+            device?: string
+            location?: string
+            name?: string
+            progress?: number
+          },
       interpolation?: { model?: string }
     ) => {
       if (typeof options === 'string') {
         return interpolation?.model ? options.replace('{{model}}', interpolation.model) : options
       }
       if (key === 'workbench.goal_standard_label') return '普通目标（/goal）'
+      if (key === 'attachment_uploading') return `${options?.name} 上传中 ${options?.progress}%`
       if (key === 'workbench.goal_pro_label') return '严格目标（/goal-pro）'
       if (key === 'workbench.goal_pro_description') return '持续执行目标，并进行独立验证'
       if (key === 'workbench.code_comment_count') {
@@ -51,7 +61,6 @@ describe('ChatInput attachments', () => {
       configurable: true,
       value: originalInnerWidth,
     })
-    delete (window as typeof window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__
   })
   test('provides left-side drag handles to reorder multiple queued messages', () => {
     const queuedMessages: QueuedWorkbenchMessage[] = [

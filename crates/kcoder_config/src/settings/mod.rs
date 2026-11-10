@@ -1,4 +1,5 @@
 //! Public configuration domains re-exported by the crate facade.
+pub mod integrations;
 
 mod permissions;
 pub use permissions::*;
@@ -20,7 +21,16 @@ mod goal;
 pub use goal::*;
 mod orchestration;
 pub use orchestration::*;
+mod continuous_work;
+pub use continuous_work::*;
 pub(super) mod defaults;
 
 mod knowledge;
 pub use knowledge::*;
+
+mod web;
+pub use web::*;
+
+#[cfg(test)]
+#[path = "mod.test.rs"]
+mod tests;

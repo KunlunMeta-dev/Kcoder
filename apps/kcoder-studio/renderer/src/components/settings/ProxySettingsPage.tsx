@@ -10,7 +10,7 @@ import {
   type LocalProxyConfig,
 } from '@/features/model-settings/localProxySettings'
 import { useTranslation } from '@/hooks/useTranslation'
-import { requestLocalExecutor } from '@/tauri/localExecutor'
+import { requestLocalExecutor } from '@/host/localExecutor'
 import { runtimeMethodForCurrentHost } from '@/kcoder/legacyRuntimeAbi'
 import { SettingsPage, SettingsPageHeader } from './settings-ui'
 
@@ -28,7 +28,6 @@ function createProxySettingsApi(connection: CloudProxySettingsConnection) {
     createHttpClient({
       baseUrl: connection.apiBaseUrl,
       getToken: () => connection.token,
-      redirectOnUnauthorized: false,
     })
   )
 }
@@ -169,7 +168,7 @@ export function ProxySettingsPage() {
   const renderLocalProxySection = (className = '') => (
     <section
       data-testid="proxy-config-local-device-section"
-      className={`rounded-lg border border-border bg-background p-4 ${className}`}
+      className={`studio-card-spacing rounded-lg border border-border bg-background ${className}`}
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
@@ -275,7 +274,7 @@ export function ProxySettingsPage() {
           {renderLocalProxySection()}
           <section
             data-testid="proxy-config-cloud-required"
-            className="rounded-lg border border-dashed border-border bg-background p-4"
+            className="studio-card-spacing rounded-lg border border-dashed border-border bg-background"
           >
             <div className="flex items-start gap-3">
               <Network className="mt-0.5 h-4 w-4 shrink-0 text-text-secondary" />
@@ -329,7 +328,7 @@ export function ProxySettingsPage() {
 
             <section
               data-testid="proxy-config-cloud-device-section"
-              className="rounded-lg border border-border bg-background p-4"
+              className="studio-card-spacing rounded-lg border border-border bg-background"
             >
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0">

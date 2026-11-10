@@ -207,7 +207,7 @@ await runE2E(import.meta.url, {
     await page.reload({ waitUntil: "domcontentloaded" });
     await byProject(page, renamedName).waitFor({ state: "visible", timeout: 30_000 });
     const archived = await page.evaluate(async () =>
-      window.__TAURI_INTERNALS__.invoke("local_executor_request", {
+      window.__ELECTRON_INTERNALS__.invoke("local_executor_request", {
         method: "runtime.archived_conversations.list", params: {},
       }),
     );

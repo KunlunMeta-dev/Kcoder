@@ -2,9 +2,6 @@ import { render, screen, within } from '@testing-library/react'
 import { describe, expect, test, vi } from 'vitest'
 import { DesktopTopBar } from './DesktopTopBar'
 
-vi.mock('@tauri-apps/api/window', () => ({
-  getCurrentWindow: () => ({ startDragging: vi.fn() }),
-}))
 
 describe('DesktopTopBar', () => {
   test('renders a unified title bar with action groups and a drag region', () => {
@@ -22,6 +19,6 @@ describe('DesktopTopBar', () => {
       within(screen.getByTestId('desktop-topbar-drag-region')).getByTestId(
         'macos-titlebar-drag-region'
       )
-    ).toHaveAttribute('data-tauri-drag-region')
+    ).toHaveAttribute('data-kcoder-drag-region')
   })
 })

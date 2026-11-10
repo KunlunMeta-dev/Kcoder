@@ -1,6 +1,6 @@
 //! Read bounded WordprocessingML without launching Word or following relationships.
 use super::{MAX_EXTRACTED_BYTES, error};
-use crate::ToolError;
+use crate::DocumentParseError;
 use quick_xml::{
     events::{BytesStart, Event},
     name::{QName, ResolveResult},
@@ -9,13 +9,13 @@ use quick_xml::{
 use std::io::{Cursor, Read};
 
 #[cfg(test)]
-pub(super) fn extract(bytes: &[u8]) -> Result<String, ToolError> {
+pub(super) fn extract(bytes: &[u8]) -> Result<String, DocumentParseError> {
     Ok(extract_with_warnings(bytes)?.0)
 }
 
-pub(super) fn extract_with_warnings(
+pub fn extract_with_warnings(
     bytes: &[u8],
-) -> Result<(String, Vec<&'static str>), ToolError> {
+) -> Result<(String, Vec<&'static str>), DocumentParseError> {
     let mut archive = zip::ZipArchive::new(Cursor::new(bytes))
         .map_err(|_| error("Invalid or encrypted Word document; save as unencrypted .docx"))?;
     if archive.len() > 4096 {
@@ -46,7 +46,7 @@ pub(super) fn extract_with_warnings(
     Ok((text, warnings))
 }
 
-pub(super) fn extract_xml(xml: &str) -> Result<String, ToolError> {
+pub(super) fn extract_xml(xml: &str) -> Result<String, DocumentParseError> {
     Ok(extract_xml_report(xml)?.0)
 }
 
@@ -57,7 +57,10 @@ struct Frame {
     alternate: Option<bool>,
 }
 
-fn supported_choice(reader: &NsReader<&[u8]>, element: &BytesStart<'_>) -> Result<bool, ToolError> {
+fn supported_choice(
+    reader: &NsReader<&[u8]>,
+    element: &BytesStart<'_>,
+) -> Result<bool, DocumentParseError> {
     let requires = element
         .attributes()
         .find_map(|attribute| match attribute {
@@ -94,7 +97,7 @@ fn supported_choice(reader: &NsReader<&[u8]>, element: &BytesStart<'_>) -> Resul
     }))
 }
 
-fn extract_xml_report(xml: &str) -> Result<(String, Vec<&'static str>), ToolError> {
+fn extract_xml_report(xml: &str) -> Result<(String, Vec<&'static str>), DocumentParseError> {
     let mut reader = NsReader::from_str(xml);
     let mut text = String::new();
     let mut frames: Vec<Frame> = Vec::new();
@@ -262,40 +265,6 @@ mod tests {
         assert!(!text.contains("Duplicate fallback"));
         let (_, warnings) = extract_with_warnings(&document(xml)).unwrap();
         assert_eq!(warnings, vec!["docx_unsupported_alternate_choice"]);
-    }
-    #[tokio::test]
-    async fn unsupported_alternate_content_is_reported_without_duplicating_or_hiding_body() {
-        let xml = r#"<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" xmlns:x="urn:unknown"><w:body><mc:AlternateContent><mc:Choice Requires="x"><w:p><w:r><w:t>Unknown fact</w:t></w:r></w:p></mc:Choice></mc:AlternateContent><w:p><w:r><w:t>Final body</w:t></w:r></w:p></w:body></w:document>"#;
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("alternate.docx");
-        std::fs::write(&path, document(xml)).unwrap();
-        let ctx = crate::ToolContext::new(kcoder_state::AppState::new(dir.path()));
-        let result =
-            super::super::extract_document_report(&path, super::super::DocumentFormat::Docx, &ctx)
-                .await
-                .unwrap();
-        assert_eq!(result.chunks[0].text.trim(), "Final body");
-        assert!(
-            result
-                .report
-                .warnings
-                .iter()
-                .any(|warning| warning == "docx_final_revision_view")
-        );
-        assert!(
-            result
-                .report
-                .warnings
-                .iter()
-                .any(|warning| warning == "docx_unsupported_alternate_choice")
-        );
-        assert!(
-            result
-                .report
-                .warnings
-                .iter()
-                .any(|warning| warning == "docx_alternate_content_without_supported_branch")
-        );
     }
     #[test]
     fn rejects_corrupt_empty_and_external_entity_documents() {

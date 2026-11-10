@@ -125,6 +125,11 @@ await runE2E(
       5000,
       "late resource removed",
     );
+    await waitFor(
+      () => f.broker.requestLoad.total.inFlight === 0,
+      5000,
+      "late cleanup request acknowledged",
+    );
     assert.equal(f.broker.requestLoad.total.inFlight, 0);
     assert.equal(f.broker.resourceOwners.size, 0);
 

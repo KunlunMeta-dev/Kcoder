@@ -261,6 +261,37 @@ impl Tool for SendMessageTool {
             .state
             .task(&id)
             .ok_or_else(|| ToolError::InvalidInput(format!("agent {id} not found")))?;
+        if let Some(expected) = &ctx.subagent_run_constraint {
+            let replay = if ctx.subagent_continuation {
+                internal_client_message_id
+                    .as_deref()
+                    .map(|id| ctx.state.subagent_command_receipt(&task.id, id))
+                    .transpose()
+                    .map_err(|error| ToolError::Execution(error.to_string()))?
+                    .flatten()
+                    .is_some_and(|receipt| receipt.background_run.as_ref() == Some(expected))
+            } else {
+                false
+            };
+            if expected.agent_id != id
+                || expected.parent_session_id != ctx.state.session_id()
+                || (!replay && task.background_run.as_ref() != Some(expected))
+            {
+                return Err(ToolError::Execution("subagent_run_changed".into()));
+            }
+            if !replay
+                && if ctx.subagent_continuation {
+                    !matches!(task.status, TaskStatus::Completed | TaskStatus::Failed)
+                } else {
+                    !matches!(
+                        task.status,
+                        TaskStatus::Pending | TaskStatus::Running | TaskStatus::Paused
+                    )
+                }
+            {
+                return Err(ToolError::Execution("subagent_run_not_active".into()));
+            }
+        }
         let max_turns = max_turns.min(
             task.plugin_prompt_policy
                 .as_ref()
@@ -494,10 +525,11 @@ impl Tool for SendMessageTool {
             TaskStatus::Pending | TaskStatus::Running => {
                 let Some(receipt) = ctx
                     .state
-                    .enqueue_subagent_delivery_with_client_id(
+                    .enqueue_subagent_delivery_for_run(
                         &id,
                         &message,
                         internal_client_message_id.as_deref(),
+                        ctx.subagent_run_constraint.as_ref(),
                     )
                     .map_err(|error| ToolError::Execution(error.to_string()))?
                 else {
@@ -553,14 +585,17 @@ impl Tool for SendMessageTool {
                 }, &task)?));
             }
             TaskStatus::Cancelled => unreachable!("cancelled tasks return before profile checks"),
-            TaskStatus::Paused if task.control.run_mode == kcoder_state::AgentRunMode::Running => {}
+            TaskStatus::Paused
+                if task.control.run_mode == kcoder_state::AgentRunMode::Running
+                    && ctx.subagent_run_constraint.is_none() => {}
             TaskStatus::Paused => {
                 let Some(receipt) = ctx
                     .state
-                    .enqueue_subagent_delivery_with_client_id(
+                    .enqueue_subagent_delivery_for_run(
                         &id,
                         &message,
                         internal_client_message_id.as_deref(),
+                        ctx.subagent_run_constraint.as_ref(),
                     )
                     .map_err(|error| ToolError::Execution(error.to_string()))?
                 else {
@@ -687,10 +722,11 @@ impl Tool for SendMessageTool {
                     critic_max_infrastructure_retries: persona.critic_max_infrastructure_retries,
                 });
         }
-        if !ctx
-            .state
-            .reopen_subagent_delivery_queue(&id)
-            .map_err(|error| ToolError::Execution(error.to_string()))?
+        if !ctx.subagent_continuation
+            && !ctx
+                .state
+                .reopen_subagent_delivery_queue(&id)
+                .map_err(|error| ToolError::Execution(error.to_string()))?
         {
             return Ok(ToolOutput::error(
                 serde_json::json!({
@@ -727,13 +763,24 @@ impl Tool for SendMessageTool {
                 }
                 (delivery.message_id.clone(), index.saturating_add(1))
             } else {
-                let receipt = ctx
-                .state
-                .enqueue_subagent_delivery_with_client_id(
-                    &id,
-                    &message,
-                    internal_client_message_id.as_deref(),
-                )
+                let receipt = if ctx.subagent_continuation {
+                    ctx.state.enqueue_subagent_continuation_for_run(
+                        ctx.subagent_run_constraint
+                            .as_ref()
+                            .ok_or_else(|| ToolError::Execution("subagent_run_changed".into()))?,
+                        &message,
+                        internal_client_message_id.as_deref().ok_or_else(|| {
+                            ToolError::Execution("continuation_identity_required".into())
+                        })?,
+                    )
+                } else {
+                    ctx.state.enqueue_subagent_delivery_for_run(
+                        &id,
+                        &message,
+                        internal_client_message_id.as_deref(),
+                        ctx.subagent_run_constraint.as_ref(),
+                    )
+                }
                 .map_err(|error| ToolError::Execution(error.to_string()))?
                 .ok_or_else(|| {
                     ToolError::Execution(format!(

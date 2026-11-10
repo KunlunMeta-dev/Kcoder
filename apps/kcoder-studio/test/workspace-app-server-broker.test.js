@@ -1,16 +1,26 @@
+import { retireRestartScopeAdmissions } from '../src/workspace-broker-release.js';
 import test from "node:test";
 import assert from "node:assert/strict";
-import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
 import { WorkspaceAppServerBroker } from "../src/workspace-app-server-broker.js";
+import { brokerFixture, fakeChild, fakeClient, validInitializeParams } from './workspace-app-server-broker.test-support.js';
 
-function fakeChild() {
-  const child = new EventEmitter();
-  child.stdin = new PassThrough();
-  child.stdout = new PassThrough();
-  child.stderr = new PassThrough();
-  return child;
-}
+test('profile human controls retain the same browser resource owner key as handoff and close',()=>{
+  const key=WorkspaceAppServerBroker.prototype.resourceKeyFrom;
+  assert.equal(key.call({}, {method:'browser/profile/humanAction',params:{expectedRevision:2,action:{session_id:'original-browser',action:'text',text:'fixture'}}}), 'browser\0original-browser');
+  assert.equal(key.call({}, {method:'browser/profile/handoff',params:{sessionId:'original-browser',expectedRevision:1,mode:'human'}}), 'browser\0original-browser');
+});
+
+test('a browser cannot submit the private ACP Receiver binding to a Native backend', () => {
+  const { broker, upstream } = brokerFixture({ residentThreads: true });
+  const client = fakeClient();
+  broker.attach(client);
+  broker.receive(client, JSON.stringify({ jsonrpc: '2.0', id: 'forged-bind',
+    method: 'kcoder/nativeRemote/controlV1', params: { authority: true,
+      message: { method: 'bind_original', params: {} } } }));
+  assert.equal(upstream.length, 0);
+  assert.equal(client.messages.at(-1).error.code, -32601);
+});
 
 test('resource sample epochs reject stale responses and preserve newer success across old failure', async () => {
   const value = residentBytes => ({ processId: 42, instanceId: 'target', residentBytes,
@@ -177,17 +187,6 @@ test('pending work observation protects each registered protocol activity withou
   }
 });
 
-function fakeClient(channel = "runtime") {
-  return {
-    channel,
-    messages: [],
-    send(message) { this.messages.push(message); return true; },
-    pause() {},
-    resume() {},
-    close() {},
-  };
-}
-
 test('drain timeout remains busy and rejects writes until the matching terminal event', async () => {
   const { broker, upstream, respond } = brokerFixture({ residentThreads: true });
   const client = fakeClient();
@@ -261,33 +260,116 @@ test('detached correlation IDs are bounded and overflow never implies idle', () 
   assert.equal(broker.hasPendingWork, false);
 });
 
-function brokerFixture(options = {}) {
-  const child = fakeChild();
-  const broker = new WorkspaceAppServerBroker({
-    child,
-    adapter: {
-      rawPassthrough: true,
-      toUpstream: message => ({ upstream: [message], client: [] }),
-      fromUpstream: message => ({ upstream: [], client: [message] }),
+test("interaction status read requires negotiated capability and current thread ownership", () => {
+  const f = brokerFixture({ residentThreads: true });
+  const owner = fakeClient(); const peer = fakeClient(); const legacy = fakeClient();
+  for (const client of [owner, peer, legacy]) f.broker.attach(client);
+  const initialize = (client, enabled) => f.broker.receive(client, JSON.stringify({
+    jsonrpc: "2.0", id: `initialize-${client === owner ? "owner" : client === peer ? "peer" : "legacy"}`,
+    method: "initialize", params: { ...validInitializeParams(),
+      capabilities: { experimental: { interactionStatusReadV1: enabled } },
     },
-    maxMessageBytes: 1024 * 1024,
-    serverId: "local",
-    ...options,
-  });
-  const upstream = [];
-  let buffered = "";
-  child.stdin.on("data", chunk => {
-    buffered += chunk.toString("utf8");
-    for (;;) {
-      const newline = buffered.indexOf("\n");
-      if (newline < 0) break;
-      upstream.push(JSON.parse(buffered.slice(0, newline)));
-      buffered = buffered.slice(newline + 1);
-    }
-  });
-  const respond = message => child.stdout.write(`${JSON.stringify(message)}\n`);
-  return { broker, child, upstream, respond };
-}
+  }));
+  initialize(owner, true);
+  assert.equal(f.upstream[0].params.capabilities.experimental.interactionStatusReadV1, true);
+  f.respond({ jsonrpc: "2.0", id: f.upstream[0].id, result: { capabilities: { experimental: {
+    residentThreads: true, interactionStatusReadV1: true,
+  } } } });
+  initialize(peer, true);
+  initialize(legacy, false);
+  assert.equal(owner.interactionStatusReadV1, true);
+  assert.equal(peer.interactionStatusReadV1, true);
+  assert.equal(legacy.interactionStatusReadV1, false);
+
+  const params = { serverId: "local", threadId: "owned-thread", turnId: "turn-1",
+    requestId: 1000001, appServerEpoch: "epoch-1", kind: "approval", approvalId: "approval-1000001" };
+  f.broker.threadOwners.set("owned-thread", owner);
+  f.broker.receive(owner, JSON.stringify({ jsonrpc: "2.0", id: "status-owner",
+    method: "interaction/status/read", params }));
+  assert.equal(f.upstream.at(-1).method, "interaction/status/read");
+  assert.deepEqual(f.upstream.at(-1).params, params);
+
+  const beforePeer = f.upstream.length;
+  f.broker.receive(peer, JSON.stringify({ jsonrpc: "2.0", id: "status-peer",
+    method: "interaction/status/read", params }));
+  assert.equal(peer.messages.at(-1).error.code, -32023);
+  f.broker.receive(legacy, JSON.stringify({ jsonrpc: "2.0", id: "status-legacy",
+    method: "interaction/status/read", params }));
+  assert.equal(legacy.messages.at(-1).error.code, -32601);
+  f.broker.threadOwners.delete("owned-thread");
+  f.broker.receive(owner, JSON.stringify({ jsonrpc: "2.0", id: "status-unowned",
+    method: "interaction/status/read", params }));
+  assert.equal(owner.messages.at(-1).error.code, -32023);
+  assert.equal(f.upstream.length, beforePeer);
+});
+
+test("client capability offer cannot enable interaction status read when the backend omits support", () => {
+  const f = brokerFixture({ residentThreads: true });
+  const client = fakeClient();
+  f.broker.attach(client);
+  f.broker.receive(client, JSON.stringify({ jsonrpc: "2.0", id: "initialize",
+    method: "initialize", params: { ...validInitializeParams(),
+      capabilities: { experimental: { interactionStatusReadV1: true } },
+    },
+  }));
+  f.respond({ jsonrpc: "2.0", id: f.upstream[0].id, result: { capabilities: { experimental: {
+    residentThreads: true,
+  } } } });
+  assert.equal(client.interactionStatusReadV1, true);
+  assert.notEqual(f.broker.initializeResponse.result.capabilities.experimental.interactionStatusReadV1, true);
+  f.broker.threadOwners.set("owned-thread", client);
+  const before = f.upstream.length;
+  f.broker.receive(client, JSON.stringify({ jsonrpc: "2.0", id: "status-unsupported",
+    method: "interaction/status/read", params: { serverId: "local", threadId: "owned-thread",
+      turnId: "turn-1", requestId: 1000001, appServerEpoch: "epoch-1", kind: "approval",
+      approvalId: "approval-1000001",
+    },
+  }));
+  assert.equal(client.messages.at(-1).error.code, -32601);
+  assert.equal(f.upstream.length, before);
+});
+
+test("Gateway disconnect cancels its pending interaction and a resumed owner can only reconcile", () => {
+  const f = brokerFixture({ residentThreads: true });
+  const owner = fakeClient(); const resumed = fakeClient();
+  f.broker.attach(owner);
+  const initialize = client => f.broker.receive(client, JSON.stringify({ jsonrpc: "2.0", id: "initialize",
+    method: "initialize", params: { ...validInitializeParams(),
+      capabilities: { experimental: { interactionStatusReadV1: true } },
+    },
+  }));
+  initialize(owner);
+  f.respond({ jsonrpc: "2.0", id: f.upstream[0].id, result: { capabilities: { experimental: {
+    residentThreads: true, interactionStatusReadV1: true,
+  } } } });
+  f.broker.threadOwners.set("owned-thread", owner);
+  f.respond({ jsonrpc: "2.0", id: 9002, method: "approval/request", params: {
+    threadId: "owned-thread", turnId: "turn-1", approvalId: "approval-1000001", appServerEpoch: "epoch-1",
+  } });
+  assert.equal(f.broker.serverRequests.get(9002), owner);
+
+  f.broker.detach(owner);
+  assert.equal(f.upstream.at(-1).id, 9002);
+  assert.equal(f.upstream.at(-1).error.message, "owning Gateway client disconnected");
+  assert.equal(f.broker.serverRequests.has(9002), false);
+  assert.equal(f.broker.threadOwners.has("owned-thread"), false);
+
+  f.broker.attach(resumed);
+  initialize(resumed);
+  assert.equal(resumed.interactionStatusReadV1, true);
+  f.broker.threadOwners.set("owned-thread", resumed);
+  assert.throws(() => f.broker.receive(resumed, JSON.stringify({ jsonrpc: "2.0", id: 9002,
+    result: { decision: "accept", approvalId: "approval-1000001" },
+  })), /another client|unsolicited/);
+  f.broker.receive(resumed, JSON.stringify({ jsonrpc: "2.0", id: "status-reconcile",
+    method: "interaction/status/read", params: { serverId: "local", threadId: "owned-thread",
+      turnId: "turn-1", requestId: 1000001, appServerEpoch: "epoch-1", kind: "approval",
+      approvalId: "approval-1000001",
+    },
+  }));
+  assert.equal(f.upstream.at(-1).method, "interaction/status/read");
+  assert.equal(f.upstream.at(-1).params.appServerEpoch, "epoch-1");
+});
 
 // These tests measure protocol lifecycle boundaries, not model behavior.
 test("path preview capability is isolated for cached and pending clients", () => {
@@ -298,7 +380,7 @@ test("path preview capability is isolated for cached and pending clients", () =>
     const late = fakeClient();
     for (const client of [modern, legacy, late]) f.broker.attach(client);
     const initialize = (client, enabled) => f.broker.receive(client, JSON.stringify({
-      id: 1, method: "initialize", params: {
+      id: 1, method: "initialize", params: { ...validInitializeParams(),
         capabilities: { experimental: { toolPathPreviewV1: enabled } },
       },
     }));
@@ -332,7 +414,7 @@ test("path preview capability rejects unnegotiated recipients and cannot change 
   const clients = [fakeClient(), fakeClient(), fakeClient(), fakeClient("metadata")];
   for (const client of clients) f.broker.attach(client);
   const initialize = (client, value) => f.broker.receive(client, JSON.stringify({
-    id: 1, method: "initialize", params: { capabilities: { experimental: { toolPathPreviewV1: value } } },
+    id: 1, method: "initialize", params: { ...validInitializeParams(), capabilities: { experimental: { toolPathPreviewV1: value } } },
   }));
   initialize(clients[0], true);
   const event = { method: "item/event", params: { event: { type: "tool_path_preview", path: "private" } } };
@@ -347,7 +429,8 @@ test("path preview capability rejects unnegotiated recipients and cannot change 
   initialize(clients[1], true);
   f.respond(event);
   assert.equal(clients[0].messages.filter(m => m.method === "item/event").length, 1);
-  for (const client of clients.slice(1)) assert.equal(client.messages.filter(m => m.method === "item/event").length, 0);
+  assert.equal(clients[1].messages.filter(m => m.method === "item/event").length, 1);
+  for (const client of clients.slice(2)) assert.equal(client.messages.filter(m => m.method === "item/event").length, 0);
   f.respond({ method: "server/status", params: { online: true } });
   for (const client of clients) assert.equal(client.messages.at(-1).method, "server/status");
 });
@@ -372,11 +455,11 @@ test("lifecycle metrics count real initialize, not cached capability or repeated
   const client = fakeClient();
   f.broker.attach(client);
   f.at(110);
-  const id = f.request(client, "initialize");
+  const id = f.request(client, "initialize", validInitializeParams());
   f.at(140);
   f.respond({ jsonrpc: "2.0", id, result: { capabilities: { experimental: { residentThreads: true } } } });
   f.at(200);
-  f.request(client, "initialize");
+  f.request(client, "initialize", validInitializeParams());
   f.child.emit("close", 0, null);
   assert.equal(f.finals.length, 1);
   assert.equal(f.finals[0].initializeMs, 40);
@@ -390,7 +473,7 @@ test("lifecycle metrics distinguish uninitialized from failed initialize and clo
     const client = fakeClient();
     f.broker.attach(client);
     if (failed) {
-      const id = f.request(client, "initialize");
+      const id = f.request(client, "initialize", validInitializeParams());
       f.respond({ id, error: { code: -1, message: "secret" } });
     }
     f.at(130);
@@ -415,7 +498,7 @@ test("lifecycle metrics count client-free reuse but not concurrent or pre-ready 
   f.broker.detach(first);
   f.at(105);
   f.broker.attach(first);
-  const id = f.request(first, "initialize");
+  const id = f.request(first, "initialize", validInitializeParams());
   f.at(110);
   f.respond({ id, result: { capabilities: { experimental: { residentThreads: true } } } });
   f.broker.attach(second);
@@ -444,7 +527,7 @@ test("lifecycle metrics aggregate resume success error and abandoned without ext
   const f = lifecycleFixture({ residentThreads: true });
   const client = fakeClient();
   f.broker.attach(client);
-  const initialize = f.request(client, "initialize");
+  const initialize = f.request(client, "initialize", validInitializeParams());
   f.respond({ id: initialize, result: { capabilities: { experimental: { residentThreads: true } } } });
   for (const [start, end, error] of [[110, 130, false], [150, 155, false], [160, 175, true]]) {
     f.at(start);
@@ -641,7 +724,7 @@ test("restart rejects malformed, uninitialized and shared-client requests withou
   const restart = { jsonrpc: "2.0", id: 8, method: "gateway/app-server/restart", params: { confirm: true } };
   broker.receive(client, JSON.stringify(restart));
   assert.equal(client.messages.at(-1).error.code, -32002);
-  broker.receive(client, JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} }));
+  broker.receive(client, JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: validInitializeParams() }));
   respond({ id: upstream.at(-1).id, result: { capabilities: { experimental: { residentThreads: true } } } });
   broker.attach(fakeClient());
   broker.receive(client, JSON.stringify(restart));
@@ -656,7 +739,7 @@ test("exclusive restart waits for shutdown, reports reconnect required and never
   let closed = false;
   client.close = () => { closed = true; };
   broker.attach(client);
-  broker.receive(client, JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} }));
+  broker.receive(client, JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: validInitializeParams() }));
   respond({ id: upstream.at(-1).id, result: { capabilities: { experimental: { residentThreads: true } } } });
   broker.receive(client, JSON.stringify({ jsonrpc: "2.0", id: 2, method: "gateway/app-server/restart", params: { confirm: true } }));
   await new Promise(resolve => setImmediate(resolve));
@@ -806,7 +889,7 @@ test("explicit self detach acknowledges only after its own cancellation complete
   const { broker, upstream, respond } = brokerFixture();
   const owner = fakeClient(), peer = fakeClient();
   broker.attach(owner); broker.attach(peer);
-  broker.receive(owner, JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} }));
+  broker.receive(owner, JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: validInitializeParams() }));
   respond({ id: upstream.at(-1).id, result: { capabilities: { experimental: { residentThreads: true } } } });
   broker.activeTurns.set("own", { owner, turnId: "own-turn" });
   broker.activeTurns.set("peer", { owner: peer, turnId: "peer-turn" });
@@ -848,7 +931,7 @@ test("detach finishes without a timeout when its pending turn start is rejected"
   const { broker, upstream, respond } = brokerFixture();
   const client = fakeClient();
   broker.attach(client);
-  broker.receive(client, JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} }));
+  broker.receive(client, JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: validInitializeParams() }));
   respond({ id: upstream.at(-1).id, result: { capabilities: { experimental: { residentThreads: true } } } });
   broker.receive(client, JSON.stringify({ jsonrpc: "2.0", id: 2, method: "turn/start", params: { threadId: "own", input: [{ text: "fixture" }] } }));
   const startId = upstream.at(-1).id;
@@ -886,6 +969,31 @@ test("releases an idle target workspace through the Gateway without forwarding t
   assert.deepEqual(upstream, []);
 });
 
+test("a Windows SSH target can release its own drive workspace from a POSIX Gateway", async () => {
+  const releases = [];
+  const { broker, upstream } = brokerFixture({ targetTransport: 'ssh', remotePlatform: 'windows',
+    onReleaseWorkspace: async path => { releases.push(path); return { released: true, releasedCount: 1 }; } });
+  const client = fakeClient(); broker.attach(client);
+  broker.receive(client, JSON.stringify({ jsonrpc: '2.0', id: 91, method: 'gateway/workspace/release',
+    params: { workspacePath: 'D:\\Owned Area\\workspace' } }));
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(releases, ['D:\\Owned Area\\workspace']);
+  assert.equal(client.messages.at(-1).result.releasedCount, 1);
+  assert.deepEqual(upstream, []);
+});
+
+test("Windows SSH release rejects UNC, drive-relative and POSIX paths without invoking another target", () => {
+  const releases = [];
+  const { broker, upstream } = brokerFixture({ targetTransport: 'ssh', remotePlatform: 'windows',
+    onReleaseWorkspace: path => { releases.push(path); } });
+  const client = fakeClient(); broker.attach(client);
+  for (const [id, workspacePath] of ['D:relative', 'relative', '\\\\server\\share', '\\\\?\\D:\\owned', '/srv/owned', '\\root-relative'].entries()) {
+    broker.receive(client, JSON.stringify({ jsonrpc: '2.0', id, method: 'gateway/workspace/release', params: { workspacePath } }));
+    assert.equal(client.messages.at(-1).error.code, -32602);
+  }
+  assert.deepEqual(releases, []); assert.deepEqual(upstream, []);
+});
+
 test("rejects non-absolute workspace release paths at the Gateway boundary", () => {
   const { broker, upstream } = brokerFixture();
   const client = fakeClient();
@@ -905,7 +1013,7 @@ test("multiplexes request ids, caches initialize, and routes thread requests to 
   const { broker, upstream, respond } = brokerFixture();
   const first = fakeClient();
   broker.attach(first);
-  broker.receive(first, JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} }));
+  broker.receive(first, JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: validInitializeParams() }));
   assert.equal(upstream.length, 1);
   const initializeId = upstream[0].id;
   respond({
@@ -919,7 +1027,7 @@ test("multiplexes request ids, caches initialize, and routes thread requests to 
 
   const second = fakeClient();
   broker.attach(second);
-  broker.receive(second, JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} }));
+  broker.receive(second, JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: validInitializeParams() }));
   assert.equal(upstream.length, 1, "cached initialize must not reach app-server twice");
   assert.equal(second.messages[0].id, 1);
 
@@ -1550,10 +1658,10 @@ test("internal cleanup write failure and clearTransientState clear their timers"
 test("late modern clients receive run summaries even when the first shared client was legacy", () => {
   const { broker, upstream, respond } = brokerFixture({ residentThreads: true });
   const legacy = fakeClient(); const modern = fakeClient(); broker.attach(legacy); broker.attach(modern);
-  broker.receive(legacy, JSON.stringify({ id: 1, method: "initialize", params: {} }));
+  broker.receive(legacy, JSON.stringify({ id: 1, method: "initialize", params: validInitializeParams() }));
   assert.equal(upstream[0].params.capabilities.experimental.threadRunSummaryV1, true);
   respond({ id: upstream[0].id, result: { capabilities: { experimental: { residentThreads: true, threadRunSummaryV1: true } } } });
-  broker.receive(modern, JSON.stringify({ id: 2, method: "initialize", params: { capabilities: { experimental: { threadRunSummaryV1: true } } } }));
+  broker.receive(modern, JSON.stringify({ id: 2, method: "initialize", params: { ...validInitializeParams(), capabilities: { experimental: { threadRunSummaryV1: true } } } }));
   const thread = { id: "thread-1", status: "waiting_for_approval", runSummary: { mainTurn: "running", pendingApprovals: 1, recentError: null } };
   for (const [client, id] of [[legacy, 10], [modern, 11]]) {
     broker.receive(client, JSON.stringify({ id, method: "thread/list", params: {} }));
@@ -1570,8 +1678,8 @@ test("fans out one concurrent initialize and only broadcasts workspace-level not
   const second = fakeClient();
   broker.attach(first);
   broker.attach(second);
-  broker.receive(first, JSON.stringify({ jsonrpc: "2.0", id: 7, method: "initialize", params: {} }));
-  broker.receive(second, JSON.stringify({ jsonrpc: "2.0", id: 8, method: "initialize", params: {} }));
+  broker.receive(first, JSON.stringify({ jsonrpc: "2.0", id: 7, method: "initialize", params: validInitializeParams() }));
+  broker.receive(second, JSON.stringify({ jsonrpc: "2.0", id: 8, method: "initialize", params: validInitializeParams() }));
   assert.equal(upstream.length, 1);
   respond({ jsonrpc: "2.0", id: upstream[0].id, result: { capabilities: { experimental: { residentThreads: true } } } });
   respond({ jsonrpc: "2.0", method: "runtime/workspaceChanged", params: { workspacePath: "/workspace" } });
@@ -1586,13 +1694,13 @@ test("keeps an in-flight initialize alive when its originating client disconnect
   const { broker, upstream, respond } = brokerFixture();
   const first = fakeClient();
   broker.attach(first);
-  broker.receive(first, JSON.stringify({ jsonrpc: "2.0", id: 7, method: "initialize", params: {} }));
+  broker.receive(first, JSON.stringify({ jsonrpc: "2.0", id: 7, method: "initialize", params: validInitializeParams() }));
   assert.equal(upstream.length, 1);
   broker.detach(first);
 
   const second = fakeClient();
   broker.attach(second);
-  broker.receive(second, JSON.stringify({ jsonrpc: "2.0", id: 8, method: "initialize", params: {} }));
+  broker.receive(second, JSON.stringify({ jsonrpc: "2.0", id: 8, method: "initialize", params: validInitializeParams() }));
   assert.equal(upstream.length, 1, "the live waiter must share the original upstream initialize");
   respond({
     jsonrpc: "2.0",
@@ -1623,6 +1731,47 @@ test("replays a completed interaction only for its owner without disturbing a la
   assert.throws(() => broker.receive(stranger, JSON.stringify(reply)), /another client/);
   broker.detach(owner);
   assert.equal(broker.repliedServerRequests.size, 0, "connection release removes replay authority");
+});
+
+test("forwards approval and question resolved notifications unchanged to their thread owner", () => {
+  const { broker, respond } = brokerFixture({ residentThreads: true });
+  const owner = fakeClient(); const peer = fakeClient();
+  broker.attach(owner); broker.attach(peer);
+  broker.threadOwners.set("owned-thread", owner);
+  const notifications = [
+    {
+      jsonrpc: "2.0",
+      method: "approval/resolved",
+      params: {
+        requestId: 9001,
+        approvalId: "approval-9001",
+        threadId: "owned-thread",
+        turnId: "turn-1",
+        appServerEpoch: "epoch-1",
+        decision: "accept",
+        reason: "client_response",
+      },
+    },
+    {
+      jsonrpc: "2.0",
+      method: "question/resolved",
+      params: {
+        requestId: 9002,
+        questionId: "question-9002",
+        threadId: "owned-thread",
+        turnId: "turn-2",
+        appServerEpoch: "epoch-1",
+        reason: "client_response",
+      },
+    },
+  ];
+
+  for (const notification of notifications) {
+    respond(notification);
+    assert.deepEqual(owner.messages.at(-1), notification);
+    assert.equal(Object.hasOwn(owner.messages.at(-1).params, "serverId"), false);
+    assert.deepEqual(peer.messages, []);
+  }
 });
 
 test("bounds replied interaction ownership and still rejects unknown replies", () => {
@@ -2148,7 +2297,7 @@ test("unattributed upstream parse errors close the corrupted transport instead o
   let closed = false;
   client.close = () => { closed = true; };
   broker.attach(client);
-  broker.receive(client, JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: {} }));
+  broker.receive(client, JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: validInitializeParams() }));
   respond({ jsonrpc: '2.0', id: null, error: { code: -32700, message: 'expected value at line 1 column 1' } });
   assert.equal(closed, true);
   assert.equal(broker.pending.size, 0);
@@ -2240,7 +2389,7 @@ test("transport failure closes the broker and clears initialize and turn state",
   const { broker, upstream, respond } = brokerFixture({ onClose: () => { closeCount += 1; } });
   const client = fakeClient();
   broker.attach(client);
-  broker.receive(client, JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} }));
+  broker.receive(client, JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: validInitializeParams() }));
   broker.receive(client, JSON.stringify({
     jsonrpc: "2.0", id: 2, method: "thread/resume", params: { threadId: "thread-a" },
   }));
@@ -2316,24 +2465,39 @@ test("MCP pending authorizations are cancelled on detach including late login re
   }
 });
 
-test("closes an owned browser session with a tracked internal request on detach", () => {
+test("detaching a browser settings owner closes only that client's owned browser session", () => {
   const { broker, upstream, respond } = brokerFixture();
-  const client = fakeClient("browser");
-  broker.attach(client);
-  broker.receive(client, JSON.stringify({ jsonrpc: "2.0", id: 1, method: "browser/start", params: {} }));
+  const owner = fakeClient("browser");
+  const peer = fakeClient("browser");
+  broker.attach(owner);
+  broker.attach(peer);
+  broker.receive(owner, JSON.stringify({ jsonrpc: "2.0", id: 1, method: "browser/start", params: {} }));
   respond({ jsonrpc: "2.0", id: upstream.at(-1).id, result: { session: { id: "browser-owned" } } });
-  client.messages.length = 0;
+  broker.receive(peer, JSON.stringify({ jsonrpc: "2.0", id: 2, method: "browser/start", params: {} }));
+  respond({ jsonrpc: "2.0", id: upstream.at(-1).id, result: { session: { id: "browser-peer" } } });
+  owner.messages.length = 0;
+  peer.messages.length = 0;
 
-  broker.detach(client);
+  broker.detach(owner);
   const close = upstream.at(-1);
   assert.notEqual(close.id, undefined);
   assert.equal(close.method, "browser/close");
   assert.deepEqual(close.params, { session_id: "browser-owned" });
   assert.equal(broker.pending.get(close.id)?.client, null);
   assert.equal(broker.pending.get(close.id)?.clientId, null);
+  assert.equal(broker.resourceOwners.get("browser\0browser-peer"), peer);
+  assert.deepEqual(owner.messages, []);
+  assert.deepEqual(peer.messages, []);
   respond({ jsonrpc: "2.0", id: close.id, result: { closed: true } });
   assert.equal(broker.pending.has(close.id), false);
-  assert.deepEqual(client.messages, []);
+  assert.deepEqual(owner.messages, []);
+  assert.deepEqual(peer.messages, []);
+
+  broker.detach(peer);
+  const peerClose = upstream.at(-1);
+  assert.equal(peerClose.method, "browser/close");
+  assert.deepEqual(peerClose.params, { session_id: "browser-peer" });
+  respond({ jsonrpc: "2.0", id: peerClose.id, result: { closed: true } });
 });
 
 test("Gateway browser authorization relays a real HTTP callback only to its originating target", async t => {
@@ -2527,4 +2691,245 @@ test('late archive start after disconnect is cancelled without restoring a clien
     respond({ id: upstream.at(-1).id, result: { phase: 'cancelled' } });
     assert.equal(broker.pending.size, 0);
   }
+});
+
+
+const snapshotInitializeParams = (enabled = false) => ({ protocolVersion: "2026-07-27",
+  clientInfo: { name: "contract-client", version: "1" }, capabilities: { experimental: { threadTranscriptSnapshotV1: enabled } } });
+const snapshotInitializeResponse = { capabilities: { experimental: { residentThreads: true, threadTranscriptSnapshotV1: true } } };
+for (const cache of [false, true]) {
+  test(`snapshot initialize validates ID and typed params before freezing choices (cached=${cache})`, () => {
+    const f = brokerFixture({ residentThreads: true });
+    if (cache) f.broker.initializeResponse = { result: snapshotInitializeResponse };
+    const invalid = [
+      { params: snapshotInitializeParams(true) },
+      ...[null, -1, 1.5, Number.MAX_SAFE_INTEGER + 1, {}, []].map(id => ({ id, params: snapshotInitializeParams(true) })),
+      ...[null, {}, { ...snapshotInitializeParams(), clientInfo: { name: "missing version" } },
+        { ...snapshotInitializeParams(), capabilities: { experimental: { threadTranscriptSnapshotV1: "true" } } },
+        { ...snapshotInitializeParams(), protocolVersion: "old" }].map(params => ({ id: "invalid", params })),
+    ];
+    for (const value of invalid) {
+      const client = fakeClient(); f.broker.attach(client);
+      f.broker.receive(client, JSON.stringify({ method: "initialize", ...value }));
+      assert.equal(client.initialized, false);
+      assert.equal(client.threadTranscriptSnapshotV1, undefined);
+      assert.equal(f.upstream.length, 0);
+      if (Object.hasOwn(value, "id")) assert.ok(client.messages.at(-1)?.error);
+      f.broker.detach(client);
+    }
+  });
+}
+for (const rawPassthrough of [false, true]) for (const order of ["legacy-first", "modern-first", "concurrent"]) {
+  test(`snapshot page negotiation is per client and immutable (${order}, raw=${rawPassthrough})`, () => {
+    const f = brokerFixture({ residentThreads: true, adapter: {
+      rawPassthrough, toUpstream: message => ({ upstream: [message], client: [] }),
+      fromUpstream: message => ({ upstream: [], client: [message] }),
+    } });
+    const modern = fakeClient(); const legacy = fakeClient();
+    f.broker.attach(modern); f.broker.attach(legacy);
+    const first = order === "modern-first" ? modern : legacy; const second = first === modern ? legacy : modern;
+    const init = client => f.broker.receive(client, JSON.stringify({ id: client === modern ? "modern" : "legacy", method: "initialize", params: snapshotInitializeParams(client === modern) }));
+    init(first);
+    assert.equal(f.upstream[0].params.capabilities.experimental.threadTranscriptSnapshotV1, true);
+    assert.equal(first.threadTranscriptSnapshotV1, undefined, "pending choice is not successful initialization");
+    if (order === "concurrent") init(second);
+    f.respond({ id: f.upstream[0].id, result: snapshotInitializeResponse });
+    if (order !== "concurrent") init(second);
+    assert.equal(modern.threadTranscriptSnapshotV1, true); assert.equal(legacy.threadTranscriptSnapshotV1, false);
+    for (const client of [modern, legacy]) {
+      assert.equal(client.initialized, true);
+      f.broker.receive(client, JSON.stringify({ id: "duplicate", method: "initialize", params: snapshotInitializeParams(client !== modern) }));
+      assert.ok(client.messages.at(-1)?.error);
+      assert.equal(client.threadTranscriptSnapshotV1, client === modern, "duplicate cannot change frozen choice");
+    }
+    const snapshot = { status: "available", snapshotId: "a".repeat(64), viewKey: "b".repeat(64) };
+    for (const method of ["thread/read", "thread/read/indexed", "thread/resume"]) {
+      const result = method === "thread/resume" ? { thread: { id: "thread-1" }, history: { status: "ready", page: { messages: [], transcriptSnapshotV1: snapshot } } }
+        : { thread: { id: "thread-1" }, messages: [], transcriptSnapshotV1: snapshot };
+      const original = JSON.parse(JSON.stringify(result));
+      for (const client of [modern, legacy]) {
+        if (method === "thread/resume") f.broker.threadOwners.set("thread-1", client);
+        f.broker.receive(client, JSON.stringify({ id: method, method, params: { threadId: "thread-1" } }));
+        f.respond({ id: f.upstream.at(-1).id, result });
+        const received = client.messages.at(-1).result;
+        assert.deepEqual(method === "thread/resume" ? received.history.page.transcriptSnapshotV1 : received.transcriptSnapshotV1, client === modern ? snapshot : undefined);
+      }
+      assert.deepEqual(result, original, "client projection must not mutate backend payload");
+    }
+  });
+}
+test("snapshot initialize rejects pending duplicates and allows retry after upstream failure", () => {
+  const f = brokerFixture({ residentThreads: true }); const client = fakeClient(); f.broker.attach(client);
+  f.broker.receive(client, JSON.stringify({ id: 1, method: "initialize", params: snapshotInitializeParams(false) }));
+  f.broker.receive(client, JSON.stringify({ id: 2, method: "initialize", params: snapshotInitializeParams(true) }));
+  assert.ok(client.messages.at(-1)?.error); assert.equal(f.upstream.length, 1);
+  f.respond({ id: f.upstream[0].id, error: { code: -32602, message: "fixture failed" } });
+  assert.equal(client.initialized, false); assert.equal(client.threadTranscriptSnapshotV1, undefined);
+  f.broker.receive(client, JSON.stringify({ id: 3, method: "initialize", params: snapshotInitializeParams(true) }));
+  assert.equal(f.upstream.length, 2);
+  f.respond({ id: f.upstream[1].id, result: snapshotInitializeResponse });
+  assert.equal(client.initialized, true); assert.equal(client.threadTranscriptSnapshotV1, true);
+});
+
+
+test("snapshot initialize choices are released on deadline and shared failure", () => {
+  for (const outcome of ["expired", "rejected"]) {
+    const f = brokerFixture({ residentThreads: true }); const first = fakeClient(); const peer = fakeClient();
+    f.broker.attach(first); f.broker.attach(peer);
+    f.broker.receive(first, JSON.stringify({ id: 1, method: "initialize", params: snapshotInitializeParams(false) }));
+    if (outcome === "expired") f.broker.expireRequest(f.upstream[0].id);
+    else {
+      f.broker.receive(peer, JSON.stringify({ id: 2, method: "initialize", params: snapshotInitializeParams(false) }));
+      f.respond({ id: f.upstream[0].id, error: { code: -32602, message: "fixture" } });
+      assert.equal(peer.pendingInitializeChoices, null); assert.equal(peer.initialized, false);
+    }
+    assert.equal(first.pendingInitializeChoices, null); assert.equal(first.initialized, false);
+    f.broker.receive(first, JSON.stringify({ id: 3, method: "initialize", params: snapshotInitializeParams(true) }));
+    assert.equal(f.upstream.length, outcome === "expired" ? 1 : 2, "retry joins only an unresolved upstream initialize");
+    f.respond({ id: f.upstream.at(-1).id, result: snapshotInitializeResponse });
+    assert.equal(first.initialized, true); assert.equal(first.threadTranscriptSnapshotV1, true);
+    assert.equal(first.messages.at(-1).id, 3);
+  }
+});
+
+test("snapshot backend opt-in also applies to parent internal initialization", () => {
+  const f = brokerFixture();
+  const id = f.broker.sendInternalRequest("initialize", snapshotInitializeParams(false));
+  assert.equal(f.upstream[0].params.capabilities.experimental.threadTranscriptSnapshotV1, true);
+  f.respond({ id, result: snapshotInitializeResponse });
+});
+
+test("snapshot initialize accepts the exact JS ID subset and default or future typed fields", () => {
+  for (const id of [0, Number.MAX_SAFE_INTEGER, "", "string-id"]) {
+    const f = brokerFixture({ residentThreads: true }); const client = fakeClient(); f.broker.attach(client);
+    const params = { ...validInitializeParams(), futureField: { ignored: true } };
+    f.broker.receive(client, JSON.stringify({ id, method: "initialize", params }));
+    assert.equal(f.upstream.length, 1);
+    f.respond({ id: f.upstream[0].id, result: snapshotInitializeResponse });
+    assert.equal(client.initialized, true); assert.equal(client.threadTranscriptSnapshotV1, false);
+    assert.equal(client.messages.at(-1).id, id);
+  }
+});
+
+
+test("snapshot initialize waiter deadline allows retry and preserves a later peer and late success", t => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const f = brokerFixture({ residentThreads: true, pendingBudget: { ttlMs: 100 } });
+  const origin = fakeClient(), waiter = fakeClient(), peer = fakeClient();
+  for (const client of [origin, waiter, peer]) f.broker.attach(client);
+  const init = (client, id, enabled) => f.broker.receive(client, JSON.stringify({ id, method: "initialize", params: snapshotInitializeParams(enabled) }));
+  init(origin, "origin", false);
+  const sharedId = f.upstream[0].id;
+  t.mock.timers.tick(100);
+  init(waiter, "expired-waiter", false);
+  t.mock.timers.tick(50);
+  init(peer, "peer", false);
+  t.mock.timers.tick(50);
+  assert.equal(waiter.messages.at(-1)?.id, "expired-waiter");
+  assert.deepEqual(waiter.messages.at(-1)?.error?.data, { kind: "gatewayRequestExpired", outcome: "unknown" });
+  assert.equal(waiter.pendingInitializeChoices, null);
+  assert.equal(peer.messages.length, 0, "a later peer keeps its own deadline");
+  assert.equal(f.broker.initializePending, sharedId);
+  init(waiter, "retry", true);
+  assert.equal(f.upstream.length, 1, "waiter retries never reissue the shared initialize");
+  f.respond({ id: sharedId, result: snapshotInitializeResponse });
+  assert.equal(waiter.messages.at(-1)?.id, "retry");
+  assert.equal(waiter.initialized, true); assert.equal(waiter.threadTranscriptSnapshotV1, true);
+  assert.equal(peer.messages.at(-1)?.id, "peer");
+  assert.equal(peer.initialized, true); assert.equal(peer.threadTranscriptSnapshotV1, false);
+  assert.equal(origin.initialized, false, "expired origin is not silently initialized by late success");
+  assert.equal(f.broker.pendingLoad.admitted, 0);
+  const counts = [origin, waiter, peer].map(client => client.messages.length);
+  t.mock.timers.tick(1000);
+  assert.deepEqual([origin, waiter, peer].map(client => client.messages.length), counts);
+  f.child.emit("close", 0, null);
+});
+
+test("snapshot initialize waiters obey admission limits and release deadlines on detach and close", t => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const f = brokerFixture({ residentThreads: true, pendingBudget: { total: 2, ttlMs: 100 } });
+  const origin = fakeClient(), waiter = fakeClient(), peer = fakeClient();
+  for (const client of [origin, waiter, peer]) f.broker.attach(client);
+  const init = (client, id) => f.broker.receive(client, JSON.stringify({ id, method: "initialize", params: snapshotInitializeParams(true) }));
+  init(origin, "origin"); init(waiter, "waiter"); init(peer, "denied");
+  assert.match(peer.messages.at(-1)?.error?.message ?? "", /capacity/);
+  assert.equal(peer.pendingInitializeChoices, null);
+  assert.equal(f.broker.pendingLoad.admitted, 2);
+  f.broker.detach(waiter);
+  assert.equal(waiter.pendingInitializeChoices, null);
+  assert.equal(f.broker.pendingLoad.admitted, 1);
+  init(peer, "admitted-after-detach");
+  assert.equal(f.broker.initializeWaiters.length, 1);
+  assert.equal(f.broker.pendingLoad.admitted, 2);
+  const detachedMessages = waiter.messages.length;
+  f.child.emit("close", 0, null);
+  assert.equal(peer.pendingInitializeChoices, null);
+  assert.equal(f.broker.initializeWaiters.length, 0);
+  assert.equal(f.broker.pendingLoad.admitted, 0);
+  const peerMessages = peer.messages.length;
+  t.mock.timers.tick(1000);
+  assert.equal(waiter.messages.length, detachedMessages);
+  assert.equal(peer.messages.length, peerMessages);
+});
+
+test('shared history worker state is negotiated and projected separately for old and new clients', () => {
+  const { broker, upstream, respond, child } = brokerFixture({ residentThreads: true });
+  const modern = fakeClient(), legacy = fakeClient();
+  broker.attach(modern); broker.attach(legacy);
+  broker.receive(modern, JSON.stringify({ id: 1, method: 'initialize', params: {
+    ...validInitializeParams(), capabilities: { experimental: { migrationHistoryWorkerStateClientV1: true } },
+  } }));
+  assert.equal(upstream[0].params.capabilities.experimental.migrationHistoryWorkerStateV1, true);
+  assert.equal(Object.hasOwn(upstream[0].params.capabilities.experimental, 'migrationHistoryWorkerStateClientV1'), false);
+  respond({ id: upstream[0].id, result: { capabilities: { experimental: { residentThreads: true, migrationHistoryWorkerStateV1: true } } } });
+  broker.receive(legacy, JSON.stringify({ id: 2, method: 'initialize', params: validInitializeParams() }));
+  assert.equal(modern.messages.at(-1).result.capabilities.experimental.migrationHistoryWorkerStateV1, true);
+  assert.equal(legacy.messages.at(-1).result.capabilities.experimental.migrationHistoryWorkerStateV1, false);
+  for (const client of [modern, legacy]) {
+    broker.receive(client, JSON.stringify({ id: 3, method: 'migration/history/read', params: { jobId: 'owned' } }));
+    respond({ id: upstream.at(-1).id, result: { job: { jobId: 'owned' }, workerRunning: false, workerState: 'unknown' } });
+    assert.equal(Object.hasOwn(client.messages.at(-1).result, 'workerState'), client === modern);
+    broker.receive(client, JSON.stringify({ id: 4, method: 'migration/history/jobs', params: {} }));
+    respond({ id: upstream.at(-1).id, result: { jobs: [{ job: { jobId: 'owned' }, workerRunning: false, workerState: 'unknown' }], nextCursor: null } });
+    assert.equal(Object.hasOwn(client.messages.at(-1).result.jobs[0], 'workerState'), client === modern);
+  }
+  assert.equal(modern.messages.find(message => message.id === 3).result.workerState, 'unknown');
+  child.emit('close', 0, null);
+});
+
+
+test('same-workspace restart retires both real broker admissions without killing an old busy peer or another owner', () => {
+  const a = brokerFixture({ residentThreads: true });
+  const b = brokerFixture({ residentThreads: true });
+  const otherOwner = brokerFixture({ residentThreads: true });
+  const otherTarget = brokerFixture({ residentThreads: true });
+  const otherPath = brokerFixture({ residentThreads: true });
+  for (const value of [a, b, otherOwner, otherTarget, otherPath]) {
+    value.broker.targetId = 'exact-target'; value.broker.loginOwner = 'exact-login-owner';
+  }
+  otherOwner.broker.loginOwner = 'other-login-owner';
+  otherTarget.broker.targetId = 'other-target';
+  const peer = fakeClient();
+  b.broker.attach(peer);
+  b.broker.receive(peer, JSON.stringify({ jsonrpc: '2.0', id: 'initialize-peer', method: 'initialize', params: validInitializeParams() }));
+  b.respond({ jsonrpc: '2.0', id: b.upstream[0].id, result: { capabilities: { experimental: { residentThreads: true } } } });
+  b.broker.activeTurns.set('owned-existing-turn', { owner: peer });
+  let exits = 0;
+  for (const value of [a, b, otherOwner, otherTarget, otherPath]) value.child.once('close', () => { exits++; });
+  const registry = new Map([
+    ['canonical-scope-A', new Set([a.broker, b.broker, otherOwner.broker, otherTarget.broker])],
+    ['same-workspace-name-different-path', new Set([otherPath.broker])],
+  ]);
+  assert.equal(retireRestartScopeAdmissions(registry, 'canonical-scope-A', { targetId: 'exact-target', loginOwner: 'exact-login-owner' }), 2);
+  assert.equal(a.broker.acceptsClient, false); assert.equal(b.broker.acceptsClient, false);
+  assert.equal(otherOwner.broker.acceptsClient, true); assert.equal(otherTarget.broker.acceptsClient, true); assert.equal(otherPath.broker.acceptsClient, true);
+  assert.equal(exits, 0); assert.equal(b.broker.clientCount, 1); assert.equal(b.broker.activeTurns.size, 1);
+  const before = b.upstream.length;
+  b.broker.receive(peer, JSON.stringify({ jsonrpc: '2.0', id: 'existing-peer-read', method: 'thread/list', params: { limit: 1 } }));
+  assert.equal(b.upstream.length, before + 1, 'retirement does not revoke the old peer connection');
+  assert.throws(() => b.broker.attach(fakeClient()), /closed or restarting/);
+  const fresh = brokerFixture({ residentThreads: true }); fresh.broker.targetId = 'exact-target'; fresh.broker.loginOwner = 'exact-login-owner';
+  registry.get('canonical-scope-A').add(fresh.broker);
+  const selected = [...registry.get('canonical-scope-A')].find(candidate => candidate.targetId === 'exact-target' && candidate.loginOwner === 'exact-login-owner' && candidate.acceptsClient);
+  assert.equal(selected, fresh.broker, 'a subsequent probe cannot return to either old configuration process');
 });

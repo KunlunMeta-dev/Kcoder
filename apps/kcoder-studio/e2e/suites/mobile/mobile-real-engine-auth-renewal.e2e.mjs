@@ -147,7 +147,7 @@ await runE2E(
         gateways: [{
           id: relayGatewayId,
           secret: relaySecret,
-          pairingToken: gateway.authToken,
+          gatewaySecret: gateway.authToken,
         }],
         sharedHosts: [relayAuthority],
         controlPort: 0,

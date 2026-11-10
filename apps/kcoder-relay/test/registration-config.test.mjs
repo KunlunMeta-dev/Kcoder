@@ -12,7 +12,7 @@ function gateway(id = 'static-gateway') {
   return {
     id,
     secret: 'static-control-secret-for-config-test-0123456789',
-    pairingToken: 'static-pairing-token-for-config-test-0123456789',
+    gatewaySecret: 'static-pairing-token-for-config-test-0123456789',
     maxConnections: 128,
     maxBytesPerWindow: 67_108_864,
     trafficWindowMs: 60_000,
@@ -95,6 +95,15 @@ test('malformed registration keys fail closed', () => {
   for (const key of ['short', 'has spaces and is longer than 32 characters', 'x'.repeat(513)]) {
     assert.throws(() => relayServerConfig({ KCODER_RELAY_REGISTRATION_KEY: key }), /KCODER_RELAY_REGISTRATION_KEY/);
   }
+});
+
+test('explicit account enrollment cannot fall back to the legacy single-Gateway mode', () => {
+  assert.throws(() => relayServerConfig({ KCODER_RELAY_REQUIRE_ACCOUNT: '1', KCODER_RELAY_SECRET: legacySecret }),
+    /KCODER_RELAY_REQUIRE_ACCOUNT requires/);
+  const config = relayServerConfig({ KCODER_RELAY_REQUIRE_ACCOUNT: '1',
+    KCODER_RELAY_ADMIN_PASSWORD_HASH: `scrypt$${'1'.repeat(32)}$${'2'.repeat(64)}` });
+  assert.equal(config.requireAccount, true);
+  assert.equal(isAbsolute(config.registrationStoreFile), true);
 });
 
 test('dynamic registration uses one exact public host and rejects host aliases', () => {

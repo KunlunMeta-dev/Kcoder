@@ -1,3 +1,5 @@
+import { normalizeWebSources } from "../../../../shared/webSources";
+import { t } from "@/i18n";
 import {
   decodeToolCallStatus,
   canAcceptToolCallUpdate,
@@ -10,6 +12,7 @@ import {
   type PendingThinkingDelta,
 } from "./core";
 import { text, todosFromInput } from "./normalizers";
+import { preserveHistoryBodyProvenance } from "./history";
 import {
   type AgentSummary,
   type AssistantTranscriptBlock,
@@ -265,6 +268,7 @@ export function updateTool(
     ...(decoded.status === "unknown" && { rawStatus: decoded.rawStatus }),
     input: item.input ?? existingTool?.input,
     output: item.output ?? existingTool?.output,
+    webSources: completed ? normalizeWebSources(item.webSources, { threadId: this.snapshot.threadId ?? undefined, turnId, attemptId: current.attemptId, toolCallId: id }) ?? existingTool?.webSources : existingTool?.webSources,
   };
   if (toolIndex >= 0) tools[toolIndex] = tool;
   else tools.push(tool);
@@ -1015,34 +1019,19 @@ export function applySubagentSnapshot(
       agent.status,
     ),
   );
-  const messages: ChatMessage[] = [...this.snapshot.messages].map((message) => ({
-    ...message,
-    activities: message.activities?.map((activity) => {
-      const agent = accepted.find(
-        (agent) => agent.agentId === activity.agentId,
-      );
-      if (
-        !agent ||
-        !["completed", "failed", "cancelled", "halted", "paused"].includes(
-          agent.status,
-        )
-      )
-        return activity;
-      const status: TaskActivityView["status"] =
-        agent.status === "paused"
-          ? "paused"
-          : agent.status === "completed"
-            ? "completed"
-            : agent.status === "failed"
-              ? "failed"
-              : "cancelled";
-      return { ...activity, status };
-    }),
-  }));
-  for (let index = 0; index < messages.length; index += 1) {
-    for (const activity of messages[index].activities ?? [])
-      messages[index] = syncOrderedActivity(messages[index], activity);
-  }
+  const messages = this.snapshot.messages.map(message => {
+    const activities = message.activities?.map(activity => {
+      const agent = accepted.find(agent => agent.agentId === activity.agentId);
+      if (!agent || !["completed", "failed", "cancelled", "halted", "paused"].includes(agent.status)) return activity;
+      const status: TaskActivityView["status"] = agent.status === "paused" ? "paused" :
+        agent.status === "completed" ? "completed" : agent.status === "failed" ? "failed" : "cancelled";
+      return activity.status === status ? activity : { ...activity, status };
+    });
+    if (!activities?.some((activity, index) => activity !== message.activities?.[index])) return message;
+    let changed: ChatMessage = { ...message, activities };
+    for (const activity of activities) changed = syncOrderedActivity(changed, activity);
+    return changed;
+  });
   const visibleAgents = accepted.filter(
     (agent) =>
       ["pending", "running", "paused"].includes(agent.status) ||
@@ -1191,8 +1180,15 @@ export function updateActivity(
         agentId: jobId,
       };
   } else if (eventType === "system_notice") {
-    const notice = text(event.text);
-    if (notice && /compact/i.test(notice))
+    const notice = event.code === "kcoder.notice.imported_context_legacy_unobserved"
+      ? t("output.imported_context_legacy_unobserved") : text(event.text);
+    if (event.kind === "provider_retry" && event.request_kind === "main" &&
+        typeof event.attempt === "number" && Number.isSafeInteger(event.attempt) && event.attempt >= 1 &&
+        typeof event.max_retries === "number" && Number.isSafeInteger(event.max_retries) && event.max_retries >= event.attempt) {
+      activity = { id: `notice-${sequence ?? transcriptOrder}`, type: "notice",
+        label: t("task.provider_retry_in_progress", { attempt: event.attempt, total: event.max_retries }),
+        detail: notice, status: "paused", providerRetry: { attempt: event.attempt, maxRetries: event.max_retries } };
+    } else if (notice && /compact/i.test(notice))
       activity = {
         id: `compaction-${sequence ?? transcriptOrder}`,
         type: "compaction",
@@ -1306,6 +1302,13 @@ function earlierSequence(
 }
 
 export function patch(this: TaskRuntime, update: Partial<TaskSnapshot>): void {
+  if (update.messages && update.messages !== this.snapshot.messages) {
+    const previous = new Map(this.snapshot.messages.map(message => [message.id, message]));
+    for (const message of update.messages) {
+      const old = previous.get(message.id);
+      if (old && old.role === message.role) preserveHistoryBodyProvenance(old, message);
+    }
+  }
   this.snapshot = { ...this.snapshot, ...update };
   if (this.snapshot.stopRequestedTurnId &&
       ((!this.snapshot.running && this.snapshot.connected) || (this.snapshot.activeTurnId && this.snapshot.activeTurnId !== this.snapshot.stopRequestedTurnId))) {

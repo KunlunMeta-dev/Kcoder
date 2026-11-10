@@ -44,7 +44,7 @@ const MAX_TIMING_TIMELINE_EVENTS = 512;
 
 await runE2E(import.meta.url, {
   testId: "mobile-workspace-task-handoff-browser-safe-observation-review",
-  tier: "full-integration",
+  tier: "manual-live",
   modelPolicy: "actual Mobile Web and Gateway/app-server protocol with a loopback deterministic provider; no real Provider or model-quality claim",
   retainSuccessLogs: true,
   processSignalTimeoutMs: 5_000,

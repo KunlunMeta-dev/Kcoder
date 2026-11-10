@@ -126,7 +126,11 @@ async fn recovery_total_deadline_drops_moa_rebuild_workers_and_queued_references
         settings.recovery.provider.total_timeout_ms = Some(500);
         settings.kunlunmeta_api_key = Some("fixture-key".into());
         settings.api_key = Some("fixture-key".into());
-        settings.providers.get_mut("kunlunmeta").unwrap().endpoint = endpoint;
+        settings
+            .providers
+            .entry("kunlunmeta".into())
+            .or_insert_with(kcoder_config::default_active_provider_config)
+            .endpoint = endpoint;
         settings.moa.enabled = true;
         settings.moa.max_reference_workers = 1;
         settings.moa.default_preset = "deadline".into();
@@ -142,6 +146,7 @@ async fn recovery_total_deadline_drops_moa_rebuild_workers_and_queued_references
             },
         );
     }
+    crate::test_support::engine_builder::initialize_owned_native_profile(&engine).unwrap();
     engine.enable_moa_for_next_turn(Some("deadline".into()));
     let requests = Arc::new(AtomicUsize::new(0));
     let observed = requests.clone();

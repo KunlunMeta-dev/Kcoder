@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { hooksApi } from './hooksApi'
-import { subscribeLocalExecutorEvents } from '@/tauri/localExecutor'
+import { subscribeLocalExecutorEvents } from '@/host/localExecutor'
 import type { HookDraft, ResolvedHookPlugin } from './hooksTypes'
 
 export function useHooksSettings() {

@@ -1,0 +1,1485 @@
+{
+  "AgentArtifactKind": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "output",
+      "transcript"
+    ],
+    "title": "AgentArtifactKind",
+    "type": "string"
+  },
+  "AgentArtifactReadParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "definitions": {
+      "AgentArtifactKind": {
+        "enum": [
+          "output",
+          "transcript"
+        ],
+        "type": "string"
+      },
+      "BackgroundRunKey": {
+        "description": "A durable execution identity; wall-clock timestamps are not identifiers.",
+        "properties": {
+          "agentId": {
+            "type": "string"
+          },
+          "parentSessionId": {
+            "type": "string"
+          },
+          "runId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "agentId",
+          "parentSessionId",
+          "runId"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "agentId": {
+        "type": "string"
+      },
+      "expectedBackgroundRun": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/BackgroundRunKey"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "kind": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/AgentArtifactKind"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "limit": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "offset": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "path": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "revision": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "tail": {
+        "type": [
+          "boolean",
+          "null"
+        ]
+      },
+      "threadId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "agentId",
+      "threadId"
+    ],
+    "title": "AgentArtifactReadParams",
+    "type": "object"
+  },
+  "AgentArtifactReadResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "definitions": {
+      "AgentArtifactKind": {
+        "enum": [
+          "output",
+          "transcript"
+        ],
+        "type": "string"
+      },
+      "BackgroundRunKey": {
+        "description": "A durable execution identity; wall-clock timestamps are not identifiers.",
+        "properties": {
+          "agentId": {
+            "type": "string"
+          },
+          "parentSessionId": {
+            "type": "string"
+          },
+          "runId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "agentId",
+          "parentSessionId",
+          "runId"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "agentId": {
+        "type": "string"
+      },
+      "backgroundRun": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/BackgroundRunKey"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "content": {
+        "type": "string"
+      },
+      "kind": {
+        "$ref": "#/definitions/AgentArtifactKind"
+      },
+      "modifiedAt": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "name": {
+        "type": "string"
+      },
+      "nextOffset": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "offset": {
+        "default": 0,
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "path": {
+        "type": "string"
+      },
+      "revision": {
+        "type": "string"
+      },
+      "size": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "threadId": {
+        "type": "string"
+      },
+      "truncated": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "agentId",
+      "content",
+      "kind",
+      "name",
+      "path",
+      "revision",
+      "size",
+      "threadId",
+      "truncated"
+    ],
+    "title": "AgentArtifactReadResult",
+    "type": "object"
+  },
+  "AgentDefinitionRef": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "definitionSha256": {
+        "type": "string"
+      },
+      "id": {
+        "type": "string"
+      },
+      "version": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "definitionSha256",
+      "id",
+      "version"
+    ],
+    "title": "AgentDefinitionRef",
+    "type": "object"
+  },
+  "AgentLiveReadParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "BackgroundRunKey": {
+        "description": "A durable execution identity; wall-clock timestamps are not identifiers.",
+        "properties": {
+          "agentId": {
+            "type": "string"
+          },
+          "parentSessionId": {
+            "type": "string"
+          },
+          "runId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "agentId",
+          "parentSessionId",
+          "runId"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "agentId": {
+        "type": "string"
+      },
+      "expectedBackgroundRun": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/BackgroundRunKey"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "previousRevision": {
+        "default": null,
+        "format": "uint64",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "threadId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "agentId",
+      "threadId"
+    ],
+    "title": "AgentLiveReadParams",
+    "type": "object"
+  },
+  "AgentLiveReadResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "definitions": {
+      "BackgroundRunKey": {
+        "description": "A durable execution identity; wall-clock timestamps are not identifiers.",
+        "properties": {
+          "agentId": {
+            "type": "string"
+          },
+          "parentSessionId": {
+            "type": "string"
+          },
+          "runId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "agentId",
+          "parentSessionId",
+          "runId"
+        ],
+        "type": "object"
+      }
+    },
+    "description": "Public presentation data only; private checkpoints and thinking are excluded.",
+    "properties": {
+      "active": {
+        "type": "boolean"
+      },
+      "agentId": {
+        "type": "string"
+      },
+      "backgroundRun": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/BackgroundRunKey"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "content": {
+        "type": "string"
+      },
+      "phase": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "revision": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "threadId": {
+        "type": "string"
+      },
+      "truncated": {
+        "type": "boolean"
+      },
+      "unchanged": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "active",
+      "agentId",
+      "content",
+      "threadId",
+      "truncated",
+      "unchanged"
+    ],
+    "title": "AgentLiveReadResult",
+    "type": "object"
+  },
+  "AgentMessageReadParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "definitions": {
+      "BackgroundRunKey": {
+        "description": "A durable execution identity; wall-clock timestamps are not identifiers.",
+        "properties": {
+          "agentId": {
+            "type": "string"
+          },
+          "parentSessionId": {
+            "type": "string"
+          },
+          "runId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "agentId",
+          "parentSessionId",
+          "runId"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "agentId": {
+        "type": "string"
+      },
+      "clientMessageId": {
+        "type": "string"
+      },
+      "expectedBackgroundRun": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/BackgroundRunKey"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "threadId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "agentId",
+      "clientMessageId",
+      "threadId"
+    ],
+    "title": "AgentMessageReadParams",
+    "type": "object"
+  },
+  "AgentMessageReadResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "definitions": {
+      "AgentMessageReceipt": {
+        "properties": {
+          "acceptedAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "appliedAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "appliedBackgroundRun": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/BackgroundRunKey"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "backgroundRun": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/BackgroundRunKey"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "bodySummary": {
+            "type": "string"
+          },
+          "clientMessageId": {
+            "type": "string"
+          },
+          "messageId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "acceptedAtMs",
+          "bodySummary",
+          "clientMessageId",
+          "messageId",
+          "status"
+        ],
+        "type": "object"
+      },
+      "BackgroundRunKey": {
+        "description": "A durable execution identity; wall-clock timestamps are not identifiers.",
+        "properties": {
+          "agentId": {
+            "type": "string"
+          },
+          "parentSessionId": {
+            "type": "string"
+          },
+          "runId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "agentId",
+          "parentSessionId",
+          "runId"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "agentId": {
+        "type": "string"
+      },
+      "clientMessageId": {
+        "type": "string"
+      },
+      "receipt": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/AgentMessageReceipt"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "None proves only that this target has no retained receipt for the identity. It does not grant permission to silently retry with a different identity."
+      },
+      "receiptEpoch": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "threadId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "agentId",
+      "clientMessageId",
+      "receiptEpoch",
+      "threadId"
+    ],
+    "title": "AgentMessageReadResult",
+    "type": "object"
+  },
+  "AgentSteerParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "definitions": {
+      "BackgroundRunKey": {
+        "description": "A durable execution identity; wall-clock timestamps are not identifiers.",
+        "properties": {
+          "agentId": {
+            "type": "string"
+          },
+          "parentSessionId": {
+            "type": "string"
+          },
+          "runId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "agentId",
+          "parentSessionId",
+          "runId"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "agentId": {
+        "type": "string"
+      },
+      "clientMessageId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "expectedBackgroundRun": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/BackgroundRunKey"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "message": {
+        "type": "string"
+      },
+      "threadId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "agentId",
+      "message",
+      "threadId"
+    ],
+    "title": "AgentSteerParams",
+    "type": "object"
+  },
+  "AgentSteerResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "definitions": {
+      "AgentSteerStatus": {
+        "enum": [
+          "applied",
+          "queued_live",
+          "queued_paused",
+          "queued_behind_blocked",
+          "resuming",
+          "finishing",
+          "cancelled",
+          "closed",
+          "rejected"
+        ],
+        "type": "string"
+      },
+      "BackgroundRunKey": {
+        "description": "A durable execution identity; wall-clock timestamps are not identifiers.",
+        "properties": {
+          "agentId": {
+            "type": "string"
+          },
+          "parentSessionId": {
+            "type": "string"
+          },
+          "runId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "agentId",
+          "parentSessionId",
+          "runId"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "agentId": {
+        "type": "string"
+      },
+      "clientMessageId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "expectedBackgroundRun": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/BackgroundRunKey"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "messageId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "queuePosition": {
+        "format": "uint",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "queued": {
+        "type": "boolean"
+      },
+      "reasonCode": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "status": {
+        "$ref": "#/definitions/AgentSteerStatus"
+      }
+    },
+    "required": [
+      "agentId",
+      "queued",
+      "status"
+    ],
+    "title": "AgentSteerResult",
+    "type": "object"
+  },
+  "AgentStreamCloseReason": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "run_changed",
+      "owner_unavailable"
+    ],
+    "title": "AgentStreamCloseReason",
+    "type": "string"
+  },
+  "AgentStreamClosedParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "AgentStreamCloseReason": {
+        "enum": [
+          "run_changed",
+          "owner_unavailable"
+        ],
+        "type": "string"
+      },
+      "BackgroundRunKey": {
+        "description": "A durable execution identity; wall-clock timestamps are not identifiers.",
+        "properties": {
+          "agentId": {
+            "type": "string"
+          },
+          "parentSessionId": {
+            "type": "string"
+          },
+          "runId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "agentId",
+          "parentSessionId",
+          "runId"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "agentId": {
+        "type": "string"
+      },
+      "expectedBackgroundRun": {
+        "$ref": "#/definitions/BackgroundRunKey"
+      },
+      "reasonCode": {
+        "$ref": "#/definitions/AgentStreamCloseReason"
+      },
+      "subscriptionId": {
+        "type": "string"
+      },
+      "threadId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "agentId",
+      "expectedBackgroundRun",
+      "reasonCode",
+      "subscriptionId",
+      "threadId"
+    ],
+    "title": "AgentStreamClosedParams",
+    "type": "object"
+  },
+  "AgentStreamSubscribeParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "BackgroundRunKey": {
+        "description": "A durable execution identity; wall-clock timestamps are not identifiers.",
+        "properties": {
+          "agentId": {
+            "type": "string"
+          },
+          "parentSessionId": {
+            "type": "string"
+          },
+          "runId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "agentId",
+          "parentSessionId",
+          "runId"
+        ],
+        "type": "object"
+      }
+    },
+    "description": "An observer only. Subscribing never creates, resumes, or controls a worker.",
+    "properties": {
+      "agentId": {
+        "type": "string"
+      },
+      "expectedBackgroundRun": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/BackgroundRunKey"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "subscriptionId": {
+        "type": "string"
+      },
+      "threadId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "agentId",
+      "subscriptionId",
+      "threadId"
+    ],
+    "title": "AgentStreamSubscribeParams",
+    "type": "object"
+  },
+  "AgentTaskBinding": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "AgentDefinitionRef": {
+        "additionalProperties": false,
+        "properties": {
+          "definitionSha256": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "definitionSha256",
+          "id",
+          "version"
+        ],
+        "type": "object"
+      },
+      "AgentTaskSource": {
+        "enum": [
+          "expert",
+          "channel"
+        ],
+        "type": "string"
+      },
+      "IntegrationNullable_for_String": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationOwner": {
+        "additionalProperties": false,
+        "description": "Stable owner identity excludes refreshable authorization/configuration generations.",
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "organizationId": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationNullable_for_String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "$ref": "#/definitions/IntegrationNullable_for_String"
+          }
+        },
+        "required": [
+          "accountId",
+          "targetId",
+          "workspaceId"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "definition": {
+        "$ref": "#/definitions/AgentDefinitionRef"
+      },
+      "owner": {
+        "$ref": "#/definitions/IntegrationOwner"
+      },
+      "source": {
+        "$ref": "#/definitions/AgentTaskSource"
+      },
+      "sourceId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "title": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "definition",
+      "owner",
+      "source",
+      "title"
+    ],
+    "title": "AgentTaskBinding",
+    "type": "object"
+  },
+  "AgentTaskSource": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "expert",
+      "channel"
+    ],
+    "title": "AgentTaskSource",
+    "type": "string"
+  },
+  "ChannelTaskSource": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationNullable_for_String": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationOwner": {
+        "additionalProperties": false,
+        "description": "Stable owner identity excludes refreshable authorization/configuration generations.",
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "organizationId": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationNullable_for_String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "$ref": "#/definitions/IntegrationNullable_for_String"
+          }
+        },
+        "required": [
+          "accountId",
+          "targetId",
+          "workspaceId"
+        ],
+        "type": "object"
+      }
+    },
+    "description": "Original Native channel ownership; independent of optional expert selection.",
+    "properties": {
+      "channelId": {
+        "type": "string"
+      },
+      "owner": {
+        "$ref": "#/definitions/IntegrationOwner"
+      }
+    },
+    "required": [
+      "channelId",
+      "owner"
+    ],
+    "title": "ChannelTaskSource",
+    "type": "object"
+  },
+  "ThreadExpertChange": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "AgentDefinitionRef": {
+        "additionalProperties": false,
+        "properties": {
+          "definitionSha256": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "definitionSha256",
+          "id",
+          "version"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "expectedRevision": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "expert": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/AgentDefinitionRef"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      }
+    },
+    "required": [
+      "expectedRevision",
+      "expert"
+    ],
+    "title": "ThreadExpertChange",
+    "type": "object"
+  },
+  "ThreadExpertParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "AgentDefinitionRef": {
+        "additionalProperties": false,
+        "properties": {
+          "definitionSha256": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "definitionSha256",
+          "id",
+          "version"
+        ],
+        "type": "object"
+      },
+      "ThreadExpertChange": {
+        "additionalProperties": false,
+        "properties": {
+          "expectedRevision": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "expert": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/AgentDefinitionRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "expectedRevision",
+          "expert"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "change": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/ThreadExpertChange"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "threadId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "threadId"
+    ],
+    "title": "ThreadExpertParams",
+    "type": "object"
+  },
+  "ThreadExpertResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "AgentDefinitionRef": {
+        "additionalProperties": false,
+        "properties": {
+          "definitionSha256": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "definitionSha256",
+          "id",
+          "version"
+        ],
+        "type": "object"
+      },
+      "AgentTaskBinding": {
+        "additionalProperties": false,
+        "properties": {
+          "definition": {
+            "$ref": "#/definitions/AgentDefinitionRef"
+          },
+          "owner": {
+            "$ref": "#/definitions/IntegrationOwner"
+          },
+          "source": {
+            "$ref": "#/definitions/AgentTaskSource"
+          },
+          "sourceId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "definition",
+          "owner",
+          "source",
+          "title"
+        ],
+        "type": "object"
+      },
+      "AgentTaskSource": {
+        "enum": [
+          "expert",
+          "channel"
+        ],
+        "type": "string"
+      },
+      "IntegrationNullable_for_String": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationOwner": {
+        "additionalProperties": false,
+        "description": "Stable owner identity excludes refreshable authorization/configuration generations.",
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "organizationId": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationNullable_for_String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "$ref": "#/definitions/IntegrationNullable_for_String"
+          }
+        },
+        "required": [
+          "accountId",
+          "targetId",
+          "workspaceId"
+        ],
+        "type": "object"
+      },
+      "ThreadExpertTurn": {
+        "additionalProperties": false,
+        "properties": {
+          "effectiveDefinitionSha256": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "expert": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/AgentTaskBinding"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "identity": {
+            "$ref": "#/definitions/TurnAttemptIdentity"
+          },
+          "personalizationRevision": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "selectionRevision": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "identity",
+          "selectionRevision"
+        ],
+        "type": "object"
+      },
+      "TurnAttemptIdentity": {
+        "description": "One execution attempt of a logical turn. Shared by recovery and model snapshots. The server chooses attempt_id; credentials are never part of this identity.",
+        "properties": {
+          "attemptId": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "turnId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "attemptId",
+          "threadId",
+          "turnId"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "expert": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/AgentTaskBinding"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "revision": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "threadId": {
+        "type": "string"
+      },
+      "turns": {
+        "items": {
+          "$ref": "#/definitions/ThreadExpertTurn"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "revision",
+      "threadId",
+      "turns"
+    ],
+    "title": "ThreadExpertResult",
+    "type": "object"
+  },
+  "ThreadExpertTurn": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "AgentDefinitionRef": {
+        "additionalProperties": false,
+        "properties": {
+          "definitionSha256": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "definitionSha256",
+          "id",
+          "version"
+        ],
+        "type": "object"
+      },
+      "AgentTaskBinding": {
+        "additionalProperties": false,
+        "properties": {
+          "definition": {
+            "$ref": "#/definitions/AgentDefinitionRef"
+          },
+          "owner": {
+            "$ref": "#/definitions/IntegrationOwner"
+          },
+          "source": {
+            "$ref": "#/definitions/AgentTaskSource"
+          },
+          "sourceId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "definition",
+          "owner",
+          "source",
+          "title"
+        ],
+        "type": "object"
+      },
+      "AgentTaskSource": {
+        "enum": [
+          "expert",
+          "channel"
+        ],
+        "type": "string"
+      },
+      "IntegrationNullable_for_String": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationOwner": {
+        "additionalProperties": false,
+        "description": "Stable owner identity excludes refreshable authorization/configuration generations.",
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "organizationId": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationNullable_for_String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "$ref": "#/definitions/IntegrationNullable_for_String"
+          }
+        },
+        "required": [
+          "accountId",
+          "targetId",
+          "workspaceId"
+        ],
+        "type": "object"
+      },
+      "TurnAttemptIdentity": {
+        "description": "One execution attempt of a logical turn. Shared by recovery and model snapshots. The server chooses attempt_id; credentials are never part of this identity.",
+        "properties": {
+          "attemptId": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "turnId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "attemptId",
+          "threadId",
+          "turnId"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "effectiveDefinitionSha256": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "expert": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/AgentTaskBinding"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "identity": {
+        "$ref": "#/definitions/TurnAttemptIdentity"
+      },
+      "personalizationRevision": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "selectionRevision": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "identity",
+      "selectionRevision"
+    ],
+    "title": "ThreadExpertTurn",
+    "type": "object"
+  }
+}

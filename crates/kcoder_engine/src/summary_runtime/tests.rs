@@ -12,7 +12,7 @@ fn test_engine_with_settings(
     TestEngineBuilder::new(cwd)
         .provider(provider)
         .settings(settings)
-        .build()
+        .build_with_profile_directory()
 }
 
 #[test]
@@ -36,7 +36,7 @@ fn summary_runtime_reuses_main_provider_and_model_without_override() {
 fn summary_runtime_uses_complete_profile_and_caps_its_output() {
     let tmp = tempfile::tempdir().unwrap();
     let mut settings = Settings::default();
-    let mut profile = settings.providers["kunlunmeta"].clone();
+    let mut profile = kcoder_config::default_active_provider_config();
     profile.default_model = "summary-model".to_string();
     profile.max_output_tokens = 4_000;
     settings.providers.insert("summary".to_string(), profile);
@@ -72,7 +72,7 @@ fn summary_deployments_keep_the_host_credential_factory() {
     let tmp = tempfile::tempdir().unwrap();
     for use_profile in [true, false] {
         let mut settings = Settings::default();
-        let mut profile = settings.providers["kunlunmeta"].clone();
+        let mut profile = kcoder_config::default_active_provider_config();
         profile.default_model = "summary-fixture".into();
         profile.models.clear();
         profile.extra_body =

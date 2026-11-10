@@ -10,10 +10,14 @@ fn extract_memory_facts_finds_remember_phrases() {
 #[tokio::test]
 async fn memory_extraction_only_observes_last_four_messages() {
     let tmp = tempfile::tempdir().unwrap();
-    let manager = MemoryManager::global_only(MemoryStore::with_path(tmp.path().join("memory.json")));
-    let mut settings = settings_using_main_summary_runtime(Settings::default());
+    let manager =
+        MemoryManager::global_only(MemoryStore::with_path(tmp.path().join("memory.json")));
+    let mut settings = settings_using_main_summary_runtime(crate::test_support::engine_builder::fixture_settings());
     settings.auto_memory_enabled = true;
-    let engine = TestEngineBuilder::new(tmp.path()).settings(settings).memory_manager(manager).build();
+    let engine = TestEngineBuilder::new(tmp.path())
+        .settings(settings)
+        .memory_manager(manager)
+        .build_with_profile_directory();
     engine.state.set_messages(vec![
         Message::assistant_text("remember that EXCLUDED_OLD_FACT"),
         Message::user_text("remember that EXCLUDED_USER_FACT"),
@@ -23,9 +27,18 @@ async fn memory_extraction_only_observes_last_four_messages() {
     ]);
     let before = engine.state.messages();
     engine.maybe_extract_memories(&[]).await;
-    let facts = engine.memory_manager.all_memories().into_iter().map(|memory| memory.fact).collect::<Vec<_>>();
+    let facts = engine
+        .memory_manager
+        .all_memories()
+        .into_iter()
+        .map(|memory| memory.fact)
+        .collect::<Vec<_>>();
     assert_eq!(facts.len(), 2);
-    assert!(facts.iter().any(|fact| fact.contains("INCLUDED_FIRST_FACT")));
+    assert!(
+        facts
+            .iter()
+            .any(|fact| fact.contains("INCLUDED_FIRST_FACT"))
+    );
     assert!(facts.iter().any(|fact| fact.contains("INCLUDED_LAST_FACT")));
     assert_eq!(engine.state.messages(), before);
 }
@@ -106,6 +119,26 @@ fn yolo_system_prompt_explicitly_disables_user_elicitation() {
     assert!(prompt.contains("Do not ask follow-up questions"));
     assert!(prompt.contains("Do not request interactive input or approval"));
     assert!(prompt.contains("Make a reasonable assumption"));
+}
+
+#[test]
+fn yolo_prompt_explains_async_question_registration_without_treating_it_as_approval() {
+    let tmp = tempfile::tempdir().unwrap();
+    let prompt = build_system_prompt(
+        tmp.path(),
+        "test-model",
+        false,
+        false,
+        true,
+        &tool_names(&["AskUserQuestionAsync"]),
+    );
+
+    assert!(prompt.contains("Synchronous user questions and permission prompts are disabled"));
+    assert!(prompt.contains(
+        "accepted=true confirms registration only; it is not an answer or authorization"
+    ));
+    assert!(prompt.contains("Continue independent work, do not sleep or wait for a reply"));
+    assert!(prompt.contains("Never use the question tool to request permission or approval"));
 }
 
 #[test]
@@ -196,7 +229,7 @@ fn system_prompt_routes_configuration_tasks_through_settings_skill() {
     assert!(prompt.contains("call DiscoverSkills first and then use skill"));
     assert!(prompt.contains("registered configuration workflow"));
     assert!(!prompt.contains("`kcoder-settings`"));
-    assert!(prompt.contains("The active KCoder CLI entry point is"));
+    assert!(prompt.contains("The active KCoder executable entry point is"));
     assert!(prompt.contains("do not mix profile-specific entry points"));
 }
 
@@ -352,7 +385,7 @@ async fn project_instructions_are_stable_leading_user_context_on_every_request()
     let provider = Arc::new(RequestRecordingProvider {
         requests: Arc::clone(&requests),
     });
-    let settings = Settings::default();
+    let settings = crate::test_support::engine_builder::fixture_settings();
     let engine = QueryEngine::new(
         provider,
         AppState::new(tmp.path()),
@@ -406,7 +439,7 @@ async fn project_instructions_are_stable_leading_user_context_on_every_request()
 fn fork_inherits_frozen_project_context_without_rereading_disk() {
     let tmp = tempfile::tempdir().unwrap();
     std::fs::write(tmp.path().join("AGENTS.md"), "PARENT_PROJECT_CONTEXT").unwrap();
-    let settings = Settings::default();
+    let settings = crate::test_support::engine_builder::fixture_settings();
     let parent = QueryEngine::new(
         Arc::new(RequestRecordingProvider {
             requests: Arc::new(Mutex::new(Vec::new())),
@@ -432,16 +465,94 @@ fn fork_inherits_frozen_project_context_without_rereading_disk() {
         Arc::new(kcoder_tools::DenyAllUserQuestioner),
         tmp.path().to_path_buf(),
     )
-    .with_project_user_context_from(&parent);
+    .with_project_user_context_from(&parent)
+    .unwrap();
 
     let messages = vec![parent.project_user_context.as_ref().clone().unwrap()];
     let mut messages: kcoder_types::SharedMessages = messages.into();
-    child.prepend_project_user_context(&mut messages);
+    child.prepend_project_user_context(&mut messages).unwrap();
 
     assert_eq!(messages.len(), 1);
     let text = messages[0].preview(usize::MAX);
     assert!(text.contains("PARENT_PROJECT_CONTEXT"));
     assert!(!text.contains("CHILD_DISK_CONTEXT"));
+}
+
+#[tokio::test]
+async fn imported_context_is_profile_bound_frozen_user_context_and_not_system_identity() {
+    use kcoder_config::imported_context::{
+        ImportedContext, ImportedContextKind, ImportedContextScope, ImportedContextStore,
+    };
+    let root = tempfile::tempdir().unwrap();
+    let profile = root.path().join("profile");
+    let project = root.path().join("project");
+    std::fs::create_dir(&profile).unwrap();
+    std::fs::create_dir(&project).unwrap();
+    let store = ImportedContextStore::open(&profile).unwrap();
+    let record = ImportedContext {
+        id: "ctx-fixture".into(),
+        operation_id: "plan-fixture".into(),
+        name: "Imported global guide".into(),
+        kind: ImportedContextKind::Instructions,
+        scope: ImportedContextScope::Global,
+        content: "IMPORTED_REQUEST_CONTEXT".into(),
+        enabled: true,
+        memory_provenance: None,
+        memory_workspace_identity: None,
+        instruction_provenance: None,
+    };
+    store.create(record.clone()).unwrap();
+    let requests = Arc::new(Mutex::new(Vec::new()));
+    let engine = TestEngineBuilder::new(&project)
+        .provider(Arc::new(RequestRecordingProvider {
+            requests: Arc::clone(&requests),
+        }))
+        .build_with_profile_directory()
+        .with_settings_persistence_path(profile.join("settings.json"));
+    for text in ["first", "second"] {
+        engine.state.add_message(Message::user_text(text));
+        let prompt = kcoder_permissions::AutoAllowPrompt;
+        let mut stream = engine.run_turn_stream(&prompt);
+        while stream.next().await.is_some() {}
+        if text == "first" {
+            store
+                .set_enabled(&record.id, &record.operation_id, false)
+                .unwrap();
+        }
+    }
+    let requests = requests.lock().unwrap();
+    assert_eq!(requests.len(), 2);
+    assert_eq!(requests[0].system, requests[1].system);
+    for request in requests.iter() {
+        assert!(
+            !request
+                .system
+                .as_deref()
+                .unwrap_or_default()
+                .contains("IMPORTED_REQUEST_CONTEXT")
+        );
+        assert_eq!(
+            request
+                .messages
+                .iter()
+                .filter(|message| message
+                    .preview(usize::MAX)
+                    .contains("IMPORTED_REQUEST_CONTEXT"))
+                .count(),
+            1
+        );
+        assert!(matches!(request.messages[0], Message::User { .. }));
+    }
+    let mut fresh: kcoder_types::SharedMessages = vec![Message::user_text("new")].into();
+    let next = TestEngineBuilder::new(&project)
+        .build_with_profile_directory()
+        .with_settings_persistence_path(profile.join("settings.json"));
+    next.prepend_project_user_context(&mut fresh).unwrap();
+    assert!(!fresh.iter().any(|message| {
+        message
+            .preview(usize::MAX)
+            .contains("IMPORTED_REQUEST_CONTEXT")
+    }));
 }
 
 #[tokio::test]
@@ -454,7 +565,7 @@ async fn relevant_memory_is_appended_once_and_never_changes_system_prefix() {
         .unwrap();
     manager.remember_user("tea is reserved for guests").unwrap();
     let requests = Arc::new(Mutex::new(Vec::new()));
-    let settings = Settings::default();
+    let settings = crate::test_support::engine_builder::fixture_settings();
     let engine = QueryEngine::new(
         Arc::new(RequestRecordingProvider {
             requests: Arc::clone(&requests),
@@ -621,6 +732,14 @@ fn system_prompt_adds_research_guidance_only_when_web_search_is_available() {
     assert!(with_search.contains("Prefer current primary or authoritative sources"));
     assert!(with_search.contains("use WebFetch when available"));
     assert!(with_search.contains("Do not refuse, guess, or give a cursory answer"));
+    assert!(with_search.contains("distinguish search snippets from pages actually read"));
+    assert!(with_search.contains("user's requested points"));
+    assert!(with_search.contains("specific missing fact needed for the answer"));
+    assert!(with_search.contains("arbitrary URL query changes"));
+    assert!(with_search.contains("implementation or source-code investigation"));
+    assert!(with_search.contains("adequate evidence, answer promptly with citations"));
+    assert!(with_search.contains("give the supported parts and state precisely"));
+    assert!(!with_search.contains("API/MCP"));
 
     let fetch_only = build_system_prompt(
         tmp.path(),
@@ -631,6 +750,7 @@ fn system_prompt_adds_research_guidance_only_when_web_search_is_available() {
         &tool_names(&["WebFetch"]),
     );
     assert!(!fetch_only.contains("Web search is available in this request"));
+    assert!(!fetch_only.contains("distinguish search snippets from pages actually read"));
 }
 
 #[test]
@@ -643,12 +763,7 @@ fn core_tool_profile_prompt_exposes_collaboration_and_omits_full_only_capabiliti
     let prompt = build_system_prompt(tmp.path(), "local-model", false, false, false, &available);
 
     assert!(prompt.contains("TodoWrite"));
-    for core_capability in [
-        "spawn_agent",
-        "explore_agent",
-        "TaskOutput",
-        "TaskStop",
-    ] {
+    for core_capability in ["spawn_agent", "explore_agent", "TaskOutput", "TaskStop"] {
         assert!(
             prompt.contains(core_capability),
             "core prompt should name {core_capability}"
@@ -717,7 +832,7 @@ async fn yolo_arrangement_prompt_uses_post_filter_tool_definitions() {
     let settings = Settings {
         permission_mode: PermissionMode::Yolo,
         goal_enabled: false,
-        ..Settings::default()
+        ..crate::test_support::engine_builder::fixture_settings()
     };
     let engine = QueryEngine::new(
         Arc::new(EmptyProvider),
@@ -768,7 +883,14 @@ async fn yolo_arrangement_prompt_uses_post_filter_tool_definitions() {
 #[test]
 fn active_plan_without_controls_is_a_host_restriction_not_a_tool_grant() {
     let dir = tempfile::tempdir().unwrap();
-    let prompt = build_system_prompt(dir.path(), "test", true, false, true, &tool_names(&["read"]));
+    let prompt = build_system_prompt(
+        dir.path(),
+        "test",
+        true,
+        false,
+        true,
+        &tool_names(&["read"]),
+    );
     assert!(prompt.contains("Plan mode is active"));
     assert!(prompt.contains("Mode changes are controlled by the user or host"));
     assert!(!prompt.contains("ExitPlanMode"));
@@ -778,11 +900,25 @@ fn active_plan_without_controls_is_a_host_restriction_not_a_tool_grant() {
 
 #[test]
 fn acceptance_guidance_checks_each_peer_instead_of_assuming_a_group() {
-    for names in [vec!["RecordTaskAcceptance"], vec!["RecordTaskAcceptances"], vec!["RecordTaskAcceptance", "RecordTaskAcceptances", "PlanProgress"]] {
+    for names in [
+        vec!["RecordTaskAcceptance"],
+        vec!["RecordTaskAcceptances"],
+        vec![
+            "RecordTaskAcceptance",
+            "RecordTaskAcceptances",
+            "PlanProgress",
+        ],
+    ] {
         let tools = tool_names(&names);
         let prompt = arrangement_system_prompt(&tools, false, OrchestrateProvenance::Session);
         assert!(prompt.contains("Acceptance has four questions"));
-        assert_eq!(prompt.contains("Call PlanProgress"), tools.contains("PlanProgress"));
-        assert_eq!(prompt.contains("with RecordTaskAcceptances"), tools.contains("RecordTaskAcceptances"));
+        assert_eq!(
+            prompt.contains("Call PlanProgress"),
+            tools.contains("PlanProgress")
+        );
+        assert_eq!(
+            prompt.contains("with RecordTaskAcceptances"),
+            tools.contains("RecordTaskAcceptances")
+        );
     }
 }

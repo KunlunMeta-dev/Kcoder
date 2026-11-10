@@ -1,10 +1,12 @@
+import type { WorkspaceFileEditorNavigation } from '@/types/workspace-files'
 import { useHorizontalPaneResize } from '../useHorizontalPaneResize'
+import type { BufferedChatInputInsertion } from '../BufferedChatInput'
 import { readWorkspaceMarkdownImage } from '@/components/chat/workspaceMarkdownImage'
 import { listSettingsTemplates } from '@/kcoder/configTemplates'
 import { settingsTemplateBadgeState } from '@/kcoder/settingsTemplateBadge'
 import { isCloudDevice, isRemoteDevice } from '@/lib/device-capabilities'
 import { type EmbeddedBrowserOpenRequest } from '@/lib/embedded-browser'
-import { isTauriRuntime } from '@/lib/runtime-environment'
+import { isGatewayRuntime } from '@/lib/runtime-environment'
 import { getActiveWorkbenchDeviceId } from '@/lib/workbench-device'
 import { sameWorkspacePath } from '@/lib/workspace-path-identity'
 import { resolveProjectRuntimeWorkspaceTargets } from '@/lib/workspace-target'
@@ -184,10 +186,8 @@ export function usePaneWorkspacePanels(context: ReturnType<typeof usePaneCloudBi
       : null
   )
 
-  const [conversationSelectionInsertion, setConversationSelectionInsertion] = useState<{
-    id: number
-    text: string
-  } | null>(null)
+  const [conversationSelectionInsertion, setConversationSelectionInsertion] =
+    useState<BufferedChatInputInsertion | null>(null)
 
   const temporaryChatInitialInputsRef = useRef(new Map<RightWorkspaceChatTab, string>())
 
@@ -209,7 +209,7 @@ export function usePaneWorkspacePanels(context: ReturnType<typeof usePaneCloudBi
 
   const [hasPreviousTurnReview, setHasPreviousTurnReview] = useState(false)
 
-  const isTauri = isTauriRuntime()
+  const isGateway = isGatewayRuntime()
 
   const workbenchMainRef = useRef<HTMLElement | null>(null)
 
@@ -253,7 +253,12 @@ export function usePaneWorkspacePanels(context: ReturnType<typeof usePaneCloudBi
     reloadDiff: undefined,
   })
 
-  const closeRightPanel = useCallback(() => setRightPanelOpen(false), [setRightPanelOpen])
+  const fileEditorNavigationRef = useRef<WorkspaceFileEditorNavigation | null>(null)
+  const closeRightPanel = useCallback(() => {
+    const close = () => setRightPanelOpen(false)
+    if (fileEditorNavigationRef.current) fileEditorNavigationRef.current.request(close)
+    else close()
+  }, [setRightPanelOpen])
 
   const onlyTemporaryChatOpen =
     rightPanelTabs.length === 1 &&
@@ -632,6 +637,9 @@ export function usePaneWorkspacePanels(context: ReturnType<typeof usePaneCloudBi
   ])
   const {
     fileNavigationScope,
+    fileCommentController,
+    fileEditorNavigation,
+    hasFileCommentDrafts,
     openFileRequest,
     setOpenFileRequest,
     beginFileOpenRequest,
@@ -643,6 +651,26 @@ export function usePaneWorkspacePanels(context: ReturnType<typeof usePaneCloudBi
     selectedFileWorkspaceTarget ?? effectiveWorkspaceTarget,
     currentRuntimeTask?.deviceId ?? effectiveWorkspaceTarget?.deviceId
   )
+  useLayoutEffect(() => {
+    fileEditorNavigationRef.current = fileEditorNavigation
+    return () => {
+      if (fileEditorNavigationRef.current === fileEditorNavigation)
+        fileEditorNavigationRef.current = null
+    }
+  }, [fileEditorNavigation])
+  useLayoutEffect(() => {
+    onTerminalPanePinChange(paneKey, 'file-editor', fileEditorNavigation.dirty)
+    return () => onTerminalPanePinChange(paneKey, 'file-editor', false)
+  }, [fileEditorNavigation.dirty, onTerminalPanePinChange, paneKey])
+  const hasPendingFileFeedback =
+    hasFileCommentDrafts ||
+    paneSession.hasCodeCommentDrafts ||
+    paneSession.codeCommentContexts.length > 0
+  useEffect(() => {
+    if (!hasPendingFileFeedback) return
+    onTerminalPanePinChange(paneKey, 'file-comments', true)
+    return () => onTerminalPanePinChange(paneKey, 'file-comments', false)
+  }, [hasPendingFileFeedback, onTerminalPanePinChange, paneKey])
   const fileWorkspaceTarget =
     committedFileWorkspaceTarget ?? selectedFileWorkspaceTarget ?? effectiveWorkspaceTarget
 
@@ -744,6 +772,8 @@ export function usePaneWorkspacePanels(context: ReturnType<typeof usePaneCloudBi
     openFileRequest,
     setOpenFileRequest,
     fileNavigationScope,
+    fileCommentController,
+    fileEditorNavigation,
     beginFileOpenRequest,
     commitFileOpenRequest,
     cancelFileOpenRequest,
@@ -755,7 +785,7 @@ export function usePaneWorkspacePanels(context: ReturnType<typeof usePaneCloudBi
     setFeedbackDialogOpen,
     hasPreviousTurnReview,
     setHasPreviousTurnReview,
-    isTauri,
+    isGateway,
     workbenchMainRef,
     workbenchScrollRef,
     workbenchContentWidth,

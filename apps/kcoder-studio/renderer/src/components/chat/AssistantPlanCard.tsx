@@ -1,10 +1,8 @@
 import { downloadLink } from '@/kcoder/downloadLink'
 import { useEffect, useState } from 'react'
 import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent } from 'react'
-import { invoke } from '@tauri-apps/api/core'
 import { Copy, Download, ListChecks, Maximize2 } from 'lucide-react'
 import { useTranslation } from '@/hooks/useTranslation'
-import { isNativeTauriHost } from '@/lib/runtime-environment'
 import { cn } from '@/lib/utils'
 import { AssistantMarkdown } from './AssistantMarkdown'
 
@@ -28,14 +26,6 @@ export function AssistantPlanCard({
   const { t } = useTranslation('chat')
 
   const handleDownload = async () => {
-    if (isNativeTauriHost()) {
-      await invoke<string>('save_text_file_to_downloads', {
-        filename: 'plan.md',
-        content,
-      })
-      return
-    }
-
     downloadTextFile(content, 'plan.md')
   }
 
@@ -96,7 +86,7 @@ export function AssistantPlanCard({
           data-testid="assistant-plan-card-content"
           className="assistant-plan-card-content text-sm leading-6 text-text-primary [&_.assistant-markdown_h1]:mb-3 [&_.assistant-markdown_h1]:mt-2 [&_.assistant-markdown_h2]:mb-2 [&_.assistant-markdown_h2]:mt-3 [&_.assistant-markdown_p]:mb-2 [&_.assistant-markdown_p]:leading-5 [&_.assistant-markdown_ul]:mb-2 [&_.assistant-markdown_ul]:space-y-1 [&_.assistant-markdown_li]:leading-5"
         >
-          <AssistantMarkdown content={content} isStreaming={isStreaming} />
+          <AssistantMarkdown conversationReading content={content} isStreaming={isStreaming} />
         </div>
         <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-background to-transparent" />
       </div>

@@ -2,11 +2,11 @@
 
 use super::*;
 
-pub(crate) fn canonicalize_cli_cwd(cwd: PathBuf) -> PathBuf {
+pub fn canonicalize_cli_cwd(cwd: PathBuf) -> PathBuf {
     dunce::canonicalize(&cwd).unwrap_or(cwd)
 }
 
-pub(crate) fn load_unified_user_dotenv(config_dir: &Path) -> Result<PathBuf> {
+pub fn load_unified_user_dotenv(config_dir: &Path) -> Result<PathBuf> {
     let dotenv_path = ensure_default_user_dotenv(config_dir)?;
     dotenvy::from_path(&dotenv_path).with_context(|| {
         format!(
@@ -17,14 +17,14 @@ pub(crate) fn load_unified_user_dotenv(config_dir: &Path) -> Result<PathBuf> {
     Ok(dotenv_path)
 }
 
-pub(crate) fn ensure_default_user_settings(cwd: &Path, config_dir: &Path) -> Result<PathBuf> {
+pub fn ensure_default_user_settings(cwd: &Path, config_dir: &Path) -> Result<PathBuf> {
     let paths = ConfigPaths::with_config_dir(cwd, config_dir.to_path_buf());
     let value = initial_config_scope_document(ConfigScope::User);
     write_scope_if_missing(&paths, ConfigScope::User, &value)?;
     Ok(paths.user_settings)
 }
 
-pub(crate) fn apply_credential_env_file(settings: &mut Settings, path: &Path) -> Result<()> {
+pub fn apply_credential_env_file(settings: &mut Settings, path: &Path) -> Result<()> {
     let values = dotenvy::from_path_iter(path)
         .with_context(|| format!("failed to read credential dotenv {}", path.display()))?
         .collect::<std::result::Result<HashMap<_, _>, _>>()
@@ -60,7 +60,7 @@ pub(crate) fn apply_credential_env_file(settings: &mut Settings, path: &Path) ->
     Ok(())
 }
 
-pub(crate) fn run_auth_action(
+pub fn run_auth_action(
     action: AuthAction,
     cli: &Cli,
     settings: &Settings,
@@ -192,7 +192,7 @@ pub(crate) fn run_auth_action(
     }
 }
 
-pub(crate) fn import_dotenv_credentials(
+pub fn import_dotenv_credentials(
     settings: &Settings,
     paths: &ConfigPaths,
     env_file: &Path,
@@ -237,7 +237,7 @@ pub(crate) fn import_dotenv_credentials(
     Ok(imported)
 }
 
-pub(crate) fn provider_process_environment_key(credential: &ProviderCredential) -> Option<String> {
+pub fn provider_process_environment_key(credential: &ProviderCredential) -> Option<String> {
     credential
         .env
         .iter()
@@ -245,7 +245,7 @@ pub(crate) fn provider_process_environment_key(credential: &ProviderCredential) 
         .and_then(|value| non_empty(Some(value)))
 }
 
-pub(crate) fn read_dotenv_api_key(
+pub fn read_dotenv_api_key(
     path: &std::path::Path,
     credential: &ProviderCredential,
 ) -> Result<Option<String>> {
@@ -270,7 +270,7 @@ pub(crate) fn read_dotenv_api_key(
 /// The id is first resolved through settings, but an id that only exists in the credential
 /// document is accepted as-is: entries left behind by an older profile would otherwise be
 /// impossible to remove.
-pub(crate) fn logout_provider_credential(
+pub fn logout_provider_credential(
     paths: &ConfigPaths,
     provider: &str,
     settings: &Settings,
@@ -322,7 +322,7 @@ pub(crate) fn logout_provider_credential(
 }
 
 /// Suffix explaining why the operating-system credential store is unreachable.
-pub(crate) fn credential_store_reason(backend: &OsCredentialBackend, available: bool) -> String {
+pub fn credential_store_reason(backend: &OsCredentialBackend, available: bool) -> String {
     if available {
         return String::new();
     }
@@ -332,7 +332,7 @@ pub(crate) fn credential_store_reason(backend: &OsCredentialBackend, available: 
     }
 }
 
-pub(crate) fn migrate_provider_credentials(paths: &ConfigPaths, to: &str) -> Result<()> {
+pub fn migrate_provider_credentials(paths: &ConfigPaths, to: &str) -> Result<()> {
     let direction = match to {
         "keyring" => MigrationDirection::ToKeyring,
         "file" => MigrationDirection::ToFile,
@@ -385,7 +385,7 @@ pub(crate) fn migrate_provider_credentials(paths: &ConfigPaths, to: &str) -> Res
     Ok(())
 }
 
-pub(crate) fn migrate_stored_credentials_wrapper(
+pub fn migrate_stored_credentials_wrapper(
     stored: &std::collections::BTreeMap<String, String>,
     backend: &dyn CredentialBackend,
     direction: MigrationDirection,
@@ -396,7 +396,7 @@ pub(crate) fn migrate_stored_credentials_wrapper(
     kcoder_config::migrate_stored_credentials(stored, backend, direction)
 }
 
-pub(crate) fn run_auth_status(cli: &Cli, settings: &Settings, paths: &ConfigPaths) -> Result<()> {
+pub fn run_auth_status(cli: &Cli, settings: &Settings, paths: &ConfigPaths) -> Result<()> {
     let backend = OsCredentialBackend::new();
     let keyring_available = CredentialBackend::available(&backend);
     let stored = CredentialStore::load_from(&paths.credentials)?;
@@ -455,7 +455,7 @@ pub(crate) fn run_auth_status(cli: &Cli, settings: &Settings, paths: &ConfigPath
     Ok(())
 }
 
-pub(crate) fn first_non_empty(values: impl IntoIterator<Item = Option<String>>) -> Option<String> {
+pub fn first_non_empty(values: impl IntoIterator<Item = Option<String>>) -> Option<String> {
     values
         .into_iter()
         .flatten()
@@ -463,14 +463,13 @@ pub(crate) fn first_non_empty(values: impl IntoIterator<Item = Option<String>>) 
         .find(|value| !value.is_empty())
 }
 
-pub(crate) fn non_empty(value: Option<String>) -> Option<String> {
+pub fn non_empty(value: Option<String>) -> Option<String> {
     value
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
 }
 
-#[cfg(test)]
-pub(crate) fn plaintext_settings_secret_warning(settings: &Settings) -> Option<String> {
+pub fn plaintext_settings_secret_warning(settings: &Settings) -> Option<String> {
     let fields = settings.plaintext_secret_setting_names();
     if fields.is_empty() {
         return None;
@@ -481,7 +480,7 @@ pub(crate) fn plaintext_settings_secret_warning(settings: &Settings) -> Option<S
     ))
 }
 
-pub(crate) fn emit_plaintext_settings_secret_warning_names(fields: &[String]) {
+pub fn emit_plaintext_settings_secret_warning_names(fields: &[String]) {
     if !fields.is_empty() {
         eprintln!(
             "warning: settings.json contains plaintext secret field(s): {}. Move API keys to `kcoder auth login`, environment variables, or CLI arguments, then remove them from settings.json.",

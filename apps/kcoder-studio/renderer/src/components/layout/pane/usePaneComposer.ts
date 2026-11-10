@@ -28,6 +28,7 @@ import {
 import { type RuntimePaneSendOptions } from './sessionTypes'
 import { isRuntimeTaskAddress } from './subagentState'
 import type { usePaneQueueDispatch } from './usePaneQueueDispatch'
+import { restoreSubmittedComments, retireSubmittedComments } from './usePaneCommentContexts'
 
 export function usePaneComposer(context: ReturnType<typeof usePaneQueueDispatch>) {
   const {
@@ -145,7 +146,7 @@ export function usePaneComposer(context: ReturnType<typeof usePaneQueueDispatch>
             })
             if (sent) {
               options.onExecutionModeAccepted?.()
-              setCodeCommentContexts([])
+              setCodeCommentContexts(current => retireSubmittedComments(current, codeCommentContexts))
             } else {
               setError('目标已更新，但指令发送失败')
               setInput(submittedInput)
@@ -346,7 +347,7 @@ export function usePaneComposer(context: ReturnType<typeof usePaneQueueDispatch>
               dispatchMessages({ type: 'reset', messages: [] })
             }
             projectChat.resetAttachments(currentAttachments.map(attachment => attachment.id))
-            setCodeCommentContexts([])
+            setCodeCommentContexts(current => retireSubmittedComments(current, codeCommentContexts))
           } else {
             // Restore the draft when send is blocked so the user can retry.
             // Use scoped setter so we do not clear the pane error reported via onError.
@@ -371,14 +372,14 @@ export function usePaneComposer(context: ReturnType<typeof usePaneQueueDispatch>
 
           if (paneStatus.isBusy) {
             projectChat.resetAttachments(currentAttachments.map(attachment => attachment.id))
-            setCodeCommentContexts([])
+            setCodeCommentContexts(current => retireSubmittedComments(current, codeCommentContexts))
             if (options.interruptWhenBusy) {
               const sent = await interruptAndSendQueuedMessage(queuedMessage)
               if (sent) options.onExecutionModeAccepted?.()
               if (!sent) {
                 scopedSetInput(visibleSubmittedInput)
                 currentAttachments.forEach(projectChat.addExistingAttachment)
-                setCodeCommentContexts(codeCommentContexts)
+                setCodeCommentContexts(current => restoreSubmittedComments(current, codeCommentContexts))
               }
               return
             }
@@ -391,7 +392,7 @@ export function usePaneComposer(context: ReturnType<typeof usePaneQueueDispatch>
           if (sent) {
             options.onExecutionModeAccepted?.()
             projectChat.resetAttachments(currentAttachments.map(attachment => attachment.id))
-            setCodeCommentContexts([])
+            setCodeCommentContexts(current => retireSubmittedComments(current, codeCommentContexts))
           }
           return
         }
@@ -429,7 +430,7 @@ export function usePaneComposer(context: ReturnType<typeof usePaneQueueDispatch>
         const sent = await sendRuntimeMessage(queuedMessage, { computerUse: options.computerUse })
         if (sent) {
           options.onExecutionModeAccepted?.()
-          setCodeCommentContexts([])
+          setCodeCommentContexts(current => retireSubmittedComments(current, codeCommentContexts))
         }
       },
       [

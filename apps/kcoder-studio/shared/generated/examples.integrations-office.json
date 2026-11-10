@@ -1,0 +1,1240 @@
+{
+  "OfficeActionItem": [
+    {
+      "decoded": {
+        "assignee": null,
+        "due": null,
+        "id": "action-1",
+        "sourceRefs": [
+          {
+            "id": "input-case",
+            "kind": "office_input",
+            "revision": "1"
+          }
+        ],
+        "status": "unknown",
+        "text": "复核材料"
+      },
+      "name": "bounded-office-contract",
+      "value": {
+        "assignee": null,
+        "due": null,
+        "id": "action-1",
+        "sourceRefs": [
+          {
+            "id": "input-case",
+            "kind": "office_input",
+            "revision": "1"
+          }
+        ],
+        "status": "unknown",
+        "text": "复核材料"
+      }
+    }
+  ],
+  "OfficeActionItemStatus": [
+    {
+      "decoded": "unknown",
+      "name": "bounded-office-contract",
+      "value": "unknown"
+    }
+  ],
+  "OfficeAggregate": [
+    {
+      "decoded": {
+        "column": "amount",
+        "function": "sum",
+        "key": "total"
+      },
+      "name": "bounded-office-contract",
+      "value": {
+        "column": "amount",
+        "function": "sum",
+        "key": "total"
+      }
+    }
+  ],
+  "OfficeAggregateFunction": [
+    {
+      "decoded": "sum",
+      "name": "bounded-office-contract",
+      "value": "sum"
+    }
+  ],
+  "OfficeAggregateResult": [
+    {
+      "decoded": {
+        "key": "total",
+        "nonNullCount": 2,
+        "value": "0.3"
+      },
+      "name": "bounded-office-contract",
+      "value": {
+        "key": "total",
+        "nonNullCount": 2,
+        "value": "0.3"
+      }
+    }
+  ],
+  "OfficeArtifactActionParams": [
+    {
+      "decoded": {
+        "action": "download",
+        "destination": null,
+        "reference": {
+          "id": "artifact-case",
+          "revision": 1
+        }
+      },
+      "name": "case-preserving-bounded-example",
+      "value": {
+        "action": "download",
+        "reference": {
+          "id": "artifact-case",
+          "revision": 1
+        }
+      }
+    }
+  ],
+  "OfficeArtifactListParams": [
+    {
+      "decoded": {
+        "cursor": null,
+        "limit": 10,
+        "personalOnly": false,
+        "threadId": "thread-case"
+      },
+      "name": "case-preserving-bounded-example",
+      "value": {
+        "limit": 10,
+        "threadId": "thread-case"
+      }
+    }
+  ],
+  "OfficeArtifactManifest": [
+    {
+      "decoded": {
+        "bytes": 1024,
+        "createdAtMs": 1,
+        "format": "docx",
+        "id": "artifact-case",
+        "kind": "document",
+        "owner": {
+          "accountId": "account-case",
+          "organizationId": null,
+          "targetId": "Target-Case",
+          "workspaceId": "workspace-case"
+        },
+        "revision": 1,
+        "schemaVersion": 1,
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "sourceRefs": [],
+        "task": {
+          "threadId": "thread-case",
+          "turnId": "turn-case"
+        },
+        "title": "核对结果",
+        "verification": {
+          "completedChecks": [
+            "OOXML structure"
+          ],
+          "formulaCalculation": "not_performed",
+          "pendingChecks": [
+            "reader verification"
+          ],
+          "readerStatus": "pending",
+          "status": "partial"
+        }
+      },
+      "name": "case-preserving-bounded-example",
+      "value": {
+        "bytes": 1024,
+        "createdAtMs": 1,
+        "format": "docx",
+        "id": "artifact-case",
+        "kind": "document",
+        "owner": {
+          "accountId": "account-case",
+          "targetId": "Target-Case",
+          "workspaceId": "workspace-case"
+        },
+        "revision": 1,
+        "schemaVersion": 1,
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "sourceRefs": [],
+        "task": {
+          "threadId": "thread-case",
+          "turnId": "turn-case"
+        },
+        "title": "核对结果",
+        "verification": {
+          "completedChecks": [
+            "OOXML structure"
+          ],
+          "formulaCalculation": "not_performed",
+          "pendingChecks": [
+            "reader verification"
+          ],
+          "readerStatus": "pending",
+          "status": "partial"
+        }
+      }
+    }
+  ],
+  "OfficeArtifactPresentation": [
+    {
+      "decoded": {
+        "kind": "document",
+        "paragraphs": [
+          "金额1234.56元；待确认日期。"
+        ]
+      },
+      "name": "bounded-office-contract",
+      "value": {
+        "kind": "document",
+        "paragraphs": [
+          "金额1234.56元；待确认日期。"
+        ]
+      }
+    },
+    {
+      "decoded": {
+        "dataset": {
+          "id": "data-case",
+          "revision": 1
+        },
+        "kind": "table"
+      },
+      "name": "fixed-table",
+      "value": {
+        "dataset": {
+          "id": "data-case",
+          "revision": 1
+        },
+        "kind": "table"
+      }
+    },
+    {
+      "decoded": {
+        "chartType": "bar",
+        "dataset": {
+          "id": "data-case",
+          "revision": 1
+        },
+        "kind": "chart",
+        "labelColumn": "name",
+        "valueColumns": [
+          "amount"
+        ]
+      },
+      "name": "fixed-chart",
+      "value": {
+        "chartType": "bar",
+        "dataset": {
+          "id": "data-case",
+          "revision": 1
+        },
+        "kind": "chart",
+        "labelColumn": "name",
+        "valueColumns": [
+          "amount"
+        ]
+      }
+    },
+    {
+      "decoded": {
+        "items": [
+          {
+            "assignee": null,
+            "due": null,
+            "id": "action-1",
+            "sourceRefs": [
+              {
+                "id": "input-case",
+                "kind": "office_input",
+                "revision": "1"
+              }
+            ],
+            "status": "unknown",
+            "text": "复核材料"
+          }
+        ],
+        "kind": "action_items"
+      },
+      "name": "fixed-action_items",
+      "value": {
+        "items": [
+          {
+            "assignee": null,
+            "due": null,
+            "id": "action-1",
+            "sourceRefs": [
+              {
+                "id": "input-case",
+                "kind": "office_input",
+                "revision": "1"
+              }
+            ],
+            "status": "unknown",
+            "text": "复核材料"
+          }
+        ],
+        "kind": "action_items"
+      }
+    },
+    {
+      "decoded": {
+        "findings": [
+          {
+            "sourceRefs": [
+              {
+                "id": "input-case",
+                "kind": "office_input",
+                "revision": "1"
+              }
+            ],
+            "text": "可核对来源"
+          }
+        ],
+        "kind": "research",
+        "observedAt": "2026-10-24T00:00:00Z",
+        "summary": "来源可核对"
+      },
+      "name": "fixed-research",
+      "value": {
+        "findings": [
+          {
+            "sourceRefs": [
+              {
+                "id": "input-case",
+                "kind": "office_input",
+                "revision": "1"
+              }
+            ],
+            "text": "可核对来源"
+          }
+        ],
+        "kind": "research",
+        "observedAt": "2026-10-24T00:00:00Z",
+        "summary": "来源可核对"
+      }
+    },
+    {
+      "decoded": {
+        "detail": "等待原生回执核对",
+        "kind": "operation_receipt",
+        "operationId": "operation-case",
+        "phase": "unknown"
+      },
+      "name": "fixed-operation_receipt",
+      "value": {
+        "detail": "等待原生回执核对",
+        "kind": "operation_receipt",
+        "operationId": "operation-case",
+        "phase": "unknown"
+      }
+    },
+    {
+      "decoded": {
+        "items": [
+          {
+            "id": "artifact-case",
+            "revision": 1
+          }
+        ],
+        "kind": "file_collection"
+      },
+      "name": "fixed-file_collection",
+      "value": {
+        "items": [
+          {
+            "id": "artifact-case",
+            "revision": 1
+          }
+        ],
+        "kind": "file_collection"
+      }
+    },
+    {
+      "decoded": {
+        "initialValues": {},
+        "kind": "form",
+        "purpose": "创建跟进任务",
+        "schema": {
+          "properties": {
+            "title": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "title"
+          ],
+          "type": "object"
+        }
+      },
+      "name": "fixed-form",
+      "value": {
+        "initialValues": {},
+        "kind": "form",
+        "purpose": "创建跟进任务",
+        "schema": {
+          "properties": {
+            "title": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "title"
+          ],
+          "type": "object"
+        }
+      }
+    }
+  ],
+  "OfficeArtifactReadParams": [
+    {
+      "decoded": {
+        "reference": {
+          "id": "artifact-case",
+          "revision": 1
+        }
+      },
+      "name": "case-preserving-bounded-example",
+      "value": {
+        "reference": {
+          "id": "artifact-case",
+          "revision": 1
+        }
+      }
+    }
+  ],
+  "OfficeContextProjection": [
+    {
+      "decoded": {
+        "artifactRefs": [],
+        "columns": [],
+        "contentSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "datasetRefs": [
+          {
+            "id": "dataset-case",
+            "revision": 1
+          }
+        ],
+        "id": "projection-case",
+        "omittedRows": 5000,
+        "owner": {
+          "accountId": "account-case",
+          "organizationId": null,
+          "targetId": "Target-Case",
+          "workspaceId": "workspace-case"
+        },
+        "previewRows": [],
+        "querySha256": null,
+        "revision": 1,
+        "schemaVersion": 1,
+        "sourceRefs": [],
+        "summary": "Exact bounded preview; remaining rows require authorized page reads.",
+        "totalRows": 5000
+      },
+      "name": "bounded-office-contract",
+      "value": {
+        "artifactRefs": [],
+        "columns": [],
+        "contentSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "datasetRefs": [
+          {
+            "id": "dataset-case",
+            "revision": 1
+          }
+        ],
+        "id": "projection-case",
+        "omittedRows": 5000,
+        "owner": {
+          "accountId": "account-case",
+          "targetId": "Target-Case",
+          "workspaceId": "workspace-case"
+        },
+        "previewRows": [],
+        "querySha256": null,
+        "revision": 1,
+        "schemaVersion": 1,
+        "sourceRefs": [],
+        "summary": "Exact bounded preview; remaining rows require authorized page reads.",
+        "totalRows": 5000
+      }
+    }
+  ],
+  "OfficeCreateCardParams": [
+    {
+      "decoded": {
+        "presentation": {
+          "dataset": {
+            "id": "dataset-case",
+            "revision": 1
+          },
+          "kind": "table"
+        },
+        "sourceRefs": [],
+        "task": {
+          "threadId": "thread-case",
+          "turnId": "turn-case"
+        },
+        "title": "真实数据预览"
+      },
+      "name": "bounded-office-contract",
+      "value": {
+        "presentation": {
+          "dataset": {
+            "id": "dataset-case",
+            "revision": 1
+          },
+          "kind": "table"
+        },
+        "sourceRefs": [],
+        "task": {
+          "threadId": "thread-case",
+          "turnId": "turn-case"
+        },
+        "title": "真实数据预览"
+      }
+    }
+  ],
+  "OfficeDataset": [
+    {
+      "decoded": {
+        "columns": [
+          {
+            "key": "amount",
+            "kind": "number",
+            "title": "金额",
+            "unit": "元"
+          }
+        ],
+        "id": "dataset-case",
+        "owner": {
+          "accountId": "account-case",
+          "organizationId": null,
+          "targetId": "Target-Case",
+          "workspaceId": "workspace-case"
+        },
+        "revision": 1,
+        "rows": [
+          [
+            1234.56
+          ],
+          [
+            null
+          ]
+        ],
+        "schemaVersion": 1,
+        "sourceRefs": []
+      },
+      "name": "case-preserving-bounded-example",
+      "value": {
+        "columns": [
+          {
+            "key": "amount",
+            "kind": "number",
+            "title": "金额",
+            "unit": "元"
+          }
+        ],
+        "id": "dataset-case",
+        "owner": {
+          "accountId": "account-case",
+          "targetId": "Target-Case",
+          "workspaceId": "workspace-case"
+        },
+        "revision": 1,
+        "rows": [
+          [
+            1234.56
+          ],
+          [
+            null
+          ]
+        ],
+        "schemaVersion": 1,
+        "sourceRefs": []
+      }
+    }
+  ],
+  "OfficeDatasetPage": [
+    {
+      "decoded": {
+        "aggregates": [],
+        "columns": [
+          {
+            "key": "amount",
+            "kind": "number",
+            "title": "金额",
+            "unit": "元"
+          }
+        ],
+        "dataset": {
+          "id": "artifact-case",
+          "revision": 1
+        },
+        "matchedRows": 2,
+        "nextCursor": null,
+        "numberText": [
+          [
+            null,
+            "1234.56"
+          ]
+        ],
+        "querySha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "rows": [
+          [
+            1234.56
+          ],
+          [
+            null
+          ]
+        ],
+        "sourceRefs": [],
+        "totalRows": 2
+      },
+      "name": "case-preserving-bounded-example",
+      "value": {
+        "aggregates": [],
+        "columns": [
+          {
+            "key": "amount",
+            "kind": "number",
+            "title": "金额",
+            "unit": "元"
+          }
+        ],
+        "dataset": {
+          "id": "artifact-case",
+          "revision": 1
+        },
+        "matchedRows": 2,
+        "nextCursor": null,
+        "numberText": [
+          [
+            null,
+            "1234.56"
+          ]
+        ],
+        "querySha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "rows": [
+          [
+            1234.56
+          ],
+          [
+            null
+          ]
+        ],
+        "sourceRefs": [],
+        "totalRows": 2
+      }
+    }
+  ],
+  "OfficeDatasetPageParams": [
+    {
+      "decoded": {
+        "query": {
+          "aggregates": [],
+          "columns": [],
+          "filters": [],
+          "limit": 10,
+          "sort": []
+        },
+        "reference": {
+          "id": "artifact-case",
+          "revision": 1
+        }
+      },
+      "name": "case-preserving-bounded-example",
+      "value": {
+        "query": {
+          "limit": 10
+        },
+        "reference": {
+          "id": "artifact-case",
+          "revision": 1
+        }
+      }
+    }
+  ],
+  "OfficeDatasetQuery": [
+    {
+      "decoded": {
+        "aggregates": [],
+        "columns": [],
+        "filters": [],
+        "limit": 10,
+        "sort": []
+      },
+      "name": "case-preserving-bounded-example",
+      "value": {
+        "limit": 10
+      }
+    }
+  ],
+  "OfficeExecuteArtifactActionParams": [
+    {
+      "decoded": {
+        "preparedOperationId": "prepared-native-operation"
+      },
+      "name": "native-prepared-intent",
+      "value": {
+        "preparedOperationId": "prepared-native-operation"
+      }
+    }
+  ],
+  "OfficeExpertPackage": [
+    {
+      "decoded": {
+        "files": [
+          {
+            "bytes": 5,
+            "path": "SOUL.md",
+            "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          }
+        ],
+        "packageSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "skillSlugs": [
+          "sample"
+        ],
+        "slug": "sample",
+        "source": "skillhub"
+      },
+      "name": "normal",
+      "value": {
+        "files": [
+          {
+            "bytes": 5,
+            "path": "SOUL.md",
+            "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          }
+        ],
+        "packageSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "skillSlugs": [
+          "sample"
+        ],
+        "slug": "sample",
+        "source": "skillhub"
+      }
+    }
+  ],
+  "OfficeExpertReadParams": [
+    {
+      "decoded": {
+        "id": "personal.sample",
+        "path": null
+      },
+      "name": "normal",
+      "value": {
+        "id": "personal.sample"
+      }
+    }
+  ],
+  "OfficeExportParams": [
+    {
+      "decoded": {
+        "format": "docx",
+        "reference": {
+          "id": "artifact-case",
+          "revision": 1
+        }
+      },
+      "name": "case-preserving-bounded-example",
+      "value": {
+        "format": "docx",
+        "reference": {
+          "id": "artifact-case",
+          "revision": 1
+        }
+      }
+    }
+  ],
+  "OfficeExportReceipt": [
+    {
+      "decoded": {
+        "bytes": 1234,
+        "expiresAtMs": 1792814400000,
+        "exportId": "export-case",
+        "filename": "report.docx",
+        "leaseRevision": "lease-case",
+        "mediaType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "reference": {
+          "id": "artifact-case",
+          "revision": 1
+        },
+        "schemaVersion": 1,
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "name": "bounded-office-contract",
+      "value": {
+        "bytes": 1234,
+        "expiresAtMs": 1792814400000,
+        "exportId": "export-case",
+        "filename": "report.docx",
+        "leaseRevision": "lease-case",
+        "mediaType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "reference": {
+          "id": "artifact-case",
+          "revision": 1
+        },
+        "schemaVersion": 1,
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    }
+  ],
+  "OfficeListParams": [
+    {
+      "decoded": {
+        "cursor": null,
+        "limit": 10,
+        "personalOnly": false
+      },
+      "name": "case-preserving-bounded-example",
+      "value": {
+        "limit": 10
+      }
+    }
+  ],
+  "OfficeMarketDetailParams": [
+    {
+      "decoded": {
+        "language": "zh-CN",
+        "slug": "tech-test-automation"
+      },
+      "name": "bounded-public-detail",
+      "value": {
+        "language": "zh-CN",
+        "slug": "tech-test-automation"
+      }
+    }
+  ],
+  "OfficeMarketExpert": [
+    {
+      "decoded": {
+        "description": "Sample expert",
+        "scene": "tech",
+        "skillSlugs": [],
+        "slug": "sample",
+        "title": "Sample"
+      },
+      "name": "normal",
+      "value": {
+        "description": "Sample expert",
+        "scene": "tech",
+        "skillSlugs": [],
+        "slug": "sample",
+        "title": "Sample"
+      }
+    }
+  ],
+  "OfficeMarketExpertDetail": [
+    {
+      "decoded": {
+        "content": "# Preview",
+        "item": {
+          "description": "Public preview",
+          "scene": "tech",
+          "skillSlugs": [],
+          "slug": "example",
+          "title": "Example"
+        }
+      },
+      "name": "inert-public-content",
+      "value": {
+        "content": "# Preview",
+        "item": {
+          "description": "Public preview",
+          "scene": "tech",
+          "skillSlugs": [],
+          "slug": "example",
+          "title": "Example"
+        }
+      }
+    }
+  ],
+  "OfficeMarketInstallParams": [
+    {
+      "decoded": {
+        "id": "personal.sample",
+        "language": "en",
+        "slug": "sample"
+      },
+      "name": "normal",
+      "value": {
+        "id": "personal.sample",
+        "language": "en",
+        "slug": "sample"
+      }
+    }
+  ],
+  "OfficeMarketListParams": [
+    {
+      "decoded": {
+        "cursor": null,
+        "language": "en",
+        "limit": 10,
+        "query": "",
+        "scene": ""
+      },
+      "name": "normal",
+      "value": {
+        "language": "en",
+        "limit": 10,
+        "query": "",
+        "scene": ""
+      }
+    }
+  ],
+  "OfficeMarketSkill": [
+    {
+      "decoded": {
+        "description": "Summarize meetings",
+        "slug": "meeting-notes",
+        "title": "Meeting notes"
+      },
+      "name": "bounded-public-skill",
+      "value": {
+        "description": "Summarize meetings",
+        "slug": "meeting-notes",
+        "title": "Meeting notes"
+      }
+    }
+  ],
+  "OfficeMaterialReceipt": [
+    {
+      "decoded": {
+        "bytes": 0,
+        "filename": "材料.txt",
+        "inputId": "native-input",
+        "kind": "office_input",
+        "mediaType": "text/plain",
+        "operationId": "original-accept",
+        "owner": {
+          "accountId": "native-account",
+          "organizationId": null,
+          "targetId": "native-target",
+          "workspaceId": "native-workspace"
+        },
+        "revision": 1,
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "status": "accepted"
+      },
+      "name": "opaque-empty-material",
+      "value": {
+        "bytes": 0,
+        "filename": "材料.txt",
+        "inputId": "native-input",
+        "kind": "office_input",
+        "mediaType": "text/plain",
+        "operationId": "original-accept",
+        "owner": {
+          "accountId": "native-account",
+          "organizationId": null,
+          "targetId": "native-target",
+          "workspaceId": "native-workspace"
+        },
+        "revision": 1,
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "status": "accepted"
+      }
+    }
+  ],
+  "OfficeMethod": [
+    {
+      "decoded": "integrations/assistant/list",
+      "name": "public-ListAssistants",
+      "value": "integrations/assistant/list"
+    },
+    {
+      "decoded": "integrations/assistant/read",
+      "name": "public-ReadAssistant",
+      "value": "integrations/assistant/read"
+    },
+    {
+      "decoded": "integrations/assistant/versions",
+      "name": "public-AssistantVersions",
+      "value": "integrations/assistant/versions"
+    },
+    {
+      "decoded": "integrations/assistant/validate",
+      "name": "public-ValidateAssistant",
+      "value": "integrations/assistant/validate"
+    },
+    {
+      "decoded": "integrations/assistant/saveDraft",
+      "name": "public-SaveAssistantDraft",
+      "value": "integrations/assistant/saveDraft"
+    },
+    {
+      "decoded": "integrations/assistant/saveVersion",
+      "name": "public-SaveAssistantVersion",
+      "value": "integrations/assistant/saveVersion"
+    },
+    {
+      "decoded": "integrations/assistant/adopt",
+      "name": "public-AdoptAssistant",
+      "value": "integrations/assistant/adopt"
+    },
+    {
+      "decoded": "integrations/assistant/archive",
+      "name": "public-ArchiveAssistant",
+      "value": "integrations/assistant/archive"
+    },
+    {
+      "decoded": "integrations/assistant/export",
+      "name": "public-ExportAssistant",
+      "value": "integrations/assistant/export"
+    },
+    {
+      "decoded": "integrations/assistant/import",
+      "name": "public-ImportAssistant",
+      "value": "integrations/assistant/import"
+    },
+    {
+      "decoded": "integrations/artifact/list",
+      "name": "public-ListArtifacts",
+      "value": "integrations/artifact/list"
+    },
+    {
+      "decoded": "integrations/artifact/createCard",
+      "name": "public-CreateArtifactCard",
+      "value": "integrations/artifact/createCard"
+    },
+    {
+      "decoded": "integrations/artifact/read",
+      "name": "public-ReadArtifact",
+      "value": "integrations/artifact/read"
+    },
+    {
+      "decoded": "integrations/artifact/source",
+      "name": "public-ReadCanonicalSource",
+      "value": "integrations/artifact/source"
+    },
+    {
+      "decoded": "integrations/artifact/verification",
+      "name": "public-ReadArtifactVerification",
+      "value": "integrations/artifact/verification"
+    },
+    {
+      "decoded": "integrations/artifact/export",
+      "name": "public-ExportArtifact",
+      "value": "integrations/artifact/export"
+    },
+    {
+      "decoded": "integrations/artifact/verify",
+      "name": "public-VerifyArtifact",
+      "value": "integrations/artifact/verify"
+    },
+    {
+      "decoded": "integrations/artifact/prepareAction",
+      "name": "public-PrepareArtifactAction",
+      "value": "integrations/artifact/prepareAction"
+    },
+    {
+      "decoded": "integrations/artifact/executeAction",
+      "name": "public-ExecuteArtifactAction",
+      "value": "integrations/artifact/executeAction"
+    },
+    {
+      "decoded": "integrations/dataset/schema",
+      "name": "public-DatasetSchema",
+      "value": "integrations/dataset/schema"
+    },
+    {
+      "decoded": "integrations/dataset/page",
+      "name": "public-DatasetPage",
+      "value": "integrations/dataset/page"
+    },
+    {
+      "decoded": "integrations/dataset/query",
+      "name": "public-DatasetQuery",
+      "value": "integrations/dataset/query"
+    },
+    {
+      "decoded": "integrations/dataset/export",
+      "name": "public-DatasetExport",
+      "value": "integrations/dataset/export"
+    },
+    {
+      "decoded": "integrations/dataset/create",
+      "name": "public-CreateDataset",
+      "value": "integrations/dataset/create"
+    },
+    {
+      "decoded": "integrations/office/generate",
+      "name": "public-GenerateOffice",
+      "value": "integrations/office/generate"
+    },
+    {
+      "decoded": "integrations/office/readiness",
+      "name": "public-GeneratorReadiness",
+      "value": "integrations/office/readiness"
+    },
+    {
+      "decoded": "integrations/office/readOperation",
+      "name": "public-ReadOfficeOperation",
+      "value": "integrations/office/readOperation"
+    },
+    {
+      "decoded": "integrations/artifact/acknowledgeExport",
+      "name": "public-AcknowledgeExport",
+      "value": "integrations/artifact/acknowledgeExport"
+    },
+    {
+      "decoded": "integrations/assistant/market/list",
+      "name": "expert-market-list",
+      "value": "integrations/assistant/market/list"
+    },
+    {
+      "decoded": "integrations/assistant/market/install",
+      "name": "expert-market-install",
+      "value": "integrations/assistant/market/install"
+    },
+    {
+      "decoded": "integrations/assistant/package/read",
+      "name": "expert-package-read",
+      "value": "integrations/assistant/package/read"
+    },
+    {
+      "decoded": "integrations/assistant/deleteDraft",
+      "name": "expert-deleteDraft",
+      "value": "integrations/assistant/deleteDraft"
+    }
+  ],
+  "OfficeResearchFinding": [
+    {
+      "decoded": {
+        "sourceRefs": [
+          {
+            "id": "input-case",
+            "kind": "office_input",
+            "revision": "1"
+          }
+        ],
+        "text": "可核对来源"
+      },
+      "name": "bounded-office-contract",
+      "value": {
+        "sourceRefs": [
+          {
+            "id": "input-case",
+            "kind": "office_input",
+            "revision": "1"
+          }
+        ],
+        "text": "可核对来源"
+      }
+    }
+  ],
+  "OfficeSettingsReadResult": [
+    {
+      "decoded": {
+        "connectionEnabled": false,
+        "effectiveEnabled": false,
+        "persistedEnabled": null,
+        "restartRequired": false,
+        "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "name": "disabled-source-and-current-connection",
+      "value": {
+        "connectionEnabled": false,
+        "effectiveEnabled": false,
+        "persistedEnabled": null,
+        "restartRequired": false,
+        "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    }
+  ],
+  "OfficeSettingsSaveParams": [
+    {
+      "decoded": {
+        "enabled": true,
+        "expectedRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "name": "explicit-cas-switch",
+      "value": {
+        "enabled": true,
+        "expectedRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    }
+  ],
+  "OfficeSkillInstallParams": [
+    {
+      "decoded": {
+        "id": "personal.test",
+        "language": "en",
+        "slug": "meeting-notes"
+      },
+      "name": "bounded-public-skill",
+      "value": {
+        "id": "personal.test",
+        "language": "en",
+        "slug": "meeting-notes"
+      }
+    }
+  ],
+  "OfficeSkillMarketListParams": [
+    {
+      "decoded": {
+        "language": "zh-CN",
+        "limit": 20,
+        "query": "",
+        "ranking": "recommended"
+      },
+      "name": "bounded-public-skill",
+      "value": {
+        "language": "zh-CN",
+        "limit": 20,
+        "query": "",
+        "ranking": "recommended"
+      }
+    }
+  ],
+  "OfficeVerificationObservation": [
+    {
+      "decoded": {
+        "contentSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "observedAtMs": 1792814400000,
+        "reference": {
+          "id": "artifact-case",
+          "revision": 1
+        },
+        "revision": 1,
+        "verification": {
+          "completedChecks": [
+            "ooxml_structure"
+          ],
+          "formulaCalculation": "not_performed",
+          "pendingChecks": [
+            "reader"
+          ],
+          "readerStatus": "pending",
+          "status": "partial"
+        }
+      },
+      "name": "bounded-office-contract",
+      "value": {
+        "contentSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "observedAtMs": 1792814400000,
+        "reference": {
+          "id": "artifact-case",
+          "revision": 1
+        },
+        "revision": 1,
+        "verification": {
+          "completedChecks": [
+            "ooxml_structure"
+          ],
+          "formulaCalculation": "not_performed",
+          "pendingChecks": [
+            "reader"
+          ],
+          "readerStatus": "pending",
+          "status": "partial"
+        }
+      }
+    }
+  ]
+}

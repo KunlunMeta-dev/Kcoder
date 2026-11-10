@@ -25,6 +25,7 @@ pub(super) fn read(
     engine: &QueryEngine,
     params: &AgentArtifactReadParams,
 ) -> Result<AgentArtifactReadResult> {
+    super::agent_run_constraint::verify_artifact(engine, params)?;
     let agent_id = params.agent_id.trim();
     if agent_id.is_empty() {
         anyhow::bail!("agent id is required");
@@ -156,7 +157,9 @@ pub(super) fn read(
     let truncated = next_offset.is_some();
     let content = String::from_utf8_lossy(&content_bytes).into_owned();
 
+    super::agent_run_constraint::verify_artifact(engine, params)?;
     Ok(AgentArtifactReadResult {
+        background_run: params.expected_background_run.clone(),
         thread_id: params.thread_id.clone(),
         agent_id: agent_id.to_string(),
         kind,

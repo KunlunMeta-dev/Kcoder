@@ -4,9 +4,11 @@ import { join, resolve } from 'node:path';
 import { chromium } from '../../../renderer/node_modules/@playwright/test/index.mjs';
 import { runE2E, requireExecutable, waitFor, repoRoot } from '../../harness/run-context.mjs';
 import { startApprovalModelFixture } from '../../harness/approval-model.mjs';
-import { createOwnedDesktopModel, verifyOwnedDesktopRecovery, verifyOwnedDesktopClearRevokeTail } from '../../../renderer/e2e/desktop/scenarios/computer-use-recovery.scenario.mjs';
+import { createOwnedDesktopModel, verifyOwnedDesktopRecovery, verifyOwnedDesktopClearRevokeTail } from '../../harness/owned-desktop-recovery.mjs';
 import { requestOwnedPageRpc } from '../../harness/owned-page-rpc.mjs';
 import { waitOwnedDesktopControllersStopped } from '../../harness/owned-desktop-cleanup.mjs';
+import { prepareWindowsHome, writeWindowsProfileSettings } from '../../harness/windows-user-profile.mjs';
+import { waitForSelectedModel } from '../../harness/model-selector.mjs';
 
 // Model-independent Windows UI contract: native input stays inside an owned
 // opaque full-view fixture. Worker exit, observation-only recovery and host
@@ -15,8 +17,9 @@ import { waitOwnedDesktopControllersStopped } from '../../harness/owned-desktop-
 // it never creates a desktop fixture or asks the model to operate the desktop.
 const tailOnly = process.env.KCODER_E2E_DESKTOP_TAIL_ONLY === '1';
 const expectLocked = process.env.KCODER_E2E_DESKTOP_EXPECT_LOCKED === '1';
+const existingTask = process.env.KCODER_E2E_DESKTOP_EXISTING_TASK === '1';
 await runE2E(import.meta.url, {
-  testId: tailOnly ? 'windows-computer-use-clear-revoke-tail' : expectLocked ? 'windows-computer-use-locked-approval' : 'windows-computer-use-approval-preview-recovery-revoke', tier: 'manual-live',
+  testId: existingTask ? 'windows-computer-use-existing-task-recovery-revoke' : tailOnly ? 'windows-computer-use-clear-revoke-tail' : expectLocked ? 'windows-computer-use-locked-approval' : 'windows-computer-use-approval-preview-recovery-revoke', tier: 'manual-live',
   modelPolicy: 'owned loopback provider; real packaged Electron/Gateway/CLI/native desktop; UI contract only',
   inputDiagnostics: process.env.KCODER_E2E_DESKTOP_INPUT_DIAGNOSTICS === '1',
 }, async context => {
@@ -34,8 +37,6 @@ await runE2E(import.meta.url, {
   const fixtureOutput = context.pathInState('desktop-fixture');
   await mkdir(workspace, { recursive: true });
   await mkdir(fixtureOutput, { recursive: true });
-  for (const directory of ['temp', 'appdata', 'localappdata']) await mkdir(context.pathInState(directory), { recursive: true });
-  const settingsPath = context.pathInState('home/settings.json');
   let desktop;
   let powershell;
   let sawImage = false;
@@ -45,23 +46,21 @@ await runE2E(import.meta.url, {
       && message.content.some(part => part.type === 'image_url' && part.image_url?.url?.startsWith('data:image/png;base64,')));
     return nativeModel.respond(input);
   } });
-  await context.writeStateJson('home/settings.json', {
+  const settings = {
     permission_mode: 'yolo', active_provider: 'fixture', plugins: { runtime: { enabled: true } },
     providers: { fixture: { api_format: 'openai_chat_completions', authentication: { mode: 'none' },
       endpoint: model.baseUrl, default_model: 'fixture', context_window_tokens: 128000,
       max_output_tokens: 1024, output_headroom_tokens: 1024, no_proxy: true,
       capabilities: { text: true, tools: true, vision: true } } },
-  });
-  await context.writeStateJson('home/credentials.json', {});
+  };
   const servers = await context.writeStateJson('servers.json', [{ id: 'local', label: 'Desktop UI fixture',
     transport: 'local', command: cli, workspace }]);
-  const env = context.isolatedEnvironment({ KCODER_CONFIG_DIR: join(settingsPath, '..'),
-    TEMP: context.pathInState('temp'), TMP: context.pathInState('temp'),
-    APPDATA: context.pathInState('appdata'), LOCALAPPDATA: context.pathInState('localappdata'),
+  const env = await prepareWindowsHome(context, context.isolatedEnvironment({ KCODER_CONFIG_DIR: context.pathInState('home'),
     KCODER_STUDIO_SERVERS_FILE: servers, KCODER_STUDIO_WORKSPACE: workspace,
     KCODER_STUDIO_DESKTOP_USER_DATA_DIR: context.pathInState('desktop-profile'),
     KCODER_STUDIO_WEB_ROOT: process.env.KCODER_E2E_RENDERER_ROOT,
-  });
+  }));
+  const settingsPath = await writeWindowsProfileSettings(context, { cli, workspace, env, settings });
   const child = context.spawnOwned('studio', executable,
     ['--remote-debugging-address=127.0.0.1', '--remote-debugging-port=0'], { cwd: root, env });
   let output = '';
@@ -102,6 +101,12 @@ await runE2E(import.meta.url, {
   network.on('Network.webSocketFrameReceived', event => captureFrame('received', event));
   try {
     await page.getByTestId('chat-message-input').waitFor({ timeout: 60000 });
+    await waitForSelectedModel(page, 'fixture', 60000);
+    if (existingTask) {
+      await page.getByTestId('chat-message-input').fill('OWNED_DESKTOP_BOOTSTRAP');
+      await page.getByTestId('send-message-button').click();
+      await page.getByTestId('desktop-chat-scroll-content').getByText('fixture', { exact: true }).waitFor({ timeout: 60000 });
+    }
     if (!expectLocked) {
       // A fresh isolated profile must explicitly install the bundled guidance.
       // Bootstrap app-servers do not initialize a resident thread as a side effect.
@@ -110,6 +115,7 @@ await runE2E(import.meta.url, {
       assert.equal(installed.error, undefined, 'owned bundled plugin install must succeed');
       assert.equal(installed.result.plugin.id, 'kcoder-windows-computer-use@kcoder-bundled');
       await context.writeArtifactJson('desktop-plugin-prerequisite.json', { explicitBundledInstall: true, profileIsolated: true });
+      await waitForSelectedModel(page, 'fixture', 60000);
     }
     if (expectLocked) {
       await page.getByTestId('chat-message-input').fill('OWNED_DESKTOP_UI: locked readiness check');
@@ -170,6 +176,9 @@ await runE2E(import.meta.url, {
     await waitFor(() => page.getByTestId('computer-use-confirm').isEnabled(), 60000, 'desktop approval');
     await page.getByTestId('computer-use-confirm').click();
     const status = page.getByTestId('computer-use-status');
+    const statusToggle = page.locator('[data-status-item="computer-use"] > button');
+    await statusToggle.waitFor({ timeout: 90000 });
+    if (await statusToggle.getAttribute('aria-expanded') !== 'true') await statusToggle.click();
     await status.waitFor({ timeout: 90000 });
     if (!tailOnly) assert.equal(await status.getAttribute('data-state'), 'active');
     await page.getByTestId('desktop-chat-scroll-content').getByText('DESKTOP_IMAGE_RECEIVED P11_INPUT_CONFIRMED', { exact: true }).waitFor({ timeout: 90000 });
@@ -202,12 +211,24 @@ await runE2E(import.meta.url, {
     await page.screenshot({ path: context.pathInArtifacts('windows-desktop-stopped.png') });
     return { approval: true, preview: true, ...recovery, modelQualityTest: false };
   } catch (error) {
+    await context.writeArtifactJson('computer-use-layout.json', await page.evaluate(() => ({
+      statuses: Array.from(document.querySelectorAll('[data-testid="computer-use-status"]')).map(element => {
+        const ancestors = [];
+        for (let parent = element; parent && ancestors.length < 10; parent = parent.parentElement) {
+          ancestors.push({ tag: parent.tagName, testId: parent.getAttribute('data-testid'), hidden: parent.hidden,
+            display: getComputedStyle(parent).display, className: parent.className });
+        }
+        return { state: element.getAttribute('data-state'), ancestors };
+      }),
+      regions: Array.from(document.querySelectorAll('[data-testid="composer-status-region"], [data-status-item], [data-testid^="composer-status-content-"]'))
+        .map(element => ({ testId: element.getAttribute('data-testid'), item: element.getAttribute('data-status-item'), hidden: element.hidden })),
+    }))).catch(() => {});
     await context.writeArtifactJson('desktop-rpc-timing.json', wire.filter(value => value.method?.includes('computerUse') || value.method?.startsWith('turn/')).slice(-100));
     await page.screenshot({ path: context.pathInArtifacts('failure.png') }).catch(() => {});
     throw error;
   } finally {
     await context.writeArtifactJson('desktop-lifecycle.json', lifecycle).catch(() => {});
-    await context.writeArtifactJson('native-model-call-boundaries.json', { calls: nativeModel.calls, nativeScreenshotObservedAtProvider: sawImage, modelQualityTest: false }).catch(() => {});
+    await context.writeArtifactJson('native-model-call-boundaries.json', { calls: nativeModel.calls, results: nativeModel.results, nativeScreenshotObservedAtProvider: sawImage, modelQualityTest: false }).catch(() => {});
     await context.writeArtifactJson('desktop-rpc-timing.json', wire.filter(value => value.method?.includes('computerUse') || value.method?.startsWith('turn/')).slice(-100)).catch(() => {});
     if (process.env.KCODER_E2E_DESKTOP_INPUT_DIAGNOSTICS === '1') {
       const eventPath = join(fixtureOutput, 'input-events.jsonl');

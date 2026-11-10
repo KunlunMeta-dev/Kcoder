@@ -91,6 +91,21 @@ class AgentGuideContracts(unittest.TestCase):
         errors = check(root, public_snapshot=True)
         self.assertIn("Public source snapshot contains private agent guide: module/AGENTS.md", errors)
 
+    def test_public_snapshot_retains_only_the_exact_synthetic_business_input(self):
+        root = self.workspace()
+        (root / "docs").rmdir()
+        (root / "README.md").write_text("# KCoder\n")
+        fixture = "apps/kcoder-studio/e2e/fixtures/workspaces/native-business"
+        self.guide(root, fixture)
+        subprocess.run(["git", "add", "."], cwd=root, check=True)
+        self.assertEqual(check(root, public_snapshot=True), [])
+        for scope in [".", f"{fixture}/nested", "apps/kcoder-studio/e2e/fixtures/workspaces/another"]:
+            self.guide(root, scope)
+        subprocess.run(["git", "add", "."], cwd=root, check=True)
+        errors = check(root, public_snapshot=True)
+        for name in ["AGENTS.md", f"{fixture}/nested/AGENTS.md", "apps/kcoder-studio/e2e/fixtures/workspaces/another/AGENTS.md"]:
+            self.assertIn(f"Public source snapshot contains private agent guide: {name}", errors)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -44,7 +44,6 @@ const SEARCH_TOOL_HINTS = ['search', 'grep', 'glob']
 const SEARCH_COMMANDS = new Set(['rg', 'grep', 'find', 'fd', 'ls', 'tree', 'ag', 'ack'])
 const FILE_COMMANDS = new Set(['cat', 'sed', 'head', 'tail', 'wc', 'nl', 'stat', 'file'])
 const HIDDEN_ACTIVITY_TOOLS = new Set(['write_stdin', 'functions.write_stdin'])
-const RECONNECTING_TOOL_NAME = 'runtime_reconnecting'
 
 export function buildProcessingDisplayRows(
   blocks: ProcessingBlock[],
@@ -124,13 +123,6 @@ export function buildProcessingDisplayRows(
     flushSubagents()
 
     if (block.type === 'tool' && isContextCompactionToolName(block.toolName)) {
-      flushCompletedTools()
-      flushFileChanges()
-      rows.push({ type: 'block', id: block.id, block, sourceBlockIds: [block.id] })
-      continue
-    }
-
-    if (block.type === 'tool' && block.toolName === RECONNECTING_TOOL_NAME) {
       flushCompletedTools()
       flushFileChanges()
       rows.push({ type: 'block', id: block.id, block, sourceBlockIds: [block.id] })
@@ -702,7 +694,11 @@ function isHiddenToolActivityBlock(block: ProcessingBlock): boolean {
 }
 
 export function isWebSearchToolName(name: string): boolean {
-  return name.toLowerCase() === 'web_search'
+  return ['web_search', 'websearch', 'websearchtool'].includes(name.toLowerCase())
+}
+
+export function isWebFetchToolName(name: string): boolean {
+  return ['web_fetch', 'webfetch', 'webfetchtool'].includes(name.toLowerCase())
 }
 
 export function isWebSearchActivityGroup(blocks: ToolBlock[]): boolean {

@@ -183,27 +183,34 @@ async fn stopped_background_process_is_detected_and_failed() {
 
 #[tokio::test]
 async fn background_command_keeps_original_total_timeout() {
-    let manager = Arc::new(ExecutingBackgroundJobManager::default());
-    let tmp = tempfile::tempdir().unwrap();
-    let ctx =
-        ToolContext::new(AppState::new(tmp.path())).with_background_job_manager(manager.clone());
+    for explicit_background in [false, true] {
+        let manager = Arc::new(ExecutingBackgroundJobManager::default());
+        let tmp = tempfile::tempdir().unwrap();
+        let ctx = ToolContext::new(AppState::new(tmp.path()))
+            .with_background_job_manager(manager.clone())
+            .with_bash_foreground_budget_ms(20);
 
-    let output = BashTool
-        .call(
-            serde_json::json!({
-                "command": "sleep 60",
-                "timeout": 80,
-                "run_in_background": true
-            }),
-            &ctx,
-        )
-        .await
-        .unwrap();
-    let started: Value = serde_json::from_str(&output_text(&output)).unwrap();
-    let completed = manager.output(started["task_id"].as_str().unwrap()).await;
+        let output = BashTool
+            .call(
+                serde_json::json!({
+                    "command": "sleep 60",
+                    "timeout": 80,
+                    "run_in_background": explicit_background
+                }),
+                &ctx,
+            )
+            .await
+            .unwrap();
+        let started: Value = serde_json::from_str(&output_text(&output)).unwrap();
+        assert_eq!(started["total_lifetime_ms"], 80);
+        if !explicit_background {
+            assert_eq!(started["automatically_backgrounded"], true);
+        }
+        let completed = manager.output(started["task_id"].as_str().unwrap()).await;
 
-    assert!(completed.is_error);
-    assert!(output_text(&completed).contains("timed out after 80 ms"));
+        assert!(completed.is_error);
+        assert!(output_text(&completed).contains("timed out after 80 ms"));
+    }
 }
 
 #[tokio::test]

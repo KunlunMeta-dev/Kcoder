@@ -46,7 +46,7 @@ fn moa_plan_models_include_current_planner_and_deduplicate_slots() {
     let mut settings = Settings {
         provider: Some("main-provider".to_string()),
         model: "main-model".to_string(),
-        ..Settings::default()
+        ..crate::test_support::engine_builder::fixture_settings()
     };
     settings.moa_plan.preset = "plan".to_string();
     settings.moa.presets.insert(
@@ -72,7 +72,8 @@ fn moa_plan_models_include_current_planner_and_deduplicate_slots() {
 
 #[test]
 fn moa_plan_models_reject_a_single_distinct_runtime() {
-    let mut settings = Settings::default();
+    let mut settings =
+        crate::test_support::engine_builder::fixture_settings_with_default_provider();
     settings.moa_plan.preset = "one".to_string();
     settings.moa.presets.insert(
         "one".to_string(),
@@ -131,7 +132,7 @@ fn moa_plan_planners_only_receive_repository_read_tools() {
     let temp = tempfile::tempdir().unwrap();
     let engine = TestEngineBuilder::new(temp.path())
         .tool_registry(kcoder_tools::default_registry())
-        .build();
+        .build_with_profile_directory();
     let tools = moa_plan_read_tools(&engine);
     let names = tools.names();
 
@@ -153,7 +154,7 @@ fn moa_plan_planners_only_receive_repository_read_tools() {
 #[test]
 fn moa_plan_validation_failure_does_not_mutate_conversation() {
     let temp = tempfile::tempdir().unwrap();
-    let mut settings = Settings::default();
+    let mut settings = crate::test_support::engine_builder::fixture_settings();
     settings.moa_plan.preset = "one".to_string();
     settings.moa.presets.insert(
         "one".to_string(),
@@ -162,7 +163,7 @@ fn moa_plan_validation_failure_does_not_mutate_conversation() {
             ..MoaPresetConfig::default()
         },
     );
-    let engine = TestEngineBuilder::new(temp.path()).settings(settings).build();
+    let engine = TestEngineBuilder::new(temp.path()).settings(settings).build_with_profile_directory();
     assert!(engine.moa_plan_preflight().is_err());
     assert!(engine.state.messages().is_empty());
 }
@@ -173,7 +174,7 @@ async fn moa_planner_keeps_submission_at_max_turn_boundary() {
     let mut settings = Settings {
         provider: Some("moa-submit-test".to_string()),
         model: "test-model".to_string(),
-        ..Settings::default()
+        ..crate::test_support::engine_builder::fixture_settings()
     };
     settings.moa_plan.draft_max_turns = 1;
     let engine = TestEngineBuilder::new(temp.path())
@@ -181,7 +182,8 @@ async fn moa_planner_keeps_submission_at_max_turn_boundary() {
             tool_name: "SubmitMoaDraft",
         }))
         .settings(settings.clone())
-        .build();
+        .build_with_profile_directory();
+    crate::test_support::engine_builder::initialize_owned_native_profile(&engine).unwrap();
 
     let outcome = engine
         .run_moa_planner(
@@ -202,10 +204,10 @@ async fn moa_planner_keeps_submission_at_max_turn_boundary() {
 #[tokio::test]
 async fn moa_planner_reports_provider_configuration_errors_as_failed_outcomes() {
     let temp = tempfile::tempdir().unwrap();
-    let settings = Settings::default();
+    let settings = crate::test_support::engine_builder::fixture_settings();
     let engine = TestEngineBuilder::new(temp.path())
         .settings(settings.clone())
-        .build();
+        .build_with_profile_directory();
 
     let outcome = engine
         .run_moa_planner(
@@ -231,7 +233,7 @@ async fn moa_synthesis_keeps_submission_at_max_turn_boundary() {
     let mut settings = Settings {
         provider: Some("moa-submit-test".to_string()),
         model: "test-model".to_string(),
-        ..Settings::default()
+        ..crate::test_support::engine_builder::fixture_settings()
     };
     settings.moa_plan.draft_max_turns = 1;
     let engine = TestEngineBuilder::new(temp.path())
@@ -239,7 +241,8 @@ async fn moa_synthesis_keeps_submission_at_max_turn_boundary() {
             tool_name: "SubmitMoaFinal",
         }))
         .settings(settings.clone())
-        .build();
+        .build_with_profile_directory();
+    crate::test_support::engine_builder::initialize_owned_native_profile(&engine).unwrap();
     let draft = temp.path().join("draft.md");
     std::fs::write(&draft, "# Draft").unwrap();
 

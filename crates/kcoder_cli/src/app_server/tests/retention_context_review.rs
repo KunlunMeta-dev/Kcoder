@@ -4,13 +4,19 @@
 
 #[cfg(target_os = "linux")]
 fn retention_context_review_fixture_parent() -> std::path::PathBuf {
-    let parent = std::path::PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR")
-        .expect("Cargo must provide the runtime manifest directory"))
-        .join("../..").canonicalize().expect("resolve source workspace")
-        .join("target/test/crates/kcoder_cli/retention-review-fixtures");
+    let parent = std::path::PathBuf::from(
+        std::env::var_os("CARGO_MANIFEST_DIR")
+            .expect("Cargo must provide the runtime manifest directory"),
+    )
+    .join("../../../..")
+    .canonicalize()
+    .expect("resolve source workspace")
+    .join("target/test/crates/kcoder_cli/retention-review-fixtures");
     kcoder_config::PrivateDirectory::open_or_create(&parent)
         .expect("create owned private retention review fixture parent");
-    parent.canonicalize().expect("resolve owned retention review fixture parent")
+    parent
+        .canonicalize()
+        .expect("resolve owned retention review fixture parent")
 }
 
 #[cfg(target_os = "linux")]
@@ -23,7 +29,10 @@ fn retention_context_review_tempdir() -> tempfile::TempDir {
 
 #[cfg(target_os = "linux")]
 fn retention_context_review_engine(cwd: &std::path::Path) -> QueryEngine {
-    let settings = kcoder_config::Settings { training_mode: true, ..Default::default() };
+    let settings = kcoder_config::Settings {
+        training_mode: true,
+        ..Default::default()
+    };
     // Keep this real client-mode Engine from scheduling even the mock
     // Provider's optional prewarm. The authority only needs its durable-root
     // fact and canonical workspace identity.
@@ -89,9 +98,9 @@ fn retention_context_review_account_context(
 fn retention_context_review_read_request(
     context: &kcoder_app_protocol::TrustedRetentionContextV1,
 ) -> kcoder_app_protocol::PrivateRetentionRequestV1 {
-    use kcoder_app_protocol::{METHOD_ATTACHMENT_RETENTION_READ};
+    use kcoder_app_protocol::METHOD_ATTACHMENT_RETENTION_READ;
 
-    serde_json::from_value(serde_json::json!({
+    let mut request = serde_json::json!({
         "jsonrpc": "2.0",
         "id": 41,
         "method": METHOD_ATTACHMENT_RETENTION_READ,
@@ -99,14 +108,25 @@ fn retention_context_review_read_request(
             "trustedContext": context,
             "selector": {
                 "by": "clientRequestId",
-                "clientRequestId": "review-request",
+                "clientRequestId": "r1.review.1.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
             },
         },
         "kcoderPrivateRetention": {
             "version": 1,
             "context": context,
+            "workspaceTargetId": "review-target",
         },
-    }))
+    });
+    if matches!(
+        &context.principal,
+        kcoder_app_protocol::RetentionPrincipalV1::VerifiedAccount { .. }
+    ) {
+        request["kcoderPrivateRetention"]["workspaceAccount"] = serde_json::json!({
+            "role": "member",
+            "authorizationGeneration": "1",
+        });
+    }
+    serde_json::from_value(request)
     .expect("construct valid typed private retention read request")
 }
 
@@ -202,7 +222,7 @@ fn retention_context_review_capture_binds_account_parent_to_actual_effective_uid
     let wrong_uid = if actual_uid == 0 { 1 } else { actual_uid - 1 };
     let retention_root = account_root.join("attachment-retention-v1");
 
-    let wrong_uid_capture = super::retention_context::VerifiedRetentionAuthority::capture(
+    let wrong_uid_capture = super::retention_context::capture(
         super::retention_context::RetentionLaunchConfiguration {
             parent: kcoder_app_protocol::RetentionParentLaunchV1::VerifiedAccount {
                 principal_id: "review-account".into(),
@@ -210,6 +230,7 @@ fn retention_context_review_capture_binds_account_parent_to_actual_effective_uid
             },
             account_root: account_root.clone(),
             optional: false,
+            revocation_verifier: None,
         },
         &engine,
     );
@@ -222,7 +243,7 @@ fn retention_context_review_capture_binds_account_parent_to_actual_effective_uid
         "UID mismatch must be rejected before opening or initializing the retention store"
     );
 
-    let authority = super::retention_context::VerifiedRetentionAuthority::capture(
+    let authority = super::retention_context::capture(
         super::retention_context::RetentionLaunchConfiguration {
             parent: kcoder_app_protocol::RetentionParentLaunchV1::VerifiedAccount {
                 principal_id: "review-account".into(),
@@ -230,6 +251,7 @@ fn retention_context_review_capture_binds_account_parent_to_actual_effective_uid
             },
             account_root: account_root.clone(),
             optional: false,
+            revocation_verifier: None,
         },
         &engine,
     )
@@ -268,11 +290,12 @@ fn retention_context_review_rejects_bad_typed_scope_batch_and_method_without_sto
     std::fs::create_dir(&workspace).unwrap();
     let account_root = retention_context_review_account_root(&fixture);
     let engine = retention_context_review_engine(&workspace);
-    let authority = super::retention_context::VerifiedRetentionAuthority::capture(
+    let authority = super::retention_context::capture(
         super::retention_context::RetentionLaunchConfiguration {
             parent: RetentionParentLaunchV1::LocalOs,
             account_root: account_root.clone(),
             optional: false,
+            revocation_verifier: None,
         },
         &engine,
     )
@@ -367,11 +390,12 @@ fn retention_context_review_rejects_account_root_replacement_after_capture() {
     std::fs::create_dir(&workspace).unwrap();
     let account_root = retention_context_review_account_root(&fixture);
     let engine = retention_context_review_engine(&workspace);
-    let authority = super::retention_context::VerifiedRetentionAuthority::capture(
+    let authority = super::retention_context::capture(
         super::retention_context::RetentionLaunchConfiguration {
             parent: RetentionParentLaunchV1::LocalOs,
             account_root: account_root.clone(),
             optional: false,
+            revocation_verifier: None,
         },
         &engine,
     )
@@ -512,7 +536,10 @@ fn retention_parent_environment_review_encode(raw_json: &str) -> std::ffi::OsStr
 fn retention_parent_environment_review_absence_and_valid_facts_are_typed() {
     use kcoder_app_protocol::RetentionParentLaunchV1;
 
-    assert_eq!(crate::retention_parent_environment::decode(None).unwrap(), None);
+    assert_eq!(
+        crate::retention_parent_environment::decode(None).unwrap(),
+        None
+    );
     assert_eq!(
         crate::retention_parent_environment::decode(Some(
             retention_parent_environment_review_encode(r#"{"version":1,"mode":"localOs"}"#)
@@ -542,21 +569,22 @@ fn retention_parent_environment_review_absence_and_valid_facts_are_typed() {
 fn retention_parent_environment_review_malformed_or_wrong_uid_never_becomes_optional() {
     let malformed = [
         "not-v1".to_owned(),
-        retention_parent_environment_review_encode(
-            r#"{"version":1,"version":1,"mode":"localOs"}"#,
-        )
-        .to_string_lossy()
-        .into_owned(),
+        retention_parent_environment_review_encode(r#"{"version":1,"version":1,"mode":"localOs"}"#)
+            .to_string_lossy()
+            .into_owned(),
         retention_parent_environment_review_encode(
             r#"{"version":1,"mode":"localOs","unexpected":true}"#,
         )
         .to_string_lossy()
-        .into_owned()
+        .into_owned(),
     ];
     for raw in malformed {
         let error = crate::retention_parent_environment::decode(Some(raw.into()))
             .expect_err("malformed inherited facts must fail before optional capture handling");
-        assert_eq!(error.to_string(), "invalid private parent launch declaration");
+        assert_eq!(
+            error.to_string(),
+            "invalid private parent launch declaration"
+        );
     }
 
     let actual_uid = unsafe { libc::geteuid() };
@@ -571,9 +599,13 @@ fn retention_parent_environment_review_malformed_or_wrong_uid_never_becomes_opti
     assert_eq!(error.to_string(), "private parent launch identity mismatch");
     assert!(!error.to_string().contains("do-not-echo-this"));
 
-    let encoded_limit = 3 + kcoder_app_protocol::PRIVATE_RETENTION_PARENT_JSON_LIMIT_V1.div_ceil(3) * 4;
+    let encoded_limit =
+        3 + kcoder_app_protocol::PRIVATE_RETENTION_PARENT_JSON_LIMIT_V1.div_ceil(3) * 4;
     let oversized = format!("v1.{}", "A".repeat(encoded_limit));
     let error = crate::retention_parent_environment::decode(Some(oversized.into()))
         .expect_err("encoded declaration size is bounded before decode");
-    assert_eq!(error.to_string(), "invalid private parent launch declaration");
+    assert_eq!(
+        error.to_string(),
+        "invalid private parent launch declaration"
+    );
 }

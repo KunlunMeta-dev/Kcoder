@@ -5,3 +5,8 @@ KCODER_WORKSPACE_ROOT = { value = ".", relative = true }
 # session-history tests collide on their non-blocking flock fences (EAGAIN) and
 # destabilizes timing-sensitive journal assertions; four workers matches CI.
 RUST_TEST_THREADS = "4"
+# Match the production app-server runtime, whose workers run with 16 MiB
+# stacks (startup/runtime_wiring.rs): `#[tokio::test]` polls the same nested
+# Engine/app-server futures directly on the libtest thread, whose 2 MiB default
+# overflows in debug builds.
+RUST_MIN_STACK = "16777216"

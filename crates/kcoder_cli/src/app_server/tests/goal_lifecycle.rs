@@ -43,6 +43,24 @@ fn goal_lifecycle_bounds_automatic_turns_without_fabricating_completion() {
 }
 
 #[test]
+fn goal_lifecycle_explicit_turn_can_repeat_an_undelivered_limit_notice_without_resetting_count() {
+    let temp = tempfile::tempdir().unwrap();
+    let engine = runtime_context_test_engine(temp.path(), None);
+    engine.settings.write().unwrap().goal_max_auto_continuations = 1;
+    engine.state.set_goal("owned limit fixture", None);
+    let mut lifecycle = goal_lifecycle::GoalLifecycle::default();
+    assert!(lifecycle.automatic_allowed(&engine));
+    let automatic = lifecycle.begin(&engine, None, Some(CancellationToken::new()));
+    lifecycle.finish(&engine, automatic, "completed", None);
+    assert!(lifecycle.take_limit_notice(&engine).is_some());
+    let explicit = lifecycle.begin(&engine, None, None);
+    lifecycle.finish(&engine, explicit, "completed", None);
+    assert!(!lifecycle.automatic_allowed(&engine));
+    assert!(lifecycle.take_limit_notice(&engine).is_some());
+    assert_eq!(engine.state.goal().unwrap().status, GoalStatus::Active);
+}
+
+#[test]
 fn goal_lifecycle_stops_on_budget_and_explicit_suspend() {
     let temp = tempfile::tempdir().unwrap();
     let engine = runtime_context_test_engine(temp.path(), None);

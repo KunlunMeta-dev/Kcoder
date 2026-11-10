@@ -7,10 +7,15 @@ license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 
+[lib]
+path = "src/exports.rs"
+
 [features]
-json-schema = ["dep:schemars"]
+json-schema = ["kcoder_integration_types/json-schema", "kcoder_session_types/json-schema"]
 
 [dependencies]
-schemars = { version = "0.8", optional = true }
-serde = { workspace = true, features = ["derive"] }
-serde_json = { workspace = true }
+kcoder_integration_types = { path = "internal/integration_types" }
+kcoder_session_types = { path = "internal/session_types" }
+
+[dev-dependencies]
+serde_json.workspace = true

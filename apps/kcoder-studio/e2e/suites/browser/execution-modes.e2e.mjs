@@ -53,7 +53,7 @@ await runE2E(import.meta.url, {
   const page = await chromium.newPage({ viewport: { width: 1440, height: 960 } });
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
-  const rpc = (method, params = {}) => page.evaluate(({method,params}) => window.__TAURI_INTERNALS__.invoke('local_executor_request', {method,params}), {method,params});
+  const rpc = (method, params = {}) => page.evaluate(({method,params}) => window.__ELECTRON_INTERNALS__.invoke('local_executor_request', {method,params}), {method,params});
   const editor = page.getByTestId('chat-message-input');
   const assertModeFooter = async (currentPage, mode) => {
     await currentPage.getByTestId('execution-mode-footer').filter({ hasText: mode }).waitFor();

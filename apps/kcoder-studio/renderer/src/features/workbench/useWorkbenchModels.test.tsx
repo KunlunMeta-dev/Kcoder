@@ -1,3 +1,4 @@
+import { LOCAL_MODEL_SETTINGS_CHANGED_EVENT } from '@/features/model-settings/localModelSettings'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { expect, test, vi } from 'vitest'
 import { useWorkbenchModels } from './useWorkbenchModels'
@@ -29,7 +30,7 @@ test('catalog refresh ignores an older response after a newer refresh completes'
   const api = { listModels: vi.fn(() => new Promise<UnifiedModelListResponse>(resolve => resolves.push(resolve))) }
   const { result } = renderHook(() => useWorkbenchModels({ api, locked: false, persistSelection: false, scopeKey: 'race' }))
   await waitFor(() => expect(resolves).toHaveLength(1))
-  act(() => window.dispatchEvent(new CustomEvent('wework:local-model-settings-changed')))
+  act(() => window.dispatchEvent(new CustomEvent(LOCAL_MODEL_SETTINGS_CHANGED_EVENT)))
   await waitFor(() => expect(resolves).toHaveLength(2))
   await act(async () => resolves[1]({ data: [{ name: 'gpt-5.5-new', type: 'public', modelId: 'gpt-5.5' }] }))
   await act(async () => resolves[0]({ data: [{ name: 'gpt-5.5-old', type: 'public', modelId: 'gpt-5.5' }] }))
@@ -92,7 +93,7 @@ test('a retained send-time validator observes model removal after catalog refres
   await waitFor(() => expect(result.current.selectedModel?.name).toBe(model.name))
   const validate = result.current.isSelectedModelUnavailable
   expect(validate()).toBe(false)
-  act(() => window.dispatchEvent(new CustomEvent('wework:local-model-settings-changed')))
+  act(() => window.dispatchEvent(new CustomEvent(LOCAL_MODEL_SETTINGS_CHANGED_EVENT)))
   await waitFor(() => expect(result.current.models).toHaveLength(0))
   expect(validate()).toBe(true)
 })
@@ -133,7 +134,7 @@ test('follow-default intent survives catalog replacement while preserving permis
     defaultSelectionConfig: models => ({ modelName: models[0]?.name ?? '', modelType: 'public', options: {} }),
   }))
   await waitFor(() => expect(result.current.isSelectionReady).toBe(true))
-  act(() => window.dispatchEvent(new CustomEvent('wework:local-model-settings-changed')))
+  act(() => window.dispatchEvent(new CustomEvent(LOCAL_MODEL_SETTINGS_CHANGED_EVENT)))
   await waitFor(() => expect(result.current.models[0]?.name).toBe(second.name))
   expect(result.current.selectedModel).toBeNull()
   expect(result.current.displaySelectedModel).toBeNull()

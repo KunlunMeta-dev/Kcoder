@@ -1,13 +1,46 @@
+import { isThreadTranscriptObservationV1, isThreadTranscriptSnapshotV1,
+  type ThreadTranscriptObservationV1, type ThreadTranscriptSnapshotV1 } from "../../../../shared/generated/contracts";
 import { GatewayRpcClient, MobileRpcError } from "@/gateway/rpc";
 import type { ThreadMessage, ThreadSummary } from "@/gateway/types";
 import { normalizeMessage } from "./normalizers";
-import { type ChatMessage, type ThreadReadPage } from "./types";
+import { type ChatMessage, type ThreadReadPage, type TaskSnapshot } from "./types";
+import type { TaskRuntime } from "./core";
+
+// Body provenance only: auxiliary row projections do not make historical text
+// live. This neither orders events nor proves an observed body committed.
+const pureHistoryRows = new WeakSet<ChatMessage>();
+const observedDecorations = new WeakMap<ChatMessage, Set<keyof ChatMessage>>();
+const decorationKeys = ["tools", "todos", "activities", "fileChanges", "fileChangesCapture", "reviewEvidence", "status", "error", "providerFailure",
+  "continuedByAttemptId", "interactionSummaries"] as const;
+
+/** Preserve historical body through auxiliary projection, including read-ahead
+ * stream adoption. Only changed rows with a historical body are inspected. */
+export function preserveHistoryBodyProvenance(previous: ChatMessage, next: ChatMessage): ChatMessage {
+  if (previous === next || pureHistoryRows.has(next) || !pureHistoryRows.has(previous)) return next;
+  const bodyBlocks = (message: ChatMessage, kind: "text" | "thinking") =>
+    (message.orderedBlocks ?? []).flatMap(block => block.kind === kind ? [block.content] : []).join("");
+  if (previous.content !== next.content || previous.thinking !== next.thinking ||
+      bodyBlocks(previous, "text") !== bodyBlocks(next, "text") ||
+      bodyBlocks(previous, "thinking") !== bodyBlocks(next, "thinking")) return next;
+  pureHistoryRows.add(next);
+  const dirty = new Set(observedDecorations.get(previous));
+  for (const key of decorationKeys) if (previous[key] !== next[key]) dirty.add(key);
+  const nonBody = (message: ChatMessage) => (message.orderedBlocks ?? [])
+    .filter(block => block.kind !== "text" && block.kind !== "thinking");
+  const before = nonBody(previous); const after = nonBody(next);
+  if (before.length !== after.length || before.some((block, index) => block !== after[index])) dirty.add("orderedBlocks");
+  if (dirty.size) observedDecorations.set(next, dirty);
+  return next;
+}
 
 export async function readHistoryPage(
   client: GatewayRpcClient,
   threadId: string,
   beforeCursor?: string,
 ): Promise<{
+  sourcePage: ThreadReadPage;
+  transcriptSnapshotV1?: ThreadTranscriptSnapshotV1;
+  transcriptObservationV1?: ThreadTranscriptObservationV1;
   thread?: ThreadSummary;
   messages: ChatMessage[];
   hasMoreBefore: boolean;
@@ -21,21 +54,25 @@ export async function readHistoryPage(
     limit: 50,
     ...(beforeCursor ? { beforeCursor } : {}),
   });
-  return normalizeHistoryPage(page);
+  if (page.thread && page.thread.id !== threadId)
+    throw new MobileRpcError("Thread history belongs to a different thread", -32603, "protocol");
+  return { ...normalizeHistoryPage(page), sourcePage: page };
 }
 
 /** Shared projection only. Legacy read parsing deliberately remains tolerant. */
 export function normalizeHistoryPage(page: ThreadReadPage) {
   return {
     thread: page.thread,
+    transcriptSnapshotV1: parseTranscriptSnapshot(page.transcriptSnapshotV1),
+    transcriptObservationV1: parseTranscriptObservation(page.transcriptObservationV1),
     messages: (page.messages ?? []).flatMap((message, index) => {
-      const normalized = normalizeMessage(message);
+      const normalized = normalizeMessage(message, page.thread?.id);
       if (!normalized) return [];
-      return [
-        Number.isSafeInteger(page.rangeStart)
-          ? { ...normalized, historyOrdinal: Number(page.rangeStart) + index }
-          : normalized,
-      ];
+      const row = Number.isSafeInteger(page.rangeStart)
+        ? { ...normalized, historyOrdinal: Number(page.rangeStart) + index }
+        : normalized;
+      pureHistoryRows.add(row);
+      return [row];
     }),
     hasMoreBefore: page.hasMoreBefore === true && Boolean(page.beforeCursor),
     beforeCursor:
@@ -81,7 +118,7 @@ export function inlineResumeHistoryPage(
   const ordinal = (value: unknown): value is number =>
     typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
   if (Object.keys(page).some(key => ![
-        "messages", "rangeStart", "rangeEnd", "hasMoreBefore", "beforeCursor",
+        "messages", "rangeStart", "rangeEnd", "hasMoreBefore", "beforeCursor", "transcriptSnapshotV1", "transcriptObservationV1",
       ].includes(key)) || !Array.isArray(page.messages) ||
       !ordinal(page.rangeStart) || !ordinal(page.rangeEnd) || page.rangeEnd < page.rangeStart ||
       page.messages.length !== page.rangeEnd - page.rangeStart ||
@@ -101,9 +138,144 @@ export function inlineResumeHistoryPage(
     return { ...message, id: message.id, role: message.role,
       content: message.content, timestampMs: message.timestampMs };
   });
-  return { thread, messages, rangeStart: page.rangeStart, rangeEnd: page.rangeEnd,
+  return { thread, messages, transcriptSnapshotV1: parseTranscriptSnapshot(page.transcriptSnapshotV1),
+    transcriptObservationV1: parseTranscriptObservation(page.transcriptObservationV1), rangeStart: page.rangeStart, rangeEnd: page.rangeEnd,
     hasMoreBefore: page.hasMoreBefore,
     ...(typeof page.beforeCursor === "string" ? { beforeCursor: page.beforeCursor } : {}) };
+}
+
+/** Missing identity remains legacy compatibility, never a verified snapshot. */
+function parseTranscriptSnapshot(value: unknown): ThreadTranscriptSnapshotV1 | undefined {
+  if (value === undefined) return undefined;
+  if (!isThreadTranscriptSnapshotV1(value))
+    throw new MobileRpcError("Invalid transcript snapshot identity", -32603, "protocol");
+  return value;
+}
+
+function parseTranscriptObservation(value: unknown): ThreadTranscriptObservationV1 | undefined {
+  if (value === undefined) return undefined;
+  if (!isThreadTranscriptObservationV1(value))
+    throw new MobileRpcError("Invalid transcript observation identity", -32603, "protocol");
+  return value;
+}
+
+type TranscriptReadIdentity = Pick<ThreadReadPage, "transcriptSnapshotV1" | "transcriptObservationV1">;
+
+/** Capture both proof domains for an in-flight owner's publication guard.
+ * Neither identity orders notifications or authorizes local history deletion. */
+export function transcriptReadIdentityKey(value: TranscriptReadIdentity): string | null {
+  const snapshot = value.transcriptSnapshotV1;
+  const observation = value.transcriptObservationV1;
+  const committed = snapshot?.status === "available" ? `${snapshot.snapshotId}:${snapshot.viewKey}` : "";
+  const observed = observation ? `${observation.observationId}:${observation.viewKey}` : "";
+  return committed || observed ? `${committed}|${observed}` : null;
+}
+
+/** Missing proof is compatible with first-page display, never page union. */
+export function transcriptReadIdentityMatches(previous: TranscriptReadIdentity, next: TranscriptReadIdentity): boolean {
+  const before = previous.transcriptSnapshotV1; const after = next.transcriptSnapshotV1;
+  if (before?.status === "available" && after?.status === "available" &&
+      before.snapshotId === after.snapshotId && before.viewKey === after.viewKey) return true;
+  const observedBefore = previous.transcriptObservationV1; const observedAfter = next.transcriptObservationV1;
+  return Boolean(observedBefore && observedAfter && observedBefore.observationId === observedAfter.observationId &&
+    observedBefore.viewKey === observedAfter.viewKey);
+}
+
+/** Retain the original first page, never the merged/live UI projection. A
+ * terminal arriving during this read still requires its own later confirmation. */
+export function publishConfirmedHistoryPage(runtime: TaskRuntime, page: ThreadReadPage,
+  completedRevision: number, isCurrent: () => boolean): void {
+  if (!isCurrent() || runtime.disposed || transcriptReadIdentityKey(page) === null ||
+      (page.thread?.id && page.thread.id !== runtime.getSnapshot().threadId)) return;
+  runtime.confirmedTranscriptPage = { page, confirmedAt: Date.now() };
+  runtime.confirmedTranscriptRevision = completedRevision;
+}
+
+/** A confirmed bounded read can repair UI rows without replacing its raw
+ * authority with a live projection. Proofs bind history, not notification time. */
+export function reconcileConfirmedHistoryPage(runtime: TaskRuntime,
+  page: Omit<Awaited<ReturnType<typeof readHistoryPage>>, "sourcePage">): void {
+  if (transcriptReadIdentityKey(page) === null) return;
+  const snapshot = runtime.getSnapshot();
+  const compatible = transcriptReadIdentityMatches(snapshot, page);
+  const readOwnerChanged = transcriptReadIdentityKey(snapshot) !== transcriptReadIdentityKey(page);
+  runtime.patch({
+    messages: mergeReconciledMessages(page.messages,
+      compatible ? snapshot.messages : historyResetTail(snapshot, page.messages)),
+    transcriptSnapshotV1: page.transcriptSnapshotV1,
+    transcriptObservationV1: page.transcriptObservationV1,
+    ...(compatible ? {} : { hasMoreBefore: page.hasMoreBefore, beforeCursor: page.beforeCursor }),
+    ...(readOwnerChanged ? { loadingOlder: false } : {}),
+  });
+}
+
+/** These identities bind pages, not event ordering or thread deletion. */
+export function transcriptSnapshotChanged(
+  previous: ThreadTranscriptSnapshotV1 | undefined,
+  next: ThreadTranscriptSnapshotV1 | undefined,
+): boolean {
+  if (previous?.status !== "available" && next?.status !== "available") return false;
+  return previous?.status !== "available" || next?.status !== "available" ||
+    previous.snapshotId !== next.snapshotId || previous.viewKey !== next.viewKey;
+}
+
+/** A fresh authoritative first page replaces historical body, including legacy rows without
+ * ordinals. Observed decorations can update an existing exact row, never revive
+ * a removed row. Actual live body remains conservative tail retention without
+ * a commit watermark; this is not cross-client deletion authority. */
+export function historyResetTail(snapshot: TaskSnapshot, authoritative: ChatMessage[]): ChatMessage[] {
+  const byId = new Map(authoritative.map(message => [message.id, message]));
+  return snapshot.messages.flatMap(message => {
+    if (!pureHistoryRows.has(message) || message.id.startsWith("local-")) return [message];
+    const dirty = observedDecorations.get(message);
+    const current = byId.get(message.id);
+    if (!dirty?.size || !current || current.role !== message.role ||
+        (current.turnId && message.turnId && current.turnId !== message.turnId) ||
+        (current.attemptId && message.attemptId && current.attemptId !== message.attemptId)) return [];
+    const overlay: ChatMessage = { ...current };
+    for (const key of decorationKeys) if (dirty.has(key)) Object.assign(overlay, { [key]: message[key] });
+    if (dirty.has("orderedBlocks")) overlay.orderedBlocks = mergeOrderedBlocks(current.orderedBlocks,
+      message.orderedBlocks?.filter(block => block.kind !== "text" && block.kind !== "thinking"));
+    pureHistoryRows.add(overlay);
+    observedDecorations.set(overlay, dirty);
+    return [overlay];
+  });
+}
+
+export interface CompletedLivePair {
+  readonly user: ChatMessage;
+  readonly assistant: ChatMessage;
+  readonly turnId: string;
+  readonly attemptId: string;
+}
+
+/** Capture only an accepted canonical user and its already completed live attempt.
+ * The caller must also fence request-time owner and notification changes. */
+export function completedLivePairsAtReadStart(
+  snapshot: TaskSnapshot,
+  finishedAttempts: ReadonlySet<string>,
+  attemptByTurn: ReadonlyMap<string, string>,
+): CompletedLivePair[] {
+  const byTurn = new Map<string, ChatMessage[]>();
+  for (const message of snapshot.messages) {
+    if (!message.turnId) continue;
+    const rows = byTurn.get(message.turnId) ?? [];
+    rows.push(message);
+    byTurn.set(message.turnId, rows);
+  }
+  return [...byTurn].flatMap(([turnId, rows]) => {
+    if (rows.length !== 2) return [];
+    const user = rows.find(row => row.role === "user");
+    const assistant = rows.find(row => row.role === "assistant");
+    const attemptId = assistant?.attemptId;
+    if (!user || !assistant || !attemptId ||
+        rows.some(row => pureHistoryRows.has(row) || row.id.startsWith("local-") || row.id.startsWith("demo-")) ||
+        !user.id || !assistant.id || user.id === assistant.id ||
+        !user.clientMessageId || !user.clientMessageId.trim() ||
+        assistant.status !== "completed" ||
+        !finishedAttempts.has(attemptId) || attemptByTurn.get(turnId) !== attemptId) return [];
+    return [{ user, assistant, turnId, attemptId }];
+  });
 }
 
 export function attachmentPathsFromMessages(
@@ -176,10 +348,18 @@ export function mergeReconciledMessages(
     }
     const transcriptSource = chooseTranscriptSource(persisted, message);
     const otherSource = transcriptSource === message ? persisted : message;
-    merged.set(persisted.id, {
+    const observedTerminal = !pureHistoryRows.has(message) && message.role === "assistant" &&
+      persisted.role === "assistant" && Boolean(message.turnId) && message.turnId === persisted.turnId &&
+      (!message.attemptId || !persisted.attemptId || message.attemptId === persisted.attemptId) &&
+      ["completed", "failed", "cancelled"].includes(message.status ?? "") &&
+      !["completed", "failed", "cancelled"].includes(persisted.status ?? "");
+    const reconciled: ChatMessage = {
       ...persisted,
+      clientMessageId: messageClientMessageId(persisted) ?? messageClientMessageId(message),
       content: transcriptSource.content,
       attemptId: persisted.attemptId ?? message.attemptId,
+      fileChangesCapture: persisted.fileChangesCapture ?? message.fileChangesCapture,
+      reviewEvidence: persisted.reviewEvidence ?? message.reviewEvidence,
       continuedByAttemptId:
         persisted.continuedByAttemptId ?? message.continuedByAttemptId,
       thinking:
@@ -195,7 +375,19 @@ export function mergeReconciledMessages(
       historyOrdinal: persisted.historyOrdinal ?? message.historyOrdinal,
       attachments: persisted.attachments ?? message.attachments,
       fileChanges: persisted.fileChanges ?? message.fileChanges,
-    });
+      ...(observedTerminal ? { status: message.status, error: message.error, providerFailure: message.providerFailure } : {}),
+    };
+    if (pureHistoryRows.has(persisted) && pureHistoryRows.has(message)) {
+      pureHistoryRows.add(reconciled);
+      // Auxiliary updates have their own observed provenance. They cannot
+      // choose the historical body, but must survive the ordinary row merge.
+      for (const key of decorationKeys)
+        if (key !== "tools" && key !== "activities" && observedDecorations.get(message)?.has(key))
+          Object.assign(reconciled, { [key]: message[key] });
+    }
+    const dirty = new Set([...observedDecorations.get(persisted) ?? [], ...observedDecorations.get(message) ?? []]);
+    if (dirty.size) observedDecorations.set(reconciled, dirty);
+    merged.set(persisted.id, reconciled);
   }
   const reconciled = [...merged.values()];
   const indexed = reconciled

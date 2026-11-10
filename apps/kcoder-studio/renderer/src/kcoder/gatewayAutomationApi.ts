@@ -1,4 +1,4 @@
-import { requestLocalExecutor } from '@/tauri/localExecutor'
+import { requestLocalExecutor } from '@/host/localExecutor'
 import type { RuntimeWorkListResponse } from '@/types/api'
 
 export interface AutomationProjectAddress {
@@ -20,11 +20,12 @@ export interface ScheduledJob {
 
 export function automationTargets(
   work: RuntimeWorkListResponse | null,
-  currentComputerLabel?: string
+  currentComputerLabel?: string,
+  currentHostId?: string
 ) {
   const targets = new Map<
     string,
-    { key: string; label: string; address: AutomationProjectAddress }
+    { key: string; label: string; address: AutomationProjectAddress; isCurrentHost: boolean }
   >()
   for (const workspace of [
     ...(work?.chats ?? []),
@@ -34,7 +35,10 @@ export function automationTargets(
       const key = `${workspace.deviceId}\0${workspace.workspacePath}`
       targets.set(key, {
         key,
-        label: `${workspace.labelKey === 'currentComputer' && currentComputerLabel ? currentComputerLabel : workspace.label || workspace.workspacePath} · ${workspace.deviceId}`,
+        label: `${workspace.label || workspace.workspacePath} · ${workspace.deviceId}`,
+        isCurrentHost: currentHostId
+          ? workspace.deviceId === currentHostId
+          : workspace.labelKey === 'currentComputer' || workspace.deviceId === 'local',
         address: {
           deviceId: workspace.deviceId,
           workspacePath: workspace.workspacePath,
@@ -42,7 +46,19 @@ export function automationTargets(
       })
     }
   }
-  return [...targets.values()]
+  const result = [...targets.values()]
+  const localCount = result.filter(target => target.isCurrentHost).length
+  return result.map(target =>
+    target.isCurrentHost && currentComputerLabel
+      ? {
+          ...target,
+          label:
+            localCount > 1
+              ? `${currentComputerLabel} · ${target.address.workspacePath}`
+              : currentComputerLabel,
+        }
+      : target
+  )
 }
 
 export async function requestAutomation<T>(

@@ -143,7 +143,7 @@ export function StartupWordmark() {
         </svg>
         <span>coder</span>
       </strong>
-      <span>studio</span>
+      <span>Studio</span>
     </div>
   )
 }
@@ -171,7 +171,7 @@ export function StartupSteps() {
 export function StartupSignature() {
   return (
     <div className="kcoder-startup-signature" aria-hidden="true">
-      <small>Kcoder studio</small>
+      <small>KCoder Studio</small>
       <div>
         <span />
         KUNLUNMETA

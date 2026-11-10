@@ -1,11 +1,11 @@
-import { clearMocks } from '@tauri-apps/api/mocks'
+import { clearTestTransports } from '@/test/runtime-transport'
 import { afterEach, expect, test, vi } from 'vitest'
 import { FakeGatewayClient } from './gateway/runtime/contractFixture.test-support'
 import { KCoderGatewayRuntime } from './gatewayRuntime'
 const runtimes: KCoderGatewayRuntime[] = []
 afterEach(async () => {
   await Promise.all(runtimes.splice(0).map(runtime => runtime.disposeAsync()))
-  clearMocks()
+  clearTestTransports()
   vi.restoreAllMocks()
 })
 function setup(blocked?: string) {

@@ -1,4 +1,5 @@
 import { gatewaySessionExpired } from "@/gateway/http";
+import type { JsonRecord } from "@/gateway/rpc";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   TaskRuntime,
@@ -27,6 +28,19 @@ describe("TaskRuntime 注册表", () => {
   it("删除 Gateway 时关闭该 profile 的全部 runtime", async () => {
     const first = new FakeClient([]);
     const second = new FakeClient([]);
+    for (const client of [first, second]) {
+      client.request = vi.fn(async (method: string, params: JsonRecord = {}) => {
+        const threadId = String(params.threadId ?? "");
+        if (method === "thread/resume") return {
+          thread: { id: threadId, title: threadId, cwd: "/workspace", status: "idle" },
+        } as never;
+        if (method === "thread/read") return {
+          thread: { id: threadId, title: threadId, cwd: "/workspace", status: "idle" },
+          messages: [],
+        } as never;
+        return {} as never;
+      }) as never;
+    }
     const clients = [first, second];
     taskRuntimeTestHelpers.setConnector(
       vi.fn(async () => clients.shift() as never) as never,

@@ -1,35 +1,30 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { beforeEach, describe, expect, test, vi } from 'vitest'
+import { render, screen } from '@testing-library/react'
+import { afterEach, expect, test, vi } from 'vitest'
 import { MacOSTitleBarDragRegion } from './MacOSTitleBarDragRegion'
 
-const startDragging = vi.fn().mockResolvedValue(undefined)
+afterEach(() => vi.restoreAllMocks())
 
-vi.mock('@tauri-apps/api/window', () => ({
-  getCurrentWindow: () => ({ startDragging }),
-}))
+test('preserves the titlebar dimensions and delegates dragging to Chromium', () => {
+  render(<MacOSTitleBarDragRegion className="flex-1" />)
+  expect(screen.getByTestId('macos-titlebar-drag-region')).toHaveClass('flex-1', '[-webkit-app-region:drag]')
+})
 
-describe('MacOSTitleBarDragRegion', () => {
-  beforeEach(() => {
-    startDragging.mockClear()
-  })
+test('leaves the Windows workbench toolbar out of the native drag region', () => {
+  vi.spyOn(navigator, 'platform', 'get').mockReturnValue('Win32')
+  render(<MacOSTitleBarDragRegion className="absolute inset-0 h-full w-full" />)
 
-  test('starts native dragging from the primary mouse button', async () => {
-    render(<MacOSTitleBarDragRegion className="flex-1" />)
+  const region = screen.getByTestId('macos-titlebar-drag-region')
+  expect(region).toHaveClass('absolute', 'inset-0', 'h-full', 'w-full', 'pointer-events-none')
+  expect(region).not.toHaveClass('[-webkit-app-region:drag]')
+  expect(region).not.toHaveAttribute('data-kcoder-drag-region')
+})
 
-    fireEvent.mouseDown(screen.getByTestId('macos-titlebar-drag-region'), {
-      button: 0,
-    })
+test.each(['MacIntel', 'Linux x86_64'])('preserves dragging on %s', platform => {
+  vi.spyOn(navigator, 'platform', 'get').mockReturnValue(platform)
+  render(<MacOSTitleBarDragRegion />)
 
-    await waitFor(() => expect(startDragging).toHaveBeenCalledTimes(1))
-  })
-
-  test('ignores non-primary mouse buttons', () => {
-    render(<MacOSTitleBarDragRegion />)
-
-    fireEvent.mouseDown(screen.getByTestId('macos-titlebar-drag-region'), {
-      button: 1,
-    })
-
-    expect(startDragging).not.toHaveBeenCalled()
-  })
+  expect(screen.getByTestId('macos-titlebar-drag-region')).toHaveClass(
+    'pointer-events-auto',
+    '[-webkit-app-region:drag]'
+  )
 })

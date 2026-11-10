@@ -13,12 +13,16 @@ export const usage = `Usage:
   npm run lsp-diagnostics -- [--out target/tui-lab]
   npm run ocr-review -- [--out target/tui-lab]
   npm run streaming-scrollbar -- [--stream-delay-ms 80] [--out target/tui-lab]
+  node bin/tui-lab.mjs native-web-sources --history COMPLETE_BUNDLE/session.jsonl --command "... --settings-file {nativeSettings} --cwd {nativeWorkspace} tui-dev --scenario full-turn"
   npm run history-scrollbar -- --history PATH [--fallback-history PATH] [--drag-duration-ms 6000] [--video-fps 30]
   node bin/tui-lab.mjs wheel-precision --description message-window-row-continuity --software-webgl
   npm run clipboard -- [--scenario full-turn] [--out target/tui-lab]
   npm run copy-view -- --description copy-view-linux [--software-webgl] [--out target/tui-lab]
   node bin/tui-lab.mjs model-refresh --description model-hot-reload --out target/tui-lab
+  node bin/tui-lab.mjs question-freeform --description askuser-free-text --out target/tui-lab
+  node bin/tui-lab.mjs tool-liveness --description silent-tool-liveness --software-webgl
   npm run tail-menu -- --description tail-follow-menu [--software-webgl] [--out target/tui-lab]
+  node bin/tui-lab.mjs work-observation --description work-footer-pause --out target/tui-lab
   npm run image-paste -- [--scenario full-turn] [--out target/tui-lab]
   npm run history-search -- [--scenario full-turn] [--out target/tui-lab]
   npm run mention -- [--scenario full-turn] [--out target/tui-lab]

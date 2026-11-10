@@ -14,6 +14,9 @@ import {
   uploadGatewayAttachment,
 } from './gatewayAttachmentTransfer'
 import { createRandomUuid } from '@/lib/random-id'
+import i18next from 'i18next'
+import type { OfficeMaterialReceipt } from '../../../shared/generated/contracts'
+import { isIntegrationRequest } from '../../../shared/generated/contractGuards.mjs'
 
 const MAX_BUFFERED_TERMINAL_OUTPUT_BYTES = 256 * 1024
 const MAX_TERMINAL_TOMBSTONES = 256
@@ -27,6 +30,8 @@ interface StagedGatewayAttachment {
 }
 
 interface GatewayAttachmentUpload {
+  controller: AbortController
+  unlinkAbort: () => void
   serverId: string
   filename: string
   mimeType: string
@@ -36,6 +41,7 @@ interface GatewayAttachmentUpload {
   nextIndex: number
   receivedBytes: number
   contentBase64: string
+  purpose?: 'office_input'
 }
 
 interface GatewayTerminalState {
@@ -47,6 +53,7 @@ interface GatewayTerminalState {
   bufferedOutputBytes: number
   bufferedExit: RemoteTerminalExitPayload | null
   exited: boolean
+  cleanupUnconfirmed: boolean
   outputHandlers: Set<(payload: RemoteTerminalOutputPayload) => void>
   exitHandlers: Set<(payload: RemoteTerminalExitPayload) => void>
 }
@@ -105,6 +112,7 @@ function utf8SuffixWithin(value: string, maxBytes: number): { data: string; byte
 }
 
 export class GatewayRemoteSessions {
+  private disposed = false
   private readonly attachmentByPath = new Map<string, StagedGatewayAttachment>()
   private readonly attachmentUploads = new Map<string, GatewayAttachmentUpload>()
   private readonly terminalByPublicId = new Map<string, GatewayTerminalState>()
@@ -147,6 +155,12 @@ export class GatewayRemoteSessions {
 
   async startAttachmentUpload(rawParams: unknown): Promise<{ uploadId: string; deviceId: string }> {
     const params = record(rawParams)
+    const signal = params.signal instanceof AbortSignal ? params.signal : undefined
+    if (this.disposed) throw new DOMException('Upload cancelled', 'AbortError')
+    signal?.throwIfAborted()
+    if (params.purpose !== undefined && params.purpose !== 'office_input')
+      throw new Error('OFFICE_INVALID_INPUT_METADATA')
+    const purpose = params.purpose === 'office_input' ? 'office_input' : undefined
     const filename = text(params.filename)
     const fileSize =
       typeof params.fileSize === 'number'
@@ -169,7 +183,10 @@ export class GatewayRemoteSessions {
         ? requestedMimeType
         : 'application/octet-stream'
     const server = await this.resolveServer(params)
-    const client = await this.getCommandClient(server)
+    const client = purpose
+      ? await this.getCommandClient(server, text(params.workspacePath) ?? server.workspacePath)
+      : await this.getCommandClient(server)
+    signal?.throwIfAborted()
     if (client.supportsExperimental?.('browserAttachments') === false) {
       throw new Error('KCoder app-server 不支持浏览器附件')
     }
@@ -179,8 +196,17 @@ export class GatewayRemoteSessions {
     })
     const remoteUploadId = text(started.upload_id)
     if (!remoteUploadId) throw new Error('KCoder app-server 未返回附件上传 ID')
+    if (signal?.aborted || this.disposed) {
+      void client.request('attachment/upload/cancel', { upload_id: remoteUploadId }).catch(() => {})
+      throw new DOMException('Upload cancelled', 'AbortError')
+    }
     const uploadId = createRandomUuid()
+    const cancel = () => {
+      void this.cancelAttachmentUpload({ uploadId }).catch(() => {})
+    }
     this.attachmentUploads.set(uploadId, {
+      controller: new AbortController(),
+      unlinkAbort: () => signal?.removeEventListener('abort', cancel),
       serverId: server.id,
       filename,
       mimeType,
@@ -190,7 +216,10 @@ export class GatewayRemoteSessions {
       nextIndex: 0,
       receivedBytes: 0,
       contentBase64: '',
+      purpose,
     })
+    signal?.addEventListener('abort', cancel, { once: true })
+    if (signal?.aborted) cancel()
     return { uploadId, deviceId: server.id }
   }
 
@@ -210,31 +239,75 @@ export class GatewayRemoteSessions {
     if (upload.receivedBytes + chunkBytes.length > upload.fileSize) {
       throw new Error('附件分块超出声明大小')
     }
-    await upload.client.request('attachment/upload/chunk', {
-      upload_id: upload.remoteUploadId,
-      index,
-      content_base64: contentBase64,
-    })
+    await upload.client.request(
+      'attachment/upload/chunk',
+      {
+        upload_id: upload.remoteUploadId,
+        index,
+        content_base64: contentBase64,
+      },
+      { signal: upload.controller.signal }
+    )
+    if (upload.controller.signal.aborted || this.attachmentUploads.get(uploadId) !== upload)
+      throw new DOMException('Upload cancelled', 'AbortError')
     upload.nextIndex += 1
     upload.receivedBytes += chunkBytes.length
-    upload.contentBase64 += contentBase64
+    if (upload.purpose !== 'office_input') upload.contentBase64 += contentBase64
     return { receivedBytes: upload.receivedBytes }
   }
 
-  async finishAttachmentUpload(rawParams: unknown): Promise<{ path: string; deviceId: string }> {
-    const uploadId = text(record(rawParams).uploadId)
+  async finishAttachmentUpload(
+    rawParams: unknown
+  ): Promise<{ path: string; deviceId: string } | OfficeMaterialReceipt> {
+    const params = record(rawParams)
+    const uploadId = text(params.uploadId)
     if (!uploadId) throw new Error('附件上传 ID 无效')
     const upload = this.attachmentUploads.get(uploadId)
     if (!upload) throw new Error('附件上传会话不存在')
+    if (
+      upload.purpose === 'office_input'
+        ? !isIntegrationRequest(params.office_input)
+        : params.office_input !== undefined
+    )
+      throw new Error('OFFICE_INVALID_INPUT_METADATA')
     try {
       if (upload.receivedBytes !== upload.fileSize) {
         throw new Error('附件内容不完整')
+      }
+      if (upload.purpose === 'office_input') {
+        const result = await upload.client.request<OfficeMaterialReceipt>(
+          'attachment/upload/finish',
+          {
+            upload_id: upload.remoteUploadId,
+            office_input: params.office_input,
+          },
+          { signal: upload.controller.signal }
+        )
+        if (upload.controller.signal.aborted || this.attachmentUploads.get(uploadId) !== upload)
+          throw new DOMException('Upload cancelled', 'AbortError')
+        if (
+          !result ||
+          result.kind !== 'office_input' ||
+          result.status !== 'accepted' ||
+          typeof result.inputId !== 'string' ||
+          !result.inputId ||
+          'path' in result ||
+          'native' in result ||
+          'stageRef' in result
+        )
+          throw new Error('OFFICE_INPUT_UNCONFIRMED')
+        return result
       }
       const result = await upload.client.request<{ path?: unknown }>('attachment/upload/finish', {
         upload_id: upload.remoteUploadId,
       })
       const path = typeof result.path === 'string' && result.path.trim() ? result.path : null
       if (!path) throw new Error('KCoder app-server 未返回附件路径')
+      if (upload.controller.signal.aborted || this.attachmentUploads.get(uploadId) !== upload) {
+        // Finish may have committed before cancellation. Only this owner's positive path is cleaned.
+        void upload.client.request('attachment/delete', { path }).catch(() => {})
+        throw new DOMException('Upload cancelled', 'AbortError')
+      }
       this.attachmentByPath.set(this.attachmentKey(upload.serverId, path), {
         serverId: upload.serverId,
         filename: upload.filename,
@@ -244,11 +317,12 @@ export class GatewayRemoteSessions {
       })
       return { path, deviceId: upload.serverId }
     } catch (error) {
-      await upload.client
+      void upload.client
         .request('attachment/upload/cancel', { upload_id: upload.remoteUploadId })
         .catch(() => undefined)
       throw error
     } finally {
+      upload.unlinkAbort()
       this.attachmentUploads.delete(uploadId)
     }
   }
@@ -259,6 +333,9 @@ export class GatewayRemoteSessions {
     const upload = this.attachmentUploads.get(uploadId)
     if (!upload) return
     this.attachmentUploads.delete(uploadId)
+    upload.unlinkAbort()
+    upload.controller.abort()
+    upload.contentBase64 = ''
     await upload.client
       .request('attachment/upload/cancel', { upload_id: upload.remoteUploadId })
       .catch(() => undefined)
@@ -270,6 +347,8 @@ export class GatewayRemoteSessions {
     size: number
   }> {
     const params = record(rawParams)
+    const signal = params.signal instanceof AbortSignal ? params.signal : undefined
+    signal?.throwIfAborted()
     const path = text(params.path)
     if (!path) throw new Error('附件路径无效')
     const requestedServerId = text(params.deviceId) ?? text(params.device_id)
@@ -287,7 +366,14 @@ export class GatewayRemoteSessions {
     const server = await this.resolveServer(params)
     const workspacePath = text(params.workspacePath) ?? server.workspacePath
     const client = await this.getCommandClient(server, workspacePath)
-    const result = await downloadGatewayAttachment(client, threadId, path)
+    signal?.throwIfAborted()
+    const result = await downloadGatewayAttachment(
+      client,
+      threadId,
+      path,
+      signal ? { signal } : undefined
+    )
+    signal?.throwIfAborted()
     return {
       contentBase64: result.contentBase64,
       mimeType: text(params.mimeType) ?? 'application/octet-stream',
@@ -366,6 +452,7 @@ export class GatewayRemoteSessions {
     state.client = client
     state.publicSessionId = publicSessionId
     state.exited = false
+    state.cleanupUnconfirmed = false
     state.bufferedExit = null
     state.bufferedOutput = []
     state.bufferedOutputBytes = 0
@@ -423,12 +510,18 @@ export class GatewayRemoteSessions {
       },
       async close() {
         try {
-          if (!state.exited) {
-            await client().request('terminal/close', { session_id: state.wireSessionId })
+          if (!state.exited || state.cleanupUnconfirmed) {
+            const result = await client().request<{ closed?: unknown }>('terminal/close', { session_id: state.wireSessionId })
+            if (result?.closed !== true)
+              throw new Error(i18next.t('workbench.terminal_exit_unconfirmed', { ns: 'common', defaultValue: 'Terminal cleanup is unconfirmed.' }))
           }
-        } finally {
-          forgetTerminal()
+        } catch (error) {
+          state.exited = true
+          state.cleanupUnconfirmed = true
+          throw error
         }
+        // A failed or lost close reply retains this exact owner for explicit retry.
+        forgetTerminal()
       },
       onOutput(handler) {
         state.outputHandlers.add(handler)
@@ -456,6 +549,7 @@ export class GatewayRemoteSessions {
       bufferedOutputBytes: 0,
       bufferedExit: null,
       exited: false,
+      cleanupUnconfirmed: false,
       outputHandlers: new Set(),
       exitHandlers: new Set(),
     }
@@ -603,6 +697,9 @@ export class GatewayRemoteSessions {
     }
     for (const [uploadId, upload] of this.attachmentUploads) {
       if (upload.serverId === serverId && upload.client === client) {
+        upload.unlinkAbort()
+        upload.controller.abort()
+        upload.contentBase64 = ''
         this.attachmentUploads.delete(uploadId)
       }
     }
@@ -638,10 +735,13 @@ export class GatewayRemoteSessions {
       if (!sessionId || !sourceServerId) return true
       const state = this.terminalState(sessionId, sourceServerId)
       if (!state) return true
+      if (state.exited && !state.cleanupUnconfirmed) return true
       state.exited = true
+      const knownExit = typeof params.exit_code === 'number' && Number.isSafeInteger(params.exit_code) && params.exit_code >= 0
+      state.cleanupUnconfirmed = !knownExit
       const payload = {
         session_id: state.publicSessionId ?? sessionId,
-        exit_code: typeof params.exit_code === 'number' ? params.exit_code : null,
+        exit_code: knownExit ? params.exit_code as number : null,
       }
       if (state.exitHandlers.size === 0) state.bufferedExit = payload
       else for (const handler of state.exitHandlers) handler(payload)
@@ -651,8 +751,15 @@ export class GatewayRemoteSessions {
   }
 
   invalidateTarget(targetId: string): void {
-    for (const key of this.attachmentByPath.keys()) if (key.startsWith(`${targetId}\0`)) this.attachmentByPath.delete(key)
-    for (const [key, upload] of this.attachmentUploads) if (upload.serverId === targetId) this.attachmentUploads.delete(key)
+    for (const key of this.attachmentByPath.keys())
+      if (key.startsWith(`${targetId}\0`)) this.attachmentByPath.delete(key)
+    for (const [key, upload] of this.attachmentUploads)
+      if (upload.serverId === targetId) {
+        upload.unlinkAbort()
+        upload.controller.abort()
+        upload.contentBase64 = ''
+        this.attachmentUploads.delete(key)
+      }
     for (const [key, terminal] of this.terminalByWireKey) {
       if (terminal.serverId !== targetId) continue
       terminal.bufferedOutput = []
@@ -662,7 +769,13 @@ export class GatewayRemoteSessions {
   }
 
   dispose() {
+    this.disposed = true
     this.attachmentByPath.clear()
+    for (const upload of this.attachmentUploads.values()) {
+      upload.unlinkAbort()
+      upload.controller.abort()
+      upload.contentBase64 = ''
+    }
     this.attachmentUploads.clear()
     this.terminalByPublicId.clear()
     this.terminalByWireKey.clear()

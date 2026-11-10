@@ -11,9 +11,7 @@ input.on("line", async (line) => {
   const message = JSON.parse(line);
   if (message.method === "attachment/delete") {
     await unlink(message.params.path);
-    process.stdout.write(
-      `${JSON.stringify({ jsonrpc: "2.0", method: "fixture/cleaned", params: {} })}\n`,
-    );
+    reply(message.id, { removed: true });
     return;
   }
   if (message.method === "server/resources/read" && released) { reply(message.id, resources()); return; }

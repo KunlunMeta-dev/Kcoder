@@ -36,6 +36,7 @@ export function applySubagentConversationEvent(
       sequence: event.sequence,
       messages,
       active: event.terminalStatus ? false : snapshot.active,
+      status: event.terminalStatus ?? snapshot.status,
     },
     resubscribe: false,
   }

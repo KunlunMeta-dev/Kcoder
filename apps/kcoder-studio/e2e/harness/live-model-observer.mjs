@@ -1,10 +1,26 @@
 import { createServer } from "node:http";
+import { randomBytes, timingSafeEqual } from "node:crypto";
+import { nativeSourceReadEvidence, nativeSourceReadRange, nativeSourceRequestShape, nativeTextOutputShape, nativeTaskInputBindingEvidence } from "./native-source-read-evidence.mjs";
+
+export function liveModelRequestPath(endpoint, apiFormat) {
+  const base = new URL(endpoint).pathname.replace(/\/+$/, "");
+  const suffix = {
+    anthropic_messages: "/v1/messages",
+    openai_chat_completions: "/chat/completions",
+    openai_responses: "/responses",
+  }[apiFormat];
+  if (!suffix) throw Error("Unsupported protected model API format");
+  return apiFormat !== "anthropic_messages" && base.endsWith(suffix)
+    ? base
+    : base + suffix;
+}
 
 // Transparent real-provider transport observer. Never stores headers or request content.
 export async function startLiveModelObserver(
   context,
   endpoint,
   maxRequests = 160,
+  options = {},
 ) {
   const upstream = new URL(endpoint);
   if (
@@ -16,12 +32,47 @@ export async function startLiveModelObserver(
   )
     throw Error("Invalid model endpoint");
   const observations = [];
+  const upstreamHeaders = options.upstreamHeaders ?? {};
+  for (const [name,value] of Object.entries(upstreamHeaders)) {
+    if (!['x-api-key','authorization'].includes(name) || typeof value !== 'string' || /[\r\n]/.test(value)) throw Error('Invalid protected upstream credential header');
+    context.registerSecret(value);
+  }
+  const protectedForward = Object.keys(upstreamHeaders).length > 0;
+  const allowedPaths = new Set(options.allowedPaths ?? []);
+  if (protectedForward && (!allowedPaths.size || [...allowedPaths].some(path => {
+    if (typeof path !== "string" || !path.startsWith("/") || path.startsWith("//")) return true;
+    const target = new URL(path, upstream.origin);
+    return target.origin !== upstream.origin || target.pathname !== path || target.search || target.hash;
+  }))) throw Error("Protected upstream credentials require exact allowed request paths");
+  const forwardToken = protectedForward ? randomBytes(32).toString("hex") : undefined;
+  if (forwardToken) context.registerSecret(forwardToken);
+  const matchesToken = value => typeof value === "string" &&
+    Buffer.byteLength(value) === Buffer.byteLength(forwardToken) &&
+    timingSafeEqual(Buffer.from(value), Buffer.from(forwardToken));
   const controllers = new Set();
   let requests = 0;
   const server = createServer(async (request, response) => {
+    if (protectedForward) {
+      const credentials = [request.headers["x-api-key"], request.headers.authorization?.replace(/^Bearer /i, "")]
+        .filter(value => value !== undefined);
+      const authorized = credentials.length > 0 && credentials.every(matchesToken);
+      if (!authorized || !allowedPaths.has(request.url) || !["POST", "HEAD"].includes(request.method)) {
+        request.resume();
+        response.writeHead(authorized ? 403 : 401, { "cache-control": "no-store" });
+        response.end("Model transport request rejected");
+        return;
+      }
+      // Provider warmup stays local and cannot bypass the inference request budget.
+      if (request.method === "HEAD") {
+        request.resume();
+        response.writeHead(204, { "cache-control": "no-store" });
+        response.end();
+        return;
+      }
+    }
     const abort = new AbortController();
     controllers.add(abort);
-    const timer = setTimeout(() => abort.abort(), 120000);
+    const timer = setTimeout(() => abort.abort(), options.requestTimeoutMs ?? 120000);
     const record = {
       request: 0,
       status: null,
@@ -47,16 +98,34 @@ export async function startLiveModelObserver(
         chunks.push(chunk);
       }
       if (request.method === "POST") {
-        try {
-          record.model =
-            JSON.parse(Buffer.concat(chunks).toString("utf8")).model ?? null;
-        } catch {
-          record.model = null;
+        let body;
+        try { body = JSON.parse(Buffer.concat(chunks).toString("utf8")); }
+        catch { throw Error("Invalid real model request JSON"); }
+        record.model = body.model ?? null;
+        const tools = (body.tools ?? []).map(tool => tool.function?.name ?? tool.name).filter(name => typeof name === "string");
+        const metadata = { model: record.model, bodyBytes: size,
+          outputTokenLimit: body.max_tokens ?? body.max_completion_tokens ?? body.max_output_tokens,
+          exposedToolNames: tools };
+        if (options.nativeSourceReadEvidence === true) {
+          metadata.sourceReads = nativeSourceReadEvidence(body);
+          record.sourceReads = metadata.sourceReads;
+          record.requestShape = nativeSourceRequestShape(body);
         }
+        if (options.nativeTaskInputBinding) {
+          metadata.taskInputBinding = nativeTaskInputBindingEvidence(body, options.nativeTaskInputBinding());
+          record.taskInputBinding = metadata.taskInputBinding;
+        }
+        record.requestBodyBytes = size;
+        record.outputTokenLimit = Number.isSafeInteger(metadata.outputTokenLimit) ? metadata.outputTokenLimit : null;
+        record.exposedToolCount = tools.length;
+        // This callback receives only shape/budget metadata, never headers or prompts.
+        const admission = await options.beforeForward?.(metadata);
+        if (admission !== undefined) record.admission = admission;
       }
       const headers = {};
       for (const [key, value] of Object.entries(request.headers))
         if (
+          !(protectedForward && ["authorization", "x-api-key", "cookie", "proxy-authorization"].includes(key)) &&
           ![
             "host",
             "connection",
@@ -72,6 +141,7 @@ export async function startLiveModelObserver(
       const target = new URL(request.url, upstream.origin);
       if (target.origin !== upstream.origin)
         throw Error("Provider origin changed");
+      Object.assign(headers, upstreamHeaders);
       const remote = await fetch(target, {
         method: request.method,
         headers,
@@ -86,6 +156,7 @@ export async function startLiveModelObserver(
         "cache-control": "no-store",
       });
       const tools = new Map();
+      if (options.nativeSourceReadEvidence === true) record.textOutput = nativeTextOutputShape(null, null);
       let pending = "";
       const decoder = new TextDecoder();
       for await (const chunk of remote.body ?? []) {
@@ -101,6 +172,8 @@ export async function startLiveModelObserver(
           } catch {
             continue;
           }
+          if (options.nativeSourceReadEvidence === true)
+            record.textOutput = nativeTextOutputShape(record.textOutput, frame);
           if (
             frame.type === "content_block_start" &&
             frame.content_block?.type === "tool_use"
@@ -153,9 +226,7 @@ export async function startLiveModelObserver(
           name: tool.name,
           chars: tool.text.length,
           valid,
-          ...(!valid
-            ? { prefix: tool.text.slice(0, 160), suffix: tool.text.slice(-160) }
-            : {}),
+          ...(options.nativeSourceReadEvidence === true ? { sourceRange: nativeSourceReadRange(tool.name, tool.text) } : {}),
         };
       });
       if (request.method === "POST") observations.push(record);
@@ -170,11 +241,15 @@ export async function startLiveModelObserver(
       controllers.delete(abort);
     }
   });
-  context.addCleanup("stop owned real model observer", async () => {
+  let stopped = false;
+  const stop = async () => {
+    if (stopped) return;
+    stopped = true;
     for (const abort of controllers) abort.abort();
     server.closeAllConnections();
     await new Promise((resolve) => server.close(resolve));
-  });
+  };
+  context.addCleanup("stop owned real model observer", stop);
   await new Promise((resolve, reject) => {
     server.once("error", reject);
     server.listen(0, "127.0.0.1", resolve);
@@ -182,7 +257,9 @@ export async function startLiveModelObserver(
   const port = server.address().port;
   context.registerPort("real-model-observer", port);
   return {
-    endpoint: `http://127.0.0.1:${port}${upstream.pathname.replace(/\/$/, "")}`,
+    endpoint: `http://127.0.0.1:${port}${upstream.pathname.replace(/\/+$/, "")}`,
+    forwardToken,
     observations,
+    stop,
   };
 }

@@ -1,11 +1,11 @@
-import { constants } from 'node:fs';
-import { mkdir, open, rename, unlink } from 'node:fs/promises';
+import { mkdir } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { isIP } from 'node:net';
 import { randomUUID } from 'node:crypto';
-import { applyEdits, modify, parse } from 'jsonc-parser';
+import { applyEdits, modify } from 'jsonc-parser';
 import { createSshCredentialCipher, validateEncryptedPassword } from './ssh-credential-cipher.js';
+import { parseVersionedJsonc, readBoundedFile, writePrivateFile } from '../../kcoder-channel-host/src/jsonc-file.mjs';
 
 const MAX_FILE_BYTES = 256 * 1024;
 const queues = new Map();
@@ -69,31 +69,25 @@ function sameIdentity(left, right) {
 }
 
 export async function readBoundedRegularFile(filePath, limit = MAX_FILE_BYTES) {
-  const handle = await open(filePath, constants.O_RDONLY | constants.O_NONBLOCK | (constants.O_NOFOLLOW ?? 0));
   try {
-    const stat = await handle.stat();
-    if (!stat.isFile() || stat.size > limit) throw new Error('SSH 文件不是普通文件或超过大小限制');
-    const buffer = Buffer.alloc(limit + 1);
-    let length = 0;
-    while (length <= limit) {
-      const { bytesRead } = await handle.read(buffer, length, buffer.length - length, null);
-      if (!bytesRead) break;
-      length += bytesRead;
-    }
-    if (length > limit) throw new Error('SSH 文件超过大小限制');
-    return buffer.subarray(0, length);
-  } finally {
-    await handle.close();
+    return await readBoundedFile(filePath, limit);
+  } catch (error) {
+    if (error.code?.startsWith('CONFIG_FILE_')) throw new Error('SSH 文件不是普通文件、已变更或超过大小限制');
+    throw error;
   }
 }
 
 function parseDocument(raw) {
-  const errors = [];
-  const document = parse(raw, errors, { allowTrailingComma: true });
-  if (errors.length) throw new Error('SSH 连接配置不是有效的 JSONC');
-  strictObject(document, ['meta', 'terminal']);
-  strictObject(document.meta, ['config_version']);
-  if (document.meta.config_version !== 1) throw new Error('SSH 连接配置仅支持 config_version 1');
+  let parsed;
+  try { parsed = parseVersionedJsonc(raw, 1); }
+  catch (error) {
+    if (error.code === 'CONFIG_VERSION_UNSUPPORTED') throw new Error('SSH 连接配置仅支持 config_version 1');
+    if (error.code === 'CONFIG_JSONC_INVALID') throw new Error('SSH 连接配置不是有效的 JSONC');
+    throw error;
+  }
+  const { raw: content, document } = parsed;
+  strictObject(document, ['$schema', 'meta', 'terminal']);
+  strictObject(document.meta ?? {}, ['config_version']);
   strictObject(document.terminal, ['ssh']);
   strictObject(document.terminal.ssh, ['connections']);
   const connections = document.terminal.ssh.connections;
@@ -103,15 +97,15 @@ function parseDocument(raw) {
     return validateSshProfile(value, { stored: true });
   });
   if (new Set(profiles.map(({ id }) => id)).size !== profiles.length) throw new Error('SSH 连接 ID 重复');
-  return profiles;
+  return { raw: content, profiles };
 }
 
 const emptyDocument = () => JSON.stringify({ meta: { config_version: 1 }, terminal: { ssh: { connections: [] } } }, null, 2) + '\n';
 
 function updateDocument(raw, profiles) {
   const path = ['terminal', 'ssh', 'connections'];
-  const existing = parseDocument(raw);
-  let content = raw;
+  const { profiles: existing } = parseDocument(raw);
+  let content = applyEdits(raw, modify(raw, ['meta', 'config_version'], 1, { formattingOptions: { insertSpaces: true, tabSize: 2 } }));
   const edit = (suffix, value) => {
     content = applyEdits(content, modify(content, [...path, ...suffix], value, { formattingOptions: { insertSpaces: true, tabSize: 2 } }));
   };
@@ -147,26 +141,21 @@ export function createSshConnectionStore({ filePath = join(homedir(), '.config',
   }
   async function read() {
     let raw;
-    try { raw = (await readBoundedRegularFile(path)).toString('utf8'); }
+    try { raw = await readBoundedRegularFile(path); }
     catch (error) {
       if (error.code !== 'ENOENT') throw new Error('无法读取 SSH 连接配置');
       raw = emptyDocument();
     }
-    return { raw, profiles: parseDocument(raw) };
+    return parseDocument(raw);
   }
   async function write(raw, profiles) {
     const content = updateDocument(raw, profiles);
     if (Buffer.byteLength(content) > MAX_FILE_BYTES) throw new Error('SSH 配置超过大小限制');
-    const temporary = `${path}.${randomUUID()}.tmp`;
     try {
       await mkdir(dirname(path), { recursive: true, mode: 0o700 });
-      const handle = await open(temporary, 'wx', 0o600);
-      try { await handle.writeFile(content, 'utf8'); await handle.sync(); } finally { await handle.close(); }
-      await rename(temporary, path);
+      await writePrivateFile(path, content, MAX_FILE_BYTES);
     } catch {
       throw new Error('无法保存 SSH 连接配置');
-    } finally {
-      await unlink(temporary).catch(() => {});
     }
   }
   return {

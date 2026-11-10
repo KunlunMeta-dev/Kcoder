@@ -3,7 +3,7 @@ import { openLocalWorkspace } from '@/lib/local-terminal'
 import { act, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
-import { enableTauri, renderSidebar } from './sidebar/DesktopSidebar.test-support'
+import { enableGateway, renderSidebar } from './sidebar/DesktopSidebar.test-support'
 const experimentalFeatures = vi.hoisted(() => ({ enabled: true }))
 vi.mock('@/features/experimental-features/useExperimentalFeaturesEnabled', () => ({
   useExperimentalFeaturesEnabled: () => experimentalFeatures.enabled,
@@ -15,7 +15,7 @@ describe('DesktopSidebar navigation', () => {
   beforeEach(() => {
     experimentalFeatures.enabled = true
     localStorage.clear()
-    enableTauri()
+    enableGateway()
     Element.prototype.scrollIntoView = vi.fn()
     vi.mocked(openLocalWorkspace).mockReset()
   })
@@ -121,6 +121,7 @@ describe('DesktopSidebar navigation', () => {
 
     const newChatButton = screen.getByTestId('new-chat-button')
     const searchButton = screen.getByTestId('runtime-search-button')
+    expect(screen.getByTestId('task-workspace-button').compareDocumentPosition(screen.getByTestId('automations-button'))).toBe(Node.DOCUMENT_POSITION_FOLLOWING)
     const pluginsButton = screen.getByTestId('plugins-button')
     const cloudButton = screen.getByTestId('sidebar-cloud-connection-button')
     const projectsHeader = screen.getByTestId('projects-section-toggle')
@@ -573,4 +574,12 @@ describe('DesktopSidebar navigation', () => {
     )
     expect(onOpenRuntimeTask).not.toHaveBeenCalled()
   })
+})
+
+test('standalone office entry is absent while normal task creation remains available',()=>{
+ renderSidebar()
+ expect(screen.queryByTestId('office-button')).not.toBeInTheDocument()
+ expect(screen.queryByTestId('connectivity-button')).not.toBeInTheDocument()
+ expect(screen.getByTestId('knowledge-button')).toBeInTheDocument()
+ expect(screen.getByTestId('task-workspace-button')).toBeInTheDocument()
 })

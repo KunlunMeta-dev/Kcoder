@@ -69,7 +69,8 @@ async function startGateway({ port = 0, stateDir, loginToken }) {
         clearTimeout(timer);
         callback(value);
       };
-      const timer = setTimeout(() => finish(rejectAddress, new Error('isolated Gateway did not become ready')), 8000);
+      // Cold Gateway resource verification can exceed eight seconds on busy hosts.
+      const timer = setTimeout(() => finish(rejectAddress, new Error('isolated Gateway did not become ready')), 120_000);
       child.stdout.setEncoding('utf8');
       child.stdout.on('data', chunk => {
         output = `${output}${chunk}`.slice(-2048);

@@ -88,6 +88,8 @@ impl Drop for RunningShell {
 }
 
 pub(super) struct ProcessGroupTerminator {
+    #[cfg(target_os = "linux")]
+    pub(super) owner: Option<kcoder_process_supervisor::linux_stdio::StdioOwnerGuard>,
     pub(super) pid: u32,
     #[cfg(target_os = "linux")]
     pub(super) process_scope: Option<String>,
@@ -100,6 +102,8 @@ pub(super) struct ProcessGroupTerminator {
 impl ProcessGroupTerminator {
     pub(super) fn new(pid: u32, _process_scope: Option<String>) -> Self {
         Self {
+            #[cfg(target_os = "linux")]
+            owner: None,
             pid,
             #[cfg(target_os = "linux")]
             process_scope: _process_scope,
@@ -129,6 +133,11 @@ impl ProcessGroupTerminator {
 
     pub(super) fn terminate(&self) {
         if self.terminated.swap(true, Ordering::SeqCst) {
+            return;
+        }
+        #[cfg(target_os = "linux")]
+        if let Some(owner) = &self.owner {
+            owner.request_stop();
             return;
         }
         // Linux invocation scopes also cover descendants that called setsid,

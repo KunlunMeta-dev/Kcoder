@@ -81,7 +81,39 @@ fn read_pending(path: &Path) -> Result<Option<Pending>> {
     Ok(Some(pending))
 }
 
+fn pending_exists(path: &Path) -> Result<bool> {
+    match fs::symlink_metadata(path) {
+        Ok(_) => Ok(true),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(error.into()),
+    }
+}
+
+/// A missing single-document projection can finish before a first publication.
+/// Existing coordinators and journals still require the ordinary recovery guard.
+pub(super) fn settings_or_transaction_present(path: &Path) -> Result<bool> {
+    for candidate in [
+        path.to_path_buf(),
+        path.with_file_name(JOURNAL),
+        path.with_file_name(crate::imported_credentials::GROUP_JOURNAL),
+        path.with_file_name(".provider-transaction.json.lock"),
+    ] {
+        if pending_exists(&candidate)? {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
 fn recover_locked(path: &Path) -> Result<()> {
+    let group_path = path.with_file_name(crate::imported_credentials::GROUP_JOURNAL);
+    if pending_exists(&group_path)? {
+        let directory = crate::PrivateDirectory::open_existing(
+            path.parent().context("Missing configuration parent")?,
+        )?;
+        directory.verify_trusted_config_directory()?;
+        crate::imported_credentials::recover_group_in(&directory)?;
+    }
     let Some(mut pending) = read_pending(path)? else {
         return Ok(());
     };
@@ -118,7 +150,8 @@ fn recover_locked(path: &Path) -> Result<()> {
 
 /// Hold for the complete layered read so a paired write cannot split its snapshot.
 pub(super) fn read_guard(path: &Path) -> Result<Option<fs::File>> {
-    let journal_exists = path.with_file_name(JOURNAL).try_exists()?;
+    let journal_exists = pending_exists(&path.with_file_name(JOURNAL))?
+        || pending_exists(&path.with_file_name(crate::imported_credentials::GROUP_JOURNAL))?;
     let guard = match coordinator(path) {
         Ok(guard) => guard,
         Err(error)
@@ -160,6 +193,7 @@ where
         .as_ref()
         .map(|s| s.value.clone())
         .unwrap_or_else(|| serde_json::json!({}));
+    crate::migrations::validate_version(&original)?;
     let credentials_existed = match fs::symlink_metadata(&credential_path) {
         Ok(_) => true,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => false,
@@ -258,6 +292,21 @@ where
     sync_parent(path)?;
     Ok(pending.next)
 }
+
+/// A fixed observer must not recover a paired credential/settings transaction.
+/// Refuse existing journals using metadata only; never read their secret payload.
+pub(super) fn refuse_pending_read_only_transaction(path: &Path) -> Result<()> {
+    anyhow::ensure!(
+        !pending_exists(&path.with_file_name(JOURNAL))?
+            && !pending_exists(&path.with_file_name(crate::imported_credentials::GROUP_JOURNAL))?,
+        "CONFIGURATION_READ_ONLY_TRANSACTION_PENDING"
+    );
+    Ok(())
+}
+
+#[cfg(test)]
+#[path = "provider_transaction/optional_reads_tests.rs"]
+mod optional_reads_tests;
 
 #[cfg(test)]
 mod tests {

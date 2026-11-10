@@ -120,6 +120,8 @@ fn historyless_app_server_starts_and_completes_a_turn_outside_the_workspace() {
             break thread_id;
         }
     };
+    let initial_metadata_revision = messages.last().unwrap()["result"]["thread"]["metadata"]["revision"]
+        .as_u64().expect("created metadata revision");
     server.send(json!({
         "jsonrpc": "2.0", "id": 4, "method": "thread/metadata/update",
         "params": {"threadId": thread_id, "title": "首轮前标题"}
@@ -129,7 +131,7 @@ fn historyless_app_server_starts_and_completes_a_turn_outside_the_workspace() {
         let updated = message["id"] == 4;
         if updated {
             assert_eq!(message["result"]["thread"]["title"], "首轮前标题");
-            assert_eq!(message["result"]["thread"]["metadata"]["revision"], 1);
+            assert_eq!(message["result"]["thread"]["metadata"]["revision"], initial_metadata_revision + 1);
             assert!(message["result"]["thread"]["metadata"]["archivedAt"].is_null());
         }
         messages.push(message);

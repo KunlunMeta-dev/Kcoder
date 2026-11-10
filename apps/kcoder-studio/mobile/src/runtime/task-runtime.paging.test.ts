@@ -1,5 +1,6 @@
 import { installBrowserProfileFixture } from "@/test/browser-profile-fixture";
 import { installThreadDeletionCleanupAuthorityResolver, threadDeletionCleanupKey } from "@/storage/thread-deletion-cleanup";
+import { captureSessionTranscriptScope } from "@/storage/session-transcript-scope";
 import { saveWorkspaceState, workspaceStateAuthorizationScope } from "@/storage/workspace-preferences";
 import { gatewaySessionExpired } from "@/gateway/http";
 import type { JsonRecord } from "@/gateway/rpc";
@@ -19,6 +20,14 @@ import {
 } from "./task-runtime";
 import { profile, server } from "./task-runtime/fixture.test-support";
 const pagingStorage = vi.hoisted(() => ({ values: new Map<string, string>() }));
+const transcriptCache = vi.hoisted(() => ({ invalidateThread: vi.fn(async () => {}) }));
+vi.mock("@/storage/session-transcript-cache", () => ({ sessionTranscriptCache: {
+  capture: async (scope: unknown, isCurrent: () => boolean) => {
+    if (!isCurrent()) throw new Error("stale owner");
+    return { scope, isCurrent };
+  },
+  invalidateThread: transcriptCache.invalidateThread,
+} }));
 let uninstallCleanupAuthority: (() => void) | undefined;
 vi.mock("@react-native-async-storage/async-storage", () => ({ default: {
   getItem: vi.fn(async (key: string) => pagingStorage.values.get(key) ?? null),
@@ -35,6 +44,7 @@ beforeEach(() => {
   vi.spyOn(Math, "random").mockReturnValue(0.5);
   vi.mocked(gatewaySessionExpired).mockResolvedValue(false);
   pagingStorage.values.clear();
+  transcriptCache.invalidateThread.mockClear();
   uninstallCleanupAuthority = undefined;
   installBrowserProfileFixture([profile]);
 });
@@ -276,6 +286,7 @@ describe("ThreadListPager", () => {
   it("历史修改和持久删除清理分别关闭其短连接", async () => {
     const requests: Array<{ method: string; params: JsonRecord }> = [];
     const requestsByClient: Array<Array<{ method: string; params: JsonRecord }>> = [[], [], [], []];
+    const cacheScope = captureSessionTranscriptScope(profile, server, "/workspace/project", "thread-1");
     const clients = requestsByClient.map((owned) => ({
       close: vi.fn(),
       request: vi.fn(async (method: string, params: JsonRecord) => {
@@ -285,6 +296,7 @@ describe("ThreadListPager", () => {
           expect(raw).not.toBeNull();
           const scope = workspaceStateAuthorizationScope(profile, server);
           expect(JSON.parse(raw!)).toEqual([{
+            cacheScope,
             id: JSON.stringify([scope, "thread-1"]),
             scope,
             serverId: server.id,
@@ -311,6 +323,9 @@ describe("ThreadListPager", () => {
       { method: "gateway/attachments/discardRetained", params: { threadId: "thread-1", paths: ["/attachments/a.png"] } },
       { method: "runtime.worktrees.conversations.remove", params: { deviceId: "local", path: "/workspace/project", taskId: "thread-1" } },
     ]);
+    expect(transcriptCache.invalidateThread).toHaveBeenCalledWith(expect.objectContaining({
+      scope: expect.objectContaining({ threadId: "thread-1", cwd: "/workspace/project" }),
+    }));
     expect(connect.mock.calls.map(([, , cwd]) => cwd)).toEqual([
       "/workspace/project", "/workspace/project", "/workspace/project", "/workspace",
     ]);
@@ -344,6 +359,9 @@ describe("ThreadListPager", () => {
       { method: "gateway/attachments/discardRetained", params: { threadId: "thread-with-attachments", paths: ["/attachments/queued.png", "/attachments/old.png", "/attachments/new.png"] } },
       { method: "runtime.worktrees.conversations.remove", params: { deviceId: "local", path: "/workspace/project", taskId: "thread-with-attachments" } },
     ]);
+    expect(transcriptCache.invalidateThread).toHaveBeenCalledWith(expect.objectContaining({
+      scope: expect.objectContaining({ threadId: "thread-with-attachments", cwd: "/workspace/project" }),
+    }));
     expect(client.close).toHaveBeenCalledTimes(3);
   });
 });

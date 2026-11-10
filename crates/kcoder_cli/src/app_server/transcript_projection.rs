@@ -1,6 +1,7 @@
 //! Transcript projection: extracted from the app-server connection boundary.
 
 use super::*;
+pub(super) use kcoder_workspace_resources::managed_worktrees::validate_thread_id;
 
 pub(super) async fn thread_transcript(
     engine: &QueryEngine,
@@ -56,12 +57,15 @@ pub(super) async fn thread_transcript(
     } = transcript_window::project(
         entries,
         transcript_window::Artifacts {
+            thread_id: params.thread_id.clone(),
             attempts: turn_attempts::records(engine, &params.thread_id)?,
             turn_ids: turn_admissions::bindings(engine, &params.thread_id)?,
             client_ids: load_turn_client_message_ids(engine, &params.thread_id),
             outcomes: load_turn_outcomes(engine, &params.thread_id),
             approvals: load_approval_decisions(engine, &params.thread_id),
             file_changes: load_turn_file_change_summaries(engine, &params.thread_id),
+            file_captures: load_turn_file_captures(engine, &params.thread_id)?,
+            review_evidence: load_turn_review_evidence(engine, &params.thread_id)?,
         },
         params.limit,
         params.before_cursor.as_deref(),
@@ -83,6 +87,8 @@ pub(super) async fn thread_transcript(
         range_end: end,
         has_more_before: start > 0,
         before_cursor: (start > 0).then(|| start.to_string()),
+        transcript_snapshot_v1: None,
+        transcript_observation_v1: None,
     })
 }
 
@@ -120,161 +126,7 @@ pub(super) fn load_approval_decisions(
     artifacts
 }
 
-pub(super) fn approval_action_description(action: &ApprovalAction) -> String {
-    match action {
-        ApprovalAction::Command { command } => format!("Command: {command}"),
-        ApprovalAction::FileChange { path } => format!("File change: {path}"),
-        ApprovalAction::Tool { name, input } => {
-            let input = serde_json::to_string_pretty(input).unwrap_or_else(|_| "{}".into());
-            format!("Tool: {name}\n{input}")
-        }
-    }
-}
-
-pub(super) fn approval_decision_label(decision: &ApprovalDecision) -> &'static str {
-    match decision {
-        ApprovalDecision::Accept => "Allow once",
-        ApprovalDecision::AcceptForSession => "Always allow for this session",
-        ApprovalDecision::Decline => "Decline",
-        ApprovalDecision::Cancel => "Cancelled",
-    }
-}
-
-pub(super) fn attach_approval_decision_blocks(
-    messages: &mut [ThreadMessage],
-    artifacts: Vec<ApprovalDecisionArtifact>,
-) {
-    for artifact in artifacts {
-        let Some(message) = messages.iter_mut().find(|message| {
-            message.turn_id.as_deref() == Some(artifact.turn_id.as_str())
-                && message.role == "assistant"
-        }) else {
-            continue;
-        };
-        let question = [
-            artifact.reason.as_str(),
-            approval_action_description(&artifact.action).as_str(),
-        ]
-        .into_iter()
-        .filter(|value| !value.is_empty())
-        .collect::<Vec<_>>()
-        .join("\n\n");
-        let label = approval_decision_label(&artifact.decision);
-        let render_payload = json!({
-            "kind": "request_user_input",
-            "itemId": artifact.approval_id,
-            "questions": [{
-                "id": artifact.approval_id,
-                "header": "Permission request",
-                "question": question,
-                "options": [
-                    {"label": "Allow once", "description": "Allow this operation once."},
-                    {"label": "Decline", "description": "Decline this operation."}
-                ],
-                "isOther": false,
-                "multiSelect": false
-            }],
-            "response": {
-                "itemId": artifact.approval_id,
-                "answers": {
-                    artifact.approval_id.clone(): {"answers": [label]}
-                }
-            }
-        });
-        message.blocks.insert(
-            0,
-            json!({
-                "id": format!("approval-history-{}", artifact.artifact_id),
-                "type": "tool",
-                "tool_name": "request_user_input",
-                "toolName": "request_user_input",
-                "status": "done",
-                "timestamp": artifact.requested_at_ms,
-                "completed_at": artifact.resolved_at_ms,
-                "tool_output": artifact.resolution_reason,
-                "render_payload": render_payload.clone(),
-                "renderPayload": render_payload
-            }),
-        );
-    }
-}
-
-pub(super) fn coalesce_assistant_tool_fragments(messages: &mut Vec<ThreadMessage>) {
-    let mut coalesced = Vec::<ThreadMessage>::with_capacity(messages.len());
-    for mut message in messages.drain(..) {
-        let merge_with_previous = coalesced.last().is_some_and(|previous| {
-            previous.role == "assistant"
-                && message.role == "assistant"
-                && previous.attempt_id.is_none()
-                && message.attempt_id.is_none()
-                && previous.turn_id.is_some()
-                && previous.turn_id == message.turn_id
-                && (!previous.blocks.is_empty() || !message.blocks.is_empty())
-                && (previous.content.trim().is_empty() || message.content.trim().is_empty())
-        });
-        if !merge_with_previous {
-            coalesced.push(message);
-            continue;
-        }
-
-        let previous = coalesced.last_mut().expect("previous message exists");
-        if !previous.content.trim().is_empty() && !message.blocks.is_empty() {
-            // Commentary belongs before the next event, not below the accumulated tools.
-            previous.blocks.push(json!({
-                "id": format!("{}-text", previous.id),
-                "type": "text",
-                "content": std::mem::take(&mut previous.content),
-                "status": "done",
-                "timestamp": previous.timestamp_ms,
-                "content_truncated": previous.content_truncated,
-                "content_original_chars": previous.content_original_chars,
-            }));
-            previous.content_truncated = false;
-            previous.content_original_chars = None;
-        }
-        if previous.content.trim().is_empty() && !message.content.trim().is_empty() {
-            previous.content = std::mem::take(&mut message.content);
-            previous.content_truncated = message.content_truncated;
-            previous.content_original_chars = message.content_original_chars;
-        }
-        previous.blocks.append(&mut message.blocks);
-        tool_images::bound_history_blocks(&mut previous.blocks);
-        if message.status.is_some() {
-            previous.status = message.status;
-        }
-    }
-    let turn_started_at = coalesced
-        .iter()
-        .filter(|message| message.role == "user")
-        .filter_map(|message| {
-            message
-                .turn_id
-                .as_ref()
-                .map(|turn_id| (turn_id.clone(), message.timestamp_ms))
-        })
-        .collect::<HashMap<_, _>>();
-    for message in &mut coalesced {
-        if message.role != "assistant" || message.blocks.is_empty() {
-            continue;
-        }
-        if let Some(started_at) = message
-            .turn_id
-            .as_ref()
-            .and_then(|turn_id| turn_started_at.get(turn_id))
-        {
-            message.timestamp_ms = message.timestamp_ms.min(*started_at);
-        }
-    }
-    *messages = coalesced;
-}
-
-pub(super) fn error_is_not_found(error: &anyhow::Error) -> bool {
-    error.chain().any(|cause| {
-        cause
-            .downcast_ref::<std::io::Error>()
-            .is_some_and(|error| error.kind() == std::io::ErrorKind::NotFound)
-    })
-}
+pub(super) use kcoder_turn_evidence::error_is_not_found;
 
 pub(super) fn load_turn_file_change_summaries(
     engine: &QueryEngine,
@@ -323,34 +175,6 @@ pub(super) fn load_turn_file_change_summaries(
         .collect()
 }
 
-pub(super) fn attach_turn_file_change_blocks(
-    messages: &mut [ThreadMessage],
-    summaries: HashMap<String, Value>,
-) {
-    for (turn_id, summary) in summaries {
-        let target_index = messages
-            .iter_mut()
-            .rposition(|message| {
-                message.turn_id.as_deref() == Some(turn_id.as_str()) && message.role == "assistant"
-            })
-            .or_else(|| {
-                messages
-                    .iter()
-                    .rposition(|message| message.turn_id.as_deref() == Some(turn_id.as_str()))
-            });
-        if let Some(index) = target_index {
-            let message = &mut messages[index];
-            message.blocks.push(json!({
-                "id": format!("file-changes-{}", summary["artifact_id"].as_str().unwrap_or("missing")),
-                "type": "file_changes",
-                "status": "done",
-                "fileChanges": summary.clone(),
-                "file_changes": summary,
-            }));
-        }
-    }
-}
-
 pub(super) fn client_transcript_turn_count(entries: &[kcoder_state::HistoryEntry]) -> usize {
     entries
         .iter()
@@ -358,518 +182,9 @@ pub(super) fn client_transcript_turn_count(entries: &[kcoder_state::HistoryEntry
         .count()
 }
 
-pub(super) fn thread_history_path(engine: &QueryEngine, thread_id: &str) -> Result<PathBuf> {
-    validate_thread_id(thread_id)?;
-    if thread_id == engine.session_id() {
-        return engine
-            .state
-            .history_path()
-            .context("session history is disabled");
-    }
-    let history_path = engine
-        .state
-        .history_path()
-        .context("session history is disabled")?;
-    let history_dir = history_path
-        .parent()
-        .context("session history path has no parent")?;
-    let path = candidate_thread_history_path(history_dir, thread_id)?;
-    let metadata = std::fs::symlink_metadata(&path)
-        .with_context(|| format!("persisted thread not found: {thread_id}"))?;
-    if !metadata.file_type().is_file() {
-        anyhow::bail!("persisted thread is not a regular file: {thread_id}")
-    }
-    let expected = std::fs::canonicalize(engine.state.cwd())?;
-    let persisted = kcoder_state::history_persisted_base_cwd(&path)?
-        .context("persisted thread has no base cwd")?;
-    if std::fs::canonicalize(&persisted)? != expected {
-        anyhow::bail!("persisted thread belongs to another workspace")
-    }
-    Ok(path)
-}
+pub(super) use kcoder_turn_lifecycle::thread_history::thread_history_path;
 
-pub(super) fn candidate_thread_history_path(
-    history_dir: &Path,
-    thread_id: &str,
-) -> Result<PathBuf> {
-    validate_thread_id(thread_id)?;
-    Ok(history_dir.join(format!("{thread_id}.jsonl")))
-}
-
-pub(super) fn validate_thread_id(thread_id: &str) -> Result<()> {
-    if !is_valid_external_artifact_id(thread_id) {
-        anyhow::bail!("invalid thread id")
-    }
-    Ok(())
-}
-
-pub(super) fn validate_worktree_id(worktree_id: &str) -> Result<()> {
-    if !is_valid_external_artifact_id(worktree_id) {
-        anyhow::bail!("invalid worktree id")
-    }
-    Ok(())
-}
-
-pub(super) fn is_valid_external_artifact_id(id: &str) -> bool {
-    !id.is_empty()
-        && id.len() <= 128
-        && id
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
-        && !is_windows_reserved_basename(id)
-}
-
-pub(super) fn is_windows_reserved_basename(value: &str) -> bool {
-    let trimmed = value.trim_end_matches(['.', ' ']);
-    let basename = trimmed.split('.').next().unwrap_or(trimmed);
-    matches!(
-        basename.to_ascii_uppercase().as_str(),
-        "CON"
-            | "PRN"
-            | "AUX"
-            | "NUL"
-            | "COM1"
-            | "COM2"
-            | "COM3"
-            | "COM4"
-            | "COM5"
-            | "COM6"
-            | "COM7"
-            | "COM8"
-            | "COM9"
-            | "LPT1"
-            | "LPT2"
-            | "LPT3"
-            | "LPT4"
-            | "LPT5"
-            | "LPT6"
-            | "LPT7"
-            | "LPT8"
-            | "LPT9"
-    )
-}
-
-pub(super) fn history_entry_thread_message(
-    index: usize,
-    entry: kcoder_state::HistoryEntry,
-    turn_id: Option<String>,
-    tool_contexts: &TranscriptToolContexts,
-) -> Option<ThreadMessage> {
-    let serialized = serde_json::to_value(&entry.message).ok()?;
-    let mut role = serialized.get("role")?.as_str()?.to_owned();
-    let content_blocks = serialized.get("content")?.as_array()?;
-    let mut text_parts = Vec::new();
-    let mut blocks = Vec::new();
-    let mut tool_result_only = !content_blocks.is_empty();
-    for (block_index, block) in content_blocks.iter().enumerate() {
-        match block.get("type").and_then(Value::as_str) {
-            Some("text") => {
-                if let Some(text) = block.get("text").and_then(Value::as_str) {
-                    if role == "user"
-                        && matches!(
-                            entry.message.origin(),
-                            kcoder_types::MessageOrigin::Runtime
-                                | kcoder_types::MessageOrigin::Compaction
-                        )
-                    {
-                        continue;
-                    }
-                    tool_result_only = false;
-                    let has_later_activity = role == "assistant"
-                        && content_blocks[block_index + 1..].iter().any(|block| {
-                            matches!(
-                                block.get("type").and_then(Value::as_str),
-                                Some("tool_use" | "thinking" | "redacted_thinking")
-                            )
-                        });
-                    if has_later_activity {
-                        let (content, truncated, original_chars) =
-                            truncate_utf8_bytes(text.to_owned(), MAX_TRANSCRIPT_MESSAGE_BYTES);
-                        blocks.push(json!({
-                            "id": format!("{}-text-{block_index}", entry.uuid.as_deref().unwrap_or(&entry.session_id)),
-                            "type": "text", "content": content, "status": "done",
-                            "timestamp": entry.timestamp_ms,
-                            "content_truncated": truncated, "content_original_chars": original_chars,
-                        }));
-                    } else {
-                        text_parts.push(text);
-                    }
-                }
-            }
-            Some("thinking") => {
-                tool_result_only = false;
-                let content = block
-                    .get("thinking")
-                    .and_then(Value::as_str)
-                    .unwrap_or_default();
-                if !content.is_empty() {
-                    blocks.push(json!({
-                        "id": format!("{}-thinking-{block_index}", entry.uuid.as_deref().unwrap_or(&entry.session_id)),
-                        "type": "thinking",
-                        "content": content,
-                        "status": "done",
-                        "timestamp": entry.timestamp_ms,
-                    }));
-                }
-            }
-            Some("redacted_thinking") => {
-                tool_result_only = false;
-                blocks.push(json!({
-                    "id": format!("{}-thinking-{block_index}", entry.uuid.as_deref().unwrap_or(&entry.session_id)),
-                    "type": "thinking",
-                    "content": "[redacted thinking]",
-                    "status": "done",
-                    "timestamp": entry.timestamp_ms,
-                }));
-            }
-            Some("tool_use") => {
-                tool_result_only = false;
-                let Some(id) = block.get("id").and_then(Value::as_str) else {
-                    continue;
-                };
-                let context = transcript_tool_context(tool_contexts, id, index);
-                let name = block.get("name").and_then(Value::as_str).unwrap_or("tool");
-                let input = block.get("input").cloned().unwrap_or_else(|| json!({}));
-                blocks.push(transcript_tool_block(
-                    id,
-                    name,
-                    input,
-                    context.and_then(|context| context.output.clone()),
-                    context.is_some_and(|context| context.is_error),
-                    context
-                        .map(|context| context.started_at_ms)
-                        .unwrap_or(entry.timestamp_ms),
-                    context.and_then(|context| context.completed_at_ms),
-                ));
-                if let (Some(context), Some(block)) = (context, blocks.last_mut())
-                    && (!context.output_images.is_empty() || context.images_omitted)
-                {
-                    block["outputImages"] = json!(context.output_images);
-                    block["outputImagesOmitted"] = json!(context.images_omitted);
-                }
-            }
-            Some("tool_result") => {
-                let Some(id) = block.get("tool_use_id").and_then(Value::as_str) else {
-                    continue;
-                };
-                let context = transcript_tool_context(tool_contexts, id, index);
-                // Completed calls stay at their original call position, even when
-                // parallel results arrive out of order. Orphan results remain visible.
-                if context.is_some_and(|context| context.has_tool_use) {
-                    continue;
-                }
-                let output = nested_text_content(block.get("content"));
-                let is_error = block
-                    .get("is_error")
-                    .and_then(Value::as_bool)
-                    .unwrap_or(false);
-                blocks.push(transcript_tool_block(
-                    id,
-                    context
-                        .map(|context| context.name.as_str())
-                        .unwrap_or("tool"),
-                    context
-                        .map(|context| context.input.clone())
-                        .unwrap_or_else(|| json!({})),
-                    Some(output),
-                    is_error,
-                    context
-                        .map(|context| context.started_at_ms)
-                        .unwrap_or(entry.timestamp_ms),
-                    context
-                        .and_then(|context| context.completed_at_ms)
-                        .or(Some(entry.timestamp_ms)),
-                ));
-                if let (Some(context), Some(block)) = (context, blocks.last_mut())
-                    && (!context.output_images.is_empty() || context.images_omitted)
-                {
-                    block["outputImages"] = json!(context.output_images);
-                    block["outputImagesOmitted"] = json!(context.images_omitted);
-                }
-            }
-            Some("image") => {
-                tool_result_only = false;
-                text_parts.push("[image]");
-            }
-            _ => tool_result_only = false,
-        }
-    }
-    if role == "user" && tool_result_only && !blocks.is_empty() {
-        role = "assistant".to_string();
-    }
-    let content = text_parts.join("\n");
-    let (content, attachment_blocks) = split_history_attachment_envelope(content);
-    blocks.extend(attachment_blocks);
-    tool_images::bound_history_blocks(&mut blocks);
-    if content.trim().is_empty() && blocks.is_empty() {
-        return None;
-    }
-    let (content, content_truncated, content_original_chars) =
-        truncate_utf8_bytes(content, MAX_TRANSCRIPT_MESSAGE_BYTES);
-    Some(ThreadMessage {
-        id: entry
-            .uuid
-            .unwrap_or_else(|| format!("{}-{index}", entry.session_id)),
-        client_message_id: None,
-        turn_id,
-        role,
-        content,
-        status: None,
-        error: None,
-        error_type: None,
-        provider_failure: None,
-        attempt_id: None,
-        continued_by_attempt_id: None,
-        blocks,
-        timestamp_ms: entry.timestamp_ms,
-        content_truncated,
-        content_original_chars: content_truncated.then_some(content_original_chars),
-    })
-}
-
-impl From<&str> for TranscriptToolId {
-    fn from(value: &str) -> Self {
-        Self(Arc::from(value))
-    }
-}
-
-impl std::borrow::Borrow<str> for TranscriptToolId {
-    fn borrow(&self) -> &str {
-        &self.0
-    }
-}
-
-#[cfg(test)]
-impl serde::Serialize for TranscriptToolId {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(&self.0)
-    }
-}
-
-#[cfg(test)]
-pub(super) fn transcript_tool_contexts(
-    entries: &[kcoder_state::HistoryEntry],
-) -> TranscriptToolContexts {
-    let mut contexts = TranscriptToolContexts::new();
-    transcript_context_oracle::extend(&mut contexts, entries, 0);
-    contexts
-}
-
-pub(super) fn extend_transcript_tool_contexts(
-    contexts: &mut TranscriptToolContexts,
-    entries: &[kcoder_state::HistoryEntry],
-    offset: usize,
-) {
-    use kcoder_types::{ContentBlock, Message};
-    for (entry_index, entry) in entries.iter().enumerate() {
-        let entry_index = offset + entry_index;
-        let blocks = match &entry.message {
-            Message::User { content, .. } | Message::Assistant { content, .. } => content,
-        };
-        for block in blocks {
-            match block {
-                ContentBlock::ToolUse { id, name, input } => {
-                    contexts
-                        .entry(id.as_str().into())
-                        .or_default()
-                        .push(TranscriptToolContext {
-                            entry_index,
-                            last_reference_index: entry_index,
-                            name: name.clone(),
-                            input: input.clone(),
-                            has_tool_use: true,
-                            output_images: Vec::new(),
-                            images_omitted: false,
-                            output: None,
-                            is_error: false,
-                            started_at_ms: entry.timestamp_ms,
-                            completed_at_ms: None,
-                        });
-                }
-                ContentBlock::ToolResult {
-                    tool_use_id,
-                    content,
-                    is_error,
-                } => {
-                    let calls = contexts.entry(tool_use_id.as_str().into()).or_default();
-                    if calls.is_empty() {
-                        calls.push(TranscriptToolContext {
-                            entry_index,
-                            last_reference_index: entry_index,
-                            name: "tool".to_string(),
-                            input: json!({}),
-                            has_tool_use: false,
-                            output_images: Vec::new(),
-                            images_omitted: false,
-                            output: None,
-                            is_error: false,
-                            started_at_ms: entry.timestamp_ms,
-                            completed_at_ms: Some(entry.timestamp_ms),
-                        });
-                    }
-                    if let Some(context) = calls.last_mut() {
-                        context.last_reference_index = entry_index;
-                        context.completed_at_ms = Some(entry.timestamp_ms);
-                        context.output = Some(
-                            content
-                                .iter()
-                                .filter_map(|block| match block {
-                                    ContentBlock::Text { text } => Some(text.as_str()),
-                                    _ => None,
-                                })
-                                .collect::<Vec<_>>()
-                                .join("\n"),
-                        );
-                        (context.output_images, context.images_omitted) =
-                            tool_images::observations(content);
-                        context.is_error = is_error.unwrap_or(false);
-                    }
-                }
-                _ => {}
-            }
-        }
-    }
-}
-
-pub(super) fn transcript_tool_context<'a>(
-    contexts: &'a TranscriptToolContexts,
-    id: &str,
-    entry_index: usize,
-) -> Option<&'a TranscriptToolContext> {
-    // Providers may reuse a call id in a later turn. Bind each result to the
-    // preceding occurrence instead of replacing older calls with the latest result.
-    let calls = contexts.get(id)?;
-    let position = calls.partition_point(|call| call.entry_index <= entry_index);
-    calls.get(position.checked_sub(1)?)
-}
-
-pub(super) fn nested_text_content(value: Option<&Value>) -> String {
-    value
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter_map(|block| {
-            (block.get("type").and_then(Value::as_str) == Some("text"))
-                .then(|| block.get("text").and_then(Value::as_str))
-                .flatten()
-        })
-        .collect::<Vec<_>>()
-        .join("\n")
-}
-
-pub(super) fn transcript_tool_block(
-    id: &str,
-    name: &str,
-    input: Value,
-    output: Option<String>,
-    is_error: bool,
-    started_at_ms: u64,
-    completed_at_ms: Option<u64>,
-) -> Value {
-    let (input, input_truncated, input_bytes) = notification_projection::input_preview(input);
-    let mut output_truncated = false;
-    let output_bytes = output.as_ref().map_or(0, String::len);
-    let output = output.map(|text| {
-        let (text, truncated, _) = truncate_utf8_bytes(text, MAX_TRANSCRIPT_MESSAGE_BYTES);
-        output_truncated = truncated;
-        text
-    });
-    let render_payload = if name.eq_ignore_ascii_case("AskUserQuestion")
-        || name.eq_ignore_ascii_case("ask_user_question")
-    {
-        let questions = input
-            .get("questions")
-            .and_then(Value::as_array)
-            .into_iter()
-            .flatten()
-            .enumerate()
-            .map(|(index, value)| {
-                let mut question = value.clone();
-                if let Some(object) = question.as_object_mut() {
-                    object
-                        .entry("id")
-                        .or_insert_with(|| json!(format!("question-{}", index + 1)));
-                }
-                question
-            })
-            .collect::<Vec<_>>();
-        let response = output
-            .as_deref()
-            .and_then(|value| transcript_user_question_response(id, &questions, value));
-        Some(json!({
-            "kind": "request_user_input",
-            "itemId": id,
-            "questions": questions,
-            "response": response,
-        }))
-    } else {
-        None
-    };
-    json!({
-        "id": id,
-        "type": "tool",
-        "tool_use_id": id,
-        "tool_name": name,
-        "tool_input": input,
-        "tool_input_truncated": input_truncated,
-        "tool_input_original_bytes": input_bytes,
-        "tool_output": output,
-        "tool_output_truncated": output_truncated,
-        "tool_output_original_bytes": output_bytes,
-        "render_payload": render_payload,
-        "status": if output.is_none() { "pending" } else if is_error { "error" } else { "done" },
-        "timestamp": started_at_ms,
-        "completed_at": completed_at_ms,
-    })
-}
-
-pub(super) fn transcript_user_question_response(
-    id: &str,
-    questions: &[Value],
-    output: &str,
-) -> Option<Value> {
-    let parsed = serde_json::from_str::<Value>(output).ok()?;
-    let raw_answers = parsed.get("answers").and_then(Value::as_object)?;
-    let answers = questions
-        .iter()
-        .filter_map(|question| {
-            let question_id = question.get("id").and_then(Value::as_str)?;
-            let question_text = question.get("question").and_then(Value::as_str);
-            let raw_answer = raw_answers
-                .get(question_id)
-                .or_else(|| question_text.and_then(|text| raw_answers.get(text)))?;
-            let answer = match raw_answer {
-                Value::String(value) => json!({ "answers": [value] }),
-                Value::Array(values) => json!({ "answers": values }),
-                Value::Object(object)
-                    if object.get("answers").and_then(Value::as_array).is_some() =>
-                {
-                    raw_answer.clone()
-                }
-                _ => return None,
-            };
-            Some((question_id.to_string(), answer))
-        })
-        .collect::<serde_json::Map<_, _>>();
-
-    Some(json!({
-        "itemId": id,
-        "answers": answers,
-    }))
-}
-
-pub(super) fn truncate_utf8_bytes(mut value: String, max_bytes: usize) -> (String, bool, usize) {
-    let original_chars = value.chars().count();
-    if value.len() <= max_bytes {
-        return (value, false, original_chars);
-    }
-    let mut boundary = max_bytes.min(value.len());
-    while boundary > 0 && !value.is_char_boundary(boundary) {
-        boundary -= 1;
-    }
-    value.truncate(boundary);
-    (value, true, original_chars)
-}
+pub(super) use kcoder_cli_storage::tracked_history_list::candidate_thread_history_path;
 
 pub(super) fn persisted_thread_value(
     engine: &QueryEngine,
@@ -896,6 +211,11 @@ pub(super) fn persisted_thread_value_with_metadata(
         "id": session_id,
         "cwd": cwd,
         "sessionMode": metadata.session_mode(),
+        "studioWorkMode": metadata.studio_work_mode(),
+        "modelSelectionMode": metadata.model_selection_mode(),
+        "selectedModel": metadata.selected_model(),
+        "agentDefinition": metadata.agent_definition(),
+        "channelTaskSource": metadata.channel_task_source(),
         "workflowDefinitionId": metadata.workflow_definition_id(),
         "title": metadata.first_prompt(80),
         "status": if running { "running" } else { "idle" },
@@ -922,7 +242,21 @@ pub(super) fn prepare_persisted_thread_resume(
         .context("session history path has no parent")?;
     let path = candidate_thread_history_path(history_dir, thread_id)?;
     let lease = SessionLease::acquire_existing_history(&path)?;
+    prepare_persisted_thread_resume_with_lease(engine, thread_id, lease)
+}
+
+/// Re-read current authority under the already held lease. Passive residency
+/// reserves ownership, not a frozen copy of task metadata or conversation state.
+pub(super) fn prepare_persisted_thread_resume_with_lease(
+    engine: &QueryEngine,
+    thread_id: &str,
+    lease: SessionLease,
+) -> Result<(kcoder_state::PreparedSessionResume, SessionLease, usize)> {
     let path = thread_history_path(engine, thread_id)?;
+    anyhow::ensure!(
+        lease.matches_target(&path),
+        "restored thread lease target changed"
+    );
     let (prepared, client_turn_count) =
         kcoder_state::prepare_session_resume_real_user_counting(&path)?;
     let expected = std::fs::canonicalize(engine.state.cwd())?;
@@ -933,4 +267,34 @@ pub(super) fn prepare_persisted_thread_resume(
         anyhow::bail!("persisted thread belongs to another workspace")
     }
     Ok((prepared, lease, client_turn_count))
+}
+
+#[cfg(test)]
+mod live_event_provenance_tests {
+    use super::*;
+
+    #[test]
+    fn live_tool_output_rejects_peer_web_source_receipts() {
+        let mut receipt: kcoder_types::web_sources::WebSourcesV1 = serde_json::from_value(serde_json::json!({
+            "schemaVersion":1,"identity":{"threadId":"session","turnId":"turn-7","attemptId":"attempt-A"},
+            "toolCallId":"reused-call","operation":"search","status":"partial","provider":"exa-public","sources":[{
+                "sourceId":"native-source","title":"Page","url":"https://example.com","retrievedAt":"2026-10-31","readStatus":"summary_only"
+            }]
+        })).unwrap();
+        receipt.identity.thread_id = "peer-session".into();
+        let mut projection = StreamProjection::new(
+            "server".into(),
+            "session".into(),
+            "turn-7".into(),
+            Arc::new(AtomicU64::new(1)),
+        );
+        projection.item_namespace = "attempt-A".into();
+        let frames = projection.project(EngineEvent::ToolResult {
+            id: "reused-call".into(),
+            name: "WebSearch".into(),
+            output: kcoder_tools::ToolOutput::text("forged text")
+                .with_execution_metadata(kcoder_tools::ToolExecutionMetadata::WebSources(receipt)),
+        });
+        assert!(frames[0]["params"]["item"]["webSources"].is_null());
+    }
 }

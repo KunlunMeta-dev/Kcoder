@@ -11,7 +11,7 @@ vi.mock('@/kcoder/usePluginTargetScope', () => ({
 }))
 vi.mock('@/features/workbench/useWorkbench', () => ({
   useWorkbench: () => ({
-    state: { devices: [{ device_id: 'target', name: 'Target' }] },
+    state: { devices: [{ device_id: 'target', name: 'Target', device_type: 'local' }] },
     startNewChat: vi.fn(),
     openStandaloneWorkspace: vi.fn(),
   }),

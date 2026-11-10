@@ -18,12 +18,15 @@ pub(super) async fn dispatch(
     history_refresh: &mut history_refresh_processor::HistoryRefreshProcessor,
     browsers: &mut BrowserRegistry,
     plugin_tasks: &tokio::task::JoinSet<()>,
+    migration_activity: usize,
     provider_tasks: &tokio::task::JoinSet<()>,
     knowledge_busy: bool,
+    app_activity: (usize, Option<usize>),
     indexed_read_tasks: &tokio::task::JoinSet<()>,
     automations: &mut project_automations::ProjectAutomations,
     automation_requested: &mut bool,
     idle_shutdown_requested: &mut bool,
+    host_shutdown_allowed: bool,
 ) -> Result<DispatchControl> {
     match method {
         "initialized" => {}
@@ -79,9 +82,9 @@ pub(super) async fn dispatch(
             send(outbound_tx, response).await?;
         }
         method::SERVER_IDLE_SHUTDOWN => {
-            let parsed = serde_json::from_value::<kcoder_app_protocol::ServerIdleShutdownParams>(
-                params.clone(),
-            );
+            let parsed = kcoder_app_rpc_codec::decode::<
+                kcoder_app_protocol::ServerIdleShutdownParams,
+            >(params.clone());
             let valid = params.is_object()
                 && parsed
                     .as_ref()
@@ -94,11 +97,21 @@ pub(super) async fn dispatch(
                 .await?;
                 return Ok(DispatchControl::Continue);
             }
+            if !host_shutdown_allowed {
+                send(
+                    outbound_tx,
+                    success_response(id, json!({"accepted":false,"reason":"persistentHost"})),
+                )
+                .await?;
+                return Ok(DispatchControl::Continue);
+            }
             if terminals.resource_count() != Some(0)
                 || browsers.resource_count() != 0
                 || !plugin_tasks.is_empty()
+                || migration_activity != 0
                 || !provider_tasks.is_empty()
                 || knowledge_busy
+                || app_activity.0 != 0
                 || !indexed_read_tasks.is_empty()
                 || history_refresh.is_active()
             {
@@ -121,7 +134,9 @@ pub(super) async fn dispatch(
                         return Ok(DispatchControl::Continue);
                     }
                 };
-            if !automations.stop_if_idle() {
+            let automation_reservation = automations.stop_if_idle();
+            if automation_reservation.is_none() {
+                drop(automation_reservation);
                 drop(reservation);
                 send(
                     outbound_tx,
@@ -132,6 +147,7 @@ pub(super) async fn dispatch(
             }
             // No await between the final checks and closing all engine admissions.
             reservation.commit();
+            drop(automation_reservation);
             *idle_shutdown_requested = true;
             let _ = send(outbound_tx, success_response(id, json!({"accepted":true}))).await;
             return Ok(DispatchControl::Shutdown);
@@ -148,12 +164,17 @@ pub(super) async fn dispatch(
                 terminal_sessions: terminals.resource_count(),
                 browser_sessions: Some(browsers.resource_count()),
                 pending_service_requests: Some(
-                    plugin_tasks.len() + provider_tasks.len() + indexed_read_tasks.len(),
+                    plugin_tasks.len()
+                        + migration_activity
+                        + provider_tasks.len()
+                        + indexed_read_tasks.len()
+                        + app_activity.0,
                 ),
                 history_refresh_active: Some(history_refresh.is_active()),
                 pending_tasks: task_activity.map(|counts| counts.0),
                 running_tasks: task_activity.map(|counts| counts.1),
-                pending_approvals: interactions.map(|counts| counts.0),
+                pending_approvals: interactions
+                    .and_then(|counts| app_activity.1.map(|apps| counts.0 + apps)),
                 pending_questions: interactions.map(|counts| counts.1),
                 queued_followups: interactions.map(|counts| counts.2),
                 pending_goal_continuations: interactions.map(|counts| counts.3),

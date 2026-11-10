@@ -1,0 +1,256 @@
+{
+  "MigrationHistoryResourceReadParams": {
+    "valid": [
+      {
+        "name": "original_target_owned_budget",
+        "value": {
+          "jobId": "original"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "rejects_foreign_authority",
+        "value": {
+          "jobId": "original",
+          "path": "other"
+        }
+      }
+    ]
+  },
+  "MigrationHistoryResourceResult": {
+    "valid": [
+      {
+        "name": "original_target_owned_budget",
+        "value": {
+          "ownerJobId": null,
+          "budget": {
+            "phase": "legacy_untracked",
+            "jobId": "original"
+          },
+          "initialLimits": null
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "rejects_foreign_authority",
+        "value": {
+          "ownerJobId": null,
+          "budget": {
+            "phase": "legacy_untracked",
+            "jobId": "original"
+          },
+          "authority": "other",
+          "initialLimits": null
+        }
+      },
+      {
+        "name": "owner_is_required_nullable",
+        "value": {
+          "budget": {
+            "phase": "legacy_untracked",
+            "jobId": "original"
+          },
+          "initialLimits": null
+        }
+      }
+    ]
+  },
+  "MigrationHistoryResourceIncreaseParams": {
+    "valid": [
+      {
+        "name": "original_target_owned_budget",
+        "value": {
+          "jobId": "original",
+          "requestId": "change",
+          "expectedPolicyRevision": 0,
+          "limits": {
+            "maxTotalBytes": 2097152,
+            "maxPayloadFiles": 8,
+            "minFreeBytes": 1048576,
+            "minFreeFileNodes": 0
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "rejects_foreign_authority",
+        "value": {
+          "jobId": "original",
+          "requestId": "change",
+          "expectedPolicyRevision": 0,
+          "limits": {
+            "maxTotalBytes": 2097152,
+            "maxPayloadFiles": 8,
+            "minFreeBytes": 1048576,
+            "minFreeFileNodes": 0
+          },
+          "reference": {
+            "group": "other"
+          }
+        }
+      }
+    ]
+  },
+  "MigrationHistoryResourceAttachParams": {
+    "valid": [
+      {
+        "name": "original_target_owned_budget",
+        "value": {
+          "jobId": "original",
+          "expectedSequence": 0,
+          "limits": {
+            "maxTotalBytes": 2097152,
+            "maxPayloadFiles": 8,
+            "minFreeBytes": 1048576,
+            "minFreeFileNodes": 0
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "rejects_foreign_authority",
+        "value": {
+          "jobId": "original",
+          "expectedSequence": 0,
+          "limits": {
+            "maxTotalBytes": 2097152,
+            "maxPayloadFiles": 8,
+            "minFreeBytes": 1048576,
+            "minFreeFileNodes": 0
+          },
+          "owner": "other"
+        }
+      }
+    ]
+  },
+  "MigrationHistoryParentResourceAttachParams": {
+    "valid": [
+      {
+        "name": "original_target_owned_budget",
+        "value": {
+          "jobId": "parent",
+          "planId": "plan",
+          "expectedSequence": 0,
+          "limits": {
+            "maxTotalBytes": 2097152,
+            "maxPayloadFiles": 8,
+            "minFreeBytes": 1048576,
+            "minFreeFileNodes": 0
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "rejects_foreign_authority",
+        "value": {
+          "jobId": "parent",
+          "planId": "plan",
+          "expectedSequence": 0,
+          "limits": {
+            "maxTotalBytes": 2097152,
+            "maxPayloadFiles": 8,
+            "minFreeBytes": 1048576,
+            "minFreeFileNodes": 0
+          },
+          "members": [
+            "client_supplied_child"
+          ]
+        }
+      }
+    ]
+  },
+  "MigrationHistoryResourceAttachmentReadParams": {
+    "valid": [
+      {
+        "name": "original_job_only",
+        "value": {
+          "jobId": "4c6d9ee9-d145-4da4-ac73-35c2dce251ea"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "no_group_authority",
+        "value": {
+          "jobId": "4c6d9ee9-d145-4da4-ac73-35c2dce251ea",
+          "group": "peer"
+        }
+      },
+      {
+        "name": "no_profile_override",
+        "value": {
+          "jobId": "4c6d9ee9-d145-4da4-ac73-35c2dce251ea",
+          "profile": "/peer"
+        }
+      }
+    ]
+  },
+  "MigrationHistoryResourceAttachmentResult": {
+    "valid": [
+      {
+        "name": "explicit_no_original_intent",
+        "value": {
+          "jobId": "4c6d9ee9-d145-4da4-ac73-35c2dce251ea",
+          "ownerJobId": "4c6d9ee9-d145-4da4-ac73-35c2dce251ea",
+          "currentSequence": 4,
+          "currentPlanId": null,
+          "phase": "untracked",
+          "originalIntent": null,
+          "issueCode": null
+        }
+      },
+      {
+        "name": "old_sequence_not_current_sequence",
+        "value": {
+          "jobId": "4c6d9ee9-d145-4da4-ac73-35c2dce251ea",
+          "ownerJobId": "4c6d9ee9-d145-4da4-ac73-35c2dce251ea",
+          "currentSequence": 4,
+          "currentPlanId": null,
+          "phase": "pending",
+          "originalIntent": {
+            "expectedSequence": 2,
+            "planId": null,
+            "initialLimits": {
+              "maxTotalBytes": 4194304,
+              "maxPayloadFiles": 16,
+              "minFreeBytes": 1048576,
+              "minFreeFileNodes": 0
+            }
+          },
+          "issueCode": null
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "no_missing_intent_field",
+        "value": {
+          "jobId": "4c6d9ee9-d145-4da4-ac73-35c2dce251ea",
+          "ownerJobId": "4c6d9ee9-d145-4da4-ac73-35c2dce251ea",
+          "currentSequence": 4,
+          "currentPlanId": null,
+          "phase": "untracked",
+          "issueCode": null
+        }
+      },
+      {
+        "name": "no_mutable_group_reference",
+        "value": {
+          "jobId": "4c6d9ee9-d145-4da4-ac73-35c2dce251ea",
+          "ownerJobId": "4c6d9ee9-d145-4da4-ac73-35c2dce251ea",
+          "currentSequence": 4,
+          "currentPlanId": null,
+          "phase": "untracked",
+          "originalIntent": null,
+          "issueCode": null,
+          "group": "peer"
+        }
+      }
+    ]
+  }
+}

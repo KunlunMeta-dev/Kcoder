@@ -11,9 +11,3 @@
 }
 
 /* This is a live status indicator: reduce motion, but retain visible activity. */
-:global(html[data-reduce-motion='true']) {
-  .spinner {
-    animation-duration: 3s;
-    animation-timing-function: steps(4, end);
-  }
-}

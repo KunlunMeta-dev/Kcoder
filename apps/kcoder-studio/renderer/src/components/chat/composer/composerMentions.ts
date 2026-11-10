@@ -1,5 +1,6 @@
+import { isConversationMentionUri } from '@/lib/conversation-mentions'
 const LOCAL_MENTION_REFERENCE_PATTERN =
-  /\[\$([^\]]+)]\(((?:skill:\/\/[^)]+SKILL\.md)|(?:\/[^)\n]*SKILL\.md)|(?:app:\/\/[^)]+)|(?:plugin:\/\/[^)]+)|(?:file:\/\/[^)]+)|(?:folder:\/\/[^)]+)|(?:cloud:\/\/[^)]+)|(?:wework-conversation:\/\/[^)]+))\)/g
+  /\[\$([^\]]+)]\(((?:skill:\/\/[^)]+SKILL\.md)|(?:\/[^)\n]*SKILL\.md)|(?:app:\/\/[^)]+)|(?:plugin:\/\/[^)]+)|(?:file:\/\/[^)]+)|(?:folder:\/\/[^)]+)|(?:cloud:\/\/[^)]+)|(?:(?:kcoder|wework)-conversation:\/\/[^)]+))\)/g
 const COMPOSER_REFERENCE_PATTERN = /^\[\$[^\]]+]\(([^)\n]+)\)$/
 const SVG_NAMESPACE = 'http://www.w3.org/2000/svg'
 const COMPOSER_MENTION_ICON_PATHS = [
@@ -42,7 +43,7 @@ export function parseComposerMentions(value: string): ParsedComposerMention[] {
     const name = match[1]
     const uri = match[2]
     const isPathReference = uri.startsWith('file://') || uri.startsWith('folder://')
-    const isConversationReference = uri.startsWith('wework-conversation://')
+    const isConversationReference = isConversationMentionUri(uri)
     return {
       name,
       label: isPathReference || isConversationReference ? name : displaySkillNameFromName(name),
@@ -140,7 +141,9 @@ export function createComposerMentionElement(payload: ComposerMentionPayload): H
   const element = document.createElement('span')
   element.className = 'composer-mention-node composer-mention-link'
   const pathReference = composerPathReference(payload.reference)
-  const conversationReference = payload.reference.includes('](wework-conversation://')
+  const conversationReference = isConversationMentionUri(
+    payload.reference.slice(payload.reference.indexOf('](') + 2)
+  )
   const displayLabel = pathReference ? composerPathDisplayName(pathReference.path) : payload.label
   element.setAttribute(
     'data-testid',

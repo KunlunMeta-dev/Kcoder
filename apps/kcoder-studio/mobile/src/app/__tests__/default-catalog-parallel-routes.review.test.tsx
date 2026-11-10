@@ -6,6 +6,7 @@ import { isValidElement, type ReactElement } from "react";
 import type { GatewayProfile, KCoderServer, ThreadSummary } from "@/gateway/types";
 import { type GatewayRpcClient, type JsonRecord } from "@/gateway/rpc";
 import type { ThreadListPage } from "@/runtime/task-runtime/threadDirectory";
+import { getLocale, setLocale, t } from "@/i18n";
 
 const fixture = vi.hoisted(() => ({
   states: [] as unknown[], setters: [] as Array<((update: unknown) => void) | undefined>,
@@ -18,6 +19,7 @@ const fixture = vi.hoisted(() => ({
   params: {} as Record<string, string>, app: {} as Record<string, unknown>,
   pushes: [] as unknown[], values: new Map<string, string>(),
 }));
+vi.mock("@/storage/interface-version", () => ({ useInterfaceVersion: () => "modern" }));
 vi.mock("react", async importOriginal => {
   const actual = await importOriginal<typeof import("react")>();
   const memo = (factory: () => unknown, deps: unknown[]) => {
@@ -42,13 +44,13 @@ vi.mock("react", async importOriginal => {
       const index = fixture.effectIndex++; const previous = fixture.effects[index];
       fixture.pendingEffects.push({ index, effect, deps, changed: !previous || deps.length !== previous.deps.length || !deps.every((value, i) => Object.is(value, previous.deps[i])) });
     },
+    useSyncExternalStore: (_subscribe: () => () => void, getSnapshot: () => unknown) => getSnapshot(),
   };
 });
-vi.mock("expo-router", () => ({ useLocalSearchParams: () => fixture.params, useRouter: () => ({ push: (value: unknown) => fixture.pushes.push(value), replace: vi.fn(), back: vi.fn() }) }));
-vi.mock("@react-navigation/native", () => ({ useIsFocused: () => true }));
+vi.mock("expo-router", () => ({ useLocalSearchParams: () => fixture.params, useRouter: () => ({ push: (value: unknown) => fixture.pushes.push(value), replace: vi.fn(), back: vi.fn() }), useIsFocused: () => true }));
 vi.mock("react-native-safe-area-context", () => ({ useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) }));
-vi.mock("react-native", () => ({ Platform: { OS: "web" }, ActivityIndicator: "ActivityIndicator", FlatList: "FlatList", Pressable: "Pressable", RefreshControl: "RefreshControl", ScrollView: "ScrollView", Text: "Text", TextInput: "TextInput", View: "View", StyleSheet: { create: (value: unknown) => value, hairlineWidth: 1, absoluteFillObject: {} } }));
-vi.mock("lucide-react-native", () => Object.fromEntries(["Archive", "ChevronDown", "ChevronLeft", "ChevronRight", "ChevronUp", "Clock3", "GitBranch", "History", "Laptop", "Menu", "MoreHorizontal", "Plus", "Search", "Server", "Settings", "SquareTerminal"].map(name => [name, name])));
+vi.mock("react-native", () => ({ Platform: { OS: "web" }, ActivityIndicator: "ActivityIndicator", FlatList: "FlatList", Pressable: "Pressable", RefreshControl: "RefreshControl", ScrollView: "ScrollView", Text: "Text", TextInput: "TextInput", View: "View", StyleSheet: { create: (value: unknown) => value, hairlineWidth: 1, absoluteFill: {} } }));
+vi.mock("lucide-react-native", () => Object.fromEntries(["Archive", "Filter", "ChevronDown", "ChevronLeft", "ChevronRight", "ChevronUp", "Clock3", "Folder", "GitBranch", "History", "Inbox", "Laptop", "Menu", "MoreHorizontal", "Plus", "Search", "Server", "Settings", "SquareTerminal"].map(name => [name, name])));
 vi.mock("@/components/ui", () => ({ EmptyState: "EmptyState", StatusDot: "StatusDot" }));
 vi.mock("@/components/mobile-drawer", () => ({ MobileDrawer: "MobileDrawer" }));
 vi.mock("@/components/history-refresh-modal", () => ({ HistoryRefreshModal: "HistoryRefreshModal" }));
@@ -82,6 +84,7 @@ vi.mock("@react-native-async-storage/async-storage", () => ({ default: {
 // Import the actual page/scope implementations, without unrelated TaskRuntime
 // composition. None of the scheduling, pager or publication methods is faked.
 vi.mock("@/runtime/task-runtime", async () => ({
+  taskRuntimeRegistry: { subscribe: () => () => {}, interactionInboxRows: () => [] },
   ...await import("@/runtime/task-runtime/threadDirectory"),
   ...await import("@/runtime/task-runtime/workspaces"),
 }));
@@ -109,6 +112,7 @@ let calls: Call[] = [];
 let clients: RouteClient[] = [];
 let peakClients = 0;
 let uninstallAuthorization: (() => void) | undefined;
+let previousLocale: ReturnType<typeof getLocale>;
 const originalSocket = globalThis.WebSocket;
 class RouteClient {
   static readonly OPEN = 1;
@@ -200,7 +204,7 @@ function sessionRows(tree: unknown): Array<{ thread: ThreadSummary; workspacePat
 }
 function pressSession(tree: unknown, id: string): void {
   const flat = list(tree)!; const item = sessionRows(tree).find(row => row.thread.id === id)!;
-  const element = (flat.props.renderItem as (arg: { item: typeof item }) => unknown)({ item });
+  const element = (flat.props.renderItem as (arg: { item: typeof item; index: number }) => unknown)({ item, index: sessionRows(tree).indexOf(item) });
   press(byId(element, "session-" + id));
 }
 async function until(route: () => unknown, check: (tree: unknown) => void): Promise<unknown> {
@@ -212,6 +216,7 @@ function registered(paths: string[]) { return { items: paths.map(workspacePath =
 function refreshSessions(tree: unknown): void { (leaf(tree, "RefreshControl")!.props.onRefresh as () => void)(); }
 
 beforeEach(() => {
+  previousLocale = getLocale(); setLocale("en");
   Object.assign(fixture, { states: [], setters: [], refs: [], memos: [], effects: [], pendingEffects: [], queuedUpdates: [], queueUpdates: false, stateIndex: 0, refIndex: 0, memoIndex: 0, effectIndex: 0, pushes: [] });
   fixture.values.clear(); calls = []; clients = []; peakClients = 0;
   taskRuntimeTestHelpers.resetConnector(); clearWorkspaceOptionsCache(); app();
@@ -223,7 +228,7 @@ afterEach(() => {
   for (const effect of fixture.effects) effect?.cleanup?.();
   for (const client of clients) if (client.readyState !== 3) client.close();
   globalThis.WebSocket = originalSocket;
-  uninstallAuthorization?.(); taskRuntimeTestHelpers.resetConnector(); vi.restoreAllMocks();
+  uninstallAuthorization?.(); taskRuntimeTestHelpers.resetConnector(); vi.restoreAllMocks(); setLocale(previousLocale);
 });
 
 
@@ -278,7 +283,7 @@ describe("cold default page is independent of directory discovery", () => {
     await vi.waitFor(() => expect(clients.every(client => client.closeCount === 1)).toBe(true));
     expect(peakClients).toBeLessThanOrEqual(4);
   });
-  it.each([{ name: "Home", route: Home }, { name: "Sessions", route: Sessions }])("$name publishes/clicks the first page before catalog or page two resolves", async ({ route }) => {
+  it.each([{ name: "Home", route: Home }, { name: "Sessions", route: Sessions }])("$name publishes/clicks the first page before catalog discovery; only Sessions waits for page two", async ({ route }) => {
     app(profile, [a]); const catalog = deferred<unknown>(); const second = deferred<ThreadListPage>();
     read = async call => call.method === "runtime.workspaces.list" ? catalog.promise :
       call.method === "runtime.worktrees.list" ? catalog.promise : call.params.cursor ? second.promise : page([thread("early")], "next");
@@ -288,8 +293,12 @@ describe("cold default page is independent of directory discovery", () => {
     expect(calls.filter(call => call.method.startsWith("runtime."))).toHaveLength(2);
     if (route === Home) press(byId(tree, "thread-early")); else pressSession(tree, "early");
     expect(fixture.pushes).toEqual([expect.objectContaining({ params: expect.objectContaining({ threadId: "early", cwd: "/A" }) })]);
-    if (route === Home) await vi.waitFor(() => expect(calls.filter(call => call.method === "thread/list")).toHaveLength(2));
-    else {
+    if (route === Home) {
+      // Home is a one-page preview. It exposes the route to all sessions when
+      // the first page has a cursor; it does not fetch a second page itself.
+      expect(byId(tree, "view-all-home-threads-A")).toBeDefined();
+      expect(calls.filter(call => call.method === "thread/list")).toHaveLength(1);
+    } else {
       (list(tree)!.props.onEndReached as () => void)();
       expect(calls.filter(call => call.method === "thread/list")).toHaveLength(1);
     }
@@ -299,10 +308,17 @@ describe("cold default page is independent of directory discovery", () => {
       const discovered = await until(route, value => expect(byId(value, "sessions-page-loading")).toBeUndefined());
       (list(discovered)!.props.onEndReached as () => void)();
       await vi.waitFor(() => expect(calls.filter(call => call.method === "thread/list")).toHaveLength(2));
+      expect(calls.filter(call => call.method === "thread/list" && !call.params.cursor)).toHaveLength(1);
+      second.resolve(page([thread("second", "/A", 1)]));
+      await until(route, value => expect(sessionRows(value)).toHaveLength(2));
+    } else {
+      await until(route, value => {
+        expect(byId(value, "thread-early")).toBeDefined();
+        expect(byId(value, "view-all-home-threads-A")).toBeDefined();
+      });
+      expect(calls.filter(call => call.method === "thread/list")).toHaveLength(1);
     }
     expect(calls.filter(call => call.method === "thread/list" && !call.params.cursor)).toHaveLength(1);
-    second.resolve(page([thread("second", "/A", 1)]));
-    await until(route, value => route === Home ? expect(byId(value, "thread-second")).toBeDefined() : expect(sessionRows(value)).toHaveLength(2));
     await vi.waitFor(() => expect(clients[0]!.closeCount).toBe(1));
   });
   it.each([{ route: Home }, { route: Sessions }])("catalog failure preserves a successful default page", async ({ route }) => {
@@ -312,7 +328,20 @@ describe("cold default page is independent of directory discovery", () => {
     await until(route, tree => route === Home ? expect(byId(tree, "thread-kept")).toBeDefined() : expect(sessionRows(tree)).toHaveLength(1));
     expect(clients[0]!.closeCount).toBe(0);
     catalog.reject(new Error("controlled catalog failure"));
-    await until(route, tree => { expect(text(tree)).toContain("controlled catalog failure"); if (route === Home) expect(byId(tree, "thread-kept")).toBeDefined(); else expect(sessionRows(tree)[0]?.thread.id).toBe("kept"); });
+    await vi.waitFor(() => expect(clients[0]!.closeCount).toBe(1));
+    await until(route, tree => {
+      if (route === Home) {
+        expect(drawer(tree).workspaceErrors.A).toContain("controlled catalog failure");
+        expect(byId(tree, "thread-kept")).toBeDefined();
+      } else {
+        expect(byId(tree, "sessions-load-error")).toBeUndefined();
+        expect(byId(tree, "sessions-load-notice")).toBeUndefined();
+        expect(byId(tree, "sessions-partial-indicator")).toBeUndefined();
+        expect(byId(tree, "sessions-open-filters")?.props.accessibilityHint).toBeUndefined();
+        expect(text(tree)).not.toContain("controlled catalog failure");
+        expect(sessionRows(tree)[0]?.thread.id).toBe("kept");
+      }
+    });
     expect(clients).toHaveLength(1); expect(clients[0]!.closeCount).toBe(1);
   });
   it("default failure does not suppress extra workspace discovery or its row", async () => {
@@ -321,7 +350,14 @@ describe("cold default page is independent of directory discovery", () => {
       call.cwd === "/A" ? Promise.reject(new Error("default refused")) : page([thread("extra", "/extra")]);
     render(Sessions); await vi.waitFor(() => expect(calls.some(call => call.method === "thread/list")).toBe(true));
     catalog.resolve(registered(["/A", "/extra"]));
-    await until(Sessions, tree => { expect(sessionRows(tree).map(row => row.thread.id)).toEqual(["extra"]); expect(text(tree)).toContain("default refused"); });
+    await until(Sessions, tree => {
+      expect(sessionRows(tree).map(row => row.thread.id)).toEqual(["extra"]);
+      expect(byId(tree, "sessions-load-error")).toBeUndefined();
+      expect(byId(tree, "sessions-load-notice")).toBeUndefined();
+      expect(byId(tree, "sessions-partial-indicator")).toBeUndefined();
+      expect(byId(tree, "sessions-open-filters")?.props.accessibilityHint).toBeUndefined();
+      expect(text(tree)).not.toContain("default refused");
+    });
     expect(clients).toHaveLength(2); expect(calls.filter(call => call.method === "thread/list" && call.cwd === "/A")).toHaveLength(1);
   });
   it("page cancellation leaves the still-authorized foreign catalog waiter alive", async () => {

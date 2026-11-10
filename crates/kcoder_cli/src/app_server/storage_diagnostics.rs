@@ -10,7 +10,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tokio_util::sync::CancellationToken;
 
 #[derive(Debug)]
-pub(super) struct StorageBusyError;
+pub struct StorageBusyError;
 impl std::fmt::Display for StorageBusyError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter.write_str("storage is busy; wait for active tasks to finish and refresh")
@@ -23,7 +23,7 @@ const TARGET_DEBUG_LOGS: &str = "debug-logs";
 const TARGET_TURN_SNAPSHOTS: &str = "turn-snapshots";
 
 #[derive(Debug)]
-pub(super) struct StorageScanCancelled;
+pub struct StorageScanCancelled;
 impl std::fmt::Display for StorageScanCancelled {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str("storage scan cancelled")
@@ -31,7 +31,7 @@ impl std::fmt::Display for StorageScanCancelled {
 }
 impl std::error::Error for StorageScanCancelled {}
 
-pub(super) fn read_report(cancel: &CancellationToken) -> Result<StorageReport> {
+pub fn read_report(cancel: &CancellationToken) -> Result<StorageReport> {
     report_for_with_cancel(&config_root()?, cancel)
 }
 
@@ -288,6 +288,12 @@ fn bucket_for(relative: &Path) -> &'static str {
     if parts.first().map(String::as_str) == Some("logs") && joined_has("llm-request") {
         return "debug-logs";
     }
+    if relative
+        .ancestors()
+        .any(|path| turn_observation_storage_owned_by(path, Path::new("projects")))
+    {
+        return "turn-snapshots";
+    }
     if joined_has("turn-file-changes")
         && parts.iter().any(|part| {
             part.starts_with("snapshot-repository-") || part.starts_with("revert-repository-")
@@ -320,7 +326,7 @@ fn count_debug_switches_in_dotenv(path: &Path) -> Result<usize> {
         .count())
 }
 
-pub(super) fn clean(target: &str, confirm: bool) -> Result<StorageCleanResult> {
+pub fn clean(target: &str, confirm: bool) -> Result<StorageCleanResult> {
     if !confirm {
         bail!("storage cleanup requires confirm=true");
     }
@@ -355,7 +361,8 @@ fn clean_at(root: &Path, target: &str) -> Result<StorageCleanResult> {
                 }
             }
             for dir in repositories {
-                let (dir_bytes, dir_files) = remove_directory_with_outcome(&dir, &mut errors);
+                let (dir_bytes, dir_files) =
+                    remove_storage_with_outcome(&dir, &mut errors, remove_snapshot_storage);
                 bytes += dir_bytes;
                 files += dir_files;
             }
@@ -375,8 +382,16 @@ fn clean_at(root: &Path, target: &str) -> Result<StorageCleanResult> {
 // the observed remaining footprint and an explicit partial failure, never imply
 // that the entire previewed bucket was deleted.
 fn remove_directory_with_outcome(path: &Path, errors: &mut Vec<String>) -> (u64, usize) {
+    remove_storage_with_outcome(path, errors, remove_directory)
+}
+
+fn remove_storage_with_outcome(
+    path: &Path,
+    errors: &mut Vec<String>,
+    remove: impl FnOnce(&Path) -> Result<(u64, usize)>,
+) -> (u64, usize) {
     let before = directory_footprint(path);
-    match remove_directory(path) {
+    match remove(path) {
         Ok(removed) => removed,
         Err(error) => {
             let after = directory_footprint(path);
@@ -387,6 +402,60 @@ fn remove_directory_with_outcome(path: &Path, errors: &mut Vec<String>) -> (u64,
             )
         }
     }
+}
+
+fn turn_observation_storage_owned_by(path: &Path, root: &Path) -> bool {
+    let Some(thread) = path.parent() else {
+        return false;
+    };
+    let Some(client) = thread.parent() else {
+        return false;
+    };
+    if !matches!(
+        path.file_name().and_then(|name| name.to_str()),
+        Some("turn-file-captures" | "turn-review-evidence")
+    ) {
+        return false;
+    }
+    if thread
+        .file_name()
+        .and_then(|name| name.to_str())
+        .is_none_or(|id| super::validate_thread_id(id).is_err())
+    {
+        return false;
+    }
+    if client == root {
+        return true;
+    }
+    let Ok(relative) = path.strip_prefix(root) else {
+        return false;
+    };
+    let parts = relative.components().collect::<Vec<_>>();
+    parts.len() == 4 && parts[1].as_os_str() == "client-sessions"
+}
+
+fn remove_snapshot_storage(path: &Path) -> Result<(u64, usize)> {
+    if matches!(
+        path.file_name().and_then(|name| name.to_str()),
+        Some("turn-file-captures" | "turn-review-evidence")
+    ) {
+        let thread = path
+            .parent()
+            .and_then(|parent| parent.file_name())
+            .and_then(|name| name.to_str())
+            .context("capture thread missing")?;
+        return super::transcript_artifact_journal::write(
+            path,
+            thread,
+            if path.file_name().and_then(|n| n.to_str()) == Some("turn-review-evidence") {
+                super::transcript_artifact_journal::Kind::TurnReviewEvidence
+            } else {
+                super::transcript_artifact_journal::Kind::TurnFileCaptures
+            },
+            || remove_directory(path),
+        );
+    }
+    remove_directory(path)
 }
 
 fn snapshot_repositories(root: &Path) -> Result<Vec<PathBuf>> {
@@ -405,7 +474,11 @@ fn snapshot_repositories(root: &Path) -> Result<Vec<PathBuf>> {
                 continue;
             }
             let name = entry.file_name().to_string_lossy().into_owned();
-            if name.starts_with("snapshot-repository-") || name.starts_with("revert-repository-") {
+            if (matches!(name.as_str(), "turn-file-captures" | "turn-review-evidence")
+                && turn_observation_storage_owned_by(&entry.path(), &root.join("projects")))
+                || name.starts_with("snapshot-repository-")
+                || name.starts_with("revert-repository-")
+            {
                 found.push(entry.path());
             } else {
                 stack.push(entry.path());
@@ -448,7 +521,7 @@ fn remove_directory(path: &Path) -> Result<(u64, usize)> {
 
 /// Outcome of one snapshot-budget enforcement pass.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) struct SnapshotGcOutcome {
+pub struct SnapshotGcOutcome {
     pub removed_snapshots: usize,
     pub removed_bytes: u64,
     pub remaining_bytes: u64,
@@ -464,7 +537,7 @@ pub(super) struct SnapshotGcOutcome {
 /// a live turn updates its own repository continuously.
 const ABANDONED_SNAPSHOT_REPOSITORY_AGE: Duration = Duration::from_secs(60 * 60);
 
-pub(super) fn enforce_turn_snapshot_budget_at(
+pub fn enforce_turn_snapshot_budget_at(
     projects_root: &Path,
     policy: &kcoder_config::TurnFileChangesSettings,
     now: SystemTime,
@@ -477,7 +550,7 @@ pub(super) fn enforce_turn_snapshot_budget_at(
     )
 }
 
-pub(super) fn enforce_turn_snapshot_budget_at_with(
+pub fn enforce_turn_snapshot_budget_at_with(
     projects_root: &Path,
     policy: &kcoder_config::TurnFileChangesSettings,
     now: SystemTime,
@@ -501,6 +574,28 @@ pub(super) fn enforce_turn_snapshot_budget_at_with(
                 continue;
             }
             let name = entry.file_name().to_string_lossy().into_owned();
+            if matches!(name.as_str(), "turn-file-captures" | "turn-review-evidence")
+                && turn_observation_storage_owned_by(&entry.path(), projects_root)
+            {
+                let path = entry.path();
+                let Some(parent) = path.parent().map(Path::to_path_buf) else {
+                    continue;
+                };
+                let lease = leases
+                    .entry(parent.clone())
+                    .or_insert_with(|| super::snapshot_leases::cleanup(&parent).ok().flatten());
+                let bytes = directory_footprint(&path).0;
+                if lease.is_none() {
+                    protected_bytes += bytes;
+                    continue;
+                }
+                let modified = entry
+                    .metadata()
+                    .and_then(|metadata| metadata.modified())
+                    .unwrap_or(now);
+                snapshots.push((modified, bytes, path));
+                continue;
+            }
             if name.starts_with("snapshot-repository-") || name.starts_with("revert-repository-") {
                 let parent = entry.path().parent().map(Path::to_path_buf);
                 let Some(parent) = parent else { continue };
@@ -554,7 +649,7 @@ pub(super) fn enforce_turn_snapshot_budget_at_with(
             .unwrap_or(UNIX_EPOCH);
         for (modified, bytes, path) in snapshots {
             if modified < cutoff {
-                if remove_directory(&path).is_ok() {
+                if remove_snapshot_storage(&path).is_ok() {
                     removed_snapshots += 1;
                     removed_bytes += bytes;
                 }
@@ -576,7 +671,7 @@ pub(super) fn enforce_turn_snapshot_budget_at_with(
             if remaining <= policy.max_total_bytes {
                 break;
             }
-            if remove_directory(path).is_ok() {
+            if remove_snapshot_storage(path).is_ok() {
                 removed_snapshots += 1;
                 removed_bytes += bytes;
                 remaining = remaining.saturating_sub(*bytes);
@@ -591,7 +686,7 @@ pub(super) fn enforce_turn_snapshot_budget_at_with(
 }
 
 /// Applies the budget to the active configuration directory.
-pub(super) fn enforce_turn_snapshot_budget(
+pub fn enforce_turn_snapshot_budget(
     policy: &kcoder_config::TurnFileChangesSettings,
 ) -> Result<SnapshotGcOutcome> {
     let root = config_root()?.join("projects");
@@ -603,7 +698,7 @@ pub(super) fn enforce_turn_snapshot_budget(
 }
 
 /// Comments out `DEV_DEBUG` assignments so future launches stop recording.
-pub(super) fn disable_debug_log() -> Result<DebugLogDisableResult> {
+pub fn disable_debug_log() -> Result<DebugLogDisableResult> {
     let dotenv_path = config_root()?.join(".env");
     let Ok(contents) = fs::read_to_string(&dotenv_path) else {
         return Ok(DebugLogDisableResult {
@@ -695,6 +790,18 @@ mod tests {
 
     #[test]
     fn buckets_route_config_paths_to_their_slices() {
+        assert_eq!(
+            bucket_for(Path::new(
+                "projects/demo/client-sessions/s1/turn-file-captures/capture.json"
+            )),
+            "turn-snapshots"
+        );
+        assert_ne!(
+            bucket_for(Path::new(
+                "projects/demo/wiki/sources/turn-file-captures/source.json"
+            )),
+            "turn-snapshots"
+        );
         for file in ["turn.patch", "turn.json", ".snapshot-repositories.lock"] {
             assert_eq!(
                 bucket_for(
@@ -889,7 +996,7 @@ mod lease_cleanup_tests {
         let idle = repository(root.path(), "idle", 10);
         let busy = repository(root.path(), "busy", 20);
         assert!(report_for(root.path()).unwrap().total_bytes >= 30);
-        let lease = crate::app_server::snapshot_leases::active(busy.parent().unwrap()).unwrap();
+        let lease = crate::snapshot_leases::active(busy.parent().unwrap()).unwrap();
         assert!(clean_at(root.path(), TARGET_TURN_SNAPSHOTS).is_err());
         assert!(idle.join("objects/blob").exists());
         assert!(busy.join("objects/blob").exists());
@@ -905,7 +1012,7 @@ mod lease_cleanup_tests {
         let root = tempfile::tempdir().unwrap();
         let idle = repository(root.path(), "idle", 10);
         let busy = repository(root.path(), "busy", 20);
-        let lease = crate::app_server::snapshot_leases::active(busy.parent().unwrap()).unwrap();
+        let lease = crate::snapshot_leases::active(busy.parent().unwrap()).unwrap();
         let policy = kcoder_config::TurnFileChangesSettings {
             max_total_bytes: 1,
             ..Default::default()

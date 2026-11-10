@@ -15,3 +15,16 @@
 /settings.json.*.tmp
 /settings.local.json.lock
 /settings.local.json.*.tmp
+
+# 天气播报的本地定制与运行状态
+/weather-daily.json
+/.weather-last-push.*
+/.provider-transaction.json
+/.provider-transaction.json.lock
+/..provider-transaction.json.*.tmp
+/.settings.json.*.tmp
+/.settings.local.json.*.tmp
+
+# Live scheduled-task state, rewritten by the cron service; never versioned.
+/cron/jobs.json
+/cron/jobs.lock

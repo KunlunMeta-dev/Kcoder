@@ -121,7 +121,8 @@ await runE2E(
     );
     await createTask(page, "MOBILE_NONGIT_CHANGES");
     await waitFor(() => exists(createdFile), 30_000, "非 Git 回合创建文件");
-    await page.getByTestId("workspace-tab-switcher").click();
+    await page.getByTestId("task-more").click();
+    await page.getByTestId("task-menu-workspace").click();
     await page.getByTestId("workspace-tab-changes").click();
     const alert = page.getByRole("alert");
     try {
@@ -176,9 +177,8 @@ await runE2E(
     assert.ok(deviceCommands.includes("turn_file_changes_revert"));
 
     await page.reload({ waitUntil: "domcontentloaded" });
-    await page
-      .locator('[data-testid="workspace-tab-switcher"]:visible')
-      .click();
+    await page.getByTestId("task-more").click();
+    await page.getByTestId("task-menu-workspace").click();
     await page.locator('[data-testid="workspace-tab-changes"]:visible').click();
     await page.locator('[data-testid="changes-mode-turn"]:visible').click();
     await page

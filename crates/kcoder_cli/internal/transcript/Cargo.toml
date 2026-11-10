@@ -1,0 +1,28 @@
+[package]
+name = "kcoder_transcript"
+description = "Pure KCoder history-to-protocol transcript projection."
+publish = false
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[features]
+test-oracle = []
+
+[dependencies]
+anyhow.workspace = true
+kcoder_app_protocol = { path = "../../../kcoder_app_protocol" }
+kcoder_state = { path = "../../../kcoder_state" }
+kcoder_types = { path = "../../../kcoder_types" }
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+
+[dev-dependencies]
+kcoder_engine = { path = "../../../kcoder_engine" }
+
+[lib]
+path = "../../src/internal/transcript/lib.rs"

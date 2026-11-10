@@ -1,9 +1,10 @@
 import type { InstalledPlugin, PluginPathComponent } from '@/types/api'
 
-const PLUGIN_TRIAL_STORAGE_KEY = 'wework:pending-plugin-trial'
-export const PLUGIN_TRIAL_QUEUED_EVENT = 'wework:plugin-trial-queued'
-export const LOCAL_PLUGIN_SKILLS_CHANGED_EVENT = 'wework:local-plugin-skills-changed'
-export const FOCUS_PLUGIN_TRIAL_COMPOSER_EVENT = 'wework:focus-plugin-trial-composer'
+const PLUGIN_TRIAL_STORAGE_KEY = 'kcoder:pending-plugin-trial'
+const LEGACY_PLUGIN_TRIAL_STORAGE_KEY = 'wework:pending-plugin-trial'
+export const PLUGIN_TRIAL_QUEUED_EVENT = 'kcoder:plugin-trial-queued'
+export const LOCAL_PLUGIN_SKILLS_CHANGED_EVENT = 'kcoder:local-plugin-skills-changed'
+export const FOCUS_PLUGIN_TRIAL_COMPOSER_EVENT = 'kcoder:focus-plugin-trial-composer'
 
 interface PendingPluginTrial {
   input: string
@@ -130,8 +131,11 @@ export function queuePluginReferenceTrial({
 }
 
 export function consumePluginTrial(): PendingPluginTrial | null {
-  const raw = window.sessionStorage.getItem(PLUGIN_TRIAL_STORAGE_KEY)
+  const raw =
+    window.sessionStorage.getItem(PLUGIN_TRIAL_STORAGE_KEY) ??
+    window.sessionStorage.getItem(LEGACY_PLUGIN_TRIAL_STORAGE_KEY)
   if (!raw) return null
+  window.sessionStorage.removeItem(LEGACY_PLUGIN_TRIAL_STORAGE_KEY)
   window.sessionStorage.removeItem(PLUGIN_TRIAL_STORAGE_KEY)
   try {
     const payload = JSON.parse(raw) as Partial<PendingPluginTrial>

@@ -3,6 +3,8 @@ import { KCoderGatewayRuntime as Runtime } from './gatewayRuntime'
 import { KCoderGatewayRuntime as InstalledRuntime } from './installGatewayRuntime'
 import { FakeGatewayClient } from './gatewayRuntime.test-support'
 
+const KCODER_PRESENTATION = { version: 1, studioWorkMode: 'kcoder', inlineWidgets: false }
+
 // These tests exercise routing and capability boundaries, independent of model output.
 describe.each([Runtime, InstalledRuntime])('tools catalog routing', RuntimeClass => {
   test('does not resume historical nonresident tasks just to obtain presentation metadata', async () => {
@@ -77,7 +79,7 @@ describe.each([Runtime, InstalledRuntime])('tools catalog routing', RuntimeClass
     })
     try {
       await runtime.request('runtime.tools.catalog', { serverId: 'remote' })
-      expect(request).toHaveBeenCalledWith('tools/catalog', {})
+      expect(request).toHaveBeenCalledWith('tools/catalog', { clientPresentation: KCODER_PRESENTATION })
       support.mockReturnValue(false)
       request.mockClear()
       await expect(

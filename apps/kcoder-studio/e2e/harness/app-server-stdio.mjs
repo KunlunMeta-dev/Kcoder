@@ -17,6 +17,7 @@ export class AppServerStdioClient {
     this.discardedResponseIds = [];
     this.protocolFailure = null;
     this.exit = null;
+    this.serverRequests = new Map();
     this.reader = createInterface({ input: child.stdout, crlfDelay: Infinity });
     this.reader.on("line", line => this.onLine(line));
     child.once("error", error => this.failPending(error));
@@ -33,6 +34,15 @@ export class AppServerStdioClient {
     } catch {
       this.protocolFailure = new Error(`${this.label} wrote a non-JSON frame to stdout`);
       this.failPending(this.protocolFailure);
+      return;
+    }
+    if (frame?.id !== undefined && typeof frame?.method === "string") {
+      if (this.serverRequests.has(frame.id) || this.serverRequests.size >= this.notificationHistoryLimit) {
+        this.protocolFailure = new Error(`${this.label} repeated or exceeded pending server requests`);
+        this.failPending(this.protocolFailure);
+        return;
+      }
+      this.serverRequests.set(frame.id, frame);
       return;
     }
     const pending = this.pending.get(frame?.id);
@@ -94,6 +104,22 @@ export class AppServerStdioClient {
         clearTimeout(pending.timer);
         pending.reject(error);
       });
+    });
+  }
+
+  pendingServerRequests() {
+    if (this.protocolFailure) throw this.protocolFailure;
+    return [...this.serverRequests.values()];
+  }
+
+  /** Reply once to an observed server request; lost writes remain unknown, never replayed. */
+  respond(id, result) {
+    if (this.protocolFailure) return Promise.reject(this.protocolFailure);
+    if (this.exit) return Promise.reject(new Error(`${this.label} is already closed`));
+    if (!this.serverRequests.has(id)) return Promise.reject(new Error(`${this.label} has no pending server request ${id}`));
+    this.serverRequests.delete(id);
+    return new Promise((accept, reject) => {
+      this.child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id, result })}\n`, error => error ? reject(error) : accept());
     });
   }
 

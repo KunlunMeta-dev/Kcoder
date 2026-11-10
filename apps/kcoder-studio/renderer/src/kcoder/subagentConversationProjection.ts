@@ -1,3 +1,4 @@
+import { normalizeWebSources } from '../../../shared/webSources'
 import {
   reduceWorkbenchMessages,
   isActiveToolCallStatus,
@@ -199,6 +200,7 @@ export class SubagentConversationProjection {
         status:
           item.status === 'failed' ? 'error' : item.status === 'completed' ? 'done' : 'unknown',
         toolOutput: toolObservationOutput(item),
+        webSources: normalizeWebSources(item.webSources, { toolCallId: id }),
       })
     } else if (method === 'item/completed' && item.type === 'agentMessage') {
       // A model message ends before its requested tools execute. Only the run

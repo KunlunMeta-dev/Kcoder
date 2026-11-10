@@ -1,11 +1,18 @@
 import { loadWorkspaceTaskHandoff, confirmWorkspaceTaskRoute } from "@/storage/pending-workspace-operation-v2";
+import { useInterfaceVersion } from "@/storage/interface-version";
 import type { TaskCreationClaim } from "@/runtime/task-runtime/types";
+import type { ThreadPresenceObservation } from "@/runtime/task-runtime/thread-presence";
+import { probeWorkspacePresence, type WorkspacePresenceObservation } from "@/runtime/task-runtime/workspace-presence";
+import { captureSessionTranscriptScope, sessionTranscriptScopeKey } from "@/storage/session-transcript-scope";
 import { captureWorkspaceProfileIdentity } from "@/storage/workspace-profile-fence";
 import { t } from "@/i18n";
 import { workspaceFileLocationFromLink } from "@/components/workspace-file-links";
+import { workspacePathName } from "@/components/workspace-path";
+import { rememberWorkspaceFile } from "@/components/workspace-file-discovery";
 import { stopDrawerSession } from "@/components/mobile-drawer-dismissal";
 import type { ThreadSummary } from "@/gateway/types";
 import { backOrReplace, profileHomeHref } from "@/navigation/back-or-replace";
+import { createWorkspaceAbsenceHandoff } from "@/navigation/workspace-absence-handoff";
 import { requestConfirmation } from "@/platform/confirmation";
 import {
   ThreadListPager,
@@ -14,6 +21,7 @@ import {
   subscribeThreadMutations,
   TaskRuntime,
   taskRuntimeRegistry,
+  workspaceThreadScopeIdentity,
   type WorkspaceOption,
 } from "@/runtime/task-runtime";
 import {
@@ -23,27 +31,38 @@ import {
   threadMutationWorkspaceServers,
   ThreadListProjection,
   threadListScopeKey,
+  threadListReadOwner,
 } from "@/runtime/thread-list-projection";
 import { useApp } from "@/state/AppContext";
 import { shouldActivateRouteProfile } from "@/state/route-profile-activation";
 import { profileAuthorizationScopeKey } from "@/state/profile-coordinator";
+import { interactionServerIdentity } from "@/runtime/task-runtime/threadDirectory";
+import { selectorForInteraction } from "@/runtime/task-runtime/interactions";
+import {
+  hasInteractionRouteParams,
+  interactionMatchesInboxRow,
+  matchesInteractionRouteLocator,
+  parseInteractionRouteLocator,
+} from "@/features/interaction-inbox/locator";
 import {
   loadWorkspaceState as loadAuthorizedWorkspaceState,
   saveWorkspaceState as saveAuthorizedWorkspaceState,
+  saveWorkspaceRecentFile as saveAuthorizedWorkspaceRecentFile,
   workspaceStateAuthorizationScope,
   type WorkspacePanelState,
   type WorkspaceTab,
   type WorkspaceViewState,
 } from "@/storage/workspace-preferences";
-import { useIsFocused } from "@react-navigation/native";
+import { useIsFocused } from "expo-router";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { Alert, Keyboard, Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { taskOpenError } from "./taskLabels";
 import { defaultWorkspacePanels, initialPanelId } from "./workspacePanels";
 
 export function useTaskScreen() {
+  const v3 = useInterfaceVersion() === "v3";
   const params = useLocalSearchParams<{
     profileId: string;
     serverId: string;
@@ -51,6 +70,11 @@ export function useTaskScreen() {
     cwd?: string;
     title?: string;
     creationRequestId?: string;
+    kind?: string | string[];
+    requestId?: string | string[];
+    interactionId?: string | string[];
+    turnId?: string | string[];
+    appServerEpoch?: string | string[];
   }>();
 
   const router = useRouter();
@@ -64,14 +88,19 @@ export function useTaskScreen() {
     activeProfile,
     profiles,
     runtime: appRuntime,
+    refresh: refreshAppRuntime,
     setActiveProfile,
     markGatewayReauthorizationRequired,
     demo,
+    runtimeActivationEpoch,
+    isCurrentInteractionOwner,
   } = useApp();
 
   const goBack = () => { if (ownsWorkspace()) backOrReplace(router, profileHomeHref(params.profileId)); };
 
   const profileReady = activeProfile?.id === params.profileId;
+  const interactionRouteRequested = hasInteractionRouteParams(params);
+  const interactionRouteLocator = parseInteractionRouteLocator(params);
 
   const invalidProfile =
     hydrated && !profiles.some((profile) => profile.id === params.profileId);
@@ -82,17 +111,40 @@ export function useTaskScreen() {
 
   const workspaceProfileIdentity = activeProfile ? captureWorkspaceProfileIdentity(activeProfile) : undefined;
   const workspaceStorageScope = profileReady && activeProfile && server ? workspaceStateAuthorizationScope(activeProfile, server) : undefined;
-  // A distinct object also fences A → B → A, even when the persisted key is the same.
-  const ownerKey = JSON.stringify([params.profileId, params.serverId, params.threadId, params.cwd ?? "", workspaceStorageScope]);
+  let recoveryScopeKey: string | null = null;
+  try { if (activeProfile && server && params.cwd) recoveryScopeKey = sessionTranscriptScopeKey(
+    captureSessionTranscriptScope(activeProfile, server, params.cwd, params.threadId)); }
+  catch { /* An incomplete target stays on the existing read-only recovery path. */ }
+  // A distinct object fences A → B → A, authorization changes, target changes, and demo transitions.
+  const ownerKey = JSON.stringify([params.profileId, params.serverId, params.threadId, params.cwd ?? "", workspaceStorageScope,
+    activeProfile ? profileAuthorizationScopeKey(activeProfile) : null, recoveryScopeKey,
+    server?.observationTargetIdentity ?? null, runtimeActivationEpoch, appRuntime.serversReady,
+    appRuntime.reauthorizationRequired, appRuntime.serversRevision, demo]);
   const ownerRef = useRef<{ key: string } | null>(null);
   if (ownerRef.current?.key !== ownerKey) ownerRef.current = { key: ownerKey };
   const owner = ownerRef.current;
+  const absenceNavigationOwner = useRef<typeof owner | null>(null);
   const ownerMounted = useRef(true);
   const ownsWorkspace = () => ownerMounted.current && ownerRef.current === owner;
   useEffect(() => {
     ownerMounted.current = true;
     return () => { if (ownerRef.current === owner) ownerMounted.current = false; };
   }, [owner]);
+  const workspaceReadinessRef = useRef<{
+    owner: typeof owner;
+    promise: Promise<WorkspaceViewState | null>;
+    resolve: (state: WorkspaceViewState | null) => void;
+  } | null>(null);
+  if (workspaceReadinessRef.current?.owner !== owner) {
+    workspaceReadinessRef.current?.resolve(null);
+    let resolve!: (state: WorkspaceViewState | null) => void;
+    const promise = new Promise<WorkspaceViewState | null>((done) => { resolve = done; });
+    workspaceReadinessRef.current = { owner, promise, resolve };
+  }
+  const workspaceReadiness = workspaceReadinessRef.current;
+  useEffect(() => () => {
+    queueMicrotask(() => { if (!ownerMounted.current || ownerRef.current !== owner) workspaceReadiness.resolve(null); });
+  }, [workspaceReadiness]);
   const guardSetter = <Value,>(setter: Dispatch<SetStateAction<Value>>) => (update: SetStateAction<Value>) => {
     if (!ownsWorkspace()) return;
     setter(current => {
@@ -100,8 +152,13 @@ export function useTaskScreen() {
       return typeof update === "function" ? (update as (current: Value) => Value)(current) : update;
     });
   };
-  const loadWorkspaceState = (profileId: string, serverId: string, threadId: string) => loadAuthorizedWorkspaceState(profileId, serverId, threadId, workspaceStorageScope);
+  // Demo workspace state stays in this screen's React state and never reaches profile storage.
+  const loadWorkspaceState = (profileId: string, serverId: string, threadId: string) =>
+    demo
+      ? Promise.resolve<WorkspaceViewState>({ activeTab: "agent" })
+      : loadAuthorizedWorkspaceState(profileId, serverId, threadId, workspaceStorageScope);
   const saveWorkspaceState = (profileId: string, serverId: string, threadId: string, update: Partial<WorkspaceViewState>) => {
+    if (demo) return Promise.resolve<WorkspaceViewState>({ activeTab: "agent", ...update });
     if (!workspaceStorageScope && !demo)
       return Promise.reject(new Error(t("task.workspace_scope_not_confirmed")));
     return saveAuthorizedWorkspaceState(profileId, serverId, threadId, update, workspaceStorageScope, workspaceProfileIdentity);
@@ -118,8 +175,236 @@ export function useTaskScreen() {
   const setTask = guardSetter(setTaskRaw);
 
   const taskScopeMatches = Boolean(task && task.getSnapshot().threadId === params.threadId && profileReady && activeProfile && server && (
-    demo || (task.reconnectContext && task.reconnectContext.profile.deviceId === activeProfile.deviceId && threadListScopeKey(task.reconnectContext.profile, task.reconnectContext.server) === threadListScopeKey(activeProfile, server))
+    demo || (task.reconnectContext &&
+      threadListReadOwner(task.reconnectContext.profile, task.reconnectContext.server) === threadListReadOwner(activeProfile, server) &&
+      (!params.cwd || workspaceThreadScopeIdentity(task.getSnapshot().cwd) === workspaceThreadScopeIdentity(params.cwd)))
   ));
+  const [interactionRouteRevision, setInteractionRouteRevision] = useState(0);
+  useEffect(() => {
+    if (!interactionRouteRequested || !task) return;
+    let subscribed = true;
+    const refresh = () => { if (subscribed) setInteractionRouteRevision((revision) => revision + 1); };
+    const unsubscribeTask = task.subscribe(refresh);
+    const unsubscribeRegistry = taskRuntimeRegistry.subscribe(refresh);
+    refresh();
+    return () => {
+      subscribed = false;
+      unsubscribeTask();
+      unsubscribeRegistry();
+    };
+  }, [interactionRouteRequested, task, owner, isFocused]);
+  useEffect(() => {
+    if (!interactionRouteRequested) return;
+    if (!isFocused) {
+      task?.focusInteraction(null);
+      return;
+    }
+    if (!task || !interactionRouteLocator) {
+      if (task) {
+        task.focusInteraction(null);
+        task.patch({ interactionFocusStatus: "stale", interaction: null });
+      }
+      return;
+    }
+    const markStale = () => {
+      if (task.getSnapshot().interactionFocusStatus === "stale" &&
+          task.getSnapshot().interaction === null) return;
+      task.focusInteraction(null);
+      task.patch({ interactionFocusStatus: "stale", interaction: null });
+    };
+    const markReadOnly = () => {
+      if (task.getSnapshot().interactionFocusStatus === "readOnly" &&
+          task.getSnapshot().interaction === null) return;
+      task.focusInteraction(null);
+      task.patch({ interactionFocusStatus: "readOnly", interaction: null });
+    };
+    const currentContext = task.reconnectContext;
+    const currentServer = appRuntime.servers.find((candidate) => candidate.id === params.serverId);
+    const registered = taskRuntimeRegistry.entries().some((entry) =>
+      entry.profileId === params.profileId && entry.serverId === params.serverId &&
+      entry.threadId === params.threadId && entry.runtime === task,
+    );
+    if (!ownsWorkspace() || demo || !hydrated || !profileReady || !activeProfile ||
+        activeProfile.id !== params.profileId || appRuntime.reauthorizationRequired ||
+        !appRuntime.serversReady || !currentServer || !currentContext || !registered ||
+        task.isDisposed() || currentContext.profile.id !== activeProfile.id ||
+        profileAuthorizationScopeKey(currentContext.profile) !== profileAuthorizationScopeKey(activeProfile) ||
+        currentContext.profile.accessToken !== activeProfile.accessToken ||
+        currentContext.profile.refreshToken !== activeProfile.refreshToken ||
+        interactionServerIdentity(currentContext.server) !== interactionServerIdentity(currentServer) ||
+        interactionServerIdentity(currentServer) !== interactionServerIdentity(server!) ||
+        currentContext.profileActivationEpoch !== runtimeActivationEpoch) {
+      markReadOnly();
+      return;
+    }
+    const authorizationScope = profileAuthorizationScopeKey(activeProfile);
+    const row = taskRuntimeRegistry.interactionInboxRows(authorizationScope).find((candidate) =>
+      candidate.profileId === params.profileId && candidate.serverId === params.serverId &&
+      candidate.threadId === params.threadId && candidate.kind === interactionRouteLocator.kind &&
+      candidate.requestId === interactionRouteLocator.requestId &&
+      candidate.interactionId === interactionRouteLocator.interactionId &&
+      candidate.turnId === interactionRouteLocator.turnId &&
+      candidate.appServerEpoch === interactionRouteLocator.appServerEpoch,
+    );
+    if (!row || row.serverConfigIdentity !== interactionServerIdentity(currentServer)) {
+      markStale();
+      return;
+    }
+    const interaction = task.pendingInteractions.find((candidate) =>
+      matchesInteractionRouteLocator(candidate, interactionRouteLocator, params.threadId),
+    );
+    if (!interaction || !interactionMatchesInboxRow(interaction, row) ||
+        interaction.owner.profileId !== activeProfile.id ||
+        interaction.owner.profileAuthorizationScopeKey !== authorizationScope ||
+        interaction.owner.serverId !== currentServer.id ||
+        interaction.owner.serverConfigIdentity !== interactionServerIdentity(currentServer) ||
+        interaction.owner.runtimeInstanceNonce !== task.runtimeInstanceNonce ||
+        interaction.owner.profileActivationEpoch !== runtimeActivationEpoch ||
+        interaction.owner.originClientGeneration !== task.clientGeneration) {
+      markReadOnly();
+      return;
+    }
+    const selector = selectorForInteraction(interaction);
+    if (!isCurrentInteractionOwner(interaction.owner)) {
+      markReadOnly();
+      return;
+    }
+    const actionable = row.liveActionable && !task.reconnecting && !task.disposed &&
+      task.getSnapshot().connected && task.client?.isTransportOpen() === true &&
+      task.isInteractionActionable(interaction);
+    if (!actionable) {
+      markReadOnly();
+      return;
+    }
+    const snapshot = task.getSnapshot();
+    if (snapshot.interaction && matchesInteractionRouteLocator(
+      snapshot.interaction,
+      interactionRouteLocator,
+      params.threadId,
+    ) && snapshot.interactionFocusStatus === undefined) return;
+    task.focusInteraction(selector);
+  }, [interactionRouteRequested, interactionRouteLocator?.kind, interactionRouteLocator?.requestId,
+    interactionRouteLocator?.interactionId, interactionRouteLocator?.turnId,
+    interactionRouteLocator?.appServerEpoch, interactionRouteRevision, task, owner,
+    isFocused, demo, hydrated, profileReady, activeProfile, appRuntime.reauthorizationRequired,
+    appRuntime.serversReady, appRuntime.servers, server, params.profileId, params.serverId,
+    params.threadId, runtimeActivationEpoch, isCurrentInteractionOwner]);
+  useEffect(() => {
+    if (!interactionRouteRequested || !task) return;
+    return () => { task.focusInteraction(null); };
+  }, [interactionRouteRequested, task, owner]);
+  const interactionRouteSourceAgentFocus = useMemo(() => {
+    if (!interactionRouteRequested || !interactionRouteLocator || !isFocused || demo ||
+        !hydrated || !profileReady || !activeProfile || activeProfile.id !== params.profileId ||
+        appRuntime.reauthorizationRequired || !appRuntime.serversReady || !server) return null;
+    const scope = profileAuthorizationScopeKey(activeProfile);
+    const currentServer = appRuntime.servers.find((candidate) => candidate.id === params.serverId);
+    if (!currentServer || interactionServerIdentity(currentServer) !== interactionServerIdentity(server)) return null;
+    const authorizedProbe = {
+      profileId: activeProfile.id,
+      profileAuthorizationScopeKey: scope,
+      serverId: currentServer.id,
+      serverConfigIdentity: interactionServerIdentity(currentServer),
+      threadId: params.threadId,
+      turnId: null,
+      appServerEpoch: null,
+      runtimeInstanceNonce: task?.runtimeInstanceNonce ?? 0,
+      profileActivationEpoch: runtimeActivationEpoch,
+      originClientGeneration: task?.clientGeneration ?? 0,
+      status: "unknown" as const,
+    };
+    if (!isCurrentInteractionOwner(authorizedProbe)) return null;
+    const row = taskRuntimeRegistry.interactionInboxRows(scope).find((candidate) =>
+      candidate.profileId === params.profileId && candidate.serverId === params.serverId &&
+      candidate.threadId === params.threadId && candidate.kind === interactionRouteLocator.kind &&
+      candidate.requestId === interactionRouteLocator.requestId &&
+      candidate.interactionId === interactionRouteLocator.interactionId &&
+      candidate.turnId === interactionRouteLocator.turnId &&
+      candidate.appServerEpoch === interactionRouteLocator.appServerEpoch &&
+      candidate.serverConfigIdentity === interactionServerIdentity(currentServer),
+    );
+    if (!row?.sourceAgent || row.sourceAgent.parentSessionId !== params.threadId) return null;
+    return {
+      kind: "question" as const,
+      requestId: row.requestId,
+      interactionId: row.interactionId,
+      turnId: row.turnId,
+      appServerEpoch: row.appServerEpoch,
+      agentId: row.sourceAgent.agentId,
+      parentSessionId: row.sourceAgent.parentSessionId,
+      status: row.status,
+      liveActionable: row.liveActionable,
+    };
+  }, [interactionRouteRequested, interactionRouteLocator?.kind, interactionRouteLocator?.requestId,
+    interactionRouteLocator?.interactionId, interactionRouteLocator?.turnId,
+    interactionRouteLocator?.appServerEpoch, interactionRouteRevision, isFocused, demo, hydrated,
+    profileReady, activeProfile, params.profileId, params.serverId, params.threadId,
+    appRuntime.reauthorizationRequired, appRuntime.serversReady, appRuntime.servers,
+    server, runtimeActivationEpoch, task, isCurrentInteractionOwner]);
+  useEffect(() => {
+    const context = task?.reconnectContext;
+    if (!task || task.isDisposed() || demo || !context || !activeProfile || !server ||
+        profileAuthorizationScopeKey(context.profile) !== profileAuthorizationScopeKey(activeProfile) ||
+        context.profile.accessToken !== activeProfile.accessToken ||
+        context.profile.refreshToken !== activeProfile.refreshToken ||
+        interactionServerIdentity(context.server) !== interactionServerIdentity(server)) return;
+    if (task.client?.isTransportOpen() &&
+        !task.client.matchesRetainedAttachmentOwner(activeProfile, server, task.getSnapshot().cwd)) return;
+    const candidateOwner = {
+      profileId: activeProfile.id,
+      profileAuthorizationScopeKey: profileAuthorizationScopeKey(activeProfile),
+      serverId: server.id,
+      serverConfigIdentity: interactionServerIdentity(server),
+      threadId: task.getSnapshot().threadId,
+      turnId: null,
+      appServerEpoch: null,
+      runtimeInstanceNonce: task.runtimeInstanceNonce,
+      profileActivationEpoch: runtimeActivationEpoch,
+      originClientGeneration: task.clientGeneration,
+      status: "unknown" as const,
+    };
+    if (!isCurrentInteractionOwner(candidateOwner)) return;
+    task.reconnectContext = {
+      ...context,
+      profile: activeProfile,
+      server,
+      profileActivationEpoch: runtimeActivationEpoch,
+      isCurrentInteractionOwner,
+    };
+  }, [task, demo, activeProfile, server, runtimeActivationEpoch, isCurrentInteractionOwner]);
+  const [resumePendingEntry, setResumePendingEntry] = useState<{ owner: typeof owner; pending: boolean } | null>(null);
+  const resumePending = resumePendingEntry?.owner === owner && resumePendingEntry.pending;
+  const latestResumePending = useRef({ owner, pending: Boolean(resumePending) });
+  latestResumePending.current = { owner, pending: Boolean(resumePending) };
+  const recoveryAttempt = useRef<{ owner: typeof owner; controller: AbortController } | null>(null);
+  const latestWorkspacePresence = useRef<{ owner: typeof owner; observation: WorkspacePresenceObservation | null }>({ owner, observation: null });
+  const exitToConfirmedAbsence = useCallback(() => {
+    const registered = taskRuntimeRegistry.get(params.profileId, params.serverId, params.threadId);
+    if (!ownsWorkspace() || !isFocused || demo || !profileReady || appRuntime.reauthorizationRequired ||
+        !activeProfile || activeProfile.id !== params.profileId || !server || server.id !== params.serverId ||
+        !params.cwd || !workspaceStorageScope || (latestResumePending.current.owner === owner && latestResumePending.current.pending) || (task && !task.isDisposed()) ||
+        (registered && !registered.isDisposed()) || absenceNavigationOwner.current === owner) return false;
+    absenceNavigationOwner.current = owner;
+    router.replace({ pathname: v3 ? "/new" : "/sessions", params: { profileId: params.profileId, serverId: params.serverId,
+      cwd: params.cwd, notice: "confirmed-thread-absent" } } as never);
+    return true;
+  }, [owner, isFocused, demo, profileReady, appRuntime.reauthorizationRequired, activeProfile, server,
+    params.profileId, params.serverId, params.threadId, params.cwd, workspaceStorageScope, task, router, resumePending, v3]);
+  const exitToConfirmedWorkspaceAbsence = useCallback(() => {
+    const registered = taskRuntimeRegistry.get(params.profileId, params.serverId, params.threadId);
+    if (!ownsWorkspace() || !isFocused || demo || !profileReady || appRuntime.reauthorizationRequired ||
+        !activeProfile || activeProfile.id !== params.profileId || !server || server.id !== params.serverId ||
+        !params.cwd || !workspaceStorageScope || (latestResumePending.current.owner === owner && latestResumePending.current.pending) || (task && !task.isDisposed()) ||
+        (registered && !registered.isDisposed()) || absenceNavigationOwner.current === owner) return false;
+    const workspaceAbsenceHandoff = createWorkspaceAbsenceHandoff({ profile: activeProfile, server, cwd: params.cwd,
+      threadId: params.threadId, observation: latestWorkspacePresence.current.owner === owner ? latestWorkspacePresence.current.observation : null,
+      isCurrent: ownsWorkspace });
+    absenceNavigationOwner.current = owner;
+    router.replace({ pathname: v3 ? "/new" : "/h/[profileId]", params: { profileId: params.profileId, ...(v3 ? { serverId: params.serverId } : {}), notice: "confirmed-workspace-absent",
+      ...(workspaceAbsenceHandoff ? { workspaceAbsenceHandoff } : {}) } } as never);
+    return true;
+  }, [owner, isFocused, demo, profileReady, appRuntime.reauthorizationRequired, activeProfile, server,
+    params.profileId, params.serverId, params.threadId, params.cwd, workspaceStorageScope, task, router, resumePending, v3]);
   useEffect(() => {
     if (!ownsWorkspace() || !task || !profileReady || !server || taskScopeMatches) return;
     if (taskRuntimeRegistry.get(params.profileId, params.serverId, params.threadId) === task)
@@ -166,6 +451,25 @@ export function useTaskScreen() {
   const [loadErrorEntry, setLoadErrorRaw] = useState<{ owner: typeof owner; error: string | null } | null>(null);
   const loadError = loadErrorEntry?.owner === owner ? loadErrorEntry.error : null;
   const setLoadError = (error: string | null) => guardSetter(setLoadErrorRaw)({ owner, error });
+  const [threadPresenceEntry, setThreadPresenceEntry] = useState<{ owner: typeof owner; observation: ThreadPresenceObservation } | null>(null);
+  const threadPresence = threadPresenceEntry?.owner === owner ? threadPresenceEntry.observation : null;
+  const [workspacePresenceEntry, setWorkspacePresenceEntry] = useState<{ owner: typeof owner; observation: WorkspacePresenceObservation } | null>(null);
+  const workspacePresence = workspacePresenceEntry?.owner === owner ? workspacePresenceEntry.observation : null;
+  latestWorkspacePresence.current = { owner, observation: workspacePresence };
+  const [resumeRevision, setResumeRevision] = useState(0);
+  const retryTaskRecovery = () => {
+    if (!ownsWorkspace() || resumePending || appRuntime.reauthorizationRequired) return;
+    setLoadError(null);
+    guardSetter(setThreadPresenceEntry)(null);
+    guardSetter(setWorkspacePresenceEntry)(null);
+    if (server) {
+      recoveryAttempt.current?.controller.abort();
+      recoveryAttempt.current = null;
+      latestResumePending.current = { owner, pending: true };
+      guardSetter(setResumePendingEntry)({ owner, pending: true });
+      setResumeRevision(revision => revision + 1);
+    } else void refreshAppRuntime().catch(() => {});
+  };
 
   const [panels, setPanelsRaw] = useState<WorkspacePanelState[]>(() =>
     defaultWorkspacePanels(),
@@ -376,6 +680,7 @@ export function useTaskScreen() {
     void loadWorkspaceState(params.profileId, params.serverId, params.threadId)
       .then((stored) => {
         if (cancelled || !ownsWorkspace()) return;
+        workspaceReadiness.resolve(stored);
         const restoredPanels = defaultWorkspacePanels(stored);
         const restoredPanelId = initialPanelId(stored, restoredPanels);
         setWorkspaceEntry(current => cancelled || !ownsWorkspace() ? current : { owner, state: stored, hydrated: true, error: null });
@@ -433,7 +738,39 @@ export function useTaskScreen() {
         update,
       ).then(() => undefined);
     },
-    [params.profileId, params.serverId, params.threadId, workspaceStorageScope, owner, workspaceStateHydrated],
+    [params.profileId, params.serverId, params.threadId, workspaceStorageScope, owner, workspaceStateHydrated, demo],
+  );
+
+  const persistWorkspaceRecentFile = useCallback(
+    async (root: string, path: string): Promise<string[]> => {
+      if (!ownsWorkspace() || !workspaceStateHydrated)
+        throw new Error(t("task.workspace_not_restored_or_changed"));
+      if (demo) {
+        const recentFiles = rememberWorkspaceFile(root, workspaceState.recentFiles ?? [], path);
+        setWorkspaceState((current) => ({
+          ...current,
+          recentFiles: rememberWorkspaceFile(root, current.recentFiles ?? [], path),
+        }));
+        return recentFiles;
+      }
+      if (!workspaceStorageScope)
+        throw new Error(t("task.workspace_scope_not_confirmed"));
+      const saved = await saveAuthorizedWorkspaceRecentFile(
+        params.profileId,
+        params.serverId,
+        params.threadId,
+        root,
+        path,
+        workspaceStorageScope,
+        workspaceProfileIdentity,
+      );
+      if (!ownsWorkspace())
+        throw new Error(t("task.workspace_not_restored_or_changed"));
+      const recentFiles = saved.recentFiles ?? [];
+      setWorkspaceState((current) => ({ ...current, recentFiles }));
+      return recentFiles;
+    },
+    [params.profileId, params.serverId, params.threadId, workspaceStorageScope, workspaceProfileIdentity, owner, workspaceStateHydrated, demo, workspaceState.recentFiles],
   );
 
   const persistComposerDraft = useCallback(
@@ -447,7 +784,7 @@ export function useTaskScreen() {
       throw new Error(t("task.workspace_not_restored_or_changed"));
     await saveWorkspaceState(params.profileId, params.serverId, params.threadId, value);
     setWorkspaceState((current) => ({ ...current, ...value }));
-  }, [params.profileId, params.serverId, params.threadId, workspaceStorageScope, owner, workspaceStateHydrated]);
+  }, [params.profileId, params.serverId, params.threadId, workspaceStorageScope, owner, workspaceStateHydrated, demo]);
 
   const persistQueuedMessages = useCallback(
     (queuedMessages: WorkspaceViewState["queuedMessages"]) =>
@@ -637,7 +974,7 @@ export function useTaskScreen() {
         };
         next = [...next, panel];
       }
-      const title = path.split("/").at(-1) || t("task.files");
+      const title = workspacePathName(path) || t("task.files");
       next = next.map((candidate) =>
         candidate.id === panel!.id ? { ...candidate, title } : candidate,
       );
@@ -675,13 +1012,13 @@ export function useTaskScreen() {
       workspaceStorageScope,
       owner,
       workspaceStateHydrated,
+      demo,
     ],
   );
 
   useEffect(() => {
     if (
       task ||
-      !workspaceStateHydrated ||
       !profileReady ||
       appRuntime.reauthorizationRequired ||
       !activeProfile ||
@@ -689,8 +1026,14 @@ export function useTaskScreen() {
     )
       return;
     const capturedAuthorizationScope = profileAuthorizationScopeKey(activeProfile);
+    guardSetter(setResumePendingEntry)({ owner, pending: true });
     let cancelled = false;
     let creationClaim: TaskCreationClaim | undefined;
+    const recoveryController = new AbortController();
+    const attempt = { owner, controller: recoveryController };
+    recoveryAttempt.current = attempt;
+    latestResumePending.current = { owner, pending: true };
+    let workspaceRecoveryEligible = false;
     const load = async () => {
       try {
         const recoveryCwd = params.cwd;
@@ -698,16 +1041,38 @@ export function useTaskScreen() {
         if (cancelled || !ownsWorkspace()) return;
         if (linked && linked.value.threadId !== params.threadId)
           throw new Error(t("task.route_original_handoff_mismatch"));
+        if (linked && params.cwd && workspaceThreadScopeIdentity(params.cwd) !==
+            workspaceThreadScopeIdentity(linked.value.linked!.input.cwd))
+          throw new Error(t("task.workspace_scope_not_confirmed"));
+        if (linked || demo) {
+          const preferences = await workspaceReadiness.promise;
+          if (!preferences || cancelled || !ownsWorkspace()) return;
+        }
+        workspaceRecoveryEligible = !linked && !demo;
         const resumed = linked ? await (() => {
-          creationClaim = TaskRuntime.claimCreation({ ...linked.value.linked!.input, profile: activeProfile, server, workspaceHandoff: linked.handle, onSessionExpired: () => markGatewayReauthorizationRequired(activeProfile.id, capturedAuthorizationScope) }, taskRuntimeRegistry);
+          creationClaim = TaskRuntime.claimCreation({ ...linked.value.linked!.input, profile: activeProfile, server, workspaceHandoff: linked.handle,
+            profileActivationEpoch: runtimeActivationEpoch, isCurrentInteractionOwner,
+            onSessionExpired: () => markGatewayReauthorizationRequired(activeProfile.id, capturedAuthorizationScope) }, taskRuntimeRegistry);
           return creationClaim.result;
         })() : demo ? TaskRuntime.demo(params.threadId) : await TaskRuntime.resume({
           profile: activeProfile, server, threadId: params.threadId, cwd: params.cwd, title: params.title,
-          reasoningEffort: workspaceState.reasoningEffort, onSessionExpired: () => markGatewayReauthorizationRequired(activeProfile.id, capturedAuthorizationScope),
+          deferConfiguration: true, onSessionExpired: () => markGatewayReauthorizationRequired(activeProfile.id, capturedAuthorizationScope),
+          profileActivationEpoch: runtimeActivationEpoch, isCurrentInteractionOwner,
+          presenceOwnerToken: owner,
+          signal: recoveryController.signal,
+          isCurrentOwner: () => !cancelled && ownsWorkspace(),
+          onThreadPresence: observation => {
+            if (!cancelled && ownsWorkspace()) guardSetter(setThreadPresenceEntry)({ owner, observation });
+          },
         });
         if (cancelled || !ownsWorkspace()) {
           if (!creationClaim) resumed.close();
           return;
+        }
+        if (!demo && !creationClaim && params.cwd &&
+            workspaceThreadScopeIdentity(resumed.getSnapshot().cwd) !== workspaceThreadScopeIdentity(params.cwd)) {
+          resumed.close();
+          throw new Error(t("task.workspace_scope_not_confirmed"));
         }
         if (creationClaim) {
           if (!creationClaim.adopt(taskRuntimeRegistry, activeProfile.id, server.id))
@@ -716,12 +1081,28 @@ export function useTaskScreen() {
         else taskRuntimeRegistry.put(activeProfile.id, server.id, resumed);
         setTask(resumed);
       } catch (value) {
-        if (!cancelled && ownsWorkspace()) setLoadError(taskOpenError(value));
-      } finally { creationClaim?.release(); }
+        if (!cancelled && ownsWorkspace()) {
+          setLoadError(taskOpenError(value));
+          // Successful resume proves the workspace already. This advisory request is failure-only.
+          if (workspaceRecoveryEligible && params.cwd && !appRuntime.reauthorizationRequired) {
+            void probeWorkspacePresence({ profile: activeProfile, server, cwd: params.cwd, threadId: params.threadId,
+              isCurrentOwner: () => !cancelled && ownsWorkspace() && recoveryAttempt.current === attempt, signal: recoveryController.signal }).then(observation => {
+              if (observation && !cancelled && ownsWorkspace()) guardSetter(setWorkspacePresenceEntry)({ owner, observation });
+            }).catch(() => {});
+          }
+        }
+      } finally {
+        creationClaim?.release();
+        if (!cancelled && ownsWorkspace() && recoveryAttempt.current === attempt) {
+          latestResumePending.current = { owner, pending: false };
+          guardSetter(setResumePendingEntry)({ owner, pending: false });
+        }
+      }
     };
     void load();
     return () => {
-      cancelled = true; creationClaim?.release();
+      cancelled = true; recoveryController.abort(); creationClaim?.release();
+      if (recoveryAttempt.current === attempt) recoveryAttempt.current = null;
     };
   }, [
     activeProfile,
@@ -734,11 +1115,17 @@ export function useTaskScreen() {
     profileReady,
     server,
     task,
-    workspaceState.reasoningEffort,
-    workspaceStateHydrated,
     appRuntime.reauthorizationRequired,
-    owner,
+    runtimeActivationEpoch,
+    isCurrentInteractionOwner,
+    owner, resumeRevision,
   ]);
+
+  useEffect(() => {
+    if (!task || !taskScopeMatches || !workspaceStateHydrated || !ownsWorkspace() ||
+        task.workspaceConfiguration === undefined) return;
+    void task.restoreWorkspaceConfiguration(workspaceState.reasoningEffort, ownsWorkspace);
+  }, [owner, task, taskScopeMatches, workspaceStateHydrated, workspaceState.reasoningEffort]);
 
   const loadDrawerServer = useCallback((serverId: string, more = false): Promise<void> => {
     const session = drawerSession.current;
@@ -804,8 +1191,18 @@ export function useTaskScreen() {
         const scope = threadListScopeKey(session.profile, workspaceServer, { archived: false });
         if (!session.pagers.has(scope)) session.pagers.set(scope, { pager: new ThreadListPager(session.profile, workspaceServer, { archived: false }, "background"), serverId });
       }
+      // Discovery can add scopes after the fast current-workspace job captured its pager list.
+      // Wait for that owned job, then load the newly discovered scopes in a fresh pass.
+      while (session.jobs.has(serverId)) {
+        await session.jobs.get(serverId);
+        if (!ownsWorkspace() || drawerSession.current !== session || session.controller.signal.aborted) return;
+      }
+      if (!ownsWorkspace() || drawerSession.current !== session || session.controller.signal.aborted) return;
       await loadDrawerServer(serverId);
-    })().finally(() => session.jobs.delete(key));
+    })().catch(error => {
+      if (ownsWorkspace() && drawerSession.current === session && !session.controller.signal.aborted)
+        setDrawerWorkspaceErrors(value => ({ ...value, [serverId]: error instanceof Error ? error.message : String(error) }));
+    }).finally(() => session.jobs.delete(key));
     session.jobs.set(key, job);
     return job;
   }, [appRuntime.servers, loadDrawerServer, owner]);
@@ -820,10 +1217,12 @@ export function useTaskScreen() {
     drawerSession.current = session;
     setDrawerThreadErrors({});
     void loadDrawerServer(server.id);
+    const targets = [server, ...appRuntime.servers.filter(item => item.id !== server.id)];
+    void mapThreadListScopes(targets, item => loadDrawerProjects(item.id));
     return () => {
       stopDrawerSession(drawerSession, session);
     };
-  }, [drawerOpen, activeProfile, profileReady, server, demo, drawerReloadRevision, loadDrawerServer, appRuntime.reauthorizationRequired]);
+  }, [drawerOpen, activeProfile, profileReady, server, demo, drawerReloadRevision, loadDrawerServer, loadDrawerProjects, appRuntime.reauthorizationRequired]);
 
   useEffect(() => {
     if (demo || !activeProfile) return;
@@ -898,11 +1297,15 @@ export function useTaskScreen() {
     appRuntime,
     demo,
     goBack,
+    exitToConfirmedAbsence,
+    exitToConfirmedWorkspaceAbsence,
     ownsWorkspace,
+    workspaceOwnerKey: owner.key,
     profileReady,
     server,
     task: taskScopeMatches ? task : null,
     loadError,
+    resumePending, retryTaskRecovery, threadPresence, workspacePresence,
     panels,
     panelsRef,
     activePanelId,
@@ -937,7 +1340,10 @@ export function useTaskScreen() {
     workspaceStateHydrated,
     workspaceStateError,
     retryWorkspaceState,
+    interactionRouteSourceAgentFocus,
     selectPanel,
+    persistWorkspaceState,
+    persistWorkspaceRecentFile,
     persistComposerDraft,
     persistQueuedMessages,
     persistQueueCommit,

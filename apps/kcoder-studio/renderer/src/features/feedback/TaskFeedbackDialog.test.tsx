@@ -1,3 +1,4 @@
+import {registerBackgroundIssue} from '@/kcoder/backgroundIssues'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import { TaskFeedbackDialog } from './TaskFeedbackDialog'
@@ -6,7 +7,7 @@ const { invokeMock } = vi.hoisted(() => ({
   invokeMock: vi.fn(),
 }))
 
-vi.mock('@tauri-apps/api/core', () => ({ invoke: invokeMock }))
+vi.mock('@/lib/runtime-commands', () => ({ invoke: invokeMock }))
 vi.mock('@/hooks/useTranslation', () => ({
   useTranslation: () => ({
     t: (key: string) =>
@@ -36,7 +37,7 @@ describe('TaskFeedbackDialog', () => {
 
     expect(screen.getByText('运行日志')).toBeInTheDocument()
     expect(screen.queryByText('Executor 日志')).not.toBeInTheDocument()
-    expect(screen.queryByText('Tauri 日志')).not.toBeInTheDocument()
+    expect(screen.queryByText('Gateway 日志')).not.toBeInTheDocument()
     expect(screen.getByTestId('task-feedback-runtimeLogs-checkbox')).toBeChecked()
   })
 
@@ -109,4 +110,22 @@ describe('TaskFeedbackDialog', () => {
       })
     )
   })
+})
+
+test('background diagnostics export only safe kind/code when task information is selected',async()=>{
+ const target={deviceId:'owned',taskId:'owned-task',workspacePath:'/owned'}
+ const dispose=registerBackgroundIssue({kind:'imported_history_check',code:'IMPORTED_HISTORY_READ_FAILED',target,isCurrent:()=>true,retry:vi.fn(),dismiss:vi.fn()})
+ invokeMock.mockResolvedValue({reportId:'report',path:'/owned/report'})
+ const view=render(<TaskFeedbackDialog open target={target} getTaskContext={async()=>({taskId:'owned-task'})} onClose={vi.fn()}/>)
+ try {
+  fireEvent.click(screen.getByTestId('task-feedback-screenshot-checkbox'))
+  fireEvent.click(screen.getByTestId('task-feedback-export-button'))
+  await waitFor(()=>expect(invokeMock).toHaveBeenCalledWith('export_feedback_bundle',expect.objectContaining({request:expect.objectContaining({taskContext:{taskId:'owned-task',backgroundIssues:[{kind:'imported_history_check',code:'IMPORTED_HISTORY_READ_FAILED'}]}})})))
+  view.unmount();invokeMock.mockClear()
+  render(<TaskFeedbackDialog open target={target} getTaskContext={vi.fn()} onClose={vi.fn()}/>)
+  fireEvent.click(screen.getByTestId('task-feedback-taskInfo-checkbox'))
+  fireEvent.click(screen.getByTestId('task-feedback-screenshot-checkbox'))
+  fireEvent.click(screen.getByTestId('task-feedback-export-button'))
+  await waitFor(()=>expect(invokeMock).toHaveBeenCalledWith('export_feedback_bundle',expect.objectContaining({request:expect.objectContaining({taskContext:null,includeTaskInfo:false})})))
+ }finally{dispose()}
 })

@@ -42,7 +42,7 @@ export function platformShell(platform = process.platform, env = process.env) {
   }
   return {
     file: env.SHELL || 'bash',
-    commandArgs: ['-lc'],
+    commandArgs: [env.KCODER_TUI_LAB_NON_LOGIN_SHELL === '1' ? '-c' : '-lc'],
   };
 }
 

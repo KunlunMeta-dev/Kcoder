@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   closestCenter,
   DndContext,
@@ -11,10 +11,19 @@ import {
 } from '@dnd-kit/core'
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { CornerDownRight, GripVertical, MoreHorizontal, Pencil, Trash2, Zap } from 'lucide-react'
+import {
+  CornerDownRight,
+  GripVertical,
+  MessagesSquare,
+  MoreHorizontal,
+  Pencil,
+  Trash2,
+  Zap,
+} from 'lucide-react'
 import { ActionMenu } from '@/components/common/ActionMenu'
 import { useTranslation } from '@/hooks/useTranslation'
 import type { GuidanceWorkbenchMessage, QueuedWorkbenchMessage } from '@/types/workbench'
+import { ComposerStatusItem } from './composer/ComposerStatusRegion'
 
 interface ConversationQueuePanelProps {
   queuedMessages: QueuedWorkbenchMessage[]
@@ -27,6 +36,7 @@ interface ConversationQueuePanelProps {
   queuePaused?: boolean
   onResumeQueue?: () => void
   onCancelGuidanceMessage?: (id: string) => void
+  presentation?: 'detail' | 'embedded'
 }
 
 export function ConversationQueuePanel({
@@ -40,9 +50,31 @@ export function ConversationQueuePanel({
   queuePaused = false,
   onResumeQueue,
   onCancelGuidanceMessage,
+  presentation,
 }: ConversationQueuePanelProps) {
   const { t } = useTranslation('chat')
   const [activeMessageId, setActiveMessageId] = useState<string | null>(null)
+  const [showSending, setShowSending] = useState(false)
+  const hasMessages = queuedMessages.length > 0 || guidanceMessages.length > 0
+  const showImmediately =
+    (queuePaused && queuedMessages.length > 0) ||
+    queuedMessages.some(message => message.status !== 'sending') ||
+    guidanceMessages.some(message => message.status !== 'sending')
+  const messageKey = JSON.stringify([
+    queuedMessages.map(message => message.id),
+    guidanceMessages.map(message => message.id),
+  ])
+  // Keep a visible batch open while sending; an empty batch resets the delay.
+  if ((showImmediately && !showSending) || (!hasMessages && showSending)) {
+    setShowSending(hasMessages)
+  }
+  useEffect(() => {
+    if (!hasMessages || showImmediately || showSending) return
+    // Dispatch receipts often arrive before a queue is useful to the user.
+    // Delay only a new sending-only panel; real queues and errors stay immediate.
+    const timer = window.setTimeout(() => setShowSending(true), 200)
+    return () => window.clearTimeout(timer)
+  }, [hasMessages, showImmediately, showSending, messageKey])
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
   const queuedMessageIds = useMemo(
     () => queuedMessages.filter(message => message.status === 'queued').map(message => message.id),
@@ -57,8 +89,23 @@ export function ConversationQueuePanel({
     [queuedMessages]
   )
   const activeMessage = queuedMessages.find(message => message.id === activeMessageId) ?? null
+  const failedCount = [...queuedMessages, ...guidanceMessages].filter(
+    message => message.status === 'failed' || message.status === 'expired'
+  ).length
+  const needsAttention = queuePaused || failedCount > 0
+  const queueSummary = [
+    ...(queuePaused ? [t('queue.paused')] : []),
+    ...(failedCount > 0
+      ? [
+          t('composer_status.queue_attention', {
+            count: failedCount,
+            defaultValue: '{{count}} message(s) failed or expired',
+          }),
+        ]
+      : []),
+  ].join(' · ')
 
-  if (queuedMessages.length === 0 && guidanceMessages.length === 0) {
+  if (!hasMessages || (!showImmediately && !showSending)) {
     return null
   }
 
@@ -73,10 +120,14 @@ export function ConversationQueuePanel({
     setActiveMessageId(null)
   }
 
-  return (
+  const panel = (
     <div
       data-testid="conversation-queue-panel"
-      className="mb-1 rounded-[18px] border border-border bg-base px-2 py-1 shadow-[0_8px_24px_rgba(15,23,42,0.05)]"
+      className={
+        presentation
+          ? 'min-w-0'
+          : 'mb-1 rounded-[18px] border border-border bg-base px-2 py-1 shadow-[0_8px_24px_rgba(15,23,42,0.05)]'
+      }
     >
       <DndContext
         sensors={sensors}
@@ -136,6 +187,25 @@ export function ConversationQueuePanel({
       </DndContext>
     </div>
   )
+
+  if (presentation === 'detail') return panel
+  if (presentation === 'embedded') {
+    return (
+      <ComposerStatusItem
+        id="queue"
+        title={t('composer_status.queue', 'Message queue')}
+        summary={queueSummary || undefined}
+        count={queuedMessages.length + guidanceMessages.length}
+        icon={MessagesSquare}
+        attention={needsAttention}
+        order={30}
+      >
+        {panel}
+      </ComposerStatusItem>
+    )
+  }
+
+  return panel
 }
 
 function queuedMessageDisplayPriority(status: QueuedWorkbenchMessage['status']): number {

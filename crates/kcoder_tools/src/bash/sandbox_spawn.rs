@@ -4,6 +4,7 @@ use super::*;
 
 #[derive(Default)]
 pub(super) struct ShellSpawnPolicy<'a> {
+    pub(super) owned_command_program: Option<&'a Path>,
     pub(super) snapshot_path: Option<&'a Path>,
     /// Trusted temporary directory used by a regular sandboxed shell when deny_read covers the original snapshot.
     pub(super) snapshot_copy_root: Option<&'a Path>,
@@ -22,6 +23,7 @@ impl RunningShell {
         policy: ShellSpawnPolicy<'_>,
     ) -> Result<Self, ToolError> {
         let ShellSpawnPolicy {
+            owned_command_program,
             snapshot_path,
             snapshot_copy_root,
             isolation_root,
@@ -42,7 +44,29 @@ impl RunningShell {
         let isolation_environment = isolation_root
             .map(|root| verifier_isolation_environment(root, isolation_workspace_root))
             .transpose()?;
-        let mut command_builder = Command::new(&invocation.program);
+        let mut command_builder =
+            Command::new(owned_command_program.unwrap_or_else(|| Path::new(&invocation.program)));
+        #[cfg(target_os = "linux")]
+        if let Some(owner) = owned_command_program {
+            if !owner.is_absolute() {
+                return Err(ToolError::Execution(
+                    "Owned command executable must be absolute".into(),
+                ));
+            }
+            let target = which::which(&invocation.program).map_err(|_| {
+                ToolError::Execution("Cannot resolve the owned shell executable".into())
+            })?;
+            command_builder
+                .arg(kcoder_process_supervisor::linux_stdio::INTERNAL_COMMAND_OWNER_V1)
+                .arg(std::process::id().to_string())
+                .arg(target);
+        }
+        #[cfg(not(target_os = "linux"))]
+        if owned_command_program.is_some() {
+            return Err(ToolError::Execution(
+                "Owned command executable is unavailable on this platform".into(),
+            ));
+        }
         command_builder
             .args(&invocation.args)
             .env("SHELL", &invocation.program)
@@ -154,7 +178,30 @@ impl RunningShell {
         let pid = child.id().ok_or_else(|| {
             ToolError::Execution("spawned shell did not expose a process id".to_string())
         })?;
-        let terminator = Arc::new(ProcessGroupTerminator::new(pid, process_scope));
+        let terminator = ProcessGroupTerminator::new(pid, process_scope);
+        #[cfg(target_os = "linux")]
+        let mut terminator = terminator;
+        #[cfg(target_os = "linux")]
+        if owned_command_program.is_some() {
+            terminator.owner = Some(
+                match kcoder_process_supervisor::linux_stdio::StdioOwnerGuard::for_child(pid) {
+                    Ok(owner) => owner,
+                    Err(_) => {
+                        // Fresh unreaped child identity remains reserved by `child`.
+                        for signal in [libc::SIGTERM, libc::SIGCONT] {
+                            unsafe {
+                                libc::kill(pid as i32, signal);
+                            }
+                        }
+                        tokio::spawn(async move {
+                            let _ = child.wait().await;
+                        });
+                        return Err(ToolError::Execution("Cannot bind owned command identity; cleanup requested but not confirmed".into()));
+                    }
+                },
+            );
+        }
+        let terminator = Arc::new(terminator);
         let stdout = child
             .stdout
             .take()

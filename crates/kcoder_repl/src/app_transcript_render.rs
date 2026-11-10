@@ -42,6 +42,9 @@ impl ReplApp {
                     absolute_idx,
                     message,
                 } => {
+                    let native_source =
+                        self.resolve_native_web_source(message, tool_transcript_expanded);
+                    let message = native_source.as_ref().unwrap_or(message);
                     let assistant_continuation =
                         assistant_message_is_continuation(&self.messages, absolute_idx);
                     let lines = if let Some(divider) = render_turn_divider_message(message, width) {
@@ -183,6 +186,9 @@ impl ReplApp {
                     absolute_idx,
                     message,
                 } => {
+                    let native_source =
+                        self.resolve_native_web_source(message, tool_transcript_expanded);
+                    let message = native_source.as_ref().unwrap_or(message);
                     let assistant_continuation =
                         assistant_message_is_continuation(&self.messages, absolute_idx);
                     let lines = if let Some(divider) = render_turn_divider_message(message, width) {
@@ -303,6 +309,7 @@ impl ReplApp {
             .as_ref()
             .map(|active| active.display_messages(self.effective_active_tools_expanded()))
             .unwrap_or_default();
+        messages.extend(self.pending_web_source_slots.iter().cloned());
         if !self.streaming_thinking_status.trim().is_empty() {
             messages.push(DisplayMessage {
                 role: MessageRole::System,
@@ -361,6 +368,9 @@ impl ReplApp {
                     absolute_idx,
                     message,
                 } => {
+                    let native_source =
+                        self.resolve_native_web_source(message, tool_transcript_expanded);
+                    let message = native_source.as_ref().unwrap_or(message);
                     let is_active = active_from.is_some_and(|start| absolute_idx >= start);
                     if let Some(mut lines) = render_panel_message(
                         &message.text,
@@ -466,11 +476,13 @@ impl ReplApp {
                     }
                 }
                 TranscriptRenderItem::ToolSummary {
-                    absolute_idx,
+                    last_running_idx,
                     message,
+                    ..
                 } => {
                     let animate = self.spinner.is_running()
-                        && active_from.is_some_and(|start| absolute_idx >= start);
+                        && last_running_idx
+                            .is_some_and(|index| active_from.is_some_and(|start| index >= start));
                     if animate {
                         let indicator =
                             motion::tool_summary_frame(self.spinner.snapshot().phase_elapsed);

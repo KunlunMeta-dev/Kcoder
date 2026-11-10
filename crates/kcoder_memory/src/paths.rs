@@ -31,6 +31,7 @@ pub fn project_memory_dir(cwd: impl AsRef<Path>, base: impl AsRef<Path>) -> Resu
         // original unhashed key. Propagate failures so callers never switch
         // to an empty new directory while the old store remains stranded.
         for old_key in [
+            unbounded_project_key(cwd.as_ref()),
             previous_project_key_for_path(cwd.as_ref()),
             legacy_project_key_for_path(cwd.as_ref()),
         ] {
@@ -87,11 +88,32 @@ pub fn previous_project_key_for_path(cwd: impl AsRef<Path>) -> String {
 fn project_key(root: &Path) -> String {
     let abs = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
     let s = abs.to_string_lossy();
-    let sanitized = sanitize_project_path(&s);
+    let mut sanitized = sanitize_project_path(&s);
+    // Keep each component below native byte and UTF-16 limits without changing
+    // the full-path identity or splitting a UTF-8 scalar.
+    if sanitized.len() > 200 {
+        let mut end = 200;
+        while !sanitized.is_char_boundary(end) {
+            end -= 1;
+        }
+        sanitized.truncate(end);
+    }
     // The sanitized form folds distinct paths together ("/foo bar" and
     // "/foo/bar" both become "_foo_bar"); a stable hash suffix keeps project
     // stores separate.
     format!("{}-{:016x}", sanitized, fnv1a_64(s.as_bytes()))
+}
+
+pub(crate) fn unbounded_project_key(cwd: &Path) -> String {
+    let root = git_root(cwd)
+        .or_else(|_| cwd.canonicalize())
+        .unwrap_or_else(|_| cwd.to_path_buf());
+    let text = root.to_string_lossy();
+    format!(
+        "{}-{:016x}",
+        sanitize_project_path(&text),
+        fnv1a_64(text.as_bytes())
+    )
 }
 
 fn previous_project_key(root: &Path) -> String {
@@ -182,25 +204,30 @@ fn git_root_command(cwd: &Path, git_path: &Path) -> Command {
         .env("PATH", "/usr/local/bin:/usr/bin:/bin")
         .env("TERM", "xterm-256color");
     #[cfg(windows)]
-    for name in [
-        "SystemRoot",
-        "WINDIR",
-        "ComSpec",
-        "PATHEXT",
-        "PATH",
-        "TEMP",
-        "TMP",
-        "USERPROFILE",
-        "HOME",
-        "APPDATA",
-        "LOCALAPPDATA",
-        "ProgramData",
-        "ProgramFiles",
-        "ProgramFiles(x86)",
-        "ProgramW6432",
-    ] {
-        if let Some(value) = std::env::var_os(name) {
-            command.env(name, value);
+    {
+        use std::os::windows::process::CommandExt;
+        // This Git query is non-interactive and must not create a console window.
+        command.creation_flags(0x0800_0000);
+        for name in [
+            "SystemRoot",
+            "WINDIR",
+            "ComSpec",
+            "PATHEXT",
+            "PATH",
+            "TEMP",
+            "TMP",
+            "USERPROFILE",
+            "HOME",
+            "APPDATA",
+            "LOCALAPPDATA",
+            "ProgramData",
+            "ProgramFiles",
+            "ProgramFiles(x86)",
+            "ProgramW6432",
+        ] {
+            if let Some(value) = std::env::var_os(name) {
+                command.env(name, value);
+            }
         }
     }
     command
@@ -210,6 +237,42 @@ fn git_root_command(cwd: &Path, git_path: &Path) -> Command {
 mod tests {
     use super::*;
     use tempfile::TempDir;
+
+    #[test]
+    fn long_unicode_project_paths_create_memory_and_retain_full_path_identity() {
+        let temp = TempDir::new().unwrap();
+        let cwd = temp.path().join("项目".repeat(20)).join("目录".repeat(20));
+        std::fs::create_dir_all(&cwd).unwrap();
+        let key = project_key(&cwd);
+        assert!(key.len() <= 217);
+        assert_ne!(key, project_key(&cwd.join("another")));
+        let memory = project_memory_dir(&cwd, temp.path().join("memory-base")).unwrap();
+        std::fs::create_dir_all(&memory).unwrap();
+        std::fs::write(memory.join("note.md"), "retained").unwrap();
+        assert_eq!(
+            std::fs::read_to_string(memory.join("note.md")).unwrap(),
+            "retained"
+        );
+    }
+
+    #[test]
+    fn bounded_project_key_migrates_existing_64_bit_key() {
+        let temp = TempDir::new().unwrap();
+        let cwd = temp.path().join("x".repeat(175));
+        std::fs::create_dir_all(&cwd).unwrap();
+        let base = temp.path().join("memory-base");
+        let old = base
+            .join("projects")
+            .join(unbounded_project_key(&cwd))
+            .join("memory");
+        std::fs::create_dir_all(&old).unwrap();
+        std::fs::write(old.join("note.md"), "previous").unwrap();
+        let memory = project_memory_dir(&cwd, &base).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(memory.join("note.md")).unwrap(),
+            "previous"
+        );
+    }
 
     #[test]
     fn project_key_normalizes_path() {

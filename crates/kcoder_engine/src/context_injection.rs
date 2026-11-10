@@ -131,13 +131,17 @@ impl QueryEngine {
         if paths.is_empty() {
             return;
         }
-        let luna_mode = self.is_luna_mode_active();
+        let blocked = self.blocked_skill_names_for_request();
         let matching_skills: Vec<String> = {
             let registry = recover_read_lock(&self.skill_registry, "skill_registry");
             registry
                 .active_for_paths(paths)
                 .into_iter()
-                .filter(|skill| !luna_mode || !is_spec_workflow_skill_name(&skill.name))
+                .filter(|skill| {
+                    !blocked.iter().any(|name| {
+                        crate::skill_visibility_runtime::skill_name_matches(name, &skill.name)
+                    })
+                })
                 .map(|skill| skill.name.clone())
                 .collect()
         };
@@ -155,7 +159,9 @@ impl QueryEngine {
     /// turns the bundled root skill from a passive file into runtime context
     /// before the model decides how to act.
     pub fn activate_superpowers_root_skill(&self) -> bool {
-        if !self.is_luna_mode_active() && !project_has_kcoder_specs(&self.cwd) {
+        if self.office_tool_policy_active()
+            || (!self.is_luna_mode_active() && !project_has_kcoder_specs(&self.cwd))
+        {
             return false;
         }
         self.activate_skill_if_available(SUPERPOWERS_ROOT_SKILL_NAME)
@@ -163,6 +169,9 @@ impl QueryEngine {
 
     /// Activate a skill by name if it exists and is not already active.
     pub fn activate_skill_if_available(&self, name: &str) -> bool {
+        if !self.skill_available_in_current_request(name) {
+            return false;
+        }
         let skill_exists = {
             let registry = recover_read_lock(&self.skill_registry, "skill_registry");
             registry.get_active(name).is_some()
@@ -188,12 +197,17 @@ impl QueryEngine {
             return;
         }
         let messages = self.state.messages();
+        let blocked = self.blocked_skill_names_for_request();
 
         let prompts = {
             let registry = recover_read_lock(&self.skill_registry, "skill_registry");
             active
                 .iter()
-                .filter(|name| !self.is_luna_mode_active() || !is_spec_workflow_skill_name(name))
+                .filter(|name| {
+                    !blocked.iter().any(|blocked| {
+                        crate::skill_visibility_runtime::skill_name_matches(blocked, name)
+                    })
+                })
                 .filter(|name| {
                     let marker = format!("<skill_content name=\"{}\">", name);
                     !messages.iter().any(|message| {
@@ -332,21 +346,57 @@ impl QueryEngine {
         );
     }
 
-    pub(super) fn prepend_project_user_context(&self, messages: &mut kcoder_types::SharedMessages) {
-        let Some(context) = self.project_user_context.as_ref() else {
-            return;
-        };
-        let context = if self.is_luna_mode_active() {
-            filter_luna_project_user_context(context)
-        } else {
-            Some(context.clone())
-        };
-        let Some(context) = context else {
-            return;
-        };
-        if messages.first() != Some(&context) {
-            messages.insert(0, context);
+    pub(super) fn prepend_project_user_context(
+        &self,
+        messages: &mut kcoder_types::SharedMessages,
+    ) -> anyhow::Result<()> {
+        if self.native_input_only() {
+            return Ok(());
         }
+        self.imported_instruction_gate.begin_provider_boundary();
+        let imported = self.frozen_imported_context()?;
+        let mut leading = Vec::new();
+        let mut contexts = Vec::new();
+        if let Some(instructions) = imported
+            .as_ref()
+            .and_then(|snapshot| snapshot.instructions.as_ref())
+        {
+            contexts.extend(
+                instructions
+                    .before_native
+                    .clone()
+                    .map(Message::runtime_text),
+            );
+            contexts.extend(
+                instructions
+                    .native_context
+                    .clone()
+                    .map(Message::runtime_text),
+            );
+        } else {
+            contexts.extend(self.project_user_context.as_ref().iter().cloned());
+        }
+        contexts.extend(
+            imported
+                .and_then(|snapshot| snapshot.content)
+                .map(Message::runtime_text),
+        );
+        for context in contexts {
+            let context = if self.is_luna_mode_active() {
+                filter_luna_project_user_context(&context)
+            } else {
+                Some(context)
+            };
+            if let Some(context) = context {
+                leading.push(context);
+            }
+        }
+        for (index, context) in leading.into_iter().enumerate() {
+            if messages.get(index) != Some(&context) {
+                messages.insert(index, context);
+            }
+        }
+        Ok(())
     }
 }
 

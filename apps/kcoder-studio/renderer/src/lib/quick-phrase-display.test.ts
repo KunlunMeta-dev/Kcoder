@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createInstance } from 'i18next'
-import { defaultQuickPhrases } from '@/tauri/appPreferences'
+import { defaultQuickPhrases } from '@/host/appPreferences'
 import { localizeQuickPhrase } from './quick-phrase-display'
 import en from '@/i18n/locales/en/common'
 import zh from '@/i18n/locales/zh-CN/common'

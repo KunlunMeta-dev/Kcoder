@@ -1,5 +1,15 @@
+import { isRuntimeDebugEnabled } from '@/lib/diagnosticPreferences'
+import { isContract } from '../../../../../shared/generated/validator.mjs'
+import { normalizeWebSources } from '../../../../../shared/webSources'
+import { normalizeReviewEvidence } from '../../../../../shared/reviewEvidence'
+import { isRegisteredHistoryWorkspace } from '../../../../../shared/workspaceHistory'
+import { studioWorkMode } from '@/features/workbench/studioWorkMode'
+import { captureAccountContextRevision } from '../../accountContextEvents'
+import { hookTargetScope } from '../../gatewayHookConfiguration'
 import { toolObservationOutput } from '../../toolObservationOutput'
+import { taskConnectionStatus } from '../../taskConnectionStatus'
 import i18n from '@/i18n'
+import { normalizeTurnFileCapture } from '../../../../../shared/turnFileCapture'
 import {
   isPersistedKCoderAttachmentBlock,
   parsePersistedKCoderAttachmentBlocks,
@@ -11,7 +21,8 @@ import { decodeProviderFailure } from '@wegent/chat-core'
 import { GatewayRpcError, safeGatewayFailureDiagnostic, type GatewayServer } from '../../gatewayRpc'
 import type { GatewayClient } from '../../gatewayRuntimeTypes'
 import { requestTranscriptPage } from '../../gatewayTranscriptPage'
-import { threadModelSelectionMode } from '../../modelSelectionMode'
+import { applyThreadModelSelection, threadModelSelectionMode } from '../../modelSelectionMode'
+import { observeThreadGoalStatuses } from './goalStatusBatch'
 import {
   parseThreadRunSummary,
   threadRunActivity,
@@ -33,8 +44,7 @@ import type { GatewayRuntimeCore } from './core'
 
 export async function searchTasks(this: GatewayRuntimeCore, params: Record<string, unknown>) {
   const query = (text(params.query) ?? '').toLocaleLowerCase()
-  if (!query) return { items: [] }
-  await this.hydrateAllPersistedTasks()
+  const workspaces = await this.hydrateAllPersistedTasks()
   const limitValue = typeof params.limit === 'number' ? Math.trunc(params.limit) : 20
   const limit = Math.min(Math.max(limitValue, 1), 100)
   const servers = new Map((await this.servers()).map(server => [server.id, server]))
@@ -45,6 +55,7 @@ export async function searchTasks(this: GatewayRuntimeCore, params: Record<strin
     ...(params.includeArchived === true ? this.archivedTasks.values() : []),
   ]
     .filter(task => !task.ephemeral)
+    .filter(task => servers.has(task.serverId))
     .filter(task => !requestedDeviceId || task.serverId === requestedDeviceId)
     .filter(
       task => !requestedWorkspace || sameWorkspacePath(task.workspacePath, requestedWorkspace)
@@ -81,6 +92,7 @@ export async function searchTasks(this: GatewayRuntimeCore, params: Record<strin
           continue
         }
       }
+      const targetWorkspaces = workspaces.filter(workspace => workspace.deviceId === task.serverId)
       items.push({
         address: {
           deviceId: task.serverId,
@@ -103,6 +115,8 @@ export async function searchTasks(this: GatewayRuntimeCore, params: Record<strin
         updatedAt: new Date(task.updatedAt).toISOString(),
         deviceName: servers.get(task.serverId)?.label ?? task.serverId,
         workspacePath: task.workspacePath,
+        unassignedProject: targetWorkspaces.length > 0 && targetWorkspaces.every(workspace => !workspace.error) &&
+          !isRegisteredHistoryWorkspace(task.workspacePath, targetWorkspaces.map(workspace => workspace.workspacePath), workspacePathKey),
         archived: this.archivedTasks.has(task.taskId),
         project: null,
       })
@@ -192,10 +206,13 @@ export async function searchTaskTranscript(
   return null
 }
 
-export async function hydrateAllPersistedTasks(this: GatewayRuntimeCore): Promise<void> {
+export async function hydrateAllPersistedTasks(this: GatewayRuntimeCore): Promise<Array<{ deviceId: string; workspacePath: string; error?: string }>> {
   const servers = await this.servers()
-  await this.hydratePersistedTasks(await this.workspaceDescriptors(servers, await this.server()))
+  // Cold pane readers join the existing sidebar scan instead of each queuing
+  // another full workspace scan before the conversation can display history.
+  const listed = await this.request('runtime.tasks.list', {}) as { workspaces: Array<{ deviceId: string; workspacePath: string; error?: string }> }
   await this.hydrateArchivedWorktreeTasks(servers)
+  return listed.workspaces
 }
 
 export async function managedWorktrees(
@@ -365,6 +382,7 @@ export async function hydratePersistedTasks(
   scanCancelled: () => boolean = () => false
 ): Promise<void> {
   const generation = this.workspaceScanGeneration
+  const accountCurrent = captureAccountContextRevision()
   const cancelled = () =>
     this.disposed || generation !== this.workspaceScanGeneration || scanCancelled()
   const ordered = [...workspaces].sort((a, b) => Number(b.projectActive) - Number(a.projectActive))
@@ -384,9 +402,17 @@ export async function hydratePersistedTasks(
                 server,
                 async client => {
                   if (client.supportsThreadResume?.() !== true) return
+                  const goalBefore = new Map<string, GatewayTask['goalStatusObservation']>()
+                  for (const task of this.tasks.values()) {
+                    if (task.serverId === server.id &&
+                        sameWorkspacePath(task.workspacePath, workspacePath))
+                      goalBefore.set(task.taskId, task.goalStatusObservation)
+                  }
                   const persistedThreads: Array<Record<string, unknown>> = []
                   const allowPartial =
                     client.supportsExperimental?.('threadListCompleteness') === true
+                  const includeGoalStatus =
+                    client.supportsExperimental?.('threadGoalStatusBatchV1') === true
                   let threadsComplete = true
                   const archiveModes: Array<boolean | undefined> = [undefined]
                   for (const archived of archiveModes) {
@@ -446,6 +472,16 @@ export async function hydratePersistedTasks(
                     } while (persistedThreads.length <= 10_000)
                     if (cursor) throw new Error('运行目标的持久任务数量超过 10000')
                   }
+                  const goalStatuses = includeGoalStatus
+                    ? await observeThreadGoalStatuses(
+                        client,
+                        persistedThreads.map(value => text(record(value).id)).filter((id): id is string => id !== null),
+                        () => cancelled() || !accountCurrent(server.id)
+                      )
+                    : undefined
+                  if (cancelled()) return
+                  if (includeGoalStatus && !accountCurrent(server.id))
+                    throw new Error('account context changed during task scan')
                   const seenThreadKeys = new Set<string>()
                   workspace.threadsComplete = threadsComplete
                   for (const value of persistedThreads) {
@@ -453,6 +489,9 @@ export async function hydratePersistedTasks(
                     const threadId = text(thread.id)
                     const threadKey = threadId ? this.threadKey(server.id, threadId) : null
                     if (!threadId || !threadKey) continue
+                    let goalStatusObservation = includeGoalStatus
+                      ? (goalStatuses?.get(threadId) ?? { availability: 'unavailable' as const })
+                      : undefined
                     seenThreadKeys.add(threadKey)
                     this.persistedThreadMisses.delete(threadKey)
                     const now = Date.now()
@@ -475,7 +514,30 @@ export async function hydratePersistedTasks(
                     }
                     const existingTaskId = this.taskByThread.get(threadKey)
                     const existing = existingTaskId ? this.tasks.get(existingTaskId) : undefined
-                    if (existing && !existing.persisted) continue
+                    if (includeGoalStatus && existing) {
+                      const sameOwner = existing.serverId === server.id && existing.threadId === threadId &&
+                        sameWorkspacePath(existing.workspacePath, workspacePath)
+                      const unchanged = sameOwner && goalBefore.has(existing.taskId) &&
+                        goalBefore.get(existing.taskId) === existing.goalStatusObservation
+                      if (!unchanged)
+                        goalStatusObservation = sameOwner
+                          ? (existing.goalStatusObservation ?? { availability: 'unavailable' })
+                          : { availability: 'unavailable' }
+                    }
+                    if (existing && !existing.persisted) {
+                      if (includeGoalStatus && goalStatusObservation && existing.serverId === server.id &&
+                          existing.threadId === threadId && sameWorkspacePath(existing.workspacePath, workspacePath)) {
+                        const observation = goalStatusObservation
+                        if (observation !== existing.goalStatusObservation) {
+                          this.tasks.set(existing.taskId, {
+                            ...existing,
+                            goalStatusObservation: observation,
+                            goalStatus: observation.availability === 'available' ? observation.status : undefined,
+                          })
+                        }
+                      }
+                      continue
+                    }
                     const syntheticTaskId = runtimeTaskId(server, threadId)
                     let taskId = existingTaskId ?? syntheticTaskId
                     if (!existingTaskId && this.tasks.has(taskId)) {
@@ -510,7 +572,15 @@ export async function hydratePersistedTasks(
                         thread.status,
                         existingTaskId ? this.activeTurnByTask.has(existingTaskId) : false
                       ),
+                      turnStatus:
+                        parseThreadRunSummary(thread.runSummary)?.latestTurnStatus ??
+                        existing?.turnStatus,
+                      completedAt: existing?.completedAt,
                       runSummary: parseThreadRunSummary(thread.runSummary),
+                      ...(goalStatusObservation ? { goalStatusObservation } : {}),
+                      ...(goalStatusObservation?.availability === 'available'
+                        ? { goalStatus: goalStatusObservation.status }
+                        : {}),
                       runActivity: threadRunActivity(
                         thread.status,
                         parseThreadRunSummary(thread.runSummary)
@@ -520,16 +590,60 @@ export async function hydratePersistedTasks(
                       updatedAt:
                         (serverMetadata ? undefined : localMetadata?.updatedAt) ??
                         (Number.isFinite(updatedAt) ? updatedAt : now),
-                      runtimeHandle: { threadId },
+                      ...(isContract('ChannelTaskSource', thread.channelTaskSource)
+                        ? {
+                            channelTaskSource:
+                              thread.channelTaskSource as import('../../../../../shared/generated/contracts').ChannelTaskSource,
+                          }
+                        : {}),
+                      ...(isContract('AgentTaskBinding', thread.agentDefinition)
+                        ? {
+                            agentDefinition:
+                              thread.agentDefinition as import('../../../../../shared/generated/contracts').AgentTaskBinding,
+                          }
+                        : {}),
+                      studioWorkMode: studioWorkMode(thread.studioWorkMode),
+                      runtimeHandle: {
+                        threadId,
+                        ...(isContract('ChannelTaskSource', thread.channelTaskSource)
+                          ? {
+                              channelTaskSource:
+                                thread.channelTaskSource as import('../../../../../shared/generated/contracts').ChannelTaskSource,
+                            }
+                          : {}),
+                        ...(isContract('AgentTaskBinding', thread.agentDefinition)
+                          ? { agentDefinition: thread.agentDefinition as import('../../../../../shared/generated/contracts').AgentTaskBinding }
+                          : {}),
+                        studioWorkMode: studioWorkMode(thread.studioWorkMode),
+                        ...(existing?.threadId === threadId &&
+                        existing.runtimeHandle.memoryTaskSnapshot
+                          ? { memoryTaskSnapshot: existing.runtimeHandle.memoryTaskSnapshot }
+                          : {}),
+                      },
                     }
+                    applyThreadModelSelection(hydratedTask, thread)
                     this.threadByTask.set(taskId, threadId)
                     this.taskByThread.set(threadKey, taskId)
                     if (archivedAt) {
                       this.tasks.delete(taskId)
+                      taskConnectionStatus.clear(this, server.id, taskId)
                       this.archivedTasks.set(taskId, { ...hydratedTask, running: false })
                     } else {
                       this.archivedTasks.delete(taskId)
                       this.tasks.set(taskId, hydratedTask)
+                    }
+                  }
+                  if (includeGoalStatus) {
+                    for (const task of this.tasks.values()) {
+                      if (!task.persisted && task.serverId === server.id &&
+                          sameWorkspacePath(task.workspacePath, workspacePath) &&
+                          !seenThreadKeys.has(this.threadKey(server.id, task.threadId)) &&
+                          !task.goalStatusObservation) {
+                        this.tasks.set(task.taskId, {
+                          ...task,
+                          goalStatusObservation: { availability: 'unavailable' },
+                        })
+                      }
                     }
                   }
                   if (!threadsComplete) return
@@ -551,6 +665,7 @@ export async function hydratePersistedTasks(
                     this.persistedThreadMisses.set(threadKey, misses)
                     if (misses < PERSISTED_THREAD_MISS_THRESHOLD) continue
                     this.tasks.delete(task.taskId)
+                    taskConnectionStatus.clear(this, server.id, task.taskId)
                     this.threadByTask.delete(task.taskId)
                     this.taskByThread.delete(threadKey)
                     this.persistedThreadMisses.delete(threadKey)
@@ -589,8 +704,16 @@ export async function loadTaskTranscript(
   params: Record<string, unknown>
 ) {
   const address = record(params.address)
+  const attachToLiveTurn = params.attachToLiveTurn === true
+  const accountCurrent = captureAccountContextRevision()
+  const generation = this.workspaceScanGeneration
   const requestedTaskId = text(params.taskId) ?? text(address.taskId)
   const taskId = this.resolveTaskId(requestedTaskId)
+  const trace = (stage: string) => {
+    if (isRuntimeDebugEnabled())
+      console.debug('[KCoder Studio] Original transcript readiness', { stage, taskId, attachToLiveTurn })
+  }
+  trace('task_lookup')
   let task = taskId ? (this.tasks.get(taskId) ?? this.archivedTasks.get(taskId)) : undefined
   if (!task && this.compatibility.isRuntimeTaskId(requestedTaskId)) {
     await this.hydrateAllPersistedTasks()
@@ -616,11 +739,58 @@ export async function loadTaskTranscript(
   const server = (await this.servers()).find(item => item.id === loadedTask.serverId)
   if (!server) throw new Error(`任务服务器已不存在：${loadedTask.serverId}`)
   if (this.archivedTasks.has(taskId)) await this.restoreArchivedTaskWorkspace(loadedTask)
-  const borrowedClient = loadedTask.ephemeral === true
-  const client = borrowedClient
-    ? this.clientByTask.get(taskId)
-    : await this.connectClient(server, 'runtime', loadedTask.workspacePath)
+  const requestedDevice = text(params.deviceId) ?? text(address.deviceId)
+  const requestedThread = text(params.threadId) ?? text(address.threadId)
+  // Ordinary task links intentionally omit filesystem paths. Resolve that
+  // address from the authenticated index, then fence this exact workspace
+  // against target/account changes throughout attachment and history loading.
+  const requestedWorkspace =
+    text(params.workspacePath) ?? text(address.workspacePath) ?? loadedTask.workspacePath
+  const targetScope = hookTargetScope(server)
+  const liveTaskIdentity = {
+    serverId: loadedTask.serverId,
+    threadId: loadedTask.threadId,
+    workspacePath: loadedTask.workspacePath,
+  }
+  const assertLiveOwner = async (client?: GatewayClient) => {
+    if (!attachToLiveTurn) return
+    const currentTask = this.tasks.get(taskId)
+    if (
+      !requestedTaskId ||
+      requestedDevice !== loadedTask.serverId ||
+      requestedThread !== loadedTask.threadId ||
+      !requestedWorkspace ||
+      !sameWorkspacePath(requestedWorkspace, loadedTask.workspacePath) ||
+      this.disposed ||
+      this.workspaceScanGeneration !== generation ||
+      !accountCurrent(loadedTask.serverId) ||
+      currentTask?.threadId !== liveTaskIdentity.threadId ||
+      currentTask.serverId !== liveTaskIdentity.serverId ||
+      !sameWorkspacePath(currentTask.workspacePath, liveTaskIdentity.workspacePath) ||
+      (client &&
+        (this.clientByTask.get(taskId) !== client || this.appServerDisconnectedClients.has(client)))
+    )
+      throw new Error('LIVE_TRANSCRIPT_ORIGINAL_OWNER_UNAVAILABLE')
+    const currentTarget = await this.serverForParams({ deviceId: loadedTask.serverId })
+    if (
+      hookTargetScope(currentTarget) !== targetScope ||
+      !accountCurrent(loadedTask.serverId) ||
+      this.disposed ||
+      this.workspaceScanGeneration !== generation
+    )
+      throw new Error('LIVE_TRANSCRIPT_ORIGINAL_OWNER_UNAVAILABLE')
+  }
+  await assertLiveOwner()
+  trace('owner_checked')
+  const borrowedClient = loadedTask.ephemeral === true || attachToLiveTurn
+  const client = attachToLiveTurn
+    ? await this.readyTaskClient(loadedTask)
+    : borrowedClient
+      ? this.clientByTask.get(taskId)
+      : await this.connectClient(server, 'runtime', loadedTask.workspacePath)
   if (!client) throw new Error('临时会话连接已结束')
+  trace('client_ready')
+  await assertLiveOwner(client)
   if (!borrowedClient && client.supportsThreadResume?.() !== true) {
     client.close()
     throw new Error('KCoder app-server 不支持历史会话读取')
@@ -641,10 +811,16 @@ export async function loadTaskTranscript(
   }
   let result: ThreadReadResult | undefined
   let readSucceeded = false
+  let reviewEvidenceSupported = false
+  let fileCaptureSupported = false
   try {
     for (let attempt = 0; attempt < 4; attempt += 1) {
       try {
         result = await requestTranscriptPage<ThreadReadResult>(client, readParams)
+        trace('history_received')
+        await assertLiveOwner(client)
+        reviewEvidenceSupported = client.supportsExperimental?.('turnReviewEvidenceV1') === true
+        fileCaptureSupported = client.supportsExperimental?.('turnFileCaptureV1') === true
         readSucceeded = true
         break
       } catch (error) {
@@ -672,8 +848,14 @@ export async function loadTaskTranscript(
     beforeCursor: null,
   }
   if (readSucceeded && loadedTask.persisted === false) {
-    loadedTask = { ...loadedTask, persisted: true }
-    this.tasks.set(taskId, loadedTask)
+    // Reading history may overlap a start/end event. Persist only the metadata
+    // flag on the current binding; never restore the pre-read execution state.
+    const current = this.tasks.get(taskId)
+    if (current?.serverId === loadedTask.serverId && current.threadId === loadedTask.threadId &&
+      sameWorkspacePath(current.workspacePath, loadedTask.workspacePath)) {
+      loadedTask = current.persisted === true ? current : { ...current, persisted: true }
+      this.tasks.set(taskId, loadedTask)
+    }
   }
   const rangeStart = Number.isFinite(result.rangeStart) ? Number(result.rangeStart) : 0
   const messages = Array.isArray(result.messages)
@@ -701,6 +883,15 @@ export async function loadTaskTranscript(
                 const hasImages =
                   Array.isArray(rawBlock.outputImages) || rawBlock.outputImagesOmitted === true
                 const block = { ...rawBlock }
+                const nativeCallId = text(rawBlock.id) ?? text(rawBlock.tool_use_id)
+                block.webSources = nativeCallId
+                  ? normalizeWebSources(rawBlock.webSources, {
+                      threadId: loadedTask.threadId ?? undefined,
+                      turnId: text(message.turnId) ?? undefined,
+                      attemptId: text(message.attemptId) ?? undefined,
+                      toolCallId: nativeCallId,
+                    })
+                  : undefined
                 if (hasImages) {
                   block.tool_output = toolObservationOutput({
                     ...rawBlock,
@@ -725,6 +916,7 @@ export async function loadTaskTranscript(
                   : missingResult
                     ? {
                         ...block,
+                        status: 'result_unrecorded',
                         tool_output: i18n.t('common:runtimeRecovery.toolResultUnavailable'),
                       }
                     : block
@@ -766,6 +958,20 @@ export async function loadTaskTranscript(
                 ? { clientMessageId: text(message.clientMessageId) }
                 : {}),
             ...(text(message.turnId) ? { turnId: text(message.turnId) } : {}),
+            ...(reviewEvidenceSupported && {
+              reviewEvidence: normalizeReviewEvidence(message.reviewEvidence, {
+                threadId,
+                turnId: text(message.turnId) ?? undefined,
+                attemptId: text(message.attemptId) ?? undefined,
+              }),
+            }),
+            ...(fileCaptureSupported && {
+              fileChangesCapture: normalizeTurnFileCapture(message.fileChangesCapture, {
+                threadId,
+                turnId: text(message.turnId) ?? undefined,
+                attemptId: text(message.attemptId) ?? undefined,
+              }),
+            }),
             role,
             content,
             ...(persistedAttachments.length > 0

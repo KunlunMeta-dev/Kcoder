@@ -1,11 +1,23 @@
 import assert from "node:assert/strict";
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { appServerEnvironment, launchSpec, loadServers, normalizeServer, publicServer, storedServer } from "../src/server-config.js";
+import { hasFullServerAccess, reconcileServerAccess, appServerEnvironment, launchSpec, loadServers, normalizeServer, publicServer, storedServer } from "../src/server-config.js";
+import { writeServerConfiguration } from '../src/server-mutation.mjs';
 
 const defaults = { repoRoot: "/repo", appServerBin: "/repo/target/debug/kcoder", workspace: "/repo" };
+
+test('shared private publication preserves the server-registry array format and reloads through the normal loader', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'kcoder-server-publish-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const path = join(directory, 'registry', 'servers.json');
+  const entries = [{ id: 'local', label: 'Owned target', transport: 'local' }];
+  await writeServerConfiguration(path, entries);
+  assert.deepEqual(JSON.parse(await readFile(path, 'utf8')), entries);
+  assert.equal((await loadServers({ env: { KCODER_STUDIO_SERVERS_STORE: path }, ...defaults }))[0].id, 'local');
+  if (process.platform !== 'win32') assert.equal((await stat(path)).mode & 0o777, 0o600);
+});
 
 test('account targets preserve identity and invoke only the restricted SSH marker', () => {
   const security = { identity: { mode: 'kcoder-account', username: 'alice' } };
@@ -319,3 +331,16 @@ test("Windows SSH uses overlapped stdio while native local and Unix launches ret
  const custom = normalizeServer({id:'local',label:'当前计算机',transport:'local'}, defaults);
  assert.equal(publicServer(custom).labelKey, undefined);
  });
+
+
+test('server management requires full target authority and configuration changes preserve restricted scope', () => {
+  const servers = [{ id: 'local' }, { id: 'remote' }];
+  const full = { allowedServerIds: new Set(['local', 'remote']) };
+  const restricted = { deviceId: 'paired-device', allowedServerIds: new Set(['remote']) };
+  assert.equal(hasFullServerAccess(full, servers), true);
+  assert.equal(hasFullServerAccess(restricted, servers), false);
+  assert.equal(hasFullServerAccess({}, servers), false);
+  assert.deepEqual([...reconcileServerAccess(full, ['local', 'remote'], ['local', 'remote', 'new'])], ['local', 'remote', 'new']);
+  assert.deepEqual([...reconcileServerAccess(restricted, ['local', 'remote'], ['remote', 'new'])], ['remote']);
+  assert.deepEqual([...reconcileServerAccess(restricted, ['local', 'remote'], ['local', 'new'])], []);
+});

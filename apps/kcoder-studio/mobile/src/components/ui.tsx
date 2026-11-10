@@ -10,6 +10,8 @@ import {
   type ViewStyle,
 } from "react-native";
 import { useTheme, useThemedStyles, type ThemeColors, radius, spacing } from "@/theme";
+import { useLocale } from "@/i18n/use-locale";
+import { statusDotAccessibilityProps, statusDotColor } from "./status-dot-presentation";
 
 export function Button({
   children,
@@ -83,17 +85,14 @@ export function Field({ label, hint, accessibilityLabel, ...props }: TextInputPr
   );
 }
 
-export function StatusDot({ status }: { status: "online" | "offline" | "checking" }) {
+export function StatusDot({ status, decorative = false }: { status: "online" | "offline" | "checking" | "unknown"; decorative?: boolean }) {
+  useLocale();
+  const { colors } = useTheme();
   const styles = useThemedStyles(makeStyles);
   return (
     <View
-      accessibilityLabel={status}
-      style={[
-        styles.dot,
-        status === "online" && styles.dotOnline,
-        status === "offline" && styles.dotOffline,
-        status === "checking" && styles.dotChecking,
-      ]}
+      {...statusDotAccessibilityProps(status, decorative)}
+      style={[styles.dot, { backgroundColor: statusDotColor(status, colors) }]}
     />
   );
 }
@@ -145,9 +144,6 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   multilineInput: { minHeight: 112, paddingTop: spacing.md, textAlignVertical: "top" },
   dot: { width: 9, height: 9, borderRadius: 9 },
-  dotOnline: { backgroundColor: colors.green },
-  dotOffline: { backgroundColor: colors.textDim },
-  dotChecking: { backgroundColor: colors.yellow },
   empty: { flex: 1, alignItems: "center", justifyContent: "center", padding: spacing.xxl, gap: spacing.md },
   emptyTitle: { color: colors.text, fontSize: 18, fontWeight: "600", textAlign: "center" },
   emptyBody: { color: colors.textMuted, fontSize: 14, lineHeight: 21, textAlign: "center", maxWidth: 360 },

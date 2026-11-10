@@ -1,7 +1,8 @@
+import { getToken } from '@/api/auth'
 import { downloadLink } from '@/kcoder/downloadLink'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { invoke } from '@tauri-apps/api/core'
+import { invoke } from '@/lib/runtime-commands'
 import {
   ChevronLeft,
   ChevronRight,
@@ -14,7 +15,7 @@ import {
 } from 'lucide-react'
 import type { Attachment } from '@/types/api'
 import { getAttachmentImageUrl } from '@/lib/attachments'
-import { isTauriRuntime } from '@/lib/runtime-environment'
+import { isGatewayRuntime } from '@/lib/runtime-environment'
 import { isKCoderGatewayPage } from '@/kcoder/gatewayRpc'
 import {
   localPathFromMarkdownImageSrc,
@@ -94,7 +95,7 @@ async function loadAttachmentImageUrl(
       )
       return { url: objectUrl, objectUrl }
     }
-    if (localPath && isTauriRuntime()) {
+    if (localPath && isGatewayRuntime()) {
       const exists = await invoke<boolean>('local_path_exists', { path: localPath }).catch(
         () => null
       )
@@ -111,7 +112,7 @@ async function loadAttachmentImageUrl(
     return { url: resolvedLocalPreviewUrl, objectUrl: null }
   }
 
-  const token = localStorage.getItem('auth_token')
+  const token = getToken()
   const response = await fetch(getAttachmentImageUrl(attachment.id), {
     headers: token ? { Authorization: `Bearer ${token}` } : undefined,
   })
@@ -169,7 +170,7 @@ function getDownloadableLocalPath(value?: string): string | null {
 
 async function downloadAttachmentImage(attachment: Attachment, imageUrl: string) {
   const sourcePath = getDownloadableLocalPath(attachment.local_preview_url ?? attachment.local_path)
-  if (sourcePath && isTauriRuntime() && !isKCoderGatewayPage()) {
+  if (sourcePath && isGatewayRuntime() && !isKCoderGatewayPage()) {
     await invoke<string>('download_local_file_to_downloads', {
       sourcePath,
       filename: attachment.filename,

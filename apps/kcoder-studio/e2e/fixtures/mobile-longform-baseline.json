@@ -1,0 +1,24 @@
+{
+  "capturedAt": "2026-10-23T09:45:14Z",
+  "scope": "Original V3 reading sources before the long-form layout change",
+  "files": [
+    {
+      "root": "mobile",
+      "path": "src/features/interface/v3-styles.ts",
+      "size": 4899,
+      "sha256": "28037fcd33b901b620a40c091f2a205709f3b20b1a89cb1f1169c2ffaf53c590"
+    },
+    {
+      "root": "mobile",
+      "path": "src/features/task/MessageBubble.tsx",
+      "size": 15675,
+      "sha256": "ef6f3d6238a9fe9993f25f16c97bf59151cb3d35d21b47e43421523220610cb5"
+    },
+    {
+      "root": "mobile",
+      "path": "src/features/task/taskStyles.ts",
+      "size": 40179,
+      "sha256": "c03cf1ae1ad98b40550866c1be2e0f3fea5ad46093437f6864973bc1e41d59de"
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 use crate::{
     AgentRunResult, AgentRunner, AgentRuntimeSelection, Tool, ToolContext, ToolError, ToolOutput,
-    VerifierRunOptions, clean_schema, parse_input,
+    VerifierRunOptions,
 };
 use async_trait::async_trait;
 use kcoder_config::GoalProTestScope;
@@ -9,9 +9,11 @@ use kcoder_state::{
     Goal, GoalStatus, GoalVerificationCommitOutcome, GoalVerificationKind, GoalVerificationVerdict,
     goal_report_relative_path, prepare_goal_objective,
 };
+pub use kcoder_tool_input::builtin::goal::{
+    CreateGoalInput, GetGoalInput, GoalToolStatus, UpdateGoalInput,
+};
 use kcoder_types::{ContentBlock, Message};
-use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
@@ -39,48 +41,32 @@ struct GoalObjectiveSnapshot {
 #[derive(Debug, Default)]
 pub struct GetGoalTool;
 
-#[derive(Debug, Deserialize, JsonSchema)]
-pub struct GetGoalInput {}
-
 #[derive(Debug, Default)]
 pub struct CreateGoalTool;
 
-#[derive(Debug, Deserialize, JsonSchema)]
-pub struct CreateGoalInput {
-    /// Concrete long-running objective the user explicitly asked to pursue.
-    pub objective: String,
-    /// Optional token budget for the goal. Omit unless the user specified one.
-    pub token_budget: Option<u64>,
-}
-
 #[derive(Debug, Default)]
 pub struct UpdateGoalTool;
-
-#[derive(Debug, Deserialize, JsonSchema)]
-pub struct UpdateGoalInput {
-    /// New status. The model may only set `complete` or `blocked`.
-    pub status: GoalToolStatus,
-    /// Required when status is `blocked`; describe the concrete blocking condition.
-    #[serde(default)]
-    pub reason: Option<String>,
-    /// Stable ID for the same external blocker across turns; optional, 1–128 ASCII letters/digits or . _ : -. Without it, exact trimmed reason text identifies the blocker.
-    #[serde(default)]
-    pub blocker_id: Option<String>,
-}
-
-#[derive(Debug, Deserialize, JsonSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum GoalToolStatus {
-    Complete,
-    Blocked,
-}
 
 #[derive(Debug, Serialize)]
 struct GoalToolResponse {
     success: bool,
     message: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(
+        skip_serializing_if = "Option::is_none",
+        serialize_with = "serialize_public_goal"
+    )]
     goal: Option<Goal>,
+}
+
+fn serialize_public_goal<S: serde::Serializer>(
+    goal: &Option<Goal>,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    goal.as_ref()
+        .map(Goal::public_native_budget_projection)
+        .transpose()
+        .map_err(serde::ser::Error::custom)?
+        .serialize(serializer)
 }
 
 #[async_trait]
@@ -100,7 +86,7 @@ impl Tool for GetGoalTool {
     }
 
     fn input_schema(&self) -> Value {
-        clean_schema(schemars::schema_for!(GetGoalInput))
+        GetGoalInput::schema()
     }
 
     fn is_read_only(&self) -> bool {
@@ -112,7 +98,7 @@ impl Tool for GetGoalTool {
     }
 
     async fn call(&self, input: Value, ctx: &ToolContext) -> Result<ToolOutput, ToolError> {
-        let _input: GetGoalInput = parse_input(&input)?;
+        let _input: GetGoalInput = GetGoalInput::parse(&input)?;
         let goal = ctx.state.goal();
         respond(GoalToolResponse {
             success: true,
@@ -143,7 +129,7 @@ impl Tool for CreateGoalTool {
     }
 
     fn input_schema(&self) -> Value {
-        clean_schema(schemars::schema_for!(CreateGoalInput))
+        CreateGoalInput::schema()
     }
 
     fn is_concurrency_safe(&self, _input: &Value) -> bool {
@@ -151,7 +137,7 @@ impl Tool for CreateGoalTool {
     }
 
     async fn call(&self, input: Value, ctx: &ToolContext) -> Result<ToolOutput, ToolError> {
-        let input: CreateGoalInput = parse_input(&input)?;
+        let input: CreateGoalInput = CreateGoalInput::parse(&input)?;
         let objective = input.objective.trim();
         if objective.is_empty() {
             return Err(ToolError::InvalidInput(
@@ -215,7 +201,10 @@ impl Tool for UpdateGoalTool {
 
     fn description(&self) -> String {
         "Update the persistent `/goal` status. The model may only set `complete` when the \
-         objective is genuinely achieved, or `blocked` after the same blocking condition has \
+         objective is genuinely achieved; `complete` is rejected while this session still has \
+         running background work, a finished background result not yet received, or an \
+         unanswered user question, so wait for and inspect those first. Set `blocked` only \
+         after the same blocking condition has \
          repeated for at least three consecutive goal turns and no meaningful progress can be \
          made without user input or an external state change. Supply `reason` for blocked so the \
          runtime audits consecutive outer Engine executions (not API retries or tool rounds). \
@@ -233,7 +222,7 @@ impl Tool for UpdateGoalTool {
     }
 
     fn input_schema(&self) -> Value {
-        clean_schema(schemars::schema_for!(UpdateGoalInput))
+        UpdateGoalInput::schema()
     }
 
     fn is_concurrency_safe(&self, _input: &Value) -> bool {
@@ -241,7 +230,7 @@ impl Tool for UpdateGoalTool {
     }
 
     async fn call(&self, input: Value, ctx: &ToolContext) -> Result<ToolOutput, ToolError> {
-        let input: UpdateGoalInput = parse_input(&input)?;
+        let input: UpdateGoalInput = UpdateGoalInput::parse(&input)?;
         let status = match input.status {
             GoalToolStatus::Complete => GoalStatus::Complete,
             GoalToolStatus::Blocked => GoalStatus::Blocked,
@@ -330,6 +319,17 @@ impl Tool for UpdateGoalTool {
             }
         }
         if status == GoalStatus::Complete
+            && let Some(pending) = unsettled_completion_work(ctx)
+        {
+            return respond_error(GoalToolResponse {
+                success: false,
+                message: format!(
+                    "Goal completion rejected because work this goal depends on has not settled: {pending}. The goal remains active; wait for and inspect those results, or get the answer, before marking the goal complete."
+                ),
+                goal: Some(current_goal),
+            });
+        }
+        if status == GoalStatus::Complete
             && let Some(evidence) = recent_completion_failure_evidence(ctx)
         {
             let outcome = ctx.state.record_goal_completion_rejected_if_matches(
@@ -375,6 +375,76 @@ impl Tool for UpdateGoalTool {
             goal: Some(goal),
         })
     }
+}
+
+/// Facts that make a completion verdict premature: background work still
+/// running, a finished background result the conversation has not received
+/// yet, or a user question nobody answered. Internal maintenance jobs and
+/// foreground-delivered jobs never block. Returns a bounded description.
+fn unsettled_completion_work(ctx: &ToolContext) -> Option<String> {
+    let mut running = Vec::new();
+    let mut undelivered = Vec::new();
+    for task in ctx.state.tasks().into_values() {
+        if !task.notify_parent_on_completion
+            || task.delivery != kcoder_state::TaskDelivery::Background
+            || task.description.starts_with("[internal:")
+        {
+            continue;
+        }
+        match task.status {
+            kcoder_state::TaskStatus::Pending | kcoder_state::TaskStatus::Running => {
+                running.push(task.id);
+            }
+            // Only a run-keyed terminal result has an authoritative delivery
+            // record; a suppressed run is settled even though nothing is shown.
+            _ => {
+                if let Some(key) = &task.background_run
+                    && ctx.state.background_run_record(key).is_some_and(|record| {
+                        record.terminal.is_some()
+                            && record.delivered_message_id.is_none()
+                            && !record.suppressed
+                    })
+                {
+                    undelivered.push(task.id);
+                }
+            }
+        }
+    }
+    let unanswered = ctx
+        .state
+        .try_inspection_lifecycle_identity()
+        .and_then(|owner| ctx.state.list_async_questions(&owner, false).ok())
+        .map(|questions| {
+            questions
+                .iter()
+                .filter(|question| {
+                    question.status
+                        == kcoder_types::async_user_questions::AsyncQuestionStatus::Pending
+                })
+                .count()
+        })
+        .unwrap_or(0);
+    let mut reasons = Vec::new();
+    for (label, mut ids) in [
+        ("background work still running", running),
+        ("background results not yet received", undelivered),
+    ] {
+        if ids.is_empty() {
+            continue;
+        }
+        ids.sort();
+        let shown = ids.iter().take(5).cloned().collect::<Vec<_>>().join(", ");
+        let more = ids.len().saturating_sub(5);
+        reasons.push(if more == 0 {
+            format!("{label} ({shown})")
+        } else {
+            format!("{label} ({shown} and {more} more)")
+        });
+    }
+    if unanswered > 0 {
+        reasons.push(format!("{unanswered} user question(s) still unanswered"));
+    }
+    (!reasons.is_empty()).then(|| reasons.join("; "))
 }
 
 fn blocked_reason_fingerprint(reason: &str) -> String {

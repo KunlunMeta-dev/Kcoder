@@ -1,3 +1,4 @@
+import { gatewayOriginLabel, isGatewayOriginLabel, isolatedGatewayAuthority } from './gateway-origin.mjs';
 import { createHash } from 'node:crypto';
 import { isIP } from 'node:net';
 
@@ -27,7 +28,9 @@ export function normalizeAuthority(value) {
     hostname = match[1].toLowerCase();
     port = match[2] === undefined ? '' : `:${match[2]}`;
   }
-  if (port && Number(port.slice(1)) > 65535) return null;
+  if (port && (Number(port.slice(1)) > 65535 || Number(port.slice(1)) < 1 || String(Number(port.slice(1))) !== port.slice(1))) return null;
+  // Public Relay authorities are HTTPS; an explicit default port names the same origin.
+  if (port === ':443') port = '';
   return `${hostname}${port}`;
 }
 
@@ -51,9 +54,10 @@ export function createGatewayRegistry({
 
   const source = legacy ? [{ id: device, secret, hosts: null }] : gateways;
   const byId = new Map();
+  const byOriginLabel = new Map();
   const ids = new Set();
   const secrets = new Set();
-  const pairingTokens = new Set();
+  const gatewaySecrets = new Set();
 
   for (const config of source) {
     if (!config || typeof config !== 'object' || typeof config.id !== 'string' || !GATEWAY_ID.test(config.id)) {
@@ -64,25 +68,26 @@ export function createGatewayRegistry({
     ids.add(normalizedId);
     if (typeof config.secret !== 'string' || config.secret.length < 32 || /[\u0000-\u001f\u007f]/.test(config.secret)) throw new Error(`Gateway ${config.id} requires a secret of at least 32 characters`);
     if (secrets.has(config.secret)) throw new Error('Each Gateway must have an independent control secret');
-    if (pairingTokens.has(config.secret)) throw new Error('Pairing tokens must be independent from all control secrets');
+    if (gatewaySecrets.has(config.secret)) throw new Error('Pairing tokens must be independent from all control secrets');
     secrets.add(config.secret);
 
-    let pairingToken = config.pairingToken;
-    if (!legacy && (typeof pairingToken !== 'string' || pairingToken.length < 32 || /[\u0000-\u001f\u007f]/.test(pairingToken) || pairingToken === config.secret)) {
-      throw new Error(`Gateway ${config.id} requires an independent pairingToken of at least 32 characters`);
+    let gatewaySecret = config.gatewaySecret;
+    if (!legacy && (typeof gatewaySecret !== 'string' || gatewaySecret.length < 32 || /[\u0000-\u001f\u007f]/.test(gatewaySecret) || gatewaySecret === config.secret)) {
+      throw new Error(`Gateway ${config.id} requires an independent gatewaySecret of at least 32 characters`);
     }
-    if (pairingToken !== undefined && (typeof pairingToken !== 'string' || pairingToken.length < 32 || /[\u0000-\u001f\u007f]/.test(pairingToken) || pairingToken === config.secret)) {
-      throw new Error(`Gateway ${config.id} has an invalid pairingToken`);
+    if (gatewaySecret !== undefined && (typeof gatewaySecret !== 'string' || gatewaySecret.length < 32 || /[\u0000-\u001f\u007f]/.test(gatewaySecret) || gatewaySecret === config.secret)) {
+      throw new Error(`Gateway ${config.id} has an invalid gatewaySecret`);
     }
-    if (pairingToken !== undefined && (pairingTokens.has(pairingToken) || secrets.has(pairingToken))) {
-      throw new Error('Each Gateway must have an independent pairingToken');
+    if (gatewaySecret !== undefined && (gatewaySecrets.has(gatewaySecret) || secrets.has(gatewaySecret))) {
+      throw new Error('Each Gateway must have an independent gatewaySecret');
     }
-    if (pairingToken !== undefined) pairingTokens.add(pairingToken);
+    if (gatewaySecret !== undefined) gatewaySecrets.add(gatewaySecret);
 
     const state = {
       id: config.id,
+      originLabel: gatewayOriginLabel(config.id),
       secret: Buffer.from(config.secret),
-      pairingToken: pairingToken === undefined ? null : Buffer.from(pairingToken),
+      gatewaySecret: gatewaySecret === undefined ? null : Buffer.from(gatewaySecret),
       maxConnections: validLimit(config.maxConnections, maxConnections, 'maxConnections'),
       maxBytesPerWindow: validLimit(config.maxBytesPerWindow, maxBytesPerWindow, 'maxBytesPerWindow'),
       trafficWindowMs: validLimit(config.trafficWindowMs, trafficWindowMs, 'trafficWindowMs'),
@@ -96,11 +101,13 @@ export function createGatewayRegistry({
       trafficBytes: 0,
       trafficWindowStarted: Date.now(),
     };
+    if (byOriginLabel.has(state.originLabel)) throw new Error('Gateway origin label collision');
     byId.set(state.id, state);
+    byOriginLabel.set(state.originLabel, state);
   }
 
-  for (const pairingToken of pairingTokens) {
-    if (secrets.has(pairingToken)) throw new Error('Pairing tokens must be independent from all control secrets');
+  for (const gatewaySecret of gatewaySecrets) {
+    if (secrets.has(gatewaySecret)) throw new Error('Pairing tokens must be independent from all control secrets');
   }
 
   const bySharedHost = new Set();
@@ -112,9 +119,21 @@ export function createGatewayRegistry({
       bySharedHost.add(authority);
     }
     if (bySharedHost.size === 0) throw new Error('Relay requires at least one shared host');
+    for (const host of bySharedHost) {
+      if (isGatewayOriginLabel(host.split('.', 1)[0])) throw new Error('A shared host cannot be a Gateway origin');
+    }
   }
 
-  return { legacy, byId, sharedHosts: bySharedHost };
+  return { legacy, byId, byOriginLabel, sharedHosts: bySharedHost };
+}
+
+/** Insert an already validated Gateway into both live indexes. */
+export function addGatewayState(registry, state) {
+  if (registry.byId.has(state.id) || registry.byOriginLabel.has(state.originLabel)) {
+    throw new Error('Duplicate Gateway identity');
+  }
+  registry.byId.set(state.id, state);
+  registry.byOriginLabel.set(state.originLabel, state);
 }
 
 /**
@@ -141,14 +160,15 @@ export function normalizeGatewayAddition(registry, config, {
   });
   const candidate = single.byId.values().next().value;
   const candidateId = candidate.id.toLowerCase();
+  if (registry.byOriginLabel?.has(candidate.originLabel)) throw new Error('Gateway origin label collision');
   for (const current of registry.byId.values()) {
     if (current.id.toLowerCase() === candidateId) throw new Error('Duplicate Gateway ID');
     const currentSecret = current.secret.toString();
-    const currentPairingToken = current.pairingToken?.toString() ?? null;
+    const currentGatewaySecret = current.gatewaySecret?.toString() ?? null;
     const nextSecret = candidate.secret.toString();
-    const nextPairingToken = candidate.pairingToken?.toString() ?? null;
-    if (nextSecret === currentSecret || nextSecret === currentPairingToken ||
-        nextPairingToken === currentSecret || nextPairingToken === currentPairingToken) {
+    const nextGatewaySecret = candidate.gatewaySecret?.toString() ?? null;
+    if (nextSecret === currentSecret || nextSecret === currentGatewaySecret ||
+        nextGatewaySecret === currentSecret || nextGatewaySecret === currentGatewaySecret) {
       throw new Error('Gateway credentials must be independent across tenants');
     }
   }
@@ -173,22 +193,52 @@ function splitTarget(target) {
     : { pathname: target.slice(0, separator), search: target.slice(separator) };
 }
 
+// Dot segments and backslashes are rejected before routing: a URL parser on
+// either side could otherwise resolve /g/a/../b into another Gateway's mount.
+function unsafeRoutePath(pathname) {
+  return pathname.includes('\\') || pathname.split('/').some(segment => /^(?:\.|%2e){1,2}$/i.test(segment));
+}
+
+function isolatedHost(registry, host) {
+  const separator = host.indexOf('.');
+  if (separator <= 0) return null;
+  const label = host.slice(0, separator);
+  const base = host.slice(separator + 1);
+  if (!isGatewayOriginLabel(label) || !registry.sharedHosts?.has(base)) return null;
+  return { label, base };
+}
+
 export function resolveGatewayRoute(registry, authority, target) {
   const host = normalizeAuthority(authority);
   const requestTarget = splitTarget(target);
-  if (!host || !requestTarget) return { error: 'invalid' };
+  if (!host || !requestTarget || unsafeRoutePath(requestTarget.pathname)) return { error: 'invalid' };
 
-  if (registry.sharedHosts.has(host)) {
-    const match = requestTarget.pathname.match(/^\/g\/([A-Za-z0-9_-]{1,64})(?:\/|$)/);
-    if (!match) return { error: 'shared-path' };
-    const gateway = registry.byId.get(match[1]);
-    if (!gateway) return { error: 'unknown-gateway' };
+  const match = requestTarget.pathname.match(/^\/g\/([A-Za-z0-9_-]{1,64})(?:\/|$)/);
+  const isolated = isolatedHost(registry, host);
+  if (registry.sharedHosts.has(host) || isolated) {
+    let gateway;
+    if (isolated) {
+      // The host label selects the Gateway; the path must name the same one.
+      gateway = registry.byOriginLabel.get(isolated.label);
+      if (!gateway) return { error: 'unknown-host' };
+      if (!match) return { error: 'shared-path' };
+      if (match[1] !== gateway.id) return { error: 'gateway-mismatch' };
+    } else {
+      if (!match) return { error: 'shared-path' };
+      gateway = registry.byId.get(match[1]);
+      if (!gateway) return { error: 'unknown-gateway' };
+    }
     const prefix = `/g/${match[1]}`;
     const suffix = requestTarget.pathname.slice(prefix.length);
+    let canonicalAuthority = null;
+    try { canonicalAuthority = isolated ? host : isolatedGatewayAuthority(host, gateway.id); } catch {}
     return {
       gateway,
       target: `${suffix || '/'}${requestTarget.search}`,
       shared: true,
+      isolated: Boolean(isolated),
+      authority: host,
+      canonicalAuthority,
     };
   }
 
@@ -197,6 +247,42 @@ export function resolveGatewayRoute(registry, authority, target) {
     return { gateway: only, target, shared: false };
   }
   return { error: 'unknown-host' };
+}
+
+/**
+ * True when an Origin belongs to this Relay's shared root or to a different
+ * Gateway's isolated origin. Such browser contexts never act for this Gateway;
+ * unrelated origins are left to the Gateway's own exact allowlist.
+ */
+export function crossGatewayOrigin(registry, route, origin) {
+  if (origin === undefined || !route?.isolated) return false;
+  if (typeof origin !== 'string') return true;
+  let parsed;
+  try { parsed = new URL(origin); } catch { return false; }
+  if (parsed.origin !== origin || !/^https?:$/.test(parsed.protocol)) return false;
+  const host = normalizeAuthority(parsed.host);
+  if (!host || host === route.authority) return false;
+  return registry.sharedHosts.has(host) || isolatedHost(registry, host) !== null;
+}
+
+/**
+ * Caddy on-demand TLS permission: allow exactly one active Gateway's derived
+ * hostname under a configured shared hostname. Uses only the in-memory label
+ * index, so the handshake path performs no disk I/O or full-ID hashing.
+ */
+export function onDemandTlsAllowed(registry, domain) {
+  if (registry.legacy || typeof domain !== 'string' || domain.length > 253 || domain !== domain.toLowerCase()) return false;
+  const separator = domain.indexOf('.');
+  if (separator <= 0 || /[^a-z0-9.-]/.test(domain)) return false;
+  const label = domain.slice(0, separator);
+  const base = domain.slice(separator + 1);
+  // Certificates are per hostname: a shared authority with a custom port
+  // contributes only its hostname, and the asked name itself never has a port.
+  let hostnameKnown = false;
+  for (const shared of registry.sharedHosts) {
+    if (shared === base || shared.replace(/:\d+$/, '') === base) { hostnameKnown = true; break; }
+  }
+  return hostnameKnown && isGatewayOriginLabel(label) && registry.byOriginLabel.has(label);
 }
 
 export function bearerToken(request) {

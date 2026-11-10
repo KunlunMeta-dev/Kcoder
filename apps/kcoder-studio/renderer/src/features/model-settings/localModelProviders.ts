@@ -1,5 +1,3 @@
-import { fetch as tauriFetch } from '@tauri-apps/plugin-http'
-import { shouldUseTauriFetch } from '@/api/http'
 import {
   KIMI_CODING_CONTEXT_WINDOW,
   KIMI_K27_CATALOG_MODEL_ID,
@@ -150,7 +148,7 @@ export function findLocalModelProviderProfile(id?: string | null): LocalModelPro
 }
 
 function defaultFetcher(): typeof fetch {
-  return shouldUseTauriFetch() ? (tauriFetch as typeof fetch) : globalThis.fetch.bind(globalThis)
+  return globalThis.fetch.bind(globalThis)
 }
 
 function modelListError(body: unknown): string | null {

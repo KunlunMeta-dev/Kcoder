@@ -43,7 +43,8 @@ test('shows a new draft separately from old saved-version checks and exact cover
     <WorkflowVerification definitionId="definition" version={1} verification={evidence} />
   )
   expect(screen.getByTestId('workflow-new-draft-unverified')).toBeVisible()
-  expect(screen.getByText(/workflowVerification.staticPassed/)).toBeVisible()
+  expect(screen.getByTitle(/workflowVerification.staticPassed/)).toBeVisible()
+  fireEvent.click(screen.getByTestId('workflow-run-evidence-run-toggle'))
   expect(screen.getByText(/workflowVerification.check.modified_passed/)).toBeVisible()
   expect(screen.queryByText(/workflowVerification.check.passed/)).not.toBeInTheDocument()
   expect(screen.getByTestId('workflow-checked-run')).toHaveTextContent('yes')
@@ -204,6 +205,7 @@ test('archived historical evidence stays inspectable and cannot silently prepare
   )
   expect(screen.getByText(/workflowVerification.archivedVersion/)).toBeVisible()
   expect(screen.queryByTestId('workflow-prepare-verification')).not.toBeInTheDocument()
+  fireEvent.click(screen.getByTestId('workflow-run-evidence-run-toggle'))
   expect(screen.getByText(/workflowVerification.effectsUnknown/)).toBeVisible()
   expect(prepare).not.toHaveBeenCalled()
   view.unmount()

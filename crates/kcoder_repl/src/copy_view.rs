@@ -348,7 +348,7 @@ impl CopyView {
                     .selection
                     .is_some_and(|(a, b)| byte >= a.min(b) && byte < a.max(b));
                 let style = if selected {
-                    Style::default().bg(crate::theme::selection_surface_bg())
+                    crate::theme::text_selection_style()
                 } else {
                     Style::default()
                 };

@@ -1,0 +1,27 @@
+[package]
+name = "kcoder_knowledge_management"
+description = "Policy-driven Wiki, memory, and automation management handlers."
+version.workspace = true
+publish = false
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+chrono.workspace = true
+kcoder_app_protocol = { path = "../../../kcoder_app_protocol" }
+kcoder_knowledge = { path = "../../../kcoder_knowledge" }
+kcoder_memory = { path = "../../../kcoder_memory" }
+kcoder_runtime_driver = { path = "../runtime_driver" }
+kcoder_state = { path = "../../../kcoder_state" }
+kcoder_schedule = { path = "../../../kcoder_tools/internal/schedule" }
+kcoder_types = { path = "../../../kcoder_types" }
+kcoder_workflow = { path = "../../../kcoder_workflow" }
+serde.workspace = true
+serde_json.workspace = true
+
+[lib]
+path = "../../src/internal/knowledge_management/lib.rs"

@@ -6,10 +6,10 @@ import { gatewayVerificationOptions, prepareGatewayWorkspace, resumeGatewayVerif
 import { RunContext, appRoot, waitFor } from './run-context.mjs';
 import { resolve } from 'node:path';
 
-test('Gateway mode requires explicit current Tauri, KCoder and renderer inputs', async () => {
-  await assert.rejects(gatewayVerificationOptions({}), /requires --tauri-bin/);
-  await assert.rejects(gatewayVerificationOptions({ 'tauri-bin': '/tmp/app' }), /requires --kcoder-bin/);
-  await assert.rejects(gatewayVerificationOptions({ 'tauri-bin': '/tmp/app', 'kcoder-bin': '/tmp/kcoder' }), /requires --renderer-root/);
+test('Gateway mode requires explicit current Electron, KCoder and renderer inputs', async () => {
+  await assert.rejects(gatewayVerificationOptions({}), /requires --electron-bin/);
+  await assert.rejects(gatewayVerificationOptions({ 'electron-bin': '/tmp/app' }), /requires --kcoder-bin/);
+  await assert.rejects(gatewayVerificationOptions({ 'electron-bin': '/tmp/app', 'kcoder-bin': '/tmp/kcoder' }), /requires --renderer-root/);
 });
 
 test('Gateway mode does not accept caller-owned origins, credentials or displays', async () => {
@@ -117,16 +117,16 @@ test('stopping an already closed session is idempotent but cleanup failures stay
 
 test('Gateway scenario opt-in accepts only the bounded subagent fixture', async () => {
   await assert.rejects(gatewayVerificationOptions({ scenario: 'untrusted-command' }), /Unsupported.*scenario/);
-  await assert.rejects(gatewayVerificationOptions({ scenario: 'subagent-trace' }), /requires --tauri-bin/);
+  await assert.rejects(gatewayVerificationOptions({ scenario: 'subagent-trace' }), /requires --electron-bin/);
 });
 
 test('provider fixture accepts an opt-in flag, never a caller endpoint', async () => {
   await assert.rejects(gatewayVerificationOptions({ 'provider-fixture': 'http://external.invalid' }), /explicitly enabled/);
-  await assert.rejects(gatewayVerificationOptions({ 'provider-fixture': 'true' }), /requires --tauri-bin/);
+  await assert.rejects(gatewayVerificationOptions({ 'provider-fixture': 'true' }), /requires --electron-bin/);
 });
 
 test('continuation fixture cannot inject endpoints or combine incompatible scenarios', async () => {
   await assert.rejects(gatewayVerificationOptions({ 'continuation-fixture': 'https://example.invalid' }), /explicitly enabled/);
   await assert.rejects(gatewayVerificationOptions({ 'continuation-fixture': 'true', scenario: 'subagent-trace' }), /cannot be combined/);
-  await assert.rejects(gatewayVerificationOptions({ 'continuation-fixture': 'true' }), /requires --tauri-bin/);
+  await assert.rejects(gatewayVerificationOptions({ 'continuation-fixture': 'true' }), /requires --electron-bin/);
 });

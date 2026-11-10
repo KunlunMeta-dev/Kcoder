@@ -63,7 +63,7 @@ export default function TerminalEmulator({
   );
   const [optionsSync] = useState(() => new TerminalWebViewOptionsSync(terminalOptions));
   optionsSync.setOptions(terminalOptions);
-  const webViewRef = useRef<WebView>(null);
+  const webViewRef = useRef<WebView<unknown>>(null);
   const callbacks = useRef({
     onInput,
     onResize,
@@ -184,7 +184,7 @@ export default function TerminalEmulator({
   }, [optionsSync, streamKey]);
 
   return (
-    <WebView
+    <WebView<unknown>
       ref={webViewRef}
       testID="terminal-emulator"
       source={TERMINAL_WEBVIEW_SOURCE}

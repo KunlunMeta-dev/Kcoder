@@ -67,7 +67,7 @@ export function WikiLibraryRename({
           onChange={event => setName(event.target.value)}
         />
         <details
-          className="rounded-lg border border-border/50 p-3"
+          className="studio-card-spacing rounded-lg border border-border/50"
           open={purpose ? true : undefined}
         >
           <summary className="cursor-pointer text-xs text-text-secondary">{t('purpose')}</summary>

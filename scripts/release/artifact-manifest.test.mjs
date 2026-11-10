@@ -1,11 +1,54 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, writeFile, readFile, rm, symlink } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { mkdtemp, mkdir, writeFile, readFile, rm, symlink, utimes } from 'node:fs/promises';
+import { dirname, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import test from 'node:test';
 import { createRequire } from 'node:module';
-import { assertPublicPath, inventory, writeManifest, verifyManifest, releaseIdentity, npmManifest, manifestName } from './artifact-manifest.mjs';
+import { assertPublicPath, inventory, writeManifest, verifyManifest, releaseIdentity, npmManifest, manifestName, cargoPackageVersion } from './artifact-manifest.mjs';
 const fixture = async t => { const root=await mkdtemp(resolve(tmpdir(),'kcoder-release-audit-'));t.after(()=>rm(root,{recursive:true,force:true}));return root; };
+
+test('release identity reads preserve the index stat cache', async t => {
+  const root = await fixture(t);
+  const files = [
+    'Cargo.toml', 'crates/kcoder_cli/Cargo.toml',
+    'crates/kcoder_app_protocol/src/lib.rs',
+    'crates/kcoder_cli/src/app_server/connection_state.rs',
+    'crates/kcoder_cli/src/internal/host_transport/metadata/capabilities.rs',
+    'crates/kcoder_cli/src/internal/host_transport/metadata/negotiation.rs',
+    'apps/kcoder-studio/package.json', 'apps/kcoder-studio/mobile/package.json',
+  ];
+  for (const file of files) {
+    const path = resolve(root, file);
+    await mkdir(dirname(path), { recursive: true });
+    await writeFile(path, await readFile(new URL('../../' + file, import.meta.url)));
+  }
+  const git = args => execFileSync('git', args, {
+    cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
+  }).trim();
+  git(['init', '-b', 'main']);
+  git(['config', 'user.email', 'fixture@example.invalid']);
+  git(['config', 'user.name', 'Fixture']);
+  git(['add', '.']);
+  git(['commit', '-m', 'initial']);
+  const index = resolve(root, '.git/index');
+  const original = await readFile(index);
+  const changedTime = new Date(Date.now() + 2_000);
+  await utimes(resolve(root, 'Cargo.toml'), changedTime, changedTime);
+  const identity = await releaseIdentity(root);
+  assert.equal(identity.packagingSource.commit, git(['rev-parse', 'HEAD']));
+  assert.equal(identity.packagingSource.dirty, false);
+  assert.deepEqual(await readFile(index), original);
+});
+
+test('CLI version follows its package declaration and explicit workspace inheritance', () => {
+  const workspace = '[workspace.package]\nversion = "0.1.0"\n[workspace.dependencies]\nother = { version = "9.0.0" }';
+  assert.equal(cargoPackageVersion('[package]\nversion = "0.6.0"\n[dependencies]\nversion = "8.0.0"', workspace), '0.6.0');
+  assert.equal(cargoPackageVersion('[package]\nversion.workspace = true', workspace), '0.1.0');
+  assert.equal(cargoPackageVersion('[package]\nversion = { workspace = true }', workspace), '0.1.0');
+  assert.throws(() => cargoPackageVersion('[package]\nname = "cli"\n[dependencies]\nversion = "8.0.0"', workspace), /Cannot resolve/);
+  assert.throws(() => cargoPackageVersion('[package]\nversion.workspace = true', '[package]\nversion = "8.0.0"'), /Cannot resolve/);
+});
 
 test('manifest binds actual file bytes, rejects tampering and unexpected files',async t=>{
   const root=await fixture(t);await mkdir(resolve(root,'bin'));await writeFile(resolve(root,'bin/kcoder'),'fixture executable');
@@ -31,14 +74,17 @@ test('ASAR inner entries and symbolic links cannot bypass the same gate',async t
   await assert.rejects(inventory(root,{inspectAsar:async()=>['desktop/main.mjs','private/settings.json']}),/forbidden/);
   await symlink(resolve(root,'app.asar'),resolve(root,'alias'));await assert.rejects(inventory(root,{inspectAsar:async()=>[]}),/symbolic link/);
 });
-test('source identity records independent versions and declared capabilities rather than claiming negotiation',async()=>{
+test('source identity records the shared product version, CLI version and declared capabilities',async()=>{
   const result=await releaseIdentity();assert.match(result.packagingSource.commit,/^[a-f0-9]{40}$/);
   assert.ok(result.protocol.sourceDeclaredCapabilities.includes('residentThreads'));
   assert.ok(result.protocol.sourceDeclaredCapabilities.includes('modelSelectionModeV1'));
   assert.ok(result.protocol.contract.some(entry=>entry.path==='../kcoder_cli/src/app_server/connection_state.rs'));
+  assert.ok(result.protocol.contract.some(entry=>entry.path==='../kcoder_cli/src/internal/host_transport/metadata/capabilities.rs'));
+  assert.ok(result.protocol.contract.some(entry=>entry.path==='../kcoder_cli/src/internal/host_transport/metadata/negotiation.rs'));
   assert.ok(result.protocol.sourceDeclaredCapabilities.includes('retryModelConfigurationV1'));
   assert.match(result.protocol.note,/not runtime negotiation/);
   for(const version of Object.values(result.versions))assert.match(version,/^\d+\.\d+\.\d+/);
+  assert.equal(result.versions.studio,result.versions.mobile);
 });
 
 test('real ASAR headers cannot conceal a private configuration resource',async t=>{

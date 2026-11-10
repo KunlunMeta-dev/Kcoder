@@ -1,4 +1,26 @@
 use super::*;
+
+#[test]
+fn unattended_turns_are_an_optional_boolean_not_a_permission_override() {
+    let legacy = json!({"threadId":"task","input":[{"type":"text","text":"hello"}]});
+    let ordinary: TurnStartParams = serde_json::from_value(legacy.clone()).unwrap();
+    assert_eq!(ordinary.unattended, None);
+    assert!(
+        serde_json::to_value(&ordinary)
+            .unwrap()
+            .get("unattended")
+            .is_none()
+    );
+    let mut restricted = legacy.clone();
+    restricted["unattended"] = json!(true);
+    let restricted: TurnStartParams = serde_json::from_value(restricted).unwrap();
+    assert_eq!(restricted.unattended, Some(true));
+    assert_eq!(restricted.permission_mode, None);
+    assert_eq!(ordinary.input, restricted.input);
+    let mut invalid = legacy;
+    invalid["unattended"] = json!("allow_all");
+    assert!(serde_json::from_value::<TurnStartParams>(invalid).is_err());
+}
 use serde_json::json;
 
 #[test]
@@ -231,6 +253,7 @@ fn browser_contract_has_typed_methods_actions_and_frames() {
         10,
         method::BROWSER_START,
         BrowserStartParams {
+            profile: None,
             url: "http://127.0.0.1:4173/".into(),
             width: 1280,
             height: 720,
@@ -339,10 +362,12 @@ fn approval_and_question_are_server_requests() {
         "approval-rpc-1",
         method::APPROVAL_REQUEST,
         ApprovalRequestParams {
+            tool_call_id: None,
             server_id: "server-a".into(),
             thread_id: "thread-1".into(),
             turn_id: "turn-1".into(),
             approval_id: "approval-1".into(),
+            app_server_epoch: Some("epoch-1".into()),
             action: ApprovalAction::Command {
                 command: "cargo test".into(),
             },
@@ -360,6 +385,7 @@ fn approval_and_question_are_server_requests() {
         thread_id: "thread-1".into(),
         turn_id: "turn-1".into(),
         question_id: "question-1".into(),
+        app_server_epoch: Some("epoch-1".into()),
         questions: vec![Question {
             id: "database".into(),
             header: "Database".into(),
@@ -386,11 +412,23 @@ fn approval_and_question_are_server_requests() {
                 question_id: "question-12".into(),
                 thread_id: "thread-1".into(),
                 turn_id: "turn-1".into(),
+                app_server_epoch: Some("epoch-1".into()),
                 reason: "client_response".into(),
             },
         ))
-        .unwrap()["method"],
-        "question/resolved"
+        .unwrap(),
+        json!({
+            "jsonrpc": "2.0",
+            "method": "question/resolved",
+            "params": {
+                "requestId": 12,
+                "questionId": "question-12",
+                "threadId": "thread-1",
+                "turnId": "turn-1",
+                "appServerEpoch": "epoch-1",
+                "reason": "client_response"
+            }
+        })
     );
 
     assert_eq!(
@@ -401,6 +439,7 @@ fn approval_and_question_are_server_requests() {
                 approval_id: "approval-11".into(),
                 thread_id: "thread-1".into(),
                 turn_id: "turn-1".into(),
+                app_server_epoch: Some("epoch-1".into()),
                 decision: ApprovalDecision::Decline,
                 reason: "timeout".into(),
             },
@@ -414,6 +453,7 @@ fn approval_and_question_are_server_requests() {
                 "approvalId": "approval-11",
                 "threadId": "thread-1",
                 "turnId": "turn-1",
+                "appServerEpoch": "epoch-1",
                 "decision": "decline",
                 "reason": "timeout"
             }
@@ -436,6 +476,9 @@ fn codec_rejects_empty_and_multiple_records() {
 #[test]
 fn all_mvp_method_types_serialize() {
     let thread = Thread {
+        agent_definition: None,
+        channel_task_source: None,
+        studio_work_mode: None,
         model_selection_mode: None,
         selected_model: None,
         session_mode: None,
@@ -510,6 +553,10 @@ fn all_mvp_method_types_serialize() {
     })
     .unwrap();
     let turn_start = serde_json::to_value(TurnStartParams {
+        unattended: None,
+        channel_tool_restrictions: None,
+        client_presentation: None,
+        async_user_questions: None,
         retention: None,
         computer_use: None,
         retry_model_configuration: None,
@@ -1012,4 +1059,60 @@ fn thread_metadata_serializes_cleared_fields_as_explicit_nulls() {
             "parent": null
         })
     );
+}
+
+#[test]
+fn studio_mode_and_presentation_are_opt_in_and_legacy_round_trips_remain_coding() {
+    let legacy: ThreadStartParams = serde_json::from_value(serde_json::json!({})).unwrap();
+    assert_eq!(legacy.studio_work_mode, None);
+    let office: ThreadStartParams =
+        serde_json::from_value(serde_json::json!({"studioWorkMode":"kworker"})).unwrap();
+    assert_eq!(office.studio_work_mode, Some(StudioWorkMode::Kworker));
+    let turn: TurnStartParams = serde_json::from_value(serde_json::json!({
+        "threadId":"thread-1", "input":[{"type":"text","text":"hello"}],
+        "clientPresentation":{"version":1,"studioWorkMode":"kworker","inlineWidgets":true}
+    }))
+    .unwrap();
+    let presentation = turn.client_presentation.unwrap();
+    assert_eq!(presentation.studio_work_mode, Some(StudioWorkMode::Kworker));
+    assert!(presentation.inline_widgets);
+    assert_eq!(turn.async_user_questions, None);
+    let catalog: ToolsCatalogParams = serde_json::from_value(serde_json::json!({
+        "clientPresentation":{"version":1}, "asyncUserQuestions":true
+    }))
+    .unwrap();
+    assert_eq!(catalog.async_user_questions, Some(true));
+    assert_eq!(catalog.client_presentation.unwrap().studio_work_mode, None);
+    assert!(
+        serde_json::from_value::<ToolsCatalogParams>(
+            serde_json::json!({"clientPresentation":{"version":1,"owner":"forged"}})
+        )
+        .is_err()
+    );
+}
+
+#[test]
+fn channel_restrictions_are_optional_bounded_and_round_scoped_on_the_wire() {
+    let input = serde_json::json!({"threadId":"original", "input":[], "unattended":true,
+        "channelToolRestrictions":{"enabled":true,"disabledTools":["AskUserQuestionAsync","AskUserQuestion","AskUserQuestion"]}});
+    let params: super::TurnStartParams = serde_json::from_value(input.clone()).unwrap();
+    let policy = params.channel_tool_restrictions.as_ref().unwrap();
+    assert_eq!(
+        policy.disabled_tools,
+        ["AskUserQuestion", "AskUserQuestionAsync"]
+    );
+    assert!(policy.enabled);
+    for invalid in [
+        serde_json::json!(["bad name"]),
+        serde_json::json!([""]),
+        serde_json::json!(["x".repeat(257)]),
+        serde_json::json!(vec!["tool"; 129]),
+    ] {
+        let mut input = input.clone();
+        input["channelToolRestrictions"]["disabledTools"] = invalid;
+        assert!(serde_json::from_value::<super::TurnStartParams>(input).is_err());
+    }
+    let legacy: super::TurnStartParams =
+        serde_json::from_value(serde_json::json!({"threadId":"original","input":[]})).unwrap();
+    assert!(legacy.channel_tool_restrictions.is_none());
 }

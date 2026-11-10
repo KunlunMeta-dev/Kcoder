@@ -1,24 +1,26 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, test, vi } from 'vitest'
 import { fireEvent } from '@testing-library/react'
 import { installDeveloperCommandMenu } from './developerCommandMenu'
+import { isPerformanceDiagnosticsEnabled, refreshProcessDiagnostics } from './performanceDiagnostics'
+import { isRuntimeDebugEnabled } from './diagnosticPreferences'
 import { APP_UPDATE_SIMULATE_EVENT } from '@/features/app-update/app-update-context'
 
 const invokeMock = vi.hoisted(() => vi.fn())
 const requestLocalExecutorMock = vi.hoisted(() => vi.fn())
-const isTauriRuntimeMock = vi.hoisted(() => vi.fn())
+const isGatewayRuntimeMock = vi.hoisted(() => vi.fn())
 const getWorkbenchDebugSnapshotMock = vi.hoisted(() => vi.fn())
 const clearWorkbenchDebugLogsMock = vi.hoisted(() => vi.fn())
 
-vi.mock('@tauri-apps/api/core', () => ({
+vi.mock('@/lib/runtime-commands', () => ({
   invoke: invokeMock,
 }))
 
-vi.mock('@/tauri/localExecutor', () => ({
+vi.mock('@/host/localExecutor', () => ({
   requestLocalExecutor: requestLocalExecutorMock,
 }))
 
 vi.mock('./runtime-environment', () => ({
-  isTauriRuntime: isTauriRuntimeMock,
+  isGatewayRuntime: isGatewayRuntimeMock,
 }))
 
 vi.mock('./debugPanel', () => ({
@@ -34,14 +36,14 @@ describe('developerCommandMenu', () => {
   beforeEach(() => {
     invokeMock.mockResolvedValue(undefined)
     requestLocalExecutorMock.mockResolvedValue({ enabled: false })
-    isTauriRuntimeMock.mockReturnValue(true)
+    isGatewayRuntimeMock.mockReturnValue(true)
     getWorkbenchDebugSnapshotMock.mockReturnValue(createDebugSnapshot())
     localStorage.clear()
   })
 
   afterEach(() => {
-    document.getElementById('wework-developer-command-menu')?.remove()
-    document.getElementById('wework-debug-panel')?.remove()
+    document.getElementById('kcoder-developer-command-menu')?.remove()
+    document.getElementById('kcoder-debug-panel')?.remove()
     vi.clearAllMocks()
   })
 
@@ -58,34 +60,54 @@ describe('developerCommandMenu', () => {
     expect(screenCommand('open-web-inspector')).toBeInTheDocument()
   })
 
-  test('toggles Codex stream logs through the local executor', async () => {
-    requestLocalExecutorMock
-      .mockResolvedValueOnce({ enabled: false })
-      .mockResolvedValueOnce({ enabled: true })
+  test('toggles renderer stream logs without calling the retired executor methods', () => {
     dispatchDeveloperShortcut()
-    await flushPromises()
-
+    expect(screenCommand('toggle-stream-logs')).toHaveTextContent('Enable Stream Logs')
     screenCommand('toggle-stream-logs').click()
-    await flushPromises()
+    expect(localStorage.getItem('kcoder:debug-runtime-chat-stream')).toBe('1')
 
-    expect(requestLocalExecutorMock).toHaveBeenCalledWith('runtime.codex.stream_debug.get')
-    expect(requestLocalExecutorMock).toHaveBeenCalledWith('runtime.codex.stream_debug.set', {
-      enabled: true,
-    })
-    expect(localStorage.getItem('wework:debug-runtime-chat-stream')).toBe('1')
+    localStorage.setItem('wework:debug-runtime-chat-stream', '1')
+    dispatchDeveloperShortcut()
+    expect(screenCommand('toggle-stream-logs')).toHaveTextContent('Disable Stream Logs')
+    screenCommand('toggle-stream-logs').click()
+    expect(localStorage.getItem('kcoder:debug-runtime-chat-stream')).toBeNull()
+    expect(localStorage.getItem('wework:debug-runtime-chat-stream')).toBeNull()
+    expect(requestLocalExecutorMock).not.toHaveBeenCalled()
   })
 
-  test('restores the frontend stream flag when the executor toggle fails', async () => {
-    requestLocalExecutorMock
-      .mockResolvedValueOnce({ enabled: true })
-      .mockRejectedValueOnce(new Error('executor unavailable'))
-    dispatchDeveloperShortcut()
-    await flushPromises()
+  test('keeps legacy runtime diagnostics readable and prioritizes the KCoder key', () => {
+    localStorage.setItem('wework:debug-runtime', '1')
+    expect(isRuntimeDebugEnabled()).toBe(true)
+    localStorage.setItem('kcoder:debug-runtime', '0')
+    expect(isRuntimeDebugEnabled()).toBe(false)
+  })
 
-    screenCommand('toggle-stream-logs').click()
-    await flushPromises()
+  test('accepts the old performance query and lets the KCoder query override it', () => {
+    const previousUrl = window.location.href
+    try {
+      window.history.replaceState({}, '', '?weworkPerf=1')
+      expect(isPerformanceDiagnosticsEnabled()).toBe(true)
+      expect(localStorage.getItem('kcoder:perf-debug')).toBe('1')
+      localStorage.setItem('wework:perf-debug', '1')
+      window.history.replaceState({}, '', '?weworkPerf=1&kcoderPerf=0')
+      expect(isPerformanceDiagnosticsEnabled()).toBe(false)
+      expect(localStorage.getItem('kcoder:perf-debug')).toBeNull()
+      expect(localStorage.getItem('wework:perf-debug')).toBeNull()
+    } finally {
+      window.history.replaceState({}, '', previousUrl)
+    }
+  })
 
-    expect(localStorage.getItem('wework:debug-runtime-chat-stream')).toBeNull()
+  test('uses the current process command and handles Gateways without process sampling', async () => {
+    const snapshot = { timestamp_ms: 1, main_pid: 42, groups: [], processes: [] }
+    invokeMock.mockResolvedValueOnce({ processes: [] }).mockResolvedValueOnce(snapshot)
+
+    await expect(refreshProcessDiagnostics()).resolves.toBeNull()
+    await expect(refreshProcessDiagnostics()).resolves.toEqual(snapshot)
+    expect(invokeMock.mock.calls).toEqual([
+      ['get_process_diagnostics_snapshot'],
+      ['get_process_diagnostics_snapshot'],
+    ])
   })
 
   test('dispatches an event to simulate an app update', () => {
@@ -99,7 +121,7 @@ describe('developerCommandMenu', () => {
     window.removeEventListener(APP_UPDATE_SIMULATE_EVENT, listener)
   })
 
-  test('opens the app log directory through Tauri', () => {
+  test('opens the app log directory through the Gateway', () => {
     dispatchDeveloperShortcut()
 
     screenCommand('open-log-directory').click()
@@ -107,7 +129,7 @@ describe('developerCommandMenu', () => {
     expect(invokeMock).toHaveBeenCalledWith('open_app_log_directory')
   })
 
-  test('opens the main WebView inspector through Tauri', () => {
+  test('opens the main WebView inspector through the Gateway', () => {
     dispatchDeveloperShortcut()
 
     screenCommand('open-web-inspector').click()
@@ -120,7 +142,7 @@ describe('developerCommandMenu', () => {
 
     screenCommand('open-debug-panel').click()
 
-    expect(document.getElementById('wework-debug-panel')).toBeInTheDocument()
+    expect(document.getElementById('kcoder-debug-panel')).toBeInTheDocument()
     expect(document.body).toHaveTextContent('Active Task State (taskKnown=true')
     expect(document.body).toHaveTextContent('Memory Diagnostics')
     expect(document.body).toHaveTextContent('Transcript vs Streaming Style')
@@ -152,7 +174,7 @@ describe('developerCommandMenu', () => {
 
     expect(document.body).toHaveTextContent('Transcript vs Streaming Style')
     expect(document.body).toHaveTextContent('Collapse')
-    expect(document.getElementById('wework-debug-panel')).not.toHaveAttribute('style')
+    expect(document.getElementById('kcoder-debug-panel')).not.toHaveAttribute('style')
   })
 
   test('drags the collapsed debug button without expanding it', () => {
@@ -160,7 +182,7 @@ describe('developerCommandMenu', () => {
     screenCommand('open-debug-panel').click()
     screenButton('Collapse').click()
 
-    const root = document.getElementById('wework-debug-panel')
+    const root = document.getElementById('kcoder-debug-panel')
     const button = screenCollapsedDebugPanel()
     vi.spyOn(root!, 'getBoundingClientRect').mockReturnValue({
       left: 900,
@@ -222,10 +244,6 @@ function screenCollapsedDebugPanel(): HTMLElement {
     throw new Error('Collapsed debug panel was not found')
   }
   return element
-}
-
-function flushPromises(): Promise<void> {
-  return new Promise(resolve => window.setTimeout(resolve, 0))
 }
 
 function createDebugSnapshot() {

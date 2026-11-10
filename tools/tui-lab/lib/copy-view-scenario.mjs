@@ -51,7 +51,7 @@ export async function runCopyViewScenario(options, runtime) {
       (_, i) => `    # COPY_LINE_${String(i).padStart(3, "0")} 中文内容`,
     ).join("\n") +
     '\n\tprint("COPY_CODE_LAST")\n';
-  const answer = `# COPY_ANSWER_ROOT\n\n这是固定的 **Markdown** 回答。\n\n\`\`\`python\n${code}\`\`\`\n\nCOPY_ANSWER_TAIL`;
+  const answer = `# COPY_ANSWER_ROOT\n\n这是固定的 **Markdown** 回答。\n\n\`\`\`python\n${code}\`\`\`\n\n鼠标选取：甲乙🙂é tail\n\nCOPY_ANSWER_TAIL`;
   const history = path.join(artifacts.dir, "copy-fixture.jsonl");
   const state = path.join(artifacts.dir, "copy-fixture");
   await mkdir(state, { mode: 0o700 });
@@ -142,6 +142,23 @@ export async function runCopyViewScenario(options, runtime) {
     );
     return page.evaluate(() => navigator.clipboard.readText());
   };
+  const selectMainText = async (needle, start, end, holdMs = 0) => {
+    const hit = await page.evaluate(
+      (needle) => window.tuiLab.textHitCells(needle)[0],
+      needle,
+    );
+    check(`main-selection-target-${needle}`, Boolean(hit));
+    const from = await point(hit.column + start, hit.row);
+    const to = await point(hit.column + end, hit.row);
+    await page.mouse.move(from.x, from.y);
+    await page.mouse.down();
+    // Let real model events repaint after the press, before the first drag.
+    if (holdMs) await page.waitForTimeout(holdMs);
+    await page.mouse.move(to.x, to.y, { steps: 12 });
+    await page.waitForTimeout(120);
+    await page.mouse.up();
+    await page.waitForTimeout(120);
+  };
   await runtime.writeStartMeta(artifacts, runOptions, command, "copy-view");
   return runBrowserScenarioLifecycle({
     execute: async () => {
@@ -160,6 +177,56 @@ export async function runCopyViewScenario(options, runtime) {
       await submitTerminalLine(page, `/resume ${history}`);
       await waitText("COPY_ANSWER_TAIL");
       await typeHumanText(page, "copy-draft-preserved");
+      if (!options.copyInline) {
+        await capture("00-main-before-selection");
+        check(
+          "official-webgl-renderer",
+          await page.evaluate(() => window.tuiLab.renderer === "webgl"),
+        );
+        const beforeStyles = await page.evaluate(
+          () => window.tuiLab.textStyleCells("🙂")[0]?.cells,
+        );
+        check("main-wide-selection-target-visible", Boolean(beforeStyles));
+        await selectMainText("甲乙", 4, 7);
+        const selectedStyles = await page.evaluate(
+          () => window.tuiLab.textStyleCells("🙂")[0].cells,
+        );
+        check(
+          "main-selection-has-visible-highlight",
+          selectedStyles.some((cell, index) =>
+            cell.inverse !== beforeStyles[index].inverse ||
+            cell.bg !== beforeStyles[index].bg ||
+            cell.bgMode !== beforeStyles[index].bgMode),
+        );
+        await capture("00-main-wide-selection");
+        check(
+          "main-drag-copies-emoji-and-combining-text-exactly",
+          (await copy()) === "🙂é",
+        );
+        await selectMainText("甲乙", 7, 0);
+        check(
+          "main-reverse-drag-keeps-chinese-columns",
+          (await copy()) === "甲乙🙂é",
+        );
+        check(
+          "main-copy-keeps-composer-draft",
+          (await visible()).includes("copy-draft-preserved"),
+        );
+        const copied = await page.evaluate(() => navigator.clipboard.readText());
+        await page.evaluate(
+          (text) => window.tuiLab.sendInput(`\u001b[200~${text}\u001b[201~`),
+          copied,
+        );
+        await waitText("copy-draft-preserved甲乙");
+        await typeHumanText(page, "-continue");
+        await waitText("-continue");
+        check(
+          "copied-unicode-pastes-into-editable-draft",
+          (await visible()).includes("copy-draft-preserved甲乙"),
+        );
+        await page.keyboard.press("Control+U");
+        await typeHumanText(page, "copy-draft-preserved");
+      }
       // Inline mode preserves native host-terminal selection and captures the mouse only after entering copy view.
       if (options.copyInline) await page.keyboard.press("F9");
       else await click("F9 copy");
@@ -233,6 +300,15 @@ export async function runCopyViewScenario(options, runtime) {
         "opened-during-live-output",
         !(await visible()).includes("tui-lab-final-sentinel"),
       );
+      if (!options.copyInline) {
+        const token = "tui-lab-final-line-001";
+        await selectMainText(token, 0, token.length, 700);
+        await capture("04-main-selection-during-stream");
+        check(
+          "main-drag-survives-live-redraw-before-first-move",
+          (await copy()) === token,
+        );
+      }
       await page.keyboard.press("F9");
       await waitText("Copy view");
       await click("Answer 1");

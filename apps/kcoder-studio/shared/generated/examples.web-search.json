@@ -1,0 +1,101 @@
+{
+  "WebSearchProbeReadParams": [
+    {
+      "decoded": {
+        "expectedRevision": "r1",
+        "requestId": "probe-1"
+      },
+      "name": "minimal",
+      "value": {
+        "expectedRevision": "r1",
+        "requestId": "probe-1"
+      }
+    }
+  ],
+  "WebSearchProbeResult": [
+    {
+      "decoded": {
+        "requestId": "probe-1",
+        "revision": "r1",
+        "state": "unknown",
+        "targetId": "fixture-target"
+      },
+      "name": "minimal",
+      "value": {
+        "requestId": "probe-1",
+        "revision": "r1",
+        "state": "unknown",
+        "targetId": "fixture-target"
+      }
+    }
+  ],
+  "WebSearchProbeStartParams": [
+    {
+      "decoded": {
+        "expectedRevision": "r1",
+        "mode": "kcoder",
+        "requestId": "probe-1"
+      },
+      "name": "minimal",
+      "value": {
+        "expectedRevision": "r1",
+        "mode": "kcoder",
+        "requestId": "probe-1"
+      }
+    }
+  ],
+  "WebSearchStatusReadParams": [
+    {
+      "decoded": {
+        "mode": "kcoder"
+      },
+      "name": "minimal",
+      "value": {
+        "mode": "kcoder"
+      }
+    }
+  ],
+  "WebSearchStatusReadResult": [
+    {
+      "decoded": {
+        "automatic": true,
+        "candidates": [
+          "exa-public",
+          "searxng-bundled",
+          "bing-html"
+        ],
+        "mode": "kcoder",
+        "observations": [
+          {
+            "component": "unknown",
+            "provider": "exa-public"
+          }
+        ],
+        "revision": "r1",
+        "targetId": "fixture-target",
+        "webFetchVisible": true,
+        "webSearchVisible": true
+      },
+      "name": "minimal",
+      "value": {
+        "automatic": true,
+        "candidates": [
+          "exa-public",
+          "searxng-bundled",
+          "bing-html"
+        ],
+        "mode": "kcoder",
+        "observations": [
+          {
+            "component": "unknown",
+            "provider": "exa-public"
+          }
+        ],
+        "revision": "r1",
+        "targetId": "fixture-target",
+        "webFetchVisible": true,
+        "webSearchVisible": true
+      }
+    }
+  ]
+}

@@ -1,9 +1,14 @@
 use kcoder_types::{ContentBlock, ContentDelta, StreamEvent};
 
+mod client_model_configuration;
 mod error_metadata;
+pub mod model_budget_input;
+pub mod native_model_request;
 pub mod provider_factory;
 pub mod providers;
 pub mod response_budget;
+pub mod token_counter;
+pub use client_model_configuration::{ClientModelConfiguration, model_configuration_summary};
 pub use error_metadata::{
     HttpErrorMetadata, NonHttpErrorClass, RejectedReasoningParameter, SseErrorKind,
 };

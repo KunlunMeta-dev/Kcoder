@@ -130,7 +130,7 @@ async fn auto_curator_archives_agent_created_skill_in_background() {
     )
     .unwrap();
 
-    let mut settings = Settings::default();
+    let mut settings = crate::test_support::engine_builder::fixture_settings();
     settings.skills.auto_curator_enabled = true;
     settings.skills.auto_curator_interval_hours = 1;
     settings.skills.auto_curator_min_idle_hours = 0;
@@ -199,7 +199,7 @@ async fn auto_curator_idle_skip_does_not_advance_last_run() {
     )
     .unwrap();
 
-    let mut settings = Settings::default();
+    let mut settings = crate::test_support::engine_builder::fixture_settings();
     settings.skills.auto_curator_enabled = true;
     settings.skills.auto_curator_interval_hours = 1;
     settings.skills.auto_curator_min_idle_hours = 0;
@@ -278,7 +278,7 @@ fn engine_startup_records_created_usage_for_external_skills() {
     )
     .unwrap();
 
-    let mut settings = Settings::default();
+    let mut settings = crate::test_support::engine_builder::fixture_settings();
     settings.skills.external_dirs = vec![external.path().to_path_buf()];
     let registry =
         SkillRegistry::load_with_external_dirs(tmp.path(), settings.skills.external_dirs.iter())
@@ -314,7 +314,7 @@ fn engine_startup_records_created_usage_for_external_skills() {
 
 #[test]
 fn skill_review_runtime_config_accepts_persistent_skills_settings() {
-    let mut settings = Settings::default();
+    let mut settings = crate::test_support::engine_builder::fixture_settings();
     assert_eq!(
         crate::skill_maintenance_runtime::skill_review_runtime_config(&settings),
         (false, 10)
@@ -345,7 +345,7 @@ fn skill_review_runtime_config_accepts_persistent_skills_settings() {
 #[test]
 fn background_skill_review_counter_requires_reusable_knowledge_signal() {
     let tmp = tempfile::tempdir().unwrap();
-    let mut settings = Settings::default();
+    let mut settings = crate::test_support::engine_builder::fixture_settings();
     settings.skills.auto_skill_review_enabled = true;
     settings.skills.auto_skill_review_interval = 2;
     let engine = QueryEngine::new(
@@ -389,7 +389,7 @@ async fn background_skill_review_patch_marks_background_write_origin() {
 
     let settings = Settings {
         auto_skill_review_enabled: false,
-        ..Settings::default()
+        ..crate::test_support::engine_builder::fixture_settings()
     };
     let calls = Arc::new(AtomicUsize::new(0));
     let engine = QueryEngine::new(
@@ -410,6 +410,7 @@ async fn background_skill_review_patch_marks_background_write_origin() {
         active_skills: vec![],
         snapshot_provider: engine.provider_name(),
         snapshot_model: engine.model_name(),
+        context_history_anchor: None,
         full_context_compatible: true,
     };
 
@@ -447,7 +448,7 @@ async fn background_skill_review_create_marks_agent_created_provenance() {
     let tmp = tempfile::tempdir().unwrap();
     let settings = Settings {
         auto_skill_review_enabled: false,
-        ..Settings::default()
+        ..crate::test_support::engine_builder::fixture_settings()
     };
     let calls = Arc::new(AtomicUsize::new(0));
     let engine = QueryEngine::new(
@@ -468,6 +469,7 @@ async fn background_skill_review_create_marks_agent_created_provenance() {
         active_skills: vec![],
         snapshot_provider: engine.provider_name(),
         snapshot_model: engine.model_name(),
+        context_history_anchor: None,
         full_context_compatible: true,
     };
 

@@ -1,0 +1,241 @@
+{
+  "MigrationTranscriptPageParams": {
+    "valid": [
+      {
+        "name": "read_only_archive",
+        "value": {
+          "jobId": "job",
+          "cursor": 0
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "rejects_unbound_or_wrong_shape",
+        "value": {
+          "jobId": "job",
+          "path": "/other"
+        }
+      }
+    ]
+  },
+  "MigrationTranscriptBlocksParams": {
+    "valid": [
+      {
+        "name": "read_only_archive",
+        "value": {
+          "jobId": "job",
+          "record": 0,
+          "cursor": 10
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "rejects_unbound_or_wrong_shape",
+        "value": {
+          "jobId": "job",
+          "record": 0,
+          "owner": "other"
+        }
+      }
+    ]
+  },
+  "MigrationTranscriptTextParams": {
+    "valid": [
+      {
+        "name": "read_only_archive",
+        "value": {
+          "jobId": "job",
+          "record": 0,
+          "blockIndex": 0
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "rejects_unbound_or_wrong_shape",
+        "value": {
+          "jobId": "job",
+          "record": 0,
+          "blockIndex": 0,
+          "offset": 100
+        }
+      }
+    ]
+  },
+  "MigrationTranscriptPageResult": {
+    "valid": [
+      {
+        "name": "read_only_archive",
+        "value": {
+          "source": "claude-code",
+          "sourceSessionId": "source-session",
+          "title": "Original title",
+          "project": null,
+          "items": [
+            {
+              "record": 0,
+              "kind": "message",
+              "role": "assistant",
+              "timestamp": null,
+              "sourceId": "message",
+              "parentId": null,
+              "hidden": false,
+              "sidechain": false,
+              "compactSummary": false,
+              "blocks": [
+                {
+                  "index": 0,
+                  "kind": "text",
+                  "preview": "Archived text",
+                  "sourceBytes": 15,
+                  "decodedBytes": 13,
+                  "bodyAvailable": true,
+                  "callId": null,
+                  "name": null,
+                  "namespace": null,
+                  "sourceType": null,
+                  "outcome": null
+                }
+              ],
+              "totalBlocks": 1,
+              "nextBlockCursor": null,
+              "diagnostics": [],
+              "totalDiagnostics": 0
+            }
+          ],
+          "totalRecords": 1,
+          "nextCursor": null,
+          "normalizationComplete": true,
+          "adapterRevision": "fixed-revision"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "rejects_unbound_or_wrong_shape",
+        "value": {
+          "source": "claude-code",
+          "sourceSessionId": "source-session",
+          "title": "Original title",
+          "project": null,
+          "items": [
+            {
+              "record": 0,
+              "kind": "message",
+              "role": "assistant",
+              "timestamp": null,
+              "sourceId": "message",
+              "parentId": null,
+              "hidden": false,
+              "sidechain": false,
+              "compactSummary": false,
+              "blocks": [
+                {
+                  "index": 0,
+                  "kind": "text",
+                  "preview": "Archived text",
+                  "sourceBytes": 15,
+                  "decodedBytes": 13,
+                  "bodyAvailable": true,
+                  "callId": null,
+                  "name": null,
+                  "namespace": null,
+                  "sourceType": null,
+                  "outcome": null,
+                  "execute": true
+                }
+              ],
+              "totalBlocks": 1,
+              "nextBlockCursor": null,
+              "diagnostics": [],
+              "totalDiagnostics": 0
+            }
+          ],
+          "totalRecords": 1,
+          "nextCursor": null,
+          "normalizationComplete": true,
+          "adapterRevision": "fixed-revision"
+        }
+      }
+    ]
+  },
+  "MigrationTranscriptBlocksResult": {
+    "valid": [
+      {
+        "name": "read_only_archive",
+        "value": {
+          "record": 0,
+          "blocks": [
+            {
+              "index": 0,
+              "kind": "text",
+              "preview": "Archived text",
+              "sourceBytes": 15,
+              "decodedBytes": 13,
+              "bodyAvailable": true,
+              "callId": null,
+              "name": null,
+              "namespace": null,
+              "sourceType": null,
+              "outcome": null
+            }
+          ],
+          "totalBlocks": 1,
+          "nextCursor": null
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "rejects_unbound_or_wrong_shape",
+        "value": {
+          "record": 0,
+          "blocks": [
+            {
+              "index": 0,
+              "kind": "active_tool",
+              "preview": "Archived text",
+              "sourceBytes": 15,
+              "decodedBytes": 13,
+              "bodyAvailable": true,
+              "callId": null,
+              "name": null,
+              "namespace": null,
+              "sourceType": null,
+              "outcome": null
+            }
+          ],
+          "totalBlocks": 1
+        }
+      }
+    ]
+  },
+  "MigrationTranscriptTextResult": {
+    "valid": [
+      {
+        "name": "read_only_archive",
+        "value": {
+          "text": "Archived text",
+          "nextCursor": "opaque-position",
+          "sourceBytes": 15,
+          "decodedBytes": 13,
+          "encoding": "json_string"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "rejects_unbound_or_wrong_shape",
+        "value": {
+          "text": "Archived text",
+          "nextCursor": "opaque-position",
+          "sourceBytes": 15,
+          "decodedBytes": 13,
+          "encoding": "executable"
+        }
+      }
+    ]
+  }
+}

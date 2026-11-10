@@ -1,10 +1,42 @@
 use super::*;
 
 impl QueryEngine {
+    pub(super) fn model_tool_names(
+        &self,
+        registry: &ToolRegistry,
+        terminal_verdict_only: bool,
+    ) -> HashSet<String> {
+        let (goal_enabled, suppress_user_elicitation) = {
+            let settings = recover_read_lock(&self.settings, "settings");
+            (
+                settings.goal_enabled,
+                settings.permission_mode.suppresses_user_elicitation(),
+            )
+        };
+        registry
+            .names()
+            .into_iter()
+            .filter(|name| {
+                registry
+                    .get(name)
+                    .is_some_and(|tool| tool.is_model_visible())
+                    && (goal_enabled || !is_goal_tool_name(name))
+                    && (name != "AskUserQuestionAsync" || self.async_user_questions_available())
+                    && (!suppress_user_elicitation || !is_user_elicitation_tool_name(name))
+                    && !edit_surface_is_hidden(self.file_edit_surface, name)
+                    && (!terminal_verdict_only || name == kcoder_tools::VERIFIER_VOTE_TOOL_NAME)
+            })
+            .collect()
+    }
+
     /// Rebuild the immutable schema caches when the host composes a turn-scoped
     /// registry. Consumes a cloned engine; resident/subagent registries are not
     /// modified and effective permissions are still filtered per request.
     pub fn with_turn_tools(mut self, tools: ToolRegistry) -> Self {
+        let tools = self.restrict_to_native_authority(tools);
+        // Keep the host-composed registry intact here so a later per-turn
+        // capability update can enable the tool. Exposure remains filtered in
+        // `active_tool_registry` and `model_tool_names`.
         let (definitions, schemas, hints) = build_tool_caches(&tools);
         self.tool_schema_revision = tools.revision();
         self.tool_definitions = Arc::new(definitions);
@@ -186,28 +218,9 @@ impl QueryEngine {
             return Vec::new();
         }
         let mut ctx = self.tool_description_context();
-        let (goal_enabled, suppress_user_elicitation) = {
-            let settings = recover_read_lock(&self.settings, "settings");
-            (
-                settings.goal_enabled,
-                settings.permission_mode.suppresses_user_elicitation(),
-            )
-        };
-        // The edit surface is pinned at engine creation; the live setting is
-        // deliberately not consulted here.
-        let file_edit_surface = self.file_edit_surface;
         let arrangement_mode = self.is_arrangement_mode_active();
         let active_tools = self.active_tool_registry();
-        ctx.available_tools = active_tools
-            .names()
-            .into_iter()
-            .filter(|name| {
-                (goal_enabled || !is_goal_tool_name(name))
-                    && (!suppress_user_elicitation || !is_user_elicitation_tool_name(name))
-                    && !edit_surface_is_hidden(file_edit_surface, name)
-                    && (!terminal_verdict_only || name == kcoder_tools::VERIFIER_VOTE_TOOL_NAME)
-            })
-            .collect();
+        ctx.available_tools = self.model_tool_names(&active_tools, terminal_verdict_only);
         let has_uncached_tool = ctx
             .available_tools
             .iter()
@@ -297,12 +310,9 @@ impl QueryEngine {
     }
 
     fn tool_description_context(&self) -> ToolDescriptionContext {
-        let (permission_mode, active_skills) = {
-            let settings = recover_read_lock(&self.settings, "settings");
-            let mode = tool_permission_mode(settings.permission_mode);
-            let skills = recover_read_lock(&self.active_skills, "active_skills").clone();
-            (mode, skills)
-        };
+        let active_skills = self.effective_active_skill_names();
+        let permission_mode =
+            tool_permission_mode(recover_read_lock(&self.settings, "settings").permission_mode);
         ToolDescriptionContext {
             permission_mode,
             is_non_interactive: description_is_non_interactive(

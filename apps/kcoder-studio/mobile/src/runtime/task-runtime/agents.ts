@@ -43,6 +43,7 @@ export function agentCapabilities(this: TaskRuntime) {
   return {
     discover: has("agentArtifactsV1") || has("agentArtifactPagesV1"),
     live: has("agentLiveViewV1"),
+    conversation: has("agentConversationStreamV1"),
     pages: has("agentArtifactPagesV1"),
     commands: has("agentCommandReceiptsV1") && has("agentSteering"),
     stop: has("agentStopV1"),

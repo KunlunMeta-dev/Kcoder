@@ -1,3 +1,4 @@
+import { SettingsSelect } from '@/components/settings/SettingsSelect'
 import { useState } from 'react'
 import { Plus, Trash2, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -149,7 +150,7 @@ export function TodoWorkflowDialog({
               </button>
             ))}
           </div>
-          <div className="mt-2 divide-y divide-border overflow-hidden rounded-lg border border-border">
+          <div className="studio-card mt-2 divide-y divide-border overflow-hidden rounded-lg border border-border">
             {workTypes.map(workType => (
               <div key={workType.key} className="px-3 py-2">
                 <div className="flex h-8 items-center gap-2">
@@ -201,7 +202,7 @@ export function TodoWorkflowDialog({
                   <span className="mr-1 text-xs text-text-muted">
                     {t('todo.default_assignee', '默认负责人')}
                   </span>
-                  <select
+                  <SettingsSelect
                     data-testid={`todo-workflow-assignee-type-${workType.key}`}
                     value={workType.defaultAssignee.type}
                     onChange={event =>
@@ -214,7 +215,7 @@ export function TodoWorkflowDialog({
                     </option>
                     <option value="human">{t('todo.assignee_human', '员工')}</option>
                     <option value="ai">{t('todo.assignee_ai', 'AI 智能体')}</option>
-                  </select>
+                  </SettingsSelect>
                   {workType.defaultAssignee.type !== 'unassigned' && (
                     <input
                       data-testid={`todo-workflow-assignee-name-${workType.key}`}

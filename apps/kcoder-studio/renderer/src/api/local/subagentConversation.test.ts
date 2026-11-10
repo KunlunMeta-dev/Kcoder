@@ -4,9 +4,9 @@ import {
   requestLocalExecutor,
   subscribeLocalExecutorEvents,
   type LocalExecutorEvent,
-} from '@/tauri/localExecutor'
+} from '@/host/localExecutor'
 
-vi.mock('@/tauri/localExecutor', () => ({
+vi.mock('@/host/localExecutor', () => ({
   requestLocalExecutor: vi.fn(),
   subscribeLocalExecutorEvents: vi.fn(),
 }))

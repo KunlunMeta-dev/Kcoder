@@ -1,0 +1,384 @@
+{
+  "schema": 1,
+  "id": "2026-10-27-checklist-states",
+  "fileKey": "n3ZXIXCF785lwDJMVEj14O",
+  "rootNodeId": "90:2",
+  "sectionName": "REF-V3 / 14 本轮清单与历史",
+  "source": [
+    "current-catalog.mjs PLAN-01..05",
+    "current-transitions.mjs PLAN-01..05",
+    "TaskPlanCard.tsx task-plan-summary"
+  ],
+  "states": [
+    {
+      "id": "PLAN-02",
+      "title": "本轮清单折叠，常驻输入区上方",
+      "group": "commands"
+    },
+    {
+      "id": "PLAN-03",
+      "title": "正文滚动，清单位置保持不变",
+      "group": "commands"
+    },
+    {
+      "id": "PLAN-04",
+      "title": "已取消项目不计入完成数量",
+      "group": "commands"
+    },
+    {
+      "id": "PLAN-05",
+      "title": "旧清单保留在历史消息中",
+      "group": "commands"
+    }
+  ],
+  "replaceRoutes": [
+    {
+      "stateId": "PLAN-01",
+      "routes": [
+        {
+          "selector": {
+            "name": "按钮 / 会话",
+            "testId": "v3-conversation-menu",
+            "occurrence": 0
+          },
+          "type": "NODE",
+          "targetStateId": "MENU-01"
+        },
+        {
+          "selector": {
+            "name": "按钮 / 新建对话",
+            "testId": "task-new",
+            "occurrence": 0
+          },
+          "type": "NODE",
+          "destinationId": "90:472"
+        },
+        {
+          "selector": {
+            "name": "按钮 / 更多",
+            "testId": "task-more",
+            "occurrence": 0
+          },
+          "type": "NODE",
+          "targetStateId": "MENU-02"
+        },
+        {
+          "selector": {
+            "name": "按钮 / 更多",
+            "testId": "assistant-response-more",
+            "occurrence": 0
+          },
+          "type": "NODE",
+          "targetStateId": "CHAT-02"
+        },
+        {
+          "selector": {
+            "name": "按钮 / 添加附件",
+            "testId": "composer-attachment",
+            "occurrence": 0
+          },
+          "type": "NODE",
+          "destinationId": "90:8365"
+        },
+        {
+          "selector": {
+            "testId": "task-plan-summary",
+            "occurrence": 0
+          },
+          "type": "NODE",
+          "targetStateId": "PLAN-02"
+        }
+      ]
+    },
+    {
+      "stateId": "PLAN-02",
+      "routes": [
+        {
+          "selector": {
+            "name": "按钮 / 会话",
+            "testId": "v3-conversation-menu",
+            "occurrence": 0
+          },
+          "type": "NODE",
+          "targetStateId": "MENU-01"
+        },
+        {
+          "selector": {
+            "name": "按钮 / 新建对话",
+            "testId": "task-new",
+            "occurrence": 0
+          },
+          "type": "NODE",
+          "destinationId": "90:472"
+        },
+        {
+          "selector": {
+            "name": "按钮 / 更多",
+            "testId": "task-more",
+            "occurrence": 0
+          },
+          "type": "NODE",
+          "targetStateId": "MENU-02"
+        },
+        {
+          "selector": {
+            "name": "按钮 / 更多",
+            "testId": "assistant-response-more",
+            "occurrence": 0
+          },
+          "type": "NODE",
+          "targetStateId": "CHAT-02"
+        },
+        {
+          "selector": {
+            "name": "按钮 / 添加附件",
+            "testId": "composer-attachment",
+            "occurrence": 0
+          },
+          "type": "NODE",
+          "destinationId": "90:8365"
+        },
+        {
+          "selector": {
+            "testId": "task-plan-summary",
+            "occurrence": 0
+          },
+          "type": "NODE",
+          "targetStateId": "PLAN-01"
+        }
+      ]
+    },
+    {
+      "stateId": "PLAN-03",
+      "routes": [
+        {
+          "selector": {
+            "name": "按钮 / 会话",
+            "testId": "v3-conversation-menu",
+            "occurrence": 0
+          },
+          "type": "NODE",
+          "targetStateId": "MENU-01"
+        },
+        {
+          "selector": {
+            "name": "按钮 / 新建对话",
+            "testId": "task-new",
+            "occurrence": 0
+          },
+          "type": "NODE",
+          "destinationId": "90:472"
+        },
+        {
+          "selector": {
+            "name": "按钮 / 更多",
+            "testId": "task-more",
+            "occurrence": 0
+          },
+          "type": "NODE",
+          "targetStateId": "MENU-02"
+        },
+        {
+          "selector": {
+            "name": "按钮 / 更多",
+            "testId": "assistant-response-more",
+            "occurrence": 0
+          },
+          "type": "NODE",
+          "targetStateId": "CHAT-02"
+        },
+        {
+          "selector": {
+            "name": "按钮 / 添加附件",
+            "testId": "composer-attachment",
+            "occurrence": 0
+          },
+          "type": "NODE",
+          "destinationId": "90:8365"
+        },
+        {
+          "selector": {
+            "testId": "task-plan-summary",
+            "occurrence": 0
+          },
+          "type": "NODE",
+          "targetStateId": "PLAN-01"
+        }
+      ]
+    },
+    {
+      "stateId": "PLAN-04",
+      "routes": [
+        {
+          "selector": {
+            "name": "按钮 / 会话",
+            "testId": "v3-conversation-menu",
+            "occurrence": 0
+          },
+          "type": "NODE",
+          "targetStateId": "MENU-01"
+        },
+        {
+          "selector": {
+            "name": "按钮 / 新建对话",
+            "testId": "task-new",
+            "occurrence": 0
+          },
+          "type": "NODE",
+          "destinationId": "90:472"
+        },
+        {
+          "selector": {
+            "name": "按钮 / 更多",
+            "testId": "task-more",
+            "occurrence": 0
+          },
+          "type": "NODE",
+          "targetStateId": "MENU-02"
+        },
+        {
+          "selector": {
+            "name": "按钮 / 更多",
+            "testId": "assistant-response-more",
+            "occurrence": 0
+          },
+          "type": "NODE",
+          "targetStateId": "CHAT-02"
+        },
+        {
+          "selector": {
+            "name": "按钮 / 添加附件",
+            "testId": "composer-attachment",
+            "occurrence": 0
+          },
+          "type": "NODE",
+          "destinationId": "90:8365"
+        },
+        {
+          "selector": {
+            "testId": "task-plan-summary",
+            "occurrence": 0
+          },
+          "type": "NODE",
+          "targetStateId": "PLAN-02"
+        }
+      ]
+    },
+    {
+      "stateId": "PLAN-05",
+      "routes": [
+        {
+          "selector": {
+            "name": "按钮 / 会话",
+            "testId": "v3-conversation-menu",
+            "occurrence": 0
+          },
+          "type": "NODE",
+          "targetStateId": "MENU-01"
+        },
+        {
+          "selector": {
+            "name": "按钮 / 新建对话",
+            "testId": "task-new",
+            "occurrence": 0
+          },
+          "type": "NODE",
+          "destinationId": "90:472"
+        },
+        {
+          "selector": {
+            "name": "按钮 / 更多",
+            "testId": "task-more",
+            "occurrence": 0
+          },
+          "type": "NODE",
+          "targetStateId": "MENU-02"
+        },
+        {
+          "selector": {
+            "name": "按钮 / 更多",
+            "testId": "assistant-response-more",
+            "occurrence": 0
+          },
+          "type": "NODE",
+          "targetStateId": "CHAT-02"
+        },
+        {
+          "selector": {
+            "name": "按钮 / 添加附件",
+            "testId": "composer-attachment",
+            "occurrence": 0
+          },
+          "type": "NODE",
+          "destinationId": "90:8365"
+        },
+        {
+          "selector": {
+            "testId": "task-plan-summary",
+            "occurrence": 0
+          },
+          "type": "NODE",
+          "targetStateId": "PLAN-01"
+        }
+      ]
+    },
+    {
+      "stateId": "SUP-PLAN-01",
+      "routes": [
+        {
+          "selector": {
+            "name": "按钮 / 会话",
+            "testId": "v3-conversation-menu",
+            "occurrence": 0
+          },
+          "type": "NODE",
+          "targetStateId": "MENU-01"
+        },
+        {
+          "selector": {
+            "name": "按钮 / 新建对话",
+            "testId": "task-new",
+            "occurrence": 0
+          },
+          "type": "NODE",
+          "destinationId": "90:472"
+        },
+        {
+          "selector": {
+            "name": "按钮 / 更多",
+            "testId": "task-more",
+            "occurrence": 0
+          },
+          "type": "NODE",
+          "targetStateId": "MENU-02"
+        },
+        {
+          "selector": {
+            "name": "按钮 / 更多",
+            "testId": "assistant-response-more",
+            "occurrence": 0
+          },
+          "type": "NODE",
+          "targetStateId": "CHAT-02"
+        },
+        {
+          "selector": {
+            "name": "按钮 / 添加附件",
+            "testId": "composer-attachment",
+            "occurrence": 0
+          },
+          "type": "NODE",
+          "destinationId": "90:8365"
+        },
+        {
+          "selector": {
+            "testId": "task-plan-summary",
+            "occurrence": 0
+          },
+          "type": "NODE",
+          "targetStateId": "PLAN-01"
+        }
+      ]
+    }
+  ]
+}

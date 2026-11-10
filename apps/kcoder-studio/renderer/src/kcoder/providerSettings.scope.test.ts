@@ -1,7 +1,7 @@
 import { beforeEach, expect, test, vi } from 'vitest'
-import { requestLocalExecutor } from '@/tauri/localExecutor'
+import { requestLocalExecutor } from '@/host/localExecutor'
 import { readProviderSettings, saveProviderSettings } from './providerSettings'
-vi.mock('@/tauri/localExecutor', () => ({ requestLocalExecutor: vi.fn() }))
+vi.mock('@/host/localExecutor', () => ({ requestLocalExecutor: vi.fn() }))
 beforeEach(() => vi.clearAllMocks())
 
 test('older targets receive no task scope when the caller has a selected conversation', async () => {

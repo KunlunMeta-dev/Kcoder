@@ -1,9 +1,17 @@
+#[cfg(test)]
+mod execution_baseline;
+mod handoff;
+mod prepared_owner;
+pub(in crate::app_server) mod task_boundary;
 use super::{
     BackgroundEventPump, BackgroundFollowupScheduler, BackgroundFollowupState,
     BackgroundProjectionState, ResidentTurnState, SessionLease,
 };
+use anyhow::Context;
+pub(super) use handoff::{HandoffBegin, RuntimeHandoffReceipts};
 use kcoder_app_protocol::ThreadRunFacts;
 use kcoder_engine::QueryEngine;
+pub(super) use prepared_owner::{PreparedThreadOwner, PreparedThreadOwnerFence, TaskOwnerPresence};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::atomic::Ordering;
@@ -14,40 +22,7 @@ use tokio::sync::Mutex;
 pub(super) const DEFAULT_RESIDENT_THREAD_LIMIT: usize = 16;
 pub(super) const DIAGNOSTIC_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(2);
 
-/// Cumulative real-user turns, independent of compacted model context.
-/// The owning runtime's activity gate serializes reservations and rewinds.
-pub(super) struct ClientTurnCounter(StdMutex<Option<usize>>);
-
-impl Default for ClientTurnCounter {
-    fn default() -> Self {
-        Self(StdMutex::new(Some(0)))
-    }
-}
-
-impl ClientTurnCounter {
-    pub(super) fn get(&self) -> Option<usize> {
-        *self.0.lock().unwrap()
-    }
-
-    pub(super) fn reset(&self, count: usize) {
-        *self.0.lock().unwrap() = Some(count);
-    }
-
-    pub(super) fn invalidate(&self) {
-        *self.0.lock().unwrap() = None;
-    }
-
-    pub(super) fn increment(&self) -> anyhow::Result<usize> {
-        let mut value = self.0.lock().unwrap();
-        let count = value.as_mut().ok_or_else(|| {
-            anyhow::anyhow!(
-                "resident turn count is unavailable; resume the thread before starting another turn"
-            )
-        })?;
-        *count = count.saturating_add(1);
-        Ok(*count)
-    }
-}
+pub(super) use kcoder_app_events::client_turn_counter::ClientTurnCounter;
 
 /// Resident thread runtime within one workspace app-server.
 ///
@@ -55,7 +30,11 @@ impl ClientTurnCounter {
 /// only the engine would route post-switch background events into another thread;
 /// keeping only the lease would require rebuilding the engine from disk each time.
 pub(super) struct ThreadRuntime {
+    handoff_ref: String,
     engine: QueryEngine,
+    original_task_configuration:
+        Option<Arc<super::integrations::core::runtime_driver::NativeOriginalTaskConfiguration>>,
+    background_lifetime: Option<Arc<dyn PreparedThreadOwnerFence>>,
     lease: SessionLease,
     last_used: u64,
     background_projection: Arc<Mutex<BackgroundProjectionState>>,
@@ -64,7 +43,18 @@ pub(super) struct ThreadRuntime {
     background_followup_scheduler: Option<BackgroundFollowupScheduler>,
     turn_state: ResidentTurnState,
     ephemeral: bool,
+    goal_metadata_lineage: Option<OwnedGoalMetadataLineage>,
+    work_owners:
+        Arc<StdMutex<HashMap<String, kcoder_state::continuous_work::NativeInitialWorkOwner>>>,
 }
+
+pub(super) enum GoalMetadataSubject {
+    Explicit { goal_id: String, created_at_ms: u64 },
+    AcceptedAttempt(kcoder_types::TurnAttemptIdentity),
+}
+
+pub(super) type OwnedGoalMetadataLineage =
+    (GoalMetadataSubject, kcoder_state::NativeGoalMetadataLineage);
 
 /// Shared runtime fixture for app-server run-state tests.
 #[cfg(test)]
@@ -84,13 +74,29 @@ pub(crate) mod test_support {
     use tokio::sync::mpsc;
 
     pub(crate) fn test_runtime(_id: &str, history: &std::path::Path) -> ThreadRuntime {
+        test_runtime_with_provider(
+            history,
+            Arc::new(MockScenarioProvider::new(TuiDevScenario::FullTurn)),
+        )
+    }
+    pub(crate) fn test_runtime_with_provider(
+        history: &std::path::Path,
+        provider: Arc<dyn kcoder_api::Provider>,
+    ) -> ThreadRuntime {
+        let storage = Arc::new(
+            kcoder_config::create_private_temp_dir_in(
+                history.parent().unwrap(),
+                "kcoder-owned-thread-test",
+            )
+            .unwrap(),
+        );
         let settings = Settings {
             history_enabled: false,
             permission_mode: PermissionMode::Bypass,
-            ..Settings::default()
+            ..crate::test_fixtures::settings_with_default_provider()
         };
         let engine = QueryEngine::try_new_for_client_with_services(
-            Arc::new(MockScenarioProvider::new(TuiDevScenario::FullTurn)),
+            provider,
             kcoder_state::AppState::new(history.parent().unwrap()),
             ToolRegistry::new(),
             PermissionEngine::from_settings(&settings),
@@ -100,7 +106,8 @@ pub(crate) mod test_support {
             Arc::new(DenyAllUserQuestioner),
             history.parent().unwrap().to_path_buf(),
             Some(true),
-            WorkspaceRuntimeServices::new(history.parent().unwrap(), "thread-manager-test"),
+            WorkspaceRuntimeServices::new(history.parent().unwrap(), "thread-manager-test")
+                .with_private_client_storage(storage),
         )
         .unwrap();
         let projection = Arc::new(tokio::sync::Mutex::new(BackgroundProjectionState::default()));
@@ -109,7 +116,6 @@ pub(crate) mod test_support {
         let turn_state = ResidentTurnState::new(
             tx.clone(),
             PermissionMode::Bypass,
-            Arc::new(AtomicU64::new(1_000_000)),
             Arc::new(AtomicU64::new(2_000_000)),
             Arc::new(StdMutex::new(InteractionReceipts::default())),
         );
@@ -200,7 +206,10 @@ impl ThreadRuntime {
     ) -> Self {
         let (background_pump, background_followup_scheduler) = background_tasks;
         Self {
+            handoff_ref: uuid::Uuid::new_v4().to_string(),
             engine,
+            original_task_configuration: None,
+            background_lifetime: None,
             lease,
             last_used: 0,
             background_projection,
@@ -209,6 +218,8 @@ impl ThreadRuntime {
             background_followup_scheduler: Some(background_followup_scheduler),
             turn_state,
             ephemeral: false,
+            goal_metadata_lineage: None,
+            work_owners: Arc::new(StdMutex::new(HashMap::new())),
         }
     }
 
@@ -272,7 +283,14 @@ impl ThreadRuntime {
     }
 
     fn claim_shutdown_if_idle(&self) -> bool {
-        self.turn_state.stop_accepting_turns();
+        if self
+            .turn_state
+            .accepting_turns
+            .compare_exchange(true, false, Ordering::SeqCst, Ordering::SeqCst)
+            .is_err()
+        {
+            return false;
+        }
         if self.is_evictable()
             && let Some(reservation) = self.engine.try_reserve_background_work_idle()
         {
@@ -284,7 +302,14 @@ impl ThreadRuntime {
     }
 
     fn claim_shutdown_if_not_running(&self) -> bool {
-        self.turn_state.stop_accepting_turns();
+        if self
+            .turn_state
+            .accepting_turns
+            .compare_exchange(true, false, Ordering::SeqCst, Ordering::SeqCst)
+            .is_err()
+        {
+            return false;
+        }
         if !self.turn_state.running.load(Ordering::SeqCst)
             && self.engine.state.try_task_activity_counts() == Some((0, 0))
         {
@@ -359,10 +384,14 @@ impl ThreadRuntime {
 /// context, pump, and follow-up scheduler. At capacity, evict only the least recently
 /// used idle runtime that is not current; the caller asynchronously shuts down the returned runtime.
 pub(super) struct ThreadManager {
+    handoffs: RuntimeHandoffReceipts,
     runtimes: HashMap<String, ThreadRuntime>,
+    prepared_owners: HashMap<String, PreparedThreadOwner>,
+    resuming_background: HashMap<String, Arc<dyn PreparedThreadOwnerFence>>,
     active_thread_id: Option<String>,
     resident_limit: usize,
     access_clock: u64,
+    work_capacity: kcoder_state::continuous_work::NativeInitialWorkCapacity,
 }
 
 /// Owns all turn gates until the caller commits or rolls back the idle check.
@@ -395,6 +424,30 @@ impl Drop for WorkspaceIdleReservation {
 impl Default for ThreadManager {
     fn default() -> Self {
         Self::with_resident_limit(DEFAULT_RESIDENT_THREAD_LIMIT)
+    }
+}
+
+/// Drop an old owner only after its original slot is known to be revoked.
+pub(super) fn retire_revoked_goal_lineage(lineage: &mut Option<OwnedGoalMetadataLineage>) -> bool {
+    if let Some((_, tracker)) = lineage {
+        if !tracker.is_definitively_revoked() {
+            return false;
+        }
+        *lineage = None;
+    }
+    true
+}
+
+impl kcoder_mcp_app_runtime::ResidentThreads for ThreadManager {
+    fn engine(&self, thread_id: &str) -> Option<QueryEngine> {
+        ThreadManager::engine(self, thread_id)
+    }
+
+    fn approval_prompt(
+        &self,
+        thread_id: &str,
+    ) -> Option<kcoder_app_interactions::AppServerPermissionPrompt> {
+        ThreadManager::turn_state(self, thread_id).map(|turn| turn.permission_prompt)
     }
 }
 
@@ -520,7 +573,7 @@ impl ThreadManager {
     }
     pub(super) fn resource_counts(&self) -> (usize, usize) {
         (
-            self.runtimes.len(),
+            self.runtimes.len() + self.prepared_owners.len(),
             self.runtimes
                 .values()
                 .filter(|runtime| runtime.turn_state.running.load(Ordering::SeqCst))
@@ -537,10 +590,16 @@ impl ThreadManager {
     }
     pub(super) fn with_resident_limit(resident_limit: usize) -> Self {
         Self {
+            handoffs: RuntimeHandoffReceipts::default(),
             runtimes: HashMap::new(),
+            prepared_owners: HashMap::new(),
+            resuming_background: HashMap::new(),
             active_thread_id: None,
             resident_limit: resident_limit.max(1),
             access_clock: 0,
+            work_capacity: kcoder_state::continuous_work::NativeInitialWorkCapacity::new(
+                resident_limit.max(1),
+            ),
         }
     }
 
@@ -549,10 +608,32 @@ impl ThreadManager {
         mut runtime: ThreadRuntime,
     ) -> Result<Option<ThreadRuntime>, Box<ThreadRuntime>> {
         let thread_id = runtime.engine.session_id();
+        if self.prepared_owners.contains_key(&thread_id) || self.runtimes.contains_key(&thread_id) {
+            return Err(Box::new(runtime));
+        }
         let evicted = match self.reserve_capacity() {
             Ok(evicted) => evicted,
             Err(()) => return Err(Box::new(runtime)),
         };
+        if let Some(fence) = self.resuming_background.remove(&thread_id) {
+            if fence.verify().is_ok() {
+                if (fence.defaults_to_background() || fence.allows_ui_resume())
+                    && runtime.engine.state.session_lifetime().revision == 0
+                {
+                    if let Err(error) = runtime.engine.state.set_session_lifetime(
+                        0,
+                        kcoder_types::session_lifetime::SessionLifetimeMode::Background,
+                    ) {
+                        tracing::warn!(%error, "binding preference requires reconciliation");
+                    }
+                }
+                runtime
+                    .background_followups
+                    .session_activity
+                    .retain_background_authority(fence.clone());
+                runtime.background_lifetime = Some(fence);
+            }
+        }
         self.access_clock = self.access_clock.saturating_add(1);
         runtime.last_used = self.access_clock;
         let replaced = self.runtimes.insert(thread_id.clone(), runtime);
@@ -567,7 +648,7 @@ impl ThreadManager {
     /// still safe, then let the caller shut it down first. Background state cannot
     /// reverse between sidecar application and final insertion.
     pub(super) fn reserve_capacity(&mut self) -> Result<Option<ThreadRuntime>, ()> {
-        if self.runtimes.len() < self.resident_limit {
+        if self.runtimes.len() + self.prepared_owners.len() < self.resident_limit {
             return Ok(None);
         }
         let active = self.active_thread_id.as_deref();
@@ -604,21 +685,315 @@ impl ThreadManager {
         self.runtimes.get(thread_id).map(ThreadRuntime::engine)
     }
 
-    /// Publish a host-prepared candidate without replacing owners, leases, background runs or hooks.
+    pub(super) fn original_task_configuration(
+        &self,
+        thread_id: &str,
+    ) -> Option<Arc<super::integrations::core::runtime_driver::NativeOriginalTaskConfiguration>>
+    {
+        self.runtimes
+            .get(thread_id)?
+            .original_task_configuration
+            .clone()
+    }
+
+    pub(super) fn retain_original_task_configuration(
+        &mut self,
+        native: &super::integrations::core::NativeIntegrationContext,
+        thread_id: &str,
+        original: Arc<super::integrations::core::runtime_driver::NativeOriginalTaskConfiguration>,
+    ) -> anyhow::Result<()> {
+        let runtime = self
+            .runtimes
+            .get_mut(thread_id)
+            .ok_or_else(|| anyhow::anyhow!("ORIGINAL_TASK_OWNER_REQUIRED"))?;
+        original.for_resident(native, &runtime.engine, &runtime.lease)?;
+        if let Some(previous) = &runtime.original_task_configuration {
+            anyhow::ensure!(
+                Arc::ptr_eq(previous, &original),
+                "ORIGINAL_TASK_CONFIGURATION_CHANGED"
+            );
+        } else {
+            runtime.original_task_configuration = Some(original);
+        }
+        Ok(())
+    }
+
+    /// Borrow just the resident State without cloning its full Engine.
+    pub(super) fn state(&self, thread_id: &str) -> Option<&kcoder_state::AppState> {
+        self.runtimes
+            .get(thread_id)
+            .map(|runtime| &runtime.engine.state)
+    }
+
+    /// Reserve only for an actual opted-in Goal mutation, never for a list scan.
+    pub(super) fn prepare_goal_metadata_lineage(
+        &mut self,
+        thread_id: &str,
+    ) -> Option<kcoder_state::NativeGoalMetadataLineage> {
+        let runtime = self.runtimes.get_mut(thread_id)?;
+        if !retire_revoked_goal_lineage(&mut runtime.goal_metadata_lineage) {
+            return None;
+        }
+        let owner = runtime.engine.state.try_inspection_lifecycle_identity()?;
+        runtime
+            .engine
+            .state
+            .try_reserve_native_goal_metadata_lineage(&owner)
+            .ok()
+            .flatten()
+    }
+
+    pub(super) fn install_goal_metadata_lineage(
+        &mut self,
+        thread_id: &str,
+        goal_id: &str,
+        created_at_ms: u64,
+        tracker: kcoder_state::NativeGoalMetadataLineage,
+    ) {
+        if goal_id.len() > 1024 {
+            return;
+        }
+        let Some(runtime) = self.runtimes.get_mut(thread_id) else {
+            return;
+        };
+        let Some(snapshot) = runtime.engine.state.try_goal_observation_snapshot() else {
+            return;
+        };
+        if runtime.goal_metadata_lineage.is_none()
+            && snapshot.session_id == thread_id
+            && snapshot.goal.as_ref().is_some_and(|goal| goal.0 == goal_id)
+            && snapshot.goal_created_at_ms == Some(created_at_ms)
+            && tracker.status() == kcoder_state::NativeGoalMetadataLineageStatus::Tracking
+            && tracker.observer().matches_lifecycle(&snapshot.lifecycle)
+        {
+            runtime.goal_metadata_lineage = Some((
+                GoalMetadataSubject::Explicit {
+                    goal_id: goal_id.to_owned(),
+                    created_at_ms,
+                },
+                tracker,
+            ));
+        }
+    }
+
+    /// Adopt an observation reserved before this exact Accepted scope. This
+    /// records no execution permission and never holds a source or lease alive.
+    pub(super) fn install_accepted_goal_metadata_lineage(
+        &mut self,
+        thread_id: &str,
+        attempt: &kcoder_types::TurnAttemptIdentity,
+        scope_owner: &kcoder_state::AppStateLifecycleIdentity,
+        tracker: kcoder_state::NativeGoalMetadataLineage,
+    ) -> Option<kcoder_state::NativeGoalMetadataSettlement> {
+        if attempt.thread_id != thread_id || attempt.validate().is_err() {
+            return None;
+        }
+        let runtime = self.runtimes.get_mut(thread_id)?;
+        let snapshot = runtime.engine.state.try_goal_observation_snapshot()?;
+        if runtime.goal_metadata_lineage.is_none()
+            && snapshot.session_id == thread_id
+            && snapshot.lifecycle.same_lifecycle(scope_owner)
+            && tracker.observer().matches_lifecycle(scope_owner)
+            && matches!(
+                tracker.status(),
+                kcoder_state::NativeGoalMetadataLineageStatus::Armed
+                    | kcoder_state::NativeGoalMetadataLineageStatus::Tracking
+            )
+        {
+            let settlement = tracker.settlement();
+            runtime.goal_metadata_lineage = Some((
+                GoalMetadataSubject::AcceptedAttempt(attempt.clone()),
+                tracker,
+            ));
+            return Some(settlement);
+        }
+        None
+    }
+
+    pub(super) fn goal_metadata_observer(
+        &self,
+        thread_id: &str,
+        goal_id: &str,
+        created_at_ms: u64,
+    ) -> Option<kcoder_state::NativeGoalMetadataObserver> {
+        let (subject, tracker) = self
+            .runtimes
+            .get(thread_id)?
+            .goal_metadata_lineage
+            .as_ref()?;
+        let matches = match subject {
+            GoalMetadataSubject::Explicit {
+                goal_id: original,
+                created_at_ms: created,
+            } => original == goal_id && *created == created_at_ms,
+            GoalMetadataSubject::AcceptedAttempt(attempt) => {
+                attempt.thread_id == thread_id && attempt.validate().is_ok()
+            }
+        };
+        matches.then(|| tracker.observer())
+    }
+
+    /// A successful explicit user creation can replace this runtime's old Goal.
+    pub(super) fn rebind_goal_metadata_lineage(
+        &mut self,
+        thread_id: &str,
+        goal_id: &str,
+        created_at_ms: u64,
+    ) {
+        if goal_id.len() > 1024 {
+            return;
+        }
+        let Some(runtime) = self.runtimes.get_mut(thread_id) else {
+            return;
+        };
+        let Some(snapshot) = runtime.engine.state.try_goal_observation_snapshot() else {
+            return;
+        };
+        let Some((subject, tracker)) = runtime.goal_metadata_lineage.as_mut() else {
+            return;
+        };
+        if snapshot.session_id == thread_id
+            && snapshot.goal.as_ref().is_some_and(|goal| goal.0 == goal_id)
+            && snapshot.goal_created_at_ms == Some(created_at_ms)
+            && tracker.status() == kcoder_state::NativeGoalMetadataLineageStatus::Tracking
+            && tracker.observer().matches_lifecycle(&snapshot.lifecycle)
+        {
+            *subject = GoalMetadataSubject::Explicit {
+                goal_id: goal_id.to_owned(),
+                created_at_ms,
+            };
+        }
+    }
+
+    /// Publish a host-prepared candidate while retaining its original owners and protection.
     pub(super) fn replace_host_turn_engine(
         &mut self,
         thread_id: &str,
         candidate: QueryEngine,
     ) -> anyhow::Result<()> {
+        self.replace_host_turn_engine_inner(thread_id, candidate, None, false)
+    }
+
+    /// Credential refresh happens after this very turn claimed the resident.
+    pub(super) fn replace_host_turn_engine_during_registration(
+        &mut self,
+        thread_id: &str,
+        candidate: QueryEngine,
+        registration: &tokio::sync::OwnedMutexGuard<()>,
+    ) -> anyhow::Result<()> {
+        self.replace_host_turn_engine_inner(thread_id, candidate, Some(registration), false)
+    }
+
+    /// Restore only the original configuration retained by this resident and
+    /// revalidated for the independently authorized first-party input.
+    pub(super) fn restore_original_task_engine_during_registration(
+        &mut self,
+        thread_id: &str,
+        native: &super::integrations::core::NativeIntegrationContext,
+        registration: &tokio::sync::OwnedMutexGuard<()>,
+    ) -> anyhow::Result<QueryEngine> {
+        let runtime = self
+            .runtimes
+            .get(thread_id)
+            .context("Thread is not resident")?;
+        if runtime.engine.native_input_requires_source_admission() {
+            anyhow::ensure!(
+                runtime.engine.native_host_source_lifecycle_is_current() == Some(true),
+                "Thread native source lifecycle is unavailable"
+            );
+        }
+        let original = runtime
+            .original_task_configuration
+            .as_ref()
+            .context("ORIGINAL_TASK_CONFIGURATION_UNAVAILABLE")?;
+        let candidate = original.for_resident(native, &runtime.engine, &runtime.lease)?;
+        self.replace_host_turn_engine_inner(
+            thread_id,
+            candidate.clone(),
+            Some(registration),
+            true,
+        )?;
+        Ok(candidate)
+    }
+
+    fn replace_host_turn_engine_inner(
+        &mut self,
+        thread_id: &str,
+        candidate: QueryEngine,
+        registration: Option<&tokio::sync::OwnedMutexGuard<()>>,
+        original_task_restoration: bool,
+    ) -> anyhow::Result<()> {
         let runtime = self
             .runtimes
             .get_mut(thread_id)
             .ok_or_else(|| anyhow::anyhow!("Thread is not resident"))?;
+        let activity_gate = Arc::clone(&runtime.turn_state.activity_gate);
+        let _claim = if let Some(registration) = registration {
+            anyhow::ensure!(
+                Arc::ptr_eq(
+                    tokio::sync::OwnedMutexGuard::mutex(registration),
+                    &activity_gate,
+                ),
+                "Thread registration owner mismatch"
+            );
+            None
+        } else {
+            let guard = activity_gate
+                .try_lock()
+                .map_err(|_| anyhow::anyhow!("Thread activity gate busy"))?;
+            anyhow::ensure!(
+                !runtime.turn_state.running.load(Ordering::SeqCst),
+                "Thread is running"
+            );
+            Some(guard)
+        };
         anyhow::ensure!(
-            runtime.lease.matches_engine(&candidate),
+            runtime
+                .lease
+                .matches_target(&candidate.session_lease_target())
+                && runtime.engine.state.shares_state_with(&candidate.state)
+                && candidate.session_id() == thread_id,
             "Thread candidate owner mismatch"
         );
+        anyhow::ensure!(
+            original_task_restoration
+                || !runtime.engine.native_input_requires_source_admission()
+                || candidate.native_input_requires_source_admission(),
+            "Thread candidate cannot remove its native source boundary"
+        );
+        let same_attenuation =
+            candidate.preserves_native_input_attenuation_from(&runtime.engine) == Some(true);
+        anyhow::ensure!(
+            same_attenuation || original_task_restoration,
+            "Thread candidate cannot remove its native input attenuation"
+        );
+        if !original_task_restoration && runtime.engine.native_input_requires_source_admission() {
+            anyhow::ensure!(
+                candidate.retains_native_tool_authorization_from(&runtime.engine)
+                    && candidate.retains_native_model_observers_from(&runtime.engine)
+                    && Arc::ptr_eq(&candidate.permissions, &runtime.engine.permissions),
+                "Thread candidate cannot replace its native guard or model observer"
+            );
+        }
+        anyhow::ensure!(
+            original_task_restoration
+                || candidate.preserves_native_host_source_from(&runtime.engine) == Some(true),
+            "Thread candidate native source lifecycle is unavailable"
+        );
+        let scheduler = runtime
+            .background_followup_scheduler
+            .as_ref()
+            .context("Thread scheduler owner unavailable")?;
+        // A first-party turn may restore the captured task configuration, but
+        // pending background work must retain its original source guard.
+        if !(original_task_restoration && runtime.engine.native_input_requires_source_admission()) {
+            scheduler.replace_engine(&candidate, runtime.lease.target())?;
+        }
+        if !runtime.engine.state.shares_state_with(&candidate.state) {
+            runtime.goal_metadata_lineage = None;
+        }
         runtime.engine = candidate;
+        runtime.background_followups.notify.notify_one();
         Ok(())
     }
 
@@ -633,11 +1008,27 @@ impl ThreadManager {
     }
 
     pub(super) fn is_empty(&self) -> bool {
-        self.runtimes.is_empty()
+        self.runtimes.is_empty() && self.prepared_owners.is_empty()
     }
 
     pub(super) fn lease(&self, thread_id: &str) -> Option<&SessionLease> {
         self.runtimes.get(thread_id).map(|runtime| &runtime.lease)
+    }
+
+    pub(super) fn initial_work_capacity(
+        &self,
+    ) -> kcoder_state::continuous_work::NativeInitialWorkCapacity {
+        self.work_capacity.clone()
+    }
+
+    pub(super) fn initial_work_owners(
+        &self,
+        thread_id: &str,
+    ) -> Option<Arc<StdMutex<HashMap<String, kcoder_state::continuous_work::NativeInitialWorkOwner>>>>
+    {
+        self.runtimes
+            .get(thread_id)
+            .map(|runtime| Arc::clone(&runtime.work_owners))
     }
 
     pub(super) fn volatile_turn_count(&self, thread_id: &str) -> usize {
@@ -703,6 +1094,8 @@ impl ThreadManager {
 
     pub(super) fn drain(&mut self) -> Vec<ThreadRuntime> {
         self.active_thread_id = None;
+        self.prepared_owners.clear();
+        self.resuming_background.clear();
         for runtime in self.runtimes.values() {
             runtime.turn_state.stop_accepting_turns();
         }
@@ -1577,10 +1970,14 @@ mod tests {
         });
         turn_state.running.store(true, Ordering::SeqCst);
         let active = ActiveTurn {
+            desktop_owner: None,
+            input_owner: None,
             handle: tokio::spawn(std::future::pending()),
             cancel: CancellationToken::new(),
             thread_id: "thread".into(),
             turn_id: "turn".into(),
+            attempt: None,
+            origin: crate::app_server::request_origin::RequestOrigin::Unverified,
         };
         let notified_followups = Arc::clone(&followups);
         let (notified_tx, notified_rx) = oneshot::channel();
@@ -1646,16 +2043,24 @@ mod tests {
         });
         turn_state.running.store(true, Ordering::SeqCst);
         *turn_state.active_turn.lock().await = Some(ActiveTurn {
+            desktop_owner: None,
+            input_owner: None,
             handle: tokio::spawn(std::future::pending()),
             cancel: CancellationToken::new(),
             thread_id: "thread".into(),
             turn_id: "newer-turn".into(),
+            attempt: None,
+            origin: crate::app_server::request_origin::RequestOrigin::Unverified,
         });
         let stale = ActiveTurn {
+            desktop_owner: None,
+            input_owner: None,
             handle: tokio::spawn(std::future::pending()),
             cancel: CancellationToken::new(),
             thread_id: "thread".into(),
             turn_id: "stale-turn".into(),
+            attempt: None,
+            origin: crate::app_server::request_origin::RequestOrigin::Unverified,
         };
 
         cancel_active_turn_with_timeout(
@@ -1691,6 +2096,132 @@ mod tests {
         let newer = turn_state.active_turn.lock().await.take().unwrap();
         newer.handle.abort();
         let _ = newer.handle.await;
+        turn_state.clear_all_turn_state();
+        runtime.shutdown().await;
+    }
+
+    #[tokio::test]
+    async fn stale_cancel_finalizer_does_not_clear_a_new_attempt_of_the_same_turn() {
+        let temp = tempfile::tempdir().unwrap();
+        let runtime = test_runtime("retry", &temp.path().join("retry.jsonl"));
+        let turn_state = runtime.turn_state.clone();
+        let projection = runtime.background_projection.clone();
+        let followups = runtime.background_followups.clone();
+        let current = kcoder_types::TurnAttemptIdentity {
+            thread_id: "thread".into(),
+            turn_id: "same-turn".into(),
+            attempt_id: "new-attempt".into(),
+        };
+        let mut old = current.clone();
+        old.attempt_id = "old-attempt".into();
+        let (question_tx, _question_rx) = oneshot::channel();
+        turn_state
+            .pending_questions
+            .lock()
+            .unwrap()
+            .insert(1, question_tx);
+        *turn_state.question_context.lock().unwrap() = Some(QuestionContext {
+            server_id: "server".into(),
+            thread_id: current.thread_id.clone(),
+            turn_id: current.turn_id.clone(),
+        });
+        projection.lock().await.active = Some(BackgroundTurnProjection {
+            thread_id: current.thread_id.clone(),
+            turn_id: current.turn_id.clone(),
+            projection: Arc::new(tokio::sync::Mutex::new(StreamProjection::new(
+                "server".into(),
+                current.thread_id.clone(),
+                current.turn_id.clone(),
+                Arc::new(AtomicU64::new(1)),
+            ))),
+        });
+        turn_state.running.store(true, Ordering::SeqCst);
+        *turn_state.active_turn.lock().await = Some(ActiveTurn {
+            desktop_owner: None,
+            input_owner: None,
+            handle: tokio::spawn(std::future::pending()),
+            cancel: CancellationToken::new(),
+            thread_id: current.thread_id.clone(),
+            turn_id: current.turn_id.clone(),
+            attempt: Some(current.clone()),
+            origin: crate::app_server::request_origin::RequestOrigin::ClientFrame,
+        });
+        let stale = ActiveTurn {
+            desktop_owner: None,
+            input_owner: None,
+            handle: tokio::spawn(std::future::pending()),
+            cancel: CancellationToken::new(),
+            thread_id: old.thread_id.clone(),
+            turn_id: old.turn_id.clone(),
+            attempt: Some(old),
+            origin: crate::app_server::request_origin::RequestOrigin::ClientFrame,
+        };
+        cancel_active_turn_with_timeout(
+            stale,
+            &turn_state,
+            &projection,
+            &followups,
+            std::time::Duration::from_millis(10),
+        )
+        .await;
+        assert!(turn_state.running.load(Ordering::SeqCst));
+        assert!(!turn_state.pending_questions.lock().unwrap().is_empty());
+        assert!(turn_state.question_context.lock().unwrap().is_some());
+        assert!(projection.lock().await.active.is_some());
+        let active = turn_state.active_turn.lock().await.take().unwrap();
+        assert!(active.matches_attempt(&current));
+        active.handle.abort();
+        let _ = active.handle.await;
+        turn_state.clear_all_turn_state();
+        runtime.shutdown().await;
+    }
+
+    #[tokio::test]
+    async fn stale_cancel_finalizer_requires_the_original_task_handle() {
+        let temp = tempfile::tempdir().unwrap();
+        let runtime = test_runtime("same-attempt", &temp.path().join("same-attempt.jsonl"));
+        let turn_state = runtime.turn_state.clone();
+        let projection = runtime.background_projection.clone();
+        let followups = runtime.background_followups.clone();
+        let attempt = kcoder_types::TurnAttemptIdentity {
+            thread_id: "thread".into(),
+            turn_id: "same-turn".into(),
+            attempt_id: "same-attempt".into(),
+        };
+        turn_state.running.store(true, Ordering::SeqCst);
+        *turn_state.active_turn.lock().await = Some(ActiveTurn {
+            desktop_owner: None,
+            input_owner: None,
+            handle: tokio::spawn(std::future::pending()),
+            cancel: CancellationToken::new(),
+            thread_id: attempt.thread_id.clone(),
+            turn_id: attempt.turn_id.clone(),
+            attempt: Some(attempt.clone()),
+            origin: crate::app_server::request_origin::RequestOrigin::ClientFrame,
+        });
+        let stale = ActiveTurn {
+            desktop_owner: None,
+            input_owner: None,
+            handle: tokio::spawn(std::future::pending()),
+            cancel: CancellationToken::new(),
+            thread_id: attempt.thread_id.clone(),
+            turn_id: attempt.turn_id.clone(),
+            attempt: Some(attempt.clone()),
+            origin: crate::app_server::request_origin::RequestOrigin::ClientFrame,
+        };
+        cancel_active_turn_with_timeout(
+            stale,
+            &turn_state,
+            &projection,
+            &followups,
+            std::time::Duration::from_millis(10),
+        )
+        .await;
+        assert!(turn_state.running.load(Ordering::SeqCst));
+        let active = turn_state.active_turn.lock().await.take().unwrap();
+        assert!(active.matches_attempt(&attempt));
+        active.handle.abort();
+        let _ = active.handle.await;
         turn_state.clear_all_turn_state();
         runtime.shutdown().await;
     }
@@ -1732,7 +2263,6 @@ mod tests {
         let turn_state = ResidentTurnState::new(
             tx,
             PermissionMode::Bypass,
-            Arc::new(AtomicU64::new(1_000_000)),
             Arc::new(AtomicU64::new(2_000_000)),
             Arc::new(StdMutex::new(InteractionReceipts::default())),
         );
@@ -1756,10 +2286,14 @@ mod tests {
         );
 
         *turn_state.active_turn.lock().await = Some(ActiveTurn {
+            desktop_owner: None,
+            input_owner: None,
             handle: tokio::spawn(std::future::pending()),
             cancel: CancellationToken::new(),
             thread_id: "thread".into(),
             turn_id: "fast-turn".into(),
+            attempt: None,
+            origin: crate::app_server::request_origin::RequestOrigin::Unverified,
         });
         drop(registration);
         assert!(scheduler_claim.await.unwrap());

@@ -441,7 +441,7 @@ fn upsert_manifest_entry(
 }
 
 fn bundled_skill_source(name: &str) -> String {
-    format!("crates/kcoder_specs/src/skills/{name}/SKILL.md")
+    format!("crates/kcoder_specs/src/skills{name}/SKILL.md")
 }
 
 fn record_bundled_metadata(metadata: &mut SkillMetadataDelta, name: &str, hash: &str) {

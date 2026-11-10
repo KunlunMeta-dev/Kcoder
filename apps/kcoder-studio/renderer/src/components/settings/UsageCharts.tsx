@@ -5,7 +5,13 @@ import { Button } from '@/components/ui/button'
 
 import { usageCalendar } from './usage-chart-calendar'
 type Day = UsageCounters & { label: string }
-const COLORS = ['bg-blue-500', 'bg-violet-500', 'bg-amber-500', 'bg-rose-500', 'bg-slate-400']
+const COLORS = [
+  'bg-blue-500/60',
+  'bg-violet-500/60',
+  'bg-amber-500/60',
+  'bg-rose-500/60',
+  'bg-slate-400/60',
+]
 const HEAT = [
   'bg-text-muted/10',
   'bg-blue-500/20',
@@ -104,7 +110,7 @@ export function UsageCharts({
   }
   return (
     <section className="mb-8 space-y-6" onKeyDown={onEscape} data-testid="usage-charts">
-      <div className="rounded-2xl bg-surface/40 p-5">
+      <div className="studio-card-spacing rounded-2xl bg-surface/40">
         <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
           <h2 className="text-base font-medium">{text('heatmap')}</h2>
           <span className="text-xs text-text-secondary">{text('calendarWindow')}</span>
@@ -184,7 +190,7 @@ export function UsageCharts({
           </div>
         </div>
       </div>
-      <div className="rounded-2xl bg-surface/40 p-5">
+      <div className="studio-card-spacing rounded-2xl bg-surface/40">
         <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
           <h2 className="text-base font-medium">{text('dailyTrend')}</h2>
           <span className="text-xs text-text-secondary">{text('chartHelp')}</span>
@@ -299,7 +305,7 @@ export function UsageCharts({
         </div>
       </div>
       <div
-        className="min-h-36 rounded-xl border border-border/60 p-4"
+        className="studio-card-spacing min-h-36 rounded-xl border border-border/60"
         data-testid="usage-day-detail"
         aria-live="polite"
         aria-atomic="true"

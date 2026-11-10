@@ -58,6 +58,24 @@ pub struct UserQuestionResponse {
 /// Backend that can present a question to the user and return the answer.
 #[async_trait]
 pub trait UserQuestioner: Send + Sync {
+    /// Whether this host can durably register a question for a later ordinary
+    /// user message. The default keeps existing synchronous-only hosts closed.
+    fn supports_async_user_questions(&self) -> bool {
+        false
+    }
+
+    /// Persist a question for later response without waiting for the answer.
+    /// Implementations must return success only after the target State write is
+    /// durable; the returned record is an acceptance receipt, never an answer.
+    async fn register_async_user_question(
+        &self,
+        _state: &kcoder_state::AppState,
+        _owner: &kcoder_state::AppStateLifecycleIdentity,
+        _request: kcoder_types::async_user_questions::AsyncQuestionRequest,
+    ) -> Result<kcoder_types::async_user_questions::AsyncQuestionAccepted, String> {
+        Err("asynchronous user questions are not available in this environment".to_string())
+    }
+
     /// A source-aware callback is currently available from this host.
     /// Legacy and non-interactive hosts remain closed to worker elicitation.
     fn supports_agent_binding(&self) -> bool {

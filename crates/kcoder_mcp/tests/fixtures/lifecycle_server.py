@@ -7,6 +7,8 @@ import threading
 import time
 
 mode, directory = sys.argv[1], pathlib.Path(sys.argv[2])
+if mode == "cwd":
+    (directory / "cwd").write_text(os.getcwd())
 output_lock = threading.Lock()
 with (directory / "launches.jsonl").open("a") as log:
     log.write(json.dumps({"pid": os.getpid()}) + "\n")

@@ -1,5 +1,5 @@
-import { invoke } from '@tauri-apps/api/core'
-import { isTauriRuntime } from './runtime-environment'
+import { invoke } from '@/lib/runtime-commands'
+import { isGatewayRuntime } from './runtime-environment'
 
 const REGISTER_FRONTEND_RECOVERY_COMMAND = 'register_frontend_recovery_bridge'
 const ACKNOWLEDGE_FRONTEND_RESUME_PROBE_COMMAND = 'acknowledge_frontend_resume_probe'
@@ -12,7 +12,7 @@ declare global {
 }
 
 export function installFrontendRecoveryBridge(): void {
-  if (!isTauriRuntime()) return
+  if (!isGatewayRuntime()) return
 
   window[FRONTEND_RESUME_PROBE_FUNCTION] = probeId => {
     window.requestAnimationFrame(() => {

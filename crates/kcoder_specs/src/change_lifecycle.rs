@@ -10,6 +10,7 @@ impl ChangeMetadata {
             schema: None,
             created_at: chrono::Local::now().to_rfc3339(),
             status: ChangeStatus::Draft,
+            requires_guarded_base: false,
         }
     }
 }
@@ -72,6 +73,15 @@ pub(super) fn template_artifacts_for_schema(schema: &str) -> Vec<(&'static str, 
 
 /// Create a new change scaffold.
 pub fn new_change(cwd: &Path, name: &str, title: Option<String>) -> Result<PathBuf> {
+    new_change_with_knowledge_sources(cwd, name, title, &[])
+}
+
+pub(crate) fn new_change_with_knowledge_sources(
+    cwd: &Path,
+    name: &str,
+    title: Option<String>,
+    sources: &[crate::project_knowledge::ProjectKnowledgeSourceGuard],
+) -> Result<PathBuf> {
     let change_dir = checked_change_dir(cwd, name)?;
     let specs_dir = specs_dir_for(cwd);
     let _lock = archive_transaction::lock(&specs_dir)?;
@@ -79,6 +89,8 @@ pub fn new_change(cwd: &Path, name: &str, title: Option<String>) -> Result<PathB
     if change_dir.exists() {
         anyhow::bail!("change '{}' already exists", name);
     }
+    let guard_errors = crate::project_knowledge::source_guard_errors(cwd, sources)?;
+    anyhow::ensure!(guard_errors.is_empty(), "{}", guard_errors.join("; "));
 
     fs::create_dir_all(change_dir.join("specs"))
         .with_context(|| format!("failed to create change directory {:?}", change_dir))?;
@@ -86,6 +98,7 @@ pub fn new_change(cwd: &Path, name: &str, title: Option<String>) -> Result<PathB
     let schema = project_schema(&specs_dir)?;
     let mut metadata = ChangeMetadata::new(name, title);
     metadata.schema = Some(schema.clone());
+    metadata.requires_guarded_base = !sources.is_empty();
     let meta_path = change_dir.join(".spec.yaml");
     fs::write(&meta_path, serde_yaml::to_string(&metadata)?)
         .with_context(|| format!("failed to write {:?}", meta_path))?;
@@ -111,7 +124,7 @@ pub fn new_change(cwd: &Path, name: &str, title: Option<String>) -> Result<PathB
 
     // Snapshot the current authoritative specs so we can detect drift before
     // archiving this change.
-    fingerprint::capture_base_snapshot(&specs_dir, &change_dir)
+    fingerprint::capture_base_snapshot_with_knowledge(&specs_dir, &change_dir, sources)
         .with_context(|| "failed to capture base spec snapshot")?;
 
     debug!("created change {:?}", change_dir);

@@ -7,15 +7,22 @@ import { firstTextNode, selectText, setDocumentSelection } from './MessageList.t
 import { clearPersistentProcessingExpansions } from './blocks/processingExpansionState'
 import '@/i18n'
 
-const tauriCoreMock = vi.hoisted(() => ({
-  convertFileSrc: vi.fn((path: string) => `asset://localhost/${path.replace(/^\/+/, '')}`),
+const runtimeCommandMock = vi.hoisted(() => ({
+  clientResourceUrl: vi.fn((path: string) => `asset://localhost/${path.replace(/^\/+/, '')}`),
   invoke: vi.fn(),
-  isTauri: vi.fn(() => false),
+  isGateway: vi.fn(() => false),
 }))
 const openExternalUrlMock = vi.hoisted(() => vi.fn().mockResolvedValue(true))
 const requestEmbeddedBrowserOpenMock = vi.hoisted(() => vi.fn(() => true))
 
-vi.mock('@tauri-apps/api/core', () => tauriCoreMock)
+vi.mock('@/lib/client-resource-url', () => runtimeCommandMock)
+vi.mock('@/lib/runtime-environment', async original => ({
+  ...(await original<typeof import('@/lib/runtime-environment')>()),
+  isGatewayRuntime: runtimeCommandMock.isGateway,
+}))
+
+vi.mock('@/lib/runtime-commands', () => ({ invoke: runtimeCommandMock.invoke }))
+
 vi.mock('@/lib/external-links', async importOriginal => ({
   ...(await importOriginal<typeof import('@/lib/external-links')>()),
   openExternalUrl: openExternalUrlMock,
@@ -33,11 +40,11 @@ describe('MessageList', () => {
     clearPersistentProcessingExpansions()
     vi.unstubAllGlobals()
     vi.restoreAllMocks()
-    tauriCoreMock.convertFileSrc
+    runtimeCommandMock.clientResourceUrl
       .mockReset()
       .mockImplementation((path: string) => `asset://localhost/${path.replace(/^\/+/, '')}`)
-    tauriCoreMock.invoke.mockReset()
-    tauriCoreMock.isTauri.mockReset().mockReturnValue(false)
+    runtimeCommandMock.invoke.mockReset()
+    runtimeCommandMock.isGateway.mockReset().mockReturnValue(false)
     openExternalUrlMock.mockClear()
     requestEmbeddedBrowserOpenMock.mockClear()
     localStorage.clear()
@@ -355,82 +362,17 @@ describe('MessageList', () => {
     expect(screen.getByTestId('message-assistant')).toHaveTextContent('world')
     expect(screen.getByTestId('message-user').style.containIntrinsicSize).toBe('')
     expect(screen.getByTestId('message-assistant').style.containIntrinsicSize).toBe('')
-  })
-
-  test('does not use message row content visibility in the Tauri app', () => {
-    tauriCoreMock.isTauri.mockReturnValue(true)
-    const getSelectionSpy = vi.spyOn(document, 'getSelection')
-
-    try {
-      render(
-        <MessageList
-          messages={[
-            {
-              id: 'assistant-tauri-contained',
-              role: 'assistant',
-              content: 'Tauri text selection should stay native.',
-              status: 'done',
-              createdAt: '2026-06-11T10:00:01Z',
-            },
-          ]}
-        />
+    // Off-screen rows keep their remembered height, falling back to the pretext
+    // estimate, so scrolling never collapses them to zero and shifts the list.
+    for (const testId of ['message-user', 'message-assistant']) {
+      const article = screen.getByTestId(testId)
+      expect(article.className).toContain(
+        '[contain-intrinsic-size:auto_var(--message-intrinsic-height,220px)]'
       )
-
-      const article = screen.getByTestId('message-assistant')
-      const paragraph = screen.getByText('Tauri text selection should stay native.')
-      expect(article.className).not.toContain('[content-visibility:auto]')
-      expect(article.style.getPropertyValue('contain-intrinsic-size')).toBe('')
-
-      fireEvent.pointerDown(paragraph, { button: 0, detail: 1 })
-      fireEvent.pointerDown(paragraph, { button: 0, detail: 2 })
-      fireEvent(document, new Event('selectionchange'))
-
-      expect(getSelectionSpy).not.toHaveBeenCalled()
-      expect(article.className).not.toContain('[content-visibility:auto]')
-      expect(article.style.contentVisibility).toBe('')
-    } finally {
-      getSelectionSpy.mockRestore()
+      expect(article.style.getPropertyValue('--message-intrinsic-height')).toMatch(/^\d+px$/)
     }
   })
 
-  test('keeps oversized streaming Markdown chunks mounted without blank placeholders', () => {
-    tauriCoreMock.isTauri.mockReturnValue(true)
-    class IntersectionObserverMock {
-      constructor() {}
-      observe = vi.fn()
-      disconnect = vi.fn()
-      unobserve = vi.fn()
-      takeRecords = vi.fn(() => [])
-      root = null
-      rootMargin = '800px 0px'
-      thresholds = [0]
-    }
-    vi.stubGlobal('IntersectionObserver', IntersectionObserverMock)
-    const content = Array.from(
-      { length: 60 },
-      (_, index) => `### Streaming section ${index + 1}\n\n${'content '.repeat(40)}\n`
-    ).join('\n')
-
-    const { container } = render(
-      <MessageList
-        messages={[
-          {
-            id: 'assistant-streaming-windowed',
-            role: 'assistant',
-            content,
-            status: 'streaming',
-            createdAt: '2026-06-11T10:00:00Z',
-          },
-        ]}
-      />
-    )
-
-    const chunks = Array.from(container.querySelectorAll('[data-markdown-window-chunk]'))
-    expect(chunks.length).toBeGreaterThan(2)
-    expect(chunks[0]).not.toBeEmptyDOMElement()
-    expect(chunks.at(-1)).not.toBeEmptyDOMElement()
-    expect(chunks.every(chunk => chunk.childElementCount > 0)).toBe(true)
-  })
 
   test('keeps message row containment during a plain text click', () => {
     const getSelectionSpy = vi.spyOn(document, 'getSelection')
@@ -1132,46 +1074,9 @@ describe('MessageList', () => {
     expect(screen.queryByTestId('assistant-plan-reading-panel')).not.toBeInTheDocument()
   })
 
-  test('downloads explicit plan blocks through the Tauri native command', async () => {
-    tauriCoreMock.isTauri.mockReturnValue(true)
-    tauriCoreMock.invoke = vi.fn().mockResolvedValue('/Users/test/Downloads/plan.md')
-
-    render(
-      <MessageList
-        messages={[
-          {
-            id: 'assistant-plan-block',
-            role: 'assistant',
-            content: '',
-            status: 'done',
-            createdAt: '2026-06-11T10:00:00Z',
-            blocks: [
-              {
-                id: 'plan-1',
-                subtaskId: 11,
-                type: 'plan',
-                content: '# Native plan\n\n- Save through Tauri.',
-                status: 'done',
-                createdAt: Date.parse('2026-06-11T10:00:00Z'),
-              },
-            ],
-          },
-        ]}
-      />
-    )
-
-    await userEvent.click(screen.getByTestId('assistant-plan-download-button'))
-
-    await waitFor(() => {
-      expect(tauriCoreMock.invoke).toHaveBeenCalledWith('save_text_file_to_downloads', {
-        filename: 'plan.md',
-        content: '# Native plan\n\n- Save through Tauri.',
-      })
-    })
-  })
 
   test('downloads explicit plan blocks in Gateway Web without invoking a native command', async () => {
-    tauriCoreMock.isTauri.mockReturnValue(true)
+    runtimeCommandMock.isGateway.mockReturnValue(true)
     ;(
       window as typeof window & { __KCODER_GATEWAY_WEB_SHIM__?: boolean }
     ).__KCODER_GATEWAY_WEB_SHIM__ = true
@@ -1204,7 +1109,7 @@ describe('MessageList', () => {
 
     await userEvent.click(screen.getByTestId('assistant-plan-download-button'))
 
-    expect(tauriCoreMock.invoke).not.toHaveBeenCalled()
+    expect(runtimeCommandMock.invoke).not.toHaveBeenCalled()
     expect(URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob))
   })
 

@@ -4,7 +4,7 @@
   grid-template-columns: 40px minmax(0, 1fr);
   align-items: start;
   gap: 12px;
-  padding: 20px;
+  padding: var(--studio-card-inset);
   border: 1px solid rgb(var(--color-border) / 0.75);
   border-radius: 16px;
   background: rgb(var(--color-bg-base));
@@ -56,17 +56,7 @@
     min-height: 44px;
     min-width: 44px;
   }
-  .plugin-marketplace-card {
-    padding: 16px;
-  }
   .plugin-card-actions {
     grid-column: 1 / -1;
-  }
-}
-:root[data-reduce-motion='true'] {
-  .plugin-marketplace-page *,
-  .plugin-marketplace-page *::before,
-  .plugin-marketplace-page *::after {
-    transition-duration: 0ms !important;
   }
 }

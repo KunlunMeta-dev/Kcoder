@@ -1,9 +1,13 @@
 import { afterEach, describe, expect, test, vi } from 'vitest'
 import { gatewayVerificationConfig } from './gateway-verification'
+import { installStudioAutomationBridge } from './automation'
+import { registerRuntimeTransport } from '@/lib/runtime-transport'
 
 afterEach(() => {
   delete window.__KCODER_AI_VERIFY__
+  delete window.__KCODER_STUDIO_E2E__
   vi.unstubAllGlobals()
+  vi.unstubAllEnvs()
 })
 
 describe('session-scoped Gateway automation', () => {
@@ -31,4 +35,21 @@ describe('session-scoped Gateway automation', () => {
       expect(gatewayVerificationConfig()).toBeNull()
     }
   })
+})
+
+test('only explicit E2E mode exposes command routing through the actual registered transport', async () => {
+  vi.stubEnv('MODE', 'production')
+  vi.stubEnv('VITE_KCODER_STUDIO_E2E', 'false')
+  installStudioAutomationBridge()
+  expect(window.__KCODER_STUDIO_E2E__).toBeUndefined()
+
+  vi.stubEnv('MODE', 'e2e')
+  installStudioAutomationBridge()
+  const handler = vi.fn(() => ({ ready: true }))
+  const cleanup = registerRuntimeTransport(handler)
+  try {
+    await expect(window.__KCODER_STUDIO_E2E__!.invokeRuntimeCommand('local_executor_status')).resolves.toEqual({ ready: true })
+    expect(handler).toHaveBeenCalledWith('local_executor_status', undefined)
+  } finally { cleanup() }
+  await expect(window.__KCODER_STUDIO_E2E__!.invokeRuntimeCommand('local_executor_status')).rejects.toThrow('Gateway service transport is unavailable')
 })

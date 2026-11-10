@@ -1,8 +1,14 @@
 // Model-independent admission, cancellation and history/config readiness contracts.
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { resetTaskRuntimeAsyncStorage } from "@/test/task-runtime-async-storage-fixture";
 import { GatewayConnectionBudget } from "../../../shared/gatewayConnectionBudget";
 import { TaskRuntime, taskRuntimeTestHelpers, ThreadListPager } from "./task-runtime";
 import { FakeClient, profile, server } from "./task-runtime/fixture.test-support";
+vi.mock("@react-native-async-storage/async-storage", async () => {
+  const { taskRuntimeAsyncStorage } = await import("@/test/task-runtime-async-storage-fixture");
+  return { default: taskRuntimeAsyncStorage };
+});
+beforeEach(resetTaskRuntimeAsyncStorage);
 function deferred<T>() {
   let resolve!: (value: T) => void;
   const promise = new Promise<T>((done) => { resolve = done; });

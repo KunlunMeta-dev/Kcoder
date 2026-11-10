@@ -1,9 +1,15 @@
-import { Check, Circle } from 'lucide-react'
+import { Check, Circle, ListChecks } from 'lucide-react'
 import { useEffect } from 'react'
 import { useTranslation } from '@/hooks/useTranslation'
 import type { RuntimePlanEventPayload, RuntimePlanStep } from '@/types/api'
+import { ComposerStatusItem } from './ComposerStatusRegion'
 
-export function TaskPlanProgress({ plan }: { plan?: RuntimePlanEventPayload | null }) {
+type TaskPlanProgressProps = {
+  plan?: RuntimePlanEventPayload | null
+  presentation?: 'detail' | 'embedded'
+}
+
+export function TaskPlanProgress({ plan, presentation }: TaskPlanProgressProps) {
   const { t } = useTranslation('common')
 
   useEffect(() => {
@@ -19,6 +25,43 @@ export function TaskPlanProgress({ plan }: { plan?: RuntimePlanEventPayload | nu
   const currentIndex = currentPlanStepIndex(plan.plan)
   const activeStep = plan.plan[currentIndex]
   const allCompleted = plan.plan.every(step => step.status === 'completed')
+  const progressLabel = allCompleted
+    ? t('workbench.task_plan_completed')
+    : t('workbench.task_plan_progress', {
+        current: currentIndex + 1,
+        total: plan.plan.length,
+      })
+  const planTitle = t('workbench.workspace_tab_plan', '计划')
+  const detail = (
+    <ol className="space-y-1" data-testid="runtime-plan-detail">
+      {plan.plan.map((step, index) => (
+        <li
+          key={`${index}-${step.step}`}
+          className="flex items-start gap-2 text-sm leading-5 text-text-secondary"
+        >
+          <PlanStepIcon step={step} compact />
+          <span className={step.status === 'inProgress' ? 'text-text-primary' : ''}>
+            {step.step}
+          </span>
+        </li>
+      ))}
+    </ol>
+  )
+
+  if (presentation === 'detail') return detail
+  if (presentation === 'embedded') {
+    return (
+      <ComposerStatusItem
+        id="plan"
+        title={`${planTitle} ${currentIndex + 1}/${plan.plan.length}`}
+        summary={activeStep.step}
+        icon={ListChecks}
+        order={20}
+      >
+        {detail}
+      </ComposerStatusItem>
+    )
+  }
 
   return (
     <div className="relative z-20 mb-2 flex justify-center">
@@ -42,26 +85,12 @@ export function TaskPlanProgress({ plan }: { plan?: RuntimePlanEventPayload | nu
           </ol>
         </div>
         <div
-          aria-label={
-            allCompleted
-              ? t('workbench.task_plan_completed')
-              : t('workbench.task_plan_progress', {
-                  current: currentIndex + 1,
-                  total: plan.plan.length,
-                })
-          }
+          aria-label={progressLabel}
           data-testid="runtime-plan-progress-button"
           className="flex h-8 items-center gap-1.5 rounded-xl border border-border/70 bg-background px-3 text-xs font-normal text-text-secondary shadow-sm transition-colors group-hover:bg-surface group-focus:bg-surface"
         >
           <PlanStepIcon step={activeStep} />
-          <span>
-            {allCompleted
-              ? t('workbench.task_plan_completed')
-              : t('workbench.task_plan_progress', {
-                  current: currentIndex + 1,
-                  total: plan.plan.length,
-                })}
-          </span>
+          <span>{progressLabel}</span>
         </div>
       </div>
     </div>

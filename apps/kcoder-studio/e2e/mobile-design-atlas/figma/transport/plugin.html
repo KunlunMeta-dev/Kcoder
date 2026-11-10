@@ -1,0 +1,25 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>KCoder V3 REF 同步</title>
+<style>
+body{font:13px/1.6 system-ui,sans-serif;margin:20px;color:var(--figma-color-text,#222);background:var(--figma-color-bg,#fff)}h1{font-size:18px}button{padding:9px 14px;border:1px solid #ccd4df;border-radius:7px;cursor:pointer;background:#fff;color:#234}button.primary{background:#245aab;color:white}button:disabled{opacity:.5;cursor:default}pre{white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.6 system-ui;background:var(--figma-color-bg-secondary,#f3f5f8);padding:12px;border-radius:8px;max-height:260px;overflow:auto}label{display:block;margin:18px 0}input{max-width:100%}.actions{display:flex;gap:8px;flex-wrap:wrap}#notice{color:#a64c00}
+</style>
+<h1>V3 REF 页面同步</h1><p>只更新独立 REF 区的生成内容，保留画板 ID、位置和名称。检测到手工修改会停止；不会强制覆盖。</p>
+<label>以后更新可载入新同步包（sync-bundle.json）<input id="file" type="file" accept=".json,application/json"></label>
+<div class="actions"><button id="preview">检查差异</button><button id="apply" class="primary" disabled>同步变化</button><button id="download" disabled>下载检查点</button></div>
+<p id="notice" role="alert"></p><pre id="output" role="status">正在检查当前参考区…</pre>
+<script>
+let checkpoint=null;
+const byId=id=>document.getElementById(id), post=message=>parent.postMessage({pluginMessage:message},'*');
+const busy=()=>{byId('preview').disabled=true;byId('apply').disabled=true;byId('file').disabled=true;byId('notice').textContent='';};
+byId('file').onchange=async e=>{const f=e.target.files[0];if(!f)return;busy();post({type:'load',text:await f.text()});};
+byId('preview').onclick=()=>{busy();post({type:'preview'});};
+byId('apply').onclick=()=>{busy();post({type:'apply'});};
+byId('download').onclick=()=>{if(!checkpoint)return;const u=URL.createObjectURL(new Blob([JSON.stringify(checkpoint,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=u;a.download='figma-sync-checkpoint.json';a.click();setTimeout(()=>URL.revokeObjectURL(u),1000);};
+window.onmessage=e=>{const m=e.data.pluginMessage;if(!m)return;
+ if(m.type==='preview'){const p=m.plan,changed=p.entries.filter(s=>s.action==='update');byId('output').textContent=`采样 ${m.stateCount} 个状态\n待更新 ${changed.length} · 无变化 ${p.entries.length-changed.length} · 冲突 ${p.conflicts.length}\n${changed.map(s=>'更新 '+s.stateId).join('\n')}\n${p.conflicts.map(c=>'停止 '+c.stateId+'：'+c.reason).join('\n')}\n${p.retained.length?'未采样的状态保留：'+p.retained.join('、'):''}`;byId('apply').dataset.allowed=String(changed.length>0&&!p.conflicts.length);}
+ if(m.type==='result'){checkpoint=m.result.checkpoint;byId('download').disabled=false;byId('output').textContent=JSON.stringify({status:m.result.status,updated:m.result.updated,conflicts:m.result.plan.conflicts,disabled:m.result.skippedDisabled,absent:m.result.skippedAbsent},null,2);byId('apply').dataset.allowed='false';}
+ if(m.type==='error'){byId('notice').textContent=m.text;byId('apply').dataset.allowed='false';}
+ if(m.type==='warning')byId('notice').textContent=m.text;
+ if(m.type==='ready'){byId('preview').disabled=false;byId('file').disabled=false;byId('apply').disabled=byId('apply').dataset.allowed!=='true';}
+};
+post({type:'preview'});
+</script></html>

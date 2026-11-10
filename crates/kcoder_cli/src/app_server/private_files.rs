@@ -3,16 +3,13 @@ use kcoder_config::PrivateDirectory;
 use sha2::Digest as _;
 use std::path::Path;
 
-pub(super) fn hex_sha256(bytes: &[u8]) -> String {
+pub fn hex_sha256(bytes: &[u8]) -> String {
     format!("{:x}", sha2::Sha256::digest(bytes))
 }
 
-pub(super) fn ensure_private_artifact_directory(path: &Path) -> Result<()> {
-    PrivateDirectory::open_or_create(path)?;
-    Ok(())
-}
+pub use crate::ensure_private_artifact_directory;
 
-pub(super) fn write_private_artifact_file(path: &Path, bytes: &[u8]) -> Result<()> {
+pub fn write_private_artifact_file(path: &Path, bytes: &[u8]) -> Result<()> {
     let parent = path.parent().context("artifact file has no parent")?;
     let name = path.file_name().context("artifact file has no name")?;
     PrivateDirectory::open_or_create(parent)?.atomic_replace(name, bytes)
@@ -57,4 +54,12 @@ mod tests {
 
         assert!(std::fs::read_dir(outside.path()).unwrap().next().is_none());
     }
+}
+
+pub fn error_is_not_found(error: &anyhow::Error) -> bool {
+    error.chain().any(|cause| {
+        cause
+            .downcast_ref::<std::io::Error>()
+            .is_some_and(|error| error.kind() == std::io::ErrorKind::NotFound)
+    })
 }

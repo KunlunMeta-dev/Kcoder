@@ -18,7 +18,7 @@ import { createSkillApi } from '@/api/skills'
 import { createTaskApi } from '@/api/tasks'
 import { createTeamApi } from '@/api/teams'
 import { createUserApi } from '@/api/users'
-import { isTauriRuntime } from '@/lib/runtime-environment'
+import { isGatewayRuntime } from '@/lib/runtime-environment'
 import { isLocalFirstAppRuntime } from '@/lib/runtime-mode'
 import type { RemoteTerminalClientFactory } from '@/lib/remote-terminal-socket'
 import { createChatStream } from '@/stream/chatStream'
@@ -27,6 +27,8 @@ import type {
   DeviceInfo,
   ProjectDeviceSessionResponse,
   RuntimeWorkListResponse,
+  RuntimeModelSelectionRequest,
+  RuntimeModelSelectionResponse,
   User,
 } from '@/types/api'
 import type { DeviceSessionResponse } from '@/types/devices'
@@ -101,6 +103,9 @@ export interface WorkbenchServices {
     disposeTemporaryRuntimeTask?: (
       address: import('@/types/api').RuntimeTaskAddress
     ) => Promise<unknown>
+    queueRuntimeModelSelection?: (
+      request: RuntimeModelSelectionRequest
+    ) => Promise<RuntimeModelSelectionResponse>
   }
   attachmentApi?: {
     uploadAttachment: (
@@ -177,7 +182,7 @@ export function createDefaultWorkbenchServices(
   }
 
   const cloudServices = createBackendWorkbenchServices()
-  if (!isTauriRuntime()) return cloudServices
+  if (!isGatewayRuntime()) return cloudServices
 
   const localServices = createLocalAppServices({ user: cloudConnection?.user })
   const cloudProjectSpaceApi = createCloudProjectSpaceApi(

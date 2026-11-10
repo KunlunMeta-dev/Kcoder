@@ -623,7 +623,7 @@ export function ProjectItem({
         data-testid={`project-local-tasks-panel-${project.id}`}
         aria-hidden={!expanded}
         className={cn(
-          'grid overflow-hidden transition-[grid-template-rows,opacity] duration-[220ms] ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none',
+          'grid overflow-hidden transition-[grid-template-rows,opacity] duration-[220ms] ease-[cubic-bezier(0.16,1,0.3,1)]',
           expanded ? 'grid-rows-[1fr] opacity-100' : 'pointer-events-none grid-rows-[0fr] opacity-0'
         )}
       >

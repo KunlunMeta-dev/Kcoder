@@ -53,7 +53,7 @@ function NativeHooksSettingsPage() {
         }
       />
       {readOnlyGateway && (
-        <div className="mb-4 rounded-xl border border-border bg-surface/70 px-4 py-3 text-sm text-text-secondary">
+        <div className="studio-card-spacing mb-4 rounded-xl border border-border bg-surface/70 px-4 py-3 text-sm text-text-secondary">
           {t('gatewayReadOnly')}
         </div>
       )}

@@ -26,6 +26,7 @@ export interface ComposerEditorHandle {
   focus: () => void
   getSnapshot: () => ComposerEditorSnapshot
   setValue: (value: string, selectionOffset?: number) => void
+  isAtVerticalBoundary: (direction: 'up' | 'down') => boolean
 }
 
 interface ComposerProseMirrorEditorProps {
@@ -85,6 +86,10 @@ export const ComposerProseMirrorEditor = forwardRef<
         const view = viewRef.current
         if (!view) return
         replaceComposerValue(view, value, selectionOffset)
+      },
+      isAtVerticalBoundary(direction) {
+        const view = viewRef.current
+        return Boolean(view?.state.selection.empty && view.endOfTextblock(direction))
       },
     }),
     []

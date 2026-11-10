@@ -15,7 +15,7 @@ test('release plan reuses registry sets and every explicit suite is registered',
 test('release prerequisites reach only the suites that require them',()=>{
   const windows='suites/gateway/windows-installer-lifecycle.e2e.mjs';
   assert.ok(suiteEnvironmentNames(windows).includes('KCODER_E2E_WINDOWS_NEW_INSTALLER'));
-  assert.ok(suiteEnvironmentNames('suites/browser/tauri-model-configuration-summary.e2e.mjs').includes('KCODER_E2E_TAURI_BIN'));
+  assert.ok(suiteEnvironmentNames('suites/browser/electron-model-configuration-summary.e2e.mjs').includes('KCODER_E2E_ELECTRON_BIN'));
   assert.equal(releaseEnvironmentNames('suites/gateway/runtime-target-local.e2e.mjs').includes('KCODER_E2E_WINDOWS_SSH_TARGET'),false);
   assert.equal(suiteEnvironmentNames(windows).includes('AWS_SECRET_ACCESS_KEY'),false);
 });

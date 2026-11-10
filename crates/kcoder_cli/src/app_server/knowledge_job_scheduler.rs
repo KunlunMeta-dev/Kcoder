@@ -8,27 +8,27 @@ use tokio_util::sync::CancellationToken;
 
 type JobKey = (String, String);
 
-pub(super) struct WikiJobScheduler {
+pub struct WikiJobScheduler {
     capacity: usize,
     active: HashMap<JobKey, CancellationToken>,
     tasks: JoinSet<(JobKey, Result<()>)>,
 }
 
 impl WikiJobScheduler {
-    pub(super) fn new(capacity: usize) -> Self {
+    pub fn new(capacity: usize) -> Self {
         Self {
             capacity,
             active: HashMap::new(),
             tasks: JoinSet::new(),
         }
     }
-    pub(super) fn has_capacity(&self) -> bool {
+    pub fn has_capacity(&self) -> bool {
         self.active.len() < self.capacity
     }
-    pub(super) fn contains(&self, library: &str, job_id: &str) -> bool {
+    pub fn contains(&self, library: &str, job_id: &str) -> bool {
         self.active.contains_key(&(library.into(), job_id.into()))
     }
-    pub(super) fn spawn<F, Fut>(
+    pub fn spawn<F, Fut>(
         &mut self,
         library: String,
         job_id: String,
@@ -45,7 +45,7 @@ impl WikiJobScheduler {
         }
         let cancel = owner.child_token();
         self.active.insert(key.clone(), cancel.clone());
-        self.tasks.spawn(async move {
+        self.tasks.spawn(Box::pin(async move {
             let outcome = AssertUnwindSafe(async move { start(cancel).await })
                 .catch_unwind()
                 .await;
@@ -54,10 +54,10 @@ impl WikiJobScheduler {
                 Err(_) => Err(anyhow::anyhow!("Wiki worker job panicked")),
             };
             (key, result)
-        });
+        }));
         true
     }
-    pub(super) fn reap(&mut self) {
+    pub fn reap(&mut self) {
         while let Some(completed) = self.tasks.try_join_next() {
             if let Ok((key, result)) = completed {
                 self.active.remove(&key);
@@ -69,12 +69,12 @@ impl WikiJobScheduler {
             }
         }
     }
-    pub(super) fn cancel_all(&self) {
+    pub fn cancel_all(&self) {
         for token in self.active.values() {
             token.cancel();
         }
     }
-    pub(super) async fn shutdown(&mut self) {
+    pub async fn shutdown(&mut self) {
         self.cancel_all();
         let joined = tokio::time::timeout(std::time::Duration::from_secs(5), async {
             while let Some(completed) = self.tasks.join_next().await {

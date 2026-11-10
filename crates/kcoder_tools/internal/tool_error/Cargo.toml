@@ -1,0 +1,16 @@
+[package]
+name = "kcoder_tool_error"
+description = "Shared tool failure contract."
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+thiserror.workspace = true
+
+[lib]
+path = "../../src/internal/tool_error/lib.rs"

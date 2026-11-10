@@ -1,8 +1,24 @@
-//! Workspace requests: extracted from the app-server connection boundary.
+//! Workspace registry requests and workspace-scoped file search.
 
-use super::*;
+use anyhow::{Context, Result, ensure};
+use kcoder_cli_storage::workspace_search::{
+    workspace_search_open_authorized_root, workspace_search_scan,
+};
+use kcoder_state::AppState;
+use kcoder_workspace_resources::managed_worktrees::{
+    ClientWorkspaceRecord, ClientWorkspaceStore, ClientWorktreeStore, app_server_now_ms,
+};
+use serde_json::{Value, json};
+use std::{
+    collections::{HashMap, HashSet},
+    path::{Component, Path, PathBuf},
+};
+#[path = "workspace_requests/project_registration.rs"]
+mod project_registration;
+#[path = "../internal/workspace_rpc/receipts.rs"]
+pub mod receipts;
 
-pub(super) async fn canonical_workspace_directory(raw: &str) -> Result<PathBuf> {
+async fn canonical_workspace_directory(raw: &str) -> Result<PathBuf> {
     if raw.trim().is_empty() || raw.len() > 4096 {
         anyhow::bail!("workspacePath is invalid")
     }
@@ -18,11 +34,11 @@ pub(super) async fn canonical_workspace_directory(raw: &str) -> Result<PathBuf> 
     Ok(canonical)
 }
 
-pub(super) fn workspace_record_matches(record: &ClientWorkspaceRecord, project_key: &str) -> bool {
+fn workspace_record_matches(record: &ClientWorkspaceRecord, project_key: &str) -> bool {
     record.project_key == project_key || record.workspace_path == project_key
 }
 
-pub(super) fn workspace_label(path: &Path) -> String {
+fn workspace_label(path: &Path) -> String {
     path.file_name()
         .and_then(|name| name.to_str())
         .filter(|name| !name.is_empty())
@@ -30,39 +46,9 @@ pub(super) fn workspace_label(path: &Path) -> String {
         .to_string()
 }
 
-pub(super) async fn workspace_request(
-    engine: &QueryEngine,
-    method: &str,
-    params: &Value,
-) -> Result<Value> {
-    if method == kcoder_app_protocol::METHOD_WORKSPACE_OPERATION_READ {
-        let input: kcoder_app_protocol::WorkspaceOperationReadParams =
-            serde_json::from_value(params.clone())?;
-        return workspace_operation_receipts::query(engine, &input.client_request_id);
-    }
-    if matches!(
-        method,
-        "runtime.workspaces.open" | "runtime.workspaces.prepare"
-    ) {
-        let input: kcoder_app_protocol::WorkspaceOperationMutationParams =
-            serde_json::from_value(params.clone())?;
-        if let Some(id) = input.client_request_id.as_deref() {
-            validate_workspace_mutation(method, params).await?;
-            if let Some(result) = workspace_operation_receipts::reserve(engine, id, method, params)?
-            {
-                return Ok(result);
-            }
-            let result = workspace_request_without_receipt(engine, method, params).await?;
-            workspace_operation_receipts::complete(engine, id, &result)?;
-            return Ok(result);
-        }
-    }
-    workspace_request_without_receipt(engine, method, params).await
-}
-
 // Validate deterministic input before reserving an ID. Filesystem/registry writes
 // stay in the mutation function and run only after the reservation is durable.
-async fn validate_workspace_mutation(method: &str, params: &Value) -> Result<()> {
+pub async fn validate_workspace_mutation(method: &str, params: &Value) -> Result<()> {
     let raw = params
         .get("workspacePath")
         .and_then(Value::as_str)
@@ -122,12 +108,12 @@ async fn validate_workspace_mutation(method: &str, params: &Value) -> Result<()>
     Ok(())
 }
 
-pub(super) async fn workspace_request_without_receipt(
-    engine: &QueryEngine,
+pub async fn workspace_request_without_receipt(
+    store: &ClientWorkspaceStore,
+    workspace: &AppState,
     method: &str,
     params: &Value,
 ) -> Result<Value> {
-    let store = ClientWorkspaceStore::new(engine);
     let device_id = params
         .get("deviceId")
         .and_then(Value::as_str)
@@ -321,7 +307,8 @@ pub(super) async fn workspace_request_without_receipt(
             let mut seen_roots = HashSet::with_capacity(roots.len());
             roots.retain(|root| seen_roots.insert(root.clone()));
             let _guard = store.lock()?;
-            let mut state = store.load();
+            let mut state = project_registration::load_for_addition(params, store)?;
+            project_registration::verify_addition(params, &roots, project_key, &state)?;
             state
                 .records
                 .retain(|path, record| record.project_key != project_key || roots.contains(path));
@@ -516,7 +503,7 @@ pub(super) async fn workspace_request_without_receipt(
                 _ => anyhow::bail!("rootProject must be a boolean"),
             };
             if root_project
-                && std::fs::canonicalize(project_key)? != std::fs::canonicalize(engine.state.cwd())?
+                && std::fs::canonicalize(project_key)? != std::fs::canonicalize(workspace.cwd())?
             {
                 anyhow::bail!("root project must match the app-server workspace")
             }
@@ -633,8 +620,9 @@ pub(super) async fn workspace_request_without_receipt(
     }
 }
 
-pub(super) async fn workspace_search_request(
-    engine: &QueryEngine,
+pub async fn workspace_search_request(
+    worktree_store: &ClientWorktreeStore,
+    workspace: &AppState,
     params: &Value,
 ) -> Result<Value> {
     let root = params
@@ -652,89 +640,40 @@ pub(super) async fn workspace_search_request(
     if query.len() > 256 {
         anyhow::bail!("workspace search query is too long")
     }
-    let root = dunce::canonicalize(root)?;
-    if !tokio::fs::metadata(&root).await?.is_dir() {
-        anyhow::bail!("workspace search root is not a directory")
+    let requested_root = Path::new(root);
+    if !requested_root.is_absolute()
+        || requested_root
+            .components()
+            .any(|component| matches!(component, Component::ParentDir))
+    {
+        anyhow::bail!("workspace search root is invalid")
     }
-    let configured = dunce::canonicalize(engine.state.cwd())?;
-    let inside_configured = root == configured || root.starts_with(&configured);
-    let managed = if inside_configured {
-        false
-    } else {
-        let store = ClientWorktreeStore::new(engine);
-        let _guard = store.lock()?;
-        store
-            .load()?
+
+    // The registry lock pins the worktree authority while its recorded anchors
+    // are opened and while the directory-handle scan is in progress.
+    let _worktree_guard = worktree_store.lock()?;
+    let worktrees = worktree_store.load()?;
+    let mut authorized_anchors = Vec::with_capacity(worktrees.records.len() + 1);
+    authorized_anchors.push(workspace.cwd());
+    authorized_anchors.extend(
+        worktrees
             .records
             .values()
-            .filter(|record| Path::new(&record.path).exists())
-            .filter_map(|record| dunce::canonicalize(&record.path).ok())
-            .any(|allowed| root == allowed || root.starts_with(allowed))
-    };
-    if !inside_configured && !managed {
-        anyhow::bail!("workspace search root has not been opened")
-    }
+            .map(|record| PathBuf::from(&record.path)),
+    );
+    let (scan_root_directory, scan_root_path) =
+        workspace_search_open_authorized_root(requested_root, &authorized_anchors)?
+            .context("workspace search root has not been opened")?;
+    let scan_root = scan_root_path
+        .to_str()
+        .context("workspace search root is not valid Unicode")?
+        .to_owned();
     let query = query.to_lowercase();
-    let scan_root = root.clone();
-    let files = tokio::task::spawn_blocking(move || -> Result<Vec<Value>> {
-        let mut pending = vec![(scan_root.clone(), 0_usize)];
-        let mut visited = 0_usize;
-        let mut matches = Vec::<(usize, Value)>::new();
-        while let Some((directory, depth)) = pending.pop() {
-            if depth > 20 || visited >= 50_000 {
-                continue;
-            }
-            let entries = match std::fs::read_dir(&directory) {
-                Ok(entries) => entries,
-                Err(_) => continue,
-            };
-            for entry in entries.flatten() {
-                visited += 1;
-                if visited > 50_000 {
-                    break;
-                }
-                let name = entry.file_name().to_string_lossy().into_owned();
-                if matches!(name.as_str(), ".git" | "node_modules" | "target" | ".next") {
-                    continue;
-                }
-                let entry_path = entry.path();
-                let metadata = match std::fs::symlink_metadata(&entry_path) {
-                    Ok(metadata) if !metadata.file_type().is_symlink() => metadata,
-                    _ => continue,
-                };
-                let relative = entry_path
-                    .strip_prefix(&scan_root)
-                    .unwrap_or(&entry_path)
-                    .to_string_lossy()
-                    .replace('\\', "/");
-                let haystack = relative.to_lowercase();
-                if let Some(index) = haystack.find(&query) {
-                    let score = 10_000_usize
-                        .saturating_sub(index * 10)
-                        .saturating_sub(depth * 25)
-                        .saturating_sub(relative.len());
-                    matches.push((
-                        score,
-                        json!({
-                            "root": scan_root,
-                            "path": relative,
-                            "fileName": name,
-                            "matchType": if metadata.is_dir() { "directory" } else { "file" },
-                            "score": score,
-                            "indices": (index..index + query.len()).collect::<Vec<_>>(),
-                        }),
-                    ));
-                }
-                if metadata.is_dir() {
-                    pending.push((entry_path, depth + 1));
-                }
-            }
-        }
-        matches.sort_by_key(|item| std::cmp::Reverse(item.0));
-        matches.truncate(200);
-        Ok(matches.into_iter().map(|(_, value)| value).collect())
+    let files = tokio::task::spawn_blocking(move || {
+        workspace_search_scan(scan_root_directory, scan_root, query)
     })
     .await
     .context("workspace search task failed")??;
+    drop(_worktree_guard);
     Ok(json!({"files": files}))
 }

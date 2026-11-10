@@ -8,13 +8,14 @@ import { appRoot, runE2E } from "../../harness/run-context.mjs";
 
 const mobileDist = resolve(process.env.KCODER_E2E_MOBILE_WEB_ROOT || resolve(appRoot, "mobile/dist"));
 const viewportWidth = Number(process.env.KCODER_E2E_VIEWPORT_WIDTH || 390);
+const PREFERENCES_KEY = "kcoder-studio:mobile-app-preferences:v1";
 assert.ok([360, 390, 768].includes(viewportWidth), "KCODER_E2E_VIEWPORT_WIDTH must be 360, 390, or 768");
 await access(resolve(mobileDist, "index.html"));
 
 await runE2E(import.meta.url, {
   testId: `workspace-qa-browser-address-interleavings-${viewportWidth}`,
   tier: "full-integration",
-  modelPolicy: "model-independent scenario task with real Gateway/app-server/browser RPC; one request held at the browser client boundary and released to the real server",
+  modelPolicy: "model-independent scenario task with real Gateway/app-server/browser RPC; valid navigation requests are held at the browser client boundary and released to the real server",
   retainSuccessLogs: true,
 }, async context => {
   const workspace = context.pathInState("workspace");
@@ -27,7 +28,7 @@ await runE2E(import.meta.url, {
     workspace,
     env: {
       KCODER_STUDIO_SCENARIO: "full-turn",
-      KCODER_STUDIO_WEB_ROOT: mobileDist,
+      KCODER_STUDIO_MOBILE_WEB_ROOT: mobileDist,
       KCODER_CHROMIUM_BIN: process.env.KCODER_E2E_CHROMIUM_BIN || "/usr/bin/chromium",
       KCODER_CHROMIUM_NO_SANDBOX: "1",
     },
@@ -38,13 +39,39 @@ await runE2E(import.meta.url, {
   await installRpcHold(page);
 
   const diagnostics = [];
+  const diagnosticEvents = [];
+  let scenarioStage = "mobile-mount";
+  let taskCreationRoutes = null;
   const rpcRequests = [];
   const rpcResponses = [];
-  page.on("pageerror", error => diagnostics.push(`pageerror: ${error.message}`));
+  const browserSocketScopes = [];
+  page.on("pageerror", error => {
+    diagnostics.push(`pageerror: ${error.message}`);
+    diagnosticEvents.push({ at: new Date().toISOString(), type: "pageerror", text: error.message, route: page.url(), stage: scenarioStage });
+  });
   page.on("console", message => {
-    if (["error", "warning"].includes(message.type())) diagnostics.push(`${message.type()}: ${message.text()}`);
+    if (["error", "warning"].includes(message.type())) {
+      diagnostics.push(`${message.type()}: ${message.text()}`);
+      diagnosticEvents.push({
+        at: new Date().toISOString(),
+        type: message.type(),
+        text: message.text(),
+        route: page.url(),
+        stage: scenarioStage,
+        location: message.location(),
+      });
+    }
   });
   page.on("websocket", socket => {
+    try {
+      const socketUrl = new URL(socket.url());
+      browserSocketScopes.push({
+        channel: socketUrl.searchParams.get("channel"),
+        server: socketUrl.searchParams.get("server"),
+        workspace: socketUrl.searchParams.get("workspace"),
+        hasToken: Boolean(socketUrl.searchParams.get("token")),
+      });
+    } catch {}
     const methods = new Map();
     socket.on("framesent", event => {
       try {
@@ -77,10 +104,28 @@ await runE2E(import.meta.url, {
   });
 
   await connect(page, gateway);
-  await createTask(page, "WORKSPACE_QA_BROWSER_ADDRESS");
+  scenarioStage = "workspace-creation";
+  taskCreationRoutes = await createTask(page, "WORKSPACE_QA_BROWSER_ADDRESS");
+  assert.equal(new URL(taskCreationRoutes.before).pathname, "/mobile/new", "workspace creation must start on the Mobile new-workspace route");
+  assert.ok(new URL(taskCreationRoutes.workspace).pathname.startsWith("/mobile/h/"), "workspace creation must first enter the profile workspace route");
+  assert.ok(new URL(taskCreationRoutes.after).pathname.startsWith("/mobile/h/"), "successful workspace creation must navigate into the profile workspace route");
+  scenarioStage = "browser-panel-selection";
   await selectPanel(page, "browser-1");
+  scenarioStage = "browser-session-start";
   await openUrl(page, oldSite.url);
+  scenarioStage = "browser-address-interleavings";
   await waitForScreenshotTitle(page, rpcResponses, oldSite.title);
+  const browserStartCount = rpcRequests.filter(request => request.method === "browser/start").length;
+  const preflightIndex = rpcRequests.findIndex(request => request.method === "browser/preflight");
+  const startIndex = rpcRequests.findIndex(request => request.method === "browser/start");
+  const browserScope = browserSocketScopes.find(scope => scope.channel === "browser");
+  assert.equal(browserStartCount, 1, "workspace BrowserPanel must create exactly one session");
+  assert.ok(preflightIndex >= 0 && startIndex > preflightIndex,
+    "the task-scoped browser connection must preflight before starting its session");
+  assert.ok(browserScope?.server && browserScope.hasToken,
+    "the browser channel must use the active profile token and selected server scope");
+  assert.equal(browserScope.workspace, workspace,
+    "the browser channel must use the task cwd rather than a settings workspace");
 
   const address = activeBrowser(page).getByTestId("browser-url-input");
   const oldScreenshotCount = screenshotCount(rpcResponses, oldSite.url);
@@ -111,38 +156,41 @@ await runE2E(import.meta.url, {
   await waitForScreenshotTitle(page, rpcResponses, newSite.title);
   await waitForInputValue(page, newSite.url);
 
-  // The app-server rejects non-http(s) URLs. Keep the draft pending across an old-page poll,
-  // then release it and verify the user can retry with a valid local fixture URL.
+  // Unsafe URL schemes must be rejected by the Mobile workspace UI before any browser RPC.
   const invalidUrl = "file:///etc/passwd";
-  const currentScreenshotCount = screenshotCount(rpcResponses, newSite.url);
+  const browserActionCountBeforeInvalid = rpcRequests.filter(request => request.method === "browser/action").length;
+  const browserStartCountBeforeInvalid = rpcRequests.filter(request => request.method === "browser/start").length;
   await address.fill(invalidUrl);
   await address.press("Tab");
-  await page.evaluate(({ url }) => window.__workspaceQaRpcHoldNext("browser/action", { action: "navigate", url }), { url: invalidUrl });
   await activeBrowser(page).getByLabel("打开", { exact: true }).click();
-  await waitForHeldRpc(page, "browser/action", invalidUrl);
-  await waitForCondition(page, () => screenshotCount(rpcResponses, newSite.url) > currentScreenshotCount);
-  await page.waitForTimeout(200);
-  const rejectedPendingValue = await address.inputValue();
-  await page.evaluate(url => {
-    const held = window.__workspaceQaRpcHeld.find(item => item.message.method === "browser/action" && item.message.params?.url === url);
-    if (!held) throw new Error("missing held invalid navigation");
-    window.__workspaceQaRpcRelease(held.message.id);
-  }, invalidUrl);
-  await page.getByText(/browser URL must be an http\(s\) URL without credentials/i).waitFor({ state: "visible", timeout: 30_000 });
-  const rejectedValue = await address.inputValue();
-  const rejectionResponse = rpcResponses.find(response => response.method === "browser/action" && response.error?.message?.includes("http(s) URL"));
+  const browserError = activeBrowser(page).getByTestId("browser-error");
+  await browserError.waitFor({ state: "visible", timeout: 15_000 });
+  const invalidErrorText = await browserError.innerText();
+  const invalidValue = await address.inputValue();
+  await page.waitForTimeout(250);
+  const invalidUrlRpcRequests = rpcRequests.filter(request => request.params?.url === invalidUrl);
+  const browserActionCountAfterInvalid = rpcRequests.filter(request => request.method === "browser/action").length;
+  const browserStartCountAfterInvalid = rpcRequests.filter(request => request.method === "browser/start").length;
+  assert.match(invalidErrorText, /HTTP|HTTPS/i);
+  assert.equal(invalidValue, invalidUrl, "local rejection must keep the address available for correction");
+  assert.deepEqual(invalidUrlRpcRequests, [], "file URL must never be forwarded to the target");
+  assert.equal(browserActionCountAfterInvalid, browserActionCountBeforeInvalid,
+    "local URL rejection must not issue browser/action");
+  assert.equal(browserStartCountAfterInvalid, browserStartCountBeforeInvalid,
+    "local URL rejection must not create a second session");
+
   const retryOldScreenshotBaseline = screenshotCount(rpcResponses, oldSite.url);
   await address.fill(oldSite.url);
   await activeBrowser(page).getByLabel("打开", { exact: true }).click();
   await waitForCondition(page, () => screenshotCount(rpcResponses, oldSite.url) > retryOldScreenshotBaseline);
   await waitForInputValue(page, oldSite.url);
-  // A rejected navigation closes that session. Re-open a local page in this fresh
-  // session so the history boundary below is real and has a previous entry.
+  // A local rejection leaves the owned session intact; navigate back to the new page
+  // in that same session so the history boundary below has a previous entry.
   const newScreenshotBaselineAfterRetry = screenshotCount(rpcResponses, newSite.url);
   await openUrl(page, newSite.url);
   await waitForCondition(page, () => screenshotCount(rpcResponses, newSite.url) > newScreenshotBaselineAfterRetry);
   await waitForInputValue(page, newSite.url);
-  await waitForEnabled(page, activeBrowser(page).getByLabel("后退", { exact: true }));
+  await waitForEnabled(page, activeBrowser(page).getByLabel("返回", { exact: true }));
 
   const backDraftBeforeAction = "http://draft-before-back.invalid/";
   const backDraftDuringAction = "http://draft-during-back.invalid/";
@@ -150,7 +198,7 @@ await runE2E(import.meta.url, {
   await address.press("Tab");
   const backScreenshotBaseline = screenshotCount(rpcResponses, newSite.url);
   await page.evaluate(() => window.__workspaceQaRpcHoldNext("browser/action", { action: "back" }));
-  await activeBrowser(page).getByLabel("后退", { exact: true }).click();
+  await activeBrowser(page).getByLabel("返回", { exact: true }).click();
   await waitForHeldAction(page, "back");
   await address.fill(backDraftDuringAction);
   await address.press("Tab");
@@ -235,11 +283,16 @@ await runE2E(import.meta.url, {
     pendingDraftPreserved,
     pendingObservedValue: pendingValue,
     heldNavigation,
-    rejectedPendingDraftPreserved: rejectedPendingValue === invalidUrl,
-    rejectedObservedPendingValue: rejectedPendingValue,
-    rejectedDraftRetained: rejectedValue === invalidUrl,
-    rejectedObservedValue: rejectedValue,
-    rejectionResponse: rejectionResponse ?? null,
+    invalidErrorText,
+    invalidDraftRetained: invalidValue === invalidUrl,
+    invalidUrlRpcRequests,
+    browserActionCountBeforeInvalid,
+    browserActionCountAfterInvalid,
+    browserStartCountBeforeInvalid,
+    browserStartCountAfterInvalid,
+    browserSocketScopes,
+    preflightIndex,
+    startIndex,
     retryConfirmed: true,
     backDraftBeforeAction,
     backDraftDuringAction,
@@ -259,14 +312,25 @@ await runE2E(import.meta.url, {
     rpcRequests,
     rpcResponses,
     diagnostics,
+    diagnosticEvents,
+    taskCreationRoutes,
   };
+  const expectedLifecycleWarnings = diagnosticEvents.filter(event => isExpectedCatalogConnectionAbort(
+    event,
+    { workspace, taskCreationRoutes },
+  ));
+  const unexpectedDiagnostics = diagnosticEvents.filter(event => !expectedLifecycleWarnings.includes(event));
+  report.expectedLifecycleWarnings = expectedLifecycleWarnings;
+  report.unexpectedDiagnostics = unexpectedDiagnostics;
   await context.writeArtifactJson("workspace-qa-browser-address-interleavings.json", report);
-  assert.deepEqual(diagnostics, []);
+  assert.ok(expectedLifecycleWarnings.length <= 1, "only one known runtime catalog connection cancellation may occur during task navigation");
+  assert.deepEqual(unexpectedDiagnostics, [], "all console errors and warnings outside the exact owner-scoped runtime cancellation must fail");
   assert.equal(blurDraftPreserved, true, "旧页面 screenshot poll 在 blur 后不得覆盖尚未提交的新 URL 草稿");
   assert.equal(pendingDraftPreserved, true, "旧页面 screenshot poll 在 Go RPC pending 时不得覆盖新 URL 草稿");
-  assert.equal(rejectedPendingValue, invalidUrl, "navigate RPC pending 时必须保留失败候选 URL");
-  assert.equal(rejectedValue, invalidUrl, "服务端拒绝后必须保留原 URL 以便用户修正或重试");
-  assert.ok(rejectionResponse, "拒绝必须来自真实 Gateway/app-server browser/action 响应");
+  assert.equal(invalidValue, invalidUrl, "本地拒绝后必须保留原 URL 以便用户修正或重试");
+  assert.deepEqual(invalidUrlRpcRequests, [], "file URL 必须在客户端拦截且不能到达 Gateway/app-server");
+  assert.equal(browserStartCountBeforeInvalid, 1, "任务只创建一个 browser session");
+  assert.equal(browserStartCountAfterInvalid, 1, "非法 URL 不得创建额外 browser session");
   assert.equal(draftPreservedDuringBackPoll, true, "Back pending时旧页截图不得覆盖用户新输入");
   assert.equal(backActionDraftRetained, true, "Back pending期间产生的新草稿不得被 action 响应覆盖");
   assert.equal(forwardActionAuthoritativeBeforeOldFrame, true, "Forward成功后地址栏应立即切换到服务端确认的页面");
@@ -278,7 +342,7 @@ await runE2E(import.meta.url, {
     modelIndependentScenarioProvider: true,
     oldScreenshotPollAfterBlur: true,
     oldScreenshotPollDuringNavigate: true,
-    appServerRejectedInvalidScheme: true,
+    mobileRejectedInvalidSchemeBeforeRpc: true,
     correctedUrlRetryReachedFixture: true,
   };
 });
@@ -398,13 +462,15 @@ async function waitForCondition(page, condition) {
 }
 
 async function connect(page, gateway) {
-  await page.goto(gateway.baseUrl, { waitUntil: "domcontentloaded" });
-  await page.locator('input[name="token"]').fill(gateway.authToken);
-  await Promise.all([
-    page.waitForSelector('[data-testid="welcome-direct-connection"]', { timeout: 30_000 }),
-    page.locator('button[type="submit"]').click(),
-  ]);
+  await page.addInitScript(({ key }) => {
+    localStorage.setItem(key, JSON.stringify({ language: "zh-CN", theme: "light" }));
+  }, { key: PREFERENCES_KEY });
+  const response = await page.goto(`${gateway.baseUrl}/mobile/`, { waitUntil: "domcontentloaded" });
+  assert.equal(response?.status(), 200, "the owned Gateway must serve the verified Mobile Web mount");
+  assert.equal(new URL(page.url()).pathname, "/mobile/", "Mobile E2E must start from the real mounted app");
+  await page.waitForSelector('[data-testid="welcome-direct-connection"]', { timeout: 30_000 });
   await page.getByTestId("welcome-direct-connection").click();
+  await page.getByTestId("gateway-endpoint").fill(gateway.baseUrl);
   await page.getByTestId("gateway-token").fill(gateway.authToken);
   await page.getByTestId("gateway-connect").click();
   await page.getByTestId("new-workspace").waitFor({ state: "visible", timeout: 30_000 });
@@ -415,13 +481,46 @@ async function createTask(page, prompt) {
   await page.getByTestId("server-option-local").click();
   await page.getByTestId("workspace-path").waitFor({ state: "visible", timeout: 30_000 });
   await page.getByTestId("new-workspace-prompt").fill(prompt);
+  const before = page.url();
+  const beforeUrl = new URL(before);
+  const profileId = beforeUrl.searchParams.get("profileId");
+  if (!profileId) throw new Error("new-workspace route is missing its profile owner");
+  const workspace = new URL(`/mobile/h/${profileId}`, before).href;
+  const creationStartedAtMs = Date.now();
   await page.getByTestId("create-workspace").click();
   await page.getByTestId("message-user").filter({ hasText: prompt }).waitFor({ state: "visible", timeout: 30_000 });
   await page.getByTestId("send-message").waitFor({ state: "visible", timeout: 30_000 });
+  return { before, workspace, after: page.url(), creationStartedAtMs, creationSettledAtMs: Date.now() };
+}
+
+function isExpectedCatalogConnectionAbort(event, { workspace, taskCreationRoutes }) {
+  if (event.type !== "warning" || event.stage !== "workspace-creation" || !taskCreationRoutes) return false;
+  if (event.route !== taskCreationRoutes.workspace) return false;
+  const source = event.location?.url ?? "";
+  if (!source.includes("/mobile/_expo/static/js/web/entry-")) return false;
+  const match = event.text.match(/^WebSocket connection to '([^']+)' failed: WebSocket is closed before the connection is established\.$/);
+  if (!match) return false;
+  let socketUrl;
+  let beforeRoute;
+  let afterRoute;
+  let warningRoute;
+  try {
+    socketUrl = new URL(match[1]);
+    beforeRoute = new URL(taskCreationRoutes.before);
+    afterRoute = new URL(taskCreationRoutes.after);
+    warningRoute = new URL(event.route);
+  } catch { return false; }
+  return socketUrl.protocol === "ws:" && socketUrl.hostname === "127.0.0.1" && socketUrl.pathname === "/rpc" &&
+    socketUrl.searchParams.get("channel") === "runtime" && socketUrl.searchParams.get("server") === "local" &&
+    socketUrl.searchParams.get("workspace") === workspace && Boolean(socketUrl.searchParams.get("token")) &&
+    beforeRoute.pathname === "/mobile/new" && afterRoute.pathname.startsWith("/mobile/h/") &&
+    warningRoute.pathname === new URL(taskCreationRoutes.workspace).pathname &&
+    afterRoute.pathname.startsWith(`${warningRoute.pathname}/task/`);
 }
 
 async function selectPanel(page, id) {
-  await page.getByTestId("workspace-tab-switcher").click();
+  await page.getByTestId("task-more").click();
+  await page.getByTestId("task-menu-workspace").click();
   await page.getByTestId(`workspace-tab-${id}`).click();
   await activeBrowser(page).waitFor({ state: "visible", timeout: 30_000 });
 }

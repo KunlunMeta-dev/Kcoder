@@ -1,6 +1,8 @@
-import { listen } from '@tauri-apps/api/event'
+import { listen } from '@/lib/runtime-events'
 import { describe, expect, test } from 'vitest'
 import { createTestGatewayRuntime, FakeGatewayClient } from './gatewayRuntime.test-support'
+
+const KCODER_PRESENTATION = { version: 1, studioWorkMode: 'kcoder', inlineWidgets: false }
 
 function deferred<T = void>() {
   let resolve!: (value: T | PromiseLike<T>) => void
@@ -1077,20 +1079,30 @@ describe('KCoder gateway runtime task isolation', () => {
       method: 'thread/read',
       params: { threadId: 'persisted-thread', limit: 50 },
     })
-    expect(
-      clients[3].requests.filter(request => request.method !== 'runtime.context.get').slice(0, 3)
-    ).toEqual([
+    const resumedRequests = clients[3].requests.filter(
+      request => request.method !== 'runtime.context.get'
+    )
+    expect(resumedRequests.slice(0, 2)).toEqual([
       { method: 'thread/resume', params: { threadId: 'persisted-thread' } },
-      { method: 'agent/list', params: { threadId: 'persisted-thread' } },
       {
         method: 'turn/start',
         params: {
+          clientPresentation: KCODER_PRESENTATION,
           threadId: 'persisted-thread',
           input: [{ type: 'text', text: '继续这个任务' }],
           model: 'persisted-model',
         },
       },
     ])
+    await expect
+      .poll(() =>
+        clients[3].requests.some(
+          request =>
+            request.method === 'agent/list' && request.params.threadId === 'persisted-thread'
+        )
+      )
+      .toBe(true)
+    await expect.poll(() => runtime.pendingAsyncJobs.size).toBe(0)
   })
 
   test('reads a persisted goal without resuming the thread owned by another page', async () => {

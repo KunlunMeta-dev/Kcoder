@@ -1,42 +1,52 @@
+pub mod async_user_questions;
+pub mod browser_profiles;
+pub mod channel_tool_restrictions;
 pub mod computer_use;
-mod private_file_identity;
-pub use private_file_identity::{
-    PrivateFileIdentityV1, PrivateFileKind, PrivateNativeFileIdentity,
-};
-mod cron_schedule;
+pub mod context_archive;
+pub mod external_history;
+pub mod historical_attachment;
+pub mod historical_branch;
+pub mod historical_context;
+pub mod historical_continuation;
+pub mod historical_display;
+pub mod historical_search;
+pub mod historical_tool_attachments;
+pub mod historical_tool_links;
+pub mod historical_undo;
+pub mod history_reinterpretation;
+pub mod imported_context_snapshot;
+pub mod imported_instructions;
+pub mod imported_memory;
+pub mod imported_projects;
+pub mod imported_transcript;
+pub mod local_attachment;
+pub mod local_attachment_upload;
+pub mod mcp_apps;
+pub mod migration;
+pub mod migration_projects;
+pub mod session_lifetime;
+mod studio_work_mode;
+pub mod web_search;
+pub mod web_search_status;
+pub mod web_sources;
+pub mod widgets;
+pub use kcoder_common_types::*;
+pub use studio_work_mode::{ClientPresentationV1, StudioWorkMode};
 pub mod domain_status;
 pub mod mcp_failure;
+mod model_selection_intent;
 pub mod plugin_prompt;
 pub mod workflow;
 pub mod workflow_runs;
-pub use cron_schedule::CronSchedule;
-mod model_configuration;
-pub use model_configuration::{
-    AgentModelSelectionSource, DEFAULT_MODEL_OUTPUT_TOKENS, ModelConfigurationBoundary,
-    ModelConfigurationSummary, ModelToolRegistryScope, ModelToolSetSummary,
-    WorkflowAgentConfigurationSummary,
-};
-mod turn_attempt;
-pub use turn_attempt::{
-    TurnAttemptIdentity, TurnAttemptStatus, TurnRetainedArtifactV1, TurnRetainedInputV1,
-};
-mod model_selection_intent;
 pub use model_selection_intent::{ModelSelectionMode, RetryModelConfiguration};
-mod background_identity;
-pub use background_identity::{BackgroundEventIdentity, BackgroundRunKey};
 mod task_metadata;
-mod task_status;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::fmt;
-use std::str::FromStr;
 pub use task_metadata::TaskMetadata;
-pub use task_status::TaskStatus;
 mod response_limits;
 pub use response_limits::ProviderResponseLimits;
 
 mod provider_error_summary;
-mod provider_failure;
 mod public_conversation;
 mod shared_messages;
 pub use public_conversation::public_conversation_message;
@@ -44,9 +54,6 @@ mod user_message_semantics;
 pub use provider_error_summary::{
     PROVIDER_ERROR_SUMMARY_MAX_BYTES, ProviderErrorSummary, provider_error_summary,
     safe_provider_error_type,
-};
-pub use provider_failure::{
-    ProviderFailureCategory, ProviderFailureDetails, ProviderFailureRecoveryAction,
 };
 pub use shared_messages::SharedMessages;
 #[allow(deprecated)]
@@ -89,12 +96,13 @@ impl ResponseJsonSchema {
 /// The type lives in `kcoder_types` so config loading, CLI setup, and MCP
 /// connection code can share the same contract without depending on each
 /// other's implementation crates.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[cfg_attr(feature = "json-schema", derive(schemars::JsonSchema))]
 pub struct McpServerConfig {
     /// Display name for this server.
     pub name: String,
     /// Transport type: `"stdio"`, `"sse"` for legacy dual-endpoint HTTP+SSE,
-    /// or `"http"` for single-endpoint Streamable HTTP.
+    /// `"http"` for single-endpoint Streamable HTTP, or `"searxng"` for bundled search.
     #[serde(default = "default_mcp_transport")]
     pub transport: String,
     /// Command to execute for stdio transport.
@@ -105,16 +113,89 @@ pub struct McpServerConfig {
     pub args: Vec<String>,
     /// Endpoint URL for `sse` or `http` transport, such as
     /// `http://localhost:3001/sse` or `https://example.com/mcp`.
+    /// For `searxng`, leave empty to start the bundled service; an explicit URL uses that instance.
     #[serde(default)]
     pub url: String,
     /// Additional environment variables.
     #[serde(default)]
     pub env: HashMap<String, String>,
-    /// Additional request headers for `http` transport, such as `Authorization`.
+    /// Additional request headers for `http` or an external `searxng` instance.
     /// Values are literal plaintext from settings without environment expansion;
     /// protect configuration-file permissions when they contain secrets.
     #[serde(default)]
     pub headers: HashMap<String, String>,
+    #[serde(default, skip_serializing_if = "McpServerPolicy::is_empty")]
+    pub policy: McpServerPolicy,
+}
+
+mod mcp_task_resources;
+pub use mcp_task_resources::McpTaskResourceReadRule;
+mod mcp_application_actions;
+pub use mcp_application_actions::{
+    McpApplicationAction, McpApplicationActionRule, McpApplicationInputField,
+};
+
+/// Launch, visibility and credential-reference controls. These never contain secret values.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "json-schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields)]
+pub struct McpServerPolicy {
+    /// Explicit local credential slot, independent of the external subject's display name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub oauth_account: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub credential_ref: Option<McpCredentialRef>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workspace: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cwd: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub enabled_tools: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub disabled_tools: Vec<String>,
+    /// Administrator-approved exact input semantics for resource-bound tasks.
+    /// Server annotations never populate this map.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub task_resource_reads: HashMap<String, McpTaskResourceReadRule>,
+    /// Reviewed business semantics; effects still need final normal user approval.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub application_actions: HashMap<String, McpApplicationActionRule>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub env_vars: Vec<String>,
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub env_aliases: HashMap<String, String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub required_env: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub required_headers: Vec<String>,
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub env_http_headers: HashMap<String, String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bearer_token_env_var: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub startup_timeout_secs: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool_timeout_secs: Option<u64>,
+}
+
+/// Opaque reference to credentials owned by the selected execution profile.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "json-schema", derive(schemars::JsonSchema))]
+#[serde(deny_unknown_fields)]
+pub struct McpCredentialRef {
+    pub id: String,
+}
+
+impl McpServerPolicy {
+    pub fn is_empty(&self) -> bool {
+        self == &Self::default()
+    }
+    pub fn allows(&self, name: &str) -> bool {
+        self.enabled_tools
+            .as_ref()
+            .is_none_or(|names| names.iter().any(|value| value == name))
+            && !self.disabled_tools.iter().any(|value| value == name)
+    }
 }
 
 fn default_mcp_transport() -> String {
@@ -307,88 +388,6 @@ pub struct ToolDefinition {
     pub name: String,
     pub description: String,
     pub input_schema: serde_json::Value,
-}
-
-/// Model reasoning effort used by OpenAI-compatible reasoning models.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ReasoningEffort {
-    None,
-    Minimal,
-    Low,
-    Medium,
-    High,
-    XHigh,
-    Custom(String),
-}
-
-impl ReasoningEffort {
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::None => "none",
-            Self::Minimal => "minimal",
-            Self::Low => "low",
-            Self::Medium => "medium",
-            Self::High => "high",
-            Self::XHigh => "xhigh",
-            Self::Custom(value) => value.as_str(),
-        }
-    }
-}
-
-impl fmt::Display for ReasoningEffort {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(self.as_str())
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ReasoningEffortParseError;
-
-impl fmt::Display for ReasoningEffortParseError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("reasoning effort cannot be empty")
-    }
-}
-
-impl std::error::Error for ReasoningEffortParseError {}
-
-impl FromStr for ReasoningEffort {
-    type Err = ReasoningEffortParseError;
-
-    fn from_str(value: &str) -> Result<Self, Self::Err> {
-        let trimmed = value.trim();
-        if trimmed.is_empty() {
-            return Err(ReasoningEffortParseError);
-        }
-        Ok(match trimmed.to_ascii_lowercase().as_str() {
-            "none" => Self::None,
-            "minimal" => Self::Minimal,
-            "low" => Self::Low,
-            "medium" => Self::Medium,
-            "high" => Self::High,
-            "xhigh" => Self::XHigh,
-            _ => Self::Custom(trimmed.to_string()),
-        })
-    }
-}
-
-impl Serialize for ReasoningEffort {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        serializer.serialize_str(self.as_str())
-    }
-}
-
-impl<'de> Deserialize<'de> for ReasoningEffort {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        let value = String::deserialize(deserializer)?;
-        value.parse().map_err(serde::de::Error::custom)
-    }
 }
 
 /// Anthropic API request body for the messages endpoint.
@@ -796,9 +795,6 @@ pub enum ChatProtocol {
     Minimax,
 }
 
-mod reasoning_policy;
-pub use reasoning_policy::{ModelReasoningPolicy, ReasoningControlMode};
-
 pub mod knowledge;
 
 mod source_agent;
@@ -806,3 +802,23 @@ pub use source_agent::SourceAgent;
 
 pub mod wiki_job_progress;
 pub mod wiki_pipeline;
+
+pub mod settings_templates;
+
+pub mod migration_plugins;
+
+pub mod configuration_layers;
+
+pub mod codex_configuration_layers;
+
+pub mod migration_source_bindings;
+pub mod migration_source_upload;
+
+pub mod migration_agent;
+pub mod migration_credential_sources;
+pub mod migration_definitions;
+pub mod migration_instructions;
+pub mod migration_resource;
+
+pub mod studio_tool_selection;
+pub use studio_tool_selection::StudioToolSelections;

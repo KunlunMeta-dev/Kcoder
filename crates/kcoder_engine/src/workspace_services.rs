@@ -34,10 +34,12 @@ impl WorkspaceRuntimeServices {
         let shell_environment_snapshot =
             ShellEnvironmentSnapshot::schedule(cwd.to_path_buf(), snapshot_identity.to_string());
         Self {
+            web_search_runtime: Arc::new(kcoder_tools::web_search::WebSearchRuntime::new()),
             cron_scheduler,
             diagnostic_writer: kcoder_state::DiagnosticWriter::default(),
             shell_environment_snapshot,
             provider_prewarmed: Arc::new(AtomicBool::new(false)),
+            model_health: Arc::default(),
             client_storage: None,
         }
     }
@@ -47,6 +49,16 @@ impl WorkspaceRuntimeServices {
         let mut services = Self::new(cwd, snapshot_identity);
         services.client_storage = Some(client_session_storage_root(cwd)?);
         Ok(services)
+    }
+
+    /// Original persistent ClientWorkspaceStore writer root. Temporary/interactive storage
+    /// grants no registered-workspace inventory authority and is never repaired here.
+    pub fn client_workspace_registry_root(&self) -> Option<PathBuf> {
+        let (root, owner) = self.client_storage.as_ref()?;
+        if owner.is_some() {
+            return None;
+        }
+        root.parent().map(Path::to_path_buf)
     }
 
     /// Share workspace services while owning all ephemeral session artifacts privately.
@@ -76,10 +88,12 @@ impl WorkspacePersistenceMode {
 impl QueryEngine {
     pub(super) fn workspace_runtime_services(&self) -> WorkspaceRuntimeServices {
         WorkspaceRuntimeServices {
+            web_search_runtime: self.web_search_runtime.clone(),
             diagnostic_writer: self.state.diagnostic_writer(),
             cron_scheduler: Arc::clone(&self.cron_scheduler),
             shell_environment_snapshot: self.shell_environment_snapshot.clone(),
             provider_prewarmed: Arc::new(AtomicBool::new(true)),
+            model_health: self.model_health.clone(),
             client_storage: matches!(
                 self.workspace_persistence_mode,
                 WorkspacePersistenceMode::Client

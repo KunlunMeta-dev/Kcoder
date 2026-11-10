@@ -24,7 +24,7 @@ describe('cloud desktop fallback extension', () => {
     expect(cloudDesktopExtension.available).toBe(false)
     expect(deviceActionView.container).toBeEmptyDOMElement()
     expect(workspaceActionView.container).toBeEmptyDOMElement()
-    expect(cloudDesktopExtension.isInternalPageUrl('tauri://localhost/extension-page.html')).toBe(
+    expect(cloudDesktopExtension.isInternalPageUrl('retired-app://localhost/extension-page.html')).toBe(
       false
     )
   })

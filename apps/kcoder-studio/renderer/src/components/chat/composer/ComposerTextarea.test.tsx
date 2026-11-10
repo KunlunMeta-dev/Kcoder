@@ -1229,10 +1229,10 @@ describe('ComposerTextarea', () => {
     )
   })
 
-  test('inserts another conversation from the at-mention menu', async () => {
+  test.each(['kcoder', 'wework'])('inserts a %s conversation reference from the at-mention menu', async scheme => {
     const textareaRef = createRef<HTMLElement>()
     const reference =
-      '[$修复登录流程](wework-conversation://%7B%22deviceId%22%3A%22local-device%22%2C%22taskId%22%3A%22source-task%22%7D)'
+      `[$修复登录流程](${scheme}-conversation://%7B%22deviceId%22%3A%22local-device%22%2C%22taskId%22%3A%22source-task%22%7D)`
     const conversationCandidates: ComposerConversationMentionCandidate[] = [
       {
         kind: 'conversation',

@@ -1,6 +1,7 @@
+import { installTestTransport, clearTestTransports } from '@/test/runtime-transport'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
-import { invoke } from '@tauri-apps/api/core'
-import { listen } from '@tauri-apps/api/event'
+import { invoke } from '@/lib/runtime-commands'
+import { listen } from '@/lib/runtime-events'
 import {
   closeLocalTerminal,
   getLocalExecutorDeviceId,
@@ -16,12 +17,12 @@ import {
   writeLocalTerminal,
 } from './local-terminal'
 
-vi.mock('@tauri-apps/api/core', () => ({
-  isTauri: vi.fn(() => false),
+vi.mock('@/lib/runtime-commands', () => ({
+  isGateway: vi.fn(() => false),
   invoke: vi.fn(),
 }))
 
-vi.mock('@tauri-apps/api/event', () => ({
+vi.mock('@/lib/runtime-events', () => ({
   listen: vi.fn(),
 }))
 
@@ -42,20 +43,17 @@ describe('local-terminal', () => {
   })
 
   afterEach(() => {
-    delete (window as typeof window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__
+    clearTestTransports()
   })
 
-  test('is available only inside the WeWork macOS Tauri app', () => {
+  test('is available only with an active desktop Gateway', () => {
     setNavigatorValue(
       'userAgent',
       'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/605.1.15'
     )
     setNavigatorValue('platform', 'MacIntel')
     setNavigatorValue('maxTouchPoints', 0)
-    Object.defineProperty(window, '__TAURI_INTERNALS__', {
-      configurable: true,
-      value: {},
-    })
+    installTestTransport(() => null)
 
     expect(isLocalTerminalAvailable()).toBe(true)
   })
@@ -71,13 +69,10 @@ describe('local-terminal', () => {
     expect(isLocalTerminalAvailable()).toBe(false)
   })
 
-  test('is unavailable inside the iOS Tauri app', () => {
+  test('is unavailable on iOS even with a Gateway transport', () => {
     setNavigatorValue('userAgent', 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)')
     setNavigatorValue('platform', 'iPhone')
-    Object.defineProperty(window, '__TAURI_INTERNALS__', {
-      configurable: true,
-      value: {},
-    })
+    installTestTransport(() => null)
 
     expect(isLocalTerminalAvailable()).toBe(false)
   })
@@ -89,10 +84,7 @@ describe('local-terminal', () => {
     )
     setNavigatorValue('platform', 'MacIntel')
     setNavigatorValue('maxTouchPoints', 0)
-    Object.defineProperty(window, '__TAURI_INTERNALS__', {
-      configurable: true,
-      value: {},
-    })
+    installTestTransport(() => null)
     invokeMock.mockResolvedValue(' local-device-1 ')
 
     await expect(getLocalExecutorDeviceId(' http://localhost:8000/api ')).resolves.toBe(
@@ -122,10 +114,7 @@ describe('local-terminal', () => {
     )
     setNavigatorValue('platform', 'MacIntel')
     setNavigatorValue('maxTouchPoints', 0)
-    Object.defineProperty(window, '__TAURI_INTERNALS__', {
-      configurable: true,
-      value: {},
-    })
+    installTestTransport(() => null)
     invokeMock.mockResolvedValue(true)
 
     await expect(localPathExists(' /Users/me/project ')).resolves.toBe(true)
@@ -153,10 +142,7 @@ describe('local-terminal', () => {
     )
     setNavigatorValue('platform', 'MacIntel')
     setNavigatorValue('maxTouchPoints', 0)
-    Object.defineProperty(window, '__TAURI_INTERNALS__', {
-      configurable: true,
-      value: {},
-    })
+    installTestTransport(() => null)
     invokeMock.mockResolvedValue('directory')
 
     await expect(getLocalPathKind(' /Users/me/tmp ')).resolves.toBe('directory')
@@ -172,10 +158,7 @@ describe('local-terminal', () => {
     )
     setNavigatorValue('platform', 'MacIntel')
     setNavigatorValue('maxTouchPoints', 0)
-    Object.defineProperty(window, '__TAURI_INTERNALS__', {
-      configurable: true,
-      value: {},
-    })
+    installTestTransport(() => null)
     invokeMock.mockResolvedValue('local-terminal-1')
 
     await expect(
@@ -195,10 +178,7 @@ describe('local-terminal', () => {
     )
     setNavigatorValue('platform', 'MacIntel')
     setNavigatorValue('maxTouchPoints', 0)
-    Object.defineProperty(window, '__TAURI_INTERNALS__', {
-      configurable: true,
-      value: {},
-    })
+    installTestTransport(() => null)
     invokeMock.mockResolvedValue('local-terminal-1')
 
     await expect(
@@ -228,10 +208,7 @@ describe('local-terminal', () => {
     )
     setNavigatorValue('platform', 'MacIntel')
     setNavigatorValue('maxTouchPoints', 0)
-    Object.defineProperty(window, '__TAURI_INTERNALS__', {
-      configurable: true,
-      value: {},
-    })
+    installTestTransport(() => null)
     invokeMock.mockResolvedValue(undefined)
 
     await openLocalWorkspace({ opener: 'vscode', path: ' /Users/me/project ' })
@@ -249,10 +226,7 @@ describe('local-terminal', () => {
     )
     setNavigatorValue('platform', 'MacIntel')
     setNavigatorValue('maxTouchPoints', 0)
-    Object.defineProperty(window, '__TAURI_INTERNALS__', {
-      configurable: true,
-      value: {},
-    })
+    installTestTransport(() => null)
     invokeMock.mockResolvedValue(undefined)
 
     await openLocalFile(' /Users/me/project/.wegent/attachments/draft/1/paste.txt ')
@@ -262,7 +236,7 @@ describe('local-terminal', () => {
     })
   })
 
-  test('does not open a local workspace outside the macOS Tauri app', async () => {
+  test('does not open a local workspace without an active Gateway connection', async () => {
     setNavigatorValue(
       'userAgent',
       'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/605.1.15'
@@ -272,7 +246,7 @@ describe('local-terminal', () => {
 
     await expect(
       openLocalWorkspace({ opener: 'vscode', path: '/Users/me/project' })
-    ).rejects.toThrow('Local workspace opening is unavailable outside the macOS Tauri app')
+    ).rejects.toThrow('Local workspace opening is unavailable without an active Gateway connection')
     expect(invokeMock).not.toHaveBeenCalled()
   })
 

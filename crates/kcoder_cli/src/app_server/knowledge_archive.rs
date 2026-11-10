@@ -46,7 +46,7 @@ impl Drop for Slot {
 }
 
 #[derive(Default)]
-pub(super) struct ArchiveTransfers {
+pub struct ArchiveTransfers {
     current: Option<Arc<Transfer>>,
 }
 struct Transfer {
@@ -183,7 +183,7 @@ fn spawn_archive_worker(
     }
 }
 
-pub(super) fn supports(method: &str) -> bool {
+pub fn supports(method: &str) -> bool {
     use knowledge_archive_method as am;
     matches!(
         method,
@@ -278,7 +278,7 @@ impl ArchiveTransfers {
         }
         Ok(transfer)
     }
-    pub(super) fn request(&mut self, method: &str, params: Value, profile: &Path) -> Result<Value> {
+    pub fn request(&mut self, method: &str, params: Value, profile: &Path) -> Result<Value> {
         use knowledge_archive_method as am;
         if method == am::CAPABILITIES {
             let _: KnowledgeStatusParams = serde_json::from_value(params)?;

@@ -146,7 +146,13 @@ impl Provider for PendingProvider {
 }
 
 fn engine(provider: Arc<dyn Provider>, tools: ToolRegistry, path: &std::path::Path) -> QueryEngine {
-    let settings = Settings::default();
+    // Fresh installations configure no Provider; declare the context limits a
+    // configured Provider would supply, or the Engine refuses the turn.
+    let settings = Settings {
+        context_window_tokens: Some(128_000),
+        context_output_headroom: Some(16_000),
+        ..Settings::default()
+    };
     let state = AppState::new(path);
     state.add_message(Message::user_text("请执行测试工具"));
     QueryEngine::new_for_client(

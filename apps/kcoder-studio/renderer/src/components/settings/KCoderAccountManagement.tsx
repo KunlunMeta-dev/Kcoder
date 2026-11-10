@@ -4,6 +4,7 @@ import { useTranslation } from '@/hooks/useTranslation'
 import { manageGatewayAccounts } from '@/kcoder/gatewayRpc'
 import { RuntimeTargetConfirmDialog } from './RuntimeTargetConfirmDialog'
 import { Button } from '@/components/ui/button'
+import { KCoderOrganizationManagement } from './KCoderOrganizationManagement'
 
 interface Account {
   id: string
@@ -61,7 +62,7 @@ export function KCoderAccountManagement({ serverId }: { serverId: string }) {
         {t('accounts.manage')}
       </Button>
       {open && (
-        <div className="mt-2 space-y-3 rounded-lg border border-border p-3">
+        <div className="studio-card-spacing mt-2 space-y-3 rounded-lg border border-border">
           <p className="text-xs text-text-secondary">{t('accounts.migrationHelp')}</p>
           <form
             className="flex flex-wrap items-end gap-2"
@@ -145,6 +146,7 @@ export function KCoderAccountManagement({ serverId }: { serverId: string }) {
               />
             </label>
           </div>
+          <KCoderOrganizationManagement serverId={serverId} accounts={accounts} />
         </div>
       )}
       {revoking && (

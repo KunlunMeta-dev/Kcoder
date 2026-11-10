@@ -15,7 +15,7 @@ vi.mock('@/kcoder/hookConfigurationApi', () => ({
 }))
 
 const request = vi.hoisted(() => vi.fn())
-vi.mock('@/tauri/localExecutor', () => ({
+vi.mock('@/host/localExecutor', () => ({
   requestLocalExecutor: request,
   subscribeLocalExecutorEvents: vi.fn().mockResolvedValue(vi.fn()),
 }))
@@ -35,6 +35,11 @@ describe('HooksSettingsPage', () => {
       appliesToNewConversations: true,
     })
     render(<HooksSettingsPage />)
+    // A remote target is never an implicit default; the user selects it explicitly.
+    const selector = await screen.findByTestId('hooks-target')
+    await waitFor(() => expect(selector).toBeEnabled())
+    expect(readHookConfiguration).not.toHaveBeenCalled()
+    await userEvent.selectOptions(selector, 'remote')
     expect(await screen.findByTestId('hooks-json')).toBeInTheDocument()
     expect(readHookConfiguration).toHaveBeenCalledWith(target)
     expect(screen.getByTestId('hooks-save')).toBeDisabled()

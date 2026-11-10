@@ -7,20 +7,20 @@ use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct WrapOptions {
+pub struct WrapOptions {
     width: usize,
     break_words: bool,
 }
 
 impl WrapOptions {
-    pub(crate) fn new(width: usize) -> Self {
+    pub fn new(width: usize) -> Self {
         Self {
             width,
             break_words: true,
         }
     }
 
-    pub(crate) fn break_words(mut self, break_words: bool) -> Self {
+    pub fn break_words(mut self, break_words: bool) -> Self {
         self.break_words = break_words;
         self
     }
@@ -32,11 +32,11 @@ impl From<usize> for WrapOptions {
     }
 }
 
-pub(crate) fn display_width(text: &str) -> usize {
+pub fn display_width(text: &str) -> usize {
     UnicodeWidthStr::width(text)
 }
 
-pub(crate) fn word_wrap_plain_line<O>(line: &str, options: O) -> Vec<String>
+pub fn word_wrap_plain_line<O>(line: &str, options: O) -> Vec<String>
 where
     O: Into<WrapOptions>,
 {
@@ -86,7 +86,7 @@ where
     out
 }
 
-pub(crate) fn adaptive_word_wrap_plain_line<O>(line: &str, options: O) -> Vec<String>
+pub fn adaptive_word_wrap_plain_line<O>(line: &str, options: O) -> Vec<String>
 where
     O: Into<WrapOptions>,
 {
@@ -102,11 +102,11 @@ where
     }
 }
 
-pub(crate) fn text_contains_url_like(text: &str) -> bool {
+pub fn text_contains_url_like(text: &str) -> bool {
     text.split_ascii_whitespace().any(is_url_like_token)
 }
 
-pub(crate) fn hard_wrap_word(word: &str, width: usize) -> Vec<String> {
+pub fn hard_wrap_word(word: &str, width: usize) -> Vec<String> {
     let width = width.max(1);
     let mut out = Vec::new();
     let mut current = String::new();
@@ -126,7 +126,7 @@ pub(crate) fn hard_wrap_word(word: &str, width: usize) -> Vec<String> {
     out
 }
 
-pub(crate) fn truncate_to_display_width(text: &str, max_width: usize) -> String {
+pub fn truncate_to_display_width(text: &str, max_width: usize) -> String {
     let mut out = String::new();
     let mut used = 0usize;
     for grapheme in text.graphemes(true) {
@@ -145,7 +145,7 @@ fn is_url_like_token(raw_token: &str) -> bool {
     !token.is_empty() && (is_absolute_url_like(token) || is_bare_url_like(token))
 }
 
-pub(crate) fn text_has_mixed_url_and_non_url_tokens(text: &str) -> bool {
+pub fn text_has_mixed_url_and_non_url_tokens(text: &str) -> bool {
     let mut saw_url = false;
     let mut saw_non_url = false;
 

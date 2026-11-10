@@ -1,3 +1,4 @@
+import { SettingsSelect } from '@/components/settings/SettingsSelect'
 import { useEffect, useMemo, useState } from 'react'
 import { LibraryBig, Link2, ListTodo, Plus, Search, X } from 'lucide-react'
 import type { CloudLoopItem, CloudProject } from '@/api/deliveries'
@@ -155,7 +156,7 @@ export function TodoBindingPicker({
         </header>
         {creating ? (
           <div className="space-y-3 p-4">
-            <select
+            <SettingsSelect
               data-testid="todo-binding-project"
               value={projectId ?? ''}
               onChange={event => setProjectId(event.target.value)}
@@ -166,7 +167,7 @@ export function TodoBindingPicker({
                   {project.name}
                 </option>
               ))}
-            </select>
+            </SettingsSelect>
             <input
               autoFocus
               data-testid="todo-binding-new-title"
@@ -180,7 +181,7 @@ export function TodoBindingPicker({
           <>
             <div className="flex items-center gap-2 border-b border-border p-3">
               <LibraryBig className="h-4 w-4 shrink-0 text-text-muted" />
-              <select
+              <SettingsSelect
                 data-testid="todo-binding-project"
                 value={projectId ?? ''}
                 onChange={event => setProjectId(event.target.value)}
@@ -191,7 +192,7 @@ export function TodoBindingPicker({
                     {project.name}
                   </option>
                 ))}
-              </select>
+              </SettingsSelect>
               <button
                 type="button"
                 data-testid="todo-binding-project-only"

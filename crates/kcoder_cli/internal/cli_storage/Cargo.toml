@@ -1,0 +1,38 @@
+[package]
+name = "kcoder_cli_storage"
+description = "Bounded workspace and local App Server storage operations."
+version = { workspace = true }
+publish = false
+edition = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+rust-version = { workspace = true }
+
+[features]
+test-oracle = []
+
+[dependencies]
+anyhow = { workspace = true }
+chrono = { workspace = true }
+dunce = { workspace = true }
+fs2 = "0.4"
+kcoder_api = { path = "../../../kcoder_api" }
+kcoder_app_protocol = { path = "../../../kcoder_app_protocol" }
+kcoder_config = { path = "../../../kcoder_config" }
+kcoder_workspace_resources = { path = "../workspace_resources" }
+kcoder_state = { path = "../../../kcoder_state" }
+kcoder_types = { path = "../../../kcoder_types" }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+tokio-util = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[target."cfg(unix)".dependencies]
+libc = { workspace = true }
+
+[lib]
+path = "../../src/internal/cli_storage/lib.rs"

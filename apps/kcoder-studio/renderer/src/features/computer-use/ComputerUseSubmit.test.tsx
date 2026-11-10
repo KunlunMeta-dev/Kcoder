@@ -1,9 +1,9 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, expect, test, vi } from 'vitest'
 import { ComputerUseSubmit } from './ComputerUseSubmit'
-import { requestLocalExecutor } from '@/tauri/localExecutor'
+import { requestLocalExecutor } from '@/host/localExecutor'
 vi.mock('@/hooks/useTranslation', () => ({ useTranslation: () => ({ t: (key: string) => key }) }))
-vi.mock('@/tauri/localExecutor', () => ({ requestLocalExecutor: vi.fn() }))
+vi.mock('@/host/localExecutor', () => ({ requestLocalExecutor: vi.fn() }))
 beforeEach(() => {
   vi.mocked(requestLocalExecutor).mockReset()
 })

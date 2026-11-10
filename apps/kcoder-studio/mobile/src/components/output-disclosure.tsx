@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
 import {
   ActivityIndicator,
   Platform,
@@ -8,26 +8,74 @@ import {
   Text,
   View,
 } from "react-native";
-import { ChevronDown, ChevronRight } from "lucide-react-native";
-import { radius, spacing, useTheme, useThemedStyles, type ThemeColors } from "@/theme";
+import {
+  ChevronDown,
+  ChevronRight,
+  Lightbulb,
+  Wrench,
+} from "lucide-react-native";
+import {
+  chatTypography,
+  radius,
+  spacing,
+  useTheme,
+  useThemedStyles,
+  type ThemeColors,
+} from "@/theme";
 import { t } from "@/i18n";
 import { useLocale } from "@/i18n/use-locale";
+import { getAppPreferencesSnapshot, subscribeAppPreferences } from "@/storage/app-preferences";
+import { resolveDisclosureExpanded, toggleDisclosureChoice } from "@/features/task/disclosure-state";
+import { useInterfaceVersion } from "@/storage/interface-version";
+import { v3ConversationPalette, v3TaskStyles } from "@/features/interface/v3-styles";
 
 export function ProcessingDisclosure({
   count,
+  title,
   running,
   failed,
+  hasThinking = false,
+  unknown = 0,
+  cancelled = 0,
   children,
 }: {
   count: number;
+  title?: string;
   running: boolean;
   failed: number;
+  hasThinking?: boolean;
+  unknown?: number;
+  cancelled?: number;
   children: ReactNode;
 }) {
   useLocale();
   const { colors } = useTheme();
-  const styles = useThemedStyles(makeStyles);
-  const [expanded, setExpanded] = useState(false);
+  const baseStyles = useThemedStyles(makeStyles);
+  const v3Styles = useThemedStyles(v3TaskStyles);
+  const v3 = useInterfaceVersion() === "v3";
+  const styles = v3 ? { ...baseStyles, processing: v3Styles.orderedProcessingGroup, title: v3Styles.orderedProcessingTitle } : baseStyles;
+  const preferences = useSyncExternalStore(
+    subscribeAppPreferences,
+    getAppPreferencesSnapshot,
+    getAppPreferencesSnapshot,
+  );
+  const [defaultExpanded] = useState(() => (
+    hasThinking && !preferences.thinkingCollapsedByDefault
+  ) || (count > 0 && !preferences.toolsCollapsedByDefault));
+  const [userExpanded, setUserExpanded] = useState<boolean | null>(null);
+  const expanded = resolveDisclosureExpanded(userExpanded, defaultExpanded);
+  const statuses = [
+    failed > 0
+      ? { key: "failed", text: t("output.failed", { count: failed }) }
+      : null,
+    unknown > 0
+      ? { key: "unknown", text: t("output.unknown", { count: unknown }) }
+      : null,
+    cancelled > 0
+      ? { key: "cancelled", text: t("output.cancelled", { count: cancelled }) }
+      : null,
+    running ? { key: "running", text: t("output.running") } : null,
+  ].filter((item): item is NonNullable<typeof item> => Boolean(item));
   return (
     <View testID="message-processing" style={styles.processing}>
       <Pressable
@@ -35,24 +83,43 @@ export function ProcessingDisclosure({
         accessibilityRole="button"
         accessibilityState={{ expanded }}
         aria-expanded={expanded}
-        onPress={() => setExpanded((value) => !value)}
-        style={styles.header}
+        onPress={() => setUserExpanded((value) => toggleDisclosureChoice(value, defaultExpanded))}
+        style={styles.processingHeader}
       >
         {running ? (
           <ActivityIndicator size="small" color={colors.textMuted} />
-        ) : expanded ? (
-          <ChevronDown size={16} color={colors.textMuted} />
+        ) : count ? (
+          hasThinking && v3 ? <Lightbulb size={20} color={v3ConversationPalette(colors).thinkingIcon} /> : <Wrench size={20} color={colors.textMuted} />
         ) : (
-          <ChevronRight size={16} color={colors.textMuted} />
+          <Lightbulb size={20} color={v3 ? v3ConversationPalette(colors).thinkingIcon : colors.textMuted} />
         )}
-        <Text numberOfLines={1} style={styles.title}>
-          {t(count ? "output.tools" : "output.process", { count })}
-        </Text>
-        <Text style={[styles.status, failed > 0 && styles.failed]}>
-          {failed
-            ? t("output.failed", { count: failed })
-            : t(running ? "output.running" : "output.complete")}
-        </Text>
+        <View style={styles.copy}>
+          <Text style={styles.title}>
+            {title ?? t(count ? "output.tools" : "output.process", { count })}
+          </Text>
+          {statuses.length ? (
+            statuses.map((item) => (
+              <Text
+                key={item.key}
+                numberOfLines={item.key === "running" ? 1 : undefined}
+                style={[
+                  styles.status,
+                  item.key === "failed" && styles.failed,
+                  item.key === "unknown" && { color: colors.yellow },
+                ]}
+              >
+                {item.text}
+              </Text>
+            ))
+          ) : !v3 || !expanded ? (
+            <Text style={styles.status}>{t("output.complete")}</Text>
+          ) : null}
+        </View>
+        {expanded ? (
+          <ChevronDown size={20} color={colors.textDim} />
+        ) : (
+          <ChevronRight size={20} color={colors.textDim} />
+        )}
       </Pressable>
       {expanded ? (
         <View testID="message-processing-details" style={styles.details}>
@@ -64,6 +131,8 @@ export function ProcessingDisclosure({
 }
 export function BoundedOutput({ value }: { value: unknown }) {
   useLocale();
+  const v3 = useInterfaceVersion() === "v3";
+  const { colors } = useTheme();
   const styles = useThemedStyles(makeStyles);
   const [limit, setLimit] = useState(8000);
   const text = useMemo(() => {
@@ -81,7 +150,7 @@ export function BoundedOutput({ value }: { value: unknown }) {
       <ScrollView
         testID="bounded-output"
         nestedScrollEnabled
-        style={styles.outputScroll}
+        style={[styles.outputScroll, v3 && { backgroundColor: v3ConversationPalette(colors).processing, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border }]}
       >
         <ScrollView horizontal nestedScrollEnabled>
           <Text selectable style={styles.code}>
@@ -137,47 +206,58 @@ export function CodeDisclosure({
     </View>
   );
 }
-const makeStyles = (colors: ThemeColors) => StyleSheet.create({
-  processing: { marginBottom: spacing.sm },
-  header: {
-    minHeight: 44,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-    paddingHorizontal: spacing.sm,
-  },
-  title: {
-    flex: 1,
-    minWidth: 0,
-    color: colors.textMuted,
-    fontSize: 12,
-    fontWeight: "500",
-  },
-  status: { color: colors.textDim, fontSize: 11 },
-  failed: { color: colors.red },
-  details: {
-    paddingLeft: spacing.sm,
-    borderLeftWidth: StyleSheet.hairlineWidth,
-    borderLeftColor: colors.border,
-    gap: spacing.sm,
-  },
-  outputScroll: {
-    maxHeight: 240,
-    backgroundColor: colors.background,
-    borderRadius: radius.md,
-  },
-  code: {
-    color: colors.textMuted,
-    fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
-    fontSize: 12,
-    lineHeight: 18,
-    padding: spacing.sm,
-  },
-  codeGroup: {
-    marginVertical: spacing.sm,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    borderRadius: radius.md,
-    overflow: "hidden",
-  },
-});
+const makeStyles = (colors: ThemeColors) =>
+  StyleSheet.create({
+    processing: {
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.xs,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.border,
+      borderRadius: radius.chatOutputGroup,
+      backgroundColor: colors.surface,
+    },
+    header: {
+      minHeight: 44,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: spacing.sm,
+      paddingHorizontal: spacing.sm,
+    },
+    processingHeader: {
+      minHeight: 48,
+      paddingVertical: spacing.xs,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: spacing.md,
+    },
+    copy: { flex: 1, minWidth: 0 },
+    title: {
+      color: colors.textMuted,
+      ...chatTypography.step,
+      fontWeight: "500",
+    },
+    status: { color: colors.textDim, ...chatTypography.status },
+    failed: { color: colors.red },
+    details: {
+      paddingTop: spacing.xs,
+    },
+    outputScroll: {
+      maxHeight: 240,
+      backgroundColor: colors.background,
+      borderRadius: radius.md,
+    },
+    code: {
+      color: colors.textMuted,
+      fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
+      fontSize: 12,
+      lineHeight: 18,
+      letterSpacing: 0,
+      padding: spacing.sm,
+    },
+    codeGroup: {
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.border,
+      borderRadius: radius.md,
+      overflow: "hidden",
+    },
+  });

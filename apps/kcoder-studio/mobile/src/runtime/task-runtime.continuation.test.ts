@@ -3,9 +3,11 @@ import type { JsonRecord } from "@/gateway/rpc";
 import { MobileRpcError } from "@/gateway/rpc";
 import type { ThreadMessage } from "@/gateway/types";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { resetTaskRuntimeAsyncStorage } from "@/test/task-runtime-async-storage-fixture";
 import { TaskRuntime, taskRuntimeTestHelpers } from "./task-runtime";
 import {
   FakeClient,
+  appServerId,
   profile,
   server,
 } from "./task-runtime/fixture.test-support";
@@ -13,7 +15,12 @@ vi.mock("@/gateway/http", () => ({
   ensureGatewayAuthorization: vi.fn(async () => {}),
   gatewaySessionExpired: vi.fn(async () => false),
 }));
+vi.mock("@react-native-async-storage/async-storage", async () => {
+  const { taskRuntimeAsyncStorage } = await import("@/test/task-runtime-async-storage-fixture");
+  return { default: taskRuntimeAsyncStorage };
+});
 beforeEach(() => {
+  resetTaskRuntimeAsyncStorage();
   vi.spyOn(Math, "random").mockReturnValue(0.5);
   vi.mocked(gatewaySessionExpired).mockResolvedValue(false);
 });
@@ -23,6 +30,7 @@ afterEach(() => {
   vi.useRealTimers();
 });
 describe("TaskRuntime failed-attempt continuation", () => {
+  const providerFailure = { category: "network_error", recovery_action: "diagnose_only", retryable: true, resume_safe: true } as const;
   const initial = (): ThreadMessage[] => [
     {
       id: "user-original",
@@ -39,6 +47,7 @@ describe("TaskRuntime failed-attempt continuation", () => {
       status: "failed",
       content: "original partial",
       error: "fixture outage",
+      providerFailure,
       timestampMs: 2,
     },
   ];
@@ -52,6 +61,18 @@ describe("TaskRuntime failed-attempt continuation", () => {
           "turnReceiptsV1",
         ].includes(name),
     });
+  it("rejects runtime-only failures before dispatching a provider continuation", async () => {
+    const rows = initial();
+    rows[1] = { ...rows[1]!, providerFailure: undefined, errorType: "local_runtime_error" };
+    const client = modern(new FakeClient(rows));
+    const request = vi.spyOn(client, "request");
+    taskRuntimeTestHelpers.setConnector(vi.fn(async () => client as never) as never);
+    const task = await TaskRuntime.resume({ profile, server, threadId: "thread-1", cwd: "/workspace" });
+    expect(task.continuationState("failure-original").allowed).toBe(false);
+    await expect(task.continueFailed("failure-original")).rejects.toThrow();
+    expect(request.mock.calls.some(([method]) => method === "turn/start")).toBe(false);
+    task.close();
+  });
   it("does not resend input and preserves separate failures across repeated continuations and late acknowledgements", async () => {
     const client = modern(new FakeClient(initial()));
     const original = client.request.bind(client);
@@ -66,7 +87,7 @@ describe("TaskRuntime failed-attempt continuation", () => {
       count++;
       const attemptId = `continued-${count}`;
       const context = {
-        serverId: "local",
+        serverId: appServerId,
         threadId: "thread-1",
         turnId: "turn-1",
       };
@@ -97,7 +118,7 @@ describe("TaskRuntime failed-attempt continuation", () => {
             attemptId,
             status: count === 1 ? "failed" : "completed",
           },
-          ...(count === 1 ? { error: { message: "second outage" } } : {}),
+          ...(count === 1 ? { error: { message: "second outage", details: providerFailure } } : {}),
         },
       });
       return { turn: { id: "turn-1", attemptId, status: "running" } } as T;

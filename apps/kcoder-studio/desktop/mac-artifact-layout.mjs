@@ -2,6 +2,8 @@ import { lstat, readdir, readFile, readlink, realpath } from 'node:fs/promises';
 import { basename, isAbsolute, relative, resolve, sep } from 'node:path';
 import { chromeRelease } from '../../../scripts/release/prepare-chrome.mjs';
 import { isMacChromeFrameworkLink } from '../../../scripts/release/mac-chrome-links.mjs';
+import { macTarget } from '../../../scripts/release/mac-target.mjs';
+import { normalizeElectronArch } from './stage-gateway-dependencies.mjs';
 import { assertPublicPath, inventory, manifestName, verifyManifest, writeManifest } from '../../../scripts/release/artifact-manifest.mjs';
 
 const frameworks = new Set(['Electron Framework', 'Mantle', 'ReactiveObjC', 'Squirrel']);
@@ -14,9 +16,9 @@ export function macApplicationPath(context) {
   return resolve(context.appOutDir, `${name}.app`);
 }
 
-function permittedFrameworkLink(path, target) {
+function permittedFrameworkLink(path, target, platform) {
   const chromePrefix = 'Contents/Resources/bin/chrome/';
-  if (path.startsWith(chromePrefix)) return isMacChromeFrameworkLink(path.slice(chromePrefix.length), target, chromeRelease('mac-x64'));
+  if (path.startsWith(chromePrefix)) return isMacChromeFrameworkLink(path.slice(chromePrefix.length), target, chromeRelease(platform));
   const match = /^Contents\/Frameworks\/([^/]+)\.framework\/(.+)$/.exec(path);
   if (!match || !frameworks.has(match[1])) return false;
   const member = match[2];
@@ -29,6 +31,7 @@ function permittedFrameworkLink(path, target) {
 /** Audit canonical files and explicitly bounded framework links; never follow
  * symlinks while walking or relax the ordinary resource inventory boundary. */
 export async function inspectMacApplication(bundle, options = {}) {
+  const buildTarget = macTarget(options.arch ?? 'x64');
   bundle = resolve(bundle);
   const bundleInfo = await lstat(bundle);
   if (bundleInfo.isSymbolicLink() || !bundleInfo.isDirectory()) {
@@ -49,7 +52,7 @@ export async function inspectMacApplication(bundle, options = {}) {
       const info = await lstat(full);
       if (info.isSymbolicLink()) {
         const target = await readlink(full);
-        if (isAbsolute(target) || !permittedFrameworkLink(path, target)) throw new Error(`Unexpected macOS framework link: ${path}`);
+        if (isAbsolute(target) || !permittedFrameworkLink(path, target, buildTarget.platform)) throw new Error(`Unexpected macOS framework link: ${path}`);
         frameworkLinks.push({ path, target });
       } else if (info.isDirectory()) await visit(path);
       else if (info.isFile()) files.push(path);
@@ -64,7 +67,7 @@ export async function inspectMacApplication(bundle, options = {}) {
   const required = ['Contents/Resources/app.asar', 'Contents/Resources/gateway/dev-server.mjs', 'Contents/Resources/renderer-dist/index.html'];
   if (options.requireSidecar !== false) required.push('Contents/Resources/bin/kcoder');
   if (options.requireLocalResources !== false) required.push(
-    'Contents/Resources/bin/chrome/chrome-mac-x64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing',
+    `Contents/Resources/bin/chrome/chrome-${buildTarget.platform}/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing`,
     'Contents/Resources/bin/pdf/pdftotext', 'Contents/Resources/bin/pdf/xpdfrc', 'Contents/Resources/bin/pdf/.kcoder-pdf.json',
   );
   for (const path of required) if (!files.includes(path)) throw new Error(`macOS application is missing ${path}`);
@@ -75,11 +78,12 @@ export async function inspectMacApplication(bundle, options = {}) {
 export async function writeMacReleaseManifest(context, options = {}) {
   const bundle = macApplicationPath(context);
   const kind = context.packager.appInfo.id === 'dev.kcoder.studio.remote' ? 'studio-remote' : 'studio-desktop';
-  const layout = await inspectMacApplication(bundle, { ...options, requireSidecar: kind !== 'studio-remote', requireLocalResources: kind !== 'studio-remote' });
+  const target = macTarget(normalizeElectronArch(context.arch, options.arch ?? 'x64'));
+  const layout = await inspectMacApplication(bundle, { ...options, arch: target.arch, requireSidecar: kind !== 'studio-remote', requireLocalResources: kind !== 'studio-remote' });
   return writeManifest(resolve(bundle, 'Contents/Resources'), {
     kind, platform: 'darwin', ...options, files: layout.resourceFiles,
     hostRuntime: {
-      kind: 'electron', version: context.packager.info.framework.version,
+      kind: 'electron', version: context.packager.info.framework.version, architecture: target.arch,
       inventoryBoundary: 'Contents/Resources and canonical application files; framework link targets are explicit; final installer checksum covers the complete application',
       frameworkLinks: layout.frameworkLinks, bundleFiles: layout.bundleFiles,
     },
@@ -88,7 +92,9 @@ export async function writeMacReleaseManifest(context, options = {}) {
 
 export async function verifyMacReleaseManifest(bundle, options = {}) {
   const prior = JSON.parse(await readFile(resolve(bundle, 'Contents/Resources', manifestName), 'utf8'));
-  const actual = await inspectMacApplication(bundle, { ...options, requireSidecar: prior.kind !== 'studio-remote', requireLocalResources: prior.kind !== 'studio-remote' });
+  const arch = prior.hostRuntime?.architecture ?? 'x64';
+  if (options.arch && options.arch !== arch) throw new Error('macOS application architecture does not match the release manifest');
+  const actual = await inspectMacApplication(bundle, { ...options, arch, requireSidecar: prior.kind !== 'studio-remote', requireLocalResources: prior.kind !== 'studio-remote' });
   const manifest = await verifyManifest(resolve(bundle, 'Contents/Resources'), { ...options, files: actual.resourceFiles });
   if (JSON.stringify(actual.frameworkLinks) !== JSON.stringify(manifest.hostRuntime?.frameworkLinks)
     || JSON.stringify(actual.bundleFiles) !== JSON.stringify(manifest.hostRuntime?.bundleFiles)) {

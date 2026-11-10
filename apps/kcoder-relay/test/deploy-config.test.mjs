@@ -15,7 +15,7 @@ const gateways = [
   {
     id: 'gateway-a',
     secret: 'a'.repeat(32),
-    pairingToken: 'b'.repeat(32),
+    gatewaySecret: 'b'.repeat(32),
     maxConnections: 128,
     maxBytesPerWindow: 64 * 1024 * 1024,
     trafficWindowMs: 60_000,
@@ -23,7 +23,7 @@ const gateways = [
   {
     id: 'gateway-b',
     secret: 'c'.repeat(32),
-    pairingToken: 'd'.repeat(32),
+    gatewaySecret: 'd'.repeat(32),
     maxConnections: 64,
     maxBytesPerWindow: 32 * 1024 * 1024,
     trafficWindowMs: 30_000,
@@ -37,16 +37,78 @@ test('multi-Gateway dry run emits one existing public authority and a private re
 
   assert.equal(plan.publicAuthority, 'hyf2333.top:8451');
   assert.deepEqual(plan.gateways, ['gateway-a', 'gateway-b']);
+  assert.match(plan.cloudEnv, /^KCODER_RELAY_PUBLIC_URL=https:\/\/hyf2333\.top:8451$/m);
   assert.equal((plan.caddyEnv.match(/^KCODER_RELAY_DOMAIN=/gm) || []).length, 1);
   assert.doesNotMatch(plan.caddyEnv, /www\.|subdomain/i);
   assert.match(plan.cloudEnv, /^KCODER_RELAY_REGISTRY_FILE=\/etc\/kcoder-relay-registry\.json$/m);
-  assert.doesNotMatch(plan.cloudEnv, /secret|pairingToken|a{32}|b{32}/i);
+  assert.doesNotMatch(plan.cloudEnv, /secret|gatewaySecret|a{32}|b{32}/i);
 
   const registry = JSON.parse(plan.registryJson);
   assert.equal(Object.hasOwn(registry, 'legacy'), false);
   assert.deepEqual(registry.sharedHosts, ['hyf2333.top:8451']);
   assert.deepEqual(registry.gateways.map(({ id }) => id), ['gateway-a', 'gateway-b']);
   assert.equal(registry.gateways[1].maxBytesPerWindow, 32 * 1024 * 1024);
+  assert.deepEqual(plan.stun, {
+    enabled: true,
+    mode: 'stun-only',
+    publicUrl: 'stun:hyf2333.top:8452',
+    protocol: 'udp',
+    listenAddress: '0.0.0.0',
+    port: 8452,
+    unitName: 'kcoder-stun.service',
+    unitPath: '/etc/systemd/system/kcoder-stun.service',
+    configPath: '/etc/coturn/kcoder-stun.conf',
+    ownerReceiptPath: '/var/lib/kcoder-relay-stun/owner.json',
+    lifecycleActions: ['install', 'upgrade', 'status', 'cleanup'],
+  });
+});
+
+test('canonical HTTPS URL normalizes host case and explicit default port 443', () => {
+  const domain = 'relay.tenxunyun2.hyf2333.top';
+  const plan = createRelayDeploymentConfig({
+    relayConfig: { sharedHosts: [`${domain.toUpperCase()}:443`], gateways },
+    publicUrl: `https://${domain.toUpperCase()}:443`,
+  });
+
+  assert.equal(plan.publicUrl, `https://${domain}`);
+  assert.equal(plan.canonicalPublicUrl, `https://${domain}`);
+  assert.equal(plan.domain, domain);
+  assert.equal(plan.publicPort, 443);
+  assert.equal(plan.publicAuthority, domain);
+  assert.match(plan.caddyEnv, new RegExp(`^KCODER_RELAY_DOMAIN=${domain}$`, 'm'));
+  assert.match(plan.caddyEnv, /^KCODER_RELAY_PUBLIC_PORT=443$/m);
+  assert.ok(plan.cloudEnv.split('\n').includes(`KCODER_RELAY_PUBLIC_URL=https://${domain}`));
+  assert.equal(plan.stun.publicUrl, `stun:${domain}:8452`);
+  assert.equal(plan.stun.port, 8452);
+  assert.deepEqual(JSON.parse(plan.registryJson).sharedHosts, [domain]);
+});
+
+test('canonical custom HTTPS port must match the legacy domain and port inputs when supplied', () => {
+  const domain = 'relay.example.com';
+  const plan = createRelayDeploymentConfig({
+    relayConfig: { sharedHosts: [`${domain}:9443`], gateways },
+    publicUrl: `https://${domain}:9443/`,
+    domain,
+    publicPort: '9443',
+    stunPort: '8453',
+  });
+
+  assert.equal(plan.publicUrl, `https://${domain}:9443`);
+  assert.equal(plan.publicAuthority, `${domain}:9443`);
+  assert.equal(plan.stun.publicUrl, `stun:${domain}:8453`);
+  assert.equal(plan.stun.port, 8453);
+  assert.throws(() => createRelayDeploymentConfig({
+    relayConfig: { sharedHosts: [`${domain}:9443`], gateways },
+    publicUrl: `https://${domain}:9443`,
+    domain: 'other.example.com',
+    publicPort: 9443,
+  }), /DOMAIN must match/);
+  assert.throws(() => createRelayDeploymentConfig({
+    relayConfig: { sharedHosts: [`${domain}:9443`], gateways },
+    publicUrl: `https://${domain}:9443`,
+    domain,
+    publicPort: 8451,
+  }), /PUBLIC_PORT must match/);
 });
 
 test('automatic registration supports an empty static list and keeps its store outside deployment files', () => {
@@ -70,8 +132,36 @@ test('automatic registration supports an empty static list and keeps its store o
   const summary = createRelayDeploymentDryRunSummary({ target: 'admin@relay-host', deployment: plan });
   assert.equal(summary.registration.enabled, true);
   assert.equal(summary.registration.storeFile, '/var/lib/kcoder-relay/registered-gateways.json');
+  assert.deepEqual(summary.stun, plan.stun);
+  assert.equal(summary.stun.protocol, 'udp');
+  assert.equal(summary.stun.listenAddress, '0.0.0.0');
+  assert.deepEqual(summary.stun.lifecycleActions, ['install', 'upgrade', 'status', 'cleanup']);
   assert.doesNotMatch(JSON.stringify(summary), new RegExp(registrationKey));
   assert.equal(summary.deploymentPerformed, false);
+});
+
+test('cloud registration environment resolves sharedHosts from the canonical public URL', () => {
+  const domain = 'relay.tenxunyun2.hyf2333.top';
+  const registrationKey = 't'.repeat(48);
+  const plan = createRelayDeploymentConfig({
+    relayConfig: {
+      sharedHosts: [`${domain}:443`],
+      gateways: [],
+      registrationKey,
+      registrationStoreFile: '/local/private/registration-store.json',
+    },
+    publicUrl: `https://${domain}:443`,
+  });
+  const cloudEnv = Object.fromEntries(plan.cloudEnv.trim().split('\n').map((line) => {
+    const separator = line.indexOf('=');
+    return [line.slice(0, separator), line.slice(separator + 1)];
+  }));
+  const runtimeConfig = relayServerConfig(cloudEnv);
+
+  assert.equal(cloudEnv.KCODER_RELAY_PUBLIC_URL, `https://${domain}`);
+  assert.deepEqual(runtimeConfig.gateways, []);
+  assert.deepEqual(runtimeConfig.sharedHosts, [domain]);
+  assert.equal(runtimeConfig.sharedHosts.includes('hyf2333.top:8451'), false);
 });
 
 test('server automatic-registration config maps its local default store to the cloud StateDirectory', () => {
@@ -151,28 +241,102 @@ test('systemd gives the relay service private persistent state and deployment ne
   assert.match(service, /^UMask=0077$/m);
   assert.doesNotMatch(deploy, /rm\s+[^\n]*registered-gateways\.json/);
   assert.doesNotMatch(deploy, /install\s+[^\n]*registered-gateways\.json/);
+  assert.match(deploy, /gatewayConnectionRoutes\.runtime\.mjs/);
+  assert.match(deploy, /kcoder-studio\/shared\/gatewayConnectionRoutes\.js/);
 });
 
-test('Caddy template declares one current-domain site with separate data and control routes', () => {
+test('Caddy template declares the current-domain site and one on-demand Gateway origin wildcard', () => {
   const caddyfile = readFileSync(fileURLToPath(new URL('../deploy/Caddyfile', import.meta.url)), 'utf8');
-  assert.equal((caddyfile.match(/^https:\/\//gm) || []).length, 1);
+  const sites = caddyfile.match(/^https:\/\/\S+/gm) || [];
+  assert.deepEqual(sites, [
+    'https://{$KCODER_RELAY_DOMAIN}:{$KCODER_RELAY_PUBLIC_PORT}',
+    'https://*.{$KCODER_RELAY_DOMAIN}:{$KCODER_RELAY_PUBLIC_PORT}',
+  ]);
   assert.doesNotMatch(caddyfile, /www\.|DOMAIN_WWW/);
-  assert.match(caddyfile, /handle \/_relay\/\*\s*\{[\s\S]*KCODER_RELAY_CONTROL_PORT/);
-  assert.match(caddyfile, /handle \/g\/\*\s*\{[\s\S]*KCODER_RELAY_PROXY_PORT/);
+  const [root, gatewayOrigins] = caddyfile.split(/^https:\/\/\*\./m);
+  assert.match(root, /handle \/_relay\/\*\s*\{[\s\S]*KCODER_RELAY_CONTROL_PORT/);
+  assert.match(root, /handle \/g\/\*\s*\{[\s\S]*KCODER_RELAY_PROXY_PORT/);
+  assert.doesNotMatch(root, /on_demand/);
+  assert.match(gatewayOrigins, /tls \{\s*on_demand\s/);
+  assert.doesNotMatch(gatewayOrigins, /_relay|CONTROL_PORT/, 'Gateway origins cannot reach registration or control');
 });
 
-test('deployment rejects extra hostnames and any alternate public domain', () => {
+test('deployment requires exactly one shared host matching the canonical public site', () => {
   assert.throws(() => createRelayDeploymentConfig({
     relayConfig: { sharedHosts: ['hyf2333.top:8451', 'www.hyf2333.top:8451'], gateways },
+    publicUrl: 'https://hyf2333.top:8451',
   }), /sharedHosts must contain only hyf2333\.top:8451/);
   assert.throws(() => createRelayDeploymentConfig({
     relayConfig: { sharedHosts: ['hyf2333.top:8451'], gateways },
-    domain: 'www.hyf2333.top',
-  }), /fixed to hyf2333\.top/);
+    publicUrl: 'https://new.example.com',
+  }), /sharedHosts must contain only new\.example\.com/);
   assert.throws(() => createRelayDeploymentConfig({
+    relayConfig: { sharedHosts: ['new.example.com'], gateways },
+    publicUrl: 'https://new.example.com',
+    domain: 'new.example.com:443',
+  }), /Invalid KCODER_RELAY_DOMAIN/);
+  assert.throws(() => createRelayDeploymentConfig({
+    relayConfig: { sharedHosts: [], gateways },
+  }), /Configure one canonical Relay public URL or sharedHosts authority/);
+  assert.throws(() => createRelayDeploymentConfig({
+    relayConfig: { sharedHosts: ['one.example.com', 'two.example.com'], gateways },
+  }), /Configure one canonical Relay public URL or sharedHosts authority/);
+  const inferredLegacy = createRelayDeploymentConfig({
     relayConfig: { sharedHosts: ['hyf2333.top:8451'], gateways },
-    publicPort: 8452,
-  }), /fixed to port 8451/);
+  });
+  assert.equal(inferredLegacy.publicUrl, 'https://hyf2333.top:8451');
+  const inferredPort = createRelayDeploymentConfig({
+    relayConfig: { sharedHosts: ['relay.example.com:9443'], gateways },
+    domain: 'relay.example.com',
+  });
+  assert.equal(inferredPort.publicPort, 9443);
+  assert.equal(inferredPort.publicUrl, 'https://relay.example.com:9443');
+});
+
+test('deployment rejects unsafe public URLs, shell-like domains, and port collisions', () => {
+  const sharedHosts = ['relay.example.com'];
+  const relayConfig = { sharedHosts, gateways };
+  for (const publicUrl of [
+    'https://user:pass@relay.example.com',
+    'https://relay.example.com/path',
+    'https://relay.example.com?x=1',
+    'https://relay.example.com#fragment',
+    'https://relay.example.com;$(id)',
+    'https://relay.example.com\nKCODER_RELAY_SECRET=leaked',
+    'https://127.0.0.1',
+  ]) {
+    assert.throws(() => createRelayDeploymentConfig({ relayConfig, publicUrl }));
+  }
+  assert.throws(() => createRelayDeploymentConfig({
+    relayConfig,
+    publicUrl: 'https://relay.example.com',
+    domain: 'relay.example.com;$(id)',
+  }), /Invalid KCODER_RELAY_DOMAIN/);
+  assert.throws(() => createRelayDeploymentConfig({
+    relayConfig,
+    publicUrl: 'https://relay.example.com',
+    controlPort: '18452; id',
+  }), /Invalid KCODER_RELAY_CONTROL_PORT/);
+  assert.throws(() => createRelayDeploymentConfig({
+    relayConfig,
+    publicUrl: 'https://relay.example.com',
+    stunPort: 18452,
+  }), /ports must be distinct/);
+  assert.throws(() => createRelayDeploymentConfig({
+    relayConfig,
+    publicUrl: 'https://relay.example.com:18451',
+  }), /ports must be distinct/);
+  assert.throws(() => createRelayDeploymentConfig({
+    relayConfig,
+    publicUrl: 'https://relay.example.com',
+    stunPort: 1023,
+  }), /KCODER_RELAY_STUN_PORT must be between 1024 and 65535/);
+  const unprivilegedBoundary = createRelayDeploymentConfig({
+    relayConfig,
+    publicUrl: 'https://relay.example.com',
+    stunPort: 1024,
+  });
+  assert.equal(unprivilegedBoundary.stun.port, 1024);
 });
 
 test('legacy mode keeps its one Gateway credentials in the protected service env', () => {
@@ -180,6 +344,7 @@ test('legacy mode keeps its one Gateway credentials in the protected service env
     relayConfig: { legacy: true, sharedHosts: ['hyf2333.top:8451'], gateways: [gateways[0]] },
   });
   assert.equal(plan.registryJson, null);
+  assert.match(plan.cloudEnv, /^KCODER_RELAY_PUBLIC_URL=https:\/\/hyf2333\.top:8451$/m);
   assert.match(plan.cloudEnv, /^KCODER_RELAY_DEVICE_ID=gateway-a$/m);
   assert.match(plan.cloudEnv, /^KCODER_RELAY_SECRET=a{32}$/m);
 });

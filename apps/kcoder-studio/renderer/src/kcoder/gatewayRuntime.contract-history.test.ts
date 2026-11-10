@@ -1,5 +1,7 @@
-import { listen } from '@tauri-apps/api/event'
-import { clearMocks, mockIPC } from '@tauri-apps/api/mocks'
+import { taskBoardState } from '@/features/task-workspace/taskBoardModel'
+import type { RuntimeTaskSummary } from '@/types/api'
+import { listen } from '@/lib/runtime-events'
+import { clearTestTransports, installTestTransport } from '@/test/runtime-transport'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { FakeGatewayClient } from './gateway/runtime/contractFixture.test-support'
 import { KCoderGatewayRuntime as CoreRuntime } from './gatewayRuntime'
@@ -20,9 +22,71 @@ describe.each([
   afterEach(async () => {
     await Promise.all([...runtimes].map(runtime => runtime.disposeAsync?.() ?? runtime.dispose()))
     runtimes.clear()
-    clearMocks()
+    clearTestTransports()
     vi.restoreAllMocks()
   })
+  test('lists recent unassigned history without creating a sidebar project or reading transcript bodies', async () => {
+    const client = new FakeGatewayClient(null)
+    client.threadResumeSupported = true
+    client.persistedThreads = [
+      { id: 'current', cwd: '/workspace', title: 'Current task', createdAt: 1, updatedAt: 2, status: 'idle' },
+      { id: 'old', cwd: '/retired/workspace', title: 'Old task', createdAt: 1, updatedAt: 3, status: 'idle' },
+    ]
+    const runtime = new KCoderGatewayRuntime('token', {
+      loadServers: async () => [{ id: 'local', label: 'Owned', transport: 'local', workspacePath: '/workspace' }],
+      createClient: () => client,
+    })
+    await expect(runtime.request('runtime.tasks.search', { query: '', limit: 20 })).resolves.toMatchObject({
+      items: [
+        { title: 'Old task', unassignedProject: true, address: { workspacePath: '/retired/workspace', threadId: 'old' } },
+        { title: 'Current task', unassignedProject: false },
+      ],
+    })
+    await expect(runtime.request('runtime.tasks.list', {})).resolves.toMatchObject({
+      workspaces: [{ workspacePath: '/workspace', tasks: [{ title: 'Current task' }] }],
+    })
+    expect(client.requests.filter(request => request.method === 'thread/read')).toEqual([])
+    await expect(runtime.request('runtime.tasks.search', { query: 'Old', limit: 20 })).resolves.toMatchObject({
+      items: [{ unassignedProject: true, address: { workspacePath: '/retired/workspace', threadId: 'old' } }],
+    })
+  })
+  test('directory hydration preserves committed terminal evidence without completing idle new tasks', async () => {
+    const client = new FakeGatewayClient(null)
+    client.threadResumeSupported = true
+    const summary = { mainTurn: 'idle', pendingApprovals: 0, pendingQuestions: 0, activeJobs: 0, tasksPending: 0, tasksRunning: 0, pendingFollowups: 0, pendingGoals: 0 }
+    client.persistedThreads = [
+      { id: 'done', cwd: '/workspace', status: 'idle', runSummary: { ...summary, latestTurnStatus: 'completed' } },
+      { id: 'new', cwd: '/workspace', status: 'idle', runSummary: { ...summary, recentError: null } },
+      { id: 'legacy', cwd: '/workspace', status: 'idle', runSummary: summary },
+      { id: 'failed', cwd: '/workspace', status: 'idle', runSummary: { ...summary, latestTurnStatus: 'failed' } },
+      { id: 'interrupted', cwd: '/workspace', status: 'idle', runSummary: { ...summary, latestTurnStatus: 'interrupted' } },
+      { id: 'background', cwd: '/workspace', status: 'background_running', runSummary: { ...summary, latestTurnStatus: 'completed', activeJobs: 1 } },
+      { id: 'approval', cwd: '/workspace', status: 'waiting_for_approval', runSummary: { ...summary, latestTurnStatus: 'completed', pendingApprovals: 1 } },
+    ]
+    // A completed reply only completes a task once the target confirms it has no
+    // open Goal, so negotiate the Goal observation and report no Goal.
+    const supports = client.supportsExperimental.bind(client)
+    client.supportsExperimental = capability =>
+      capability === 'threadGoalStatusBatchV1' || supports(capability)
+    const request = client.request.bind(client)
+    client.request = async <T>(method: string, params: Record<string, unknown> = {}) =>
+      method === 'thread/goal/status/readMany'
+        ? ({ observations: (params.threadIds as string[]).map(threadId => ({ threadId, availability: 'available', status: null })) } as T)
+        : request<T>(method, params)
+    const runtime = new KCoderGatewayRuntime('token', {
+      loadServers: async () => [{ id: 'local', label: 'Owned', transport: 'local', workspacePath: '/workspace' }],
+      createClient: () => client,
+    })
+    const result = await runtime.request('runtime.tasks.list', {}) as { workspaces: { tasks: RuntimeTaskSummary[] }[] }
+    const tasks = result.workspaces.flatMap(workspace => workspace.tasks)
+    for (const [id, lane] of [['done', 'completed'], ['new', 'waiting'], ['legacy', 'unknown'], ['failed', 'stopped'], ['interrupted', 'stopped'], ['background', 'background'], ['approval', 'waiting']]) {
+      const task = tasks.find(item => item.threadId === id)!
+      expect(task).toBeDefined()
+      expect(taskBoardState({ task, targetLabel: 'Owned', stale: false }).lane).toBe(lane)
+      expect(taskBoardState({ task, targetLabel: 'Owned', stale: true }).lane).toBe('unknown')
+    }
+  })
+
   test('lists opened workspaces and hydrates their threads in the matching process cwd', async () => {
     const connections: Array<string | undefined> = []
     const command = new FakeGatewayClient(null)
@@ -90,7 +154,7 @@ describe.each([
   })
 
   test('renames, archives, lists, and restores tasks with durable gateway metadata', async () => {
-    mockIPC(() => undefined, { shouldMockEvents: true })
+    installTestTransport(() => undefined)
     const client = new FakeGatewayClient('thread-metadata')
     const runtime = new KCoderGatewayRuntime('token', {
       loadServers: async () => [
@@ -452,7 +516,7 @@ describe.each([
   })
 
   test('keeps a running task routable while thread/list persistence catches up', async () => {
-    mockIPC(() => undefined, { shouldMockEvents: true })
+    installTestTransport(() => undefined)
     const received: Array<{ event: string; payload: Record<string, unknown> }> = []
     const unlisten = await listen<{ event: string; payload: Record<string, unknown> }>(
       'local-executor:event',

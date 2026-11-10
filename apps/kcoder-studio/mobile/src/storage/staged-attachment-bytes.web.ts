@@ -1,12 +1,13 @@
+import { bindMetadataTransaction, type MetadataAuthority } from "./metadata-authority";
 import type { AttachmentBytesBackend, AttachmentStoreChange } from "./staged-attachment-bytes";
 
 const DATABASE = "kcoder-staged-attachments-v1";
-function openDatabase(): Promise<IDBDatabase> {
+function openDatabase(database: string): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     if (typeof indexedDB === "undefined") { reject(new Error("此浏览器无法持久保存附件")); return; }
     let settled = false;
     const fail = (error: Error) => { if (!settled) { settled = true; reject(error); } };
-    const request = indexedDB.open(DATABASE, 1);
+    const request = indexedDB.open(database, 1);
     request.onupgradeneeded = () => {
       const db = request.result;
       db.createObjectStore("rows", { keyPath: "id" });
@@ -17,19 +18,23 @@ function openDatabase(): Promise<IDBDatabase> {
     request.onsuccess = () => { if (settled) request.result.close(); else { settled = true; resolve(request.result); } };
   });
 }
-export function createAttachmentBytesBackend(): AttachmentBytesBackend {
+export function createAttachmentBytesBackend(database = DATABASE): AttachmentBytesBackend {
+  if (!/^kcoder-[a-z0-9-]+$/.test(database)) throw new Error("Invalid local attachment namespace");
   return {
     kind: "web",
-    async transaction<T>(change: (rows: readonly unknown[]) => AttachmentStoreChange<T>): Promise<T> {
-      const db = await openDatabase();
+    async transaction<T>(change: (rows: readonly unknown[]) => AttachmentStoreChange<T>, authority?: MetadataAuthority): Promise<T> {
+      const db = await openDatabase(database);
+      try { authority?.assert(); } catch (error) { db.close(); throw error; }
       return new Promise<T>((resolve, reject) => {
         let transaction: IDBTransaction;
         try { transaction = db.transaction(["rows", "bytes"], "readwrite"); } catch (error) { db.close(); reject(error); return; }
+        const unbind = bindMetadataTransaction(authority, transaction);
         const rows = transaction.objectStore("rows"); const bytes = transaction.objectStore("bytes");
         let value: T; let failure: unknown;
         const request = rows.getAll(undefined, 129);
         request.onsuccess = () => {
           try {
+            authority?.assert();
             // No await inside this callback: final Blob + row + quota/revision CAS
             // are written under this same readwrite transaction across tabs.
             if (request.result.length > 128) throw new Error("附件本地索引超出容量，保留原记录");
@@ -46,13 +51,13 @@ export function createAttachmentBytesBackend(): AttachmentBytesBackend {
             if (update.deleteBytes) bytes.delete(update.deleteBytes);
           } catch (error) { failure = error; transaction.abort(); }
         };
-        transaction.oncomplete = () => { db.close(); resolve(value); };
+        transaction.oncomplete = () => { unbind(); db.close(); resolve(value); };
         transaction.onerror = () => { /* onabort is the single rejection path. */ };
-        transaction.onabort = () => { db.close(); reject(failure ?? transaction.error ?? new Error("附件持久化失败")); };
+        transaction.onabort = () => { unbind(); db.close(); reject(failure ?? transaction.error ?? new Error("附件持久化失败")); };
       });
     },
     async source(id, expectedSize) {
-      const db = await openDatabase();
+      const db = await openDatabase(database);
       const blob = await new Promise<Blob>((resolve, reject) => {
         let transaction: IDBTransaction;
         try { transaction = db.transaction("bytes", "readonly"); } catch (error) { db.close(); reject(error); return; }

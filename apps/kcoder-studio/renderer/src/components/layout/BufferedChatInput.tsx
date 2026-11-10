@@ -4,10 +4,13 @@ import { ChatInput, type ChatInputProps, type ChatSubmitOptions } from '@/compon
 export interface BufferedChatInputInsertion {
   id: number
   text: string
+  scopeKey?: string
+  isCurrent?: () => boolean
 }
 
 interface BufferedChatInputProps extends ChatInputProps {
   insertion?: BufferedChatInputInsertion | null
+  insertionScopeKey?: string
 }
 
 export const BufferedChatInput = memo(function BufferedChatInput({
@@ -15,9 +18,10 @@ export const BufferedChatInput = memo(function BufferedChatInput({
   onChange,
   onSubmit,
   insertion,
+  insertionScopeKey,
   ...props
 }: BufferedChatInputProps) {
-  const scopeKey = props.projectChat?.scopeKey
+  const scopeKey = insertionScopeKey ?? props.projectChat?.scopeKey
   const [draftState, setDraftState] = useState(() => ({
     scopeKey,
     sourceValue: value,
@@ -40,6 +44,8 @@ export const BufferedChatInput = memo(function BufferedChatInput({
 
   useEffect(() => {
     if (!insertion || appliedInsertionIdRef.current === insertion.id) return
+    if (insertion.scopeKey !== undefined && insertion.scopeKey !== scopeKey) return
+    if (insertion.isCurrent?.() === false) return
     appliedInsertionIdRef.current = insertion.id
     setDraftState(current => {
       const currentDraft =

@@ -1,3 +1,4 @@
+import { SettingsSelect } from '@/components/settings/SettingsSelect'
 import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import {
@@ -404,7 +405,7 @@ export function TodoDetailPanel({
                 {t('delivery.snapshot_count', '{{count}} 份快照', { count: deliveries.length })}
               </span>
             </div>
-            <div className="mt-2 divide-y divide-border overflow-hidden rounded-lg border border-border">
+            <div className="studio-card mt-2 divide-y divide-border overflow-hidden rounded-lg border border-border">
               {deliveries.map(delivery => (
                 <div key={delivery.id} className="flex min-h-11 items-center gap-3 px-3 py-2">
                   <FileText className="h-4 w-4 shrink-0 text-text-muted" />
@@ -440,7 +441,7 @@ export function TodoDetailPanel({
         </section>
 
         {(item.objective || goal?.objective) && (
-          <section className="mt-[18px] flex gap-2 rounded-lg border border-[#CFECE7] bg-[#F2FAF8] p-3 dark:border-primary/20 dark:bg-primary/5">
+          <section className="studio-card-spacing mt-[18px] flex gap-2 rounded-lg border border-[#CFECE7] bg-[#F2FAF8] dark:border-primary/20 dark:bg-primary/5">
             <Target className="mt-0.5 h-4 w-4 shrink-0 text-[#0F8F82]" />
             <p className="text-xs font-medium leading-[1.4] text-[#356A64] dark:text-primary">
               {t('todo.objective_prefix', '目标：')} {item.objective || goal?.objective}
@@ -480,7 +481,7 @@ export function TodoDetailPanel({
         {!onUpdateItem && (item.blocker || item.nextAction) && (
           <section className="mt-[18px] grid gap-2 sm:grid-cols-2">
             {item.blocker && (
-              <div className="rounded-lg border border-destructive/20 bg-destructive/5 p-3">
+              <div className="studio-card-spacing rounded-lg border border-destructive/20 bg-destructive/5">
                 <p className="text-xs font-semibold text-destructive">
                   {t('todo.blocked', '阻塞')}
                 </p>
@@ -488,7 +489,7 @@ export function TodoDetailPanel({
               </div>
             )}
             {item.nextAction && (
-              <div className="rounded-lg border border-border bg-muted/40 p-3">
+              <div className="studio-card-spacing rounded-lg border border-border bg-muted/40">
                 <p className="text-xs font-semibold text-text-muted">
                   {t('todo.next_action', '下一步')}
                 </p>
@@ -522,7 +523,7 @@ export function TodoDetailPanel({
               )}
             </div>
             {item.children && item.children.length > 0 ? (
-              <div className="mt-2 divide-y divide-border overflow-hidden rounded-lg border border-border">
+              <div className="studio-card mt-2 divide-y divide-border overflow-hidden rounded-lg border border-border">
                 {item.children.map(child => (
                   <button
                     key={child.id}
@@ -562,7 +563,7 @@ export function TodoDetailPanel({
                 ))}
               </div>
             ) : workTypes.length > 0 ? (
-              <div className="mt-2 rounded-lg border border-dashed border-border px-4 py-4">
+              <div className="studio-card-spacing mt-2 rounded-lg border border-dashed border-border">
                 <p className="text-xs font-medium text-text-primary">
                   {t('todo.workflow_not_applied', '这个事项还没有应用项目流程')}
                 </p>
@@ -585,7 +586,7 @@ export function TodoDetailPanel({
                 </button>
               </div>
             ) : (
-              <div className="mt-2 rounded-lg border border-dashed border-border px-4 py-4">
+              <div className="studio-card-spacing mt-2 rounded-lg border border-dashed border-border">
                 <p className="text-xs font-medium text-text-primary">
                   {t('todo.workflow_not_configured', '当前项目还没有设置事项流程')}
                 </p>
@@ -645,7 +646,7 @@ export function TodoDetailPanel({
                 />
               </div>
             </div>
-            <div className="mt-2 divide-y divide-border overflow-hidden rounded-lg border border-border">
+            <div className="studio-card mt-2 divide-y divide-border overflow-hidden rounded-lg border border-border">
               {workspaceEntries.map(entry => (
                 <div key={entry.path} className="flex h-9 items-center gap-2 px-3 text-xs">
                   {entry.nodeType === 'directory' ? (
@@ -711,7 +712,7 @@ export function TodoDetailPanel({
             <PropertyRow>
               {onUpdateItem ? (
                 <EditableProperty icon={CircleDot} label={t('todo.status', '状态')}>
-                  <select
+                  <SettingsSelect
                     data-testid="todo-detail-state-select"
                     value={item.state}
                     onChange={event => onUpdateItem({ state: event.target.value as TodoViewState })}
@@ -722,7 +723,7 @@ export function TodoDetailPanel({
                         {t(detail.labelKey, detail.fallback)}
                       </option>
                     ))}
-                  </select>
+                  </SettingsSelect>
                   {item.waitingFor && item.waitingFor.length > 0 && (
                     <span
                       data-testid="todo-detail-dependency-warning"
@@ -749,7 +750,7 @@ export function TodoDetailPanel({
             <PropertyRow>
               {onUpdateItem ? (
                 <EditableProperty icon={Bot} label={t('todo.assignee', '负责人')}>
-                  <select
+                  <SettingsSelect
                     data-testid="todo-detail-assignee-select"
                     value={item.assigneeType ?? 'unassigned'}
                     onChange={event =>
@@ -764,7 +765,7 @@ export function TodoDetailPanel({
                     </option>
                     <option value="human">{t('todo.assignee_human', '员工')}</option>
                     <option value="ai">{t('todo.assignee_ai', 'AI 智能体')}</option>
-                  </select>
+                  </SettingsSelect>
                 </EditableProperty>
               ) : (
                 <Property

@@ -1,0 +1,178 @@
+name: KCoder Studio iOS unsigned arm64 package
+
+on:
+  push:
+    branches: [codex/ios-arm64-package-20261001]
+    paths: [.github/workflows/kcoder-studio-ios-arm64-unsigned.yml]
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: Exact KCoder Mobile source commit to package
+        required: true
+        default: 151fd539792067b12a505300eb5341fc2c8282e7
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  package-ios-arm64:
+    if: github.event_name == 'push' || inputs.source_ref == '151fd539792067b12a505300eb5341fc2c8282e7'
+    runs-on: macos-15
+    timeout-minutes: 45
+    env:
+      SOURCE_COMMIT: 151fd539792067b12a505300eb5341fc2c8282e7
+      EXPO_NO_TELEMETRY: '1'
+    steps:
+      - name: Prepare isolated output
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/kcoder-ios-build/logs" "$GITHUB_WORKSPACE/ios-package-output/logs" "$GITHUB_WORKSPACE/ios-package-output/artifacts"
+          echo "IOS_BUILD_ROOT=$RUNNER_TEMP/kcoder-ios-build" >> "$GITHUB_ENV"
+      - name: Checkout pinned Mobile source
+        uses: actions/checkout@v4
+        with:
+          ref: 151fd539792067b12a505300eb5341fc2c8282e7
+          path: source
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.17.0
+      - name: Record native toolchain
+        id: toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          record() {
+            name="$1"; shift
+            set +e
+            "$@" > "$GITHUB_WORKSPACE/ios-package-output/logs/$name.log" 2>&1
+            rc=$?
+            set -e
+            echo "$rc" > "$GITHUB_WORKSPACE/ios-package-output/logs/$name.exitcode"
+            cat "$GITHUB_WORKSPACE/ios-package-output/logs/$name.log"
+            test "$rc" -eq 0
+          }
+          record host-architecture uname -m
+          record macos-version sw_vers
+          record xcode-version xcodebuild -version
+          record iphoneos-sdk xcrun --sdk iphoneos --show-sdk-version
+          record node-version node --version
+          record npm-version npm --version
+          record cocoapods-version pod --version
+      - name: Build unsigned device IPA
+        id: package
+        timeout-minutes: 40
+        shell: bash
+        working-directory: source/apps/kcoder-studio/mobile
+        run: |
+          set -euo pipefail
+          exec > "$GITHUB_WORKSPACE/ios-package-output/logs/build-step.log" 2>&1
+          run_logged() {
+            name="$1"; shift
+            set +e
+            "$@" > "$GITHUB_WORKSPACE/ios-package-output/logs/$name.log" 2>&1
+            rc=$?
+            set -e
+            echo "$rc" > "$GITHUB_WORKSPACE/ios-package-output/logs/$name.exitcode"
+            cat "$GITHUB_WORKSPACE/ios-package-output/logs/$name.log"
+            test "$rc" -eq 0
+          }
+          test "$(git -C "$GITHUB_WORKSPACE/source" rev-parse HEAD)" = "$SOURCE_COMMIT"
+          unset KCODER_STUDIO_ALLOW_HTTP EXPO_PUBLIC_KCODER_STUDIO_ALLOW_HTTP
+          run_logged npm-ci npm ci --no-audit --no-fund
+          run_logged terminal-webview npm run build:terminal-webview
+          run_logged expo-prebuild npx expo prebuild --platform ios --no-install
+          run_logged cocoapods-install pod install --project-directory=ios
+          run_logged verify-expo-config node -e "const p=require('./ios/Podfile.properties.json'); if(p.newArchEnabled!=='true'||(p['expo.jsEngine']&&p['expo.jsEngine']!=='hermes')) process.exit(1)"
+
+          workspace="$(find ios -maxdepth 1 -name '*.xcworkspace' -print -quit)"
+          test -n "$workspace"
+          run_logged xcode-list xcodebuild -list -json -workspace "$workspace"
+          workspace_name="$(basename "$workspace" .xcworkspace)"
+          scheme="$(python3 -c 'import json,sys; s=open(sys.argv[1]).read(); d=json.loads(s[s.find("{"):s.rfind("}")+1]); name=sys.argv[2]; schemes=d["workspace"]["schemes"]; sys.exit(f"Required app scheme {name!r} derived from workspace is absent; available schemes: {schemes}") if name not in schemes else print(name)' "$GITHUB_WORKSPACE/ios-package-output/logs/xcode-list.log" "$workspace_name")"
+          test -n "$scheme"
+          archive="$IOS_BUILD_ROOT/KCoderStudio-device.xcarchive"
+          run_logged xcodebuild-archive xcodebuild \
+            -workspace "$workspace" -scheme "$scheme" -configuration Release \
+            -destination 'generic/platform=iOS' -derivedDataPath "$IOS_BUILD_ROOT/DerivedData" \
+            -archivePath "$archive" ARCHS=arm64 ONLY_ACTIVE_ARCH=NO CURRENT_PROJECT_VERSION=1 \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO archive
+
+          app="$(find "$archive/Products/Applications" -maxdepth 1 -name '*.app' -print -quit)"
+          test -n "$app"
+          plist="$app/Info.plist"
+          executable=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$plist")
+          bundle=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$plist")
+          version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$plist")
+          build=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$plist")
+          platform=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleSupportedPlatforms:0' "$plist")
+          archs=$(lipo -archs "$app/$executable")
+          test "$bundle" = dev.kcoder.studio && test "$version" = 0.1.0 && test "$build" = 1 && test "$platform" = iPhoneOS
+          case " $archs " in *' arm64 '*) ;; *) echo "arm64 missing: $archs" >&2; exit 1 ;; esac
+          test -s "$app/main.jsbundle"
+          hermes_magic=$(od -An -N4 -tx1 "$app/main.jsbundle" | tr -d '[:space:]')
+          test "$hermes_magic" = c61fbc03
+          test ! -e "$app/embedded.mobileprovision" && test ! -d "$app/_CodeSignature"
+          run_logged verify-ats python3 -c 'import plistlib,sys; a=plistlib.load(open(sys.argv[1],"rb")).get("NSAppTransportSecurity",{}); keys=("NSAllowsArbitraryLoads","NSAllowsArbitraryLoadsForMedia","NSAllowsArbitraryLoadsInWebContent"); bad=[k for k in keys if a.get(k) is True]; bad += [d for d,v in a.get("NSExceptionDomains",{}).items() if v.get("NSExceptionAllowsInsecureHTTPLoads") is True]; print("ATS allows insecure public HTTP" if bad else "ATS public HTTP exceptions: none; local networking remains scoped"); sys.exit(bool(bad))' "$plist"
+
+          mkdir -p "$IOS_BUILD_ROOT/package/Payload"
+          ditto "$app" "$IOS_BUILD_ROOT/package/Payload/$(basename "$app")"
+          ipa="$GITHUB_WORKSPACE/ios-package-output/artifacts/KCoder-Studio-0.1.0-build1-unsigned-ios-arm64-151fd539.ipa"
+          (cd "$IOS_BUILD_ROOT/package" && zip -qry "$ipa" Payload)
+          unzip -t "$ipa"
+          unzip -Z1 "$ipa" > "$IOS_BUILD_ROOT/ipa-contents.txt"
+          grep -Fxq "Payload/$(basename "$app")/Info.plist" "$IOS_BUILD_ROOT/ipa-contents.txt"
+          sha256=$(shasum -a 256 "$ipa" | awk '{print $1}')
+          size=$(stat -f '%z' "$ipa")
+          printf 'sourceCommit=%s\nscheme=%s\nbundleIdentifier=%s\nversion=%s\nbuildNumber=%s\nplatform=%s\narchitectures=%s\nhermesBytecodeMagic=%s\ncodeSigned=false\ninstallable=false\nipa=%s\nsizeBytes=%s\nsha256=%s\n' \
+            "$SOURCE_COMMIT" "$scheme" "$bundle" "$version" "$build" "$platform" "$archs" "$hermes_magic" "$(basename "$ipa")" "$size" "$sha256" \
+            > "$GITHUB_WORKSPACE/ios-package-output/build-facts.txt"
+          cat "$GITHUB_WORKSPACE/ios-package-output/build-facts.txt"
+      - name: Write build manifest
+        if: always()
+        env:
+          JOB_STATUS: ${{ job.status }}
+          TOOLCHAIN_OUTCOME: ${{ steps.toolchain.outcome || 'not_run' }}
+          PACKAGE_OUTCOME: ${{ steps.package.outcome || 'not_run' }}
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          root = Path('ios-package-output')
+          logs = root / 'logs'
+          def read(name):
+              p = logs / f'{name}.log'
+              return p.read_text(errors='replace').strip() if p.exists() else None
+          facts = {}
+          p = root / 'build-facts.txt'
+          if p.exists():
+              facts = dict(line.split('=', 1) for line in p.read_text().splitlines() if '=' in line)
+          data = {
+              'sourceCommit': os.environ['SOURCE_COMMIT'],
+              'workflowRef': os.getenv('GITHUB_REF'),
+              'runner': {k: read(v) for k, v in {
+                  'architecture': 'host-architecture', 'macOS': 'macos-version',
+                  'xcode': 'xcode-version', 'iphoneosSdk': 'iphoneos-sdk',
+                  'node': 'node-version', 'npm': 'npm-version', 'cocoaPods': 'cocoapods-version'}.items()},
+              'jobStatus': os.getenv('JOB_STATUS'),
+              'toolchainStep': os.getenv('TOOLCHAIN_OUTCOME'),
+              'packageStep': os.getenv('PACKAGE_OUTCOME'),
+              'destination': 'generic/platform=iOS', 'configuration': 'Release',
+              'requestedArchitectures': ['arm64'], 'codeSigningAllowed': False,
+              'unsignedInstallable': False, 'facts': facts,
+          }
+          (root / 'manifest.json').write_text(json.dumps(data, indent=2) + '\n')
+          PY
+      - name: Upload IPA, manifest, and logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kcoder-studio-ios-unsigned-0.1.0-arm64-151fd539-${{ github.run_id }}
+          path: ios-package-output/
+          if-no-files-found: warn
+          retention-days: 2

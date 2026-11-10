@@ -1,9 +1,8 @@
-import { FolderOpen, Loader2, Trash2, X } from 'lucide-react'
+import { SettingsSelect } from '@/components/settings/SettingsSelect'
+import { Loader2, Trash2, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from '@/hooks/useTranslation'
 import { canUseEmbeddedBrowser, clearEmbeddedBrowserData } from '@/lib/embedded-browser'
-import { openNativeDirectoryPicker } from '@/lib/native-directory-picker'
-import { isNativeTauriHost } from '@/lib/runtime-environment'
 import {
   defaultAppPreferences,
   getAppPreferences,
@@ -11,14 +10,8 @@ import {
   type AppPreferences,
   type AppPreferencesPatch,
   type BrowserLinkTarget,
-} from '@/tauri/appPreferences'
-import {
-  SettingsGroup,
-  SettingsPage,
-  SettingsPageHeader,
-  SettingsRow,
-  SettingsSwitch,
-} from './settings-ui'
+} from '@/host/appPreferences'
+import { SettingsGroup, SettingsPage, SettingsPageHeader, SettingsRow } from './settings-ui'
 
 function LinkTargetSelect({
   testId,
@@ -34,7 +27,7 @@ function LinkTargetSelect({
   const { t } = useTranslation('common')
 
   return (
-    <select
+    <SettingsSelect
       data-testid={testId}
       value={value}
       disabled={disabled}
@@ -42,8 +35,8 @@ function LinkTargetSelect({
       className="h-8 min-w-[156px] rounded-md border border-border bg-background px-2.5 text-sm text-text-primary outline-none focus:border-primary disabled:cursor-not-allowed disabled:opacity-60"
     >
       <option value="system">{t('workbench.browser_settings_target_system')}</option>
-      <option value="studio">{t('workbench.browser_settings_target_wework')}</option>
-    </select>
+      <option value="studio">{t('workbench.browser_settings_target_kcoder')}</option>
+    </SettingsSelect>
   )
 }
 
@@ -129,7 +122,6 @@ function ClearBrowserDataDialog({
 export function BrowserSettingsPage() {
   const { t } = useTranslation('common')
   const browserAvailable = canUseEmbeddedBrowser()
-  const nativeDownloads = isNativeTauriHost()
   const [preferences, setPreferences] = useState<AppPreferences>(defaultAppPreferences)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -170,18 +162,6 @@ export function BrowserSettingsPage() {
     }
   }
 
-  const chooseDownloadDirectory = async () => {
-    try {
-      const selected = await openNativeDirectoryPicker(
-        preferences.browserDownloadDirectory ?? undefined
-      )
-      if (selected) await savePreferences({ browserDownloadDirectory: selected })
-    } catch (pickerError) {
-      console.error('[KCoder Studio] Failed to select browser download directory', pickerError)
-      setError(t('workbench.browser_settings_download_picker_failed'))
-    }
-  }
-
   const clearBrowserData = async () => {
     setClearing(true)
     setError(null)
@@ -199,8 +179,6 @@ export function BrowserSettingsPage() {
   }
 
   const controlsDisabled = loading || saving || !browserAvailable
-  const downloadLocation =
-    preferences.browserDownloadDirectory ?? t('workbench.browser_settings_downloads_system')
 
   return (
     <SettingsPage data-testid="browser-settings-page">
@@ -257,67 +235,11 @@ export function BrowserSettingsPage() {
         </SettingsGroup>
       </section>
 
-      {nativeDownloads ? (
-        <section className="mt-7">
-          <h2 className="mb-2 text-sm font-semibold text-text-primary">
-            {t('workbench.browser_settings_downloads')}
-          </h2>
-          <SettingsGroup>
-            <SettingsRow
-              label={t('workbench.browser_settings_download_location')}
-              description={
-                <span className="block max-w-[480px] truncate" title={downloadLocation}>
-                  {downloadLocation}
-                </span>
-              }
-              control={
-                <div className="flex items-center gap-1.5">
-                  {preferences.browserDownloadDirectory ? (
-                    <button
-                      type="button"
-                      data-testid="browser-download-location-reset"
-                      disabled={controlsDisabled}
-                      onClick={() => void savePreferences({ browserDownloadDirectory: null })}
-                      className="h-8 rounded-md px-2.5 text-sm text-text-secondary hover:bg-muted hover:text-text-primary disabled:opacity-50"
-                    >
-                      {t('workbench.browser_settings_download_reset')}
-                    </button>
-                  ) : null}
-                  <button
-                    type="button"
-                    data-testid="browser-download-location-change"
-                    disabled={controlsDisabled}
-                    onClick={() => void chooseDownloadDirectory()}
-                    className="inline-flex h-8 items-center gap-1.5 rounded-md bg-muted px-3 text-sm font-medium text-text-primary hover:bg-hover disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    <FolderOpen className="h-4 w-4" />
-                    {t('workbench.browser_settings_download_change')}
-                  </button>
-                </div>
-              }
-            />
-            <SettingsRow
-              label={t('workbench.browser_settings_ask_download')}
-              description={t('workbench.browser_settings_ask_download_description')}
-              control={
-                <SettingsSwitch
-                  data-testid="browser-ask-before-download-toggle"
-                  checked={preferences.browserAskBeforeDownload}
-                  disabled={controlsDisabled}
-                  onCheckedChange={checked =>
-                    void savePreferences({ browserAskBeforeDownload: checked })
-                  }
-                  aria-label={t('workbench.browser_settings_ask_download')}
-                />
-              }
-            />
-          </SettingsGroup>
-        </section>
-      ) : (
+      {
         <p data-testid="browser-downloads-unavailable" className="mt-7 text-sm text-text-secondary">
           {t('workbench.browser_settings_remote_downloads_unavailable')}
         </p>
-      )}
+      }
 
       {(loading || saving || status || error) && (
         <div

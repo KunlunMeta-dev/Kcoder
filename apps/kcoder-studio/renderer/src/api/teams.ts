@@ -20,13 +20,13 @@ export function createTeamApi(client: HttpClient) {
     listTeams,
     async getDefaultWorkbenchTeam(): Promise<Team> {
       const teams = (await listTeams()).filter(isActive)
-      const weworkTeam = teams.find(team => team.default_for_modes?.includes('studio'))
+      const studioTeam = teams.find(team => team.default_for_modes?.includes('studio'))
 
-      if (!weworkTeam) {
+      if (!studioTeam) {
         throw new Error('KCoder default team is not configured')
       }
 
-      return weworkTeam
+      return studioTeam
     },
   }
 }

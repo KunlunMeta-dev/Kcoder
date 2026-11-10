@@ -3,13 +3,14 @@
 use super::{knowledge_job_runner, knowledge_model::ProviderWikiModel};
 use anyhow::{Context, Result, ensure};
 use clap::Parser;
-use kcoder_engine::ClientModelConfiguration;
+use kcoder_api::ClientModelConfiguration;
+use kcoder_cli_commands::{cli_args::Cli, model_configuration::ModelConfiguration};
 use sha2::{Digest, Sha256};
 use std::{ffi::OsStr, io::Read, path::Path};
 
 /// Normalize only the private Wiki Provider request copy. Vendor extra-body
 /// output fields are late overrides; retaining them bypasses every stage limit.
-pub(super) fn prepare_settings(settings: &mut kcoder_config::Settings) -> Result<()> {
+pub fn prepare_settings(settings: &mut kcoder_config::Settings) -> Result<()> {
     let mut ceiling = settings
         .max_tokens
         .unwrap_or(kcoder_knowledge::WIKI_MAX_OUTPUT_TOKENS);
@@ -50,10 +51,10 @@ pub(super) fn prepare_settings(settings: &mut kcoder_config::Settings) -> Result
 
 /// Project the accepted normalized request, including persistent-worker thaw.
 /// This worker never sends tools, regardless of conversation tool profiles.
-pub(super) fn summary(
+pub fn summary(
     settings: &kcoder_config::Settings,
 ) -> Result<kcoder_types::ModelConfigurationSummary> {
-    let mut summary = kcoder_engine::model_configuration_summary(
+    let mut summary = kcoder_api::model_configuration_summary(
         settings,
         kcoder_types::ModelConfigurationBoundary::SessionSnapshot,
     )?;
@@ -103,7 +104,7 @@ fn filename(key: &str) -> Result<String> {
     Ok(format!("{digest}.json"))
 }
 
-pub(super) fn save(
+pub fn save(
     path: &Path,
     settings: &kcoder_config::Settings,
     model: &ProviderWikiModel,
@@ -136,7 +137,7 @@ pub(super) fn save(
     Ok(key)
 }
 
-pub(super) fn load(
+pub fn load(
     path: &Path,
     key: &str,
     purpose: &str,
@@ -158,7 +159,7 @@ pub(super) fn load(
         snapshot.len() <= 512 * 1024,
         "Wiki model snapshot exceeds limit"
     );
-    let mut cli = crate::Cli::try_parse_from(["kcoder"])?;
+    let mut cli = Cli::try_parse_from(["kcoder"])?;
     // This is a source reference emitted by freeze_model, not a submitted
     // credential. The resolver validates the authority again for each call.
     let metadata: serde_json::Value =
@@ -169,7 +170,7 @@ pub(super) fn load(
     {
         cli.credential_env_file = Some(file.into());
     }
-    let source = crate::model_configuration::ModelConfiguration::new(
+    let source = ModelConfiguration::new(
         kcoder_config::SettingsLoader::new(profile).with_config_dir(profile),
         cli,
     );
@@ -354,11 +355,11 @@ mod tests {
             &credentials,
             r#"{"kunlunmeta":{"type":"api","key":"fixture-private-key-never-real"}}"#,
         )?;
-        let source = crate::model_configuration::ModelConfiguration::new(
+        let source = ModelConfiguration::new(
             kcoder_config::SettingsLoader::new(&root)
                 .with_config_dir(&root)
                 .with_executable_dir(temp.path()),
-            crate::Cli::try_parse_from(["kcoder"])?,
+            Cli::try_parse_from(["kcoder"])?,
         );
         let mut settings = source.settings("kunlunmeta")?;
         // The built-in provider may imply its protocol instead of materializing

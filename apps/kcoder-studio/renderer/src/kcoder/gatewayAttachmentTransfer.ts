@@ -132,19 +132,26 @@ export async function uploadGatewayAttachment(
 async function readAttachmentInChunks(
   client: GatewayClient,
   threadId: string,
-  path: string
+  path: string,
+  options?: { signal?: AbortSignal }
 ): Promise<{ contentBase64: string; size: number }> {
   let offset = 0
   let totalSize: number | null = null
   let contentBase64 = ''
 
   while (true) {
-    const result = await client.request<GatewayAttachmentReadChunkResult>('attachment/read/chunk', {
-      threadId,
-      path,
-      offset,
-      length: ATTACHMENT_CHUNK_BYTES,
-    })
+    options?.signal?.throwIfAborted()
+    const result = await client.request<GatewayAttachmentReadChunkResult>(
+      'attachment/read/chunk',
+      {
+        threadId,
+        path,
+        offset,
+        length: ATTACHMENT_CHUNK_BYTES,
+      },
+      options
+    )
+    options?.signal?.throwIfAborted()
     const chunkBase64 = typeof result.contentBase64 === 'string' ? result.contentBase64 : null
     const chunkOffset = typeof result.offset === 'number' ? result.offset : null
     const chunkSize = typeof result.size === 'number' ? result.size : null
@@ -185,13 +192,20 @@ async function readAttachmentInChunks(
 export async function downloadGatewayAttachment(
   client: GatewayClient,
   threadId: string,
-  path: string
+  path: string,
+  options?: { signal?: AbortSignal }
 ): Promise<{ contentBase64: string; size: number }> {
   try {
-    const result = await client.request<GatewayAttachmentReadResult>('attachment/read', {
-      threadId,
-      path,
-    })
+    options?.signal?.throwIfAborted()
+    const result = await client.request<GatewayAttachmentReadResult>(
+      'attachment/read',
+      {
+        threadId,
+        path,
+      },
+      options
+    )
+    options?.signal?.throwIfAborted()
     const contentBase64 = typeof result.contentBase64 === 'string' ? result.contentBase64 : null
     if (contentBase64 === null) throw new Error('KCoder app-server 未返回附件内容')
     const size = typeof result.size === 'number' ? result.size : decodeBase64(contentBase64).length
@@ -200,7 +214,8 @@ export async function downloadGatewayAttachment(
     }
     return { contentBase64, size }
   } catch (error) {
+    options?.signal?.throwIfAborted()
     if (!isDirectReadLimitError(error)) throw error
-    return readAttachmentInChunks(client, threadId, path)
+    return readAttachmentInChunks(client, threadId, path, options)
   }
 }

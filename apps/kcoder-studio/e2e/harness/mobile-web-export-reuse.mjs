@@ -3,9 +3,7 @@ import { createHash } from "node:crypto";
 import { constants } from "node:fs";
 import { lstat, mkdir, open, readdir, rm } from "node:fs/promises";
 import { basename, dirname, isAbsolute, parse, relative, resolve, sep } from "node:path";
-import { repoRoot } from "./run-context.mjs";
-
-const artifactBoundary = resolve(repoRoot, "target/test/apps/kcoder-studio/e2e");
+import { repoRoot, retainedE2EArtifactBoundary } from "./run-context.mjs";
 const defaultExpectedBundleFileCount = 37;
 const maximumManifestBytes = 1024 * 1024;
 const maximumBundleBytes = 64 * 1024 * 1024;
@@ -155,6 +153,7 @@ async function validateRetainedExport({
   expectedBundleSha256,
   expectedBundleFileCount,
 }) {
+  const artifactBoundary = retainedE2EArtifactBoundary(manifestPath);
   assertContained(artifactBoundary, manifestPath, "source manifest must be inside the E2E artifact boundary");
   assert.equal(basename(dirname(manifestPath)), "artifacts", "source manifest must be a direct child of a run artifacts directory");
   const sourceArtifactsDirectory = dirname(manifestPath);
@@ -422,7 +421,16 @@ function assertPublicAssetPath(value) {
   const nodeModulesIndexes = parts.flatMap((part, index) => part === "node_modules" ? [index] : []);
   if (nodeModulesIndexes.length > 0) {
     const imageAsset = /\.(?:png|svg|webp|jpe?g|gif)$/i.test(value);
-    const allowedStaticAsset = parts[0] === "assets" && nodeModulesIndexes.length === 1 && nodeModulesIndexes[0] === 1 && imageAsset;
+    const e2eFixtureAsset = parts[0] === "assets" && nodeModulesIndexes.length === 1 && nodeModulesIndexes[0] === 1 && imageAsset;
+    const expoMonorepoAsset = parts[0] === "assets"
+      && parts[1] === "________________apps"
+      && parts[2] === "kcoder-studio"
+      && parts[3] === "mobile"
+      && nodeModulesIndexes.length === 1
+      && nodeModulesIndexes[0] === 4
+      && parts.length >= 7
+      && imageAsset;
+    const allowedStaticAsset = e2eFixtureAsset || expoMonorepoAsset;
     assert.ok(allowedStaticAsset, "Mobile Web bundle cannot contain node_modules except manifest-listed static image assets");
   }
 }

@@ -1,6 +1,7 @@
 import { CloudConnectionDialog } from '@/features/cloud-connection/CloudConnectionDialog'
 import { useOptionalCloudConnection } from '@/features/cloud-connection/useCloudConnection'
 import { useTranslation } from '@/hooks/useTranslation'
+import { isKCoderGatewayPage } from '@/kcoder/gatewayRpc'
 import { isCloudDevice, isRemoteDevice } from '@/lib/device-capabilities'
 import { cn } from '@/lib/utils'
 import type { DeviceInfo, RuntimeIMNotificationSettingsResponse } from '@/types/api'
@@ -45,12 +46,15 @@ export function GlobalImNotificationBell({
   }, [menuContainerRef])
   const targetLabel = getImNotificationSessionLabel(imNotificationSettings)
   const enabled = Boolean(imNotificationSettings?.global.enabled)
-  const connecting = cloud.status === 'connecting'
-  const requiresCloudLogin = !cloud.isConnected
-  const needsSession = cloud.isConnected && !targetLabel
-  const notifying = enabled && cloud.isConnected && Boolean(targetLabel)
-  const cloudConnectionError = cloud.status === 'error' || cloud.status === 'expired'
-  const cloudConnectionErrorMessage = cloudConnectionError ? cloud.error : null
+  const gatewayPage = isKCoderGatewayPage()
+  const cloudStatus = gatewayPage ? undefined : cloud.status
+  const connecting = cloudStatus === 'connecting'
+  const canConfigureNotifications = gatewayPage || cloud.isConnected
+  const requiresCloudLogin = !canConfigureNotifications
+  const needsSession = canConfigureNotifications && !targetLabel
+  const notifying = enabled && canConfigureNotifications && Boolean(targetLabel)
+  const cloudConnectionErrorMessage =
+    cloudStatus === 'error' || cloudStatus === 'expired' ? cloud.error : null
   const NotificationIcon = notifying ? Bell : BellOff
   const onlineCloudDeviceCount = useMemo(
     () =>
@@ -59,7 +63,7 @@ export function GlobalImNotificationBell({
       ).length,
     [devices]
   )
-  const title = getGlobalImNotificationTitle(t, imNotificationSettings, cloud.status)
+  const title = getGlobalImNotificationTitle(t, imNotificationSettings, cloudStatus)
   const primaryActionLabel = requiresCloudLogin
     ? t('workbench.cloud_connection_login', '登录并连接')
     : enabled
@@ -89,13 +93,13 @@ export function GlobalImNotificationBell({
       openCloudLogin()
       return
     }
+    if (needsSession) {
+      openSessionSettings()
+      return
+    }
     if (!onToggleGlobalImNotification) {
       onMenuOpenChange(false)
       onOpenSettings()
-      return
-    }
-    if (needsSession) {
-      openSessionSettings()
       return
     }
     onMenuOpenChange(false)
@@ -193,7 +197,7 @@ export function GlobalImNotificationBell({
             </div>
 
             <div className="mt-3 flex items-center justify-end gap-2">
-              {cloud.isConnected && onOpenGlobalImNotificationSettings && (
+              {canConfigureNotifications && onOpenGlobalImNotificationSettings && (
                 <button
                   type="button"
                   data-testid="sidebar-global-im-notification-settings-button"
@@ -222,7 +226,7 @@ export function GlobalImNotificationBell({
           menuContainer
         )}
 
-      {cloudDialogOpen && (
+      {requiresCloudLogin && cloudDialogOpen && (
         <CloudConnectionDialog
           open
           onlineCloudDeviceCount={onlineCloudDeviceCount}

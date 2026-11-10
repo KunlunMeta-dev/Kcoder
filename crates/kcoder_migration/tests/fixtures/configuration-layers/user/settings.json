@@ -1,0 +1,7 @@
+{
+  "model": "user-model",
+  "env": {
+    "ANTHROPIC_BASE_URL": "https://selected.example.invalid/v1",
+    "ANTHROPIC_API_KEY": "SYNTHETIC_LAYERED_LOWER_API_KEY"
+  }
+}

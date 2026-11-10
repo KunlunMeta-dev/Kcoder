@@ -1,0 +1,41 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { BrokerWebSearchDiagnostics } from '../broker-web-search.js';
+import { WEB_SEARCH_METHODS as M } from '../../shared/webSearchMethods.mjs';
+const capabilities = { webSearchStatusV1: true, webSearchProbeV1: true };
+const client = () => ({ initialized: true, ...capabilities });
+const frame = (method = M.start, params = {}) => ({ jsonrpc: '2.0', id: 1, method, params: { requestId: 'probe-1', expectedRevision: 'r1', ...(method === M.start ? { mode: 'kcoder' } : {}), ...params } });
+test('shared native search receipts use unforgeable client identities and restore only their addressed request', () => {
+  const broker = new BrokerWebSearchDiagnostics(), a = client(), b = client();
+  const original = frame();
+  const first = broker.claim(a, original, capabilities, new Map());
+  const duplicate = broker.claim(a, original, capabilities, new Map());
+  const peer = broker.claim(b, original, capabilities, new Map());
+  assert.equal(first.nativeId, duplicate.nativeId);
+  assert.notEqual(first.nativeId, peer.nativeId);
+  assert.ok(first.nativeId.length <= 128);
+  const native = broker.rewrite(original, first);
+  assert.notEqual(native.params.requestId, original.params.requestId);
+  const result = { targetId: 'target', requestId: first.nativeId, revision: 'r1', state: 'running' };
+  assert.equal(broker.response({ result }, first).result.requestId, original.params.requestId);
+  assert.equal(broker.response({ result }, peer).error.code, -32020);
+  assert.equal(broker.detach(a)[0].params.requestId, first.nativeId);
+  assert.equal(broker.detach(b)[0].params.requestId, peer.nativeId);
+});
+test('late or legacy clients cannot inherit diagnostics or resident-thread authority', () => {
+  const broker = new BrokerWebSearchDiagnostics();
+  const a = client(), b = client();
+  assert.throws(() => broker.claim({ initialized: true }, frame(), capabilities, new Map()), /UNSUPPORTED/);
+  assert.throws(() => broker.claim(a, frame(), {}, new Map()), /UNSUPPORTED/);
+  assert.deepEqual(broker.capabilities(capabilities, { initialized: true }), { webSearchStatusV1: false, webSearchProbeV1: false });
+  assert.throws(() => broker.claim(b, frame(M.start, { threadId: 'a-thread' }), capabilities, new Map([['a-thread', a]])), /THREAD_OWNER/);
+  assert.ok(broker.claim(a, frame(M.start, { threadId: 'a-thread' }), capabilities, new Map([['a-thread', a]])));
+});
+test('receipt reads never create cleanup authority and disconnect keeps peer terminal records', () => {
+  const broker = new BrokerWebSearchDiagnostics(), a = client(), b = client();
+  broker.claim(a, frame(M.read), capabilities, new Map());
+  assert.deepEqual(broker.detach(a), []);
+  const ticket = broker.claim(b, frame(), capabilities, new Map());
+  broker.response({ result: { targetId: 'target', revision: 'r1', requestId: ticket.nativeId, state: 'completed' } }, ticket);
+  assert.deepEqual(broker.detach(b), []);
+});

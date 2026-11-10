@@ -2,7 +2,7 @@
 async fn input_hint_cache_matches_uncached_definitions_across_modes() {
     let root = tempfile::tempdir().unwrap();
     let engine = crate::test_support::engine_builder::TestEngineBuilder::new(root.path())
-        .tool_registry(kcoder_tools::default_registry()).build();
+        .tool_registry(kcoder_tools::default_registry()).build_with_profile_directory();
     let mut uncached = engine.clone();
     uncached.tool_input_hints = Arc::new(crate::tool_input_hints::ToolInputHints::default());
     for luna in [false, true] {
@@ -26,7 +26,7 @@ async fn effective_tool_catalog_matches_model_definitions_across_filters() {
     let engine = crate::test_support::engine_builder::TestEngineBuilder::new(temp.path())
         .settings(settings)
         .tool_registry(kcoder_tools::default_registry())
-        .build();
+        .build_with_profile_directory();
     for luna in [false, true, false] {
         engine.set_luna_mode(luna);
         let mut expected = engine
@@ -248,7 +248,7 @@ async fn turn_scoped_tools_refresh_schema_cache_without_leaking_to_resident_or_s
     }
     let root = tempfile::tempdir().unwrap();
     let resident = crate::test_support::engine_builder::TestEngineBuilder::new(root.path())
-        .tool_registry(kcoder_tools::default_registry()).build();
+        .tool_registry(kcoder_tools::default_registry()).build_with_profile_directory();
     let count=Arc::new(AtomicUsize::new(0));
     let mut tools=resident.tools.clone();
     tools.try_register(Arc::new(SchemaProbe(count.clone()))).unwrap();

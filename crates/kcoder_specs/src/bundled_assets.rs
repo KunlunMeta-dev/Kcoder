@@ -236,6 +236,21 @@ Use `SpecCheck` with `action=preflight` before implementing `spec-driven-superpo
 Use `SpecRecordVerification` to write retained evidence into `verification.md`. \
 Prefer structured spec tools over guessing paths under `.kcoder/specs/changes/`.\n",
     );
+    text.push_str(
+        "\n## Project Knowledge\n\n\
+Read only relevant Markdown sources with `SpecStatus` `knowledge.paths`: at most 8 files, \
+32768 source bytes by default, hard maximum 65536. Keep returned paths, SHA-256 revisions \
+and scope; authoritative specs, unconfirmed change content, project documents and model \
+summaries have different authority. Preview updates with `knowledge.updates`, providing \
+the original scope, path, expected_revision and replacement; a preview is not saved or confirmed. \
+Pass its returned `change_base` unchanged as `SpecNewChange.knowledge_base`, then use the \
+existing delta/check/review and user-confirmed archive workflow. Preserve guarded base and \
+change metadata formats: old runtimes must not publish guarded changes. Missing proof, unknown \
+formats or source drift must not be repaired by recapturing or upgrading old guards; reread \
+and review a new candidate/change, retaining the old draft. Wiki retrieval and organization \
+keep their existing independent controls and revision rules. Use only operations and skills \
+actually attached to this request.\n",
+    );
     if let Some(config) = config {
         text.push_str("\n## Project Spec Configuration\n\n");
         let schema = if config.schema.trim().is_empty() {

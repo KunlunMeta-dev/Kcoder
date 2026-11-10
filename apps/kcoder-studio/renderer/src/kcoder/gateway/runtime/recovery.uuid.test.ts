@@ -35,6 +35,7 @@ test('LAN HTTP disconnect recovery proceeds when randomUUID is unavailable', asy
     tasks: new Map([[task.taskId, task]]),
     disconnectRecoveryByTask,
     clientByTask,
+    appServerDisconnectedClients: new WeakSet(),
     resumeTask,
     trackAsyncJob: vi.fn(),
   } as unknown as GatewayRuntimeCore

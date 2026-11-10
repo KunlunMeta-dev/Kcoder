@@ -169,7 +169,8 @@ fn rejects_untyped_request_ids_without_side_effects() {
         "method": "thread/delete",
         "params": {"threadId": thread_id}
     }));
-    assert_eq!(server.response(5)["result"]["deleted"], true);
+    let deleted = server.response(5);
+    assert_eq!(deleted["result"]["deleted"], true, "{deleted}");
     server.send(json!({"jsonrpc":"2.0", "id":6, "method":"thread/list", "params":{"limit":50}}));
     let after_delete = server.response(6);
     assert!(
@@ -202,6 +203,8 @@ fn deleting_a_thread_twice_reports_an_honest_outcome() {
     assert!(server.response(3).get("error").is_none());
     server.wait_for_method("turn/completed");
 
+    #[cfg(target_os = "linux")]
+    let history = find_named_file(temp.path(), &format!("{thread_id}.jsonl")).unwrap();
     server.send(json!({
         "jsonrpc": "2.0", "id": 4, "method": "thread/delete",
         "params": {"threadId": thread_id.clone()}
@@ -214,21 +217,31 @@ fn deleting_a_thread_twice_reports_an_honest_outcome() {
         "the first delete must remove files: {first}"
     );
 
-    // Repeating a delete reports the post-state instead of pretending it deleted
-    // the files again: the thread is gone, and the server says so explicitly.
+    #[cfg(target_os = "linux")]
+    let deletion_checkpoint = std::fs::read(history.with_extension("hctl").join("source.json")).unwrap();
+    // A bound Linux tombstone acknowledges the post-state with zero repeated
+    // deletions. Platforms without this proof retain their explicit refusal.
     server.send(json!({
         "jsonrpc": "2.0", "id": 5, "method": "thread/delete",
         "params": {"threadId": thread_id.clone()}
     }));
     let second = server.response(5);
-    assert_eq!(second["error"]["code"], -32035, "{second}");
-    assert!(
-        second["error"]["message"]
-            .as_str()
-            .unwrap_or_default()
-            .contains(&thread_id),
-        "the refusal must name the thread: {second}"
-    );
+    #[cfg(target_os = "linux")]
+    {
+        assert!(second.get("error").is_none(), "{second}");
+        assert_eq!(second["result"]["threadId"], thread_id);
+        assert_eq!(second["result"]["deleted"], true);
+        assert_eq!(second["result"]["deletedFiles"], 0);
+        assert!(!history.exists());
+        assert_eq!(std::fs::read(history.with_extension("hctl").join("source.json")).unwrap(), deletion_checkpoint,
+            "the idempotent acknowledgement must not rewrite the deletion witness");
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        assert_eq!(second["error"]["code"], -32035, "{second}");
+        assert!(second["error"]["message"].as_str().unwrap_or_default().contains(&thread_id),
+            "the refusal must name the thread: {second}");
+    }
 
     server
         .send(json!({"jsonrpc": "2.0", "id": 6, "method": "thread/list", "params": {"limit": 50}}));

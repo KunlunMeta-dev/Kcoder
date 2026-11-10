@@ -1,14 +1,15 @@
+mod imported_agent;
 mod plugin_prompt;
 use async_trait::async_trait;
 use kcoder_types::ContentBlock;
 use serde_json::Value;
-use thiserror::Error;
 
 pub mod agent;
 pub mod agent_fleet;
 pub mod apply_patch;
 pub mod arrangement;
 pub mod ask_user_question;
+pub mod ask_user_question_async;
 pub mod background;
 pub mod bash;
 pub mod bundled_skills;
@@ -20,24 +21,27 @@ pub mod cron;
 pub mod ctx_inspect;
 pub mod discover_skills;
 pub mod edit;
+pub mod expert_market;
 pub mod file;
 pub mod glob;
 pub mod goal;
 pub mod grep;
-pub mod image_input;
+pub use kcoder_tool_input::image_input;
 mod input_schema;
+pub mod integrations;
 pub mod local_memory_recall;
 pub mod lsp;
 pub mod memory;
 pub mod moa_plan;
 pub mod ocr;
 pub mod orchestrate;
-pub mod os_sandbox;
+pub use kcoder_shell_isolation::os_sandbox;
+pub mod context_history;
 mod peer_guidance;
 pub mod plan;
 pub mod session_inspect;
+pub use kcoder_process_supervisor::owned_process;
 pub use peer_guidance::project_builtin_peer_guidance;
-pub mod owned_process;
 mod pdf_read;
 pub mod powershell;
 mod process;
@@ -45,18 +49,27 @@ mod registry;
 pub mod repl;
 pub mod review_vote;
 mod ripgrep;
-pub mod sandbox;
-pub mod semantic_coerce;
+pub use kcoder_shell_isolation::sandbox;
+pub use kcoder_tool_input::semantic_coerce;
 pub mod send_message;
-pub mod shell_snapshot;
+pub mod shell_snapshot {
+    #[cfg(test)]
+    pub(crate) use kcoder_shell_isolation::shell_snapshot::sandbox_snapshot_source;
+    pub use kcoder_shell_isolation::shell_snapshot::{
+        SNAPSHOT_RETENTION, SNAPSHOT_TIMEOUT, ShellEnvironmentSnapshot,
+    };
+}
+pub mod show_widget;
 pub mod skill;
 pub mod skill_curator;
 pub mod skill_guard;
 pub mod skill_hub;
 pub mod skill_manage;
-pub mod skill_provenance;
-pub mod skill_telemetry;
+pub use kcoder_skill_support::{skill_provenance, skill_telemetry};
 pub mod sleep;
+pub mod tool_execute;
+pub mod tool_search;
+pub use show_widget::ShowWidgetTool;
 pub mod snip;
 pub mod specs;
 pub mod task;
@@ -67,16 +80,19 @@ pub mod user_question;
 pub mod verifier_vote;
 pub mod wait_agent;
 pub mod web_browser;
+use kcoder_document_parsers::web_content;
 pub mod web_fetch;
+pub mod web_network;
+mod web_resources;
 pub mod web_search;
 pub mod wiki;
 pub mod wiki_document;
 pub mod wiki_manage;
 #[cfg(windows)]
-mod windows_sandbox;
+use kcoder_shell_isolation::windows_sandbox;
 pub mod workflow;
 pub mod workflow_draft;
-pub mod workflow_runs;
+pub use kcoder_workflow_observations::workflow_runs;
 pub mod worktree;
 pub mod write;
 
@@ -87,6 +103,7 @@ pub use arrangement::{
     AppendNotepadTool, EditPlanTool, EditReportTool, WritePlanTool, WriteReportTool,
 };
 pub use ask_user_question::AskUserQuestionTool;
+pub use ask_user_question_async::AskUserQuestionAsyncTool;
 pub use bash::BashTool;
 pub use close_agent::CloseAgentTool;
 pub use config_tool::ConfigTool;
@@ -94,10 +111,11 @@ pub use context::{
     AgentArtifactExecution, AgentConfigurationObserver, AgentDeliveryContext, AgentError,
     AgentPersonaOptions, AgentRunOptions, AgentRunResult, AgentRunner, AgentRuntimeSelection,
     AgentToolExecution, BackgroundJobSpawner, LifecycleHookEmitter, LifecycleHookResult,
-    MAX_SUBAGENT_DEPTH, SkillGuardPolicy, SpawnError, SubagentContextMode, ToolCapabilities,
-    ToolContext, ToolContextView, VerifierRunOptions, VerifierTestOrigin,
-    VerifierWorkspaceBaseline, check_allowed_write_path,
+    MAX_SUBAGENT_DEPTH, NativeTransportAuthorization, SkillGuardPolicy, SpawnError,
+    SubagentContextMode, ToolCapabilities, ToolContext, ToolContextView, VerifierRunOptions,
+    VerifierTestOrigin, VerifierWorkspaceBaseline, check_allowed_write_path,
 };
+pub use context_history::ContextHistoryTool;
 pub use control_agent::ControlAgentTool;
 pub use cron::{CronCreateTool, CronDeleteTool, CronFire, CronListTool, CronScheduler};
 pub use ctx_inspect::CtxInspectTool;
@@ -132,7 +150,7 @@ pub use sandbox::Sandbox;
 pub use semantic_coerce::{CoercionOptions, CoercionResult};
 pub use send_message::{SendMessageTool, SubagentSteerReceipt, SubagentSteerStatus};
 pub use shell_snapshot::ShellEnvironmentSnapshot;
-pub use skill::SkillTool;
+pub use skill::{SelectedExpertSkillLoad, SkillTool};
 pub use skill_curator::SkillCuratorTool;
 pub use skill_guard::SkillGuardTool;
 pub use skill_hub::SkillHubTool;
@@ -169,24 +187,19 @@ pub use workflow_draft::WorkflowDraftTool;
 pub use worktree::{EnterWorktreeTool, ExitWorktreeTool, WorktreeCreateTool, WorktreeRemoveTool};
 pub use write::FileWriteTool;
 
-#[derive(Debug, Error)]
-pub enum ToolError {
-    #[error("input validation failed: {0}")]
-    InvalidInput(String),
-    #[error("tool execution failed: {0}")]
-    Execution(String),
-    #[error("sandbox denied: {reason}")]
-    SandboxDenied {
-        reason: String,
-        output: Option<String>,
-    },
-    #[error("tool was aborted")]
-    Aborted,
-}
+pub use kcoder_tool_error::ToolError;
 
 /// Output produced by a tool invocation.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ToolExecutionMetadata {
+    /// Native search/read observations bound to the actual dispatch identity.
+    WebSources(kcoder_types::web_sources::WebSourcesV1),
+    /// Native successful file-content read evidence, never decoded from a transcript or MCP payload.
+    FileRead(crate::file::SuccessfulFileRead),
+    /// UI-only MCP resource returned by the exact connected server, never model text.
+    McpApp(kcoder_types::mcp_apps::McpAppView),
+    /// Trusted durable presentation reference; never inferred from tool-result text.
+    Widget(kcoder_types::widgets::WidgetRef),
     /// A terminal background result returned by a trusted tool; acknowledged only after history commit.
     BackgroundResultDelivery { run: kcoder_types::BackgroundRunKey },
     /// Runtime observations loaded from the task's committed validation report.
@@ -197,7 +210,7 @@ pub enum ToolExecutionMetadata {
         signal: Option<i32>,
         cwd: std::path::PathBuf,
     },
-    /// Stable artifact identity generated by a file tool after a successful write.
+    /// Digest of raw content observed by a native file tool; this does not imply a write.
     Artifact {
         path: std::path::PathBuf,
         sha256: String,
@@ -262,6 +275,10 @@ fn artifact_freshness_report_supported(
                 })
         })
 }
+
+mod web_settings_reader;
+pub use web_settings_reader::WebSettingsReader;
+mod web_sources;
 
 impl ToolOutput {
     /// Attach only current durable observations, never model-authored report text.
@@ -389,6 +406,14 @@ pub trait Tool: Send + Sync + std::any::Any {
     /// Tool name exposed to the model. Dynamic (e.g. MCP) tools return an owned
     /// string; built-in tools usually return a static string via `.to_string()`.
     fn name(&self) -> String;
+    /// App-only tools stay registered for an authorized UI bridge, never a model request.
+    fn is_model_visible(&self) -> bool {
+        true
+    }
+    /// Only a trusted application-origin execution may use this visibility.
+    fn is_app_visible(&self) -> bool {
+        false
+    }
     /// Stable provenance for diagnostics, never an authorization grant.
     fn source(&self) -> ToolSource {
         ToolSource::Builtin
@@ -422,6 +447,11 @@ pub trait Tool: Send + Sync + std::any::Any {
         false
     }
     fn is_destructive(&self) -> bool {
+        false
+    }
+    /// A native host can require final one-call user approval for an effect.
+    /// Remote annotations and ordinary permission bypasses cannot set this flag.
+    fn requires_explicit_approval(&self) -> bool {
         false
     }
     /// Whether this invocation may run in parallel with another tool call from
@@ -476,6 +506,7 @@ pub fn arrangement_orchestrator_registry() -> ToolRegistry {
         .register(CloseAgentTool)
         .register(TodoWriteTool)
         .register(AskUserQuestionTool)
+        .register(AskUserQuestionAsyncTool)
         .register(EditPlanTool)
         .register(WriteReportTool)
         .register(EditReportTool)
@@ -483,6 +514,7 @@ pub fn arrangement_orchestrator_registry() -> ToolRegistry {
         .register(WebFetchTool)
         .register(WebSearchTool::default())
         .register(CtxInspectTool)
+        .register(ContextHistoryTool)
         .register(SkillTool)
         .register(DiscoverSkillsTool)
         .register(GetGoalTool)
@@ -514,6 +546,7 @@ pub fn orchestrate_orchestrator_registry() -> ToolRegistry {
         .register(CloseAgentTool)
         .register(TodoWriteTool)
         .register(AskUserQuestionTool)
+        .register(AskUserQuestionAsyncTool)
         .register(CreateWorkPlanTool)
         .register(EditWorkPlanTool)
         .register(AppendWorkNotepadTool)
@@ -527,6 +560,7 @@ pub fn orchestrate_orchestrator_registry() -> ToolRegistry {
         .register(WebFetchTool)
         .register(WebSearchTool::default())
         .register(CtxInspectTool)
+        .register(ContextHistoryTool)
         .register(SkillTool)
         .register(DiscoverSkillsTool)
         .register(GetGoalTool)
@@ -586,6 +620,7 @@ fn default_registry_for_platform(platform: ToolPlatform) -> ToolRegistry {
         .register(ExploreAgentTool)
         .register(SendMessageTool)
         .register(AskUserQuestionTool)
+        .register(AskUserQuestionAsyncTool)
         .register(TodoWriteTool)
         .register(TaskCreateTool)
         .register(TaskUpdateTool)
@@ -598,6 +633,7 @@ fn default_registry_for_platform(platform: ToolPlatform) -> ToolRegistry {
         .register(WebFetchTool)
         .register(WebSearchTool::default())
         .register(CtxInspectTool)
+        .register(ContextHistoryTool)
         .register(OcrReviewTool)
         .register(LocalMemoryRecallTool)
         .register(GetGoalTool)
@@ -662,6 +698,7 @@ fn core_registry_for_platform(platform: ToolPlatform) -> ToolRegistry {
 fn nano_registry_for_platform(platform: ToolPlatform) -> ToolRegistry {
     let registry = ToolRegistry::new()
         .register(CtxInspectTool)
+        .register(ContextHistoryTool)
         .register(FileReadTool)
         .register(FileWriteTool)
         .register(FileEditTool)
@@ -1258,6 +1295,7 @@ mod tests {
             "grep",
             "TodoWrite",
             "Sleep",
+            "ContextHistory",
         ] {
             assert!(registry.get(name).is_some(), "{name} should be registered");
         }
@@ -1266,7 +1304,7 @@ mod tests {
         assert!(registry.get("TaskCreate").is_none());
         assert!(registry.get("get_goal").is_none());
         assert!(registry.get("WebSearch").is_none());
-        assert!(registry.names().len() <= 10);
+        assert!(registry.names().len() <= 11);
     }
 
     #[test]
@@ -2183,4 +2221,4 @@ mod tests {
     }
 }
 
-pub mod workflow_interactions;
+pub use kcoder_workflow_observations::workflow_interactions;

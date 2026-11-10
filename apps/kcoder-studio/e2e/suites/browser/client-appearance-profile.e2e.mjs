@@ -65,7 +65,7 @@ await runE2E(import.meta.url, {
       button.style.cssText = 'position:fixed;top:50px;left:300px;z-index:2147483647';
       button.onclick = async () => {
         try {
-          await window.__TAURI_INTERNALS__.invoke('local_executor_copy_debug_info', { text: 'KCODER_OWNED_CLIPBOARD_PROBE' });
+          await window.__ELECTRON_INTERNALS__.invoke('local_executor_copy_debug_info', { text: 'KCODER_OWNED_CLIPBOARD_PROBE' });
           button.dataset.status = 'copied';
         } catch { button.dataset.status = 'failed'; }
       };

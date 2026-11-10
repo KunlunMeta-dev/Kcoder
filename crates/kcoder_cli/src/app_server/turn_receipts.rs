@@ -1,38 +1,8 @@
 //! Read-only acceptance and terminal evidence. Absence is not proof of completion.
 
-use super::{QueryEngine, TurnOutcomeArtifact, hex_sha256};
-use std::io::Read;
-
-pub(super) fn terminal_status(
-    engine: &QueryEngine,
-    thread_id: &str,
-    turn_id: &str,
-) -> Option<String> {
-    let path = engine
-        .session_storage_dir_for(thread_id)
-        .join("turn-outcomes")
-        .join(format!("{}.json", hex_sha256(turn_id.as_bytes())));
-    let directory = kcoder_config::PrivateDirectory::open_existing(path.parent()?).ok()?;
-    let mut bytes = Vec::new();
-    directory
-        .open_regular_file(path.file_name()?)
-        .ok()?
-        .take(64 * 1024 + 1)
-        .read_to_end(&mut bytes)
-        .ok()?;
-    if bytes.len() > 64 * 1024 {
-        return None;
-    }
-    let outcome: TurnOutcomeArtifact = serde_json::from_slice(&bytes).ok()?;
-    (outcome.version == 1
-        && outcome.thread_id == thread_id
-        && outcome.turn_id == turn_id
-        && matches!(
-            outcome.status.as_str(),
-            "completed" | "failed" | "interrupted"
-        ))
-    .then_some(outcome.status)
-}
+use super::QueryEngine;
+pub(super) use kcoder_turn_lifecycle::receipts::{submitted_turn_id, terminal_status};
+use kcoder_turn_lifecycle::turn_artifacts::continuation_turns_for_operation;
 
 pub(super) async fn query(
     params: serde_json::Value,
@@ -97,33 +67,15 @@ pub(super) async fn query(
             });
         }
     }
-    let root = engine.session_storage_dir_for(&params.thread_id);
-    let mut matches = Vec::new();
-    if let Some(identity) = params.client_message_id {
-        for record in
-            read_records::<super::TurnClientMessageArtifact>(&root.join("turn-client-messages"))?
-        {
-            ensure!(
-                record.version == 1 && record.thread_id == params.thread_id,
-                "invalid submission receipt identity"
-            );
-            if record.client_message_id == identity {
-                matches.push(record.turn_id);
-            }
-        }
+    let mut matches = if let Some(identity) = params.client_message_id {
+        submitted_turn_id(engine, &params.thread_id, &identity)?
+            .into_iter()
+            .collect()
     } else if let Some(identity) = params.retry_operation_id {
-        for record in
-            read_records::<super::TurnContinuationArtifact>(&root.join("turn-continuations"))?
-        {
-            ensure!(
-                record.version == 1 && record.thread_id == params.thread_id,
-                "invalid continuation receipt identity"
-            );
-            if record.retry_operation_id.as_deref() == Some(identity.as_str()) {
-                matches.push(record.turn_id);
-            }
-        }
-    }
+        continuation_turns_for_operation(engine, &params.thread_id, &identity)?
+    } else {
+        Vec::new()
+    };
     // An explicit re-submission may deliberately reuse a client id. Do not choose an arbitrary attempt.
     ensure!(
         matches.len() <= 1,
@@ -142,6 +94,13 @@ pub(super) async fn query(
     } else {
         false
     };
+    let attempts: Vec<_> = super::turn_attempts::records(engine, &params.thread_id)?
+        .into_iter()
+        .filter(|record| record.identity.turn_id == turn_id)
+        .collect();
+    // A client-message receipt can identify an attempt only if it is unique.
+    // Legacy sessions and continuation trees retain the old optional contract.
+    let attempt_id = (attempts.len() == 1).then(|| attempts[0].identity.attempt_id.clone());
     let status = if running {
         TurnReceiptStatus::Running
     } else {
@@ -157,52 +116,7 @@ pub(super) async fn query(
             thread_id: params.thread_id,
             turn_id,
             status,
-            attempt_id: None,
+            attempt_id,
         }),
     })
-}
-
-pub(super) fn read_records<T: serde::de::DeserializeOwned>(
-    directory: &std::path::Path,
-) -> anyhow::Result<Vec<T>> {
-    use anyhow::{Context, ensure};
-    match std::fs::symlink_metadata(directory) {
-        Ok(metadata) => ensure!(
-            metadata.file_type().is_dir(),
-            "invalid acceptance receipt directory"
-        ),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
-        Err(error) => return Err(error).context("cannot inspect acceptance receipt directory"),
-    }
-    let entries = match std::fs::read_dir(directory) {
-        Ok(entries) => entries,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
-        Err(error) => return Err(error).context("cannot read acceptance receipts"),
-    };
-    let handle = kcoder_config::PrivateDirectory::open_existing(directory)?;
-    let mut records = Vec::new();
-    let mut total_bytes = 0usize;
-    for (index, entry) in entries.enumerate() {
-        ensure!(index < 10_000, "acceptance receipt lookup limit exceeded");
-        let path = entry?.path();
-        if path.extension().and_then(|extension| extension.to_str()) != Some("json") {
-            continue;
-        }
-        let mut bytes = Vec::new();
-        handle
-            .open_regular_file(path.file_name().context("missing receipt filename")?)?
-            .take(64 * 1024 + 1)
-            .read_to_end(&mut bytes)?;
-        ensure!(
-            bytes.len() <= 64 * 1024,
-            "acceptance receipt exceeds size limit"
-        );
-        total_bytes = total_bytes.saturating_add(bytes.len());
-        ensure!(
-            total_bytes <= 64 * 1024 * 1024,
-            "acceptance receipt collection exceeds size limit"
-        );
-        records.push(serde_json::from_slice(&bytes).context("cannot decode acceptance receipt")?);
-    }
-    Ok(records)
 }

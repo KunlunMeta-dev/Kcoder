@@ -29,6 +29,33 @@ describe('WorkbenchSearchDialog', () => {
     vi.useRealTimers()
   })
 
+  test('shows recent unassigned history without a query and opens its original directory', async () => {
+    const item = { ...searchItem('Old conversation', 'Old conversation'), unassignedProject: true, workspacePath: '/retired/workspace',
+      address: { deviceId: 'device-1', taskId: 'old', workspacePath: '/retired/workspace' } }
+    const onSearch = vi.fn().mockResolvedValue({ items: [item] })
+    const onOpen = vi.fn()
+    render(<WorkbenchSearchDialog open onClose={vi.fn()} onSearchRuntimeWork={onSearch} onOpenRuntimeTask={onOpen} />)
+    expect(await screen.findByText('Old conversation', { selector: '.font-medium' })).toBeInTheDocument()
+    expect(onSearch).toHaveBeenCalledWith({ query: '', limit: 20 })
+    expect(screen.getByTestId('workbench-search-result-0')).toHaveTextContent('/retired/workspace')
+    fireEvent.click(screen.getByTestId('workbench-search-result-0'))
+    expect(onOpen).toHaveBeenCalledWith(item.address)
+  })
+
+  test('does not reuse a previous Gateway reader\'s cached results after the reader changes', async () => {
+    const oldReader = vi.fn().mockResolvedValue({ items: [searchItem('First Gateway', 'result')] })
+    let settle!: (value: { items: ReturnType<typeof searchItem>[] }) => void
+    const newReader = vi.fn(() => new Promise<{ items: ReturnType<typeof searchItem>[] }>(resolve => { settle = resolve }))
+    const props = { open: true, onClose: vi.fn(), onOpenRuntimeTask: vi.fn() }
+    const view = render(<WorkbenchSearchDialog {...props} onSearchRuntimeWork={oldReader} />)
+    await screen.findByText('First Gateway')
+    view.rerender(<WorkbenchSearchDialog {...props} onSearchRuntimeWork={newReader} />)
+    expect(screen.queryByText('First Gateway')).not.toBeInTheDocument()
+    await waitFor(() => expect(newReader).toHaveBeenCalled())
+    await act(async () => { settle({ items: [searchItem('Second Gateway', 'result')] }) })
+    expect(await screen.findByText('Second Gateway')).toBeInTheDocument()
+  })
+
   test('searches transcripts and opens a runtime task result', async () => {
     const user = userEvent.setup()
     const onSearchRuntimeWork = vi.fn().mockResolvedValue({
@@ -73,7 +100,7 @@ describe('WorkbenchSearchDialog', () => {
       '请执行 pwd 并返回结果'
     )
     expect(screen.getByTestId('workbench-search-result-0')).not.toHaveTextContent('⌘1')
-    expect(onSearchRuntimeWork).toHaveBeenCalledWith({ query: 'pwd', limit: 20 })
+    await waitFor(() => expect(onSearchRuntimeWork).toHaveBeenCalledWith({ query: 'pwd', limit: 20 }))
 
     await user.click(screen.getByTestId('workbench-search-result-0'))
 

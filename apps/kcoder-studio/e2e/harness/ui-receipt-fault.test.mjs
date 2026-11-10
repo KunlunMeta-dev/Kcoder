@@ -80,3 +80,16 @@ test("file-kind fault holds only a genuine owned A parent-directory lookup", () 
   );
   assert.equal(uiReceiptMatches("file-kind", { stdout: "{broken" }), false);
 });
+test("source fault holds only a completed typed snapshot for the exact armed thread", () => {
+  const snapshot = { threadId: "owned-original", revision: 2,
+    selection: { mode: "none", sources: [] }, effectiveSources: [], effectiveFrom: "current_snapshot" };
+  const reply = { status: "completed", error: null, result: snapshot };
+  const plan = { threadId: "owned-original" };
+  assert.equal(uiReceiptMatches("task-source-current", reply, plan), true);
+  assert.equal(uiReceiptMatches("task-source-current", reply), false);
+  assert.equal(uiReceiptMatches("task-source-current", reply, { threadId: "peer" }), false);
+  assert.equal(uiReceiptMatches("task-source-current", { ...reply, status: "rejected" }, plan), false);
+  assert.equal(uiReceiptMatches("task-source-current", { ...reply, result: { snapshot } }, plan), false);
+  assert.equal(uiReceiptMatches("task-source-current", { ...reply, result: { ...snapshot, revision: "2" } }, plan), false);
+  assert.equal(uiReceiptMatches("task-source-current", { ...reply, result: { ...snapshot, grant: true } }, plan), false);
+});

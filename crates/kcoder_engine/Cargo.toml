@@ -7,12 +7,16 @@ license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 
+[features]
+web-network-test-fixture = ["kcoder_tools/web-network-test-fixture"]
+
 [dependencies]
 kcoder_types = { path = "../kcoder_types" }
 kcoder_state = { path = "../kcoder_state" }
 kcoder_api = { path = "../kcoder_api" }
 kcoder_config = { path = "../kcoder_config" }
 kcoder_tools = { path = "../kcoder_tools" }
+kcoder_workflow = { path = "../kcoder_workflow" }
 kcoder_permissions = { path = "../kcoder_permissions" }
 kcoder_memory = { path = "../kcoder_memory" }
 kcoder_skills = { path = "../kcoder_skills" }
@@ -26,16 +30,19 @@ tokio = { workspace = true }
 tokio-util = { workspace = true }
 tracing = { workspace = true }
 futures = { workspace = true }
+futures-timer = "3.0.4"
 async-stream = { workspace = true }
 async-trait = { workspace = true }
 chrono = { workspace = true }
 sha2 = { workspace = true }
+base64 = "0.22"
 url = { workspace = true }
 dunce = { workspace = true }
 tempfile = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]
-kcoder_workflow = { path = "../kcoder_workflow" }
+kcoder_api = { path = "../kcoder_api", features = ["token-count-test-hooks"] }
+kcoder_config = { path = "../kcoder_config", features = ["provider-test-fixtures"] }
 libc = { workspace = true }
 syn = { version = "2", features = ["full", "parsing", "visit"] }

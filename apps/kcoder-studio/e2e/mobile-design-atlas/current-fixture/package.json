@@ -1,0 +1,6 @@
+{
+  "name": "kcoder-mobile-send-recovery-fixture",
+  "private": true,
+  "main": "index.tsx",
+  "dependencies": { "expo": "^54.0.18", "react": "19.1.0", "react-dom": "19.1.0", "react-native": "0.81.5", "react-native-web": "~0.21.0" }
+}

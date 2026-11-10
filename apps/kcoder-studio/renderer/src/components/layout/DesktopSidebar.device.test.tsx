@@ -5,7 +5,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import {
   cloudWorkStatus,
-  enableTauri,
+  enableGateway,
   localDevice,
   renderSidebar,
 } from './sidebar/DesktopSidebar.test-support'
@@ -20,7 +20,7 @@ describe('DesktopSidebar device', () => {
   beforeEach(() => {
     experimentalFeatures.enabled = true
     localStorage.clear()
-    enableTauri()
+    enableGateway()
     Element.prototype.scrollIntoView = vi.fn()
     vi.mocked(openLocalWorkspace).mockReset()
   })

@@ -23,15 +23,15 @@ const execFileAsync = promisify(execFile);
 const TEST_ID = "mobile-web-export-current-head-1028b995-20261009";
 const EXPECTED_HEAD = "9fe48fb139c2582e9a1f414f8212417ffb19c050";
 const SOURCE_SCOPE_BASE_COMMIT = "1028b99573043940828e7e4019f6f4d617e673ac";
-const BASE_ROOT = "/data1/hyf/20260822_agent/Kunlun-Code-CYX/target/phone-ux-upstream-integration-20261008/target/private-phone-latency-implementation/current-mobile-default-catalog-parallel-20261009-090018";
+const BASE_ROOT = "/data1/hyf/20260822_agent/Kunlun-Code-CYX/target/worktree/2026/10/08/phone-ux-upstream-integration-20261008/target/private-phone-latency-implementation/current-mobile-default-catalog-parallel-20261009-090018";
 const BASE_SOURCE_DIGEST = "649a35cd63b42a43bb2cba9e74fdc2ba9e1586090f56507a0f4dd3cc4ad6667f";
 const BASE_MANIFEST_SHA256 = "d3f7b230cd925035f3905fb67c8050964fc38bc6b5cf50965da5a52776e19ef8";
 const BASE_FILE_COUNT = 339;
-const CANDIDATE_ROOT = "/data1/hyf/20260822_agent/Kunlun-Code-CYX/target/phone-ux-upstream-integration-20261008/target/private-phone-latency-implementation/current-mobile-head-1028b995-20261009";
+const CANDIDATE_ROOT = "/data1/hyf/20260822_agent/Kunlun-Code-CYX/target/worktree/2026/10/08/phone-ux-upstream-integration-20261008/target/private-phone-latency-implementation/current-mobile-head-1028b995-20261009";
 const CANDIDATE_SOURCE_ROOT = resolve(CANDIDATE_ROOT, "source");
 const CANDIDATE_SOURCE_DIGEST = "566cbcc13b8715550cb9cc85b679bde2331081bfa435261decc1430ae0cbab19";
 const CANDIDATE_FILE_COUNT = 354;
-const CANDIDATE_ROOTS = [{"name":"mobile","destination":"apps/kcoder-studio/mobile","path":"/data1/hyf/20260822_agent/Kunlun-Code-CYX/target/phone-ux-upstream-integration-20261008/apps/kcoder-studio/mobile","fileCount":335,"sha256":"9855b2787a5a18fb6dec2d19cbb94aac17b66e4fa15af6663c793eeaa89cd27f"},{"name":"studio-shared","destination":"apps/kcoder-studio/shared","path":"/data1/hyf/20260822_agent/Kunlun-Code-CYX/target/phone-ux-upstream-integration-20261008/apps/kcoder-studio/shared","fileCount":19,"sha256":"5443f5e695e75b82a1365baf90a3c280239bead8855647becfa2c9d67e91fe88"}];
+const CANDIDATE_ROOTS = [{"name":"mobile","destination":"apps/kcoder-studio/mobile","path":"/data1/hyf/20260822_agent/Kunlun-Code-CYX/target/worktree/2026/10/08/phone-ux-upstream-integration-20261008/apps/kcoder-studio/mobile","fileCount":335,"sha256":"9855b2787a5a18fb6dec2d19cbb94aac17b66e4fa15af6663c793eeaa89cd27f"},{"name":"studio-shared","destination":"apps/kcoder-studio/shared","path":"/data1/hyf/20260822_agent/Kunlun-Code-CYX/target/worktree/2026/10/08/phone-ux-upstream-integration-20261008/apps/kcoder-studio/shared","fileCount":19,"sha256":"5443f5e695e75b82a1365baf90a3c280239bead8855647becfa2c9d67e91fe88"}];
 const EXPECTED_ADDED = ["apps/kcoder-studio/mobile/scripts/export-gateway-web.mjs","apps/kcoder-studio/mobile/src/features/task/useRetainedAttachmentOutbox.ts","apps/kcoder-studio/mobile/src/features/task/useTaskAttachments.retained-outbox.test.tsx","apps/kcoder-studio/mobile/src/protocol/attachment-retention.test.ts","apps/kcoder-studio/mobile/src/protocol/attachment-retention.ts","apps/kcoder-studio/mobile/src/protocol/fixtures/retention-upload-v1-contract.json","apps/kcoder-studio/mobile/src/protocol/sha256-stream.ts","apps/kcoder-studio/mobile/src/storage/retained-attachment-upload.test.ts","apps/kcoder-studio/mobile/src/storage/retained-attachment-upload.ts","apps/kcoder-studio/mobile/src/storage/staged-attachment-bytes.native.ts","apps/kcoder-studio/mobile/src/storage/staged-attachment-bytes.ts","apps/kcoder-studio/mobile/src/storage/staged-attachment-bytes.web.ts","apps/kcoder-studio/mobile/src/storage/staged-attachment-consumers.test.ts","apps/kcoder-studio/mobile/src/storage/staged-attachment-consumers.ts","apps/kcoder-studio/mobile/src/storage/staged-attachment-store.ts"];
 const EXPECTED_CHANGED = ["apps/kcoder-studio/mobile/README.md","apps/kcoder-studio/mobile/app.config.ts","apps/kcoder-studio/mobile/package.json","apps/kcoder-studio/mobile/src/app/connect.tsx","apps/kcoder-studio/mobile/src/app/welcome.tsx","apps/kcoder-studio/mobile/src/features/task/TaskComposer.tsx","apps/kcoder-studio/mobile/src/features/task/useTaskAttachments.ts","apps/kcoder-studio/mobile/src/gateway/rpc.ts"];
 const EXPECTED_REMOVED = [];
@@ -51,7 +51,7 @@ const HELPER_PINS = new Map([
   ["apps/kcoder-studio/e2e/harness/retention.mjs", "9df5193dc1f4bd5565731cf92d0154bb8f3993e8d3c7c3d98f530c8738716532"],
   ["apps/kcoder-studio/e2e/harness/owned-process.mjs", "40a230721ead1ff78877c1b2815aafd220279bccd43d15d78303f30a59cb78af"],
 ]);
-const OUTPUT_ROOT = "/data1/hyf/20260822_agent/Kunlun-Code-CYX/target/phone-ux-upstream-integration-20261008/target/private-phone-ux-implementation/mobile-web-export-current-head-1028b995-20261009";
+const OUTPUT_ROOT = "/data1/hyf/20260822_agent/Kunlun-Code-CYX/target/worktree/2026/10/08/phone-ux-upstream-integration-20261008/target/private-phone-ux-implementation/mobile-web-export-current-head-1028b995-20261009";
 const OUTPUT_MANIFEST = `${OUTPUT_ROOT}-manifest.json`;
 const OUTPUT_PROVENANCE = `${OUTPUT_ROOT}-provenance.json`;
 const SOURCE_OMIT_DIRS = new Set([".expo", ".git", "dist", "node_modules"]);

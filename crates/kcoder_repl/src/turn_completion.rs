@@ -3,6 +3,8 @@ use crate::events::{AppEvent, AppEventSender};
 pub(crate) struct TurnCompletionGuard {
     tx: AppEventSender,
     completed: bool,
+    steering: Option<kcoder_engine::TurnSteerSettlement>,
+    unapplied_steers: Vec<u64>,
 }
 
 impl TurnCompletionGuard {
@@ -10,6 +12,29 @@ impl TurnCompletionGuard {
         Self {
             tx,
             completed: false,
+            steering: None,
+            unapplied_steers: Vec::new(),
+        }
+    }
+
+    pub(crate) fn set_steering(&mut self, steering: Option<kcoder_engine::TurnSteerSettlement>) {
+        self.steering = steering;
+    }
+
+    pub(crate) fn close_steering(&mut self) {
+        if let Some(steering) = &self.steering {
+            self.unapplied_steers.extend(steering.close());
+        }
+    }
+
+    fn finished_event(&mut self) -> AppEvent {
+        self.close_steering();
+        if self.steering.take().is_some() {
+            AppEvent::TurnFinishedWithSteering {
+                unapplied_steers: std::mem::take(&mut self.unapplied_steers),
+            }
+        } else {
+            AppEvent::TurnFinished
         }
     }
 
@@ -17,7 +42,8 @@ impl TurnCompletionGuard {
         if self.completed {
             return;
         }
-        let _ = self.tx.send(AppEvent::TurnFinished);
+        let event = self.finished_event();
+        let _ = self.tx.send(event);
         self.completed = true;
     }
 
@@ -25,7 +51,8 @@ impl TurnCompletionGuard {
         if self.completed {
             return;
         }
-        let _ = self.tx.send_ordered(AppEvent::TurnFinished).await;
+        let event = self.finished_event();
+        let _ = self.tx.send_ordered(event).await;
         self.completed = true;
     }
 }
@@ -52,6 +79,18 @@ mod tests {
         }
 
         assert!(matches!(rx.try_recv(), Ok(AppEvent::TurnFinished)));
+    }
+
+    #[tokio::test]
+    async fn dropped_turn_terminal_event_precedes_a_new_turn_after_backpressure() {
+        let (raw_tx, mut rx) = mpsc::channel(1);
+        raw_tx.send(AppEvent::FrameTick).await.unwrap();
+        let tx = AppEventSender::new(raw_tx);
+        drop(TurnCompletionGuard::new(tx.clone()));
+        assert!(matches!(rx.recv().await, Some(AppEvent::FrameTick)));
+        assert!(tx.send(AppEvent::TurnStarted));
+        assert!(matches!(rx.recv().await, Some(AppEvent::TurnFinished)));
+        assert!(matches!(rx.recv().await, Some(AppEvent::TurnStarted)));
     }
 
     #[tokio::test]

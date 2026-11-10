@@ -105,7 +105,7 @@ await runE2E(import.meta.url, {
   const row = id => page.getByTestId(`session-${id}`);
   let stage = "mobile-connect";
   const renameA = async title => {
-    await page.getByTestId(`session-actions-${ids[0]}`).click();
+    await page.getByTestId(`session-${ids[0]}`).click({ delay: 650 });
     await page.getByTestId("thread-rename-input").fill(title);
     await page.getByTestId("thread-rename-save").click();
     await waitFor(async () => (await row(ids[0]).innerText()).includes(title), 10000, "Mobile rename ACK");

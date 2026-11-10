@@ -43,9 +43,18 @@ export async function verifyComputerUseRuntime(source,expectedHash){
   if(manifest.inputTrackingVersion!==1)throw new Error('Unsupported desktop input tracking protocol; update bundled component');
   if(manifest.clipboardRecoveryVersion!==1)throw new Error('Unsupported desktop clipboard recovery protocol; update bundled component');
   if(manifest.clearTextVersion!==1)throw new Error('Unsupported verified text clearing; update bundled component');
+  if(manifest.bytecodePolicyVersion!==1)throw new Error('Unsupported Python bytecode startup policy; rebuild bundled component');
+  if(manifest.screenshotFrameVersion!==1)throw new Error('Unsupported desktop screenshot frame policy; rebuild bundled component');
   const python=manifest.python?.replaceAll('\\','/');
   if(manifest.schemaVersion!==1||!/^3\.14\.\d+$/.test(manifest.pythonVersion??'')||!validPath(python)||!python.startsWith('runtime/')||!python.endsWith('/python.exe'))throw new Error('Invalid runtime interpreter');
   for(const name of [python,'launch.py','worker.toml','runtime-manifest.json','source/src/windows_mcp/kcoder_clipboard.py','source/src/windows_mcp/kcoder_clipboard_guard.py','source/src/windows_mcp/kcoder_clear.py'])if(!actual.has(name))throw new Error(`Missing runtime resource: ${name}`);
+  const interpreterDirectory=dirname(python).replaceAll('\\','/');
+  if(!actual.has('source/src/windows_mcp/kcoder_screenshot_frame.py'))throw new Error('Missing desktop screenshot frame resource');
+  for(const leaf of ['kcoder-bootstrap.zip','python314._pth','python._pth']){
+    const name=`${interpreterDirectory}/${leaf}`;
+    if(!actual.has(name))throw new Error(`Missing Python startup policy resource: ${name}`);
+    if(leaf.endsWith('._pth') && await readFile(join(source,name),'utf8')!=='kcoder-bootstrap.zip\nLib\nDLLs\n.\nimport site\n')throw new Error('Invalid Python startup search path policy');
+  }
   return {files:entries.length,bytes:total,pythonVersion:manifest.pythonVersion,status:manifest.status};
 }
 export async function stageComputerUseRuntime({source,destination,expectedHash,allowPrototype=false}){

@@ -40,7 +40,7 @@ test('preserves model colors and absolute heights and filters models', () => {
   const chart = screen.getByTestId('usage-trend')
   const bar = chart.querySelector('[data-date="2026-09-19"]')!
   const segment = bar.querySelector('[data-series="beta"]')!
-  expect(segment).toHaveClass('bg-violet-500')
+  expect(segment).toHaveClass('bg-violet-500/60')
   expect(segment).toHaveStyle({ height: '50%' })
   const legend = screen.getByTestId('usage-trend-legend')
   fireEvent.click(within(legend).getByRole('button', { name: 'alpha' }))

@@ -55,7 +55,7 @@ export function desktopIconPaths(platform = process.platform, resourcesPath = pr
   // Electron Builder excludes ICO files from asar; Windows ships this real shell resource.
   const shellIcon = platform === 'win32' && resourcesPath ? join(resourcesPath, 'shell', 'icon.ico') : null;
   if (shellIcon && existsSync(shellIcon)) return { window: shellIcon, tray: shellIcon };
-  const asset = name => fileURLToPath(new URL(`../renderer/src-tauri/icons/${name}`, import.meta.url));
+  const asset = name => fileURLToPath(new URL(`./icons/${name}`, import.meta.url));
   return {
     window: asset(platform === 'win32' ? 'icon.ico' : '128x128.png'),
     tray: asset(platform === 'win32' ? 'icon.ico' : '32x32.png'),

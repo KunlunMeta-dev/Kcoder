@@ -14,8 +14,12 @@ import type {
   SelectHTMLAttributes,
 } from 'react'
 
+// The dialog shell tracks the shared `PageContent` column plus its `4rem` padding
+// and the `2px` ring: `62.4rem` is the former `48rem` column widened by 30%.
+const SETTINGS_DIALOG_WIDTH_CLASS = 'max-w-[calc(var(--studio-page-column-width)+4rem+2px)]'
+
 export function SettingsPage({ className, ...props }: PageContentProps) {
-  return <PageContent className={clsx('pb-10', className)} {...props} />
+  return <PageContent className={clsx('studio-settings-page pb-10', className)} {...props} />
 }
 
 export function SettingsDialog({
@@ -30,7 +34,7 @@ export function SettingsDialog({
       testId={testId}
       wide
       className={clsx(
-        'max-w-[calc(48rem+4rem+2px)] px-8 max-md:px-4 [&>div>h2]:heading-base',
+        `${SETTINGS_DIALOG_WIDTH_CLASS} px-8 max-md:px-4 [&>div>h2]:heading-base`,
         className
       )}
     >
@@ -74,7 +78,7 @@ export function SettingsPageHeader({
 export function SettingsGroup({ className = '', ...props }: HTMLAttributes<HTMLDivElement>) {
   return (
     <div
-      className={`flex flex-col overflow-hidden rounded-2xl border border-border/60 bg-surface/30 [&>*:not(:last-child)]:relative [&>*:not(:last-child)]:after:pointer-events-none [&>*:not(:last-child)]:after:absolute [&>*:not(:last-child)]:after:inset-x-4 [&>*:not(:last-child)]:after:bottom-0 [&>*:not(:last-child)]:after:h-px [&>*:not(:last-child)]:after:bg-border [&>*:not(:last-child)]:after:content-[''] ${className}`.trim()}
+      className={`studio-card flex flex-col overflow-hidden rounded-2xl border border-border/60 bg-surface/30 [&>*:not(:last-child)]:relative [&>*:not(:last-child)]:after:pointer-events-none [&>*:not(:last-child)]:after:absolute [&>*:not(:last-child)]:after:inset-x-5 [&>*:not(:last-child)]:after:bottom-0 [&>*:not(:last-child)]:after:h-px [&>*:not(:last-child)]:after:bg-border [&>*:not(:last-child)]:after:content-[''] ${className}`.trim()}
       {...props}
     />
   )
@@ -97,7 +101,7 @@ export function SettingsRow({
 }: SettingsRowProps) {
   return (
     <div
-      className={`flex items-center justify-between gap-6 px-4 py-4 transition-colors focus-within:bg-background/60 hover:bg-background/40 max-sm:flex-col max-sm:items-stretch max-sm:gap-3 ${className}`.trim()}
+      className={`studio-card-inset flex items-center justify-between gap-6 transition-colors focus-within:bg-background/60 hover:bg-background/40 max-sm:flex-col max-sm:items-stretch max-sm:gap-3 ${className}`.trim()}
       {...props}
     >
       <div className="flex min-w-0 flex-1 flex-col gap-1">
@@ -358,6 +362,22 @@ export function StatusChip({
   )
 }
 
+/** One icon geometry for settings section headers and their rows. */
+export function SettingsIcon({ children, className, ...props }: HTMLAttributes<HTMLSpanElement>) {
+  return (
+    <span
+      aria-hidden="true"
+      className={clsx(
+        'flex size-10 shrink-0 items-center justify-center rounded-xl border border-border/60 bg-background text-text-secondary shadow-sm [&>svg]:size-4',
+        className
+      )}
+      {...props}
+    >
+      {children}
+    </span>
+  )
+}
+
 interface SectionHeaderProps extends Omit<HTMLAttributes<HTMLDivElement>, 'title'> {
   icon?: ReactNode
   title: ReactNode
@@ -372,15 +392,8 @@ export function SectionHeader({
   ...props
 }: SectionHeaderProps) {
   return (
-    <div className={clsx('flex items-start gap-3', className)} {...props}>
-      {icon && (
-        <span
-          aria-hidden="true"
-          className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-border/60 bg-background text-text-secondary shadow-sm [&>svg]:h-4 [&>svg]:w-4"
-        >
-          {icon}
-        </span>
-      )}
+    <div className={clsx('flex items-center gap-3', className)} {...props}>
+      {icon && <SettingsIcon>{icon}</SettingsIcon>}
       <div className="min-w-0">
         <h2 className="heading-sm tracking-normal text-text-primary">{title}</h2>
         {description && <p className="mt-0.5 text-sm text-text-secondary">{description}</p>}

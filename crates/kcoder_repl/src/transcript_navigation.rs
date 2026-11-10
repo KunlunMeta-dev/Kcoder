@@ -186,7 +186,7 @@ impl ReplApp {
                 || layout.entry != meta.id
                 || layout.prefix_revision != meta.prefix_revision
                 || layout.width != width
-                || (!self.is_loading && layout.source_bytes != self.messages[index].text.len())
+                || (!self.is_loading && layout.source_bytes != self.messages.source_text_len(index))
                 || layout.height != height
                 || layout.markdown != self.render_markdown
                 || layout.theme != self.code_theme
@@ -242,7 +242,7 @@ impl ReplApp {
                 self.transcript_row_index
                     .correct_message_rows(neighbor, rows);
             }
-            if layout.source_bytes == self.messages[index].text.len() {
+            if layout.source_bytes == self.messages.source_text_len(index) {
                 self.transcript_row_index
                     .correct_message_rows(index, layout.window.total_rows);
             }
@@ -273,7 +273,7 @@ impl ReplApp {
                 self.navigation.requested = Some(MessageSourceTarget::VisualRow(usize::MAX));
                 self.navigation.settle_delta = Some(-((prefix - top) as isize).saturating_sub(1));
             } else if message_row >= layout.window.total_rows
-                && layout.source_bytes == self.messages[index].text.len()
+                && layout.source_bytes == self.messages.source_text_len(index)
                 && index + 1 < self.messages.len()
             {
                 self.navigation.anchor = Some(TranscriptAnchor {
@@ -294,7 +294,8 @@ impl ReplApp {
                     + layout.following.len();
                 let covered = top >= window_origin
                     && local_top + height.min(total.saturating_sub(top)) <= available;
-                let inside_known_prefix = layout.source_bytes == self.messages[index].text.len()
+                let inside_known_prefix = layout.source_bytes
+                    == self.messages.source_text_len(index)
                     || message_row + height <= layout.window.total_rows;
                 if covered && inside_known_prefix {
                     let mut lines = if include_welcome {
@@ -341,7 +342,10 @@ impl ReplApp {
         {
             let (job_index, _) = self.messages.resolve_anchor(self.navigation.anchor?)?;
             let job_meta = self.messages.identity(job_index)?;
-            let message = self.messages[job_index].clone();
+            let raw_message = &self.messages[job_index];
+            let message = self
+                .resolve_native_web_source(raw_message, self.effective_tool_transcript_expanded())
+                .unwrap_or_else(|| raw_message.clone());
             let store_len = self.messages.len();
             let neighbor_versions = (job_index.saturating_sub(24)
                 ..self.messages.len().min(job_index + 25))
@@ -363,7 +367,16 @@ impl ReplApp {
                     preceding_bytes += message.text.len();
                     preceding_bytes <= 1024 * 1024
                 })
-                .map(|(index, message)| (index, message.clone()))
+                .map(|(index, message)| {
+                    (
+                        index,
+                        self.resolve_native_web_source(
+                            message,
+                            self.effective_tool_transcript_expanded(),
+                        )
+                        .unwrap_or_else(|| message.clone()),
+                    )
+                })
                 .collect::<Vec<_>>();
             // Copy only neighboring messages with body size bounded by the work budget; never copy the entire session.
             let mut follow_bytes = 0usize;
@@ -376,7 +389,13 @@ impl ReplApp {
                     follow_bytes += message.text.len();
                     follow_bytes <= 1024 * 1024
                 })
-                .cloned()
+                .map(|message| {
+                    self.resolve_native_web_source(
+                        message,
+                        self.effective_tool_transcript_expanded(),
+                    )
+                    .unwrap_or_else(|| message.clone())
+                })
                 .collect::<Vec<_>>();
             let theme = self.code_theme.clone();
             let markdown = self.render_markdown;
@@ -983,7 +1002,12 @@ impl ReplApp {
         let block = Block::default()
             .borders(Borders::ALL)
             .title("History · F8 outline · Esc close");
-        let inner = block.inner(area);
+        let mut inner = block.inner(area);
+        let return_button = self.can_return_to_bottom() && inner.height > 1;
+        let button_area = Rect::new(inner.x, inner.bottom().saturating_sub(1), inner.width, 1);
+        if return_button {
+            inner.height = inner.height.saturating_sub(1);
+        }
         self.transcript_viewport.begin_frame(inner);
         let render = self.render_navigation_window(inner.width, inner.height as usize);
         frame.render_widget(ratatui::widgets::Clear, area);
@@ -1000,6 +1024,9 @@ impl ReplApp {
             );
         } else {
             frame.render_widget(Paragraph::new("Locating…"), inner);
+        }
+        if return_button {
+            self.draw_scroll_to_bottom(frame, button_area);
         }
     }
 

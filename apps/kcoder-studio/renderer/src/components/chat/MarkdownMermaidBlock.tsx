@@ -31,7 +31,7 @@ export function MarkdownMermaidBlock({ chart, compact = false }: MarkdownMermaid
   )
 }
 
-function MermaidErrorFallback({ chart, error }: MermaidErrorComponentProps) {
+export function MermaidErrorFallback({ chart, error }: MermaidErrorComponentProps) {
   return (
     <div
       data-testid="markdown-mermaid-error"

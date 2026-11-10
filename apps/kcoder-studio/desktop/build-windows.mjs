@@ -1,32 +1,42 @@
+import { stageNativeWindowsComponentImage } from './native-component-image.mjs';
 import { execFileSync, spawn } from "node:child_process";
 import { createRequire } from "node:module";
 import { copyFile, mkdir, open } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { stageComputerUseRuntime } from "../../../scripts/release/stage-computer-use.mjs";
+import { stageComputerUseRuntime, verifyComputerUseRuntime } from "../../../scripts/release/stage-computer-use.mjs";
 import { stageDesktopResources } from "./stage-desktop-resources.mjs";
 import releaseArtifactHook from "./release-artifact-hook.mjs";
+import { loadWindowsSigningConfiguration, runWithWindowsSigning, verifyWindowsSigningTool } from "../../../scripts/release/windows-signing-config.mjs";
+import { checkClientVersion } from "../../../scripts/release/client-version.mjs";
 
 const studioRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const repoRoot = resolve(studioRoot, "../..");
 
-export function windowsPackConfig(stage = stageDesktopResources, audit = releaseArtifactHook, env = process.env) {
+export function windowsComputerUseInputs(env = process.env) {
+  if (!/^[a-f0-9]{64}$/.test(env.KCODER_COMPUTER_USE_INVENTORY_SHA256 ?? "")) {
+    throw new Error("Full Windows installers require Computer Use resources: prepare them with scripts/computer-use/build-runtime.ps1 and set KCODER_COMPUTER_USE_INVENTORY_SHA256 to the trusted files.sha256.json digest");
+  }
+  return {
+    source: resolve(repoRoot, env.KCODER_COMPUTER_USE_RUNTIME || "target/packages/kcoder-studio/windows-input/computer-use"),
+    expectedHash: env.KCODER_COMPUTER_USE_INVENTORY_SHA256,
+    // Evaluation builds must still explicitly acknowledge prototype resources.
+    allowPrototype: env.KCODER_COMPUTER_USE_ALLOW_PROTOTYPE === "1",
+  };
+}
+
+export function windowsPackConfig(stage = stageDesktopResources, audit = releaseArtifactHook, env = process.env, nativeImagePin, stageComputerUse = stageComputerUseRuntime) {
+  const computerUse = windowsComputerUseInputs(env);
   return {
     // The external Gateway ships portable dependencies; Electron uses built-ins only.
     npmRebuild: false,
+    ...(nativeImagePin ? {extraMetadata:{nativeWindowsComponentImage:nativeImagePin}} : {}),
     directories: { output: resolve(repoRoot, "target/packages/kcoder-studio/windows") },
     beforePack: async context => { await stage(context); },
     afterPack: async context => {
-      if (env.KCODER_COMPUTER_USE_RUNTIME) {
-        await stageComputerUseRuntime({
-          source: resolve(env.KCODER_COMPUTER_USE_RUNTIME),
-          destination: resolve(context.appOutDir, "resources/computer-use"),
-          expectedHash: env.KCODER_COMPUTER_USE_INVENTORY_SHA256,
-          // Explicit opt-in for user-requested evaluation builds; preserve the
-          // component's prototype status rather than claiming release readiness.
-          allowPrototype: env.KCODER_COMPUTER_USE_ALLOW_PROTOTYPE === "1",
-        });
-      }
+      await stageComputerUse({ ...computerUse,
+        destination: resolve(context.appOutDir, "resources/computer-use"),
+      });
       return audit(context);
     },
   };
@@ -88,14 +98,14 @@ export function windowsBuildEnv(env = {}, probe = null) {
     ...env,
     KCODER_BUILD_COMMIT: commit,
     KCODER_BUILD_DIRTY: dirty ? "true" : "false",
-    KCODER_BUILD_TIME_UNIX: env.KCODER_BUILD_TIME_UNIX || String(Math.floor(Date.now() / 1000)),
+    KCODER_BUILD_TIME_UNIX: env.KCODER_BUILD_TIME_UNIX || env.SOURCE_DATE_EPOCH || "0",
   };
 }
 
 export function probeGitIdentity(repoRoot) {
   const run = args => {
     try {
-      return execFileSync("git", args, { cwd: repoRoot, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+      return execFileSync("git", args, { cwd: repoRoot, env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" }, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
     } catch { return ""; }
   };
   const commit = run(["rev-parse", "HEAD"]);
@@ -104,8 +114,18 @@ export function probeGitIdentity(repoRoot) {
 }
 
 export async function buildWindows() {
+  await checkClientVersion(repoRoot);
+  const signing = await loadWindowsSigningConfiguration(repoRoot);
+  await verifyWindowsSigningTool(signing);
   const inputs = windowsBuildInputs();
   const env = windowsBuildEnv(process.env, () => probeGitIdentity(repoRoot));
+  delete env.KCODER_WINDOWS_CERTIFICATE_PASSWORD;
+  delete env.WIN_CSC_KEY_PASSWORD;
+  const computerUse = windowsComputerUseInputs(env);
+  const verified = await verifyComputerUseRuntime(computerUse.source, computerUse.expectedHash);
+  if (!computerUse.allowPrototype && verified.status !== "release-ready") {
+    throw new Error("Computer Use runtime has not passed release readiness audit; evaluation builds require KCODER_COMPUTER_USE_ALLOW_PROTOTYPE=1");
+  }
   if (inputs.target === "x86_64-pc-windows-gnu" && process.platform !== "win32") {
     env.CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER ||= "x86_64-w64-mingw32-gcc";
   }
@@ -125,9 +145,16 @@ export async function buildWindows() {
     await assertWindowsX64Executable(source);
     await copyFile(source, resolve(inputs.stageDir, name));
   }
+  await run("cargo", ["build", "--release", "--locked", "--manifest-path", resolve(repoRoot, "Cargo.toml"),
+    "--target", inputs.target, "-p", "kcoder_process_supervisor", "--lib", "--features", "native-image-addon"], repoRoot, env);
+  const nativeImagePin = await stageNativeWindowsComponentImage({
+    library:resolve(inputs.binaryDir, "kcoder_process_supervisor.dll"), destination:inputs.stageDir,
+  });
   const { build, Platform, Arch } = await import("electron-builder");
-  await build({ projectDir: studioRoot, targets: Platform.WINDOWS.createTarget(["nsis"], Arch.x64), publish: "never",
-    config: windowsPackConfig() });
+  await runWithWindowsSigning(signing, signingOptions => build({
+    projectDir: studioRoot, targets: Platform.WINDOWS.createTarget(["nsis"], Arch.x64), publish: "never",
+    config: { ...windowsPackConfig(stageDesktopResources, releaseArtifactHook, env, nativeImagePin), ...signingOptions },
+  }));
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

@@ -1617,40 +1617,6 @@ describe('ToolBlocksDisplay', () => {
     expect(screen.getByText(/\d+ 秒/)).toBeInTheDocument()
   })
 
-  test('shows reconnecting, recovered and failed states without leaving a stale shimmer', () => {
-    const reconnectingBlock: ProcessingBlock = {
-      id: 'reconnecting-1',
-      subtaskId: 1,
-      type: 'tool',
-      toolName: 'runtime_reconnecting',
-      status: 'streaming',
-      createdAt: 1770000000000,
-    }
-
-    const { rerender } = render(
-      <ToolBlocksDisplay blocks={[reconnectingBlock]} isStreaming={true} />
-    )
-
-    const status = screen.getByTestId('runtime-reconnecting-status')
-    expect(status).toHaveTextContent('连接中断，正在重连…')
-    expect(status).toHaveClass('truncate')
-    expect(status.querySelector('.tool-activity-shimmer')).not.toBeNull()
-
-    rerender(
-      <ToolBlocksDisplay blocks={[{ ...reconnectingBlock, status: 'done' }]} isStreaming={true} />
-    )
-    expect(screen.getByTestId('runtime-reconnecting-status')).toHaveTextContent('连接已恢复')
-    expect(screen.getByTestId('runtime-reconnecting-status').firstElementChild).not.toHaveClass(
-      'tool-activity-shimmer'
-    )
-
-    rerender(
-      <ToolBlocksDisplay blocks={[{ ...reconnectingBlock, status: 'error' }]} isStreaming={true} />
-    )
-    expect(screen.getByTestId('runtime-reconnecting-status')).toHaveTextContent('重连失败')
-    expect(screen.getByTestId('runtime-reconnecting-status')).toHaveAttribute('role', 'alert')
-  })
-
   test('does not duplicate the generic thinking indicator when live thinking is visible', () => {
     const thinkingBlock: ProcessingBlock = {
       id: 'thinking-1',

@@ -173,8 +173,8 @@ await runE2E(
     const deleteRequestOffset = rpcRequests.length;
     const deleteResponseOffset = rpcResponses.length;
     await page
-      .locator(`[data-testid="session-actions-${threadId}"]:visible`)
-      .click();
+      .locator(`[data-testid="session-${threadId}"]:visible`)
+      .click({ delay: 650 });
     const actions = page.getByRole("dialog", { name: "任务操作" });
     page.once("dialog", (dialog) => dialog.accept());
     await actions.getByTestId("thread-delete-action").click();

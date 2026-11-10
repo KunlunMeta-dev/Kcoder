@@ -1,0 +1,96 @@
+{
+  "MigrationAgentAdaptation": [
+    {
+      "decoded": {
+        "model": {
+          "kind": "target",
+          "model": "review-model",
+          "provider": "mapped"
+        },
+        "reviewedSourceSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "tools": [
+          "read"
+        ]
+      },
+      "name": "explicit_reviewed_native_mapping",
+      "value": {
+        "model": {
+          "kind": "target",
+          "model": "review-model",
+          "provider": "mapped"
+        },
+        "reviewedSourceSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "tools": [
+          "read"
+        ]
+      }
+    }
+  ],
+  "MigrationAgentCompatibility": [
+    {
+      "decoded": {
+        "availableTools": [
+          "read"
+        ],
+        "canAdapt": true,
+        "problem": null,
+        "sourceModelReference": true,
+        "sourceSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "name": "explicit_reviewed_native_mapping",
+      "value": {
+        "availableTools": [
+          "read"
+        ],
+        "canAdapt": true,
+        "problem": null,
+        "sourceModelReference": true,
+        "sourceSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    }
+  ],
+  "MigrationAgentPreviewParams": [
+    {
+      "decoded": {
+        "itemId": "owned-item",
+        "jobId": "owned-job"
+      },
+      "name": "explicit_reviewed_native_mapping",
+      "value": {
+        "itemId": "owned-item",
+        "jobId": "owned-job"
+      }
+    }
+  ],
+  "MigrationAgentPreviewResult": [
+    {
+      "decoded": {
+        "compatibility": {
+          "availableTools": [
+            "read"
+          ],
+          "canAdapt": true,
+          "problem": null,
+          "sourceModelReference": true,
+          "sourceSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "itemId": "owned-item",
+        "jobId": "owned-job"
+      },
+      "name": "explicit_reviewed_native_mapping",
+      "value": {
+        "compatibility": {
+          "availableTools": [
+            "read"
+          ],
+          "canAdapt": true,
+          "problem": null,
+          "sourceModelReference": true,
+          "sourceSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "itemId": "owned-item",
+        "jobId": "owned-job"
+      }
+    }
+  ]
+}

@@ -1,3 +1,5 @@
+import { WorkspacePageHeader } from '@/components/layout/WorkspacePageHeader'
+import { currentHostDeviceId } from '@/features/runtime-target/currentHostTarget'
 import { downloadLink } from '@/kcoder/downloadLink'
 import { WikiArchiveTransfer } from './WikiArchiveTransfer'
 import { WikiLibraryCreate } from './WikiLibraryCreate'
@@ -5,13 +7,12 @@ import { exportMarkdownZip, importMarkdownZip } from './wikiMarkdownBundle'
 import { WikiError } from './WikiError'
 import { WikiLibraryRename } from './WikiLibraryRename'
 import { KnowledgeContents } from './KnowledgeContents'
+import { WikiManagedKnowledge } from './WikiManagedKnowledge'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
-  ArrowLeft,
   BookOpen,
   Plus,
   RefreshCw,
-  LoaderCircle,
   LibraryBig,
   Pencil,
   Archive,
@@ -29,55 +30,141 @@ import { workbenchModelTarget } from '@/features/workbench/workbenchModelTarget'
 import { useTranslation } from '@/hooks/useTranslation'
 import { usePluginTargetScope } from '@/kcoder/usePluginTargetScope'
 import { knowledgeApi, type WikiLibrary } from '@/kcoder/knowledgeApi'
-import { navigateTo } from '@/lib/navigation'
 
-export function KnowledgeWorkspace() {
+export type WikiWorkspaceSection = 'library' | 'memory'
+
+export function KnowledgeWorkspace({
+  initialSection = 'library',
+}: { initialSection?: WikiWorkspaceSection } = {}) {
   const { t } = useTranslation('knowledge')
   const { state } = useWorkbench()
   const target = workbenchModelTarget(state)
   const [requested, setRequested] = useState<string | null>(null)
+  const [section, setSection] = useState<WikiWorkspaceSection>(initialSection)
+  const [previousInitial, setPreviousInitial] = useState(initialSection)
+  if (previousInitial !== initialSection) {
+    setPreviousInitial(initialSection)
+    setSection(initialSection)
+  }
   const serverId = state.devices.some(device => device.device_id === requested)
     ? requested!
-    : target?.deviceId ||
-      state.devices.find(device => device.is_default)?.device_id ||
-      state.devices[0]?.device_id ||
-      ''
+    : currentHostDeviceId(state.devices) || ''
   const scope = usePluginTargetScope(serverId)
+  const workspacePath = serverId === target?.deviceId ? target.workspacePath : undefined
+  const sections: WikiWorkspaceSection[] = ['library', 'memory']
+  const owner = JSON.stringify([scope.key, workspacePath])
+  const [visited, setVisited] = useState({
+    owner,
+    sections: [initialSection] as WikiWorkspaceSection[],
+  })
+  if (visited.owner !== owner || !visited.sections.includes(section))
+    setVisited({
+      owner,
+      sections: visited.owner === owner ? [...visited.sections, section] : [section],
+    })
+  const openedSections = visited.owner === owner ? visited.sections : [section]
+  const chooseSection = (next: WikiWorkspaceSection) => {
+    setSection(next)
+    setVisited(current => ({ owner, sections: Array.from(new Set([...current.sections, next])) }))
+  }
   return (
     <main
       data-testid="knowledge-workspace"
       className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background text-text-primary"
     >
-      <header className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border/50 px-4 py-3 md:px-6">
-        <Button
-          size="sm"
-          variant="ghost"
-          data-testid="knowledge-back"
-          aria-label={t('back')}
-          onClick={() => navigateTo('/')}
-        >
-          <ArrowLeft />
-        </Button>
-        <h1 className="text-base font-semibold tracking-tight">{t('title')}</h1>
-        <div className="ml-auto">
-          <SettingsSelect
-            density="compact"
-            icon={<BookOpen />}
-            aria-label={t('targetRequired')}
-            data-testid="knowledge-target"
-            value={serverId}
-            onChange={event => setRequested(event.target.value)}
+      <WorkspacePageHeader
+        title={t('title')}
+        backLabel={t('back')}
+        backTestId="knowledge-back"
+        actions={
+          <>
+            {' '}
+            <SettingsSelect
+              density="compact"
+              icon={<BookOpen />}
+              aria-label={t('targetRequired')}
+              data-testid="knowledge-target"
+              value={serverId}
+              onChange={event => setRequested(event.target.value)}
+            >
+              {state.devices.map(device => (
+                <option key={device.device_id} value={device.device_id}>
+                  {device.name}
+                </option>
+              ))}
+            </SettingsSelect>{' '}
+          </>
+        }
+      />
+      <nav
+        role="tablist"
+        aria-label={t('workspaceTabs')}
+        className="mx-auto my-4 inline-flex shrink-0 gap-1 self-center rounded-2xl border border-border/70 bg-surface/60 p-1"
+      >
+        {sections.map(value => (
+          <Button
+            key={value}
+            id={`wiki-workspace-tab-${value}`}
+            role="tab"
+            aria-selected={section === value}
+            aria-controls={`wiki-workspace-panel-${value}`}
+            tabIndex={section === value ? 0 : -1}
+            variant="ghost"
+            className={
+              section === value
+                ? 'min-h-11 min-w-28 rounded-xl bg-background font-medium shadow-sm ring-1 ring-border/40 hover:bg-background'
+                : 'min-h-11 min-w-28 rounded-xl text-text-secondary'
+            }
+            data-testid={`wiki-workspace-tab-${value}`}
+            onClick={() => chooseSection(value)}
+            onKeyDown={event => {
+              const index = sections.indexOf(value)
+              const next =
+                event.key === 'ArrowRight'
+                  ? sections[(index + 1) % sections.length]
+                  : event.key === 'ArrowLeft'
+                    ? sections[(index + sections.length - 1) % sections.length]
+                    : event.key === 'Home'
+                      ? sections[0]
+                      : event.key === 'End'
+                        ? sections.at(-1)
+                        : undefined
+              if (next) {
+                event.preventDefault()
+                chooseSection(next)
+                document.getElementById(`wiki-workspace-tab-${next}`)?.focus()
+              }
+            }}
           >
-            {state.devices.map(device => (
-              <option key={device.device_id} value={device.device_id}>
-                {device.name}
-              </option>
-            ))}
-          </SettingsSelect>
-        </div>
-      </header>
+            {t(`workspaceSections.${value}`)}
+          </Button>
+        ))}
+      </nav>
       {serverId ? (
-        <KnowledgeLibrary key={scope.key} serverId={serverId} isCurrent={scope.isCurrent} />
+        <>
+          {sections
+            .filter(value => value === section || openedSections.includes(value))
+            .map(value => (
+              <div
+                key={`${owner}:${value}`}
+                id={`wiki-workspace-panel-${value}`}
+                role="tabpanel"
+                aria-labelledby={`wiki-workspace-tab-${value}`}
+                hidden={section !== value}
+                className={section === value ? 'flex min-h-0 min-w-0 flex-1 flex-col' : 'hidden'}
+              >
+                {value === 'library' ? (
+                  <KnowledgeLibrary serverId={serverId} isCurrent={scope.isCurrent} />
+                ) : (
+                  <WikiManagedKnowledge
+                    serverId={serverId}
+                    workspacePath={workspacePath}
+                    section={value}
+                  />
+                )}
+              </div>
+            ))}
+        </>
       ) : (
         <p>{t('targetRequired')}</p>
       )}
@@ -126,6 +213,7 @@ function KnowledgeLibrary({ serverId, isCurrent }: { serverId: string; isCurrent
   const [creating, setCreating] = useState(false)
   const reload = useCallback(async () => {
     const attempt = ++revision.current
+    setBusy(true)
     try {
       const status = await knowledgeApi.status(serverId)
       if (!isCurrent() || attempt !== revision.current) return
@@ -190,7 +278,7 @@ function KnowledgeLibrary({ serverId, isCurrent }: { serverId: string; isCurrent
   }
   const libraryToolbar = (
     <div className="flex flex-wrap items-center justify-end gap-3">
-      {libraries.length > 1 ? (
+      {libraries.length > 0 ? (
         <SettingsSelect
           density="compact"
           className="max-w-full"
@@ -216,7 +304,7 @@ function KnowledgeLibrary({ serverId, isCurrent }: { serverId: string; isCurrent
         <span className="sr-only">{libraries.find(item => item.id === selected)?.name}</span>
       )}
       {libraries.find(library => library.id === selected) && (
-        <details ref={menu} className="relative ml-auto">
+        <details ref={menu} className="relative">
           <summary
             aria-label={t('wikiActions')}
             data-testid="knowledge-library-actions"
@@ -353,7 +441,7 @@ function KnowledgeLibrary({ serverId, isCurrent }: { serverId: string; isCurrent
       )}
       <Button
         size="sm"
-        className="ml-auto max-md:min-h-11"
+        className="max-md:min-h-11"
         data-testid="knowledge-create"
         disabled={busy || !organizationEnabled}
         onClick={() => setCreating(true)}
@@ -410,68 +498,81 @@ function KnowledgeLibrary({ serverId, isCurrent }: { serverId: string; isCurrent
   return (
     <div
       data-testid="knowledge-scroll"
-      className="min-h-0 flex-1 overflow-y-auto px-8 pb-5 pt-6 max-md:px-4 md:pb-8 md:pt-7"
+      className="studio-page-gutter min-h-0 flex-1 overflow-y-auto py-5"
     >
       <PageContent data-testid="knowledge-content" className="flex flex-col">
-        <div className="mb-3 flex shrink-0 flex-wrap items-center justify-between gap-4">
-          <div className="flex min-w-0 items-center gap-8">
+        <section
+          data-testid="knowledge-space-hero"
+          className="studio-card-spacing mb-4 grid shrink-0 gap-6 rounded-2xl border border-border/70 bg-background lg:grid-cols-2"
+        >
+          <div className="studio-card-inset flex min-w-0 items-center gap-6 rounded-xl bg-surface/60">
             <span
               aria-hidden="true"
-              className="flex size-[72px] shrink-0 items-center justify-center rounded-2xl bg-accent-surface text-focus"
+              className="flex size-32 shrink-0 items-center justify-center rounded-3xl bg-muted/70 text-text-primary max-sm:size-20"
             >
-              <BookOpen className="size-8" strokeWidth={1.5} />
+              <BookOpen className="size-24 max-sm:size-14" strokeWidth={1.4} />
             </span>
-            <div>
-              <h2 className="heading-base">{t('yourWikis')}</h2>
-              <p className="mt-1 text-sm text-text-muted">{t('spaceHint')}</p>
+            <div className="min-w-0">
+              <h2 className="heading-lg font-semibold tracking-tight">{t('yourWikis')}</h2>
+              <p className="mt-3 text-base leading-relaxed text-text-secondary">{t('spaceHint')}</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <label className="flex items-center gap-2 text-xs text-text-secondary">
-              {t('retrieval')}
-              <Switch
-                size="sm"
-                data-testid="knowledge-retrieval-enabled"
-                aria-label={t('retrievalToggle')}
-                checked={retrievalEnabled}
-                disabled={busy || enabled === null}
-                onCheckedChange={value =>
-                  void mutate(() => knowledgeApi.configureMode(serverId, 'retrievalEnabled', value))
-                }
-              />
-            </label>
-            <label className="flex items-center gap-2 text-xs text-text-secondary">
-              {t('organization')}
-              <Switch
-                size="sm"
-                data-testid="knowledge-organization-enabled"
-                aria-label={t('organizationToggle')}
-                checked={organizationEnabled}
-                disabled={busy || enabled === null}
-                onCheckedChange={value =>
-                  void mutate(() =>
-                    knowledgeApi.configureMode(serverId, 'organizationEnabled', value)
-                  )
-                }
-              />
-            </label>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="max-md:min-h-11 max-md:min-w-11"
-              disabled={busy}
-              data-testid="knowledge-refresh"
-              aria-label={t('refresh')}
-              onClick={() => {
-                setBusy(true)
-                void reload()
-              }}
-            >
-              {busy ? <LoaderCircle className="animate-spin" /> : <RefreshCw />}
-            </Button>
+          <div className="flex min-w-0 items-center py-3">
+            <div className="min-w-0 flex-1 space-y-5">
+              <div className="flex items-start justify-between gap-5">
+                <div>
+                  <p className="text-base font-medium">{t('retrieval')}</p>
+                  <p
+                    id="wiki-retrieval-help"
+                    className="mt-1 text-sm leading-relaxed text-text-secondary"
+                  >
+                    {t('retrievalDescription')}
+                  </p>
+                </div>
+                <Switch
+                  size="sm"
+                  className="data-[state=checked]:bg-text-primary [&>span]:bg-background"
+                  data-testid="knowledge-retrieval-enabled"
+                  aria-label={t('retrievalToggle')}
+                  aria-describedby="wiki-retrieval-help"
+                  checked={retrievalEnabled}
+                  disabled={busy || enabled === null}
+                  onCheckedChange={value =>
+                    void mutate(() =>
+                      knowledgeApi.configureMode(serverId, 'retrievalEnabled', value)
+                    )
+                  }
+                />
+              </div>
+              <div className="flex items-start justify-between gap-5">
+                <div>
+                  <p className="text-base font-medium">{t('organization')}</p>
+                  <p
+                    id="wiki-organization-help"
+                    className="mt-1 text-sm leading-relaxed text-text-secondary"
+                  >
+                    {t('organizationDescription')}
+                  </p>
+                </div>
+                <Switch
+                  size="sm"
+                  className="data-[state=checked]:bg-text-primary [&>span]:bg-background"
+                  data-testid="knowledge-organization-enabled"
+                  aria-label={t('organizationToggle')}
+                  aria-describedby="wiki-organization-help"
+                  checked={organizationEnabled}
+                  disabled={busy || enabled === null}
+                  onCheckedChange={value =>
+                    void mutate(() =>
+                      knowledgeApi.configureMode(serverId, 'organizationEnabled', value)
+                    )
+                  }
+                />
+              </div>
+            </div>
           </div>
-        </div>
-        {error && <WikiError error={error} />}
+        </section>
+        {error && <WikiError error={error} onReload={() => void reload()} reloading={busy} />}
         {creating && (
           <WikiLibraryCreate
             serverId={serverId}

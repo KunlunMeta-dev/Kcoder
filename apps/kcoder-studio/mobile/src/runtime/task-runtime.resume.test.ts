@@ -1,6 +1,7 @@
 import { gatewaySessionExpired } from "@/gateway/http";
 import type { JsonRecord } from "@/gateway/rpc";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { resetTaskRuntimeAsyncStorage } from "@/test/task-runtime-async-storage-fixture";
 import { TaskRuntime, taskRuntimeTestHelpers } from "./task-runtime";
 import {
   FakeClient,
@@ -11,7 +12,12 @@ vi.mock("@/gateway/http", () => ({
   ensureGatewayAuthorization: vi.fn(async () => {}),
   gatewaySessionExpired: vi.fn(async () => false),
 }));
+vi.mock("@react-native-async-storage/async-storage", async () => {
+  const { taskRuntimeAsyncStorage } = await import("@/test/task-runtime-async-storage-fixture");
+  return { default: taskRuntimeAsyncStorage };
+});
 beforeEach(() => {
+  resetTaskRuntimeAsyncStorage();
   vi.spyOn(Math, "random").mockReturnValue(0.5);
   vi.mocked(gatewaySessionExpired).mockResolvedValue(false);
 });
@@ -502,7 +508,7 @@ describe("TaskRuntime.resume", () => {
           thread: { id: "thread-goal", cwd: "/workspace", status: "idle" },
         } as never;
       if (method === "thread/read") return { messages: [] } as never;
-      if (method === "thread/goal/get") return { goal } as never;
+      if (method === "thread/goal/get") return { threadId: goal.threadId, goal } as never;
       if (method === "thread/goal/history") return { goals: [goal] } as never;
       if (method === "thread/goal/set") return { goal } as never;
       if (method === "thread/goal/clear") return { cleared: true } as never;

@@ -4,9 +4,12 @@ import type { Attachment, MultiAttachmentUploadState } from '@/types/api'
 import {
   deleteAttachment as defaultDeleteAttachment,
   isValidFileSize,
+  MAX_FILE_SIZE,
   uploadAttachment as defaultUploadAttachment,
 } from '@/api/attachments'
 import { readTextAttachmentMetadata, releaseAttachmentPreview } from '@/lib/attachments'
+import { abortable } from '@/lib/abortable'
+import i18n from '@/i18n'
 
 interface UseWorkbenchAttachmentsOptions {
   uploadAttachment?: (
@@ -149,7 +152,10 @@ export function useWorkbenchAttachments(options: UseWorkbenchAttachmentsOptions 
           const uploadingFiles = new Map(current.uploadingFiles)
           uploadingFiles.delete(fileId)
           const errors = new Map(current.errors)
-          errors.set(fileId, 'File is too large')
+          errors.set(
+            fileId,
+            i18n.t('common:attachment_too_large', { max: MAX_FILE_SIZE / (1024 * 1024) })
+          )
           return { ...current, uploadingFiles, errors }
         })
         uploadControllersRef.current.delete(controllerKey)
@@ -163,7 +169,7 @@ export function useWorkbenchAttachments(options: UseWorkbenchAttachmentsOptions 
         const imageMetadata = await inspectImageFile(file, controller.signal)
         if (controller.signal.aborted) return
         const textMetadataPromise = readTextAttachmentMetadata(file)
-        const attachment = await uploadAttachment(
+        const pending = uploadAttachment(
           file,
           progress => {
             if (uploadControllersRef.current.get(controllerKey) !== controller) return
@@ -178,8 +184,15 @@ export function useWorkbenchAttachments(options: UseWorkbenchAttachmentsOptions 
           },
           controller.signal
         )
+        void pending.then(
+          attachment => {
+            if (controller.signal.aborted) releaseAttachmentPreview(attachment)
+          },
+          () => {}
+        )
+        const attachment = await abortable(pending, controller.signal)
         if (controller.signal.aborted) return
-        const textMetadata = await textMetadataPromise
+        const textMetadata = await abortable(textMetadataPromise, controller.signal)
         if (controller.signal.aborted) return
         const imageAttachment = imageMetadata ? { ...attachment, ...imageMetadata } : attachment
         const enrichedAttachment = textMetadata

@@ -540,6 +540,7 @@ mod tests {
     #[test]
     #[ignore = "fixed 96MiB archive export resource measurement"]
     fn fixed_large_archive_export_resource_sample() -> Result<()> {
+        let _fixture = crate::test_support::large_storage_fixture();
         let LargeArchiveFixture {
             root,
             scope,
@@ -592,6 +593,7 @@ mod tests {
     // Model-independent backup/storage test; no Provider request or identity is exported.
     #[test]
     fn stream_roundtrip_large_originals_history_reports_and_owned_cleanup() -> Result<()> {
+        let _fixture = crate::test_support::large_storage_fixture();
         let LargeArchiveFixture {
             root,
             scope,

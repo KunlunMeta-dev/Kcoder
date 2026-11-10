@@ -1,4 +1,4 @@
-import { requestLocalExecutor } from '@/tauri/localExecutor'
+import { requestLocalExecutor } from '@/host/localExecutor'
 
 /** One labeled slice of the KCoder configuration directory. */
 export interface StorageBucket {

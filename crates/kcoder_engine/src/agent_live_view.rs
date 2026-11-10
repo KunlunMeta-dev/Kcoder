@@ -25,6 +25,13 @@ pub(crate) struct AgentLiveViews(
 );
 
 impl AgentLiveViews {
+    /// The original manager owns this empty stream before the first child event.
+    /// Never seed it from a legacy checkpoint or let an observer create it.
+    pub(crate) fn prepare_managed_run(&self, id: &str, run_id: String) {
+        let mut writer = self.1.register(id, run_id, &[]);
+        writer.defer_terminal_to_manager();
+    }
+
     #[cfg(test)]
     pub(crate) fn register(&self, id: &str, messages: Vec<Message>) -> AgentLiveWriter {
         self.register_with_run(
@@ -85,6 +92,14 @@ impl AgentLiveViews {
         run_id: &str,
     ) -> Option<crate::agent_conversation_stream::AgentConversationSubscription> {
         self.1.subscribe_run(id, run_id)
+    }
+
+    pub(crate) fn subscribe_registered_run(
+        &self,
+        id: &str,
+        run_id: &str,
+    ) -> Option<crate::agent_conversation_stream::AgentConversationSubscription> {
+        self.1.subscribe_registered_run(id, run_id)
     }
 
     pub(crate) fn observe_checkpoint(
@@ -186,6 +201,10 @@ impl AgentLiveWriter {
             _ => return,
         }
         view.revision = NEXT_REVISION.fetch_add(1, Ordering::Relaxed);
+    }
+
+    pub(crate) fn finish_native_denial(&mut self, status: &str) {
+        self.conversation.finish(status);
     }
 
     pub(crate) fn finish(&mut self, managed: bool) {

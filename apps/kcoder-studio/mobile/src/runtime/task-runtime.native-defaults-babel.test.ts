@@ -5,7 +5,7 @@ import { getDefaultConfig } from "expo/metro-config";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import vm from "node:vm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 const projectRoot = path.resolve(path.dirname(import.meta.filename), "../..");
 const taskRuntimeRoot = path.join(projectRoot, "src/runtime/task-runtime");
@@ -34,7 +34,9 @@ function loadExpoTransformedFunction(
     throw new Error(`TaskRuntime ${functionName} declaration was not found`);
   }
 
-  const metro = getDefaultConfig(projectRoot);
+  const metro = getDefaultConfig(projectRoot) as {
+    transformer: { babelTransformerPath: string };
+  };
   const transformer = require(metro.transformer.babelTransformerPath) as {
     transform(input: {
       filename: string;
@@ -77,18 +79,17 @@ function loadExpoTransformedFunction(
 describe("Expo Android Babel default parameters with TypeScript this parameters", () => {
   it("honors false when rolling back an interaction response", () => {
     const interactionsPath = path.join(taskRuntimeRoot, "interactions.ts");
+    const publishInteractionProjection = vi.fn();
     const markResponding = loadExpoTransformedFunction(
       interactionsPath,
       "markInteractionResponding",
+      { publishInteractionProjection },
     );
     const task = {
       pendingInteractions: [
         { requestId: 71, kind: "approval", responding: false },
       ],
-      snapshot: { interaction: null, interactionCount: 0 },
-      patch(patch: Record<string, unknown>) {
-        this.snapshot = { ...this.snapshot, ...patch };
-      },
+      notifyInteractionChanged: vi.fn(),
     };
 
     markResponding.apply(task, [71]);
@@ -96,15 +97,54 @@ describe("Expo Android Babel default parameters with TypeScript this parameters"
     markResponding.apply(task, [71, false]);
 
     expect(task.pendingInteractions[0].responding).toBe(false);
-    expect(task.snapshot.interaction).toMatchObject({
-      requestId: 71,
-      responding: false,
-    });
+    expect(task.notifyInteractionChanged).toHaveBeenCalledTimes(2);
+    expect(publishInteractionProjection).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps current-generation receipt reconciliation opt-in after Expo transform", async () => {
+    const interactionsPath = path.join(taskRuntimeRoot, "interactions.ts");
+    const receiptStatuses: string[] = [];
+    const reconcile = loadExpoTransformedFunction(
+      interactionsPath,
+      "reconcilePendingInteractions",
+      {
+        selectorForInteraction: () => ({}),
+        queryForInteraction: () => ({}),
+        currentOwnerMatches: () => true,
+        updateReceiptStatus: (_runtime: unknown, _selector: unknown, status: string) => {
+          receiptStatuses.push(status);
+        },
+      },
+    );
+    const task = {
+      client: {
+        isTransportOpen: () => true,
+        supportsExperimental: () => false,
+      },
+      reconnectContext: {},
+      clientGeneration: 4,
+      disposed: false,
+      reconnecting: false,
+      pendingInteractions: [{ owner: { originClientGeneration: 4 } }],
+    };
+
+    await reconcile.apply(task, []);
+    expect(receiptStatuses).toEqual([]);
+
+    await reconcile.apply(task, [false]);
+    expect(receiptStatuses).toEqual([]);
+
+    await reconcile.apply(task, [true]);
+    expect(receiptStatuses).toEqual(["unsupported"]);
   });
 
   it("preserves setGoal defaults, mode, budget, and options in the client request", async () => {
     const metadataPath = path.join(taskRuntimeRoot, "metadata.ts");
-    const setGoal = loadExpoTransformedFunction(metadataPath, "setGoal");
+    const setGoal = loadExpoTransformedFunction(metadataPath, "setGoal", {
+      captureGoalProjection: () => ({ version: 0, current: () => true }),
+      publishGoal: () => true,
+      requestGoalWrite: (task: { request: (method: string, params: unknown) => Promise<unknown> }, method: string, params: unknown) => task.request(method, params),
+    });
     const requests: Array<{ method: string; params: Record<string, unknown> }> =
       [];
     const task = {

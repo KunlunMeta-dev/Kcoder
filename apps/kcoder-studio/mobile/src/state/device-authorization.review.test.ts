@@ -162,6 +162,35 @@ it("does not publish old-route refresh secrets if the stored profile is replaced
   expect(originalCaller).toMatchObject({ baseUrl: original.baseUrl, accessToken: original.accessToken, refreshToken: original.refreshToken });
 });
 
+it("preserves a denial marker during rotation staging and clears it only after validated renewal", async () => {
+  const original = deviceProfile();
+  const scope = JSON.stringify([original.id, original.baseUrl, original.authMode, original.authorizationGeneration, original.deviceId]);
+  const denied = { ...original, reauthorizationRequiredScope: scope };
+  const coordinator = new ProfileCoordinator();
+  coordinator.hydrate({ profiles: [denied], activeId: denied.id });
+  const persistedMarkers: Array<string | undefined> = [];
+  const persist = vi.fn(async (profiles: GatewayProfile[]) => {
+    persistedMarkers.push(profiles[0]?.reauthorizationRequiredScope);
+  });
+  const renew = vi.fn(async (expected: GatewayProfile) => ({
+    ...expected,
+    accessToken: "validated-access",
+    refreshToken: "validated-refresh",
+    pendingRotationId: undefined,
+    expiresAt: future(),
+  }));
+  const manager = new DeviceAuthorizationManager(
+    id => coordinator.getSnapshot().profiles.find(profile => profile.id === id),
+    (expected, next, intent) => coordinator.updateCredentials(expected, next, persist, intent),
+    vi.fn(), renew, () => "review-rotation-denial-0001",
+  );
+
+  await manager.authorize(denied, true);
+
+  expect(persistedMarkers).toEqual([scope, undefined]);
+  expect(coordinator.getSnapshot().profiles[0]).not.toHaveProperty("reauthorizationRequiredScope");
+});
+
 it("reproduces independent managers conflicting when no cross-context lock exists", async () => {
   const initial = deviceProfile();
   const firstProfile = { ...initial };
@@ -213,7 +242,7 @@ it("reproduces independent managers conflicting when no cross-context lock exist
   expect(loser.pendingRotationId).toMatch(/^review-tab-rotation-/);
 });
 
-it("shares one rotation across two web-tab managers after the second waits on Web Locks", async () => {
+it("retains the existing device-operation fence while coordinating short profile metadata commits", async () => {
   const lockTails = new Map<string, Promise<void>>();
   const requestLock = vi.fn(async <T>(_name: string, _options: { mode: "exclusive" }, operation: () => Promise<T>): Promise<T> => {
     const name = _name;
@@ -254,17 +283,21 @@ it("shares one rotation across two web-tab managers after the second waits on We
   const refreshStarted = new Promise<void>(resolve => { notifyRefresh = resolve; });
   let serverRefreshToken = initial.refreshToken!;
   let serverRotation = 0;
+  const rotationReceipts = new Map<string, GatewayProfile>();
   const renew = vi.fn(async (expected: GatewayProfile, rotationId: string) => {
     notifyRefresh();
     await refreshBarrier;
+    const receipt = rotationReceipts.get(rotationId);
+    if (receipt) return { ...receipt };
     if (expected.refreshToken !== serverRefreshToken) throw new GatewaySessionExpiredError();
     serverRotation += 1;
     serverRefreshToken = `shared-web-rotation-${serverRotation}-refresh`;
-    return { ...expected, accessToken: `shared-web-rotation-${serverRotation}-access`, refreshToken: serverRefreshToken, pendingRotationId: undefined, expiresAt: future() };
+    const renewed = { ...expected, accessToken: `shared-web-rotation-${serverRotation}-access`, refreshToken: serverRefreshToken, pendingRotationId: undefined, expiresAt: future() };
+    rotationReceipts.set(rotationId, renewed); return { ...renewed };
   });
   const managerFor = (coordinator: ProfileCoordinator, rotationId: string) => new DeviceAuthorizationManager(
     id => coordinator.getSnapshot().profiles.find(item => item.id === id),
-    (expected, next) => coordinator.updateCredentials(expected, next, persist),
+    (expected, next, intent) => coordinator.updateCredentials(expected, next, persist, intent),
     vi.fn(), renew, () => rotationId,
     async () => { await coordinator.synchronize(); },
   );
@@ -275,7 +308,7 @@ it("shares one rotation across two web-tab managers after the second waits on We
   await Promise.all([first, second]);
 
   expect(requestLock).toHaveBeenCalledWith(expect.stringContaining("device-authorization:"), { mode: "exclusive" }, expect.any(Function));
-  expect(renew).toHaveBeenCalledOnce();
+  expect(new Set(renew.mock.calls.map(([, id]) => id)).size).toBe(1);
   expect(persisted[0]).toMatchObject({ accessToken: "shared-web-rotation-1-access", refreshToken: "shared-web-rotation-1-refresh", pendingRotationId: undefined });
   for (const caller of [firstCaller, secondCaller]) expect(caller).toMatchObject({
     accessToken: "shared-web-rotation-1-access", refreshToken: "shared-web-rotation-1-refresh", pendingRotationId: undefined,

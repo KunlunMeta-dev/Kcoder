@@ -89,7 +89,7 @@ export function RuntimeTargetEditor({
   return (
     <section
       data-testid="runtime-target-editor"
-      className="mb-6 rounded-2xl border border-border/60 bg-surface/30 p-5 max-md:p-4"
+      className="studio-card-spacing mb-6 rounded-2xl border border-border/60 bg-surface/30"
     >
       <div className="mb-4 flex items-center justify-between gap-4">
         <div>

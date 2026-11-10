@@ -1,0 +1,243 @@
+{
+  "WebSourcesToolResultV1": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "definitions": {
+      "TurnAttemptIdentity": {
+        "description": "One execution attempt of a logical turn. Shared by recovery and model snapshots. The server chooses attempt_id; credentials are never part of this identity.",
+        "properties": {
+          "attemptId": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "turnId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "attemptId",
+          "threadId",
+          "turnId"
+        ],
+        "type": "object"
+      },
+      "WebSearchAttemptV1": {
+        "properties": {
+          "elapsedMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/WebSearchErrorKind"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "provider": {
+            "$ref": "#/definitions/WebSearchProvider"
+          },
+          "requestSent": {
+            "description": "A sent request may have consumed an upstream quota even when its reply was lost.",
+            "type": "boolean"
+          },
+          "status": {
+            "$ref": "#/definitions/WebSearchStatus"
+          }
+        },
+        "required": [
+          "elapsedMs",
+          "provider",
+          "requestSent",
+          "status"
+        ],
+        "type": "object"
+      },
+      "WebSearchErrorKind": {
+        "enum": [
+          "invalid_input",
+          "policy_denied",
+          "authentication",
+          "rate_limited",
+          "quota_exhausted",
+          "network",
+          "tls",
+          "timeout",
+          "challenge",
+          "contract_invalid",
+          "component_unavailable",
+          "unsupported",
+          "cancelled"
+        ],
+        "type": "string"
+      },
+      "WebSearchProvider": {
+        "enum": [
+          "exa-public",
+          "searxng-bundled",
+          "bing-html"
+        ],
+        "type": "string"
+      },
+      "WebSearchStatus": {
+        "enum": [
+          "success",
+          "empty",
+          "partial",
+          "failed",
+          "cancelled"
+        ],
+        "type": "string"
+      },
+      "WebSourceOperation": {
+        "enum": [
+          "search",
+          "fetch"
+        ],
+        "type": "string"
+      },
+      "WebSourcePageV1": {
+        "properties": {
+          "author": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "cacheAgeMs": {
+            "default": 0,
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "cacheHit": {
+            "default": false,
+            "type": "boolean"
+          },
+          "publishedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "readStatus": {
+            "$ref": "#/definitions/WebSourceReadStatus"
+          },
+          "retrievedAt": {
+            "description": "Observation time, never substituted for the publication date.",
+            "type": "string"
+          },
+          "sourceId": {
+            "default": "",
+            "description": "Native producer assigns this identifier; upstream source IDs are ignored.",
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "readStatus",
+          "retrievedAt",
+          "title",
+          "url"
+        ],
+        "type": "object"
+      },
+      "WebSourceReadStatus": {
+        "enum": [
+          "summary_only",
+          "read",
+          "partial",
+          "unreadable"
+        ],
+        "type": "string"
+      },
+      "WebSourcesV1": {
+        "properties": {
+          "attempts": {
+            "default": [],
+            "items": {
+              "$ref": "#/definitions/WebSearchAttemptV1"
+            },
+            "type": "array"
+          },
+          "failure": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/WebSearchErrorKind"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "identity": {
+            "$ref": "#/definitions/TurnAttemptIdentity"
+          },
+          "operation": {
+            "$ref": "#/definitions/WebSourceOperation"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/WebSearchProvider"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "schemaVersion": {
+            "format": "uint8",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sources": {
+            "default": [],
+            "items": {
+              "$ref": "#/definitions/WebSourcePageV1"
+            },
+            "type": "array"
+          },
+          "status": {
+            "$ref": "#/definitions/WebSearchStatus"
+          },
+          "toolCallId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "identity",
+          "operation",
+          "schemaVersion",
+          "status",
+          "toolCallId"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "webSources": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/WebSourcesV1"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      }
+    },
+    "title": "WebSourcesToolResultV1",
+    "type": "object"
+  }
+}

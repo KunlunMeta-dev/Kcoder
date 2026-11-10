@@ -3,6 +3,7 @@ import { chmod, lstat, mkdtemp, readFile, readdir, realpath, rmdir, unlink } fro
 import { createHash } from "node:crypto";
 import { join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
+import { waitFor } from "./run-context.mjs";
 
 export const SSH_STAGE_MARKERS = Object.freeze([
   "REMOTE_PYTHON_ENTERED",
@@ -204,7 +205,142 @@ export function buildMarkedPythonSource(source) {
     "print('KCUX_STAGE:REMOTE_PYTHON_ENTERED', file=sys.stderr, flush=True)",
     source,
     "print('KCUX_STAGE:REMOTE_PROGRAM_COMPLETE', file=sys.stderr, flush=True)",
-  ].join("\n");
+  ].join("\n") + "\n";
+}
+
+/** Python-side exact owner gates shared by private remote-resource once-runs. */
+export function remoteOwnedProcessGuardSource() {
+  return [
+    "import hashlib,json,os,stat",
+    "def _private_regular(path, uid, mode):",
+    " st=os.lstat(path)",
+    " assert stat.S_ISREG(st.st_mode) and st.st_uid==uid and stat.S_IMODE(st.st_mode)==mode and st.st_nlink==1",
+    " return st",
+    "def _read_owner_marker(root, run_id, marker_name, uid):",
+    " rs=os.lstat(root)",
+    " assert stat.S_ISDIR(rs.st_mode) and not stat.S_ISLNK(rs.st_mode) and rs.st_uid==uid and stat.S_IMODE(rs.st_mode)==0o700",
+    " marker=os.path.join(root,marker_name)",
+    " ms=_private_regular(marker,uid,0o600)",
+    " assert ms.st_size<=512",
+    " fd=os.open(marker,os.O_RDONLY|os.O_NOFOLLOW)",
+    " try:",
+    "  fs=os.fstat(fd)",
+    "  assert (fs.st_dev,fs.st_ino,fs.st_uid,stat.S_IMODE(fs.st_mode),fs.st_nlink)==(ms.st_dev,ms.st_ino,uid,0o600,1)",
+    "  body=os.read(fd,513)",
+    " finally: os.close(fd)",
+    " assert len(body)<=512",
+    " value=json.loads(body.decode('utf-8'))",
+    " assert set(value)=={'version','runId','uid','dev','ino'}",
+    " assert value=={'version':1,'runId':run_id,'uid':uid,'dev':rs.st_dev,'ino':rs.st_ino}",
+    " return rs,value",
+    "def _read_owned_json(root, name, uid, max_bytes=4096):",
+    " assert type(name) is str and os.path.basename(name)==name and name not in ('','.','..')",
+    " assert type(max_bytes) is int and 0<max_bytes<=65536",
+    " path=os.path.join(root,name); st=_private_regular(path,uid,0o600)",
+    " assert st.st_size<=max_bytes",
+    " fd=os.open(path,os.O_RDONLY|os.O_NOFOLLOW)",
+    " try:",
+    "  before=os.fstat(fd); assert (before.st_dev,before.st_ino,before.st_uid,stat.S_IMODE(before.st_mode),before.st_nlink)==(st.st_dev,st.st_ino,uid,0o600,1)",
+    "  body=os.read(fd,max_bytes+1); after=os.fstat(fd)",
+    "  assert (after.st_dev,after.st_ino,after.st_uid,stat.S_IMODE(after.st_mode),after.st_nlink,after.st_size,after.st_mtime_ns,after.st_ctime_ns)==(before.st_dev,before.st_ino,uid,0o600,1,before.st_size,before.st_mtime_ns,before.st_ctime_ns)",
+    " finally: os.close(fd)",
+    " assert len(body)==st.st_size and len(body)<=max_bytes",
+    " return json.loads(body.decode('utf-8'))",
+    "def _assert_owned_tree(root, uid, allowed_root_names, max_files=256, max_bytes=8*1024*1024):",
+    " assert set(os.listdir(root))<=allowed_root_names",
+    " count=0; total=0",
+    " for current,dirs,files in os.walk(root,topdown=True,followlinks=False):",
+    "  for name in dirs:",
+    "   path=os.path.join(current,name); st=os.lstat(path)",
+    "   assert stat.S_ISDIR(st.st_mode) and st.st_uid==uid and stat.S_IMODE(st.st_mode)==0o700",
+    "  for name in files:",
+    "   path=os.path.join(current,name); st=os.lstat(path)",
+    "   assert stat.S_ISREG(st.st_mode) and st.st_uid==uid and stat.S_IMODE(st.st_mode)==0o600 and st.st_nlink==1",
+    "   count+=1; total+=st.st_size; assert count<=max_files and total<=max_bytes",
+    " return {'fileCount':count,'totalBytes':total}",
+    "def _read_process(pid):",
+    " assert type(pid) is int and 1<pid<2**31",
+    " base='/proc/'+str(pid)",
+    " raw=open(base+'/cmdline','rb').read()",
+    " argv=[x.decode('utf-8','strict') for x in raw.split(b'\\0') if x]",
+    " status=open(base+'/status','r',encoding='utf-8').read().splitlines()",
+    " uidline=next(x for x in status if x.startswith('Uid:')).split()",
+    " statline=open(base+'/stat','r',encoding='utf-8').read()",
+    " right=statline.rfind(')')",
+    " fields=statline[right+2:].split()",
+    " return {'pid':pid,'euid':int(uidline[2]),'startTicks':int(fields[19]),'exe':os.path.realpath(base+'/exe'),",
+    "  'cwd':os.path.realpath(base+'/cwd'),'argv':argv,'argvSha256':hashlib.sha256(raw).hexdigest()}",
+    "def assert_owned_process(receipt, root, run_id, marker_name, uid, executable, config_sha256, expected_argv):",
+    " _read_owner_marker(root,run_id,marker_name,uid)",
+    " expected={'runId','pid','startTicks','euid','exe','argvSha256','cwd','configSha256'}",
+    " assert type(receipt) is dict and set(receipt)==expected and receipt['runId']==run_id",
+    " assert receipt['euid']==uid and receipt['exe']==os.path.realpath(executable) and receipt['cwd']==root",
+    " assert receipt['configSha256']==config_sha256 and len(config_sha256)==64",
+    " assert type(expected_argv) is list and len(expected_argv)<=16 and all(type(x) is str for x in expected_argv)",
+    " assert type(receipt['startTicks']) is int and receipt['startTicks']>0 and type(receipt['pid']) is int and receipt['pid']>1",
+    " actual=_read_process(receipt['pid'])",
+    " assert actual['pid']==receipt['pid'] and actual['startTicks']==receipt['startTicks'] and actual['euid']==uid",
+    " assert actual['exe']==os.path.realpath(executable) and actual['cwd']==root and actual['argv']==expected_argv",
+    " assert actual['argvSha256']==receipt['argvSha256']",
+    " return actual",
+  ].join("\n") + "\n";
+}
+
+/** Run one bounded command through an already-owned SSH dispatcher. */
+export async function runOwnedSshOperation({ context, dispatcher, label, command, cwd, timeoutMs = 30_000,
+  maxStdoutBytes = 16_384, maxStderrBytes = 32_768, stdin }) {
+  assert.ok(context && typeof context.spawnOwned === "function");
+  assert.ok(dispatcher && typeof dispatcher.spawn === "function");
+  assert.match(label, /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,95}$/);
+  assert.equal(typeof command, "string");
+  assert.ok(command.length > 0 && !command.includes("\0"));
+  assert.ok(typeof cwd === "string" && cwd.startsWith("/"));
+  assert.ok(Number.isSafeInteger(timeoutMs) && timeoutMs > 0 && timeoutMs <= 180_000);
+  assert.ok(Number.isSafeInteger(maxStdoutBytes) && maxStdoutBytes > 0 && maxStdoutBytes <= 1_048_576);
+  assert.ok(Number.isSafeInteger(maxStderrBytes) && maxStderrBytes > 0 && maxStderrBytes <= 131_072);
+  assert.ok(stdin === undefined || Buffer.isBuffer(stdin));
+  const processLabel = "ssh-op-" + label;
+  const observer = createSshStageObserver(performance.now(), 16, maxStderrBytes);
+  const child = await dispatcher.spawn(context, processLabel, command, {
+    cwd,
+    env: context.isolatedEnvironment({}, ["SSH_AUTH_SOCK"]),
+    ...(stdin === undefined ? {} : { stdin: "pipe" }),
+  });
+  let close = null, spawnError = false, overflow = false, stdoutBytes = 0, stderrBytes = 0;
+  const stdout = [];
+  child.once("error", () => { spawnError = true; });
+  child.once("close", (code, signal) => { close = { code, signal }; });
+  child.stdout.on("data", chunk => {
+    const bytes = Buffer.from(chunk);
+    stdoutBytes += bytes.length;
+    if (stdoutBytes > maxStdoutBytes) {
+      overflow = true;
+      void context.stopOwned(processLabel).catch(() => {});
+    } else stdout.push(bytes);
+  });
+  child.stderr.on("data", chunk => {
+    const bytes = Buffer.from(chunk);
+    stderrBytes += bytes.length;
+    if (stderrBytes > maxStderrBytes) overflow = true;
+    else observer.push(bytes);
+  });
+  if (stdin !== undefined) { child.stdin.on("error", () => {}); child.stdin.end(stdin); }
+  try {
+    await waitFor(() => close !== null || spawnError, timeoutMs, "owned SSH operation " + label, 25, context.abortSignal);
+  } catch (error) {
+    await context.stopOwned(processLabel).catch(() => {});
+    throw new Error("owned SSH operation timed out: " + label, { cause: error });
+  }
+  const stage = observer.finish();
+  assert.equal(close?.code, 0, "owned SSH operation failed: " + label);
+  assert.equal(close?.signal, null);
+  assert.equal(spawnError, false);
+  assert.equal(overflow, false, "owned SSH operation exceeded its output bound: " + label);
+  assert.equal(stage.valid, true, "owned SSH operation stage stream was invalid: " + label);
+  const expectsMarkers = command.includes("KCUX_STAGE:REMOTE_PYTHON_ENTERED");
+  assert.deepEqual(stage.markers.map(row => row.stage), expectsMarkers
+    ? ["REMOTE_PYTHON_ENTERED", "REMOTE_PROGRAM_COMPLETE"] : []);
+  return Object.freeze({ stdout: Buffer.concat(stdout), stderrBytes, stage });
 }
 
 function identityFromStat(stat) {

@@ -4,6 +4,9 @@ beforeEach(() => initLocale("zh-CN"));
 import { runtimeErrorSummary } from "./runtime-error";
 
 describe("runtimeErrorSummary", () => {
+  it("概括配置目录权限错误，技术详情保留在展开项", () => {
+    expect(runtimeErrorSummary("configuration root is writable by other users")).toBe("服务器配置目录权限异常，修复后可继续。");
+  });
   it("将额度错误转换为适合手机阅读的提示", () => {
     expect(
       runtimeErrorSummary(

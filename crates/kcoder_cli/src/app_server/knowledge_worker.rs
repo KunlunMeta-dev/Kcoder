@@ -4,7 +4,8 @@ use super::{knowledge_job_runner, knowledge_model::ProviderWikiModel, knowledge_
 use anyhow::{Context, Result, ensure};
 use clap::Parser;
 use fs2::FileExt;
-use kcoder_engine::ClientModelConfiguration;
+use kcoder_api::ClientModelConfiguration;
+use kcoder_cli_commands::{cli_args::Cli, model_configuration::ModelConfiguration};
 use std::{
     fs::{File, OpenOptions},
     path::{Path, PathBuf},
@@ -13,13 +14,13 @@ use std::{
 };
 use tokio_util::sync::CancellationToken;
 
-pub(super) fn is_remote() -> bool {
+pub fn is_remote() -> bool {
     cfg!(unix)
         && (std::env::var_os("SSH_CONNECTION").is_some()
             || std::env::var_os("KCODER_ACCOUNT_PRINCIPAL_ID").is_some())
 }
 
-pub(super) fn ensure_started(path: &Path) -> Result<()> {
+pub fn ensure_started(path: &Path) -> Result<()> {
     // Account workers must remain under the root-owned revision supervisor.
     // Never detach an account-owned child from the connection supervisor here.
     if std::env::var_os("KCODER_ACCOUNT_PRINCIPAL_ID").is_some() {
@@ -103,7 +104,7 @@ fn worker_lock(path: &Path) -> Result<File> {
     Ok(file)
 }
 
-pub(crate) fn entry(path: &Path, pause_only: bool) -> Result<()> {
+pub fn entry(path: &Path, pause_only: bool) -> Result<()> {
     ensure!(
         path.is_absolute() && path.is_file(),
         "Wiki worker needs an existing absolute profile path"
@@ -248,12 +249,12 @@ fn selected_model(
             "Wiki organization model must be a qualified Provider::model selection"
         );
     }
-    let mut cli = crate::Cli::try_parse_from(["kcoder"])?;
+    let mut cli = Cli::try_parse_from(["kcoder"])?;
     let dotenv = root.join(".env");
     if dotenv.is_file() {
         cli.credential_env_file = Some(dotenv);
     }
-    let configuration = crate::model_configuration::ModelConfiguration::new(loader, cli);
+    let configuration = ModelConfiguration::new(loader, cli);
     // Resolve the Wiki selection through the same qualified model resolver as
     // interactive turns, without changing the conversation or Provider defaults.
     let mut settings = configuration.settings(&selection)?;
@@ -286,6 +287,10 @@ fn scan(
     if !queue.has_capacity() {
         return Ok(());
     }
+    let approved = super::knowledge_worker_authority::queued_jobs()?;
+    if approved.as_ref().is_some_and(Vec::is_empty) {
+        return Ok(());
+    }
     let (mut store, scope) = knowledge_requests::open_catalog(path)?;
     let mut after_library = None;
     loop {
@@ -307,6 +312,11 @@ fn scan(
                     break;
                 }
                 for job in &jobs {
+                    if approved.as_ref().is_some_and(|allowed| {
+                        !allowed.contains(&(library.id.clone(), job.id.clone()))
+                    }) {
+                        continue;
+                    }
                     if cancel.is_cancelled() || !knowledge_requests::organization_enabled(path)? {
                         return Ok(());
                     }

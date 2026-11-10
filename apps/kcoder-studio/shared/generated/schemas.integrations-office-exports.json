@@ -1,0 +1,607 @@
+{
+  "OfficeExportAcknowledgement": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "client_acknowledged"
+    ],
+    "title": "OfficeExportAcknowledgement",
+    "type": "string"
+  },
+  "OfficeExportAcknowledgementKind": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "description": "A durable fact about original client byte receipt, never a saved-file or read permission.",
+    "enum": [
+      "office_export_acknowledgement"
+    ],
+    "title": "OfficeExportAcknowledgementKind",
+    "type": "string"
+  },
+  "OfficeExportAcknowledgementParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "OfficeArtifactRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "revision": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "revision"
+        ],
+        "type": "object"
+      }
+    },
+    "description": "Locators and a client byte observation only. The original native export owner must independently prove full coverage, identity and current access.",
+    "properties": {
+      "automationRunId": {
+        "maxLength": 256,
+        "minLength": 1,
+        "pattern": "\\S",
+        "type": "string"
+      },
+      "bytes": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "exportId": {
+        "type": "string"
+      },
+      "leaseRevision": {
+        "type": "string"
+      },
+      "reference": {
+        "$ref": "#/definitions/OfficeArtifactRef"
+      },
+      "sha256": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "bytes",
+      "exportId",
+      "leaseRevision",
+      "reference",
+      "sha256"
+    ],
+    "title": "OfficeExportAcknowledgementParams",
+    "type": "object"
+  },
+  "OfficeExportAcknowledgementReceipt": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationNullable_for_String": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationOwner": {
+        "additionalProperties": false,
+        "description": "Stable owner identity excludes refreshable authorization/configuration generations.",
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "organizationId": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationNullable_for_String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "$ref": "#/definitions/IntegrationNullable_for_String"
+          }
+        },
+        "required": [
+          "accountId",
+          "targetId",
+          "workspaceId"
+        ],
+        "type": "object"
+      },
+      "OfficeArtifactRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "revision": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "revision"
+        ],
+        "type": "object"
+      },
+      "OfficeCanonicalInputIdentity": {
+        "additionalProperties": false,
+        "properties": {
+          "reference": {
+            "$ref": "#/definitions/OfficeResourceRef"
+          },
+          "sha256": {
+            "description": "Actual immutable content identity resolved under native authority.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reference",
+          "sha256"
+        ],
+        "type": "object"
+      },
+      "OfficeExportAcknowledgementKind": {
+        "description": "A durable fact about original client byte receipt, never a saved-file or read permission.",
+        "enum": [
+          "office_export_acknowledgement"
+        ],
+        "type": "string"
+      },
+      "OfficeResourceRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "revision"
+        ],
+        "type": "object"
+      },
+      "OfficeTaskRef": {
+        "additionalProperties": false,
+        "properties": {
+          "runId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "turnId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "threadId",
+          "turnId"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "acknowledgedAtMs": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "bytes": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "exportId": {
+        "type": "string"
+      },
+      "kind": {
+        "$ref": "#/definitions/OfficeExportAcknowledgementKind"
+      },
+      "operationId": {
+        "type": "string"
+      },
+      "owner": {
+        "$ref": "#/definitions/IntegrationOwner"
+      },
+      "readCompletedAtMs": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "reference": {
+        "$ref": "#/definitions/OfficeArtifactRef"
+      },
+      "schemaVersion": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "sha256": {
+        "type": "string"
+      },
+      "sourceIdentities": {
+        "items": {
+          "$ref": "#/definitions/OfficeCanonicalInputIdentity"
+        },
+        "type": "array"
+      },
+      "task": {
+        "$ref": "#/definitions/OfficeTaskRef"
+      }
+    },
+    "required": [
+      "acknowledgedAtMs",
+      "bytes",
+      "exportId",
+      "kind",
+      "operationId",
+      "owner",
+      "readCompletedAtMs",
+      "reference",
+      "schemaVersion",
+      "sha256",
+      "sourceIdentities",
+      "task"
+    ],
+    "title": "OfficeExportAcknowledgementReceipt",
+    "type": "object"
+  },
+  "OfficeExportAcknowledgementResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "AutomationArtifactClaim": {
+        "additionalProperties": false,
+        "description": "Actual native export completion, separate from preparing a lease or clicking a link.",
+        "properties": {
+          "bytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "completedAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "exportId": {
+            "type": "string"
+          },
+          "manifestRef": {
+            "$ref": "#/definitions/IntegrationEntityRef"
+          },
+          "nativeOperationId": {
+            "type": "string"
+          },
+          "owner": {
+            "$ref": "#/definitions/IntegrationOwner"
+          },
+          "runId": {
+            "type": "string"
+          },
+          "sha256": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "bytes",
+          "completedAtMs",
+          "exportId",
+          "manifestRef",
+          "nativeOperationId",
+          "owner",
+          "runId",
+          "sha256"
+        ],
+        "type": "object"
+      },
+      "IntegrationEntityKind": {
+        "enum": [
+          "model_policy_configuration",
+          "input",
+          "workspace",
+          "workflow",
+          "assistant",
+          "delegation",
+          "destination",
+          "thread",
+          "turn",
+          "task",
+          "artifact",
+          "dataset",
+          "subscription",
+          "publication",
+          "connection",
+          "delivery"
+        ],
+        "type": "string"
+      },
+      "IntegrationEntityRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/definitions/IntegrationEntityKind"
+          },
+          "revision": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "kind"
+        ],
+        "type": "object"
+      },
+      "IntegrationNullable_for_String": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationOwner": {
+        "additionalProperties": false,
+        "description": "Stable owner identity excludes refreshable authorization/configuration generations.",
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "organizationId": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationNullable_for_String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "$ref": "#/definitions/IntegrationNullable_for_String"
+          }
+        },
+        "required": [
+          "accountId",
+          "targetId",
+          "workspaceId"
+        ],
+        "type": "object"
+      },
+      "OfficeArtifactRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "revision": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "revision"
+        ],
+        "type": "object"
+      },
+      "OfficeCanonicalInputIdentity": {
+        "additionalProperties": false,
+        "properties": {
+          "reference": {
+            "$ref": "#/definitions/OfficeResourceRef"
+          },
+          "sha256": {
+            "description": "Actual immutable content identity resolved under native authority.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reference",
+          "sha256"
+        ],
+        "type": "object"
+      },
+      "OfficeExportAcknowledgement": {
+        "enum": [
+          "client_acknowledged"
+        ],
+        "type": "string"
+      },
+      "OfficeExportAcknowledgementKind": {
+        "description": "A durable fact about original client byte receipt, never a saved-file or read permission.",
+        "enum": [
+          "office_export_acknowledgement"
+        ],
+        "type": "string"
+      },
+      "OfficeExportAcknowledgementReceipt": {
+        "additionalProperties": false,
+        "properties": {
+          "acknowledgedAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "bytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "exportId": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/definitions/OfficeExportAcknowledgementKind"
+          },
+          "operationId": {
+            "type": "string"
+          },
+          "owner": {
+            "$ref": "#/definitions/IntegrationOwner"
+          },
+          "readCompletedAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "reference": {
+            "$ref": "#/definitions/OfficeArtifactRef"
+          },
+          "schemaVersion": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sha256": {
+            "type": "string"
+          },
+          "sourceIdentities": {
+            "items": {
+              "$ref": "#/definitions/OfficeCanonicalInputIdentity"
+            },
+            "type": "array"
+          },
+          "task": {
+            "$ref": "#/definitions/OfficeTaskRef"
+          }
+        },
+        "required": [
+          "acknowledgedAtMs",
+          "bytes",
+          "exportId",
+          "kind",
+          "operationId",
+          "owner",
+          "readCompletedAtMs",
+          "reference",
+          "schemaVersion",
+          "sha256",
+          "sourceIdentities",
+          "task"
+        ],
+        "type": "object"
+      },
+      "OfficeResourceRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "revision"
+        ],
+        "type": "object"
+      },
+      "OfficeTaskRef": {
+        "additionalProperties": false,
+        "properties": {
+          "runId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "turnId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "threadId",
+          "turnId"
+        ],
+        "type": "object"
+      }
+    },
+    "description": "Acknowledgement means that the original client confirms receipt. It does not establish a physical save, external delivery or business correctness.",
+    "properties": {
+      "acknowledgement": {
+        "$ref": "#/definitions/OfficeExportAcknowledgement"
+      },
+      "claim": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/AutomationArtifactClaim"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "exportId": {
+        "type": "string"
+      },
+      "receipt": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/OfficeExportAcknowledgementReceipt"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "reference": {
+        "$ref": "#/definitions/OfficeArtifactRef"
+      }
+    },
+    "required": [
+      "acknowledgement",
+      "exportId",
+      "reference"
+    ],
+    "title": "OfficeExportAcknowledgementResult",
+    "type": "object"
+  }
+}

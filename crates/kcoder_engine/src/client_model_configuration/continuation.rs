@@ -49,6 +49,7 @@ impl QueryEngine {
             } else {
                 snapshot.mode
             },
+            pending_model_selection: None,
             reasoning: snapshot.reasoning,
             default_reasoning: snapshot.default_reasoning,
             selection: Some((context.active_provider.clone(), context.model.clone())),

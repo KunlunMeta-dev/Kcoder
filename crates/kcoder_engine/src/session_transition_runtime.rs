@@ -15,11 +15,20 @@ impl QueryEngine {
 
     /// Rotate to a clean chat and stop jobs owned by the previous session.
     pub fn start_new_session(&self) -> anyhow::Result<()> {
+        self.start_new_session_with_lifecycle().map(|_| ())
+    }
+
+    /// Return the exact State lifecycle installed by this transition.
+    pub fn start_new_session_with_lifecycle(
+        &self,
+    ) -> anyhow::Result<kcoder_state::AppStateLifecycleIdentity> {
         let id = self.state.reserve_new_session_id()?;
         self.prepare_session_replacement();
-        self.state.start_new_session_with_reserved_id(id);
+        let owner = self
+            .state
+            .start_new_session_with_reserved_id_and_lifecycle(id);
         self.rebind_checkpoints_to_current_session();
-        Ok(())
+        Ok(owner)
     }
 
     /// Apply a prepared durable-session replacement and rotate all engine
@@ -28,10 +37,21 @@ impl QueryEngine {
         &self,
         prepared: kcoder_state::PreparedSessionResume,
     ) -> anyhow::Result<usize> {
+        self.apply_prepared_session_resume_with_lifecycle(prepared)
+            .map(|(count, _)| count)
+    }
+
+    /// Return the original State lifecycle installed by this resume.
+    pub fn apply_prepared_session_resume_with_lifecycle(
+        &self,
+        prepared: kcoder_state::PreparedSessionResume,
+    ) -> anyhow::Result<(usize, kcoder_state::AppStateLifecycleIdentity)> {
         self.prepare_session_replacement();
-        let count = self.state.apply_prepared_session_resume(prepared)?;
+        let (count, owner) = self
+            .state
+            .apply_prepared_session_resume_with_lifecycle(prepared)?;
         self.rebind_checkpoints_to_current_session();
-        Ok(count)
+        Ok((count, owner))
     }
 
     pub(super) fn rebind_checkpoints_to_current_session(&self) {
@@ -44,6 +64,9 @@ impl QueryEngine {
     /// Stop runtime work and discard prompt snapshots before replacing AppState
     /// with another durable session.
     pub fn prepare_session_replacement(&self) {
+        if let Some(contributions) = &self.session_tool_contributions {
+            contributions.revoke();
+        }
         self.prefire_owner.cancel();
         self.background_jobs.advance_generation_and_abort_all();
         if let Some(handle) = self
@@ -67,5 +90,6 @@ impl QueryEngine {
         self.memory_observer_worker_running
             .store(false, Ordering::SeqCst);
         *recover_write_lock(&self.last_cache_safe_params, "last_cache_safe_params") = None;
+        *recover_write_lock(&self.discovered_tools, "discovered_tools") = Default::default();
     }
 }

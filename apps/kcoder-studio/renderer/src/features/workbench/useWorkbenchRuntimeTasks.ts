@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef } from 'react'
+import { useCallback, useLayoutEffect, useRef } from 'react'
 import { captureAccountContextRevision } from '@/kcoder/accountContextEvents'
 import type { Dispatch } from 'react'
 import type { ExecutorClient } from '@/api/executorAccess'
@@ -29,6 +29,7 @@ import {
 } from './runtimePaneMessages'
 import type { WorkbenchAction } from './workbenchReducer'
 import {
+  findRuntimeTask,
   getRuntimeTaskRouteKey,
   isSameRuntimeTaskAddress,
   isSameRuntimeTaskIdentity,
@@ -82,7 +83,7 @@ export function useWorkbenchRuntimeTasks({
     currentExecutorRef.current = executorClient
   }, [executorClient])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     currentRuntimeTaskRef.current = state.currentRuntimeTask
   }, [state.currentRuntimeTask])
 
@@ -131,8 +132,25 @@ export function useWorkbenchRuntimeTasks({
       address: RuntimeTaskAddress,
       options: RuntimePaneTranscriptLoadOptions = {}
     ): Promise<RuntimePaneTranscript> => {
-      const transcriptRequest: RuntimeTranscriptRequest = { ...address, ...options }
-      const transcriptKey = runtimeTranscriptRequestKey(address, options)
+      const task = findRuntimeTask(state.runtimeWork, address)
+      const originalPrefix = `kcoder:${address.deviceId}:`
+      const originalThreadId = address.taskId.startsWith(originalPrefix)
+        ? address.taskId.slice(originalPrefix.length)
+        : ''
+      const originalKCoderAddress = Boolean(originalThreadId) &&
+        (!address.threadId || address.threadId === originalThreadId)
+      const attachToLiveTurn =
+        isSameRuntimeTaskIdentity(currentRuntimeTaskRef.current, address) &&
+        (originalKCoderAddress || (task?.runtime === 'kcoder' && task.threadId === address.threadId))
+      const transcriptRequest: RuntimeTranscriptRequest = {
+        ...address,
+        ...options,
+        ...(attachToLiveTurn ? {
+          attachToLiveTurn: true,
+          ...(originalKCoderAddress ? { threadId: originalThreadId } : {}),
+        } : {}),
+      }
+      const transcriptKey = runtimeTranscriptRequestKey(address, options, attachToLiveTurn)
       let requests = runtimeTranscriptRequests.get(executorClient)
       if (!requests) {
         requests = new Map()
@@ -199,7 +217,7 @@ export function useWorkbenchRuntimeTasks({
       assertCurrent()
       return transcript
     },
-    [executorClient]
+    [executorClient, state.runtimeWork]
   )
 
   const subscribeRuntimeTaskStream = useCallback(
@@ -209,7 +227,7 @@ export function useWorkbenchRuntimeTasks({
   )
 
   const openRuntimeTask = useCallback(
-    async (address: RuntimeTaskAddress) => {
+    async (address: RuntimeTaskAddress, options?: { navigate?: boolean }) => {
       const runtimeProjectWork = state.runtimeWork?.projects.find(item =>
         item.deviceWorkspaces.some(
           workspace =>
@@ -226,7 +244,7 @@ export function useWorkbenchRuntimeTasks({
       writeLastProjectId(user.id, project?.id ?? null)
       openRuntimeTaskView(address, project, {
         markOpened: !openedRuntimeTaskKeysRef.current.has(getRuntimeTaskRouteKey(address)),
-        navigate: true,
+        navigate: options?.navigate !== false,
       })
     },
     [openRuntimeTaskView, state.projects, state.runtimeWork, user.id]
@@ -512,10 +530,12 @@ function uniqueRuntimeTaskAddresses(addresses: RuntimeTaskAddress[]): RuntimeTas
 
 function runtimeTranscriptRequestKey(
   address: RuntimeTaskAddress,
-  options: RuntimePaneTranscriptLoadOptions
+  options: RuntimePaneTranscriptLoadOptions,
+  attachToLiveTurn: boolean
 ): string {
   return JSON.stringify({
     address: getRuntimeTaskRouteKey(address),
+    attachToLiveTurn,
     limit: options.limit ?? null,
     beforeCursor: options.beforeCursor ?? null,
     afterCursor: options.afterCursor ?? null,

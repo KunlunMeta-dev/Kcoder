@@ -167,11 +167,10 @@ impl ClipboardTransaction {
             let marker = get_bytes(self.marker_format, MAX_BYTES)?;
             if marker.starts_with(&active.marker)
                 && marker[active.marker.len()..].iter().all(|byte| *byte == 0)
+                && let Err(error) = restore(&active.prior)
             {
-                if let Err(error) = restore(&active.prior) {
-                    self.restoration_failed = true;
-                    return Err(error);
-                }
+                self.restoration_failed = true;
+                return Err(error);
             }
         }
         self.active.take();

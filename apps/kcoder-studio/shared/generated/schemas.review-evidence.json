@@ -1,0 +1,289 @@
+{
+  "TurnReviewEvidence": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "ReviewArtifact": {
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "sha256": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "sha256"
+        ],
+        "type": "object"
+      },
+      "ReviewArtifactCheck": {
+        "additionalProperties": false,
+        "properties": {
+          "index": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "path": {
+            "type": "string"
+          },
+          "sha256": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sizeBytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "status": {
+            "$ref": "#/definitions/ReviewArtifactStatus"
+          }
+        },
+        "required": [
+          "index",
+          "path",
+          "status"
+        ],
+        "type": "object"
+      },
+      "ReviewArtifactStatus": {
+        "enum": [
+          "unchanged",
+          "passed",
+          "skipped_missing",
+          "missing",
+          "denied",
+          "invalid_path",
+          "not_regular",
+          "too_small",
+          "forbidden_content",
+          "too_large",
+          "read_limit",
+          "duplicate",
+          "unavailable"
+        ],
+        "type": "string"
+      },
+      "ReviewEvidenceState": {
+        "enum": [
+          "collecting",
+          "settled",
+          "partial",
+          "interrupted",
+          "unknown"
+        ],
+        "type": "string"
+      },
+      "ReviewProcess": {
+        "additionalProperties": false,
+        "properties": {
+          "cwd": {
+            "type": "string"
+          },
+          "exitCode": {
+            "format": "int32",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "signal": {
+            "format": "int32",
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "cwd"
+        ],
+        "type": "object"
+      },
+      "ReviewToolExecution": {
+        "additionalProperties": false,
+        "properties": {
+          "artifacts": {
+            "items": {
+              "$ref": "#/definitions/ReviewArtifact"
+            },
+            "type": "array"
+          },
+          "command": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "detailsTruncated": {
+            "type": "boolean"
+          },
+          "executionObservedAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "ordinal": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "outcome": {
+            "$ref": "#/definitions/ReviewToolOutcome"
+          },
+          "outputPreview": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "process": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/ReviewProcess"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "resultObservedAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "toolCallId": {
+            "type": "string"
+          },
+          "toolFailed": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "toolName": {
+            "type": "string"
+          },
+          "validation": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/ReviewValidation"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "artifacts",
+          "detailsTruncated",
+          "ordinal",
+          "outcome",
+          "toolCallId",
+          "toolName"
+        ],
+        "type": "object"
+      },
+      "ReviewToolOutcome": {
+        "enum": [
+          "pending",
+          "recorded",
+          "denied",
+          "unknown"
+        ],
+        "type": "string"
+      },
+      "ReviewValidation": {
+        "additionalProperties": false,
+        "properties": {
+          "declarationsSha256": {
+            "type": "string"
+          },
+          "entries": {
+            "items": {
+              "$ref": "#/definitions/ReviewArtifactCheck"
+            },
+            "type": "array"
+          },
+          "observedAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "runId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "declarationsSha256",
+          "entries",
+          "observedAtMs",
+          "runId"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "attemptId": {
+        "type": "string"
+      },
+      "evidenceId": {
+        "type": "string"
+      },
+      "observations": {
+        "items": {
+          "$ref": "#/definitions/ReviewToolExecution"
+        },
+        "type": "array"
+      },
+      "omittedCount": {
+        "description": "Omitted observation updates, not a count of distinct tool executions.",
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "state": {
+        "$ref": "#/definitions/ReviewEvidenceState"
+      },
+      "threadId": {
+        "type": "string"
+      },
+      "turnId": {
+        "type": "string"
+      },
+      "version": {
+        "format": "uint8",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "attemptId",
+      "evidenceId",
+      "observations",
+      "omittedCount",
+      "state",
+      "threadId",
+      "turnId",
+      "version"
+    ],
+    "title": "TurnReviewEvidence",
+    "type": "object"
+  }
+}

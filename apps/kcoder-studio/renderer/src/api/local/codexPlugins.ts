@@ -1,7 +1,7 @@
 import type { PluginLifecycleApi } from '@/features/plugins/pluginLifecycle'
-import { invoke } from '@tauri-apps/api/core'
-import { isTauriRuntime } from '@/lib/runtime-environment'
-import { ensureLocalExecutorStarted, requestLocalExecutor } from '@/tauri/localExecutor'
+import { invoke } from '@/lib/runtime-commands'
+import { isGatewayRuntime } from '@/lib/runtime-environment'
+import { ensureLocalExecutorStarted, requestLocalExecutor } from '@/host/localExecutor'
 import { createKCoderPluginApi } from '@/kcoder/gatewayPluginApi'
 import { runtimeNameForCurrentHost } from '@/kcoder/legacyRuntimeAbi'
 import type {
@@ -243,7 +243,8 @@ interface CodexSkillsListEntry {
   errors?: Array<{ path: string; message: string }>
 }
 
-const SELECTED_MARKETPLACE_STORAGE_KEY = 'wework.plugins.selectedCodexMarketplace'
+const SELECTED_MARKETPLACE_STORAGE_KEY = 'kcoder.plugins.selectedCodexMarketplace'
+const LEGACY_SELECTED_MARKETPLACE_STORAGE_KEY = 'wework.plugins.selectedCodexMarketplace'
 
 let cachedState: LocalCodexPluginsState | null = null
 
@@ -260,7 +261,11 @@ async function codexAppServerRequest<T>(
 
 function selectedMarketplaceId(): string {
   if (typeof window === 'undefined') return ''
-  return window.localStorage.getItem(SELECTED_MARKETPLACE_STORAGE_KEY) ?? ''
+  return (
+    window.localStorage.getItem(SELECTED_MARKETPLACE_STORAGE_KEY) ??
+    window.localStorage.getItem(LEGACY_SELECTED_MARKETPLACE_STORAGE_KEY) ??
+    ''
+  )
 }
 
 function installedPluginId(plugin: InstalledPlugin): unknown {
@@ -283,6 +288,7 @@ function rememberSelectedMarketplaceId(id: string) {
   if (id) {
     window.localStorage.setItem(SELECTED_MARKETPLACE_STORAGE_KEY, id)
   } else {
+    window.localStorage.removeItem(LEGACY_SELECTED_MARKETPLACE_STORAGE_KEY)
     window.localStorage.removeItem(SELECTED_MARKETPLACE_STORAGE_KEY)
   }
 }
@@ -533,7 +539,7 @@ async function readState(
     refresh?: boolean
   } = {}
 ): Promise<LocalCodexPluginsState> {
-  if (!isTauriRuntime()) return emptyState
+  if (!isGatewayRuntime()) return emptyState
   const requestedMarketplaceId = params.marketplaceId?.trim() || selectedMarketplaceId()
   const [availableResponse, installedResponse] = await Promise.all([
     codexAppServerRequest<{
@@ -597,15 +603,15 @@ function createNativePluginApi(): LocalCodexPluginApi {
   }
   return {
     importExternalContent(source) {
-      if (!isTauriRuntime()) {
-        return Promise.reject(new Error('External content import requires the Wework desktop app'))
+      if (!isGatewayRuntime()) {
+        return Promise.reject(new Error('External content import requires the KCoder desktop app'))
       }
       return invoke<ExternalContentImportResult>('local_executor_import_external_content', {
         options: { source },
       })
     },
     codexHomeMigrationStatus() {
-      if (!isTauriRuntime()) {
+      if (!isGatewayRuntime()) {
         return Promise.resolve({
           weworkCodexHome: '',
           nativeCodexHome: '',
@@ -617,7 +623,7 @@ function createNativePluginApi(): LocalCodexPluginApi {
       return invoke<LocalCodexHomeMigrationStatus>('local_executor_codex_home_migration_status')
     },
     initializeCodexHome(options) {
-      if (!isTauriRuntime()) {
+      if (!isGatewayRuntime()) {
         return Promise.resolve({
           weworkCodexHome: '',
           nativeCodexHome: '',
@@ -640,13 +646,13 @@ function createNativePluginApi(): LocalCodexPluginApi {
       })
     },
     readCodexLocalConfig() {
-      if (!isTauriRuntime()) {
+      if (!isGatewayRuntime()) {
         return Promise.resolve(defaultCodexLocalConfig)
       }
       return invoke<LocalCodexLocalConfig>('local_executor_read_codex_local_config')
     },
     updateCodexLocalConfig(patch) {
-      if (!isTauriRuntime()) {
+      if (!isGatewayRuntime()) {
         return Promise.resolve({ ...defaultCodexLocalConfig, ...patch })
       }
       return invoke<LocalCodexLocalConfig>('local_executor_update_codex_local_config', { patch })
@@ -663,7 +669,7 @@ function createNativePluginApi(): LocalCodexPluginApi {
       return { items: state.installedPlugins }
     },
     async listSkills(params = {}) {
-      if (!isTauriRuntime()) return []
+      if (!isGatewayRuntime()) return []
       const response = await codexAppServerRequest<{ data: CodexSkillsListEntry[] }>(
         'skills/list',
         {
@@ -676,7 +682,7 @@ function createNativePluginApi(): LocalCodexPluginApi {
       )
     },
     async listApps(params = {}) {
-      if (!isTauriRuntime()) return []
+      if (!isGatewayRuntime()) return []
       const apps: LocalDeviceApp[] = []
       let cursor: string | null = null
       do {

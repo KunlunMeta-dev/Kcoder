@@ -1,3 +1,5 @@
+import { cleanupOwnedBrowserSessions, runBrowserScenarioLifecycle, settleLifecycleStep } from "../browser-lifecycle.mjs";
+import { captureFailurePageEvidence } from "../failure-artifact.mjs";
 import { createRunContext } from "../run-context.mjs";
 import { runContextRuntime } from "../runtime-paths.mjs";
 import path from "node:path";
@@ -53,6 +55,12 @@ export async function runSessionResumeScenario(options) {
   const browserConsole = [];
   const beforeMarker = `WINDOWS_RESUME_BEFORE_${artifacts.runLabel}`;
   const afterMarker = `WINDOWS_RESUME_AFTER_${artifacts.runLabel}`;
+  const sessions = [];
+  const startOwnedSession = async options => {
+    const owned = await startSession(options);
+    sessions.push(owned);
+    return owned;
+  };
   let session;
   let browser;
   let page;
@@ -61,9 +69,10 @@ export async function runSessionResumeScenario(options) {
   let projectDir = artifacts.projectDir;
   let sessionId = "";
   await writeStartMeta(artifacts, baseRunOptions, command, "session-resume");
-  try {
+  await runBrowserScenarioLifecycle({
+    execute: async () => {
     browser = await chromium.launch(browserLaunchOptions(options));
-    session = await startSession({
+    session = await startOwnedSession({
       ...baseRunOptions,
       requestsDir: firstRequestsDir,
     });
@@ -111,11 +120,15 @@ export async function runSessionResumeScenario(options) {
     transcriptPath = path.join(projectDir, `${sessionId}.jsonl`);
     firstPtyLog = session.getPtyLog();
     await session.stop();
+    const firstExit = await settleLifecycleStep("first-pty-exit", () => session.exitPromise, 1000);
+    if (firstExit.status !== "completed") {
+      throw new Error("original session exit unconfirmed before resume");
+    }
     session = null;
     await page.close();
     page = null;
 
-    session = await startSession({
+    session = await startOwnedSession({
       ...baseRunOptions,
       requestsDir: resumedRequestsDir,
     });
@@ -253,8 +266,14 @@ export async function runSessionResumeScenario(options) {
       error.assertions = assertions;
       throw error;
     }
+    return { requestEvidence, orchestrateControlEvidence };
+    },
+    captureBeforeCleanup: () => captureFailurePageEvidence({ page }),
+    cleanup: () => cleanupOwnedBrowserSessions({ browser, sessions }),
+    onSuccess: async ({ requestEvidence, orchestrateControlEvidence }, cleanup) => {
     await writeJsonArtifact(artifacts.meta, {
       ok: true,
+      cleanup,
       mode: "session-resume",
       command,
       runId: artifacts.runId,
@@ -290,7 +309,8 @@ export async function runSessionResumeScenario(options) {
         2,
       ),
     );
-  } catch (error) {
+    },
+    onFailure: async (error, pageEvidence) => {
     await writeFailureArtifacts({
       artifacts,
       runOptions: baseRunOptions,
@@ -301,10 +321,8 @@ export async function runSessionResumeScenario(options) {
       browserConsole,
       trace,
       error,
+      pageEvidence,
     });
-    throw error;
-  } finally {
-    if (browser) await browser.close().catch(() => {});
-    if (session) await session.stop().catch(() => {});
-  }
+    },
+  });
 }

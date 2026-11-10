@@ -1,3 +1,4 @@
+import { SettingsSelect } from '@/components/settings/SettingsSelect'
 import { downloadLink } from '@/kcoder/downloadLink'
 import { useEffect, useRef, useState } from 'react'
 import { Copy, Download, Upload } from 'lucide-react'
@@ -53,7 +54,7 @@ export function WorkflowLibraryActions({
   }
   return (
     <div className="flex flex-wrap items-center gap-2" data-testid="workflow-library-actions">
-      <select
+      <SettingsSelect
         aria-label={t('workflowCanvas.version')}
         className="rounded-lg border border-border bg-background px-2 py-1 text-sm"
         value={version ?? ''}
@@ -66,7 +67,7 @@ export function WorkflowLibraryActions({
             v{item.version} · {item.title}
           </option>
         ))}
-      </select>
+      </SettingsSelect>
       <Button
         size="sm"
         variant="ghost"

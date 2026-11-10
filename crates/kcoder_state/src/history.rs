@@ -1,9 +1,13 @@
 use super::*;
 use crate::history_metadata::{HistoryTimestampBounds, load_metadata_state};
 mod bounded_transcript;
+mod completed_attempt_checkpoint;
 mod projected_transcript;
 mod replay;
 mod resume_checkpoint;
+pub use completed_attempt_checkpoint::{
+    PreparedCommittedAttemptHistory, PreparedCompletedAttemptHistory,
+};
 pub use projected_transcript::ProjectedTranscriptReader;
 mod incremental_transcript;
 pub use bounded_transcript::{BoundedTranscriptReader, load_transcript_history_bounded};
@@ -974,6 +978,34 @@ fn open_prune_session_lease(path: &Path) -> anyhow::Result<fs::File> {
 
 /// Delete one persisted session after the caller has acquired its exclusive lease.
 /// The lease file must remain in place after unlocking to preserve its stable lock identity.
+pub fn mark_session_history_deleted(
+    history_path: &Path,
+    workspace: &Path,
+) -> anyhow::Result<crate::DeletedHistoryProof> {
+    crate::history_store::mark_deleted_with_proof(history_path, workspace)
+}
+
+/// Read a prior deletion without initializing storage or changing its identity.
+pub fn read_session_history_deletion(
+    history_path: &Path,
+    workspace: &Path,
+) -> anyhow::Result<Option<crate::DeletedHistoryProof>> {
+    crate::history_store::read_deletion_proof(history_path, workspace)
+}
+
+/// Observe bounded State source/control facts without turning physical presence into authorization.
+///
+/// This observation is currently implemented only on Linux. Other platforms return
+/// [`crate::HistorySourcePresenceUnsupported`].
+pub fn observe_session_history_source_presence(
+    history_path: &Path,
+    workspace: &Path,
+) -> anyhow::Result<crate::HistorySourceObservation> {
+    crate::history_store::observe_source_presence(history_path, workspace)
+}
+
+/// Delete one persisted session after the caller has acquired its exclusive lease.
+/// Retention producers must settle their bound cleanup before deleting sidecars.
 pub fn delete_session_history_files(history_path: &Path) -> anyhow::Result<Vec<PathBuf>> {
     let metadata = match fs::symlink_metadata(history_path) {
         Ok(metadata) => Some(metadata),
@@ -1201,6 +1233,18 @@ impl PreparedTranscriptHistory {
     }
 
     pub fn load_range(&self, range: std::ops::Range<usize>) -> anyhow::Result<Vec<Message>> {
+        Ok(self
+            .load_entries_range(range)?
+            .into_iter()
+            .map(|entry| entry.message)
+            .collect())
+    }
+
+    /// Indexed presentation records retain optional native observations outside model messages.
+    pub fn load_entries_range(
+        &self,
+        range: std::ops::Range<usize>,
+    ) -> anyhow::Result<Vec<HistoryEntry>> {
         anyhow::ensure!(
             range.start <= range.end && range.end <= self.records.len(),
             "transcript range {:?} exceeds {} indexed records",
@@ -1259,7 +1303,7 @@ impl PreparedTranscriptHistory {
                 self.path.display(),
                 record.line_number
             );
-            messages.push(entry.message);
+            messages.push(entry);
         }
         Ok(messages)
     }
@@ -1275,6 +1319,7 @@ pub struct PreparedSessionResume {
     pub(super) source_stamp: crate::history_store::SourceStamp,
     pub(super) messages: Vec<Message>,
     pub(super) message_history_ids: Vec<Option<String>>,
+    pub(super) history_attempts: crate::history_append_context::HistoryAppendMetadata,
     pub(super) last_assistant_message_timestamp_ms: Option<u64>,
     pub(super) transcript_history: PreparedTranscriptHistory,
     pub(super) last_transcript_uuid: Option<String>,
@@ -1282,6 +1327,59 @@ pub struct PreparedSessionResume {
 }
 
 impl PreparedSessionResume {
+    /// Only typed Runtime startup context may precede the first conversation.
+    /// The original creation receipt stores this exact body/content digest.
+    pub fn initial_creation_history_digest(&self) -> anyhow::Result<Option<String>> {
+        use sha2::Digest;
+        let body = self.source_stamp.committed_body_key()?;
+        anyhow::ensure!(
+            crate::history_store::source_stamp(&self.path)?.same_committed_body(&self.source_stamp),
+            "NEW_TASK_HISTORY_NOT_EMPTY_OR_CHANGED"
+        );
+        let runtime_only =
+            |message: &Message| message.origin() == kcoder_types::MessageOrigin::Runtime;
+        let transcript = self.transcript_history.load_all()?;
+        if !self.messages.iter().all(runtime_only) || !transcript.iter().all(runtime_only) {
+            return Ok(None);
+        }
+        let digest = format!(
+            "{:x}",
+            sha2::Sha256::digest(serde_json::to_vec(&(
+                "kcoder-initial-creation-history-v1",
+                &self.session_id,
+                body,
+                &self.messages,
+                &transcript,
+            ))?)
+        );
+        anyhow::ensure!(
+            crate::history_store::source_stamp(&self.path)?.same_committed_body(&self.source_stamp),
+            "NEW_TASK_HISTORY_NOT_EMPTY_OR_CHANGED"
+        );
+        Ok(Some(digest))
+    }
+
+    pub fn verify_initial_creation_history(&self, original_digest: &str) -> anyhow::Result<()> {
+        anyhow::ensure!(
+            self.initial_creation_history_digest()?.as_deref() == Some(original_digest),
+            "NEW_TASK_HISTORY_NOT_EMPTY_OR_CHANGED"
+        );
+        Ok(())
+    }
+
+    /// A successor must have no old model or visible conversation entries.
+    /// This observes the original committed history and grants no execution.
+    pub fn verify_empty_creation_history(&self) -> anyhow::Result<()> {
+        anyhow::ensure!(
+            self.messages.is_empty()
+                && self.transcript_history.is_empty()
+                && self.source_stamp.known_committed_bytes() == Some(0)
+                && crate::history_store::source_stamp(&self.path)? == self.source_stamp,
+            "NEW_TASK_HISTORY_NOT_EMPTY_OR_CHANGED"
+        );
+        Ok(())
+    }
+
     pub fn persisted_base_cwd(&self) -> Option<&Path> {
         self.persisted_state
             .base_cwd
@@ -1291,6 +1389,34 @@ impl PreparedSessionResume {
 
     pub fn has_persisted_cwd(&self) -> bool {
         self.persisted_state.cwd.is_some() || self.persisted_state.base_cwd.is_some()
+    }
+
+    /// Older channel-owned sessions require explicit migration to an original task.
+    pub fn has_legacy_channel_source(&self) -> bool {
+        self.persisted_state.channel_task_source.is_some()
+            || self
+                .persisted_state
+                .agent_definition
+                .as_ref()
+                .is_some_and(|binding| {
+                    binding.source == kcoder_types::agent_definition::AgentTaskSource::Channel
+                })
+    }
+
+    /// Build transient client configuration state with no history or session writer.
+    /// Resolving a next-turn model must not perform recovery against the original task.
+    pub fn client_configuration_preview(&self, cwd: &Path) -> crate::AppState {
+        let state = crate::AppState::new(cwd);
+        {
+            let persisted = &self.persisted_state;
+            let mut inner = state.write_inner();
+            inner.session_mode = persisted.session_mode;
+            inner.studio_work_mode = persisted.studio_work_mode;
+            inner.studio_tool_selection = persisted.studio_tool_selection.clone();
+            inner.model_selection_mode = persisted.model_selection_mode;
+            inner.selected_model = persisted.selected_model.clone();
+        }
+        state
     }
 
     pub fn transcript_len(&self) -> usize {
@@ -1341,6 +1467,8 @@ fn prepare_session_resume_inner(
         .last()
         .map_or(0, |record| record.matching_prefix);
     let message_history_ids = entries.iter().map(|entry| entry.uuid.clone()).collect();
+    let history_attempts =
+        crate::history_append_context::HistoryAppendMetadata::from_entries(&entries, &session_id);
     let last_assistant_message_timestamp_ms = entries.iter().rev().find_map(|entry| {
         matches!(entry.message, Message::Assistant { .. }).then_some(entry.timestamp_ms)
     });
@@ -1364,6 +1492,7 @@ fn prepare_session_resume_inner(
             source_stamp,
             messages,
             message_history_ids,
+            history_attempts,
             last_assistant_message_timestamp_ms,
             transcript_history,
             last_transcript_uuid,
@@ -1461,6 +1590,8 @@ mod resume_checkpoint_tests {
 
     fn entry(uuid: &str, message: Message) -> serde_json::Value {
         serde_json::to_value(HistoryEntry {
+            web_sources: Vec::new(),
+            history_attempt: None,
             session_id: "session".into(),
             timestamp_ms: 7,
             uuid: Some(uuid.into()),
@@ -1605,6 +1736,103 @@ mod resume_checkpoint_tests {
                     .borrow()
                     .iter()
                     .any(|message| message.preview(100) == "after summary")
+            );
+        }
+    }
+
+    #[test]
+    fn client_configuration_preview_preserves_the_original_sidecar_and_history() {
+        use kcoder_types::{ModelSelectionMode, StudioWorkMode};
+
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("session.jsonl");
+        let source = crate::history_store::HistorySource::bind(&path).unwrap();
+        let body = lines(&[entry("u", Message::user_text("original"))]);
+        source.append(&body).unwrap();
+        let sidecar = session_state_path(temp.path(), "session");
+        let metadata = serde_json::to_vec(&serde_json::json!({
+            "schema_version": 1,
+            "base_cwd": temp.path(),
+            "cwd": temp.path(),
+            "model_selection_mode": "follow_target_default",
+            "selected_model": "test/model",
+            "studio_work_mode": "kworker",
+        }))
+        .unwrap();
+        source
+            .write_metadata(&sidecar, || Ok(metadata.clone()))
+            .unwrap();
+
+        let prepared = prepare_session_resume(&path).unwrap();
+        let preview = prepared.client_configuration_preview(temp.path());
+        assert_eq!(
+            preview.model_selection_mode(),
+            ModelSelectionMode::FollowTargetDefault
+        );
+        assert_eq!(preview.selected_model().as_deref(), Some("test/model"));
+        assert_eq!(preview.studio_work_mode(), StudioWorkMode::Kworker);
+        assert!(preview.history_path().is_none());
+        assert!(preview.messages().is_empty());
+        preview
+            .set_model_selection_mode(ModelSelectionMode::Explicit)
+            .unwrap();
+        assert_eq!(fs::read(&sidecar).unwrap(), metadata);
+        assert_eq!(fs::read(&path).unwrap(), body);
+    }
+
+    #[test]
+    fn prepared_history_identifies_both_legacy_channel_ownership_formats() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("session.jsonl");
+        let source = crate::history_store::HistorySource::bind(&path).unwrap();
+        source
+            .append(&lines(&[entry("u", Message::user_text("original"))]))
+            .unwrap();
+        let sidecar = session_state_path(temp.path(), "session");
+        let owner = serde_json::json!({
+            "accountId": "account",
+            "targetId": "target",
+            "workspaceId": "workspace",
+        });
+        let definition = serde_json::json!({
+            "id": "expert",
+            "version": "1",
+            "definitionSha256": "0".repeat(64),
+        });
+        for (channel_task_source, agent_definition, expected) in [
+            (serde_json::Value::Null, serde_json::Value::Null, false),
+            (
+                serde_json::json!({"owner":owner,"channelId":"old-channel"}),
+                serde_json::Value::Null,
+                true,
+            ),
+            (
+                serde_json::Value::Null,
+                serde_json::json!({"owner":owner,"definition":definition,"title":"Legacy","source":"channel"}),
+                true,
+            ),
+            (
+                serde_json::Value::Null,
+                serde_json::json!({"owner":owner,"definition":definition,"title":"Expert","source":"expert"}),
+                false,
+            ),
+        ] {
+            source
+                .write_metadata(&sidecar, || {
+                    Ok(serde_json::to_vec(&serde_json::json!({
+                        "schema_version": 1,
+                        "base_cwd": temp.path(),
+                        "cwd": temp.path(),
+                        "channel_task_source": channel_task_source,
+                        "agent_definition": agent_definition,
+                    }))?)
+                })
+                .unwrap();
+            assert_eq!(
+                prepare_session_resume(&path)
+                    .unwrap()
+                    .has_legacy_channel_source(),
+                expected
             );
         }
     }

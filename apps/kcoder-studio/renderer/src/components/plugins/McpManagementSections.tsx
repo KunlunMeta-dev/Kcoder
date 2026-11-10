@@ -1,3 +1,4 @@
+import { SettingsSelect } from '@/components/settings/SettingsSelect'
 import type { ChangeEvent, FormEvent } from 'react'
 import { useRef, useState } from 'react'
 import {
@@ -127,7 +128,7 @@ export function CustomMcpForm({
         </div>
       </div>
       {isJsonImportOpen && (
-        <div className="mt-5 rounded-2xl border border-border bg-background p-3">
+        <div className="studio-card-spacing mt-5 rounded-2xl border border-border bg-background">
           <div className="flex items-center justify-between gap-3">
             <p className="text-xs font-semibold text-text-secondary">
               {t(
@@ -191,7 +192,7 @@ export function CustomMcpForm({
         />
         <label className="text-xs font-semibold text-text-secondary">
           {t('workbench.plugins_custom_mcp_type', '类型')}
-          <select
+          <SettingsSelect
             value={form.type}
             data-testid="custom-mcp-type-select"
             className="mt-2 h-10 w-full rounded-xl border border-border bg-background px-3 text-sm text-text-primary outline-none focus:border-primary"
@@ -206,7 +207,7 @@ export function CustomMcpForm({
             <option value="sse">sse</option>
             <option value="http">http</option>
             <option value="stdio">stdio</option>
-          </select>
+          </SettingsSelect>
         </label>
         <McpTextInput
           label={t('workbench.plugins_custom_mcp_description_label', '描述')}
@@ -385,7 +386,7 @@ export function McpProviderBlock({
   const providerName = provider.name.trim() || provider.name_en?.trim() || provider.key
 
   return (
-    <article className="rounded-2xl border border-border bg-background p-5">
+    <article className="studio-card-spacing rounded-2xl border border-border bg-background">
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
           <div className="flex items-center gap-2">

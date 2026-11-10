@@ -1,5 +1,6 @@
 use super::*;
 use kcoder_api::ModelDiscoveryOptions;
+pub use kcoder_api::model_configuration_summary;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DiscoveredModelGroup {
@@ -64,7 +65,43 @@ impl QueryEngine {
     }
 
     pub fn current_provider(&self) -> Arc<dyn Provider> {
-        recover_read_lock(&self.provider, "provider").clone()
+        let purpose = if recover_read_lock(&self.verifier_vote_channel, "verifier_vote_channel")
+            .is_some()
+            || recover_read_lock(&self.review_vote_channel, "review_vote_channel").is_some()
+        {
+            crate::native_model_requests::NativeModelRequestPurpose::Verifier
+        } else {
+            crate::native_model_requests::NativeModelRequestPurpose::Main
+        };
+        self.current_provider_for_purpose(purpose)
+    }
+
+    pub(super) fn current_provider_for_purpose(
+        &self,
+        purpose: crate::native_model_requests::NativeModelRequestPurpose,
+    ) -> Arc<dyn Provider> {
+        let provider = recover_read_lock(&self.provider, "provider").clone();
+        let provider = if self.model_request_binding.is_none() {
+            provider
+        } else {
+            let configuration = if purpose
+                == crate::native_model_requests::NativeModelRequestPurpose::MemoryObserver
+            {
+                let mut settings = recover_read_lock(&self.settings, "settings").clone();
+                if let Some(model) = settings.memory.observer_model.clone() {
+                    settings.model = model;
+                }
+                model_configuration_summary(
+                    &settings,
+                    kcoder_types::ModelConfigurationBoundary::SessionSnapshot,
+                )
+                .ok()
+            } else {
+                self.observer_main_configuration()
+            };
+            self.observe_model_provider(provider, purpose, configuration)
+        };
+        self.observe_health_provider(provider)
     }
 
     /// Build and activate a complete provider profile for subsequent turns.
@@ -83,8 +120,10 @@ impl QueryEngine {
                     .1
             }
         } else {
-            current
+            self.current_raw_provider()
         };
+
+        persist_explicit_model_selection(&self.state, &next_settings)?;
 
         if reconfigurable && !next_settings.training_mode {
             schedule_provider_prewarm(next_provider.clone());
@@ -114,8 +153,11 @@ impl QueryEngine {
                     })?
             }
         } else {
-            current
+            self.current_raw_provider()
         };
+
+        persist_explicit_model_selection(&self.state, &next_settings)?;
+
         if reconfigurable && !next_settings.training_mode {
             schedule_provider_prewarm(next_provider.clone());
         }
@@ -555,6 +597,21 @@ impl QueryEngine {
     }
 }
 
+fn persist_explicit_model_selection(
+    state: &kcoder_state::AppState,
+    settings: &Settings,
+) -> Result<()> {
+    let profile = settings
+        .active_provider
+        .as_deref()
+        .context("selected model has no active provider profile")?;
+    state.set_model_selection(
+        kcoder_types::ModelSelectionMode::Explicit,
+        Some(format!("{profile}::{}", settings.model)),
+    )?;
+    Ok(())
+}
+
 pub(super) fn apply_client_runtime_options(
     next_settings: &mut Settings,
     proxy_url: Option<&str>,
@@ -593,91 +650,4 @@ pub(super) fn apply_client_runtime_options(
         }
     }
     Ok(())
-}
-
-/// Safe read model built from the resolved settings used by the Engine. Body
-/// contents affect only the opaque revision; they never enter this projection.
-pub fn model_configuration_summary(
-    settings: &Settings,
-    boundary: kcoder_types::ModelConfigurationBoundary,
-) -> Result<kcoder_types::ModelConfigurationSummary> {
-    use sha2::{Digest, Sha256};
-    let mut request_output_limits = std::collections::BTreeMap::new();
-    let output_field = match settings.api_format.as_ref().map(|format| format.as_str()) {
-        Some("openai_responses") => Some("max_output_tokens"),
-        Some("anthropic_messages" | "openai_chat_completions") => Some("max_tokens"),
-        _ => None,
-    };
-    if let Some(field) = output_field {
-        request_output_limits.insert(field.into(), settings.max_tokens);
-    }
-    for field in ["max_tokens", "max_completion_tokens", "max_output_tokens"] {
-        if let Some(value) = settings.provider_extra_body.get(field) {
-            request_output_limits.insert(
-                field.into(),
-                value.as_u64().and_then(|value| u32::try_from(value).ok()),
-            );
-        }
-    }
-    let mut summary = kcoder_types::ModelConfigurationSummary {
-        provider_id: settings.active_provider.clone(),
-        model_id: settings.model.clone(),
-        api_format: settings
-            .api_format
-            .as_ref()
-            .map(|format| format.as_str().to_owned()),
-        chat_protocol: serde_json::to_value(settings.provider_chat_protocol)?
-            .as_str()
-            .unwrap_or("auto")
-            .to_owned(),
-        context_window_tokens: settings.context_window_tokens,
-        max_output_tokens: settings.max_tokens,
-        request_output_limits,
-        output_headroom_tokens: settings.context_output_headroom,
-        text: settings.model_capabilities.text,
-        tools: settings.model_capabilities.tools,
-        tool_set: Some(kcoder_types::ModelToolSetSummary {
-            profile: Some(settings.tools.profile.as_str().into()),
-            registry_scope: kcoder_types::ModelToolRegistryScope::ProfileConfiguration,
-            registered_tool_count: None,
-            exposed_tool_count: None,
-        }),
-        vision: settings.model_capabilities.vision,
-        reasoning: settings.model_capabilities.reasoning,
-        structured_output: settings.model_capabilities.structured_output,
-        reasoning_effort: settings
-            .model_reasoning_effort
-            .as_ref()
-            .map(ToString::to_string),
-        reasoning_policy: settings.model_reasoning_policy.clone(),
-        extra_body_configured: !settings.provider_extra_body.is_empty(),
-        request_override_fields: [
-            "max_tokens",
-            "max_completion_tokens",
-            "max_output_tokens",
-            "temperature",
-            "thinking",
-            "reasoning",
-            "reasoning_effort",
-        ]
-        .into_iter()
-        .filter(|field| settings.provider_extra_body.contains_key(*field))
-        .map(str::to_owned)
-        .collect(),
-        revision: String::new(),
-        boundary,
-        sources: Default::default(),
-    };
-    let mut revision_summary = summary.clone();
-    revision_summary.boundary = kcoder_types::ModelConfigurationBoundary::NextTurn;
-    let bytes = serde_json::to_vec(&(
-        &revision_summary,
-        &settings.provider_extra_body,
-        &settings.base_url,
-        &settings.openai_base_url,
-        &settings.anthropic_base_url,
-        &settings.provider_chat_protocol,
-    ))?;
-    summary.revision = format!("{:x}", Sha256::digest(bytes));
-    Ok(summary)
 }

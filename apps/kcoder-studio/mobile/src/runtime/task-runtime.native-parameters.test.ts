@@ -4,6 +4,13 @@ import { join } from "node:path";
 import { fileURLToPath, URL } from "node:url";
 import { runInNewContext } from "node:vm";
 import { expect, it, vi } from "vitest";
+import { profileAuthorizationScopeKey } from "@/state/profile-coordinator";
+import { legacyAttachmentPrompt } from "@/protocol/attachment-prompt";
+import { appServerId, profile, server } from "./task-runtime/fixture.test-support";
+import { permissionParams } from "./task-runtime/turn-permissions";
+import { assertNoTranscriptAction } from "./task-runtime/transcriptActions";
+import { interactionServerIdentity } from "./task-runtime/threadDirectory";
+import { t } from "@/i18n";
 
 const require = createRequire(import.meta.url);
 const expoRequire = createRequire(require.resolve("expo/package.json"));
@@ -19,7 +26,7 @@ function nativeModule(name: string, platform: "android" | "ios", modules: Record
     caller: { name: "metro", platform, engine: "hermes", isDev: false, isServer: false, supportsStaticESM: false, supportsDynamicImport: true },
   });
   const exports: Api = {};
-  runInNewContext(result.code, { exports, module: { exports }, require: (id: string) => id.startsWith("@babel/runtime/") ? require(id) : modules[id] ?? {},
+  runInNewContext(result.code, { exports, module: { exports }, require: (id: string) => id.startsWith("@babel/runtime/") ? require(id) : modules[id] ?? (id === "./turn-permissions" ? { permissionParams } : id === "./goalProjection" ? nativeModule("goalProjection.ts", platform) : {}),
     TextEncoder, Error, Date, Math, Map, Set, Object, setTimeout, clearTimeout });
   return exports;
 }
@@ -36,34 +43,103 @@ for (const platform of ["android", "ios"] as const) {
     expect(request).toHaveBeenLastCalledWith("agent/list", {}, undefined);
   }, 20_000);
   it(`${platform} native compilation retains public history paging options and source ignore`, async () => {
-    const agents = nativeModule("agents.ts", platform), interactions = nativeModule("interactions.ts", platform);
+    const agents = nativeModule("agents.ts", platform), interactions = nativeModule("interactions.ts", platform, {
+      "@/i18n": { t },
+      "@/state/profile-coordinator": { profileAuthorizationScopeKey },
+      "./threadDirectory": { interactionServerIdentity },
+    });
     const request = vi.fn(async () => ({ threadId: "parent", agentId: "worker", content: "public" }));
-    const task = { client: { respond: vi.fn() }, clientGeneration: 1, disposed: false, snapshot: { connected: true, threadId: "parent" }, request,
-      agentCapabilities: () => ({ discover: true, pages: true }), markInteractionResponding: vi.fn(),
-      pendingInteractions: [{ kind: "question", requestId: 11, sourceAgent: { agentId: "worker", parentSessionId: "parent" } }], patch: vi.fn() };
+    const clientGeneration = 1;
+    const runtimeInstanceNonce = 27;
+    const profileActivationEpoch = 4;
+    const profileScope = profileAuthorizationScopeKey(profile);
+    const serverIdentity = interactionServerIdentity(server);
+    const owner = {
+      profileId: profile.id,
+      profileAuthorizationScopeKey: profileScope,
+      serverId: server.id,
+      appServerId,
+      serverConfigIdentity: serverIdentity,
+      threadId: "parent",
+      turnId: "turn-11",
+      appServerEpoch: "epoch-11",
+      runtimeInstanceNonce,
+      profileActivationEpoch,
+      originClientGeneration: clientGeneration,
+      status: "pending" as const,
+    };
+    const task: any = {
+      client: {
+        isTransportOpen: () => true,
+        getAppServerId: () => appServerId,
+        respond: vi.fn(),
+      },
+      clientGeneration,
+      runtimeInstanceNonce,
+      disposed: false,
+      reconnecting: false,
+      reconnectContext: {
+        profile,
+        server,
+        profileActivationEpoch,
+        isCurrentInteractionOwner: (candidate: typeof owner) => candidate === owner,
+      },
+      snapshot: { connected: true, threadId: "parent" },
+      request,
+      agentCapabilities: () => ({ discover: true, pages: true }),
+      pendingInteractions: [{
+        kind: "question",
+        requestId: 11,
+        questionId: "question-11",
+        questions: [{ id: "choice" }],
+        sourceAgent: { agentId: "worker", parentSessionId: "parent" },
+        owner,
+      }],
+      focusedInteractionSelector: null,
+      patch: vi.fn(),
+      notifyInteractionChanged: vi.fn(),
+      notifyInteractionResolved: vi.fn(),
+      markInteractionResponding: (selector: unknown, responding?: boolean) =>
+        interactions.markInteractionResponding.call(task, selector, responding),
+    };
     await agents.readSubagent.call(task, { agentId: "worker", status: "completed" }, { history: true, offset: 80, revision: "stable" });
     expect(request).toHaveBeenCalledWith("agent/artifact/read", { threadId: "parent", agentId: "worker", kind: "transcript", limit: 32768, offset: 80, revision: "stable" });
+    expect(() => interactions.respondAgentQuestions.call(task, "worker", 11, { foreign: ["yes"] }))
+      .toThrow(t("task.question_answer_items_mismatch"));
+    expect(task.client.respond).not.toHaveBeenCalled();
+    expect(task.pendingInteractions[0].responding).not.toBe(true);
     interactions.respondAgentQuestions.call(task, "worker", 11, {}, true);
     expect(task.client.respond).toHaveBeenCalledWith(11, { answers: {}, annotations: { ignored: true } });
     interactions.markInteractionResponding.call(task, 11, false);
     expect(task.pendingInteractions[0]).toMatchObject({ responding: false });
   });
   it(`${platform} native compilation preserves attachment/mode and exact reliable steer identity`, async () => {
-    const api = nativeModule("turns.ts", platform, { "../../../../shared/modelSelection": { negotiateModelSelector: async () => undefined } });
+    const api = nativeModule("turns.ts", platform, {
+      "../../../../shared/modelSelection": { negotiateModelSelector: async () => undefined },
+      "@/protocol/attachment-prompt": { legacyAttachmentPrompt },
+      "./transcriptActions": { assertNoTranscriptAction },
+    });
     const request = vi.fn(async (_method: string, params: any) => ({ agentId: params.agentId, clientMessageId: params.clientMessageId, status: "queued_live", queued: true }));
-    const task = { client: { supportsExperimental: () => true }, clientGeneration: 1, disposed: false, snapshot: { connected: true, threadId: "parent", messages: [] },
+    const task = { client: { supportsExperimental: () => true }, clientGeneration: 1, disposed: false, snapshot: { connected: true, threadId: "parent", messages: [], transcriptActionPending: false },
       request, patch: vi.fn(), startOrdinaryTurn: vi.fn(), updateSubagentSteer: vi.fn() };
     const attachment = { path: "/owned/note.txt", filename: "note.txt", mimeType: "text/plain", fileSize: 2 };
     await api.send.call(task, "native text", [attachment], "moa");
+    expect(task.startOrdinaryTurn).toHaveBeenCalledTimes(1);
+    expect(task.startOrdinaryTurn.mock.calls[0][0]).toEqual(expect.objectContaining({
+      turnMode: "moa",
+      input: [{ type: "text", text: expect.stringContaining(JSON.stringify(attachment)) }],
+    }));
+    expect(task.startOrdinaryTurn.mock.calls[0][0]).not.toHaveProperty("clientMessageId");
+    expect(task.startOrdinaryTurn.mock.calls[0][1]).toMatch(/^local-user-/);
+
+    task.startOrdinaryTurn.mockClear();
+    await api.send.call(task, "native text with explicit identity", [attachment], "moa", { clientMessageId: "native-message-id" });
+    expect(task.startOrdinaryTurn).toHaveBeenCalledTimes(1);
     expect(task.startOrdinaryTurn).toHaveBeenCalledWith(
       expect.objectContaining({
         turnMode: "moa",
-        input: [
-          {
-            type: "text",
-            text: expect.stringContaining(JSON.stringify(attachment)),
-          },
-        ],
+        clientMessageId: "native-message-id",
+        input: [{ type: "text", text: expect.stringContaining(JSON.stringify(attachment)) }],
       }),
       expect.stringMatching(/^local-user-/),
     );
@@ -83,6 +159,50 @@ for (const platform of ["android", "ios"] as const) {
     expect(task.request).toHaveBeenCalledWith("thread/goal/set", { threadId: "parent", objective: "native goal", mode: "standard", tokenBudget: 900, expectedGoalId: "goal", expectedRevision: 4, status: "active" });
     await turns.continueFailed.call(task, "failed", true);
     expect(submitted.mock.calls[0][1]).toMatchObject({ retryModelConfiguration: "current", model: "native-model", reasoningEffort: "high" });
+  });
+  it(`${platform} native compilation preserves restored effort and its owner callback positions`, async () => {
+    const restore = vi.fn(async (_client: unknown, _thread: string, _model: string, effort: string | undefined) => effort);
+    const api = nativeModule("factories.ts", platform, {
+      "./modelCatalog": { restoreReasoningEffortForThread: restore },
+    });
+    const client = {};
+    const task = { disposed: false, client, clientGeneration: 4, workspaceConfiguration: {},
+      snapshot: { connected: true, threadId: "native-thread", model: "native-model", pendingTurnPreferences: null },
+      patch: vi.fn() };
+    const stale = vi.fn(() => false);
+    await api.restoreWorkspaceConfiguration.call(task, "high", stale);
+    expect(stale).toHaveBeenCalled();
+    expect(restore).not.toHaveBeenCalled();
+    expect(task.patch).not.toHaveBeenCalled();
+    const current = vi.fn(() => true);
+    await api.restoreWorkspaceConfiguration.call(task, "high", current);
+    expect(restore).toHaveBeenCalledWith(client, "native-thread", "native-model", "high");
+    expect(task.workspaceConfiguration).toMatchObject({ reasoningEffort: "high", isCurrent: current });
+    expect(task.patch).toHaveBeenLastCalledWith({ reasoningEffort: "high", configurationReady: true });
+    await api.restoreWorkspaceConfiguration.call(task, undefined);
+    expect(restore).toHaveBeenLastCalledWith(client, "native-thread", "native-model", undefined);
+  });
+  it(`${platform} native compilation preserves accepted result, optimistic row and owner positions`, async () => {
+    const api = nativeModule("turns.ts", platform);
+    const client = {};
+    const result = { turn: { id: "native-turn", status: "running" } };
+    const task = { disposed: false, finishedAttempts: new Set(), uncertainSend: { clientMessageId: "native-cid" },
+      snapshot: { messages: [{ id: "local-user-native", role: "user", content: "native prompt", clientMessageId: "native-cid" }] },
+      patch: vi.fn() };
+    const stale = vi.fn(() => false);
+    await api.acceptOrdinaryResult.call(task, result, client, false, "local-user-native", stale);
+    expect(stale).toHaveBeenCalled();
+    expect(task.patch).not.toHaveBeenCalled();
+    expect(task.uncertainSend).toEqual({ clientMessageId: "native-cid" });
+    const current = vi.fn(() => true);
+    await api.acceptOrdinaryResult.call(task, result, client, false, "local-user-native", current);
+    expect(current).toHaveBeenCalled();
+    expect(task.patch).toHaveBeenLastCalledWith(expect.objectContaining({ running: true, activeTurnId: "native-turn",
+      messages: [expect.objectContaining({ id: "local-user-native", turnId: "native-turn", clientMessageId: "native-cid" })] }));
+    task.patch.mockClear();
+    await api.acceptOrdinaryResult.call(task, result, client, false, "local-user-native");
+    expect(task.patch).toHaveBeenLastCalledWith(expect.objectContaining({
+      messages: [expect.objectContaining({ id: "local-user-native", turnId: "native-turn" })] }));
   });
 }
 

@@ -1,11 +1,15 @@
 import json
 from pathlib import Path
 import tempfile
+from textwrap import dedent
 import unittest
 from unittest.mock import patch
 
 from generate_references import rust_brace_end
-from source_facts import claim_errors, declared_integer, integer, profile_layout, tool_profile_facts
+from source_facts import (
+    REGISTRY_SOURCE, WIRING_SOURCE, claim_errors, declared_integer, integer,
+    manifest_package_version, profile_layout, tool_profile_facts, widget_facts, luna_default_facts,
+)
 
 
 REGISTRIES = """
@@ -47,6 +51,13 @@ fn builtin_tools_for_settings(cli: &Cli, settings: &Settings) -> ToolRegistry {
 
 
 class SourceFactContracts(unittest.TestCase):
+    def test_product_version_does_not_silently_use_workspace_library_version(self):
+        self.assertEqual(manifest_package_version({"package": {"version": "2.0.0"}}, "0.1.0"), "2.0.0")
+        self.assertEqual(manifest_package_version({"package": {"version": {"workspace": True}}}, "0.1.0"), "0.1.0")
+        for invalid in [None, 2, {"workspace": False}, {"workspace": 1}, {}]:
+            with self.subTest(version=invalid), self.assertRaises(ValueError):
+                manifest_package_version({"package": {"version": invalid}}, "0.1.0")
+
     def workspace(self):
         temporary = tempfile.TemporaryDirectory(prefix="kcoder-source-facts-")
         self.addCleanup(temporary.cleanup)
@@ -62,8 +73,8 @@ class SourceFactContracts(unittest.TestCase):
 
     def test_cli_additions_have_separate_wiki_gates_and_none_stays_empty(self):
         root = self.workspace()
-        for path, value in [("crates/kcoder_tools/src/lib.rs", REGISTRIES),
-                            ("crates/kcoder_cli/src/startup/runtime_wiring.rs", WIRING)]:
+        for path, value in [(REGISTRY_SOURCE, REGISTRIES),
+                            (WIRING_SOURCE, WIRING)]:
             file = root / path
             file.parent.mkdir(parents=True, exist_ok=True)
             file.write_text(value)
@@ -71,7 +82,7 @@ class SourceFactContracts(unittest.TestCase):
         self.assertEqual(facts["tools.full.wiki_off"], 4)
         self.assertEqual(facts["tools.full.wiki_both"], 6)
         self.assertEqual(facts["tools.none.wiki_both"], 0)
-        (root / "crates/kcoder_cli/src/startup/runtime_wiring.rs").write_text(
+        (root / WIRING_SOURCE).write_text(
             WIRING.replace("can_retrieve()", "can_organize()")
         )
         with self.assertRaisesRegex(ValueError, "retrieval activation"):
@@ -83,6 +94,26 @@ class SourceFactContracts(unittest.TestCase):
                        REGISTRIES.replace("let registry =", 'if condition { register(); } let registry =', 1)]:
             with self.assertRaises(ValueError):
                 profile_layout(source, rust_brace_end)
+
+    def test_profile_helper_preserves_cli_precedence_and_rejects_changed_delegation(self):
+        root = self.workspace()
+        registry = root / REGISTRY_SOURCE
+        registry.parent.mkdir(parents=True)
+        registry.write_text(REGISTRIES)
+        wiring = root / WIRING_SOURCE
+        wiring.parent.mkdir(parents=True)
+        helper = WIRING.replace("builtin_tools_for_settings(cli: &Cli, settings: &Settings)",
+                                "builtin_tools_for_profile(profile: ToolProfile, settings: &Settings)")
+        wrapper = """fn builtin_tools_for_settings(cli: &Cli, settings: &Settings) -> ToolRegistry {
+            builtin_tools_for_profile(cli.tool_profile.effective(settings.tools.profile), settings)
+        }\n"""
+        wiring.write_text(wrapper + helper)
+        _, facts = tool_profile_facts(root, rust_brace_end)
+        self.assertEqual(facts["tools.full.wiki_both"], 6)
+        wiring.write_text(wrapper.replace("cli.tool_profile.effective(settings.tools.profile)",
+                                         "settings.tools.profile") + helper)
+        with self.assertRaisesRegex(ValueError, "profile delegation"):
+            tool_profile_facts(root, rust_brace_end)
 
     def test_comments_raw_literals_and_escaped_strings_do_not_create_registrations(self):
         source = REGISTRIES.replace("let registry =", '''
@@ -108,6 +139,95 @@ class SourceFactContracts(unittest.TestCase):
         self.assertEqual(declared_integer(root, "limits.rs", "PRIVATE"), 8192)
         self.assertEqual(declared_integer(root, "limits.rs", "PUBLIC"), 16)
         self.assertEqual(declared_integer(root, "limits.rs", "LOCAL"), 32)
+
+    def test_commented_and_quoted_constants_cannot_override_real_numeric_limits(self):
+        root = self.workspace()
+        (root / "limits.rs").write_text(dedent('''
+            /* pub const LIMIT: usize = 999; */
+            const EXAMPLE: &str = r##"pub const LIMIT: usize = 998;"##;
+            // pub const LIMIT: usize = 997;
+            pub const LIMIT: usize = 32 * 1024;
+        '''))
+        self.assertEqual(declared_integer(root, "limits.rs", "LIMIT"), 32768)
+
+    def test_reviewed_cross_crate_integer_reference_tracks_changes_and_rejects_unknown_or_cycles(self):
+        root = self.workspace()
+        shared = root / "crates/kcoder_migration/src/history_jobs.rs"
+        shared.parent.mkdir(parents=True)
+        shared.write_text("pub const HISTORY_IMPORT_CONCURRENCY: usize = 32;")
+        declaration = root / "limits.rs"
+        expression = "kcoder_migration::history_jobs::HISTORY_IMPORT_CONCURRENCY"
+        declaration.write_text(f"const LIMIT: usize = 2 * {expression};")
+        self.assertEqual(declared_integer(root, "limits.rs", "LIMIT"), 64)
+        shared.write_text("pub const HISTORY_IMPORT_CONCURRENCY: usize = 40;")
+        self.assertEqual(declared_integer(root, "limits.rs", "LIMIT"), 80)
+        declaration.write_text(f"const LIMIT: usize = 2 * {expression}_UNKNOWN;")
+        with self.assertRaisesRegex(ValueError, "Unsupported integer declaration"):
+            declared_integer(root, "limits.rs", "LIMIT")
+        declaration.write_text(f"const LIMIT: usize = {expression};")
+        shared.write_text(f"pub const HISTORY_IMPORT_CONCURRENCY: usize = {expression};")
+        with self.assertRaisesRegex(ValueError, "Cyclic integer declaration"):
+            declared_integer(root, "limits.rs", "LIMIT")
+
+    def widget_workspace(self):
+        root = self.workspace()
+        repository = Path(__file__).resolve().parents[2]
+        for path in ["crates/kcoder_types/src/widgets.rs", "crates/kcoder_types/src/studio_work_mode.rs",
+                     "crates/kcoder_engine/src/widget_render_verification.rs", "crates/kcoder_engine/src/stream_response.rs",
+                     "apps/kcoder-studio/desktop/widget-isolation/policy.mjs"]:
+            target = root / path
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text((repository / path).read_text())
+        return root
+
+    def test_widget_claims_follow_limits_modes_and_changed_feedback_deadlines(self):
+        root = self.widget_workspace()
+        facts = widget_facts(root, rust_brace_end)
+        self.assertEqual(facts["studio.work_modes"], ["kcoder", "kworker"])
+        self.assertEqual(facts["widget.source_bytes"], 1024 * 1024)
+        self.assertEqual(facts["widget.chunk_bytes"], 32 * 1024)
+        self.assertEqual(facts["widget.feedback_seconds"], 3)
+        self.assertEqual(facts["widget.automatic_repairs"], 2)
+        source = root / "crates/kcoder_engine/src/widget_render_verification.rs"
+        source.write_text(source.read_text().replace("Duration::from_secs(3)", "Duration::from_secs(4)"))
+        self.assertEqual(widget_facts(root, rust_brace_end)["widget.feedback_seconds"], 4)
+
+    def test_widget_unknown_runtime_guard_and_nonliteral_limits_fail_for_review(self):
+        root = self.widget_workspace()
+        policy = root / "apps/kcoder-studio/desktop/widget-isolation/policy.mjs"
+        original = policy.read_text()
+        policy.write_text(original.replace("chromiumVersion.startsWith('148.')", "chromiumVersion.startsWith(allowedChromium)"))
+        with self.assertRaisesRegex(ValueError, "runtime admission guard"):
+            widget_facts(root, rust_brace_end)
+        policy.write_text(original)
+        limits = root / "crates/kcoder_types/src/widgets.rs"
+        limits.write_text(limits.read_text().replace("WIDGET_SOURCE_BYTES: usize = 1024 * 1024", "WIDGET_SOURCE_BYTES: usize = read_private_configuration()"))
+        with self.assertRaisesRegex(ValueError, "Unsupported integer declaration"):
+            widget_facts(root, rust_brace_end)
+
+    def test_luna_platform_shell_counts_once_and_unknown_entries_fail_for_review(self):
+        root = self.workspace()
+        file = root / "crates/kcoder_config/src/settings/tools.rs"
+        file.parent.mkdir(parents=True)
+        source = '''pub(crate) fn default_luna_allowed_tools() -> Vec<String> {
+            let shell = if cfg!(windows) { "PowerShell" } else { "bash" };
+            [
+                "read",
+                shell,
+                "Workflow",
+                "TodoWrite",
+            ].into_iter().map(str::to_string).collect()
+        }'''
+        file.write_text(source)
+        facts = luna_default_facts(root, rust_brace_end)
+        self.assertEqual(facts["tools.luna.default.count"], 4)
+        self.assertEqual(facts["tools.luna.default"], ["read", "bash/PowerShell", "Workflow", "TodoWrite"])
+        file.write_text(source.replace('"read",', '"read",\n"read",'))
+        with self.assertRaisesRegex(ValueError, "duplicate"):
+            luna_default_facts(root, rust_brace_end)
+        file.write_text(source.replace('"read",', 'external_default(),'))
+        with self.assertRaises(ValueError):
+            luna_default_facts(root, rust_brace_end)
 
     def claims(self, root, claims):
         (root / "docs/source-claims.json").write_text(json.dumps({"schemaVersion": 1, "claims": claims}))

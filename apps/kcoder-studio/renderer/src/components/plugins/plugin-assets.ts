@@ -1,4 +1,4 @@
-import { convertFileSrc } from '@tauri-apps/api/core'
+import { clientResourceUrl } from '@/lib/client-resource-url'
 
 function isLocalAssetPath(value: string): boolean {
   if (value.startsWith('file://')) return true
@@ -23,7 +23,7 @@ export function resolvePluginAssetUrl(value?: string | null): string {
   if (!isLocalAssetPath(source)) return source
 
   try {
-    return convertFileSrc(localPathFromFileUrl(source))
+    return clientResourceUrl(localPathFromFileUrl(source)) ?? ''
   } catch {
     return source
   }

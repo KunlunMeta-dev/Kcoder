@@ -383,7 +383,7 @@ async function prepareGatewayRuntimeSnapshot(context, snapshotDirectoryArgument,
       await cp(entry.source, entry.destination, { dereference: true, filter: sourceSnapshotFilter });
     }
   }
-  await cp(appNodeModules, resolve(snapshotRoot, "node_modules"), {
+  await cp(appNodeModulesReal, resolve(snapshotRoot, "node_modules"), {
     recursive: true,
     dereference: false,
     verbatimSymlinks: true,

@@ -103,6 +103,35 @@ describe('WorktreesSettingsPage', () => {
     forgetWorktree.mockResolvedValue({ success: true })
   })
 
+  test('defaults to the actual Gateway local host even when a remote appears first', async () => {
+    render(
+      <WorktreesSettingsPage
+        api={api}
+        devices={[
+          {
+            device_id: 'peer',
+            name: 'Peer',
+            status: 'online',
+            device_type: 'remote',
+            capabilities: ['kcoder-gateway'],
+          },
+          {
+            device_id: 'custom-host',
+            name: 'My computer',
+            status: 'online',
+            device_type: 'remote',
+            capabilities: ['kcoder-gateway', 'kcoder-gateway-local'],
+          },
+        ]}
+      />
+    )
+    await waitFor(() =>
+      expect(getWorktreeSettings).toHaveBeenCalledWith({ deviceId: 'custom-host' })
+    )
+    expect(getWorktreeSettings).not.toHaveBeenCalledWith({ deviceId: 'peer' })
+    expect(screen.getByTestId('worktrees-device-select')).toHaveValue('custom-host')
+  })
+
   test('loads device defaults and linked tasks from the injected device API', async () => {
     render(<WorktreesSettingsPage api={api} devices={devices} />)
 

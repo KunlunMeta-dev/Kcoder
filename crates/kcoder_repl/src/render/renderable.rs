@@ -167,6 +167,7 @@ impl<R: Renderable> Renderable for Arc<R> {
     }
 }
 
+#[derive(Default)]
 pub struct ColumnRenderable<'a> {
     children: Vec<RenderableItem<'a>>,
 }
@@ -245,6 +246,7 @@ pub struct FlexChild<'a> {
     child: RenderableItem<'a>,
 }
 
+#[derive(Default)]
 pub struct FlexRenderable<'a> {
     children: Vec<FlexChild<'a>>,
 }
@@ -364,6 +366,7 @@ impl<'a> Renderable for FlexRenderable<'a> {
     }
 }
 
+#[derive(Default)]
 pub struct RowRenderable<'a> {
     children: Vec<(u16, RenderableItem<'a>)>,
 }

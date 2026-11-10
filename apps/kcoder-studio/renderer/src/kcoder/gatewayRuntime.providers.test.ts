@@ -5,6 +5,10 @@ import { FakeGatewayClient } from './gatewayRuntime.test-support'
 
 class ProviderClient extends FakeGatewayClient {
   override async request<T>(method: string, params: Record<string, unknown> = {}): Promise<T> {
+    if (method === 'runtime.providers.discoverModels') {
+      this.requests.push({ method, params })
+      return { models: ['Owned-Model'] } as T
+    }
     if (method === 'runtime.providers.templates') {
       this.requests.push({ method, params })
       return { templates: [{ id: 'fixture-template' }] } as T
@@ -28,6 +32,43 @@ class ProviderClient extends FakeGatewayClient {
 }
 
 describe.each([Runtime, InstalledRuntime])('target-owned provider configuration', RuntimeClass => {
+  test('draft discovery needs no model and cannot fall back to an unsupported target', async () => {
+    const client = new ProviderClient(null)
+    const capability = vi
+      .spyOn(client, 'supportsExperimental')
+      .mockImplementation(name => name !== 'providerModelDiscoveryV1')
+    const runtime = new RuntimeClass('token', {
+      loadServers: async () => [
+        { id: 'remote', label: 'Remote', transport: 'ssh', workspacePath: '/workspace' },
+      ],
+      createClient: () => client,
+    })
+    const request = {
+      serverId: 'remote',
+      method: 'runtime.providers.discoverModels',
+      params: {
+        endpoint: 'https://owned.invalid/v1',
+        apiFormat: 'openai_chat_completions',
+        apiKey: 'fixture',
+      },
+    }
+    try {
+      await expect(runtime.request('runtime.providers.request', request)).rejects.toThrow(
+        'provider_discovery_unsupported'
+      )
+      expect(client.requests.some(item => item.method === request.method)).toBe(false)
+      capability.mockImplementation(() => true)
+      await runtime.request('runtime.providers.request', request)
+      expect(client.requests).toContainEqual({ method: request.method, params: request.params })
+      expect(
+        client.requests.some(item =>
+          ['runtime.providers.upsert', 'turn/start'].includes(item.method)
+        )
+      ).toBe(false)
+    } finally {
+      runtime.dispose()
+    }
+  })
   test('does not silently discard capability edits on an old server', async () => {
     const client = new ProviderClient(null)
     vi.spyOn(client, 'supportsExperimental').mockImplementation(
@@ -308,6 +349,54 @@ describe.each([Runtime, InstalledRuntime])('target-owned provider configuration'
     ).rejects.toThrow('Unsupported')
     runtime.dispose()
     setItem.mockRestore()
+  })
+
+  test('rejects an in-flight provider mutation when the selected target identity changes without replaying it', async () => {
+    let workspacePath = '/before'
+    let finishOldMutation!: (value: unknown) => void
+    let mutationStarted = false
+    let clientsCreated = 0
+    const oldClient = new ProviderClient(null)
+    const replacementClient = new ProviderClient(null)
+    const originalRequest = oldClient.request.bind(oldClient)
+    vi.spyOn(oldClient, 'request').mockImplementation(
+      async <T>(method: string, params: Record<string, unknown> = {}): Promise<T> => {
+        if (method === 'runtime.providers.upsert') {
+          oldClient.requests.push({ method, params })
+          mutationStarted = true
+          return new Promise(resolve => {
+            finishOldMutation = value => resolve(value as T)
+          })
+        }
+        return originalRequest<T>(method, params)
+      }
+    )
+    const runtime = new RuntimeClass('token', {
+      loadServers: async () => [{ id: 'local', label: 'Local', transport: 'local', workspacePath }],
+      createClient: () => (++clientsCreated === 1 ? oldClient : replacementClient),
+    })
+    try {
+      const pending = runtime.request('runtime.providers.request', {
+        serverId: 'local',
+        method: 'runtime.providers.upsert',
+        params: { id: 'fixture-provider', validateConnection: false },
+      })
+      const rejected = expect(pending).rejects.toThrow('target changed')
+      await vi.waitFor(() => expect(mutationStarted).toBe(true))
+      workspacePath = '/after'
+      window.dispatchEvent(new Event('kcoder:servers-changed'))
+      finishOldMutation({ profiles: [], restartRequired: true })
+      await rejected
+      expect(
+        oldClient.requests.filter(item => item.method === 'runtime.providers.upsert')
+      ).toHaveLength(1)
+      expect(
+        replacementClient.requests.some(item => item.method === 'runtime.providers.upsert')
+      ).toBe(false)
+      expect(clientsCreated).toBe(1)
+    } finally {
+      await runtime.dispose()
+    }
   })
 
   test('rejects old target capabilities instead of acknowledging a configuration no-op', async () => {

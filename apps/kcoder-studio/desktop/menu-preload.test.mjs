@@ -28,7 +28,7 @@ test('preload exposes only named desktop operations on the main frame', () => {
     assert.ok(Object.isFrozen(host));
     assert.ok(Object.isFrozen(host.capabilities));
     assert.equal(host.capabilities.completionBadge, true);
-    assert.deepEqual(Object.keys(host).sort(), ['capabilities', 'download', 'hideToTray', 'onMenuCommand', 'onSettings', 'setPreferences', 'setTaskActivity', 'setTrayState', 'windowAction']);
+    assert.deepEqual(Object.keys(host).sort(), ['capabilities', 'download', 'hideToTray', 'onMenuCommand', 'onSettings', 'setPreferences', 'setTaskActivity', 'setTrayState', 'widgets', 'windowAction']);
     host.hideToTray();
     assert.deepEqual(calls, [['kcoder:tray:hide']]);
     let callbackArguments = null;
@@ -47,6 +47,30 @@ test('preload exposes only named desktop operations on the main frame', () => {
   }
 });
 
+test('widget IPC is bound by the main process sender even in additional windows', async () => {
+  const exposed = {}, calls = [], listeners = new Map();
+  runInNewContext(source, {
+    process: { isMainFrame: true, argv: ['--kcoder-window-scope=child-1'] },
+    require: () => ({ contextBridge: { exposeInMainWorld: (name, value) => { exposed[name] = value; } },
+      ipcRenderer: { invoke: (...args) => { calls.push(args); return Promise.resolve(); },
+        on: (name, callback) => listeners.set(name, callback), removeListener: name => listeners.delete(name) } }),
+  });
+  const bridge = exposed.kcoderDesktopHost.widgets;
+  assert.ok(Object.isFrozen(bridge));
+  await bridge.getCapabilities();
+  await bridge.authorize({ frameName: 'owned' });
+  await bridge.heartbeat({ leaseId: 'own-lease' });
+  await bridge.revoke({ leaseId: 'own-lease' });
+  assert.deepEqual(calls.map(call => call[0]), ['kcoder:widgets:capabilities', 'kcoder:widgets:authorize',
+    'kcoder:widgets:heartbeat', 'kcoder:widgets:revoke']);
+  let observed;
+  const off = bridge.onRevoked(value => { observed = value; });
+  listeners.get('kcoder:widgets:revoked')({ sender: 'private' }, { leaseId: 'own-lease' });
+  assert.deepEqual(observed, { leaseId: 'own-lease' });
+  off();
+  assert.equal(listeners.size, 0);
+});
+
 test('additional window IPC uses its own host-assigned scope', () => {
   const exposed = {}, calls = [];
   runInNewContext(source, {
@@ -55,9 +79,11 @@ test('additional window IPC uses its own host-assigned scope', () => {
       ipcRenderer: { invoke: (...args) => calls.push(args) } }),
   });
   exposed.kcoderDesktopMenu.list();
+  exposed.kcoderDesktopMenu.setTheme(true, 'rgb(17, 19, 22)');
   exposed.kcoderDesktopHost.windowAction('close');
   exposed.kcoderDesktopHost.pickWorkspacePaths({});
-  assert.deepEqual(calls.map(call => call[0]), ['kcoder:menu:list:child-1', 'kcoder:tray:window:child-1', 'kcoder:directories:pick:child-1']);
+  assert.deepEqual(calls.map(call => call[0]), ['kcoder:menu:list:child-1', 'kcoder:menu:theme:child-1', 'kcoder:tray:window:child-1', 'kcoder:directories:pick:child-1']);
+  assert.deepEqual(calls[1], ['kcoder:menu:theme:child-1', true, 'rgb(17, 19, 22)']);
 });
 
 test('only the local desktop launcher can expose the native directory picker capability', () => {

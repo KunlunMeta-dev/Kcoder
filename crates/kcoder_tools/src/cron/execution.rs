@@ -364,7 +364,7 @@ impl CronScheduler {
         owner: Option<&str>,
         limit: usize,
     ) -> Result<Vec<Value>, String> {
-        let diagnostics = self.execution_diagnostics(owner)?;
+        let diagnostics = self.execution_diagnostics_inner(owner, true)?;
         let candidates = diagnostics["runs"]
             .as_array()
             .into_iter()
@@ -386,8 +386,45 @@ impl CronScheduler {
     }
 
     pub fn execution_diagnostics(&self, owner: Option<&str>) -> Result<Value, String> {
+        self.execution_diagnostics_inner(owner, false)
+    }
+
+    /// Delete a history projection without erasing the evidence that prevents replay.
+    pub fn delete_execution_history(
+        &self,
+        job: &str,
+        trigger: &str,
+        owner: Option<&str>,
+    ) -> Result<bool, String> {
+        if trigger.is_empty() || trigger.len() > 512 {
+            return Err("invalid cron history identity".into());
+        }
+        self.update_execution(|file| {
+            if !file.receipts.iter().any(|receipt| {
+                receipt.job_id == job
+                    && receipt.session_id.as_deref() == owner
+                    && format!(
+                        "cron:{}:{}",
+                        receipt.job_id,
+                        receipt.scheduled_at.to_rfc3339()
+                    ) == trigger
+            }) {
+                return Ok(false);
+            }
+            file.deleted_history
+                .insert((owner.map(str::to_owned), trigger.to_owned()));
+            Ok(true)
+        })
+    }
+
+    fn execution_diagnostics_inner(
+        &self,
+        owner: Option<&str>,
+        include_deleted: bool,
+    ) -> Result<Value, String> {
         let file = read_cron_file(&self.0.path)?.unwrap_or_default();
         let runs = file.receipts.iter().rev().filter(|r| r.session_id.as_deref() == owner)
+            .filter(|r| include_deleted || !file.deleted_history.contains(&(r.session_id.clone(), format!("cron:{}:{}", r.job_id, r.scheduled_at.to_rfc3339()))))
             .map(|receipt| {
                 let mut row = match receipt.execution.as_ref() {
                     Some(run) => serde_json::to_value(run).map_err(|error| error.to_string())?,
@@ -407,7 +444,7 @@ impl CronScheduler {
                 Ok(row)
             }).collect::<Result<Vec<_>, String>>()?;
         Ok(
-            serde_json::json!({"runs":runs,"automaticReplay":false,"serviceRequired":true,
+            serde_json::json!({"runs":runs,"historyDeletionSupported":true,"automaticReplay":false,"serviceRequired":true,
             "offlinePolicy":"wait-for-host-and-service; coalesce-missed; expire-after-seven-days"}),
         )
     }
@@ -447,6 +484,77 @@ mod tests {
             .execution_diagnostics(Some(APP_PROJECT_CRON_OWNER))
             .unwrap()["runs"][0]
             .clone()
+    }
+
+    #[test]
+    fn history_deletion_is_scoped_persistent_and_preserves_execution_and_schedule() {
+        let root = tempfile::tempdir().unwrap();
+        let scheduler = CronScheduler::load(root.path());
+        let _subscription = scheduler.subscribe_session(APP_PROJECT_CRON_OWNER.into());
+        let job = scheduler
+            .create_for_session(
+                APP_PROJECT_CRON_OWNER.into(),
+                "review".into(),
+                CronSchedule::Every { every_seconds: 60 },
+                Some(0),
+            )
+            .unwrap();
+        scheduler.fire_due(job.next_run_at);
+        let event = CronFire {
+            session_id: Some(APP_PROJECT_CRON_OWNER.into()),
+            id: job.id.clone(),
+            prompt: job.prompt.clone(),
+            scheduled_at: job.next_run_at,
+            coalesced: 0,
+        };
+        assert!(scheduler.begin_execution(&event, root.path()).unwrap());
+        scheduler.fire_due(job.next_run_at + ChronoDuration::seconds(60));
+        let before = read_cron_file(&scheduler.0.path).unwrap().unwrap();
+        assert_eq!(before.receipts.len(), 2);
+        let jobs = serde_json::to_value(&before.jobs).unwrap();
+        assert!(
+            !scheduler
+                .delete_execution_history(&job.id, &event.trigger_id(), Some("peer"))
+                .unwrap()
+        );
+        assert!(
+            !scheduler
+                .delete_execution_history(
+                    "other-job",
+                    &event.trigger_id(),
+                    Some(APP_PROJECT_CRON_OWNER)
+                )
+                .unwrap()
+        );
+        for _ in 0..2 {
+            assert!(
+                scheduler
+                    .delete_execution_history(
+                        &job.id,
+                        &event.trigger_id(),
+                        Some(APP_PROJECT_CRON_OWNER)
+                    )
+                    .unwrap()
+            );
+        }
+        let restarted = CronScheduler::load(root.path());
+        let visible = restarted
+            .execution_diagnostics(Some(APP_PROJECT_CRON_OWNER))
+            .unwrap();
+        assert_eq!(visible["runs"].as_array().unwrap().len(), 1);
+        assert_ne!(visible["runs"][0]["triggerId"], event.trigger_id());
+        assert!(
+            restarted
+                .execution_reconciliation_candidates(Some(APP_PROJECT_CRON_OWNER), 16)
+                .unwrap()
+                .iter()
+                .any(|row| row["triggerId"] == event.trigger_id())
+        );
+        assert!(!restarted.begin_execution(&event, root.path()).unwrap());
+        let after = read_cron_file(&scheduler.0.path).unwrap().unwrap();
+        assert_eq!(serde_json::to_value(after.jobs).unwrap(), jobs);
+        assert_eq!(after.receipts.len(), 2);
+        assert_eq!(after.deleted_history.len(), 1);
     }
 
     #[test]

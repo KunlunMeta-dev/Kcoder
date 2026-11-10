@@ -2,7 +2,7 @@
 
 use super::*;
 
-pub(super) async fn set_active_background_projection(
+pub async fn set_active_background_projection(
     state: &Arc<Mutex<BackgroundProjectionState>>,
     thread_id: &str,
     turn_id: &str,
@@ -15,7 +15,7 @@ pub(super) async fn set_active_background_projection(
     });
 }
 
-pub(super) async fn clear_active_background_projection(
+pub async fn clear_active_background_projection(
     state: &Arc<Mutex<BackgroundProjectionState>>,
     thread_id: &str,
     turn_id: &str,
@@ -30,7 +30,7 @@ pub(super) async fn clear_active_background_projection(
     }
 }
 
-pub(super) async fn rotate_background_projection(state: &Arc<Mutex<BackgroundProjectionState>>) {
+pub async fn rotate_background_projection(state: &Arc<Mutex<BackgroundProjectionState>>) {
     let mut state = state.lock().await;
     state.active = None;
     state.jobs.clear();
@@ -47,7 +47,7 @@ pub(super) async fn rotate_background_projection(state: &Arc<Mutex<BackgroundPro
     state.steer_correlations.clear();
 }
 
-pub(super) async fn begin_agent_steer_response_gate(
+pub async fn begin_agent_steer_response_gate(
     state: &Arc<Mutex<BackgroundProjectionState>>,
     agent_id: &str,
     client_message_id: Option<String>,
@@ -66,7 +66,7 @@ pub(super) async fn begin_agent_steer_response_gate(
     Ok(())
 }
 
-pub(super) async fn finish_agent_steer_response_gate(
+pub async fn finish_agent_steer_response_gate(
     state: &Arc<Mutex<BackgroundProjectionState>>,
     outbound_tx: &mpsc::Sender<Value>,
     agent_id: &str,
@@ -123,7 +123,7 @@ pub(super) async fn finish_agent_steer_response_gate(
     Ok(())
 }
 
-pub(super) async fn clear_background_followups(state: &BackgroundFollowupState) {
+pub async fn clear_background_followups(state: &BackgroundFollowups) {
     let mut queue = state.queue.lock().await;
     queue.pending.clear();
     queue.claimed_terminal_ids.clear();
@@ -131,8 +131,8 @@ pub(super) async fn clear_background_followups(state: &BackgroundFollowupState) 
     state.notify.notify_waiters();
 }
 
-pub(super) async fn queue_background_followup_once(
-    state: &BackgroundFollowupState,
+pub async fn queue_background_followup_once(
+    state: &BackgroundFollowups,
     id: String,
     run_started_at_ms: Option<u64>,
     summary: String,
@@ -151,18 +151,16 @@ pub(super) async fn queue_background_followup_once(
     true
 }
 
-pub(super) fn followup_run_key(value: &str) -> Option<kcoder_types::BackgroundRunKey> {
+pub fn followup_run_key(value: &str) -> Option<kcoder_types::BackgroundRunKey> {
     serde_json::from_str(value).ok()
 }
 
-pub(super) fn followup_key_is_eligible(engine: &QueryEngine, value: &str) -> bool {
+pub fn followup_key_is_eligible(engine: &QueryEngine, value: &str) -> bool {
     if let Some(key) = followup_run_key(value) {
         return engine
             .state
             .task_for_background_run(&key)
-            .is_some_and(|task| {
-                task.kind == TaskKind::Subagent && task.notify_parent_on_completion
-            })
+            .is_some_and(|task| engine.background_task_wakes_parent(&task))
             && engine
                 .state
                 .background_run_record(&key)
@@ -179,9 +177,9 @@ pub(super) fn followup_key_is_eligible(engine: &QueryEngine, value: &str) -> boo
     engine.background_job_triggers_followup(value)
 }
 
-pub(super) async fn queue_recovered_background_followups(
+pub async fn queue_recovered_background_followups(
     engine: &QueryEngine,
-    state: &BackgroundFollowupState,
+    state: &BackgroundFollowups,
     recovered: Vec<(String, String)>,
     should_trigger: impl Fn(&str) -> bool,
 ) {
@@ -204,7 +202,7 @@ pub(super) async fn queue_recovered_background_followups(
     }
 }
 
-pub(super) async fn register_background_tool_call(
+pub async fn register_background_tool_call(
     state: &Arc<Mutex<BackgroundProjectionState>>,
     tool_call_id: &str,
     thread_id: &str,
@@ -221,7 +219,7 @@ pub(super) async fn register_background_tool_call(
     );
 }
 
-pub(super) fn retire_background_projection(state: &mut BackgroundProjectionState, id: &str) {
+pub fn retire_background_projection(state: &mut BackgroundProjectionState, id: &str) {
     state.terminal_jobs.insert(id.to_owned());
     state.jobs.remove(id);
     state.associated_jobs.remove(id);
@@ -230,7 +228,7 @@ pub(super) fn retire_background_projection(state: &mut BackgroundProjectionState
     }
 }
 
-pub(super) async fn project_engine_background_event(
+pub async fn project_engine_background_event(
     state: &Arc<Mutex<BackgroundProjectionState>>,
     outbound_tx: &mpsc::Sender<Value>,
     event: EngineEvent,
@@ -466,11 +464,14 @@ pub(super) async fn project_engine_background_event(
     result
 }
 
-pub(super) async fn project_managed_background_event(
+pub type TerminalResultObserver = fn(&QueryEngine, &EngineEvent) -> Option<String>;
+
+pub async fn project_managed_background_event(
     engine: &QueryEngine,
     state: &Arc<Mutex<BackgroundProjectionState>>,
     outbound_tx: &mpsc::Sender<Value>,
     event: EngineEvent,
+    record_terminal_result: TerminalResultObserver,
 ) -> Result<()> {
     let Some(id) = background_event_id(&event) else {
         return Ok(());
@@ -501,6 +502,12 @@ pub(super) async fn project_managed_background_event(
                 return Ok(());
             }
         }
+    }
+    // One terminal run may become the recorded result of the business work item
+    // bound to this thread. Recording is the only side effect: nothing is
+    // replayed, no delivery is resent and completion stays a separate CAS.
+    if let Some(outcome) = record_terminal_result(engine, &event) {
+        tracing::info!(outcome = %outcome, "continuous-work terminal result handoff");
     }
     let resumed_association = if matches!(
         event.background_payload(),
@@ -534,7 +541,7 @@ pub(super) async fn project_managed_background_event(
 }
 
 #[cfg(test)]
-pub(super) async fn project_background_broadcast_event(
+pub async fn project_background_broadcast_event(
     state: &Arc<Mutex<BackgroundProjectionState>>,
     outbound_tx: &mpsc::Sender<Value>,
     event: BackgroundJobEvent,
@@ -542,21 +549,29 @@ pub(super) async fn project_background_broadcast_event(
     project_engine_background_event(state, outbound_tx, event.into()).await
 }
 
-pub(super) async fn project_flushed_background_events(
+async fn project_flushed_background_events(
     engine: &QueryEngine,
     state: &Arc<Mutex<BackgroundProjectionState>>,
     outbound_tx: &mpsc::Sender<Value>,
     events: Vec<EngineEvent>,
+    record_terminal_result: TerminalResultObserver,
 ) -> Result<()> {
     for event in events {
         if background_event_id(&event).is_some() {
-            project_managed_background_event(engine, state, outbound_tx, event).await?;
+            project_managed_background_event(
+                engine,
+                state,
+                outbound_tx,
+                event,
+                record_terminal_result,
+            )
+            .await?;
         }
     }
     Ok(())
 }
 
-pub(super) async fn reconcile_background_jobs(
+pub async fn reconcile_background_jobs(
     engine: &QueryEngine,
     state: &Arc<Mutex<BackgroundProjectionState>>,
     outbound_tx: &mpsc::Sender<Value>,
@@ -668,17 +683,14 @@ pub(super) async fn reconcile_background_jobs(
     Ok(followups)
 }
 
-pub(super) fn reconciled_background_followup(
-    task: &Task,
-    routable: bool,
-) -> Option<(String, String)> {
+pub fn reconciled_background_followup(task: &Task, routable: bool) -> Option<(String, String)> {
     routable
         .then(|| background_task_terminal_summary(task))
         .flatten()
         .map(|summary| (task.id.clone(), summary))
 }
 
-pub(super) fn background_task_is_routable(
+pub fn background_task_is_routable(
     state: &BackgroundProjectionState,
     task_id: &str,
     tool_call_id: &str,
@@ -692,21 +704,21 @@ pub(super) fn background_task_is_routable(
         || state.terminal_jobs.contains(task_id)
 }
 
-pub(super) fn background_task_terminal_summary(task: &Task) -> Option<String> {
+pub fn background_task_terminal_summary(task: &Task) -> Option<String> {
     match task.status {
-        TaskStatus::Completed => Some(format!("background sub-agent `{}` completed", task.id)),
+        TaskStatus::Completed => Some(format!("background job `{}` completed", task.id)),
         TaskStatus::Failed => Some(format!(
-            "background sub-agent `{}` failed: {}",
+            "background job `{}` failed: {}",
             task.id,
             task.output.as_deref().unwrap_or("background job failed")
         )),
         TaskStatus::Cancelled => Some(format!(
-            "background sub-agent `{}` was cancelled: {}",
+            "background job `{}` was cancelled: {}",
             task.id,
             task.output.as_deref().unwrap_or("background job cancelled")
         )),
         TaskStatus::Halted => Some(format!(
-            "background sub-agent `{}` was halted: {}",
+            "background job `{}` was halted: {}",
             task.id,
             task.output.as_deref().unwrap_or("background job halted")
         )),
@@ -716,7 +728,7 @@ pub(super) fn background_task_terminal_summary(task: &Task) -> Option<String> {
     }
 }
 
-pub(super) fn agent_summary(task: Task) -> AgentSummary {
+pub fn agent_summary(task: Task) -> AgentSummary {
     let queue_depth = task.message_queue.len();
     let status = match task.status {
         TaskStatus::Pending => "pending",
@@ -770,27 +782,25 @@ pub(super) fn agent_summary(task: Task) -> AgentSummary {
     }
 }
 
-pub(super) fn background_terminal_summary(event: &BackgroundJobEvent) -> Option<(&str, String)> {
+pub fn background_terminal_summary(event: &BackgroundJobEvent) -> Option<(&str, String)> {
     match event.payload() {
         BackgroundJobEvent::Completed { id, .. } => {
-            Some((id, format!("background sub-agent `{id}` completed")))
+            Some((id, format!("background job `{id}` completed")))
         }
-        BackgroundJobEvent::Failed { id, error } => {
-            Some((id, format!("background sub-agent `{id}` failed: {error}")))
+        BackgroundJobEvent::Failed { id, error, .. } => {
+            Some((id, format!("background job `{id}` failed: {error}")))
         }
-        BackgroundJobEvent::Halted { id, reason } => Some((
-            id,
-            format!("background sub-agent `{id}` was halted: {reason}"),
-        )),
-        BackgroundJobEvent::Cancelled { id, reason } => Some((
-            id,
-            format!("background sub-agent `{id}` was cancelled: {reason}"),
-        )),
+        BackgroundJobEvent::Halted { id, reason } => {
+            Some((id, format!("background job `{id}` was halted: {reason}")))
+        }
+        BackgroundJobEvent::Cancelled { id, reason } => {
+            Some((id, format!("background job `{id}` was cancelled: {reason}")))
+        }
         _ => None,
     }
 }
 
-pub(super) fn has_running_background_followups(engine: &QueryEngine) -> bool {
+pub fn has_running_background_followups(engine: &QueryEngine) -> bool {
     engine.state.tasks().into_values().any(|task| {
         matches!(task.kind, TaskKind::Subagent)
             && task.notify_parent_on_completion
@@ -798,8 +808,8 @@ pub(super) fn has_running_background_followups(engine: &QueryEngine) -> bool {
     })
 }
 
-pub(super) async fn take_ready_background_followup_batch(
-    state: &BackgroundFollowupState,
+pub async fn take_ready_background_followup_batch(
+    state: &BackgroundFollowups,
     has_running: bool,
     engine: Option<&QueryEngine>,
     should_trigger: impl Fn(&str) -> bool,
@@ -850,8 +860,8 @@ pub(super) async fn take_ready_background_followup_batch(
 }
 
 #[cfg(test)]
-pub(super) async fn take_ready_background_followup(
-    state: &BackgroundFollowupState,
+pub async fn take_ready_background_followup(
+    state: &BackgroundFollowups,
     has_running: bool,
     should_trigger: impl Fn(&str) -> bool,
 ) -> Option<String> {
@@ -860,23 +870,24 @@ pub(super) async fn take_ready_background_followup(
         .map(|(summary, _)| summary)
 }
 
-pub(super) fn background_followup_nudge(summary: &str) -> String {
+pub fn background_followup_nudge(summary: &str) -> String {
     format!(
-        "[system] All tracked background sub-agents have finished. Aggregate their results now \
-         using the available `<subagent_notification .../>` entries and output files. Events: \
-         {summary}. Continue the original task, do not repeat work already delegated to a \
-         sub-agent, and do not give a final conclusion until the relevant results have been \
-         inspected."
+        "[system] All tracked background work has finished. Aggregate the results now using \
+         the available `<subagent_notification .../>`, `<workflow_notification .../>` and \
+         `<task_notification .../>` entries and output files. Events: {summary}. Continue the \
+         original task, do not repeat work already delegated to background work, and do not \
+         give a final conclusion until the relevant results have been inspected."
     )
 }
 
-pub(super) async fn run_background_event_pump(
+pub async fn run_background_event_pump(
     engine: QueryEngine,
     mut receiver: tokio::sync::broadcast::Receiver<BackgroundJobEvent>,
     state: Arc<Mutex<BackgroundProjectionState>>,
-    followups: Arc<BackgroundFollowupState>,
+    followups: Arc<BackgroundFollowups>,
     outbound_tx: mpsc::Sender<Value>,
     cancel: CancellationToken,
+    record_terminal_result: TerminalResultObserver,
 ) {
     let mut idle_tick = tokio::time::interval(std::time::Duration::from_millis(500));
     idle_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
@@ -893,7 +904,7 @@ pub(super) async fn run_background_event_pump(
                     continue;
                 }
                 let events = engine.flush_background_jobs_with_hooks().await;
-                if project_flushed_background_events(&engine, &state, &outbound_tx, events)
+                if project_flushed_background_events(&engine, &state, &outbound_tx, events, record_terminal_result)
                     .await
                     .is_err()
                 {
@@ -926,11 +937,11 @@ pub(super) async fn run_background_event_pump(
                             && !engine.turn_driver_active()
                         {
                             let events = engine.flush_background_jobs_with_hooks().await;
-                            if project_flushed_background_events(&engine, &state, &outbound_tx, events).await.is_err() {
+                            if project_flushed_background_events(&engine, &state, &outbound_tx, events, record_terminal_result).await.is_err() {
                                 break;
                             }
                         }
-                        if project_managed_background_event(&engine, &state, &outbound_tx, event.into()).await.is_err() {
+                        if project_managed_background_event(&engine, &state, &outbound_tx, event.into(), record_terminal_result).await.is_err() {
                             break;
                         }
                         if let Some((id, summary)) = terminal_summary
@@ -954,7 +965,7 @@ pub(super) async fn run_background_event_pump(
                     Err(tokio::sync::broadcast::error::RecvError::Lagged(skipped)) => {
                         tracing::warn!(skipped, "app-server background event pump lagged");
                         let events = engine.flush_background_jobs_with_hooks().await;
-                        if project_flushed_background_events(&engine, &state, &outbound_tx, events).await.is_err() {
+                        if project_flushed_background_events(&engine, &state, &outbound_tx, events, record_terminal_result).await.is_err() {
                             break;
                         }
                         match reconcile_background_jobs(&engine, &state, &outbound_tx).await {
@@ -973,38 +984,6 @@ pub(super) async fn run_background_event_pump(
                     Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
                 }
             }
-        }
-    }
-}
-
-impl BackgroundEventPump {
-    pub(super) fn spawn(
-        engine: &QueryEngine,
-        state: Arc<Mutex<BackgroundProjectionState>>,
-        followups: Arc<BackgroundFollowupState>,
-        outbound_tx: mpsc::Sender<Value>,
-    ) -> Self {
-        let cancel = CancellationToken::new();
-        let receiver = engine.subscribe_background_jobs();
-        let handle = tokio::spawn(run_background_event_pump(
-            engine.clone(),
-            receiver,
-            state,
-            followups,
-            outbound_tx,
-            cancel.clone(),
-        ));
-        Self { cancel, handle }
-    }
-
-    pub(super) async fn stop(mut self) {
-        self.cancel.cancel();
-        if tokio::time::timeout(BACKGROUND_PUMP_SHUTDOWN_TIMEOUT, &mut self.handle)
-            .await
-            .is_err()
-        {
-            self.handle.abort();
-            let _ = self.handle.await;
         }
     }
 }

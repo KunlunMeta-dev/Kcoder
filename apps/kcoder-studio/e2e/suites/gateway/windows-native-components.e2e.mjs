@@ -1,0 +1,12 @@
+import { runE2E } from '../../harness/run-context.mjs';
+import { verifyWindowsNativeComponents } from '../../harness/windows-installer-lifecycle.mjs';
+if(process.env.KCODER_E2E_WINDOWS_NATIVE_COMPONENTS!=='1')throw Error('UNMET_PREREQUISITE: explicit owned Windows native component probe required');
+const gatewayMode=process.env.KCODER_E2E_WINDOWS_NATIVE_GATEWAY==='1';
+if(gatewayMode&&(!process.env.KCODER_E2E_WINDOWS_GATEWAY_SOURCE_ARCHIVE||!process.env.KCODER_E2E_WINDOWS_NATIVE_COMPONENT_ADDON))throw Error('UNMET_PREREQUISITE: actual Gateway archive and addon required');
+const imageOnly=process.env.KCODER_E2E_WINDOWS_NATIVE_IMAGE_ONLY==='1';
+if(imageOnly&&!process.env.KCODER_E2E_WINDOWS_NATIVE_COMPONENT_ADDON)throw Error('UNMET_PREREQUISITE: actual compiled image addon required');
+const options={nativeGateway:process.env.KCODER_E2E_WINDOWS_NATIVE_GATEWAY==='1',gatewayArchive:process.env.KCODER_E2E_WINDOWS_GATEWAY_SOURCE_ARCHIVE,nativeImageOnly:imageOnly,nativeImageAddon:process.env.KCODER_E2E_WINDOWS_NATIVE_COMPONENT_ADDON,target:process.env.KCODER_E2E_WINDOWS_SSH_TARGET,installation:process.env.KCODER_E2E_WINDOWS_STUDIO_DIRECTORY,
+ probeCli:process.env.KCODER_E2E_WINDOWS_NATIVE_CLI,probeSupervisor:process.env.KCODER_E2E_WINDOWS_NATIVE_SUPERVISOR,
+ readonlyProbe:process.env.KCODER_E2E_WINDOWS_NATIVE_STORE_READONLY_PROBE,sdkArchive:process.env.KCODER_E2E_WINDOWS_CHANNEL_SOURCE_ARCHIVE,node:process.env.KCODER_E2E_WINDOWS_NODE};
+await runE2E(import.meta.url,{testId:gatewayMode?'actual-windows-cookie-selected-target-native-image':imageOnly?'actual-windows-native-kernel-image-lock':'actual-windows-ordinary-user-native-component-parent',tier:'manual-live',cleanupTimeoutMs:120000,
+ modelPolicy:gatewayMode?'Actual Cookie-authenticated Windows Source Gateway automatically captures loaded image and sealed SDK for its selected default native target, then actual Main saves/reads disabled configuration; no manual native env, no Electron/account/model/platform or personal installation claim.':imageOnly?'Actual loaded Node-API module and held kernel image lease only in a new owned ordinary account; no Main/Gateway claim, no model/platform or personal change.':'No model/platform or personal installation change. A new isolated ordinary Windows account runs actual Node→CLI stdio with OS parent/SID/held roots; unverified/unsupported account descriptors refuse, actual sealed Main save/read works, tampering refuses. Reuses the existing account/desktop/cleanup lifecycle.'},context=>verifyWindowsNativeComponents(context,options));

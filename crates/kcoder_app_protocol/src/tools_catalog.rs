@@ -6,6 +6,11 @@ pub use kcoder_types::tool_ui::{TOOL_CATALOG_BYTE_LIMIT, TOOL_CATALOG_LIMIT};
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ToolsCatalogParams {
+    /// Gateway declaration set from this client's negotiated capability.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub async_user_questions: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub client_presentation: Option<kcoder_types::ClientPresentationV1>,
     /// Omit for the current target's workspace baseline, not a union of threads.
     #[serde(default)]
     pub thread_id: Option<String>,

@@ -10,6 +10,7 @@ import type {
   RuntimePlanEventPayload,
   RuntimeGuidanceAppliedPayload,
   RuntimeSubagentActivityPayload,
+  NormalizedRuntimeMessage,
 } from '@/types/api'
 import type { DeviceSlotUpdatePayload, DeviceUpgradeStatusPayload } from '@/types/device-events'
 import type { SocketClientSocket } from '@wegent/chat-core'
@@ -34,6 +35,7 @@ export interface RuntimeTransportReplacedPayload {
 export interface ChatStreamHandlers {
   scope?: ChatStreamScope
   onChatStart?: (payload: ChatStartPayload) => void
+  onUserMessage?: (payload: ChatStartPayload & { message: NormalizedRuntimeMessage }) => void
   onChatChunk?: (payload: ChatChunkPayload) => void
   onChatDone?: (payload: ChatDonePayload) => void
   onChatError?: (payload: ChatErrorPayload) => void

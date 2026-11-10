@@ -1,4 +1,4 @@
-import { listen } from '@tauri-apps/api/event'
+import { listen } from '@/lib/runtime-events'
 import { afterEach, beforeEach, expect, vi } from 'vitest'
 import type { GatewayServer } from './gatewayRpc'
 import { KCoderGatewayRuntime, type KCoderGatewayRuntimeOptions } from './gatewayRuntime'
@@ -70,6 +70,7 @@ export class FakeGatewayClient extends EventTarget {
   supportsExperimental(capability: string) {
     if (capability === 'threadIndexedPagesV1') return this.indexedPagesSupported
     if (capability === 'threadListCompleteness') return false
+    if (capability === 'threadGoalStatusBatchV1') return false
     return capability === 'agentSteering' ? this.agentSteeringSupported : true
   }
 
@@ -88,6 +89,13 @@ export class FakeGatewayClient extends EventTarget {
     this.requests.push({ method, params })
     if (method === 'thread/start')
       return (this.threadId ? { thread: { id: this.threadId } } : {}) as T
+    if (method === 'thread/model/select') {
+      return {
+        accepted: true,
+        model: params.model,
+        appliesAt: 'next_tool_result_or_response_boundary',
+      } as T
+    }
     if (method === 'thread/list') {
       const start = Number(params.cursor ?? 0)
       const limit = Number(params.limit ?? 100)
@@ -431,7 +439,7 @@ let consoleWarn: ReturnType<typeof vi.spyOn> | null = null
 beforeEach(async () => {
   emittedGatewayEvents.splice(0)
   cleanupIpc = installGatewayIpc(command => {
-    throw new Error(`测试未声明的 Tauri IPC：${command}`)
+    throw new Error(`测试未声明的 Gateway IPC：${command}`)
   })
   unlistenGatewayEvents = await listen('local-executor:event', event => {
     emittedGatewayEvents.push(event.payload)
@@ -487,5 +495,5 @@ afterEach(async () => {
   localStorage.clear()
   if (teardownError) throw teardownError
   expect(unexpectedErrors, 'runtime 测试不应产生 console.error').toEqual([])
-  expect(unexpectedWarnings, 'runtime 测试不应产生 console.warn/Tauri callback warning').toEqual([])
+  expect(unexpectedWarnings, 'runtime 测试不应产生 console.warn/Gateway callback warning').toEqual([])
 })

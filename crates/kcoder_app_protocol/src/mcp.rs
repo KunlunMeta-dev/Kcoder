@@ -1,3 +1,6 @@
+mod revocation;
+pub use revocation::*;
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -47,6 +50,8 @@ impl From<McpConnectionAttemptStatus> for McpConnectionAttempt {
 pub struct McpServerSummary {
     pub name: String,
     pub transport: String,
+    #[serde(default = "default_enabled", skip_serializing_if = "is_enabled")]
+    pub enabled: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub plugin_id: Option<String>,
     pub authorization: McpAuthorizationStatus,
@@ -56,6 +61,33 @@ pub struct McpServerSummary {
     pub last_connection_failure: Option<kcoder_types::mcp_failure::McpFailureReason>,
 }
 
+fn default_enabled() -> bool {
+    true
+}
+
+fn is_enabled(value: &bool) -> bool {
+    *value
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "json-schema", derive(schemars::JsonSchema))]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct McpSetEnabledParams {
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plugin_id: Option<String>,
+    pub enabled: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "json-schema", derive(schemars::JsonSchema))]
+#[serde(rename_all = "camelCase")]
+pub struct McpSetEnabledResult {
+    pub name: String,
+    pub enabled: bool,
+    pub applies_to_new_conversations: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct McpListResult {
@@ -63,6 +95,7 @@ pub struct McpListResult {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "json-schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct McpServerParams {
     pub name: String,
@@ -146,9 +179,12 @@ mod connection_status_tests {
     fn historical_status_is_optional_for_older_peers() {
         let legacy = serde_json::json!({"name":"fixture","transport":"stdio","authorization":"notApplicable"});
         let mut summary: McpServerSummary = serde_json::from_value(legacy.clone()).unwrap();
+        assert!(summary.enabled);
         assert_eq!(summary.last_connection_attempt, None);
         assert_eq!(summary.last_connection_failure, None);
         assert_eq!(serde_json::to_value(&summary).unwrap(), legacy);
+        summary.enabled = false;
+        assert_eq!(serde_json::to_value(&summary).unwrap()["enabled"], false);
         summary.last_connection_attempt = Some(McpConnectionAttemptStatus::Unavailable);
         assert_eq!(
             serde_json::to_value(summary).unwrap()["lastConnectionAttempt"],

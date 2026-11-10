@@ -7,7 +7,7 @@ set -euo pipefail
 script_dir="$(cd -P "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_dir="$(cd -P "$script_dir/../.." && pwd)"
 source "$repo_dir/scripts/install/lib/ripgrep.sh"
-version="${1:-$(sed -n 's/^version = "\([^"]*\)"/\1/p' "$repo_dir/Cargo.toml" | head -1)}"
+version="${1:-$(sed -n 's/^version = "\([^"]*\)"/\1/p' "$repo_dir/crates/kcoder_cli/Cargo.toml" | head -1)}"
 target="${KCODER_WINDOWS_TARGET:-x86_64-pc-windows-gnu}"
 out_dir="${KCODER_RELEASE_OUT:-$repo_dir/target/dist}"
 cargo_bin="${KCODER_CARGO_BIN:-cargo}"

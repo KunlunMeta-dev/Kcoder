@@ -129,7 +129,7 @@ await runE2E(
       context.registerSecret(relayGatewaySecret);
       const relayPairingToken = gateway.authToken;
       relay = await startRelay({
-        gateways: [{ id: gatewayId, secret: relayGatewaySecret, pairingToken: relayPairingToken }],
+        gateways: [{ id: gatewayId, secret: relayGatewaySecret, gatewaySecret: relayPairingToken }],
         sharedHosts: [relayAuthority],
         controlPort: 0,
         proxyPort: relayProxyPort,

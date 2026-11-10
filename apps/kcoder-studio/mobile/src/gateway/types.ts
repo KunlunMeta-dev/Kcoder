@@ -1,5 +1,7 @@
 import type { ProviderFailureDetails } from '../../../shared/providerFailure';
 import type { ThreadRunSummary } from '../../../shared/threadRunSummary';
+import type { GatewayConnectionRoutes } from '../../../shared/gatewayConnectionRoutes.js';
+import type { GatewayServerCapabilities } from "./rpc";
 export interface GatewayProfile {
   id: string;
   label: string;
@@ -9,20 +11,38 @@ export interface GatewayProfile {
   rpcToken: string;
   /** Non-secret authorization family identity; stable across access-token refresh. */
   authorizationGeneration?: string;
+  /** Non-secret signed LAN/public route descriptor for this Gateway. */
+  connectionRoutes?: GatewayConnectionRoutes;
   authMode?: "device" | "legacy";
   deviceId?: string;
   refreshExpiresAt?: number;
   accessTtlMs?: number;
   refreshToken?: string;
   pendingRotationId?: string;
+  /** Non-secret profile scope denied by an authenticated Gateway 401. */
+  reauthorizationRequiredScope?: string;
+}
+
+/** Ephemeral in-memory evidence for the exact grant that received HTTP 401. Never persist or log. */
+export interface GatewayAuthorizationDenialWitness {
+  profileId: string;
+  baseUrl: string;
+  authMode?: "device" | "legacy";
+  authorizationGeneration?: string;
+  deviceId?: string;
+  accessToken: string;
+  refreshToken?: string;
 }
 
 export interface KCoderServer {
   id: string;
   label: string;
+  labelKey?: "currentComputer";
   description: string;
   runtime: "kcoder";
   transport: "local" | "ssh";
+  /** Opaque, non-secret Gateway target revision for cwd observation preconditions. */
+  observationTargetIdentity?: string;
   workspacePath?: string;
   host?: string;
   user?: string;
@@ -62,6 +82,11 @@ export interface ServerStatus {
   latencyMs?: number;
   checkedAt?: number;
   error?: string;
+  /** Version reported by serverInfo.version in the app-server initialize result. */
+  appServerVersion?: string | null;
+  /** Protocol selected in the app-server initialize result. */
+  protocolVersion?: string | null;
+  capabilities?: GatewayServerCapabilities;
 }
 
 export interface ThreadSummary {
@@ -81,6 +106,8 @@ export interface ThreadSummary {
 }
 
 export interface ThreadMessage {
+  fileChangesCapture?: unknown;
+  reviewEvidence?: unknown;
   attemptId?: string;
   continuedByAttemptId?: string;
   error?: string;

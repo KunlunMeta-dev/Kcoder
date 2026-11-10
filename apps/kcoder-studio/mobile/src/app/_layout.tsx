@@ -1,11 +1,14 @@
+import { loadConversationFonts } from "@/features/conversation/conversation-fonts";
+import { ScreenFocusBoundary } from "@/navigation/screen-focus-boundary";
+import type { PropsWithChildren } from "react";
 import { useEffect, useState } from "react";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { AppState } from "react-native";
-import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AppProvider } from "@/state/AppContext";
 import { initTheme, refreshSystemTheme, setThemePreference, useTheme } from "@/theme";
 import { RootErrorBoundary } from "@/components/root-error-boundary";
+import MobileWebDocumentMetadata from "@/navigation/mobile-web-metadata";
 import {
   getAppPreferencesSnapshot,
   hydrateAppPreferences,
@@ -20,11 +23,14 @@ import {
 } from "@/i18n";
 import { getSystemLocaleTag } from "@/i18n/system-locale";
 
+const screenLayout = ({ children }: PropsWithChildren) => <ScreenFocusBoundary>{children}</ScreenFocusBoundary>;
+
 export default function RootLayout() {
   const [preferencesReady, setPreferencesReady] = useState(false);
   const { colors, mode } = useTheme();
 
   useEffect(() => {
+    void loadConversationFonts();
     let cancelled = false;
     void hydrateAppPreferences()
       .then((loadedPreferences) => {
@@ -68,33 +74,36 @@ export default function RootLayout() {
 
   if (!preferencesReady) return null;
   return (
-    <SafeAreaProvider>
-      <RootErrorBoundary>
-        <AppProvider>
-          <StatusBar
-            style={mode === "dark" ? "light" : "dark"}
-            backgroundColor={colors.background}
-          />
-          <Stack
-            screenOptions={{
-              headerShown: false,
-              contentStyle: { backgroundColor: colors.background },
-              animation: "fade",
-            }}
-          >
-            <Stack.Screen name="index" />
-            <Stack.Screen name="welcome" />
-            <Stack.Screen name="connect" />
-            <Stack.Screen name="h/[profileId]" />
-            <Stack.Screen name="new" />
-            <Stack.Screen name="settings" />
-            <Stack.Screen name="sessions" />
-            <Stack.Screen name="open-project" />
-            <Stack.Screen name="pair-scan" />
-            <Stack.Screen name="server-editor" />
-          </Stack>
-        </AppProvider>
-      </RootErrorBoundary>
-    </SafeAreaProvider>
+    <RootErrorBoundary>
+      <AppProvider>
+        <MobileWebDocumentMetadata />
+        <StatusBar style={mode === "dark" ? "light" : "dark"} />
+        <Stack
+          screenLayout={screenLayout}
+          screenOptions={{
+            headerShown: false,
+            contentStyle: { backgroundColor: colors.background },
+            animation: "fade",
+          }}
+        >
+          <Stack.Screen name="index" />
+          <Stack.Screen name="welcome" />
+          <Stack.Screen name="connect" />
+          <Stack.Screen name="h/[profileId]" />
+          <Stack.Screen name="new" />
+          <Stack.Screen name="settings" />
+          <Stack.Screen name="settings-section" options={{ animation: "slide_from_right" }} />
+          <Stack.Screen name="settings-connections" options={{ animation: "slide_from_right" }} />
+          <Stack.Screen name="settings-appearance" options={{ animation: "slide_from_right" }} />
+          <Stack.Screen name="settings-terminal" options={{ animation: "slide_from_right" }} />
+          <Stack.Screen name="settings-diagnostics" options={{ animation: "slide_from_right" }} />
+          <Stack.Screen name="settings-about" options={{ animation: "slide_from_right" }} />
+          <Stack.Screen name="sessions" />
+          <Stack.Screen name="open-project" />
+          <Stack.Screen name="pair-scan" />
+          <Stack.Screen name="server-editor" />
+        </Stack>
+      </AppProvider>
+    </RootErrorBoundary>
   );
 }

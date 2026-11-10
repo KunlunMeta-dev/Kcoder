@@ -10,7 +10,8 @@ use std::{collections::BTreeMap, ffi::OsStr, io::Read, path::Path};
 use uuid::Uuid;
 
 pub(super) fn digest(bytes: &[u8]) -> String {
-    super::super::private_files::hex_sha256(bytes)
+    use sha2::Digest;
+    format!("{:x}", sha2::Sha256::digest(bytes))
 }
 pub(super) fn missing(error: &anyhow::Error) -> bool {
     error
@@ -29,6 +30,8 @@ fn bytes<T: Serialize>(value: &T) -> Result<Vec<u8>> {
     Ok(result)
 }
 fn raw(directory: &PrivateDirectory, name: &str) -> Result<Option<Vec<u8>>> {
+    #[cfg(test)]
+    REAPER_RECORD_READS.with(|count| count.set(count.get() + 1));
     let file = match directory.open_regular_file(OsStr::new(name)) {
         Ok(file) => file,
         Err(error) if missing(&error) => return Ok(None),
@@ -313,6 +316,148 @@ pub(super) struct Transaction<'a> {
     changes: BTreeMap<(Area, String), Change>,
 }
 impl Transaction<'_> {
+    /// Read one catalog page. Missing/corrupt membership is Unknown, never empty.
+    pub(super) fn catalog_page(&self, epoch_id: u64, number: u64) -> Result<IndexPage> {
+        let epoch = self
+            .state
+            .epochs
+            .get(&epoch_id)
+            .context("catalog epoch missing")?;
+        let start = number
+            .checked_mul(INDEX_PAGE_SIZE as u64)
+            .context("catalog offset overflow")?;
+        ensure!(start < epoch.records, "catalog page out of bounds");
+        let page: IndexPage = self
+            .read(Area::Index, &format!("{epoch_id}:{number}"))?
+            .context("reaper catalog page missing")?;
+        ensure!(
+            page.records.len() == (epoch.records - start).min(INDEX_PAGE_SIZE as u64) as usize,
+            "reaper catalog membership mismatch"
+        );
+        for locator in &page.records {
+            ensure!(
+                safe_leaf(&locator.leaf) && locator.area.records() && locator.area != Area::Index,
+                "invalid reaper catalog locator"
+            );
+        }
+        Ok(page)
+    }
+    pub(super) fn catalog_record<T: DeserializeOwned>(&self, locator: &Locator) -> Result<T> {
+        ensure!(
+            locator.area.records() && locator.area != Area::Index && safe_leaf(&locator.leaf),
+            "invalid reaper record locator"
+        );
+        serde_json::from_slice(
+            &raw(&self.store.area(locator.area)?, &locator.leaf)?
+                .context("reaper registered record missing")?,
+        )
+        .context("invalid reaper authority record")
+    }
+    /// The bounded registration catalog is the only discovery authority. A
+    /// missing/corrupt page or registered receipt is Unknown, never an empty set.
+    pub(super) fn registered_receipts(&self) -> Result<Vec<Receipt>> {
+        #[cfg(test)]
+        REAPER_FULL_SCANS.with(|count| count.set(count.get() + 1));
+        let mut visited = 0u64;
+        let mut receipt_leaves = std::collections::BTreeSet::new();
+        let mut receipts = Vec::new();
+        for (epoch_id, epoch) in &self.state.epochs {
+            for number in 0..epoch.records.div_ceil(INDEX_PAGE_SIZE as u64) {
+                let page: IndexPage = self
+                    .read(Area::Index, &format!("{epoch_id}:{number}"))?
+                    .context("registered cleanup catalog page missing")?;
+                ensure!(
+                    page.records.len()
+                        == (epoch.records - number * INDEX_PAGE_SIZE as u64)
+                            .min(INDEX_PAGE_SIZE as u64) as usize,
+                    "cleanup catalog membership mismatch"
+                );
+                visited += page.records.len() as u64;
+                ensure!(visited <= 65_536, "cleanup catalog work budget exceeded");
+                for locator in page.records {
+                    ensure!(
+                        safe_leaf(&locator.leaf)
+                            && locator.area.records()
+                            && locator.area != Area::Index,
+                        "invalid cleanup catalog locator"
+                    );
+                    if locator.area != Area::Receipts {
+                        continue;
+                    }
+                    ensure!(
+                        receipt_leaves.insert(locator.leaf.clone()),
+                        "duplicate cleanup receipt registration"
+                    );
+                    let receipt: Receipt = serde_json::from_slice(
+                        &raw(&self.store.area(Area::Receipts)?, &locator.leaf)?
+                            .context("registered cleanup receipt missing")?,
+                    )?;
+                    ensure!(
+                        leaf(&receipt.wire.retention_id) == locator.leaf
+                            && receipt.epoch == *epoch_id,
+                        "cleanup receipt registration differs"
+                    );
+                    // Terminal receipts remain registered after their active
+                    // receipt slots are returned. The catalog record budget,
+                    // rather than the active-slot limit, bounds discovery.
+                    ensure!(receipts.len() < 65_536, "cleanup receipt budget exceeded");
+                    receipts.push(receipt);
+                }
+            }
+        }
+        receipts.sort_by(|a, b| a.wire.retention_id.cmp(&b.wire.retention_id));
+        Ok(receipts)
+    }
+
+    pub(super) fn registered_owners(&self) -> Result<Vec<Owner>> {
+        #[cfg(test)]
+        REAPER_FULL_SCANS.with(|count| count.set(count.get() + 1));
+        let mut visited = 0u64;
+        let mut seen = std::collections::BTreeSet::new();
+        let mut owners = Vec::new();
+        for (epoch_id, epoch) in &self.state.epochs {
+            for number in 0..epoch.records.div_ceil(INDEX_PAGE_SIZE as u64) {
+                let page: IndexPage = self
+                    .read(Area::Index, &format!("{epoch_id}:{number}"))?
+                    .context("registered owner catalog page missing")?;
+                ensure!(
+                    page.records.len()
+                        == (epoch.records - number * INDEX_PAGE_SIZE as u64)
+                            .min(INDEX_PAGE_SIZE as u64) as usize,
+                    "owner catalog membership mismatch"
+                );
+                visited += page.records.len() as u64;
+                ensure!(visited <= 65_536, "owner catalog work budget exceeded");
+                for locator in page.records {
+                    ensure!(
+                        safe_leaf(&locator.leaf)
+                            && locator.area.records()
+                            && locator.area != Area::Index,
+                        "invalid owner catalog locator"
+                    );
+                    if locator.area != Area::Owners {
+                        continue;
+                    }
+                    ensure!(
+                        seen.insert(locator.leaf.clone()),
+                        "duplicate registered owner"
+                    );
+                    let owner: Owner = serde_json::from_slice(
+                        &raw(&self.store.area(Area::Owners)?, &locator.leaf)?
+                            .context("registered owner missing")?,
+                    )?;
+                    ensure!(
+                        leaf(&owner.id) == locator.leaf && owner.epoch == *epoch_id,
+                        "owner registration differs"
+                    );
+                    owners.push(owner);
+                }
+            }
+        }
+        owners.sort_by(|a, b| a.id.cmp(&b.id));
+        Ok(owners)
+    }
+
     /// A missing request row is not a new intent if the bounded durable catalog
     /// still registers it. This is recovery metadata, never a directory scan.
     pub fn assert_unregistered(&self, area: Area, id: &str) -> Result<()> {
@@ -579,6 +724,27 @@ impl Transaction<'_> {
         );
         Ok(first_change && old.is_none())
     }
+    /// Lifecycle progress spends this existing receipt's slot; never allocate
+    /// fresh metadata credit after starting physical cleanup.
+    pub(super) fn put_cleanup_receipt(&mut self, receipt: &Receipt) -> Result<()> {
+        let prior: Receipt = self
+            .read(Area::Receipts, &receipt.wire.retention_id)?
+            .context("cleanup receipt missing")?;
+        ensure!(
+            prior.cleanup_capacity == RECORD_BYTES
+                && receipt.cleanup_capacity == RECORD_BYTES
+                && prior.scope_hash == receipt.scope_hash
+                && prior.epoch == receipt.epoch,
+            super::RetentionFailure::Capacity
+        );
+        bytes(receipt)?;
+        self.put(
+            Area::Receipts,
+            &receipt.wire.retention_id,
+            receipt.epoch,
+            receipt,
+        )
+    }
     pub fn put<T: Serialize>(&mut self, area: Area, id: &str, epoch: u64, value: &T) -> Result<()> {
         let new = self.change(area, id, Some(serde_json::to_value(value)?))?;
         if new && area != Area::Index {
@@ -678,3 +844,8 @@ impl Transaction<'_> {
 }
 #[cfg(test)]
 thread_local! { pub(super) static FAIL_AFTER_JOURNAL: std::cell::Cell<bool> = const { std::cell::Cell::new(false) }; }
+#[cfg(test)]
+thread_local! {
+    pub(super) static REAPER_RECORD_READS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    pub(super) static REAPER_FULL_SCANS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}

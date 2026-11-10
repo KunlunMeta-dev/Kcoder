@@ -1,4 +1,4 @@
-import { requestLocalExecutor } from '@/tauri/localExecutor'
+import { requestLocalExecutor } from '@/host/localExecutor'
 import type { GatewayServer } from './gatewayRpc'
 import {
   HOOK_CONFIGURATION_READ,

@@ -1,19 +1,20 @@
+use crate::protocol_io::{error_response, success_response};
 use kcoder_app_protocol::{ServerResourceActivity, ServerResourcesParams, ServerResourcesResult};
 use serde_json::Value;
 use std::sync::OnceLock;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-pub(super) fn process(id: Value, params: Value, activity: ServerResourceActivity) -> Value {
+pub fn process(id: Value, params: Value, activity: ServerResourceActivity) -> Value {
     if !params.is_object() || serde_json::from_value::<ServerResourcesParams>(params).is_err() {
-        return super::error_response(id, -32602, "server/resources/read requires an empty object");
+        return error_response(id, -32602, "server/resources/read requires an empty object");
     }
-    super::success_response(
+    success_response(
         id,
         serde_json::to_value(snapshot(activity)).expect("resource snapshot serializes"),
     )
 }
 
-pub(super) fn instance_id() -> &'static str {
+pub fn instance_id() -> &'static str {
     static INSTANCE: OnceLock<String> = OnceLock::new();
     INSTANCE.get_or_init(|| uuid::Uuid::new_v4().to_string())
 }

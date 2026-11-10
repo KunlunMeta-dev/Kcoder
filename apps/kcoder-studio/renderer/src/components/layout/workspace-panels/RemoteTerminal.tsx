@@ -17,6 +17,7 @@ import { defaultAppearance, useOptionalAppearance } from '@/features/appearance'
 import { createXtermWebLinksAddon } from './xtermLinks'
 import { installXtermInputFallback, type XtermInputFallbackController } from './xtermInputFallback'
 import { installXtermSelectionGuard } from './xtermSelectionGuard'
+import { useTranslation } from '@/hooks/useTranslation'
 
 interface RemoteTerminalProps {
   sessionId: string
@@ -72,6 +73,9 @@ export function RemoteTerminal({
   testIdsEnabled = true,
   showWorkbenchBackground = false,
 }: RemoteTerminalProps) {
+  const { t } = useTranslation('common')
+  const textRef = useRef(t)
+  useLayoutEffect(() => { textRef.current = t }, [t])
   const appearance = useOptionalAppearance()?.appearance ?? defaultAppearance
   const wrapperRef = useRef<HTMLDivElement | null>(null)
   const containerRef = useRef<HTMLDivElement | null>(null)
@@ -193,7 +197,9 @@ export function RemoteTerminal({
       noteData: () => undefined,
       dispose: () => undefined,
     }
+    let exitUnconfirmed = false
     const dataDisposable = terminal.onData(data => {
+      if (exitUnconfirmed) return
       inputFallback.noteData(data)
       void client.write(data).catch(error => {
         if (!disposed) {
@@ -211,6 +217,11 @@ export function RemoteTerminal({
     })
     const unsubscribeExit = client.onExit(payload => {
       if (!disposed && payload.session_id === sessionId) {
+        if (payload.exit_code === null) {
+          if (!exitUnconfirmed) terminal.writeln(`\r\n\u001b[33m[${textRef.current('workbench.terminal_exit_unconfirmed')}]\u001b[0m`)
+          exitUnconfirmed = true
+          return
+        }
         onExitRef.current?.()
       }
     })
@@ -222,6 +233,7 @@ export function RemoteTerminal({
     inputFallback = installXtermInputFallback({
       terminal,
       writeData: data => {
+        if (exitUnconfirmed) return
         inputFallback.noteData(data)
         void client.write(data).catch(error => {
           if (!disposed) {

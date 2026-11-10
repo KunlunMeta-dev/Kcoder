@@ -1,8 +1,6 @@
 use super::TokenCounter;
-use anyhow::Result;
 use kcoder_types::{ContentBlock, Message};
 
-pub(super) const PTL_RETRY_MARKER: &str = "[earlier conversation truncated for compaction retry]";
 pub(super) const COMPACT_SUMMARY_PREFIX: &str = "This session is being continued from a previous conversation that ran out of context. The summary below covers the earlier portion of the conversation.";
 pub(super) const LEGACY_COMPACT_SUMMARY_PREFIX: &str = "Earlier conversation summary:";
 pub(super) const COMPACT_CONTINUATION_MARKER: &str = "\n\nRecent messages are preserved verbatim.";
@@ -24,6 +22,12 @@ pub struct CompactBoundary {
 }
 
 pub(super) fn fingerprint_messages(messages: &[Message]) -> Option<[u8; 32]> {
+    fingerprint_serializable(messages)
+}
+
+pub(crate) fn fingerprint_serializable(
+    value: &(impl serde::Serialize + ?Sized),
+) -> Option<[u8; 32]> {
     use sha2::{Digest, Sha256};
     struct HashWriter(Sha256);
     impl std::io::Write for HashWriter {
@@ -37,7 +41,7 @@ pub(super) fn fingerprint_messages(messages: &[Message]) -> Option<[u8; 32]> {
     }
     // Stream every serialized field without allocating another transcript-sized buffer.
     let mut writer = HashWriter(Sha256::new());
-    serde_json::to_writer(&mut writer, messages).ok()?;
+    serde_json::to_writer(&mut writer, value).ok()?;
     Some(writer.0.finalize().into())
 }
 
@@ -121,7 +125,10 @@ pub(super) fn build_compacted_messages(
     messages
 }
 
-fn combine_compact_summaries(prior_summary: Option<&str>, new_summary: Option<&str>) -> String {
+pub(super) fn combine_compact_summaries(
+    prior_summary: Option<&str>,
+    new_summary: Option<&str>,
+) -> String {
     match (
         prior_summary.map(str::trim).filter(|s| !s.is_empty()),
         new_summary.map(str::trim).filter(|s| !s.is_empty()),
@@ -249,92 +256,6 @@ pub(crate) fn split_for_compaction_with_recent_budget_and_emergency(
         old: messages[..latest_request_start].to_vec(),
         recent: messages[latest_request_start..].to_vec(),
     }
-}
-
-pub(super) fn truncate_head_for_ptl_retry(
-    messages: Vec<Message>,
-    old_len: usize,
-) -> Result<Vec<Message>> {
-    let effective_old_len = old_len.min(messages.len());
-    if let Some(boundary) = latest_compact_boundary(&messages)
-        .filter(|boundary| boundary.summary_index < effective_old_len)
-    {
-        let boundary_message = messages[boundary.summary_index].clone();
-        let suffix_start = boundary.suffix_start;
-        let suffix_old_len = effective_old_len.saturating_sub(suffix_start);
-        let suffix = messages.into_iter().skip(suffix_start).collect();
-        let mut truncated = truncate_unprotected_head_for_ptl_retry(suffix, suffix_old_len)?;
-        truncated.insert(0, boundary_message);
-        return Ok(truncated);
-    }
-
-    truncate_unprotected_head_for_ptl_retry(messages, effective_old_len)
-}
-
-fn truncate_unprotected_head_for_ptl_retry(
-    messages: Vec<Message>,
-    old_len: usize,
-) -> Result<Vec<Message>> {
-    if old_len == 0 {
-        anyhow::bail!("compaction failed: prompt too long and no old messages can be dropped");
-    }
-
-    let effective_old_len = old_len.min(messages.len());
-    let marker_offset = messages.first().is_some_and(is_ptl_retry_marker_message) as usize;
-    let effective_old_len = effective_old_len.saturating_sub(marker_offset);
-    let messages = messages.into_iter().skip(marker_offset).collect::<Vec<_>>();
-    let groups = group_message_indices_by_user_turn(&messages[..effective_old_len]);
-    if groups.len() < 2 {
-        anyhow::bail!(
-            "compaction failed: prompt too long and not enough message groups can be dropped"
-        );
-    }
-
-    // Preserve the fallback when the provider does
-    // not expose a parseable token gap: drop roughly 20% of old API-round
-    // groups while keeping at least one group available for summarization.
-    let drop_groups = std::cmp::min(
-        std::cmp::max(1, groups.len() / 5),
-        groups.len().saturating_sub(1),
-    );
-    let drop_until = groups[drop_groups].0;
-
-    let mut truncated: Vec<Message> = messages.into_iter().skip(drop_until).collect();
-    truncated.insert(0, Message::runtime_text(PTL_RETRY_MARKER));
-
-    Ok(truncated)
-}
-
-fn is_ptl_retry_marker_message(message: &Message) -> bool {
-    if message.origin() != kcoder_types::MessageOrigin::Runtime {
-        return false;
-    }
-    matches!(
-        message,
-        Message::User { content, .. }
-            if content.iter().any(
-                |block| matches!(block, ContentBlock::Text { text } if text == PTL_RETRY_MARKER)
-            )
-    )
-}
-
-fn group_message_indices_by_user_turn(messages: &[Message]) -> Vec<(usize, usize)> {
-    if messages.is_empty() {
-        return Vec::new();
-    }
-
-    let mut groups = Vec::new();
-    let mut start = 0;
-
-    for (i, message) in messages.iter().enumerate().skip(1) {
-        if is_user_request_message(message) {
-            groups.push((start, i));
-            start = i;
-        }
-    }
-
-    groups.push((start, messages.len()));
-    groups
 }
 
 pub(crate) fn is_user_request_message(message: &Message) -> bool {

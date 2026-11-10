@@ -1,0 +1,2270 @@
+{
+  "MigrationSourceAdoptionCancelParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "MigrationSourceAdoptionParams": {
+        "additionalProperties": false,
+        "properties": {
+          "adoptionId": {
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "type": "string"
+          },
+          "requestId": {
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "type": "string"
+          },
+          "target": {
+            "$ref": "#/definitions/MigrationSourceAdoptionSession"
+          }
+        },
+        "required": [
+          "adoptionId",
+          "requestId",
+          "target"
+        ],
+        "type": "object"
+      },
+      "MigrationSourceAdoptionSession": {
+        "additionalProperties": false,
+        "properties": {
+          "purpose": {
+            "$ref": "#/definitions/MigrationSourceAdoptionSessionPurpose"
+          },
+          "sessionId": {
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "type": "string"
+          },
+          "targetId": {
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+          },
+          "workspacePath": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "purpose",
+          "sessionId",
+          "targetId"
+        ],
+        "type": "object"
+      },
+      "MigrationSourceAdoptionSessionPurpose": {
+        "enum": [
+          "target",
+          "target_recovery"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "commandId": {
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+        "type": "string"
+      },
+      "locator": {
+        "$ref": "#/definitions/MigrationSourceAdoptionParams"
+      }
+    },
+    "required": [
+      "commandId",
+      "locator"
+    ],
+    "title": "MigrationSourceAdoptionCancelParams",
+    "type": "object"
+  },
+  "MigrationSourceAdoptionParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "MigrationSourceAdoptionSession": {
+        "additionalProperties": false,
+        "properties": {
+          "purpose": {
+            "$ref": "#/definitions/MigrationSourceAdoptionSessionPurpose"
+          },
+          "sessionId": {
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "type": "string"
+          },
+          "targetId": {
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+          },
+          "workspacePath": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "purpose",
+          "sessionId",
+          "targetId"
+        ],
+        "type": "object"
+      },
+      "MigrationSourceAdoptionSessionPurpose": {
+        "enum": [
+          "target",
+          "target_recovery"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "adoptionId": {
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+        "type": "string"
+      },
+      "requestId": {
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+        "type": "string"
+      },
+      "target": {
+        "$ref": "#/definitions/MigrationSourceAdoptionSession"
+      }
+    },
+    "required": [
+      "adoptionId",
+      "requestId",
+      "target"
+    ],
+    "title": "MigrationSourceAdoptionParams",
+    "type": "object"
+  },
+  "MigrationSourceAdoptionPrepareParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "MigrationInstructionScopeChoice": {
+        "additionalProperties": false,
+        "properties": {
+          "itemId": {
+            "minLength": 1,
+            "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]+$",
+            "type": "string",
+            "x-max-utf8-bytes": 256
+          },
+          "targetRelativeScope": {
+            "pattern": "^(?!(?:[^/]+/){64})(?!(?:.*?/)?\\.{1,2}(?:/|$))(?!.*[\\\\:])(?!/)(?!.*//)(?!.*[^/]/$)[^\\u0000-\\u001f\\u007f-\\u009f]*$",
+            "type": "string",
+            "x-max-utf8-bytes": 4096
+          }
+        },
+        "required": [
+          "itemId",
+          "targetRelativeScope"
+        ],
+        "type": "object"
+      },
+      "MigrationSourceAdoptionParams": {
+        "additionalProperties": false,
+        "properties": {
+          "adoptionId": {
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "type": "string"
+          },
+          "requestId": {
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "type": "string"
+          },
+          "target": {
+            "$ref": "#/definitions/MigrationSourceAdoptionSession"
+          }
+        },
+        "required": [
+          "adoptionId",
+          "requestId",
+          "target"
+        ],
+        "type": "object"
+      },
+      "MigrationSourceAdoptionSelection": {
+        "additionalProperties": false,
+        "properties": {
+          "entryId": {
+            "pattern": "^e[0-9]{4}-[0-9]{4}$",
+            "type": "string"
+          },
+          "projectMapping": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/MigrationSourceProjectMapping"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "entryId"
+        ],
+        "type": "object"
+      },
+      "MigrationSourceAdoptionSession": {
+        "additionalProperties": false,
+        "properties": {
+          "purpose": {
+            "$ref": "#/definitions/MigrationSourceAdoptionSessionPurpose"
+          },
+          "sessionId": {
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "type": "string"
+          },
+          "targetId": {
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+          },
+          "workspacePath": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "purpose",
+          "sessionId",
+          "targetId"
+        ],
+        "type": "object"
+      },
+      "MigrationSourceAdoptionSessionPurpose": {
+        "enum": [
+          "target",
+          "target_recovery"
+        ],
+        "type": "string"
+      },
+      "MigrationSourceInstructionMapping": {
+        "additionalProperties": false,
+        "properties": {
+          "archiveIncompleteChain": {
+            "type": "boolean"
+          },
+          "entryId": {
+            "pattern": "^e[0-9]{4}-[0-9]{4}$",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/definitions/MigrationInstructionScopeChoice"
+            },
+            "maxItems": 128,
+            "minItems": 1,
+            "type": "array"
+          }
+        },
+        "required": [
+          "entryId",
+          "items"
+        ],
+        "type": "object"
+      },
+      "MigrationSourceProjectMapping": {
+        "oneOf": [
+          {
+            "description": "The actual trusted Native workspace is captured by the host, never from a path here.",
+            "enum": [
+              "current_workspace"
+            ],
+            "type": "string"
+          }
+        ]
+      }
+    },
+    "properties": {
+      "instructionMappings": {
+        "items": {
+          "$ref": "#/definitions/MigrationSourceInstructionMapping"
+        },
+        "type": "array"
+      },
+      "locator": {
+        "$ref": "#/definitions/MigrationSourceAdoptionParams"
+      },
+      "manifestSha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "type": "string"
+      },
+      "selections": {
+        "items": {
+          "$ref": "#/definitions/MigrationSourceAdoptionSelection"
+        },
+        "maxItems": 64,
+        "minItems": 1,
+        "type": "array"
+      }
+    },
+    "required": [
+      "locator",
+      "manifestSha256",
+      "selections"
+    ],
+    "title": "MigrationSourceAdoptionPrepareParams",
+    "type": "object"
+  },
+  "MigrationSourceAdoptionResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "MigrationSourceAdoptionControl": {
+        "additionalProperties": false,
+        "properties": {
+          "cancelWatermark": {
+            "format": "uint64",
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sequence": {
+            "format": "uint64",
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "cancelWatermark",
+          "sequence"
+        ],
+        "type": "object"
+      },
+      "MigrationSourceAdoptionJob": {
+        "additionalProperties": false,
+        "properties": {
+          "jobId": {
+            "pattern": "^mig-[0-9a-f]{32}$",
+            "type": "string"
+          },
+          "previewReady": {
+            "description": "Only this flag authorizes opening the existing batch preview, not publishing it.",
+            "type": "boolean"
+          },
+          "source": {
+            "$ref": "#/definitions/MigrationSourceKind"
+          },
+          "targetScope": {
+            "$ref": "#/definitions/MigrationSourceAdoptionTargetScope"
+          }
+        },
+        "required": [
+          "jobId",
+          "previewReady",
+          "source",
+          "targetScope"
+        ],
+        "type": "object"
+      },
+      "MigrationSourceAdoptionPhase": {
+        "enum": [
+          "prepared",
+          "scanning",
+          "preview_ready",
+          "cancel_requested",
+          "cancelled",
+          "interrupted",
+          "failed",
+          "unknown"
+        ],
+        "type": "string"
+      },
+      "MigrationSourceAdoptionState": {
+        "additionalProperties": false,
+        "properties": {
+          "adoptionId": {
+            "type": "string"
+          },
+          "blockedItems": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "cancelRequested": {
+            "$ref": "#/definitions/MigrationSourceNullable_for_Boolean"
+          },
+          "completedSources": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "control": {
+            "allOf": [
+              {
+                "$ref": "#/definitions/MigrationSourceNullable_for_MigrationSourceAdoptionControl"
+              }
+            ],
+            "description": "Null means the original control could not be verified. Never substitute zero."
+          },
+          "errorCode": {
+            "$ref": "#/definitions/MigrationSourceNullable_for_String"
+          },
+          "jobs": {
+            "items": {
+              "$ref": "#/definitions/MigrationSourceAdoptionJob"
+            },
+            "maxItems": 4,
+            "type": "array"
+          },
+          "phase": {
+            "$ref": "#/definitions/MigrationSourceAdoptionPhase"
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "totalSources": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "workerState": {
+            "$ref": "#/definitions/MigrationSourceAdoptionWorkerState"
+          }
+        },
+        "required": [
+          "adoptionId",
+          "blockedItems",
+          "cancelRequested",
+          "completedSources",
+          "control",
+          "errorCode",
+          "jobs",
+          "phase",
+          "requestId",
+          "totalSources",
+          "workerState"
+        ],
+        "type": "object"
+      },
+      "MigrationSourceAdoptionTargetScope": {
+        "enum": [
+          "user",
+          "current_workspace"
+        ],
+        "type": "string"
+      },
+      "MigrationSourceAdoptionWorkerState": {
+        "enum": [
+          "running",
+          "stopped",
+          "unknown"
+        ],
+        "type": "string"
+      },
+      "MigrationSourceKind": {
+        "enum": [
+          "claude-code",
+          "codex"
+        ],
+        "type": "string"
+      },
+      "MigrationSourceNullable_for_Boolean": {
+        "anyOf": [
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "MigrationSourceNullable_for_MigrationSourceAdoptionControl": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/MigrationSourceAdoptionControl"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "MigrationSourceNullable_for_MigrationSourceAdoptionState": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/MigrationSourceAdoptionState"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "MigrationSourceNullable_for_String": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      }
+    },
+    "properties": {
+      "state": {
+        "allOf": [
+          {
+            "$ref": "#/definitions/MigrationSourceNullable_for_MigrationSourceAdoptionState"
+          }
+        ],
+        "description": "Absence is untracked, never permission to replay another creation identity."
+      }
+    },
+    "required": [
+      "state"
+    ],
+    "title": "MigrationSourceAdoptionResult",
+    "type": "object"
+  },
+  "MigrationSourceAdoptionResumeParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "MigrationSourceAdoptionControl": {
+        "additionalProperties": false,
+        "properties": {
+          "cancelWatermark": {
+            "format": "uint64",
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sequence": {
+            "format": "uint64",
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "cancelWatermark",
+          "sequence"
+        ],
+        "type": "object"
+      },
+      "MigrationSourceAdoptionParams": {
+        "additionalProperties": false,
+        "properties": {
+          "adoptionId": {
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "type": "string"
+          },
+          "requestId": {
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "type": "string"
+          },
+          "target": {
+            "$ref": "#/definitions/MigrationSourceAdoptionSession"
+          }
+        },
+        "required": [
+          "adoptionId",
+          "requestId",
+          "target"
+        ],
+        "type": "object"
+      },
+      "MigrationSourceAdoptionSession": {
+        "additionalProperties": false,
+        "properties": {
+          "purpose": {
+            "$ref": "#/definitions/MigrationSourceAdoptionSessionPurpose"
+          },
+          "sessionId": {
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "type": "string"
+          },
+          "targetId": {
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+          },
+          "workspacePath": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "purpose",
+          "sessionId",
+          "targetId"
+        ],
+        "type": "object"
+      },
+      "MigrationSourceAdoptionSessionPurpose": {
+        "enum": [
+          "target",
+          "target_recovery"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "expectedControl": {
+        "$ref": "#/definitions/MigrationSourceAdoptionControl"
+      },
+      "locator": {
+        "$ref": "#/definitions/MigrationSourceAdoptionParams"
+      }
+    },
+    "required": [
+      "expectedControl",
+      "locator"
+    ],
+    "title": "MigrationSourceAdoptionResumeParams",
+    "type": "object"
+  },
+  "MigrationSourceBindingsParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "sourceIds": {
+        "items": {
+          "minLength": 1,
+          "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]+$",
+          "type": "string",
+          "x-max-utf8-bytes": 256
+        },
+        "maxItems": 10,
+        "minItems": 1,
+        "type": "array",
+        "uniqueItems": true
+      }
+    },
+    "required": [
+      "sourceIds"
+    ],
+    "title": "MigrationSourceBindingsParams",
+    "type": "object"
+  },
+  "MigrationSourceBindingsResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "MigrationSourceBindingFamily": {
+        "enum": [
+          "configuration",
+          "assets"
+        ],
+        "type": "string"
+      },
+      "MigrationSourceBindingSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "family": {
+            "$ref": "#/definitions/MigrationSourceBindingFamily"
+          },
+          "sourceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "family",
+          "sourceId"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "bindings": {
+        "items": {
+          "$ref": "#/definitions/MigrationSourceBindingSummary"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "bindings"
+    ],
+    "title": "MigrationSourceBindingsResult",
+    "type": "object"
+  },
+  "MigrationSourceCodexLayersReadParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "description": "A source child may inspect only a previously discovered source, never a saved target job.",
+    "properties": {
+      "pageIndex": {
+        "default": 0,
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "sourceId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "sourceId"
+    ],
+    "title": "MigrationSourceCodexLayersReadParams",
+    "type": "object"
+  },
+  "MigrationSourceConfigurationLayersReadParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "description": "A source-only configuration report cannot select a target job or filesystem path.",
+    "properties": {
+      "pageIndex": {
+        "default": 0,
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "sourceId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "sourceId"
+    ],
+    "title": "MigrationSourceConfigurationLayersReadParams",
+    "type": "object"
+  },
+  "MigrationSourceDirectoryResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "MigrationSourceKind": {
+        "enum": [
+          "claude-code",
+          "codex"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "remainingMs": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "selectionId": {
+        "type": "string"
+      },
+      "source": {
+        "$ref": "#/definitions/MigrationSourceKind"
+      }
+    },
+    "required": [
+      "remainingMs",
+      "selectionId",
+      "source"
+    ],
+    "title": "MigrationSourceDirectoryResult",
+    "type": "object"
+  },
+  "MigrationSourceDirectorySelectParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "MigrationSourceKind": {
+        "enum": [
+          "claude-code",
+          "codex"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "directory": {
+        "description": "Absolute path on the selected source runtime, never a browser-local path.",
+        "minLength": 1,
+        "pattern": "^(?=.*\\S)[^\\u0000-\\u001f\\u007f-\\u009f]+$",
+        "type": "string",
+        "x-max-utf8-bytes": 4096
+      },
+      "selectionId": {
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+        "type": "string"
+      },
+      "source": {
+        "$ref": "#/definitions/MigrationSourceKind"
+      }
+    },
+    "required": [
+      "directory",
+      "selectionId",
+      "source"
+    ],
+    "title": "MigrationSourceDirectorySelectParams",
+    "type": "object"
+  },
+  "MigrationSourceReceivedParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "MigrationSourceAdoptionSession": {
+        "additionalProperties": false,
+        "properties": {
+          "purpose": {
+            "$ref": "#/definitions/MigrationSourceAdoptionSessionPurpose"
+          },
+          "sessionId": {
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "type": "string"
+          },
+          "targetId": {
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+          },
+          "workspacePath": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "purpose",
+          "sessionId",
+          "targetId"
+        ],
+        "type": "object"
+      },
+      "MigrationSourceAdoptionSessionPurpose": {
+        "enum": [
+          "target",
+          "target_recovery"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "includeInstructions": {
+        "type": "boolean"
+      },
+      "includePlugins": {
+        "type": "boolean"
+      },
+      "includeProjects": {
+        "type": "boolean"
+      },
+      "manifestSha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "type": "string"
+      },
+      "pageIndex": {
+        "format": "uint32",
+        "maximum": 102,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "requestId": {
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+        "type": "string"
+      },
+      "target": {
+        "$ref": "#/definitions/MigrationSourceAdoptionSession"
+      }
+    },
+    "required": [
+      "manifestSha256",
+      "pageIndex",
+      "requestId",
+      "target"
+    ],
+    "title": "MigrationSourceReceivedParams",
+    "type": "object"
+  },
+  "MigrationSourceReceivedResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "MigrationCategory": {
+        "enum": [
+          "provider",
+          "mcp",
+          "skill",
+          "command",
+          "instructions",
+          "memory",
+          "plugin",
+          "project",
+          "history",
+          "agent",
+          "hook",
+          "workflow"
+        ],
+        "type": "string"
+      },
+      "MigrationProjectLabelOrigin": {
+        "enum": [
+          "registry_name",
+          "path_basename",
+          "original_id"
+        ],
+        "type": "string"
+      },
+      "MigrationProjectReceivedMetadata": {
+        "additionalProperties": false,
+        "description": "A manifest-bound label for a received project, never a target filesystem grant.",
+        "properties": {
+          "displayName": {
+            "type": "string"
+          },
+          "formatRevision": {
+            "type": "string"
+          },
+          "labelOrigin": {
+            "$ref": "#/definitions/MigrationProjectLabelOrigin"
+          },
+          "originalProjectId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "roots": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "displayName",
+          "formatRevision",
+          "labelOrigin",
+          "roots"
+        ],
+        "type": "object"
+      },
+      "MigrationSourceKind": {
+        "enum": [
+          "claude-code",
+          "codex"
+        ],
+        "type": "string"
+      },
+      "MigrationSourceNullable_for_MigrationCategory": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/MigrationCategory"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "MigrationSourceNullable_for_uint32": {
+        "anyOf": [
+          {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "MigrationSourceReceipt": {
+        "additionalProperties": false,
+        "properties": {
+          "bytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "entries": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "manifestSha256": {
+            "type": "string"
+          },
+          "requestId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "bytes",
+          "entries",
+          "manifestSha256",
+          "requestId"
+        ],
+        "type": "object"
+      },
+      "MigrationSourceReceivedClass": {
+        "enum": [
+          "project",
+          "instructions",
+          "plugin",
+          "configuration",
+          "work_asset",
+          "history"
+        ],
+        "type": "string"
+      },
+      "MigrationSourceReceivedItem": {
+        "additionalProperties": false,
+        "properties": {
+          "bytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "category": {
+            "$ref": "#/definitions/MigrationSourceNullable_for_MigrationCategory"
+          },
+          "class": {
+            "$ref": "#/definitions/MigrationSourceReceivedClass"
+          },
+          "entryId": {
+            "pattern": "^e[0-9]{4}-[0-9]{4}$",
+            "type": "string"
+          },
+          "files": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "project": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/MigrationProjectReceivedMetadata"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "projectScoped": {
+            "description": "For history this is provenance, not a required destination mapping.",
+            "type": "boolean"
+          },
+          "source": {
+            "$ref": "#/definitions/MigrationSourceKind"
+          }
+        },
+        "required": [
+          "bytes",
+          "category",
+          "class",
+          "entryId",
+          "files",
+          "projectScoped",
+          "source"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "items": {
+        "items": {
+          "$ref": "#/definitions/MigrationSourceReceivedItem"
+        },
+        "maxItems": 10,
+        "type": "array"
+      },
+      "nextPage": {
+        "$ref": "#/definitions/MigrationSourceNullable_for_uint32"
+      },
+      "receipt": {
+        "$ref": "#/definitions/MigrationSourceReceipt"
+      },
+      "totalSources": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "items",
+      "nextPage",
+      "receipt",
+      "totalSources"
+    ],
+    "title": "MigrationSourceReceivedResult",
+    "type": "object"
+  },
+  "MigrationSourceTransferCancelParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "MigrationSourceSessionParams": {
+        "additionalProperties": false,
+        "properties": {
+          "purpose": {
+            "$ref": "#/definitions/MigrationSourceSessionPurpose"
+          },
+          "sessionId": {
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "type": "string"
+          },
+          "targetId": {
+            "description": "Must resolve to the original session scope; this cannot retarget a child.",
+            "type": "string"
+          },
+          "workspacePath": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "purpose",
+          "sessionId",
+          "targetId"
+        ],
+        "type": "object"
+      },
+      "MigrationSourceSessionPurpose": {
+        "enum": [
+          "source",
+          "target",
+          "target_recovery"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "commandId": {
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+        "type": "string"
+      },
+      "requestId": {
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+        "type": "string"
+      },
+      "source": {
+        "$ref": "#/definitions/MigrationSourceSessionParams"
+      },
+      "target": {
+        "$ref": "#/definitions/MigrationSourceSessionParams"
+      }
+    },
+    "required": [
+      "commandId",
+      "requestId",
+      "source",
+      "target"
+    ],
+    "title": "MigrationSourceTransferCancelParams",
+    "type": "object"
+  },
+  "MigrationSourceTransferReadParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "MigrationSourceSessionParams": {
+        "additionalProperties": false,
+        "properties": {
+          "purpose": {
+            "$ref": "#/definitions/MigrationSourceSessionPurpose"
+          },
+          "sessionId": {
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "type": "string"
+          },
+          "targetId": {
+            "description": "Must resolve to the original session scope; this cannot retarget a child.",
+            "type": "string"
+          },
+          "workspacePath": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "purpose",
+          "sessionId",
+          "targetId"
+        ],
+        "type": "object"
+      },
+      "MigrationSourceSessionPurpose": {
+        "enum": [
+          "source",
+          "target",
+          "target_recovery"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "requestId": {
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+        "type": "string"
+      },
+      "source": {
+        "$ref": "#/definitions/MigrationSourceSessionParams"
+      },
+      "target": {
+        "$ref": "#/definitions/MigrationSourceSessionParams"
+      }
+    },
+    "required": [
+      "requestId",
+      "source",
+      "target"
+    ],
+    "title": "MigrationSourceTransferReadParams",
+    "type": "object"
+  },
+  "MigrationSourceTransferResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "MigrationSourceCaptureObservation": {
+        "additionalProperties": false,
+        "properties": {
+          "errorCode": {
+            "$ref": "#/definitions/MigrationSourceNullable_for_String"
+          },
+          "status": {
+            "$ref": "#/definitions/MigrationSourceCaptureStatus"
+          }
+        },
+        "required": [
+          "errorCode",
+          "status"
+        ],
+        "type": "object"
+      },
+      "MigrationSourceCaptureStatus": {
+        "enum": [
+          "idle",
+          "running",
+          "failed",
+          "interrupted",
+          "ready"
+        ],
+        "type": "string"
+      },
+      "MigrationSourceCoordinatorState": {
+        "enum": [
+          "running",
+          "idle",
+          "unknown"
+        ],
+        "type": "string"
+      },
+      "MigrationSourceCopyProgress": {
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "phase": {
+                "enum": [
+                  "capturing"
+                ],
+                "type": "string"
+              },
+              "requestId": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "phase",
+              "requestId"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "acceptedBytes": {
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "entries": {
+                "format": "uint32",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "phase": {
+                "enum": [
+                  "transferring"
+                ],
+                "type": "string"
+              },
+              "requestId": {
+                "type": "string"
+              },
+              "totalBytes": {
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "acceptedBytes",
+              "entries",
+              "phase",
+              "requestId",
+              "totalBytes"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "MigrationSourceNullable_for_MigrationSourceCopyProgress": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/MigrationSourceCopyProgress"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "MigrationSourceNullable_for_MigrationSourceReceipt": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/MigrationSourceReceipt"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "MigrationSourceNullable_for_MigrationSourceTargetProgress": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/MigrationSourceTargetProgress"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "MigrationSourceNullable_for_MigrationSourceTransferObservation": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/MigrationSourceTransferObservation"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "MigrationSourceNullable_for_String": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "MigrationSourceObservationState": {
+        "enum": [
+          "observed",
+          "unobserved"
+        ],
+        "type": "string"
+      },
+      "MigrationSourcePairedObservation": {
+        "additionalProperties": false,
+        "properties": {
+          "phase": {
+            "$ref": "#/definitions/MigrationSourceTransferPhase"
+          },
+          "receipt": {
+            "$ref": "#/definitions/MigrationSourceNullable_for_MigrationSourceReceipt"
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "sourceCapture": {
+            "$ref": "#/definitions/MigrationSourceCaptureObservation"
+          },
+          "sourceSnapshotControl": {
+            "$ref": "#/definitions/MigrationSourceTransferObservedControl"
+          },
+          "sourceState": {
+            "$ref": "#/definitions/MigrationSourceTransferObservedControl"
+          },
+          "targetAdmissionControl": {
+            "$ref": "#/definitions/MigrationSourceTransferObservedControl"
+          },
+          "targetState": {
+            "$ref": "#/definitions/MigrationSourceTransferObservedControl"
+          },
+          "targetWorkerRunning": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "phase",
+          "receipt",
+          "requestId",
+          "sourceCapture",
+          "sourceSnapshotControl",
+          "sourceState",
+          "targetAdmissionControl",
+          "targetState",
+          "targetWorkerRunning"
+        ],
+        "type": "object"
+      },
+      "MigrationSourceReceipt": {
+        "additionalProperties": false,
+        "properties": {
+          "bytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "entries": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "manifestSha256": {
+            "type": "string"
+          },
+          "requestId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "bytes",
+          "entries",
+          "manifestSha256",
+          "requestId"
+        ],
+        "type": "object"
+      },
+      "MigrationSourceTargetObservation": {
+        "additionalProperties": false,
+        "properties": {
+          "phase": {
+            "$ref": "#/definitions/MigrationSourceTransferPhase"
+          },
+          "progress": {
+            "$ref": "#/definitions/MigrationSourceNullable_for_MigrationSourceTargetProgress"
+          },
+          "receipt": {
+            "$ref": "#/definitions/MigrationSourceNullable_for_MigrationSourceReceipt"
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "scope": {
+            "$ref": "#/definitions/MigrationSourceTargetScope"
+          },
+          "sourceCapture": {
+            "type": "null"
+          },
+          "sourceObserved": {
+            "type": "boolean"
+          },
+          "sourceSnapshotControl": {
+            "type": "null"
+          },
+          "sourceState": {
+            "type": "null"
+          },
+          "targetAdmissionControl": {
+            "$ref": "#/definitions/MigrationSourceTransferObservedControl"
+          },
+          "targetState": {
+            "$ref": "#/definitions/MigrationSourceTransferObservedControl"
+          },
+          "targetWorkerRunning": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "phase",
+          "progress",
+          "receipt",
+          "requestId",
+          "scope",
+          "sourceCapture",
+          "sourceObserved",
+          "sourceSnapshotControl",
+          "sourceState",
+          "targetAdmissionControl",
+          "targetState",
+          "targetWorkerRunning"
+        ],
+        "type": "object"
+      },
+      "MigrationSourceTargetProgress": {
+        "additionalProperties": false,
+        "properties": {
+          "acceptedBytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "entries": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "manifestSha256": {
+            "type": "string"
+          },
+          "partsComplete": {
+            "type": "boolean"
+          },
+          "totalBytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "acceptedBytes",
+          "entries",
+          "manifestSha256",
+          "partsComplete",
+          "totalBytes"
+        ],
+        "type": "object"
+      },
+      "MigrationSourceTargetScope": {
+        "enum": [
+          "target"
+        ],
+        "type": "string"
+      },
+      "MigrationSourceTransferControl": {
+        "additionalProperties": false,
+        "properties": {
+          "cancelWatermark": {
+            "format": "uint64",
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "cancelled": {
+            "type": "boolean"
+          },
+          "ready": {
+            "type": "boolean"
+          },
+          "sequence": {
+            "format": "uint64",
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "cancelWatermark",
+          "cancelled",
+          "ready",
+          "sequence"
+        ],
+        "type": "object"
+      },
+      "MigrationSourceTransferObservation": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/MigrationSourcePairedObservation"
+          },
+          {
+            "$ref": "#/definitions/MigrationSourceTargetObservation"
+          }
+        ]
+      },
+      "MigrationSourceTransferObservedControl": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/MigrationSourceTransferControl"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "Null is an explicit observation, distinct from an omitted confirmation."
+      },
+      "MigrationSourceTransferPhase": {
+        "enum": [
+          "pending",
+          "ready",
+          "cancelling",
+          "cancelled",
+          "failed",
+          "interrupted",
+          "incomplete"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "coordinatorState": {
+        "$ref": "#/definitions/MigrationSourceCoordinatorState"
+      },
+      "errorCode": {
+        "$ref": "#/definitions/MigrationSourceNullable_for_String"
+      },
+      "observation": {
+        "$ref": "#/definitions/MigrationSourceObservationState"
+      },
+      "progress": {
+        "$ref": "#/definitions/MigrationSourceNullable_for_MigrationSourceCopyProgress"
+      },
+      "requestId": {
+        "type": "string"
+      },
+      "result": {
+        "$ref": "#/definitions/MigrationSourceNullable_for_MigrationSourceTransferObservation"
+      }
+    },
+    "required": [
+      "coordinatorState",
+      "errorCode",
+      "observation",
+      "progress",
+      "requestId",
+      "result"
+    ],
+    "title": "MigrationSourceTransferResult",
+    "type": "object"
+  },
+  "MigrationSourceTransferRunParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "MigrationSourceSelectionV1": {
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "catalogId": {
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "projects"
+                ],
+                "type": "string"
+              },
+              "sourceHandle": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "catalogId",
+              "kind",
+              "sourceHandle"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "captureId": {
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "instructions"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "captureId",
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "candidateId": {
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "plugin"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "candidateId",
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "configuration"
+                ],
+                "type": "string"
+              },
+              "sourceId": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "sourceId"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "assets"
+                ],
+                "type": "string"
+              },
+              "sourceId": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "sourceId"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "catalogId": {
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "history"
+                ],
+                "type": "string"
+              },
+              "sourceHandle": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "catalogId",
+              "kind",
+              "sourceHandle"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "MigrationSourceSessionParams": {
+        "additionalProperties": false,
+        "properties": {
+          "purpose": {
+            "$ref": "#/definitions/MigrationSourceSessionPurpose"
+          },
+          "sessionId": {
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "type": "string"
+          },
+          "targetId": {
+            "description": "Must resolve to the original session scope; this cannot retarget a child.",
+            "type": "string"
+          },
+          "workspacePath": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "purpose",
+          "sessionId",
+          "targetId"
+        ],
+        "type": "object"
+      },
+      "MigrationSourceSessionPurpose": {
+        "enum": [
+          "source",
+          "target",
+          "target_recovery"
+        ],
+        "type": "string"
+      },
+      "MigrationSourceTransferControl": {
+        "additionalProperties": false,
+        "properties": {
+          "cancelWatermark": {
+            "format": "uint64",
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "cancelled": {
+            "type": "boolean"
+          },
+          "ready": {
+            "type": "boolean"
+          },
+          "sequence": {
+            "format": "uint64",
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "cancelWatermark",
+          "cancelled",
+          "ready",
+          "sequence"
+        ],
+        "type": "object"
+      },
+      "MigrationSourceTransferObservedControl": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/MigrationSourceTransferControl"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "Null is an explicit observation, distinct from an omitted confirmation."
+      },
+      "MigrationSourceTransferResume": {
+        "additionalProperties": false,
+        "properties": {
+          "source": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/MigrationSourceTransferSourceResume"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "target": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/MigrationSourceTransferTargetResume"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "MigrationSourceTransferSourceResume": {
+        "additionalProperties": false,
+        "properties": {
+          "cancelWatermark": {
+            "format": "uint64",
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sequence": {
+            "format": "uint64",
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "snapshotControl": {
+            "$ref": "#/definitions/MigrationSourceTransferObservedControl"
+          }
+        },
+        "required": [
+          "cancelWatermark",
+          "sequence",
+          "snapshotControl"
+        ],
+        "type": "object"
+      },
+      "MigrationSourceTransferTargetResume": {
+        "additionalProperties": false,
+        "properties": {
+          "admissionControl": {
+            "$ref": "#/definitions/MigrationSourceTransferControl"
+          },
+          "cancelWatermark": {
+            "format": "uint64",
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "sequence": {
+            "format": "uint64",
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "admissionControl"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "attemptId": {
+        "description": "One explicit execution attempt; transport retries retain this identity.",
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+        "type": "string"
+      },
+      "requestId": {
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+        "type": "string"
+      },
+      "resume": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/MigrationSourceTransferResume"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "selections": {
+        "description": "Omission permits reconciliation of the original Native intent, not a new selection.",
+        "items": {
+          "$ref": "#/definitions/MigrationSourceSelectionV1"
+        },
+        "maxItems": 64,
+        "minItems": 1,
+        "type": [
+          "array",
+          "null"
+        ]
+      },
+      "source": {
+        "$ref": "#/definitions/MigrationSourceSessionParams"
+      },
+      "target": {
+        "$ref": "#/definitions/MigrationSourceSessionParams"
+      }
+    },
+    "required": [
+      "attemptId",
+      "requestId",
+      "source",
+      "target"
+    ],
+    "title": "MigrationSourceTransferRunParams",
+    "type": "object"
+  },
+  "MigrationSourceTransferTargetCancelParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "MigrationSourceSessionParams": {
+        "additionalProperties": false,
+        "properties": {
+          "purpose": {
+            "$ref": "#/definitions/MigrationSourceSessionPurpose"
+          },
+          "sessionId": {
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "type": "string"
+          },
+          "targetId": {
+            "description": "Must resolve to the original session scope; this cannot retarget a child.",
+            "type": "string"
+          },
+          "workspacePath": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "purpose",
+          "sessionId",
+          "targetId"
+        ],
+        "type": "object"
+      },
+      "MigrationSourceSessionPurpose": {
+        "enum": [
+          "source",
+          "target",
+          "target_recovery"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "commandId": {
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+        "type": "string"
+      },
+      "requestId": {
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+        "type": "string"
+      },
+      "target": {
+        "$ref": "#/definitions/MigrationSourceSessionParams"
+      }
+    },
+    "required": [
+      "commandId",
+      "requestId",
+      "target"
+    ],
+    "title": "MigrationSourceTransferTargetCancelParams",
+    "type": "object"
+  },
+  "MigrationSourceTransferTargetFinishParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "MigrationSourceSessionParams": {
+        "additionalProperties": false,
+        "properties": {
+          "purpose": {
+            "$ref": "#/definitions/MigrationSourceSessionPurpose"
+          },
+          "sessionId": {
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "type": "string"
+          },
+          "targetId": {
+            "description": "Must resolve to the original session scope; this cannot retarget a child.",
+            "type": "string"
+          },
+          "workspacePath": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "purpose",
+          "sessionId",
+          "targetId"
+        ],
+        "type": "object"
+      },
+      "MigrationSourceSessionPurpose": {
+        "enum": [
+          "source",
+          "target",
+          "target_recovery"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "attemptId": {
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+        "type": "string"
+      },
+      "requestId": {
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+        "type": "string"
+      },
+      "target": {
+        "$ref": "#/definitions/MigrationSourceSessionParams"
+      }
+    },
+    "required": [
+      "attemptId",
+      "requestId",
+      "target"
+    ],
+    "title": "MigrationSourceTransferTargetFinishParams",
+    "type": "object"
+  },
+  "MigrationSourceTransferTargetReadParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "MigrationSourceSessionParams": {
+        "additionalProperties": false,
+        "properties": {
+          "purpose": {
+            "$ref": "#/definitions/MigrationSourceSessionPurpose"
+          },
+          "sessionId": {
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "type": "string"
+          },
+          "targetId": {
+            "description": "Must resolve to the original session scope; this cannot retarget a child.",
+            "type": "string"
+          },
+          "workspacePath": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "purpose",
+          "sessionId",
+          "targetId"
+        ],
+        "type": "object"
+      },
+      "MigrationSourceSessionPurpose": {
+        "enum": [
+          "source",
+          "target",
+          "target_recovery"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "requestId": {
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+        "type": "string"
+      },
+      "target": {
+        "$ref": "#/definitions/MigrationSourceSessionParams"
+      }
+    },
+    "required": [
+      "requestId",
+      "target"
+    ],
+    "title": "MigrationSourceTransferTargetReadParams",
+    "type": "object"
+  },
+  "MigrationSourceTransferTargetResumeParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "MigrationSourceSessionParams": {
+        "additionalProperties": false,
+        "properties": {
+          "purpose": {
+            "$ref": "#/definitions/MigrationSourceSessionPurpose"
+          },
+          "sessionId": {
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "type": "string"
+          },
+          "targetId": {
+            "description": "Must resolve to the original session scope; this cannot retarget a child.",
+            "type": "string"
+          },
+          "workspacePath": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "purpose",
+          "sessionId",
+          "targetId"
+        ],
+        "type": "object"
+      },
+      "MigrationSourceSessionPurpose": {
+        "enum": [
+          "source",
+          "target",
+          "target_recovery"
+        ],
+        "type": "string"
+      },
+      "MigrationSourceTransferControl": {
+        "additionalProperties": false,
+        "properties": {
+          "cancelWatermark": {
+            "format": "uint64",
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          },
+          "cancelled": {
+            "type": "boolean"
+          },
+          "ready": {
+            "type": "boolean"
+          },
+          "sequence": {
+            "format": "uint64",
+            "maximum": 9007199254740991,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "cancelWatermark",
+          "cancelled",
+          "ready",
+          "sequence"
+        ],
+        "type": "object"
+      },
+      "MigrationSourceTransferObservedControl": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/MigrationSourceTransferControl"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "Null is an explicit observation, distinct from an omitted confirmation."
+      }
+    },
+    "properties": {
+      "attemptId": {
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+        "type": "string"
+      },
+      "expectedAdmissionControl": {
+        "$ref": "#/definitions/MigrationSourceTransferControl"
+      },
+      "expectedOperationControl": {
+        "$ref": "#/definitions/MigrationSourceTransferObservedControl"
+      },
+      "requestId": {
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+        "type": "string"
+      },
+      "target": {
+        "$ref": "#/definitions/MigrationSourceSessionParams"
+      }
+    },
+    "required": [
+      "attemptId",
+      "expectedAdmissionControl",
+      "expectedOperationControl",
+      "requestId",
+      "target"
+    ],
+    "title": "MigrationSourceTransferTargetResumeParams",
+    "type": "object"
+  }
+}

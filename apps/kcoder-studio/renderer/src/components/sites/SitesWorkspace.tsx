@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { usePageSurfaceTransition } from '@/components/layout/pageTransitionAnimation'
 import type { ReactNode } from 'react'
 import {
   AlertCircle,
@@ -164,9 +165,14 @@ export function SitesWorkspace({
   const [sites, setSites] = useState<Site[]>([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
+  // Refetches keep the current list visible; only the first load shows a placeholder.
+  const [hasLoaded, setHasLoaded] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [sitesUnavailable, setSitesUnavailable] = useState(false)
+  const pageSurface = usePageSurfaceTransition<HTMLElement>(
+    sitesUnavailable ? 'unavailable' : 'sites'
+  )
   const [publishingIds, setPublishingIds] = useState<Set<string>>(new Set())
   const [pendingDeleteSite, setPendingDeleteSite] = useState<Site | null>(null)
   const [deletingSiteId, setDeletingSiteId] = useState<string | null>(null)
@@ -203,7 +209,10 @@ export function SitesWorkspace({
         setLoadError(errorMessage(error, t('load_failed', '站点加载失败')))
       }
     } finally {
-      if (currentRequest === requestId.current) setLoading(false)
+      if (currentRequest === requestId.current) {
+        setLoading(false)
+        setHasLoaded(true)
+      }
     }
   }, [api, debouncedQuery, pageSize, t])
 
@@ -300,6 +309,8 @@ export function SitesWorkspace({
   if (sitesUnavailable) {
     return (
       <main
+        ref={pageSurface}
+        data-studio-page-content="true"
         data-testid="sites-workspace"
         className="min-w-0 flex-1 overflow-y-auto bg-background text-text-primary"
       >
@@ -336,6 +347,8 @@ export function SitesWorkspace({
 
   return (
     <main
+      ref={pageSurface}
+      data-studio-page-content="true"
       data-testid="sites-workspace"
       className="min-w-0 flex-1 overflow-y-auto bg-background text-text-primary"
     >
@@ -398,7 +411,7 @@ export function SitesWorkspace({
 
         {createError && (
           <div
-            className="mt-4 flex items-center justify-between gap-4 rounded-lg border border-border bg-surface px-4 py-3"
+            className="studio-card-spacing mt-4 flex items-center justify-between gap-4 rounded-lg border border-border bg-surface"
             role="alert"
             data-testid="sites-create-error"
           >
@@ -425,7 +438,7 @@ export function SitesWorkspace({
             <span>{t('external_column', '外网发布')}</span>
           </div>
 
-          {loading ? (
+          {loading && !hasLoaded ? (
             <div
               className="flex min-h-48 items-center justify-center text-text-secondary"
               aria-label={t('loading', '正在加载站点')}

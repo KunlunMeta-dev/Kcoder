@@ -19,11 +19,13 @@
     "desktop/additional-window.mjs",
     "desktop/directory-dialog-controller.mjs",
     "desktop/desktop-menu-controller.mjs",
-    "renderer/src-tauri/icons/icon.ico",
-    "renderer/src-tauri/icons/128x128.png",
-    "renderer/src-tauri/icons/32x32.png",
+    "desktop/icons/icon.ico",
+    "desktop/icons/128x128.png",
+    "desktop/icons/32x32.png",
     "desktop/download-controller.mjs",
     "desktop/security-policy.mjs",
+    "desktop/widget-isolation/*.mjs",
+    "!desktop/widget-isolation/**/*.test.*",
     "package.json"
   ],
   "extraMetadata": {
@@ -54,13 +56,13 @@
     }
   ],
   "linux": {
-    "icon": "renderer/src-tauri/icons/icon.png"
+    "icon": "desktop/icons/icon.png"
   },
   "mac": {
-    "icon": "renderer/src-tauri/icons/icon.icns"
+    "icon": "desktop/icons/icon.icns"
   },
   "win": {
-    "icon": "renderer/src-tauri/icons/icon.ico",
+    "icon": "desktop/icons/icon.ico",
     "signAndEditExecutable": true,
     "signExecutable": false,
     "target": [

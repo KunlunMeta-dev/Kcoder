@@ -1,3 +1,14 @@
+    async fn wait_for_history_worker_stop(queue: &HistoryFlusherQueue) {
+        tokio::time::timeout(tokio::time::Duration::from_secs(5), async {
+            while !queue.worker_is_stopped() {
+                tokio::time::sleep(tokio::time::Duration::from_millis(1)).await;
+            }
+        })
+        .await
+        .expect("the original history worker must finish after its sender closes");
+        assert!(!queue.worker_is_unknown(), "the original final flush must succeed");
+    }
+
     #[tokio::test]
     async fn resume_from_history_restarts_history_flusher_for_resumed_path() {
         let tmp = TempDir::new().unwrap();
@@ -6,6 +17,8 @@
         append_history_entry(
             &resumed_path,
             &HistoryEntry {
+                web_sources: Vec::new(),
+                history_attempt: None,
                 session_id: "resumed-session".to_string(),
                 timestamp_ms: now_millis(),
                 uuid: Some(generate_transcript_uuid()),
@@ -18,8 +31,9 @@
         state.with_history_path(&fresh_path);
         state.resume_from_history(&resumed_path).unwrap();
         state.add_message(Message::assistant_text("after resume"));
+        let queue = state.read_inner().history_flusher.as_ref().unwrap().queue.clone();
         drop(state);
-        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+        wait_for_history_worker_stop(&queue).await;
 
         let entries = load_history(&resumed_path).unwrap();
         assert_eq!(entries.len(), 2);
@@ -36,10 +50,10 @@
         state.add_message(Message::user_text("hello"));
         state.add_message(Message::assistant_text("hi"));
 
-        // Drop the state to close the flusher channel and trigger a final flush.
+        // Retain only the original queue's completion observation, not a sender.
+        let queue = state.read_inner().history_flusher.as_ref().unwrap().queue.clone();
         drop(state);
-        // Give the background task a moment to finish writing.
-        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+        wait_for_history_worker_stop(&queue).await;
 
         let entries = load_history(&path).unwrap();
         assert_eq!(entries.len(), 2);
@@ -52,6 +66,8 @@
         append_history_entry(
             &path,
             &HistoryEntry {
+                web_sources: Vec::new(),
+                history_attempt: None,
                 session_id: "timestamped".to_string(),
                 timestamp_ms: 1_000,
                 uuid: Some("user-1".to_string()),
@@ -62,6 +78,8 @@
         append_history_entry(
             &path,
             &HistoryEntry {
+                web_sources: Vec::new(),
+                history_attempt: None,
                 session_id: "timestamped".to_string(),
                 timestamp_ms: 2_000,
                 uuid: Some("assistant-1".to_string()),
@@ -72,6 +90,8 @@
         append_history_entry(
             &path,
             &HistoryEntry {
+                web_sources: Vec::new(),
+                history_attempt: None,
                 session_id: "timestamped".to_string(),
                 timestamp_ms: 3_000,
                 uuid: Some("user-2".to_string()),
@@ -275,17 +295,27 @@
         std::fs::write(&blocking_parent, "file").unwrap();
         let path = blocking_parent.join("history.jsonl");
         let mut batch = vec![HistoryEntry {
+            web_sources: Vec::new(),
+            history_attempt: None,
             session_id: "session".to_string(),
             timestamp_ms: 1,
             uuid: Some("entry".to_string()),
             parent_uuid: None,
-	            message: Message::user_text("must survive failed flush"),
+            message: Message::user_text("must survive failed flush"),
         }];
 
         let error = flush_history_batch(&path, &mut batch).unwrap_err();
 
         assert!(error.to_string().contains("not-a-directory"), "{error:#}");
         assert_eq!(batch.len(), 1, "failed flush must retain entries for retry");
+        assert_eq!(batch[0].uuid.as_deref(), Some("entry"));
+        std::fs::remove_file(&blocking_parent).unwrap();
+        flush_history_batch(&path, &mut batch).unwrap();
+        assert!(batch.is_empty());
+        let entries = load_history(&path).unwrap();
+        assert_eq!(entries.len(), 1, "retry must not duplicate the original batch");
+        assert_eq!(entries[0].uuid.as_deref(), Some("entry"));
+        assert_eq!(entries[0].message.preview(100), "must survive failed flush");
     }
 
     #[tokio::test]

@@ -1,3 +1,6 @@
+import { WorkspacePageHeader } from '@/components/layout/WorkspacePageHeader'
+import { usePageSurfaceTransition } from '@/components/layout/pageTransitionAnimation'
+import { currentHostDeviceId } from '@/features/runtime-target/currentHostTarget'
 import { startWorkflowPolling } from './workflowPolling'
 import { WorkflowWorkspaceLocation } from './WorkflowWorkspaceLocation'
 import {
@@ -9,7 +12,6 @@ import { requestWorkflowComposerIntent } from './useWorkflowComposerIntent'
 import { WorkflowLibraryActions, WorkflowImportButton } from './WorkflowLibraryActions'
 import { WorkflowRunPanel } from './WorkflowRunPanel'
 import {
-  WorkflowVerification,
   type WorkflowVersionVerification,
   type WorkflowStorageCapacity,
 } from './WorkflowVerification'
@@ -24,7 +26,6 @@ import { captureAccountContextRevision } from '@/kcoder/accountContextEvents'
 import { usePluginTargetScope } from '@/kcoder/usePluginTargetScope'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
-  ArrowLeft,
   GitBranch,
   Plus,
   RefreshCw,
@@ -37,7 +38,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { ModalDialog } from '@/components/ui/modal-dialog'
 import { SettingsSelect } from '@/components/settings/SettingsSelect'
-import { SettingsDialog } from '@/components/settings/settings-ui'
+import { WorkflowVersionSettings } from './WorkflowVersionSettings'
 import { useWorkbench } from '@/features/workbench/useWorkbench'
 import { workbenchModelTarget } from '@/features/workbench/workbenchModelTarget'
 import { useTranslation } from '@/hooks/useTranslation'
@@ -52,6 +53,7 @@ import {
   type WorkflowSummary,
   type WorkflowRun,
 } from './workflowApi'
+import { useRetainedPageActive } from '@/components/layout/retainedPageState'
 
 const field =
   'w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-focus/30'
@@ -65,10 +67,7 @@ export function WorkflowWorkspace({
   const [requested, setRequested] = useState<string | null>(null)
   const serverId = state.devices.some(device => device.device_id === requested)
     ? requested!
-    : target?.deviceId ||
-      state.devices.find(device => device.is_default)?.device_id ||
-      state.devices[0]?.device_id ||
-      ''
+    : currentHostDeviceId(state.devices) || ''
   const scope = usePluginTargetScope(serverId)
   const handleDirty = useCallback(
     (value: boolean) => setDirtyScope(value ? scope.key : null),
@@ -79,34 +78,30 @@ export function WorkflowWorkspace({
       data-testid="workflow-workspace"
       className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background text-text-primary"
     >
-      <header className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border/50 px-4 py-3 md:px-6">
-        <Button
-          size="sm"
-          variant="ghost"
-          aria-label={t('workflowCanvas.back')}
-          onClick={() => navigateTo('/')}
-        >
-          <ArrowLeft />
-        </Button>
-        <h1 className="text-base font-semibold tracking-tight">{t('workflowCanvas.heading')}</h1>
-        <div className="ml-auto">
-          <SettingsSelect
-            density="compact"
-            icon={<GitBranch />}
-            aria-label={t('workflowCanvas.target')}
-            data-testid="workflow-target"
-            disabled={dirtyScope === scope.key}
-            value={serverId}
-            onChange={event => setRequested(event.target.value)}
-          >
-            {state.devices.map(device => (
-              <option key={device.device_id} value={device.device_id}>
-                {device.name}
-              </option>
-            ))}
-          </SettingsSelect>
-        </div>
-      </header>
+      <WorkspacePageHeader
+        title={t('workflowCanvas.heading')}
+        backLabel={t('workflowCanvas.back')}
+        actions={
+          <>
+            {' '}
+            <SettingsSelect
+              density="compact"
+              icon={<GitBranch />}
+              aria-label={t('workflowCanvas.target')}
+              data-testid="workflow-target"
+              disabled={dirtyScope === scope.key}
+              value={serverId}
+              onChange={event => setRequested(event.target.value)}
+            >
+              {state.devices.map(device => (
+                <option key={device.device_id} value={device.device_id}>
+                  {device.name}
+                </option>
+              ))}
+            </SettingsSelect>{' '}
+          </>
+        }
+      />
       {serverId ? (
         <WorkflowLibrary
           key={scope.key}
@@ -154,6 +149,7 @@ function WorkflowLibrary({
   const [selected, setSelected] = useState<string | null>(null)
   const latestDefinition = useRef<WorkflowDefinition | null>(null)
   const [definition, setDefinition] = useState<WorkflowDefinition | null>(null)
+  const pageSurface = usePageSurfaceTransition<HTMLElement>(definition?.id ?? 'library')
   const [viewVersion, setViewVersion] = useState<number | null>(null)
   const [selectedNode, setSelectedNode] = useState<string | null>(null)
   const [dirty, setDirty] = useState(false)
@@ -186,9 +182,11 @@ function WorkflowLibrary({
   const inspectionToken = useRef(0)
   const evidenceKey = (run: NonNullable<WorkflowVersionVerification>['runs'][number]) =>
     `${run.runId}:${run.artifactAttempt ?? run.resumeCount}`
+  const pageActive = useRetainedPageActive()
   useEffect(() => {
     inspectionToken.current++
     return startWorkflowPolling({
+      active: pageActive,
       isCurrent,
       changes: { serverId, definitionId: selected ?? undefined },
       poll: async (isLive, signal) => {
@@ -228,7 +226,7 @@ function WorkflowLibrary({
         setMetadataLoading(false)
       },
     })
-  }, [serverId, selected, metadataVersion, revisionTick, isCurrent])
+  }, [pageActive, serverId, selected, metadataVersion, revisionTick, isCurrent])
   const inspectReferences = async (version: number) => {
     if (!selected || !capabilities?.versionHistory || !isCurrent()) return
     const token = ++inspectionToken.current
@@ -331,6 +329,7 @@ function WorkflowLibrary({
   useEffect(() => {
     let ticks = 0
     return startWorkflowPolling({
+      active: pageActive,
       isCurrent,
       changes: {
         serverId,
@@ -377,7 +376,7 @@ function WorkflowLibrary({
         ticks = 0
       },
     })
-  }, [serverId, selected, revisionTick, offset, t, isCurrent, viewVersion])
+  }, [pageActive, serverId, selected, revisionTick, offset, t, isCurrent, viewVersion])
 
   const mutate = async (operation: () => Promise<WorkflowDefinition>) => {
     if (loadError || !isCurrent()) return false
@@ -608,7 +607,10 @@ function WorkflowLibrary({
         aria-label={t('workflowCanvas.resizeLibrary')}
         className={`${PANE_RESIZE_HANDLE} mx-1 hidden lg:block`}
       />
-      <section className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 lg:overflow-hidden">
+      <section
+        ref={pageSurface}
+        className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 lg:overflow-hidden"
+      >
         {locationAction && (
           <WorkflowWorkspaceLocation
             onClose={() => setLocationAction(null)}
@@ -625,7 +627,7 @@ function WorkflowLibrary({
           <div
             role="alert"
             data-testid="workflow-error"
-            className="flex items-start justify-between gap-3 rounded-lg border border-destructive/30 p-3 text-sm text-destructive"
+            className="studio-card-spacing flex items-start justify-between gap-3 rounded-lg border border-destructive/30 text-sm text-destructive"
           >
             <span className="whitespace-pre-wrap break-words">{error || loadError}</span>
             <Button
@@ -742,226 +744,198 @@ function WorkflowLibrary({
                 {t('workflowCanvas.advancedSettings')}
               </Button>
               {advancedOpen && (
-                <SettingsDialog
-                  title={t('workflowCanvas.advancedSettings')}
-                  testId="workflow-settings-dialog"
-                  closeLabel={t('workflowCanvas.back')}
+                <WorkflowVersionSettings
+                  definitionId={definition.id}
+                  version={metadataVersion}
+                  verification={verification}
+                  capacity={capacity}
+                  loading={metadataLoading}
+                  unsupported={capabilities?.verification === false}
+                  error={metadataError}
+                  disabled={busy || dirty || !!loadError || !isCurrent()}
+                  onPrepareVerification={
+                    capabilities?.verification ? () => void prepareVerification() : undefined
+                  }
+                  onLoadMore={() => void moreEvidence()}
                   onClose={() => setAdvancedOpen(false)}
                 >
-                  <div className="space-y-6 pt-5">
-                    <WorkflowVerification
-                      definitionId={definition.id}
-                      version={metadataVersion}
-                      verification={verification}
-                      capacity={capacity}
-                      loading={metadataLoading}
-                      unsupported={capabilities?.verification === false}
-                      error={metadataError}
-                      disabled={busy || dirty || !!loadError || !isCurrent()}
-                      onPrepareVerification={
-                        capabilities?.verification ? () => void prepareVerification() : undefined
-                      }
-                      onLoadMore={() => void moreEvidence()}
+                  <div className="space-y-5">
+                    {capabilities?.versionHistory && (
+                      <WorkflowVerificationHistory
+                        definitionId={definition.id}
+                        version={metadataVersion}
+                        references={references}
+                        loading={metadataLoading}
+                        disabled={busy || dirty || !!loadError || !isCurrent()}
+                        isCurrent={isCurrent}
+                        onInspect={version => void inspectReferences(version)}
+                        onArchive={async (version, expectedRevision) => {
+                          if (!isCurrent()) return
+                          await workflowApi.archiveVersion(
+                            serverId,
+                            definition.id,
+                            version,
+                            expectedRevision
+                          )
+                          if (isCurrent()) {
+                            setReferences(null)
+                            setVerification(null)
+                            setRevisionTick(value => value + 1)
+                          }
+                        }}
+                      />
+                    )}
+                    {capabilities?.storage && capacity && (
+                      <WorkflowVerificationStorage
+                        capacity={capacity}
+                        disabled={busy || dirty || !!loadError || !isCurrent()}
+                        isCurrent={isCurrent}
+                        onChangeStorage={async operation => {
+                          if (!isCurrent()) return
+                          if (operation === 'migrate') await workflowApi.migrateStorage(serverId)
+                          else await workflowApi.rollbackStorage(serverId)
+                          if (isCurrent()) setRevisionTick(value => value + 1)
+                        }}
+                      />
+                    )}
+                    <WorkflowDeleteButton
+                      key={definition.id}
+                      serverId={serverId}
+                      definition={definition}
+                      disabled={busy || dirty || !!loadError || viewVersion != null}
+                      isCurrent={isCurrent}
+                      onDeleted={() => {
+                        setSelected(null)
+                        setDefinition(null)
+                        setSelectedNode(null)
+                        setObservedRun(null)
+                        setViewVersion(null)
+                        setItems(current => current.filter(item => item.id !== definition.id))
+                        setOffset(0)
+                        setRevisionTick(value => value + 1)
+                      }}
                     />
-                    <details className="rounded-xl border border-border/60 p-4">
-                      <summary
-                        data-testid="workflow-management-toggle"
-                        className="cursor-pointer text-sm text-text-secondary focus-visible:ring-2 focus-visible:ring-focus"
-                      >
-                        {t('workflowVerification.management')}
+                    <WorkflowLibraryActions
+                      serverId={serverId}
+                      definition={definition}
+                      version={viewVersion}
+                      disabled={busy || dirty || !!loadError}
+                      isCurrent={isCurrent}
+                      onError={setError}
+                      onVersion={version => {
+                        setViewVersion(version)
+                        setDefinition(null)
+                        setSelectedNode(null)
+                        setObservedRun(null)
+                      }}
+                      onCreated={next => {
+                        setViewVersion(null)
+                        setSelected(next.id)
+                        setDefinition(next)
+                        setSelectedNode(null)
+                        setItems([])
+                        setOffset(0)
+                        setRevisionTick(value => value + 1)
+                      }}
+                    />
+                    <details className="studio-card-spacing rounded-xl border border-border">
+                      <summary className="cursor-pointer text-sm">
+                        {t('workflowCanvas.inputSchema')}
                       </summary>
-                      <div className="mt-4 space-y-5">
-                        {capabilities?.versionHistory && (
-                          <WorkflowVerificationHistory
-                            definitionId={definition.id}
-                            version={metadataVersion}
-                            references={references}
-                            loading={metadataLoading}
-                            disabled={busy || dirty || !!loadError || !isCurrent()}
-                            isCurrent={isCurrent}
-                            onInspect={version => void inspectReferences(version)}
-                            onArchive={async (version, expectedRevision) => {
-                              if (!isCurrent()) return
-                              await workflowApi.archiveVersion(
-                                serverId,
-                                definition.id,
-                                version,
-                                expectedRevision
-                              )
-                              if (isCurrent()) {
-                                setReferences(null)
-                                setVerification(null)
-                                setRevisionTick(value => value + 1)
-                              }
-                            }}
-                          />
-                        )}
-                        {capabilities?.storage && capacity && (
-                          <WorkflowVerificationStorage
-                            capacity={capacity}
-                            disabled={busy || dirty || !!loadError || !isCurrent()}
-                            isCurrent={isCurrent}
-                            onChangeStorage={async operation => {
-                              if (!isCurrent()) return
-                              if (operation === 'migrate')
-                                await workflowApi.migrateStorage(serverId)
-                              else await workflowApi.rollbackStorage(serverId)
-                              if (isCurrent()) setRevisionTick(value => value + 1)
-                            }}
-                          />
-                        )}
-                        <WorkflowDeleteButton
-                          key={definition.id}
-                          serverId={serverId}
-                          definition={definition}
-                          disabled={busy || dirty || !!loadError || viewVersion != null}
-                          isCurrent={isCurrent}
-                          onDeleted={() => {
-                            setSelected(null)
-                            setDefinition(null)
-                            setSelectedNode(null)
-                            setObservedRun(null)
-                            setViewVersion(null)
-                            setItems(current => current.filter(item => item.id !== definition.id))
-                            setOffset(0)
-                            setRevisionTick(value => value + 1)
+                      <textarea
+                        aria-label={t('workflowCanvas.inputSchema')}
+                        className={`${field} mt-2 font-mono`}
+                        rows={6}
+                        value={schemaText || JSON.stringify(definition.inputSchema ?? {}, null, 2)}
+                        onChange={event => {
+                          if (schemaRevision == null) setSchemaRevision(definition.revision)
+                          setSchemaText(event.target.value)
+                        }}
+                      />
+                      {schemaText && schemaRevision !== definition.revision && (
+                        <p role="alert" className="text-xs text-destructive">
+                          {t('workflowCanvas.editorStale')}
+                        </p>
+                      )}
+                      {schemaText && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => {
+                            setSchemaText('')
+                            setSchemaRevision(null)
                           }}
-                        />
-                        <WorkflowLibraryActions
-                          serverId={serverId}
-                          definition={definition}
-                          version={viewVersion}
-                          disabled={busy || dirty || !!loadError}
-                          isCurrent={isCurrent}
-                          onError={setError}
-                          onVersion={version => {
-                            setViewVersion(version)
-                            setDefinition(null)
-                            setSelectedNode(null)
-                            setObservedRun(null)
-                          }}
-                          onCreated={next => {
-                            setViewVersion(null)
-                            setSelected(next.id)
-                            setDefinition(next)
-                            setSelectedNode(null)
-                            setItems([])
-                            setOffset(0)
-                            setRevisionTick(value => value + 1)
-                          }}
-                        />
-                        <details className="rounded-xl border border-border p-3">
-                          <summary className="cursor-pointer text-sm">
-                            {t('workflowCanvas.inputSchema')}
-                          </summary>
-                          <textarea
-                            aria-label={t('workflowCanvas.inputSchema')}
-                            className={`${field} mt-2 font-mono`}
-                            rows={6}
-                            value={
-                              schemaText || JSON.stringify(definition.inputSchema ?? {}, null, 2)
-                            }
-                            onChange={event => {
-                              if (schemaRevision == null) setSchemaRevision(definition.revision)
-                              setSchemaText(event.target.value)
-                            }}
-                          />
-                          {schemaText && schemaRevision !== definition.revision && (
-                            <p role="alert" className="text-xs text-destructive">
-                              {t('workflowCanvas.editorStale')}
-                            </p>
-                          )}
-                          {schemaText && (
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => {
+                        >
+                          {t('workflowCanvas.discardEdits')}
+                        </Button>
+                      )}
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        disabled={
+                          busy ||
+                          !!loadError ||
+                          dirty ||
+                          viewVersion != null ||
+                          !schemaText ||
+                          schemaRevision !== definition.revision
+                        }
+                        onClick={() => {
+                          try {
+                            const schema: unknown = JSON.parse(schemaText)
+                            void mutate(() =>
+                              workflowApi.update(serverId, definition, schema)
+                            ).then(ok => {
+                              if (ok) {
                                 setSchemaText('')
                                 setSchemaRevision(null)
-                              }}
-                            >
-                              {t('workflowCanvas.discardEdits')}
-                            </Button>
-                          )}
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            disabled={
-                              busy ||
-                              !!loadError ||
-                              dirty ||
-                              viewVersion != null ||
-                              !schemaText ||
-                              schemaRevision !== definition.revision
-                            }
-                            onClick={() => {
-                              try {
-                                const schema: unknown = JSON.parse(schemaText)
-                                void mutate(() =>
-                                  workflowApi.update(serverId, definition, schema)
-                                ).then(ok => {
-                                  if (ok) {
-                                    setSchemaText('')
-                                    setSchemaRevision(null)
-                                  }
-                                })
-                              } catch {
-                                setError(t('workflowCanvas.invalidJsonObject'))
                               }
-                            }}
-                          >
-                            {t('workflowCanvas.saveInputSchema')}
-                          </Button>
-                        </details>
-                        <details className="rounded-xl border border-border p-3">
-                          <summary
-                            data-testid="workflow-run-settings-toggle"
-                            className="cursor-pointer text-sm"
-                          >
-                            {t('workflowCanvas.runSettings')}
-                          </summary>
-                          <div className="space-y-2">
-                            <label className="block space-y-1 text-sm">
-                              {t('workflowCanvas.workspace')}
-                              <input
-                                data-testid="workflow-execution-workspace"
-                                className={field}
-                                value={workspacePath}
-                                onChange={event => setWorkspacePath(event.target.value)}
-                                placeholder={t('workflowCanvas.workspaceRequired')}
-                              />
-                            </label>
-                            <label className="block space-y-1 text-sm">
-                              {t('workflowCanvas.runArguments')}
-                              {definition.inputSchema != null && (
-                                <pre className="max-h-32 overflow-auto whitespace-pre-wrap text-xs text-text-muted">
-                                  {JSON.stringify(definition.inputSchema, null, 2)}
-                                </pre>
-                              )}
-                              <textarea
-                                data-testid="workflow-run-arguments"
-                                className={`${field} font-mono`}
-                                rows={3}
-                                value={runArguments}
-                                onChange={event => setRunArguments(event.target.value)}
-                              />
-                            </label>
-                          </div>
-                        </details>
+                            })
+                          } catch {
+                            setError(t('workflowCanvas.invalidJsonObject'))
+                          }
+                        }}
+                      >
+                        {t('workflowCanvas.saveInputSchema')}
+                      </Button>
+                    </details>
+                    <details className="studio-card-spacing rounded-xl border border-border">
+                      <summary
+                        data-testid="workflow-run-settings-toggle"
+                        className="cursor-pointer text-sm"
+                      >
+                        {t('workflowCanvas.runSettings')}
+                      </summary>
+                      <div className="space-y-2">
+                        <label className="block space-y-1 text-sm">
+                          {t('workflowCanvas.workspace')}
+                          <input
+                            data-testid="workflow-execution-workspace"
+                            className={field}
+                            value={workspacePath}
+                            onChange={event => setWorkspacePath(event.target.value)}
+                            placeholder={t('workflowCanvas.workspaceRequired')}
+                          />
+                        </label>
+                        <label className="block space-y-1 text-sm">
+                          {t('workflowCanvas.runArguments')}
+                          {definition.inputSchema != null && (
+                            <pre className="max-h-32 overflow-auto whitespace-pre-wrap text-xs text-text-muted">
+                              {JSON.stringify(definition.inputSchema, null, 2)}
+                            </pre>
+                          )}
+                          <textarea
+                            data-testid="workflow-run-arguments"
+                            className={`${field} font-mono`}
+                            rows={3}
+                            value={runArguments}
+                            onChange={event => setRunArguments(event.target.value)}
+                          />
+                        </label>
                       </div>
                     </details>
                   </div>
-                  <div className="sticky bottom-0 mt-5 flex justify-end border-t border-border/50 bg-popover pt-4">
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      data-testid="workflow-settings-done"
-                      onClick={() => setAdvancedOpen(false)}
-                    >
-                      {t('common.close')}
-                    </Button>
-                  </div>
-                </SettingsDialog>
+                </WorkflowVersionSettings>
               )}
               <Button
                 size="sm"

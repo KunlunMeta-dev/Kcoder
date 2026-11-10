@@ -1,0 +1,21 @@
+model = "source-model"
+model_provider = "TeamGateway"
+model_context_window = 128000
+model_auto_compact_token_limit = 96000
+
+[model_providers.TeamGateway]
+name = "Team Gateway"
+base_url = "https://api.example.invalid/v1"
+wire_api = "responses"
+env_key = "TEAM_GATEWAY_KEY"
+experimental_bearer_token = "SYNTHETIC_CREDENTIAL_CANARY_NOT_A_REAL_KEY"
+
+[mcp_servers.documents]
+command = "never-run-this-mcp"
+args = ["--workspace", "selected-folder"]
+cwd = "selected-folder"
+enabled_tools = ["read"]
+disabled_tools = ["write"]
+
+[mcp_servers.documents.env]
+API_TOKEN = "SYNTHETIC_CREDENTIAL_CANARY_NOT_A_REAL_KEY"

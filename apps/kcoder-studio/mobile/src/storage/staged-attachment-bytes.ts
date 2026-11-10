@@ -1,3 +1,4 @@
+import type { MetadataAuthority } from "./metadata-authority";
 import type { BoundedByteReader } from "@/protocol/sha256-stream";
 import { createAttachmentBytesBackend as createWebBackend } from "./staged-attachment-bytes.web";
 
@@ -14,7 +15,7 @@ export interface AttachmentStoreChange<T> {
 }
 export interface AttachmentBytesBackend {
   readonly kind: "web" | "native";
-  transaction<T>(change: (rows: readonly unknown[]) => AttachmentStoreChange<T>): Promise<T>;
+  transaction<T>(change: (rows: readonly unknown[]) => AttachmentStoreChange<T>, authority?: MetadataAuthority): Promise<T>;
   source(id: string, expectedSize: number): Promise<BoundedByteReader>;
   /** Native only, after the durable quota/copy-intent reservation. */
   copySource?(id: string, source: DurableByteSource, isCurrent: () => boolean, signal: AbortSignal | undefined, withOwnership: (write: () => void) => Promise<void>): Promise<string>;

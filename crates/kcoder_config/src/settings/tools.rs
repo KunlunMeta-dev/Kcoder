@@ -1,6 +1,78 @@
 //! Tools configuration types and their defaults.
 
+pub use kcoder_types::StudioToolSelections;
+
 use crate::*;
+
+/// Additional agent tools in the default KWorker surface.
+pub const KWORKER_DEFAULT_AGENT_TOOLS: &[&str] = &[
+    "spawn_agent",
+    "explore_agent",
+    "SendMessage",
+    "wait",
+    "close_agent",
+];
+/// Workflow tools in the default KWorker surface.
+pub const KWORKER_DEFAULT_WORKFLOW_TOOLS: &[&str] = &["Workflow", "WorkflowDraft"];
+/// Shell tools in the default KWorker surface, filtered by host availability later.
+pub const KWORKER_DEFAULT_SHELL_TOOLS: &[&str] = &["bash", "PowerShell"];
+
+/// Resolve legacy KWorker defaults from the configured Luna surface.
+pub fn kworker_default_tool_names(luna: &[String]) -> Vec<String> {
+    let mut names = luna.to_vec();
+    names.extend(
+        KWORKER_DEFAULT_AGENT_TOOLS
+            .iter()
+            .chain(KWORKER_DEFAULT_WORKFLOW_TOOLS)
+            .chain(KWORKER_DEFAULT_SHELL_TOOLS)
+            .chain(["show_widget", "tool_search", "tool_execute"].iter())
+            .map(|name| (*name).to_owned()),
+    );
+    names.sort();
+    names.dedup();
+    names
+}
+
+/// Validate exact tool names without interpreting wildcard characters.
+/// This validates configuration shape, not availability in a target's registry.
+pub fn validate_studio_tool_selections(selections: &StudioToolSelections) -> anyhow::Result<()> {
+    for (mode, names) in [
+        ("kcoder", &selections.kcoder),
+        ("kworker", &selections.kworker),
+    ] {
+        let Some(names) = names else { continue };
+        anyhow::ensure!(
+            names.len() <= 1024,
+            "tools.studio.{mode}: at most 1024 tool names are allowed"
+        );
+        let mut seen = std::collections::HashSet::new();
+        for name in names {
+            anyhow::ensure!(
+                !name.is_empty()
+                    && name.len() <= 256
+                    && name.trim() == name
+                    && !name.chars().any(char::is_control),
+                "tools.studio.{mode}: tool names must have 1..256 bytes, no surrounding whitespace or control characters"
+            );
+            anyhow::ensure!(
+                seen.insert(name),
+                "tools.studio.{mode}: duplicate tool name"
+            );
+        }
+    }
+    Ok(())
+}
+
+fn deserialize_studio_tool_selections<'de, D>(
+    deserializer: D,
+) -> Result<StudioToolSelections, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let selections = StudioToolSelections::deserialize(deserializer)?;
+    validate_studio_tool_selections(&selections).map_err(serde::de::Error::custom)?;
+    Ok(selections)
+}
 
 /// Which file-edit tool is offered to the model. Exactly one edit surface is
 /// exposed at a time; the hidden one stays registered so sessions restored
@@ -54,6 +126,9 @@ impl ToolProfile {
 /// Tool-system settings.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ToolsSettings {
+    /// Studio mode selections; sessions retain their creation-time snapshot.
+    #[serde(default, deserialize_with = "deserialize_studio_tool_selections")]
+    pub studio: StudioToolSelections,
     /// Explicit startup registry. CLI --tool-profile overrides this setting;
     /// changing a settings file does not rebuild an already running registry.
     #[serde(default)]
@@ -112,8 +187,11 @@ pub(crate) fn default_luna_allowed_tools() -> Vec<String> {
         "WebFetch",
         "DiscoverSkills",
         "explore_agent",
-        "ocr",
         "Workflow",
+        "REPL",
+        "AskUserQuestion",
+        "WebBrowser",
+        "ContextHistory",
     ]
     .into_iter()
     .map(str::to_string)
@@ -145,19 +223,45 @@ impl Default for ToolCoercionConfig {
 }
 
 /// Configurable limits applied to named tools.
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ToolLimitsSettings {
     #[serde(default)]
     pub doom_loop: DoomLoopSettings,
     /// Foreground blocking budgets indexed by tool name.
     #[serde(default)]
     pub foreground_budget_ms: NamedToolLimitSettings,
+    /// Per-tool total lifetime overrides; missing names use tool_timeout_ms.
+    #[serde(default = "default_execution_timeout_ms")]
+    pub execution_timeout_ms: BTreeMap<String, u64>,
     /// Blocking timeout policy used by TaskOutput.
     #[serde(default)]
     pub task_output_timeout_ms: TaskOutputTimeoutSettings,
     /// Circuit-breaker policy for repeated denial of one capability in non-interactive permission modes.
     #[serde(default)]
     pub permission_denials: PermissionDenialLimitSettings,
+}
+
+pub const DEFAULT_SHELL_TIMEOUT_MS: u64 = 30 * 60 * 1000;
+
+fn default_execution_timeout_ms() -> BTreeMap<String, u64> {
+    [
+        ("bash".to_string(), DEFAULT_SHELL_TIMEOUT_MS),
+        ("PowerShell".to_string(), DEFAULT_SHELL_TIMEOUT_MS),
+    ]
+    .into_iter()
+    .collect()
+}
+
+impl Default for ToolLimitsSettings {
+    fn default() -> Self {
+        Self {
+            doom_loop: DoomLoopSettings::default(),
+            foreground_budget_ms: NamedToolLimitSettings::default(),
+            execution_timeout_ms: default_execution_timeout_ms(),
+            task_output_timeout_ms: TaskOutputTimeoutSettings::default(),
+            permission_denials: PermissionDenialLimitSettings::default(),
+        }
+    }
 }
 
 /// Consecutive-denial limit for the same permission class.

@@ -1,5 +1,6 @@
 use crate::matrix::Suite;
 use crate::report::SuiteOutcome;
+use crate::source_snapshot::SourceSnapshot;
 use anyhow::Result;
 use kcoder_test_harness::RunContext;
 use serde::Serialize;
@@ -12,6 +13,10 @@ struct SuiteExecutionManifest<'a> {
     argv: Vec<String>,
     cwd: String,
     git_commit: &'a Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    source_before: Option<&'a SourceSnapshot>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    source_after: Option<&'a SourceSnapshot>,
     seed: Option<u64>,
     platform: &'a str,
     platform_arch: &'a str,
@@ -31,6 +36,8 @@ pub fn persist_suite_manifest(
     root: &Path,
     suite: &Suite,
     outcome: &SuiteOutcome,
+    source_before: Option<&SourceSnapshot>,
+    source_after: Option<&SourceSnapshot>,
 ) -> Result<String> {
     let metadata = &context.manifest().metadata;
     let finished_at_ms = std::time::SystemTime::now()
@@ -79,6 +86,8 @@ pub fn persist_suite_manifest(
         argv,
         cwd: cwd.to_string_lossy().into_owned(),
         git_commit: &metadata.git_commit,
+        source_before,
+        source_after,
         seed: metadata.seed,
         platform: &metadata.platform,
         platform_arch: &metadata.platform_arch,

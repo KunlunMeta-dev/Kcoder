@@ -32,7 +32,8 @@ describe('MobileSettingsPage', () => {
       expect(screen.getByTestId('mobile-settings-model-settings-button')).toBeVisible()
       expect(screen.getByTestId('mobile-settings-usage-button')).toBeVisible()
       await userEvent.click(screen.getByTestId('mobile-settings-model-settings-button'))
-      expect(screen.getByTestId('provider-form')).toBeVisible()
+      expect(screen.getByTestId('kcoder-provider-settings-page')).toBeVisible()
+      expect(screen.getByTestId('provider-form')).not.toBeVisible()
       await userEvent.click(screen.getByTestId('mobile-model-settings-back-button'))
       await userEvent.click(screen.getByTestId('mobile-settings-usage-button'))
       expect(screen.getByTestId('usage-settings-page')).toBeVisible()
@@ -139,6 +140,8 @@ describe('MobileSettingsPage', () => {
               name: 'Server A',
               status: 'online',
               is_default: true,
+              device_type: 'remote',
+              capabilities: ['kcoder-gateway', 'kcoder-gateway-local'],
             },
             {
               id: 2,

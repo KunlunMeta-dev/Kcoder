@@ -1,3 +1,4 @@
+import { getRuntimeConfig, joinAppPath } from '@/config/runtime'
 import type { RemoteTerminalClient } from '@/lib/remote-terminal-socket'
 import { gatewayToken } from './gatewayRpc'
 
@@ -17,7 +18,7 @@ export type SshConnectionUpdate = Omit<SshConnectionProfile, 'passwordSaved'> & 
 }
 
 async function profilesRequest(path = '', method = 'GET', body?: SshConnectionUpdate) {
-  const response = await fetch(`/api/ssh-connections${path}`, {
+  const response = await fetch(joinAppPath(getRuntimeConfig().appBasePath, `/api/ssh-connections${path}`), {
     method,
     credentials: 'same-origin',
     cache: 'no-store',
@@ -90,7 +91,7 @@ export class SshTerminalConnection {
         reject(new Error('SSH terminal requires a KCoder Gateway'))
         return
       }
-      const url = new URL('/rpc', window.location.href)
+      const url = new URL(joinAppPath(getRuntimeConfig().appBasePath, '/rpc'), window.location.href)
       url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
       url.searchParams.set('token', token)
       url.searchParams.set('channel', 'ssh-terminal')

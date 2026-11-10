@@ -1,11 +1,17 @@
 import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
+import { authenticatedOidcAccountProcess } from './account-oidc-process.js';
+import { privateOidcResume } from './account-oidc-private.js';
 
 const failure = () => new Error('KCoder 账号认证或隔离启动失败，请检查账号和服务器部署');
 
 // Hide the privileged authentication frame from the app-server broker and all clients.
-export function authenticatedAccountProcess(child, { username, password, workspace }, { onAuthenticated, onFailure, retentionParentV1 = false } = {}) {
+export function authenticatedAccountProcess(child, { username, password, workspace, authentication = 'password', resumeAuthority, callbackPort }, { onAuthenticated, onFailure, onAuthorizationRequired, retentionParentV1 = false } = {}) {
   if (typeof retentionParentV1 !== 'boolean') throw failure();
+  if (authentication === 'oidc') return authenticatedOidcAccountProcess(child, { username, workspace, callbackPort },
+    { onAuthenticated, onFailure, onAuthorizationRequired, retentionParentV1 });
+  if (!['password', 'oidcResume'].includes(authentication)) throw failure();
+  const resume = authentication === 'oidcResume' ? privateOidcResume(resumeAuthority) : undefined;
   const proxy = new EventEmitter();
   const output = new PassThrough();
   proxy.stdin = child.stdin;
@@ -50,10 +56,23 @@ export function authenticatedAccountProcess(child, { username, password, workspa
     if (!response || typeof response !== 'object' || Array.isArray(response) || response.protocol !== 'kcoder-account-v1' || response.authenticated !== true ||
         response.username !== username || !/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(response.principalId) ||
         !Number.isInteger(response.uid) || response.uid < 1000 || !['admin', 'user'].includes(response.role)) return reject(response?.authenticated === false ? 'server-authentication' : 'response-identity', response?.errorCode === 'authentication_failed');
+    // A caller may synchronously reject a stale principal/generation. Do not
+    // publish authentication or forward coalesced runtime bytes before that veto.
+    let accepted;
+    try {
+      let confirmed;
+      if (resume) {
+        confirmed = privateOidcResume(response.privateOidcResume);
+        if (Object.keys(resume).some(key => resume[key] !== confirmed[key])) return reject('response-identity');
+      }
+      accepted = onAuthenticated?.({ principalId: response.principalId, username, role: response.role }, confirmed);
+    }
+    catch { return reject('response-identity'); }
+    if (accepted === false) return reject('response-identity');
     authenticated = true;
     clearTimeout(timer);
-    onAuthenticated?.({ principalId: response.principalId, username, role: response.role });
     const remaining = buffered.subarray(end + 1);
+    buffered.fill(0, 0, end + 1);
     if (remaining.length && !output.write(remaining)) child.stdout.pause();
     buffered = Buffer.alloc(0);
   });
@@ -74,7 +93,8 @@ export function authenticatedAccountProcess(child, { username, password, workspa
     output.end();
     proxy.emit('close', ...args);
   });
-  const frame = Buffer.from(JSON.stringify({ protocol: 'kcoder-account-v1', username, password,
+  const frame = Buffer.from(JSON.stringify({ protocol: 'kcoder-account-v1', username,
+    ...(resume ? { authentication: 'oidcResume', resumeAuthority: resume } : { password }),
     ...(workspace ? { workspace } : {}), ...(retentionParentV1 ? { retentionParentV1: true } : {}) }) + '\n');
   try { child.stdin.write(frame, () => frame.fill(0)); }
   catch { frame.fill(0); queueMicrotask(reject); }

@@ -2,8 +2,8 @@
 // hook host. NOT mounted React/DOM, Browser, real Web Locks or network evidence.
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { ReactElement } from "react";
-import type { GatewayProfile, KCoderServer } from "@/gateway/types";
-import type { MobileSessionBootstrap } from "@/gateway/http";
+import type { GatewayAuthorizationDenialWitness, GatewayProfile, KCoderServer } from "@/gateway/types";
+import { GatewaySessionExpiredError, type MobileSessionBootstrap } from "@/gateway/http";
 import type { ProfileSnapshot } from "./profile-coordinator";
 
 type Effect = { callback: () => void | (() => void); deps: readonly unknown[]; pending: boolean; cleanup?: () => void };
@@ -20,6 +20,8 @@ const api = vi.hoisted(() => ({
   ensure: vi.fn<(profile: GatewayProfile) => Promise<GatewayProfile>>(),
   servers: vi.fn<(profile: GatewayProfile) => Promise<KCoderServer[]>>(),
   statuses: vi.fn(), revoke: vi.fn(), cleanup: vi.fn(),
+  denialRecorder: undefined as ((witness: GatewayAuthorizationDenialWitness) => Promise<boolean>) | undefined,
+  denialChecker: undefined as ((witness: GatewayAuthorizationDenialWitness) => boolean) | undefined,
 }));
 vi.mock("react", async importOriginal => {
   const actual = await importOriginal<typeof import("react")>();
@@ -50,11 +52,31 @@ vi.mock("react-native", () => ({ Platform: { OS: "web" }, AppState: { currentSta
 vi.mock("@/storage/profile-store", () => ({ PROFILE_INDEX_KEY: "review-profile-index", loadProfiles: api.load,
   persistProfiles: api.persist, migrateLegacyWebProfiles: vi.fn(async () => null) }));
 vi.mock("@/storage/context-lock", () => ({ canCoordinateDeviceAuthorization: () => true,
-  withLocalIdentityLock: async (_key: string, operation: () => Promise<unknown>) => operation() }));
-vi.mock("@/gateway/http", () => ({ GatewaySessionExpiredError: class extends Error {},
+  withLocalMetadata: async (_key: string, operation: () => Promise<unknown>) => operation() }));
+vi.mock("@/gateway/http", async importOriginal => {
+  const actual = await importOriginal<typeof import("@/gateway/http")>();
+  return { ...actual,
   exchangeMobileSessionWithBootstrap: api.exchange, ensureGatewayAuthorization: api.ensure,
-  installGatewayAuthorizationResolver: () => () => {}, listServers: api.servers,
-  listServerStatuses: api.statuses, revokeMobileSession: api.revoke }));
+  installGatewayAuthorizationResolver: () => () => {},
+  installGatewayAuthorizationDenialRecorder: (
+    recorder: (witness: GatewayAuthorizationDenialWitness) => Promise<boolean>,
+    checker?: (witness: GatewayAuthorizationDenialWitness) => boolean,
+  ) => {
+    api.denialRecorder = recorder; api.denialChecker = checker;
+    return () => {
+      if (api.denialRecorder === recorder) { api.denialRecorder = undefined; api.denialChecker = undefined; }
+    };
+  },
+  listServers: api.servers,
+  listServerStatuses: api.statuses,
+  getServerStatusSnapshot: async (...args: Parameters<typeof api.statuses>) => ({
+    gatewayRuntimeVersion: null,
+    statuses: await api.statuses(...args),
+  }), revokeMobileSession: api.revoke };
+});
+vi.mock("@/storage/session-transcript-cache", () => ({ sessionTranscriptCache: {
+  clearRemovedProfile: vi.fn(async () => {}), invalidateProfile: vi.fn(async () => {}),
+} }));
 vi.mock("@/runtime/task-runtime", () => ({ taskRuntimeRegistry: { removeProfile: vi.fn() } }));
 vi.mock("@/runtime/task-runtime/modelCatalog", () => ({ clearModelCache: vi.fn() }));
 vi.mock("@/runtime/task-runtime/workspaces", () => ({ clearWorkspaceOptionsCache: vi.fn() }));
@@ -85,12 +107,18 @@ function profile(id: string, baseUrl = "https://review.invalid/g/one"): GatewayP
   return { id, label: id, baseUrl, accessToken: `synthetic-${id}`, rpcToken: "synthetic", expiresAt: Number.MAX_SAFE_INTEGER,
     authMode: "legacy", authorizationGeneration: `generation-${id}` };
 }
+function denialWitness(profile: GatewayProfile): GatewayAuthorizationDenialWitness {
+  return { profileId: profile.id, baseUrl: profile.baseUrl, authMode: profile.authMode,
+    authorizationGeneration: profile.authorizationGeneration, deviceId: profile.deviceId,
+    accessToken: profile.accessToken, refreshToken: profile.refreshToken };
+}
 function server(id: string): KCoderServer { return { id, label: id, description: id, runtime: "kcoder", transport: "local" }; }
 async function startup() { render(); await vi.waitFor(() => expect(render().hydrated).toBe(true)); }
 async function ready() { await vi.waitFor(() => expect(render().runtime.serversReady).toBe(true)); }
 beforeEach(() => {
   host.states = []; host.setters = []; host.refs = []; host.memos = []; host.effects = [];
   api.stored = { profiles: [], activeId: null }; vi.clearAllMocks();
+  api.denialRecorder = undefined; api.denialChecker = undefined;
   api.load.mockImplementation(async () => ({ profiles: [...api.stored.profiles], activeId: api.stored.activeId }));
   api.persist.mockImplementation(async (profiles, activeId) => { api.stored = { profiles: [...profiles], activeId }; });
   api.ensure.mockImplementation(async p => p); api.servers.mockResolvedValue([server("get")]); api.statuses.mockResolvedValue([]);
@@ -109,6 +137,37 @@ it.each([{ inventory: [server("seed")] }, { inventory: [] as KCoderServer[] }])(
   expect(api.stored.profiles[0]).not.toHaveProperty("initialServers");
   await render().refresh(); expect(api.servers).toHaveBeenCalledTimes(1); expect(api.statuses).toHaveBeenCalledTimes(2);
   expect(render().runtime.servers).toEqual([server("get")]);
+});
+
+it("does not publish a pairing seed when activation authorization expires", async () => {
+  await startup();
+  const expired = new GatewaySessionExpiredError();
+  api.ensure.mockImplementationOnce(async current => {
+    const witness = denialWitness(current);
+    const recorder = api.denialRecorder;
+    if (!recorder || !await recorder(witness) || api.denialChecker?.(witness) === false)
+      throw new Error("Test gateway did not record its exact authorization denial");
+    throw expired;
+  });
+  api.exchange.mockResolvedValue({ profile: profile("paired"), initialServers: [server("seed")] });
+
+  await render().connectGateway({ baseUrl: profile("paired").baseUrl, token: "synthetic" });
+  await vi.waitFor(() => {
+    const runtime = render().runtime;
+    expect(runtime.error).toBe(expired.message);
+    expect(runtime.reauthorizationRequired).toBe(true);
+  });
+
+  const runtime = render().runtime;
+  expect(runtime.servers).toEqual([]);
+  expect(runtime.serversReady).toBe(false);
+  expect(runtime.serversRevision).toBe(0);
+  expect(runtime.loading).toBe(false);
+  expect(runtime.statusRefreshing).toBe(false);
+  expect(runtime.statusError).toBeNull();
+  expect(api.ensure).toHaveBeenCalledTimes(1);
+  expect(api.servers).not.toHaveBeenCalled();
+  expect(api.statuses).not.toHaveBeenCalled();
 });
 
 it("uses the coordinator's committed existing ID rather than the exchanged ID for seed scope", async () => {

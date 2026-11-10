@@ -1,4 +1,6 @@
 use super::*;
+#[path = "tests/imported.rs"]
+mod imported;
 use crate::background::BackgroundJobEvent;
 use crate::{AgentError, AgentRunner, BackgroundJobSpawner};
 use kcoder_state::AppState;
@@ -935,6 +937,7 @@ impl BackgroundJobSpawner for FakeBackgroundJobManager {
                 BackgroundJobEvent::Failed {
                     id: event_id,
                     error: tool_output_text(&output),
+                    execution_metadata: output.execution_metadata.clone(),
                 }
             } else {
                 BackgroundJobEvent::Completed {
@@ -1789,39 +1792,93 @@ async fn plugin_prompt_runs_through_agent_lifecycle_with_restricted_tools() {
     struct CapturingPluginRunner(Mutex<Vec<(String, usize, AgentRunOptions)>>);
     #[async_trait::async_trait]
     impl AgentRunner for CapturingPluginRunner {
-        async fn run_agent(&self, _: String, _: usize) -> Result<String, AgentError> { panic!("options required") }
-        async fn run_agent_session_with_options(&self, _: String, prompt: String, turns: usize, _: AgentKind, options: AgentRunOptions) -> Result<String, AgentError> {
+        async fn run_agent(&self, _: String, _: usize) -> Result<String, AgentError> {
+            panic!("options required")
+        }
+        async fn run_agent_session_with_options(
+            &self,
+            _: String,
+            prompt: String,
+            turns: usize,
+            _: AgentKind,
+            options: AgentRunOptions,
+        ) -> Result<String, AgentError> {
             self.0.lock().unwrap().push((prompt, turns, options));
             Ok("plugin child completed".into())
         }
     }
     let temp = tempfile::tempdir().unwrap();
-    let source = temp.path().join("skills/profile"); std::fs::create_dir_all(&source).unwrap();
+    let source = temp.path().join("skills/profile");
+    std::fs::create_dir_all(&source).unwrap();
     let name = "plugin:demo:market:agent:review";
     std::fs::write(source.join("SKILL.md"), format!("---\nname: {name}\ndescription: Review profile\nmetadata:\n  kcoder:\n    category: plugin-prompt\n---\nReview plugin task.")).unwrap();
-    std::fs::write(source.join("plugin-agent.json"), serde_json::to_vec(&kcoder_types::plugin_prompt::PluginPromptProfile {
-        instructions: "Review $ARGUMENTS with $0".into(), argument_names: Vec::new(), plugin_root: temp.path().to_string_lossy().into_owned(), source: "agents/review.md".into(), kind: "agent".into(), allowed_tools: Some(vec!["Read".into(), "Grep".into()]), max_turns: Some(3),
-    }).unwrap()).unwrap();
-    let registry = kcoder_skills::SkillRegistry::load_with_external_dirs(temp.path(), [temp.path().join("skills")]).unwrap();
-    let state = AppState::new(temp.path()); state.with_history_path(temp.path().join("session.jsonl"));
+    std::fs::write(
+        source.join("plugin-agent.json"),
+        serde_json::to_vec(&kcoder_types::plugin_prompt::PluginPromptProfile {
+            imported_agent: None,
+            instructions: "Review $ARGUMENTS with $0".into(),
+            argument_names: Vec::new(),
+            plugin_root: temp.path().to_string_lossy().into_owned(),
+            source: "agents/review.md".into(),
+            kind: "agent".into(),
+            allowed_tools: Some(vec!["Read".into(), "Grep".into()]),
+            max_turns: Some(3),
+        })
+        .unwrap(),
+    )
+    .unwrap();
+    let registry = kcoder_skills::SkillRegistry::load_with_external_dirs(
+        temp.path(),
+        [temp.path().join("skills")],
+    )
+    .unwrap();
+    let state = AppState::new(temp.path());
+    state.with_history_path(temp.path().join("session.jsonl"));
     let runner = Arc::new(CapturingPluginRunner(Mutex::new(Vec::new())));
-    let ctx = ToolContext::new(state).with_agent_runner(runner.clone())
+    let ctx = ToolContext::new(state)
+        .with_agent_runner(runner.clone())
         .with_background_job_manager(Arc::new(FakeBackgroundJobManager::default()))
         .with_skill_registry(Arc::new(std::sync::RwLock::new(registry)))
         .with_trust_external_skills(true);
-    AgentTool.call(serde_json::json!({"plugin_agent":name,"message":"target.rs","context_mode":"none"}), &ctx).await.unwrap();
+    AgentTool
+        .call(
+            serde_json::json!({"plugin_agent":name,"message":"target.rs","context_mode":"none"}),
+            &ctx,
+        )
+        .await
+        .unwrap();
     {
-        let calls = runner.0.lock().unwrap(); assert_eq!(calls.len(), 1);
+        let calls = runner.0.lock().unwrap();
+        assert_eq!(calls.len(), 1);
         assert!(calls[0].0.contains("Review target.rs with target.rs"));
         assert_eq!(calls[0].1, 3);
-        assert_eq!(calls[0].2.tool_allowlist, Some(vec!["read".into(), "grep".into()]));
-        assert!(calls[0].0.contains(&format!("Task working directory: {}", temp.path().display())));
+        assert_eq!(
+            calls[0].2.tool_allowlist,
+            Some(vec!["read".into(), "grep".into()])
+        );
+        assert!(calls[0].0.contains(&format!(
+            "Task working directory: {}",
+            temp.path().display()
+        )));
         let task = ctx.state.tasks().into_values().next().unwrap();
-        let restored: kcoder_state::Task = serde_json::from_value(serde_json::to_value(&task).unwrap()).unwrap();
-        assert_eq!(restored.plugin_prompt_policy.unwrap().allowed_tools, Some(vec!["read".into(), "grep".into()]));
+        let restored: kcoder_state::Task =
+            serde_json::from_value(serde_json::to_value(&task).unwrap()).unwrap();
+        assert_eq!(
+            restored.plugin_prompt_policy.unwrap().allowed_tools,
+            Some(vec!["read".into(), "grep".into()])
+        );
         assert_eq!(restored.max_turns, Some(3));
     }
-    let mut blocked = ctx.clone(); blocked.blocked_skill_names.push(name.into());
-    assert!(AgentTool.call(serde_json::json!({"plugin_agent":name,"message":"target.rs"}), &blocked).await.is_err());
+    let mut blocked = ctx.clone();
+    blocked.blocked_skill_names.push(name.into());
+    assert!(
+        AgentTool
+            .call(
+                serde_json::json!({"plugin_agent":name,"message":"target.rs"}),
+                &blocked
+            )
+            .await
+            .is_err()
+    );
     assert_eq!(runner.0.lock().unwrap().len(), 1);
 }

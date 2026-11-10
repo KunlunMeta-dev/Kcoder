@@ -1,0 +1,40 @@
+[package]
+name = "kcoder_thread_metadata"
+version = { workspace = true }
+edition = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+rust-version = { workspace = true }
+publish = false
+
+[lib]
+path = "../../src/app_server/thread_metadata/storage.rs"
+
+[features]
+test-oracle = []
+
+[dependencies]
+anyhow = { workspace = true }
+dunce = { workspace = true }
+fs2 = "0.4"
+kcoder_app_protocol = { path = "../../../kcoder_app_protocol" }
+kcoder_cli_storage = { path = "../cli_storage" }
+kcoder_config = { path = "../../../kcoder_config" }
+kcoder_host_transport = { path = "../host_transport" }
+kcoder_workspace_resources = { path = "../workspace_resources" }
+kcoder_state = { path = "../../../kcoder_state" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+kcoder_tools = { path = "../../../kcoder_tools" }
+kcoder_types = { path = "../../../kcoder_types" }
+
+[target."cfg(unix)".dependencies]
+libc = { workspace = true }

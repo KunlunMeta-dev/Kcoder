@@ -1,3 +1,4 @@
+import { useWorkspaceFileEditorGuard } from '@/kcoder/useWorkspaceFileEditorGuard'
 import {
   File,
   FileDiff,
@@ -9,12 +10,9 @@ import {
   X,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
-import { memo, useCallback, useEffect, useState } from 'react'
+import { Suspense, memo, useCallback, useEffect, useState } from 'react'
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
-import {
-  FileChangesReviewPanel,
-  type FileChangesReviewViewOption,
-} from '@/components/chat/FileChangesReviewPanel'
+import type { FileChangesReviewViewOption } from '@/components/chat/FileChangesReviewPanel'
 import { AssistantMarkdown } from '@/components/chat/AssistantMarkdown'
 import { MacOSTitleBarDragRegion } from '@/components/layout/MacOSTitleBarDragRegion'
 import { TitlebarRightPanelPortal } from '@/components/topnav/TitlebarActionsPortal'
@@ -22,16 +20,21 @@ import type { WorkspaceSessionApi } from '@/features/workbench/workbenchServices
 import { useTranslation } from '@/hooks/useTranslation'
 import type {
   CodeCommentContext,
+  WorkspaceFileCommentController,
+  WorkspaceFileEditorNavigation,
   WorkspaceFileApi,
   WorkspaceFileOpenRequest,
   WorkspaceTarget,
 } from '@/types/workspace-files'
-import { isTauriRuntime } from '@/lib/runtime-environment'
+import { isGatewayRuntime } from '@/lib/runtime-environment'
 import type { EmbeddedBrowserOpenRequest } from '@/lib/embedded-browser'
 import { cn } from '@/lib/utils'
 import type { DeviceInfo, ProjectWithTasks, RuntimeTaskAddress } from '@/types/api'
 import { isEditableShortcutTarget } from '@/lib/keybindings'
-import { FileWorkspacePanel } from './FileWorkspacePanel'
+import {
+  LazyFileChangesReviewPanel as FileChangesReviewPanel,
+  LazyFileWorkspacePanel as FileWorkspacePanel,
+} from './workspacePanelChunks'
 import { WorkspaceAddMenu, type WorkspaceAddMenuItem } from './WorkspaceAddMenu'
 import { WorkspaceBrowserPanel } from './WorkspaceBrowserPanel'
 import { WorkspacePanelCards } from './WorkspacePanelCards'
@@ -70,6 +73,8 @@ interface RightWorkspaceReviewState {
 }
 
 interface RightWorkspacePanelProps {
+  fileEditorNavigation?: WorkspaceFileEditorNavigation
+  fileCommentController?: WorkspaceFileCommentController
   showWorkbenchBackground?: boolean
   visible: boolean
   activeView: RightWorkspacePanelView
@@ -114,6 +119,8 @@ interface RightWorkspacePanelProps {
 }
 
 export const RightWorkspacePanel = memo(function RightWorkspacePanel({
+  fileEditorNavigation,
+  fileCommentController,
   showWorkbenchBackground = false,
   visible,
   activeView,
@@ -156,9 +163,30 @@ export const RightWorkspacePanel = memo(function RightWorkspacePanel({
   getChatInitialInput,
 }: RightWorkspacePanelProps) {
   const { t } = useTranslation('common')
+  const standaloneEditorNavigation = useWorkspaceFileEditorGuard(
+    JSON.stringify([
+      fileNavigationScope,
+      currentRuntimeTask?.deviceId,
+      currentRuntimeTask?.taskId,
+      fileWorkspaceTarget?.deviceId,
+      fileWorkspaceTarget?.path,
+      fileWorkspaceTarget?.source,
+    ]),
+    fileWorkspaceTarget?.deviceId
+  )
+  const editorNavigation = fileEditorNavigation ?? standaloneEditorNavigation
+  const navigateStandaloneEditor = useCallback(
+    (action: () => void) => {
+      // The workbench handlers use the same registered guard at their navigation boundary.
+      if (fileEditorNavigation) action()
+      else standaloneEditorNavigation.request(action)
+    },
+    [fileEditorNavigation, standaloneEditorNavigation]
+  )
+
   const visibleTabs = canBrowseFiles ? openTabs : openTabs.filter(tab => tab !== 'files')
   const showTabs = visibleTabs.length > 0
-  const renderTabsInTitlebar = isTauriRuntime() && visible && showTabs
+  const renderTabsInTitlebar = isGatewayRuntime() && visible && showTabs
   const browserOpen = openTabs.includes('browser')
   const [browserFaviconUrl, setBrowserFaviconUrl] = useState<string | null>(null)
   const [browserTitle, setBrowserTitle] = useState<string | null>(null)
@@ -168,8 +196,8 @@ export const RightWorkspacePanel = memo(function RightWorkspacePanel({
   const openBrowserTab = useCallback(() => {
     setBrowserFaviconUrl(null)
     setBrowserTitle(null)
-    onSelectBrowser()
-  }, [onSelectBrowser])
+    navigateStandaloneEditor(onSelectBrowser)
+  }, [onSelectBrowser, navigateStandaloneEditor])
 
   useEffect(() => {
     if (!visible) return
@@ -190,10 +218,10 @@ export const RightWorkspacePanel = memo(function RightWorkspacePanel({
 
       if (key === 'r' && canOpenReview) {
         event.preventDefault()
-        onSelectReview()
+        navigateStandaloneEditor(onSelectReview)
       } else if (key === 's') {
         event.preventDefault()
-        onSelectChat()
+        navigateStandaloneEditor(onSelectChat)
       } else if (key === 'f' && canBrowseFiles) {
         event.preventDefault()
         onSelectFiles()
@@ -211,21 +239,28 @@ export const RightWorkspacePanel = memo(function RightWorkspacePanel({
     onSelectFiles,
     onSelectReview,
     openBrowserTab,
+    navigateStandaloneEditor,
     visible,
   ])
 
   const closeTab = (tab: RightWorkspacePanelTab) => {
-    if (tab === 'browser') {
-      setBrowserFaviconUrl(null)
-      setBrowserTitle(null)
+    const close = () => {
+      if (tab === 'browser') {
+        setBrowserFaviconUrl(null)
+        setBrowserTitle(null)
+      }
+      onCloseTab(tab)
     }
-    onCloseTab(tab)
+    if (tab === 'files') navigateStandaloneEditor(close)
+    else close()
   }
 
   const getTabSelectHandler =
     (tab: RightWorkspacePanelTab): (() => void) =>
-    () =>
-      onSelectTab(tab)
+    () => {
+      if (tab === 'files') onSelectTab(tab)
+      else navigateStandaloneEditor(() => onSelectTab(tab))
+    }
 
   const getNewTabOptions = (): WorkspaceAddMenuItem[] => [
     {
@@ -235,14 +270,14 @@ export const RightWorkspacePanel = memo(function RightWorkspacePanel({
       label: t('workbench.workspace_tab_review', '审查'),
       shortcut: RIGHT_WORKSPACE_SHORTCUTS.review,
       disabled: !canOpenReview,
-      onSelect: onSelectReview,
+      onSelect: () => navigateStandaloneEditor(onSelectReview),
     },
     {
       id: 'terminal',
       testId: 'right-workspace-terminal-option',
       icon: SquareTerminal,
       label: t('workbench.terminal', '终端'),
-      onSelect: onSelectTerminal,
+      onSelect: () => navigateStandaloneEditor(onSelectTerminal),
     },
     ...(canOpenBrowser && !browserOpen
       ? [
@@ -262,7 +297,7 @@ export const RightWorkspacePanel = memo(function RightWorkspacePanel({
       icon: MessageCircle,
       label: t('workbench.workspace_tab_chat', '临时聊天'),
       shortcut: RIGHT_WORKSPACE_SHORTCUTS.chat,
-      onSelect: onSelectChat,
+      onSelect: () => navigateStandaloneEditor(onSelectChat),
     },
     ...(canBrowseFiles
       ? [
@@ -361,19 +396,21 @@ export const RightWorkspacePanel = memo(function RightWorkspacePanel({
             onSelectChat={onSelectChat}
           />
         ) : !isRightWorkspaceChatTab(activeView) && activeView === 'review' ? (
-          <FileChangesReviewPanel
-            loading={review.loading}
-            diff={review.diff}
-            diffTruncated={review.diffTruncated}
-            error={review.error}
-            reviewTitle={review.reviewTitle}
-            defaultFileTreeVisible={review.defaultFileTreeVisible}
-            branchName={review.branchName}
-            targetBranchName={review.targetBranchName}
-            focusFilePath={review.focusFilePath}
-            viewOptions={reviewViewOptions}
-            onRefresh={onRefreshReview}
-          />
+          <Suspense fallback={<div className="min-h-0 flex-1" />}>
+            <FileChangesReviewPanel
+              loading={review.loading}
+              diff={review.diff}
+              diffTruncated={review.diffTruncated}
+              error={review.error}
+              reviewTitle={review.reviewTitle}
+              defaultFileTreeVisible={review.defaultFileTreeVisible}
+              branchName={review.branchName}
+              targetBranchName={review.targetBranchName}
+              focusFilePath={review.focusFilePath}
+              viewOptions={reviewViewOptions}
+              onRefresh={onRefreshReview}
+            />
+          </Suspense>
         ) : !isRightWorkspaceChatTab(activeView) && activeView === 'terminal' ? (
           <WorkspacePanelCards
             showWorkbenchBackground={showWorkbenchBackground}
@@ -403,21 +440,25 @@ export const RightWorkspacePanel = memo(function RightWorkspacePanel({
           !isRightWorkspaceChatTab(activeView) &&
           canBrowseFiles &&
           activeView === 'files' && (
-            <FileWorkspacePanel
-              key={
-                fileWorkspaceTarget
-                  ? `${fileNavigationScope ?? ''}:${fileWorkspaceTarget.deviceId}:${fileWorkspaceTarget.path}`
-                  : `empty:${fileNavigationScope ?? ''}`
-              }
-              target={fileWorkspaceTarget}
-              workspaceTargets={fileWorkspaceTargets}
-              workspaceFileApi={workspaceFileApi}
-              openFileRequest={openFileRequest}
-              onCommitFileOpenRequest={onCommitFileOpenRequest}
-              onCancelFileOpenRequest={onCancelFileOpenRequest}
-              onAddCodeComment={onAddCodeComment}
-              onSelectWorkspaceTarget={onSelectFileWorkspaceTarget}
-            />
+            <Suspense fallback={<div className="min-h-0 flex-1" />}>
+              <FileWorkspacePanel
+                registerEditorGuard={editorNavigation.register}
+                commentController={fileCommentController}
+                key={
+                  fileWorkspaceTarget
+                    ? `${fileNavigationScope ?? ''}:${fileWorkspaceTarget.deviceId}:${fileWorkspaceTarget.path}`
+                    : `empty:${fileNavigationScope ?? ''}`
+                }
+                target={fileWorkspaceTarget}
+                workspaceTargets={fileWorkspaceTargets}
+                workspaceFileApi={workspaceFileApi}
+                openFileRequest={openFileRequest}
+                onCommitFileOpenRequest={onCommitFileOpenRequest}
+                onCancelFileOpenRequest={onCancelFileOpenRequest}
+                onAddCodeComment={onAddCodeComment}
+                onSelectWorkspaceTarget={onSelectFileWorkspaceTarget}
+              />
+            </Suspense>
           )
         )}
         {chatTabs.map(tab => (

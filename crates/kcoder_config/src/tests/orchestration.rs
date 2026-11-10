@@ -219,6 +219,8 @@ fn orchestrate_reliability_settings_reject_values_outside_schema_bounds() {
 #[test]
 fn orchestrate_full_context_rejects_an_incompatible_runtime() {
     let mut document = default_settings_document();
+    document["active_provider"] = serde_json::json!("main");
+    document["providers"]["main"] = serde_json::to_value(default_active_provider_config()).unwrap();
     document["providers"]["small"] = serde_json::json!({
         "credential_env": ["SMALL_KEY"],
         "api_format": "anthropic_messages",

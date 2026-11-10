@@ -22,15 +22,15 @@ import { repoRoot, runE2E } from "../harness/run-context.mjs";
 const execFileAsync = promisify(execFile);
 const TEST_ID = "mobile-web-export-default-catalog-parallel-20261009-090018";
 const EXPECTED_HEAD = "0f2e391986e14144f5c4e5643fcac2e5d7f1306d";
-const BASE_ROOT = "/data1/hyf/20260822_agent/Kunlun-Code-CYX/target/phone-ux-upstream-integration-20261008/target/private-phone-latency-implementation/current-mobile-sessions-default-lease-20261009-062104";
+const BASE_ROOT = "/data1/hyf/20260822_agent/Kunlun-Code-CYX/target/worktree/2026/10/08/phone-ux-upstream-integration-20261008/target/private-phone-latency-implementation/current-mobile-sessions-default-lease-20261009-062104";
 const BASE_SOURCE_DIGEST = "effa93130e74c958a4fd6639e79efab1d1a8bc78bcd18648aa9f70fe26f2b233";
 const BASE_MANIFEST_SHA256 = "d78b6de305d13b7a9ce24798dc8cbd5a9c8afdeae7cc133111634259d97fb916";
 const BASE_FILE_COUNT = 336;
-const CANDIDATE_ROOT = "/data1/hyf/20260822_agent/Kunlun-Code-CYX/target/phone-ux-upstream-integration-20261008/target/private-phone-latency-implementation/current-mobile-default-catalog-parallel-20261009-090018";
+const CANDIDATE_ROOT = "/data1/hyf/20260822_agent/Kunlun-Code-CYX/target/worktree/2026/10/08/phone-ux-upstream-integration-20261008/target/private-phone-latency-implementation/current-mobile-default-catalog-parallel-20261009-090018";
 const CANDIDATE_SOURCE_ROOT = resolve(CANDIDATE_ROOT, "source");
 const CANDIDATE_SOURCE_DIGEST = "649a35cd63b42a43bb2cba9e74fdc2ba9e1586090f56507a0f4dd3cc4ad6667f";
 const CANDIDATE_FILE_COUNT = 339;
-const CANDIDATE_ROOTS = [{"name": "mobile", "destination": "apps/kcoder-studio/mobile", "path": "/data1/hyf/20260822_agent/Kunlun-Code-CYX/target/phone-ux-upstream-integration-20261008/apps/kcoder-studio/mobile", "fileCount": 320, "sha256": "d447f96d87465fff1c9cb90044ad6a52e4faf36746bd3c86daf568b9fbba58e8"}, {"name": "studio-shared", "destination": "apps/kcoder-studio/shared", "path": "/data1/hyf/20260822_agent/Kunlun-Code-CYX/target/phone-ux-upstream-integration-20261008/apps/kcoder-studio/shared", "fileCount": 19, "sha256": "5443f5e695e75b82a1365baf90a3c280239bead8855647becfa2c9d67e91fe88"}];
+const CANDIDATE_ROOTS = [{"name": "mobile", "destination": "apps/kcoder-studio/mobile", "path": "/data1/hyf/20260822_agent/Kunlun-Code-CYX/target/worktree/2026/10/08/phone-ux-upstream-integration-20261008/apps/kcoder-studio/mobile", "fileCount": 320, "sha256": "d447f96d87465fff1c9cb90044ad6a52e4faf36746bd3c86daf568b9fbba58e8"}, {"name": "studio-shared", "destination": "apps/kcoder-studio/shared", "path": "/data1/hyf/20260822_agent/Kunlun-Code-CYX/target/worktree/2026/10/08/phone-ux-upstream-integration-20261008/apps/kcoder-studio/shared", "fileCount": 19, "sha256": "5443f5e695e75b82a1365baf90a3c280239bead8855647becfa2c9d67e91fe88"}];
 const EXPECTED_ADDED = ["apps/kcoder-studio/mobile/src/app/__tests__/default-catalog-parallel-routes.review.test.tsx", "apps/kcoder-studio/mobile/src/runtime/task-runtime/default-catalog-parallel.review.test.ts", "apps/kcoder-studio/mobile/src/state/AppContext.routine-workspace-cache.review.test.tsx"];
 const EXPECTED_CHANGED = ["apps/kcoder-studio/mobile/src/app/h/[profileId]/index.tsx", "apps/kcoder-studio/mobile/src/app/sessions.tsx", "apps/kcoder-studio/mobile/src/runtime/task-runtime/workspaces.ts", "apps/kcoder-studio/mobile/src/state/AppContext.tsx"];
 const EXPECTED_REMOVED = [];
@@ -50,7 +50,7 @@ const HELPER_PINS = new Map([
   ["apps/kcoder-studio/e2e/harness/retention.mjs", "9df5193dc1f4bd5565731cf92d0154bb8f3993e8d3c7c3d98f530c8738716532"],
   ["apps/kcoder-studio/e2e/harness/owned-process.mjs", "40a230721ead1ff78877c1b2815aafd220279bccd43d15d78303f30a59cb78af"],
 ]);
-const OUTPUT_ROOT = "/data1/hyf/20260822_agent/Kunlun-Code-CYX/target/phone-ux-upstream-integration-20261008/target/private-phone-ux-implementation/mobile-web-export-default-catalog-parallel-20261009-090018";
+const OUTPUT_ROOT = "/data1/hyf/20260822_agent/Kunlun-Code-CYX/target/worktree/2026/10/08/phone-ux-upstream-integration-20261008/target/private-phone-ux-implementation/mobile-web-export-default-catalog-parallel-20261009-090018";
 const OUTPUT_MANIFEST = `${OUTPUT_ROOT}-manifest.json`;
 const OUTPUT_PROVENANCE = `${OUTPUT_ROOT}-provenance.json`;
 const SOURCE_OMIT_DIRS = new Set([".expo", ".git", "dist", "node_modules"]);

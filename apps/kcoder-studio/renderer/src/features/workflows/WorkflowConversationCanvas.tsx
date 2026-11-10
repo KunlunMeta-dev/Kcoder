@@ -7,6 +7,7 @@ import { usePluginTargetScope } from '@/kcoder/usePluginTargetScope'
 import { WorkflowCanvas } from './WorkflowCanvas'
 import { WorkflowNodeEditor } from './WorkflowNodeEditor'
 import { newerDefinition, workflowApi, type WorkflowDefinition } from './workflowApi'
+import { useRetainedPageActive } from '@/components/layout/retainedPageState'
 
 export function WorkflowConversationCanvas({
   serverId,
@@ -80,10 +81,11 @@ function ConversationCanvas({
     },
     [isCurrent]
   )
+  const pageActive = useRetainedPageActive()
   useEffect(
     () =>
       startWorkflowPolling({
-        active,
+        active: active && pageActive,
         isCurrent,
         changes: { serverId, definitionId },
         poll: async (isLive, signal) => {
@@ -101,7 +103,7 @@ function ConversationCanvas({
           setStale(true)
         },
       }),
-    [serverId, definitionId, isCurrent, apply, retry, active]
+    [pageActive, serverId, definitionId, isCurrent, apply, retry, active]
   )
   const mutate = async (action: () => Promise<WorkflowDefinition>) => {
     if (stale || !isCurrent()) return false

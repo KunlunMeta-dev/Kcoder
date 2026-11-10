@@ -1,24 +1,27 @@
-use crate::{
-    AgentRunOptions, AgentRunner, Tool, ToolContext, ToolError, ToolOutput, clean_schema,
-    parse_input,
-};
+use crate::{AgentRunOptions, AgentRunner, Tool, ToolContext, ToolError, ToolOutput};
+pub use kcoder_tool_input::builtin::workflow::WorkflowInput;
+mod native_definition;
+mod native_launch;
 use async_trait::async_trait;
 use kcoder_state::{Task, TaskKind, TaskStatus};
 use kcoder_workflow::{
     AgentExecutor, AgentRequest, EventSink, WorkflowError, WorkflowEvent, WorkflowRuntime,
     WorkflowRuntimeConfig,
 };
-use schemars::JsonSchema;
+use kcoder_workflow_observations::run_files::{
+    acquire_initial_resume_lease, acquire_resume_lease, atomic_write_file, lexical_normalize,
+    secure_append_file, secure_create_dir, secure_create_new_dir, secure_read_file,
+    secure_remove_file,
+};
+pub use native_definition::WorkflowNativeDefinition;
+pub use native_launch::{WorkflowNativeLaunch, WorkflowNativeLaunchObserver};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::fs;
-use std::io::{Read, Write};
-use std::path::{Component, Path, PathBuf};
-use std::sync::{
-    Arc, Mutex,
-    atomic::{AtomicU64, Ordering},
-};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::io::Read;
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex, atomic::Ordering};
+use std::time::{SystemTime, UNIX_EPOCH};
 use tokio_util::sync::CancellationToken;
 
 /// Coordination tools may await/cancel other executions and must not hold their gate.
@@ -86,60 +89,8 @@ impl Default for WorkflowRunLimits {
     }
 }
 
-static NEXT_ARTIFACT_WRITE_ID: AtomicU64 = AtomicU64::new(1);
-
 #[derive(Debug, Default)]
 pub struct WorkflowTool;
-
-#[derive(Debug, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct WorkflowInput {
-    /// Inline JavaScript workflow body. Use exactly one of script, name, script_path, or definition_id with version.
-    #[serde(default)]
-    pub script: Option<String>,
-    /// Named project workflow from `.kcoder/workflows/<name>.js`.
-    #[serde(default)]
-    pub name: Option<String>,
-    /// JavaScript workflow file relative to the session cwd.
-    #[serde(default)]
-    pub script_path: Option<PathBuf>,
-    /// Recover the same pinned version using its run_id. Reuses successful dependency-closed node checkpoints. Omit args and execution limits to retain saved values. Legacy missing limits require matching saved execution evidence; otherwise supply original limits. Never blindly replay effects with unknown outcomes.
-    #[serde(default)]
-    pub resume: Option<String>,
-    /// With definition_id and an explicit saved version, create a new run reusing successful unchanged nodes from this prior run. Omit args and execution limits to retain source values. The old run is retained; only nodes with matching semantics, all upstream nodes, effective input and execution settings are reused. Cannot combine with resume or scripts.
-    #[serde(default)]
-    pub reuse_from_run: Option<String>,
-    /// Published workflow-library definition ID. Requires an explicit version; cannot be combined with JavaScript sources or resume.
-    #[serde(default)]
-    pub definition_id: Option<String>,
-    /// Immutable published version of definition_id to execute.
-    #[serde(default)]
-    pub version: Option<u64>,
-    /// Native JSON value exposed as args; for object schemas pass an object, not JSON-encoded text.
-    #[serde(default)]
-    pub args: Value,
-    /// Preferred channel for arrays and nested objects: complete serialized JSON text. Explicit JSON types are preserved, not coerced. For args.items use {"items":["1","2"]}; a root array is args itself. Never also supply args.
-    #[serde(default)]
-    pub args_json: Option<String>,
-    /// Explicit finite case for a pinned definition graph: id, requiredCheckNodes, expectedSkippedNodes. Verdicts come only from actual configured checks.
-    #[serde(default)]
-    pub verification_scenario: Option<Value>,
-    /// Lossless JSON text alternative; never also supply verification_scenario.
-    #[serde(default)]
-    pub verification_scenario_json: Option<String>,
-    /// Maximum agents this workflow may run concurrently (1-4).
-    #[serde(default)]
-    pub max_concurrency: Option<usize>,
-    /// Default max turns for each agent call (1-100; new runs default to 60, recovery retains the source value).
-    #[serde(default)]
-    pub max_agent_turns: Option<usize>,
-    /// Whole-workflow wall clock limit in seconds (1-86400; recovery retains the source value when omitted).
-    #[serde(default)]
-    pub timeout_seconds: Option<u64>,
-    /// Short user-facing description for background task lists.
-    #[serde(default)]
-    pub description: Option<String>,
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct WorkflowRunState {
@@ -149,6 +100,8 @@ struct WorkflowRunState {
     source: String,
     #[serde(default)]
     definition_sha256: Option<String>,
+    #[serde(default)]
+    native_definition: bool,
     script_path: PathBuf,
     args_path: PathBuf,
     journal_path: PathBuf,
@@ -202,15 +155,14 @@ struct ResumeRollback {
     args: Vec<u8>,
 }
 
-struct ResumeLease {
-    _file: fs::File,
-}
-
 struct ToolAgentExecutor {
     require_checkpoint_match: bool,
     require_legacy_agent_request: bool,
     verification_store: Option<Arc<WorkflowRunStore>>,
     isolate_context: bool,
+    pinned_model: Option<kcoder_types::ModelConfigurationSummary>,
+    native_parent_state: Option<kcoder_state::AppState>,
+    collaboration_artifacts: Option<Arc<collaboration::NativeArtifacts>>,
     runner: Arc<dyn AgentRunner>,
     arrangement_mode: bool,
     resume_run_dir: Option<PathBuf>,
@@ -250,7 +202,7 @@ impl Tool for WorkflowTool {
     }
 
     fn input_schema(&self) -> Value {
-        let mut schema = clean_schema(schemars::schema_for!(WorkflowInput));
+        let mut schema = WorkflowInput::schema();
         let choices = Value::Array(["definition_id", "resume", "script", "name", "script_path"].iter().map(|field| {
             let mut branch = json!({"type":"object","required":[field],"properties":{*field:{"type":"string","minLength":1}}});
             if *field == "definition_id" {
@@ -294,7 +246,7 @@ impl Tool for WorkflowTool {
                     .into(),
             ));
         }
-        let mut input: WorkflowInput = parse_input(&input).map_err(|error| match error {
+        let mut input: WorkflowInput = WorkflowInput::parse(&input).map_err(|error| match error {
             ToolError::InvalidInput(message) if message.contains("unknown field") => {
                 ToolError::InvalidInput(format!(
                     "{message}. Workflow inputs belong inside args, not at the top level. If nested fields were flattened by the provider, omit args and use args_json containing serialized JSON for all workflow inputs. Keep definition_id and version at the top level; do not repeat the same flattened call."
@@ -313,13 +265,23 @@ impl Tool for WorkflowTool {
         if input.reuse_from_run.is_some() && input.definition_id.is_none() {
             return Err(ToolError::InvalidInput("reuse_from_run requires definition_id and an explicit saved version; it cannot be combined with resume or scripts".into()));
         }
-        let lossless_arguments = input.args_json.is_some();
+        let lossless_arguments =
+            input.args_json.is_some() || ctx.workflow_native_definition.is_some();
         if let Some(text) = input.args_json.take() {
             if text.len() > 128 * 1024 {
                 return Err(ToolError::InvalidInput("args_json exceeds 128 KiB".into()));
             }
             input.args = serde_json::from_str(&text)
                 .map_err(|error| ToolError::InvalidInput(format!("args_json: {error}")))?;
+        }
+        if let Some(definition) = &ctx.workflow_native_definition {
+            if ctx.workflow_native_launch_observer.is_none() {
+                return Err(ToolError::Execution(
+                    "WORKFLOW_NATIVE_OWNER_UNAVAILABLE".into(),
+                ));
+            }
+            definition.verify_call(&input)?;
+            input.args = definition.arguments().clone();
         }
         let scenario = verification::decode_scenario(
             input.verification_scenario.take(),
@@ -328,6 +290,13 @@ impl Tool for WorkflowTool {
         if scenario.is_some() && input.definition_id.is_none() && input.resume.is_none() {
             return Err(ToolError::InvalidInput("verification_scenario requires a pinned definition graph; inline/named/file scripts are unsupported".into()));
         }
+        let pinned_model = ctx
+            .agent_runner
+            .as_ref()
+            .map(|runner| runner.workflow_model_configuration())
+            .transpose()
+            .map_err(|error| ToolError::Execution(error.to_string()))?
+            .flatten();
         let session_cap = ctx
             .max_concurrent_subagents
             .unwrap_or(MAX_WORKFLOW_CONCURRENCY)
@@ -490,12 +459,16 @@ impl Tool for WorkflowTool {
                             "definition_id requires an explicit published version".into(),
                         )
                     })?;
-                    let library = kcoder_workflow::store::WorkflowStore::new(
-                        crate::workflow_draft::library_root(ctx)?,
-                    );
-                    let definition = library
-                        .read_saved(id, Some(version))
-                        .map_err(|error| ToolError::Execution(error.to_string()))?;
+                    let definition = if let Some(native) = &ctx.workflow_native_definition {
+                        native.definition().clone()
+                    } else {
+                        let library = kcoder_workflow::store::WorkflowStore::new(
+                            crate::workflow_draft::library_root(ctx)?,
+                        );
+                        library
+                            .read_saved(id, Some(version))
+                            .map_err(|error| ToolError::Execution(error.to_string()))?
+                    };
                     if let Some(source_run) = &input.reuse_from_run {
                         let source_run = source_run.trim();
                         validate_workflow_run_id(source_run)?;
@@ -617,6 +590,8 @@ impl Tool for WorkflowTool {
                         .map_err(|e| ToolError::Execution(e.to_string()))?;
                     store.state.lock().unwrap().definition_sha256 =
                         Some(format!("{:x}", sha2::Sha256::digest(&bytes)));
+                    store.state.lock().unwrap().native_definition =
+                        ctx.workflow_native_definition.is_some();
                     store.state.lock().unwrap().reuse_from_run = input.reuse_from_run.clone();
                     store.state.lock().unwrap().checkpoint_format = Some(1);
                     store.persist_state()?;
@@ -770,6 +745,41 @@ impl Tool for WorkflowTool {
                 return Err(error);
             }
         }
+        if let Some(observer) = &ctx.workflow_native_launch_observer {
+            let observed = (|| {
+                let definition = pinned_definition
+                    .as_ref()
+                    .filter(|_| !is_resume)
+                    .ok_or_else(|| {
+                        ToolError::InvalidInput(
+                            "native workflow launch requires a new pinned definition".into(),
+                        )
+                    })?;
+                let version = definition.saved_version.ok_or_else(|| {
+                    ToolError::Execution("native workflow version is unavailable".into())
+                })?;
+                use sha2::Digest;
+                let input_bytes = serde_json::to_vec(&workflow_args).map_err(|_| {
+                    ToolError::Execution("native workflow inputs are invalid".into())
+                })?;
+                observer.before_dispatch(&WorkflowNativeLaunch {
+                    run_id: run_id.clone(),
+                    definition_id: definition.id.clone(),
+                    version,
+                    definition_sha256: kcoder_workflow::store::definition_fingerprint(definition)
+                        .map_err(|_| {
+                        ToolError::Execution("WORKFLOW_NATIVE_DEFINITION_INVALID".into())
+                    })?,
+                    inputs_sha256: format!("{:x}", sha2::Sha256::digest(input_bytes)),
+                })
+            })();
+            if let Err(error) = observed {
+                let _ = store.finish(Err(
+                    "workflow_native_registration_failed: no workflow work was dispatched".into(),
+                ));
+                return Err(error);
+            }
+        }
         let output_path = store.output_path();
         let state_path = store.state_path.clone();
         let journal_path = store.state.lock().unwrap().journal_path.clone();
@@ -791,6 +801,40 @@ impl Tool for WorkflowTool {
             .as_ref()
             .map(CancellationToken::child_token)
             .unwrap_or_default();
+        let collaboration_artifacts = pinned_definition
+            .as_ref()
+            .filter(|definition| {
+                definition
+                    .nodes
+                    .iter()
+                    .any(|node| node.config.collaboration_role.is_some())
+            })
+            .map(|definition| {
+                let observations = ctx
+                    .settings_persistence_path
+                    .as_deref()
+                    .and_then(Path::parent)
+                    .ok_or_else(|| {
+                        anyhow::anyhow!("workflow_artifact: native profile unavailable")
+                    })?
+                    .join("workflow-runs");
+                collaboration::NativeArtifacts::new(
+                    store.run_dir.clone(),
+                    if is_resume {
+                        Some(store.run_dir.clone())
+                    } else {
+                        checkpoint_run_dir.clone()
+                    },
+                    observations,
+                    run_id.clone(),
+                    definition.clone(),
+                    &checkpoint_context,
+                    ctx.state.clone(),
+                )
+                .map(Arc::new)
+            })
+            .transpose()
+            .map_err(|error| ToolError::Execution(format!("{error:#}")))?;
         let executor: Arc<dyn AgentExecutor> = Arc::new(ToolAgentExecutor {
             require_checkpoint_match: unresolved_execution_limits != 0
                 && pinned_definition.is_some()
@@ -800,6 +844,9 @@ impl Tool for WorkflowTool {
                 && (pinned_definition.is_none() || legacy_node_identities),
             verification_store: Some(store.clone()),
             isolate_context: pinned_definition.is_some(),
+            pinned_model,
+            native_parent_state: Some(ctx.state.clone()),
+            collaboration_artifacts,
             runner,
             arrangement_mode: ctx.arrangement_mode,
             resume_run_dir: (is_resume && (pinned_definition.is_none() || legacy_node_identities))
@@ -820,6 +867,13 @@ impl Tool for WorkflowTool {
             cancellation: workflow_cancel.clone(),
         });
         let sink: Arc<dyn EventSink> = store.clone();
+        // Graph checkpoints reuse completed nodes; each resumed Agent needs a new task identity.
+        // Legacy runs still reconcile their original Agent receipt paths.
+        let agent_resume_attempt = if pinned_definition.is_some() && !legacy_node_identities {
+            store.state.lock().unwrap().resume_count
+        } else {
+            0
+        };
         let run_store = store.clone();
         let workflow_task_state = ctx.state.clone();
         let cancel_store = store.clone();
@@ -843,6 +897,7 @@ impl Tool for WorkflowTool {
                 checkpoint_context,
                 legacy_node_identities,
                 agent_id_prefix: workflow_id_for_result.clone(),
+                agent_resume_attempt,
                 max_concurrency,
                 default_agent_max_turns: max_agent_turns,
                 max_agent_max_turns: MAX_AGENT_MAX_TURNS,
@@ -1094,20 +1149,6 @@ fn read_limited_script(mut file: fs::File, path: &Path) -> Result<String, ToolEr
     })
 }
 
-fn lexical_normalize(path: &Path) -> PathBuf {
-    let mut output = PathBuf::new();
-    for component in path.components() {
-        match component {
-            Component::CurDir => {}
-            Component::ParentDir => {
-                output.pop();
-            }
-            other => output.push(other.as_os_str()),
-        }
-    }
-    output
-}
-
 fn workflow_run_dir(ctx: &ToolContext, run_id: &str) -> PathBuf {
     ctx.state
         .session_state_path()
@@ -1133,392 +1174,14 @@ fn now_millis() -> u64 {
         .as_millis() as u64
 }
 
-#[cfg(target_os = "linux")]
-fn try_acquire_resume_lease(run_dir: &Path) -> Result<ResumeLease, ToolError> {
-    use nix::fcntl::{OFlag, openat};
-    use nix::sys::stat::Mode;
-    use std::os::fd::AsRawFd;
-
-    let parent = secure_open_dir(run_dir).map_err(|error| {
-        ToolError::Execution(format!(
-            "failed to open workflow run directory `{}`: {error}",
-            run_dir.display()
-        ))
-    })?;
-    let fd = openat(
-        &parent,
-        ".resume.lock",
-        OFlag::O_RDWR | OFlag::O_CREAT | OFlag::O_CLOEXEC | OFlag::O_NOFOLLOW,
-        Mode::S_IRUSR | Mode::S_IWUSR,
-    )
-    .map_err(nix_io_error)
-    .map_err(|error| ToolError::Execution(format!("failed to open resume lease: {error}")))?;
-    let file = fs::File::from(fd);
-    let result = unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) };
-    if result != 0 {
-        let error = std::io::Error::last_os_error();
-        return Err(ToolError::InvalidInput(format!(
-            "workflow resume is already being prepared or is running: {error}"
-        )));
-    }
-    Ok(ResumeLease { _file: file })
-}
-
-#[cfg(windows)]
-fn try_acquire_resume_lease(run_dir: &Path) -> Result<ResumeLease, ToolError> {
-    use std::os::windows::fs::OpenOptionsExt;
-
-    let path = run_dir.join(".resume.lock");
-    let file = fs::OpenOptions::new()
-        .read(true)
-        .write(true)
-        .create(true)
-        .truncate(false)
-        // A zero share mode gives this handle an exclusive Windows lease. The
-        // lease is released automatically when ResumeLease drops the file.
-        .share_mode(0)
-        .open(&path)
-        .map_err(|error| {
-            ToolError::InvalidInput(format!(
-                "workflow resume is already being prepared or is running: {error}"
-            ))
-        })?;
-    Ok(ResumeLease { _file: file })
-}
-
-#[cfg(all(not(target_os = "linux"), not(windows)))]
-fn try_acquire_resume_lease(_run_dir: &Path) -> Result<ResumeLease, ToolError> {
-    Err(ToolError::Execution(
-        "workflow resume locking is not supported on this platform".to_string(),
-    ))
-}
-
-#[cfg(any(target_os = "linux", windows))]
-async fn acquire_resume_lease(run_dir: &Path) -> Result<ResumeLease, ToolError> {
-    const RETRY_COUNT: usize = 25;
-    const RETRY_DELAY: Duration = Duration::from_millis(10);
-
-    for attempt in 0..=RETRY_COUNT {
-        match try_acquire_resume_lease(run_dir) {
-            Ok(lease) => return Ok(lease),
-            Err(ToolError::InvalidInput(_)) if attempt < RETRY_COUNT => {
-                tokio::time::sleep(RETRY_DELAY).await;
-            }
-            Err(error) => return Err(error),
-        }
-    }
-    unreachable!("bounded resume lease loop always returns")
-}
-
-#[cfg(all(not(target_os = "linux"), not(windows)))]
-async fn acquire_resume_lease(run_dir: &Path) -> Result<ResumeLease, ToolError> {
-    try_acquire_resume_lease(run_dir)
-}
-
-#[cfg(any(target_os = "linux", windows))]
-async fn acquire_initial_resume_lease(run_dir: &Path) -> Result<Option<ResumeLease>, ToolError> {
-    acquire_resume_lease(run_dir).await.map(Some)
-}
-
-#[cfg(all(not(target_os = "linux"), not(windows)))]
-async fn acquire_initial_resume_lease(_run_dir: &Path) -> Result<Option<ResumeLease>, ToolError> {
-    // Initial execution remains available on platforms where crash-resume
-    // locking itself is unsupported.
-    Ok(None)
-}
-
-#[cfg(not(target_os = "linux"))]
-fn secure_reject_symlink_components(path: &Path) -> std::io::Result<()> {
-    let absolute = absolute_lexical_path(path)?;
-    let mut current = PathBuf::new();
-    for component in absolute.components() {
-        current.push(component.as_os_str());
-        match fs::symlink_metadata(&current) {
-            Ok(metadata) if metadata.file_type().is_symlink() => {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::PermissionDenied,
-                    format!(
-                        "workflow artifact path contains a symbolic link: {}",
-                        current.display()
-                    ),
-                ));
-            }
-            Ok(_) => {}
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-            Err(error) => return Err(error),
-        }
-    }
-    Ok(())
-}
-
-#[cfg(not(target_os = "linux"))]
-fn atomic_write_file(path: &Path, bytes: impl AsRef<[u8]>) -> std::io::Result<()> {
-    secure_reject_symlink_components(path.parent().unwrap_or_else(|| Path::new(".")))?;
-    let file_name = path
-        .file_name()
-        .and_then(|value| value.to_str())
-        .unwrap_or("artifact");
-    let temporary = path.with_file_name(format!(
-        ".{file_name}.tmp-{}-{}",
-        std::process::id(),
-        NEXT_ARTIFACT_WRITE_ID.fetch_add(1, Ordering::Relaxed)
-    ));
-    let result = (|| {
-        let mut file = fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&temporary)?;
-        file.write_all(bytes.as_ref())?;
-        file.sync_all()?;
-        if fs::symlink_metadata(path).is_ok_and(|metadata| metadata.file_type().is_symlink()) {
-            fs::remove_file(path)?;
-        }
-        fs::rename(&temporary, path)?;
-        sync_parent_directory(path)
-    })();
-    if result.is_err() {
-        let _ = fs::remove_file(&temporary);
-    }
-    result
-}
-
-#[cfg(windows)]
-fn sync_parent_directory(_path: &Path) -> std::io::Result<()> {
-    // Windows does not allow directories to be opened with std::fs::File, and
-    // the preceding rename is already the atomic publication point.
-    Ok(())
-}
-
-#[cfg(all(not(target_os = "linux"), not(windows)))]
-fn sync_parent_directory(path: &Path) -> std::io::Result<()> {
-    fs::File::open(path.parent().unwrap_or_else(|| Path::new(".")))?.sync_all()
-}
-
-#[cfg(target_os = "linux")]
-fn atomic_write_file(path: &Path, bytes: impl AsRef<[u8]>) -> std::io::Result<()> {
-    use nix::fcntl::{OFlag, openat, renameat};
-    use nix::sys::stat::Mode;
-
-    let (parent, file_name) = secure_open_parent(path)?;
-    let temporary = format!(
-        ".{}.tmp-{}-{}",
-        file_name.to_string_lossy(),
-        std::process::id(),
-        NEXT_ARTIFACT_WRITE_ID.fetch_add(1, Ordering::Relaxed)
-    );
-    let fd = openat(
-        &parent,
-        temporary.as_str(),
-        OFlag::O_WRONLY | OFlag::O_CREAT | OFlag::O_EXCL | OFlag::O_CLOEXEC | OFlag::O_NOFOLLOW,
-        Mode::S_IRUSR | Mode::S_IWUSR,
-    )
-    .map_err(nix_io_error)?;
-    let mut file = fs::File::from(fd);
-    let result = (|| {
-        file.write_all(bytes.as_ref())?;
-        file.sync_all()?;
-        renameat(&parent, temporary.as_str(), &parent, file_name.as_os_str())
-            .map_err(nix_io_error)?;
-        parent.sync_all()
-    })();
-    if result.is_err() {
-        use nix::unistd::{UnlinkatFlags, unlinkat};
-        let _ = unlinkat(&parent, temporary.as_str(), UnlinkatFlags::NoRemoveDir);
-    }
-    result
-}
-
-#[cfg(target_os = "linux")]
-fn secure_open_dir(path: &Path) -> std::io::Result<fs::File> {
-    use nix::fcntl::{OFlag, OpenHow, ResolveFlag, openat2};
-
-    let absolute = absolute_lexical_path(path)?;
-    let relative = absolute
-        .strip_prefix("/")
-        .map_err(|_| std::io::Error::other("path is not absolute"))?;
-    let root = fs::File::open("/")?;
-    let fd = openat2(
-        &root,
-        relative,
-        OpenHow::new()
-            .flags(OFlag::O_RDONLY | OFlag::O_DIRECTORY | OFlag::O_CLOEXEC)
-            .resolve(ResolveFlag::RESOLVE_BENEATH | ResolveFlag::RESOLVE_NO_SYMLINKS),
-    )
-    .map_err(nix_io_error)?;
-    Ok(fs::File::from(fd))
-}
-
-#[cfg(target_os = "linux")]
-fn secure_open_parent(path: &Path) -> std::io::Result<(fs::File, std::ffi::OsString)> {
-    let parent = path
-        .parent()
-        .ok_or_else(|| std::io::Error::other("path has no parent"))?;
-    let file_name = path
-        .file_name()
-        .ok_or_else(|| std::io::Error::other("path has no file name"))?
-        .to_os_string();
-    Ok((secure_open_dir(parent)?, file_name))
-}
-
-#[cfg(target_os = "linux")]
-fn secure_create_dir(path: &Path) -> std::io::Result<()> {
-    use nix::errno::Errno;
-    use nix::sys::stat::{Mode, mkdirat};
-
-    if secure_open_dir(path).is_ok() {
-        return Ok(());
-    }
-    let parent_path = path
-        .parent()
-        .ok_or_else(|| std::io::Error::other("directory has no parent"))?;
-    secure_create_dir(parent_path)?;
-    let parent = secure_open_dir(parent_path)?;
-    let name = path
-        .file_name()
-        .ok_or_else(|| std::io::Error::other("directory has no name"))?;
-    match mkdirat(&parent, name, Mode::S_IRWXU) {
-        Ok(()) | Err(Errno::EEXIST) => {
-            secure_open_dir(path)?;
-            parent.sync_all()?;
-            Ok(())
-        }
-        Err(error) => Err(nix_io_error(error)),
-    }
-}
-
-#[cfg(target_os = "linux")]
-fn secure_create_new_dir(path: &Path) -> std::io::Result<()> {
-    use nix::sys::stat::{Mode, mkdirat};
-
-    let (parent, name) = secure_open_parent(path)?;
-    mkdirat(&parent, name.as_os_str(), Mode::S_IRWXU).map_err(nix_io_error)?;
-    secure_open_dir(path)?;
-    parent.sync_all()?;
-    Ok(())
-}
-
-#[cfg(not(target_os = "linux"))]
-fn secure_create_new_dir(path: &Path) -> std::io::Result<()> {
-    secure_reject_symlink_components(path.parent().unwrap_or_else(|| Path::new(".")))?;
-    fs::create_dir(path)?;
-    secure_reject_symlink_components(path)
-}
-
-#[cfg(not(target_os = "linux"))]
-fn secure_create_dir(path: &Path) -> std::io::Result<()> {
-    secure_reject_symlink_components(path)?;
-    fs::create_dir_all(path)?;
-    secure_reject_symlink_components(path)
-}
-
-#[cfg(target_os = "linux")]
-fn secure_remove_file(path: &Path) -> std::io::Result<()> {
-    use nix::errno::Errno;
-    use nix::unistd::{UnlinkatFlags, unlinkat};
-
-    let (parent, name) = secure_open_parent(path)?;
-    match unlinkat(&parent, name.as_os_str(), UnlinkatFlags::NoRemoveDir) {
-        Ok(()) => parent.sync_all(),
-        Err(Errno::ENOENT) => Ok(()),
-        Err(error) => Err(nix_io_error(error)),
-    }
-}
-
-#[cfg(not(target_os = "linux"))]
-fn secure_remove_file(path: &Path) -> std::io::Result<()> {
-    secure_reject_symlink_components(path.parent().unwrap_or_else(|| Path::new(".")))?;
-    match fs::remove_file(path) {
-        Ok(()) => sync_parent_directory(path),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(error) => Err(error),
-    }
-}
-
-#[cfg(target_os = "linux")]
-fn secure_read_file(path: &Path, maximum: usize) -> std::io::Result<Vec<u8>> {
-    use nix::fcntl::{OFlag, OpenHow, ResolveFlag, openat2};
-
-    let (parent, name) = secure_open_parent(path)?;
-    let fd = openat2(
-        &parent,
-        name.as_os_str(),
-        OpenHow::new()
-            .flags(OFlag::O_RDONLY | OFlag::O_CLOEXEC)
-            .resolve(ResolveFlag::RESOLVE_BENEATH | ResolveFlag::RESOLVE_NO_SYMLINKS),
-    )
-    .map_err(nix_io_error)?;
-    let mut bytes = Vec::new();
-    Read::by_ref(&mut fs::File::from(fd))
-        .take((maximum + 1) as u64)
-        .read_to_end(&mut bytes)?;
-    if bytes.len() > maximum {
-        return Err(std::io::Error::other("file exceeds size limit"));
-    }
-    Ok(bytes)
-}
-
-#[cfg(not(target_os = "linux"))]
-fn secure_read_file(path: &Path, maximum: usize) -> std::io::Result<Vec<u8>> {
-    secure_reject_symlink_components(path)?;
-    let mut bytes = Vec::new();
-    Read::by_ref(&mut fs::File::open(path)?)
-        .take((maximum + 1) as u64)
-        .read_to_end(&mut bytes)?;
-    if bytes.len() > maximum {
-        return Err(std::io::Error::other("file exceeds size limit"));
-    }
-    Ok(bytes)
-}
-
-#[cfg(target_os = "linux")]
-fn secure_append_file(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
-    use nix::fcntl::{OFlag, openat};
-    use nix::sys::stat::Mode;
-
-    let (parent, name) = secure_open_parent(path)?;
-    let fd = openat(
-        &parent,
-        name.as_os_str(),
-        OFlag::O_WRONLY | OFlag::O_APPEND | OFlag::O_CREAT | OFlag::O_CLOEXEC | OFlag::O_NOFOLLOW,
-        Mode::S_IRUSR | Mode::S_IWUSR,
-    )
-    .map_err(nix_io_error)?;
-    let mut file = fs::File::from(fd);
-    file.write_all(bytes)?;
-    file.sync_data()?;
-    parent.sync_all()
-}
-
-#[cfg(not(target_os = "linux"))]
-fn secure_append_file(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
-    secure_reject_symlink_components(path)?;
-    let mut file = fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(path)?;
-    file.write_all(bytes)?;
-    file.sync_data()?;
-    sync_parent_directory(path)
-}
-
-fn absolute_lexical_path(path: &Path) -> std::io::Result<PathBuf> {
-    if path.is_absolute() {
-        Ok(lexical_normalize(path))
-    } else {
-        Ok(lexical_normalize(&std::env::current_dir()?.join(path)))
-    }
-}
-
-#[cfg(target_os = "linux")]
-fn nix_io_error(error: nix::errno::Errno) -> std::io::Error {
-    std::io::Error::from_raw_os_error(error as i32)
-}
-
+mod agent_recovery;
 #[path = "workflow/checkpoints.rs"]
 mod checkpoints;
 #[path = "workflow/direct_tool.rs"]
 mod direct_tool;
 mod execution_adapter;
+pub use agent_recovery::WorkflowAgentRecovery;
+pub(crate) mod collaboration;
 use execution_adapter::*;
 
 mod run_store;

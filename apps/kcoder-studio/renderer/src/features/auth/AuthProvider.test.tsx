@@ -1,161 +1,71 @@
-import { render, screen, waitFor } from '@testing-library/react'
-import { beforeEach, describe, expect, test, vi } from 'vitest'
-import { setToken } from '@/api/auth'
-import { ApiError } from '@/api/http'
-import { LOCAL_USER } from '@/api/local/localSession'
+import { installTestTransport, clearTestTransports } from '@/test/runtime-transport'
+import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { AuthProvider } from './AuthProvider'
 import { useAuth } from './useAuth'
 
-function createJwt(expSeconds: number) {
-  return `header.${btoa(JSON.stringify({ exp: expSeconds }))}.signature`
-}
-
 function Probe() {
-  const { user, isLoading, adminPasswordSetupRequired, adminUsername } = useAuth()
-  return (
-    <div data-testid="auth-probe">
-      {isLoading
-        ? 'loading'
-        : `${user?.user_name ?? 'none'}:${adminPasswordSetupRequired ? adminUsername : 'ready'}`}
-    </div>
-  )
+  const { user, logout } = useAuth()
+  return <button onClick={logout}>{user?.user_name ?? 'none'}</button>
 }
 
-function useBackendRuntime() {
-  window.__KCODER_STUDIO_RUNTIME_CONFIG__ = {
-    runtimeMode: 'backend',
-  }
-}
-
-function setTauriRuntime() {
-  Object.defineProperty(window, '__TAURI_INTERNALS__', {
-    value: {},
-    configurable: true,
-  })
-}
-
-function clearTauriRuntime() {
-  delete (window as Window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__
+function markGateway() {
+  const meta = document.createElement('meta')
+  meta.name = 'kcoder-rpc-token'
+  meta.content = 'cookie-auth'
+  document.head.appendChild(meta)
 }
 
 describe('AuthProvider', () => {
   beforeEach(() => {
     localStorage.clear()
     sessionStorage.clear()
+    window.history.pushState({}, '', '/settings/access-links')
+  })
+
+  afterEach(() => {
+    clearTestTransports()
     delete window.__KCODER_STUDIO_RUNTIME_CONFIG__
-    clearTauriRuntime()
-    window.history.pushState({}, '', '/')
+    document.head.querySelector('meta[name="kcoder-rpc-token"]')?.remove()
+    document.body.querySelector('form[action$="/logout"]')?.remove()
+    vi.restoreAllMocks()
   })
 
-  test('loads current user when token is valid', async () => {
-    useBackendRuntime()
-    setToken(createJwt(Math.floor(Date.now() / 1000) + 3600))
-    const authApi = {
-      getCurrentUser: vi.fn().mockResolvedValue({ id: 1, user_name: 'alice', email: 'a@b.c' }),
-      getCurrentUserWithoutAuthRedirect: vi.fn(),
-      login: vi.fn(),
-      logout: vi.fn(),
-      loginWithOidcToken: vi.fn(),
-      setupAdminPassword: vi.fn(),
-    }
+  test('does not start legacy auth on a standalone renderer even with a stale token', () => {
+    localStorage.setItem('auth_token', 'stale')
+    const fetch = vi.spyOn(globalThis, 'fetch')
+    render(<AuthProvider><Probe /></AuthProvider>)
 
-    render(
-      <AuthProvider authApi={authApi}>
-        <Probe />
-      </AuthProvider>
-    )
-
-    await waitFor(() => expect(screen.getByTestId('auth-probe')).toHaveTextContent('alice'))
+    expect(screen.getByRole('button', { name: 'none' })).toBeInTheDocument()
+    expect(window.location.pathname).toBe('/settings/access-links')
+    expect(fetch).not.toHaveBeenCalled()
   })
 
-  test('redirects protected routes to login when admin password setup is required', async () => {
-    useBackendRuntime()
-    setToken(createJwt(Math.floor(Date.now() / 1000) + 3600))
-    window.history.pushState({}, '', '/')
-    const authApi = {
-      getCurrentUser: vi.fn().mockRejectedValue(
-        new ApiError('ADMIN_PASSWORD_SETUP_REQUIRED', 400, 'ADMIN_PASSWORD_SETUP_REQUIRED', {
-          error_code: 'ADMIN_PASSWORD_SETUP_REQUIRED',
-          admin_username: 'admin',
-        })
-      ),
-      getCurrentUserWithoutAuthRedirect: vi.fn(),
-      login: vi.fn(),
-      logout: vi.fn(),
-      loginWithOidcToken: vi.fn(),
-      setupAdminPassword: vi.fn(),
-    }
+  test('accepts a Gateway document before runtime transport is available', () => {
+    window.__KCODER_STUDIO_RUNTIME_CONFIG__ = { runtimeMode: 'backend' }
+    markGateway()
+    render(<AuthProvider><Probe /></AuthProvider>)
 
-    render(
-      <AuthProvider authApi={authApi}>
-        <Probe />
-      </AuthProvider>
-    )
-
-    await waitFor(() => expect(screen.getByTestId('auth-probe')).toHaveTextContent('none:admin'))
-    expect(window.location.pathname).toBe('/login')
-    expect(sessionStorage.getItem('postLoginRedirectPath')).toBe('/')
+    expect(screen.getByRole('button', { name: 'local' })).toBeInTheDocument()
+    expect(window.location.pathname).toBe('/settings/access-links')
   })
 
-  test('redirects protected routes to login when token is missing', async () => {
-    useBackendRuntime()
-    render(
-      <AuthProvider>
-        <Probe />
-      </AuthProvider>
-    )
+  test('logs out using the Gateway route under the public base path', async () => {
+    window.__KCODER_STUDIO_RUNTIME_CONFIG__ = { appBasePath: '/g/example' }
+    markGateway()
+    const submit = vi.spyOn(HTMLFormElement.prototype, 'submit').mockImplementation(() => {})
+    render(<AuthProvider><Probe /></AuthProvider>)
 
-    await waitFor(() => expect(screen.getByTestId('auth-probe')).toHaveTextContent('none'))
-    expect(window.location.pathname).toBe('/login')
+    await userEvent.click(screen.getByRole('button', { name: 'local' }))
+
+    expect(submit).toHaveBeenCalledOnce()
+    expect(document.querySelector('form')).toHaveAttribute('action', '/g/example/logout')
   })
 
-  test('creates local user without redirect or backend calls in local-first mode', async () => {
-    setTauriRuntime()
-    window.__KCODER_STUDIO_RUNTIME_CONFIG__ = {
-      runtimeMode: 'local-first',
-    }
-    const authApi = {
-      getCurrentUser: vi.fn(),
-      getCurrentUserWithoutAuthRedirect: vi.fn(),
-      login: vi.fn(),
-      logout: vi.fn(),
-      loginWithOidcToken: vi.fn(),
-      setupAdminPassword: vi.fn(),
-    }
-
-    render(
-      <AuthProvider authApi={authApi}>
-        <Probe />
-      </AuthProvider>
-    )
-
-    await waitFor(() =>
-      expect(screen.getByTestId('auth-probe')).toHaveTextContent(`${LOCAL_USER.user_name}:ready`)
-    )
-    expect(window.location.pathname).toBe('/')
-    expect(authApi.getCurrentUser).not.toHaveBeenCalled()
-    expect(authApi.getCurrentUserWithoutAuthRedirect).not.toHaveBeenCalled()
-  })
-
-  test('uses backend auth in browser even when runtime mode defaults local-first', async () => {
-    setToken(createJwt(Math.floor(Date.now() / 1000) + 3600))
-    const authApi = {
-      getCurrentUser: vi.fn().mockResolvedValue({ id: 1, user_name: 'admin', email: 'a@b.c' }),
-      getCurrentUserWithoutAuthRedirect: vi.fn(),
-      login: vi.fn(),
-      logout: vi.fn(),
-      loginWithOidcToken: vi.fn(),
-      setupAdminPassword: vi.fn(),
-    }
-
-    render(
-      <AuthProvider authApi={authApi}>
-        <Probe />
-      </AuthProvider>
-    )
-
-    await waitFor(() => expect(screen.getByTestId('auth-probe')).toHaveTextContent('admin:ready'))
-    expect(authApi.getCurrentUser).toHaveBeenCalledTimes(1)
-    expect(window.location.pathname).toBe('/')
+  test('supports the local runtime transport without Gateway HTML', () => {
+    installTestTransport(() => null)
+    render(<AuthProvider><Probe /></AuthProvider>)
+    expect(screen.getByRole('button', { name: 'local' })).toBeInTheDocument()
   })
 })

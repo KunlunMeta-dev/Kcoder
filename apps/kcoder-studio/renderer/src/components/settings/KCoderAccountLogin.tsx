@@ -9,6 +9,7 @@ import {
   type GatewayServer,
 } from '@/kcoder/gatewayRpc'
 import { Button } from '@/components/ui/button'
+import { KCoderAccountOidc } from './KCoderAccountOidc'
 
 import { listenAccountContextChanges } from '@/kcoder/accountContextEvents'
 
@@ -195,6 +196,7 @@ export function KCoderAccountLogin({
           <Button type="submit" disabled={busy} data-testid="kcoder-account-submit">
             {t('accounts.login')}
           </Button>
+          <KCoderAccountOidc serverId={server.id} username={username} disabled={busy} onBusy={setBusy} onChanged={onChanged} />
         </form>
       )}
       {error && (

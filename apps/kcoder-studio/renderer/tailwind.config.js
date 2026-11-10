@@ -3,12 +3,15 @@ import plugin from 'tailwindcss/plugin'
 /** @type {import('tailwindcss').Config} */
 export default {
   darkMode: 'class',
-  content: [
-    './index.html',
-    './src/**/*.{ts,tsx}',
-    './wecode/**/*.{ts,tsx}',
-    './node_modules/streamdown/dist/*.js',
-  ],
+  content: {
+    relative: true,
+    files: [
+      './index.html',
+      './src/**/*.{ts,tsx}',
+      './wecode/**/*.{ts,tsx}',
+      './node_modules/streamdown/dist/*.js',
+    ],
+  },
   theme: {
     fontSize: {
       xs: ['var(--text-xs)', { lineHeight: '1.333333' }],
@@ -90,11 +93,20 @@ export default {
       },
       transitionDuration: {
         fast: 'var(--duration-fast)',
+        base: 'var(--duration-base)',
         DEFAULT: 'var(--duration-base)',
         slow: 'var(--duration-slow)',
       },
       transitionTimingFunction: {
         standard: 'var(--ease-standard)',
+      },
+      boxShadow: {
+        control: 'var(--shadow-control)',
+        'control-hover': 'var(--shadow-control-hover)',
+        'control-inverse': 'var(--shadow-control-inverse)',
+        'control-pressed': 'var(--shadow-control-pressed)',
+        card: 'var(--shadow-card)',
+        'card-hover': 'var(--shadow-card-hover)',
       },
       zIndex: {
         chrome: 'var(--z-chrome)',

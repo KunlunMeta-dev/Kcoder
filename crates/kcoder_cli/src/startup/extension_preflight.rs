@@ -1,17 +1,33 @@
 //! Extension preflight for the shared CLI composition root.
 
-use super::*;
+use crate::build_identity;
+use anyhow::{Result, bail};
+use kcoder_cli_commands::{cli_args::TrustAction, credentials::canonicalize_cli_cwd};
+use kcoder_config::{PermissionMode, Settings};
+use kcoder_permissions::{PermissionDecision, PermissionEngine};
+use kcoder_skills::SkillRegistry;
+use kcoder_tools::ToolRegistry;
+use std::path::{Path, PathBuf};
+use tracing::warn;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RequiredSkillPreflightFailure {
+    pub skill: String,
+    pub reason: &'static str,
+    pub message: String,
+    pub remediation: String,
+}
 
 /// True when the working directory exposes a project-level executable
 /// extension surface (hooks/MCP settings, skills, plugins).
-pub(crate) fn project_has_extension_surface(cwd: &Path) -> bool {
+pub fn project_has_extension_surface(cwd: &Path) -> bool {
     cwd.join(".kcoder").join("settings.json").is_file()
         || cwd.join(".kcoder").join("settings.local.json").is_file()
         || cwd.join(".kcoder").join("skills").is_dir()
         || cwd.join(".kcoder").join("plugins").is_dir()
 }
 
-pub(crate) fn run_trust_action(action: TrustAction, cwd: &Path) -> Result<()> {
+pub fn run_trust_action(action: TrustAction, cwd: &Path) -> Result<()> {
     let config_dir = Settings::config_dir()?;
     let mut store = kcoder_config::FolderTrustStore::load(&config_dir);
     let requested_path = match &action {
@@ -63,7 +79,7 @@ pub(crate) fn run_trust_action(action: TrustAction, cwd: &Path) -> Result<()> {
     Ok(())
 }
 
-pub(crate) fn required_skill_preflight(
+pub fn required_skill_preflight(
     required_skills: &[String],
     folder_trusted: bool,
     registry: &SkillRegistry,
@@ -104,6 +120,31 @@ pub(crate) fn required_skill_preflight(
             });
         }
 
+        let skill = registry.get_active(name).expect("checked above");
+        let missing_tools = skill
+            .requires_tools
+            .iter()
+            .filter(|required| tools.get(required).is_none())
+            .cloned()
+            .collect::<Vec<_>>();
+        if skill.requires_inline_widgets() || !missing_tools.is_empty() {
+            return Err(RequiredSkillPreflightFailure {
+                skill: name.to_string(),
+                reason: "required_skill_capability_unavailable",
+                message: format!(
+                    "required skill `{name}` needs tools or client capabilities unavailable in this CLI run"
+                ),
+                remediation: if skill.requires_inline_widgets() {
+                    "open a kworker conversation in KCoder Studio with inline visualizations enabled".to_string()
+                } else {
+                    format!(
+                        "enable the required tools in this run: {}",
+                        missing_tools.join(", ")
+                    )
+                },
+            });
+        }
+
         let Some(skill_tool) = tools.get("skill") else {
             return Err(RequiredSkillPreflightFailure {
                 skill: name.to_string(),
@@ -137,7 +178,7 @@ pub(crate) fn required_skill_preflight(
     Ok(())
 }
 
-pub(crate) fn find_project_skill_file(cwd: &Path, skill_name: &str) -> Option<PathBuf> {
+pub fn find_project_skill_file(cwd: &Path, skill_name: &str) -> Option<PathBuf> {
     let relative_name = skill_name.replace(':', "/");
     for directory in cwd.ancestors() {
         let candidate = directory
@@ -152,7 +193,7 @@ pub(crate) fn find_project_skill_file(cwd: &Path, skill_name: &str) -> Option<Pa
     None
 }
 
-pub(crate) fn emit_required_skill_preflight_failure(
+pub fn emit_required_skill_preflight_failure(
     failure: &RequiredSkillPreflightFailure,
     json: bool,
     session_id: String,
@@ -191,32 +232,9 @@ pub(crate) fn emit_required_skill_preflight_failure(
     }
 }
 
-/// Names of MCP servers declared by project-layer settings files; these are
-/// stripped when the folder is untrusted (user-level MCP config is kept).
-pub(crate) fn project_mcp_server_names(cwd: &Path) -> std::collections::BTreeSet<String> {
-    let mut names = std::collections::BTreeSet::new();
-    for file in ["settings.json", "settings.local.json"] {
-        let path = cwd.join(".kcoder").join(file);
-        let Ok(raw) = std::fs::read_to_string(&path) else {
-            continue;
-        };
-        let Ok(json) = serde_json::from_str::<serde_json::Value>(&raw) else {
-            continue;
-        };
-        if let Some(servers) = json.get("mcp_servers").and_then(|value| value.as_array()) {
-            for server in servers {
-                if let Some(name) = server.get("name").and_then(|value| value.as_str()) {
-                    names.insert(name.to_string());
-                }
-            }
-        }
-    }
-    names
-}
-
 /// One-time interactive trust prompt shown before the TUI starts. Non-TTY
 /// stdin (headless/CI) means "skip", matching headless permission behavior.
-pub(crate) fn prompt_folder_trust(cwd: &Path, store: &mut kcoder_config::FolderTrustStore) -> bool {
+pub fn prompt_folder_trust(cwd: &Path, store: &mut kcoder_config::FolderTrustStore) -> bool {
     use std::io::IsTerminal as _;
     if !std::io::stdin().is_terminal() {
         return false;
@@ -248,5 +266,42 @@ pub(crate) fn prompt_folder_trust(cwd: &Path, store: &mut kcoder_config::FolderT
             false
         }
         _ => false,
+    }
+}
+
+pub use kcoder_cli_commands::training_isolation::apply_training_skill_isolation;
+
+#[cfg(test)]
+mod project_mcp_tests {
+    use kcoder_cli_commands::entry_modes::project_mcp_server_names;
+
+    #[test]
+    fn missing_project_mcp_names_do_not_create_project_configuration() {
+        let workspace = tempfile::tempdir().unwrap();
+        assert!(project_mcp_server_names(workspace.path()).is_empty());
+        assert!(!workspace.path().join(".kcoder").exists());
+    }
+
+    #[test]
+    fn project_mcp_names_preserve_project_and_local_documents() {
+        let workspace = tempfile::tempdir().unwrap();
+        let directory = workspace.path().join(".kcoder");
+        std::fs::create_dir(&directory).unwrap();
+        let project = br#"{"mcp_servers":[{"name":"project-fixture"}]}"#;
+        let local = br#"{"mcp_servers":[{"name":"local-fixture"}]}"#;
+        std::fs::write(directory.join("settings.json"), project).unwrap();
+        std::fs::write(directory.join("settings.local.json"), local).unwrap();
+        assert_eq!(
+            project_mcp_server_names(workspace.path()),
+            std::collections::BTreeSet::from(["project-fixture".into(), "local-fixture".into()])
+        );
+        assert_eq!(
+            std::fs::read(directory.join("settings.json")).unwrap(),
+            project
+        );
+        assert_eq!(
+            std::fs::read(directory.join("settings.local.json")).unwrap(),
+            local
+        );
     }
 }

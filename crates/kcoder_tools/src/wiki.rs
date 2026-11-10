@@ -11,6 +11,8 @@ const TEXT_LIMIT: usize = 16_000;
 const LIST_LIMIT: usize = 10;
 
 pub struct WikiTool;
+mod native_access;
+pub use native_access::{NativeWikiManagementGuard, NativeWikiReadAccess, read_observed_catalog};
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -54,6 +56,13 @@ impl Tool for WikiTool {
         false
     }
     async fn call(&self, input: Value, ctx: &ToolContext) -> Result<ToolOutput, ToolError> {
+        if let Some(access) = &ctx.native_wiki_read_access {
+            parse_input(input.clone())?;
+            if !ctx.authorizes_native_tool_invocation(self, &input) {
+                return Err(ToolError::Execution("WIKI_NATIVE_DISPATCH_REQUIRED".into()));
+            }
+            return access.read(input, ctx);
+        }
         call_scoped(input, ctx, false)
     }
 }
@@ -62,13 +71,12 @@ pub(crate) fn read_for_organization(
     input: Value,
     ctx: &ToolContext,
 ) -> Result<ToolOutput, ToolError> {
+    if let Some(access) = &ctx.native_wiki_read_access {
+        return access.read_for_organization(input, ctx);
+    }
     call_scoped(input, ctx, true)
 }
-fn call_scoped(
-    input: Value,
-    ctx: &ToolContext,
-    organization: bool,
-) -> Result<ToolOutput, ToolError> {
+fn parse_input(input: Value) -> Result<Input, ToolError> {
     let input: Input =
         serde_json::from_value(input).map_err(|e| ToolError::InvalidInput(e.to_string()))?;
     match input.action.as_str() {
@@ -76,6 +84,14 @@ fn call_scoped(
         "read_page" => return Err(ToolError::InvalidInput("Wiki has no read_page action. Use Wiki with action=read and page; include revision when using a cursor. WikiManage.read_page is only for explicit organization.".into())),
         _ => {}
     }
+    Ok(input)
+}
+fn call_scoped(
+    input: Value,
+    ctx: &ToolContext,
+    organization: bool,
+) -> Result<ToolOutput, ToolError> {
+    let input = parse_input(input)?;
     let result = (|| {
         let path = ctx
             .settings_persistence_path

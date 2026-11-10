@@ -259,6 +259,13 @@ impl PrivateDirectory {
         verified_read_write_file(self.open_read_write_file(name, false)?, expected)
     }
 
+    /// Observe an existing descriptor supplied by a native publisher. Identity is
+    /// evidence only; the caller must separately bind it to its original namespace.
+    pub fn retention_regular_handle_identity(&self, file: &File) -> Result<PrivateFileIdentityV1> {
+        self.retention_identity()?;
+        identity(file, PrivateFileKind::RegularFile)
+    }
+
     /// Capture identity of an already created/sealed regular leaf.
     pub fn retention_regular_identity(&self, name: &OsStr) -> Result<PrivateFileIdentityV1> {
         self.retention_identity()?;

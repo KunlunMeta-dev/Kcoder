@@ -13,7 +13,12 @@ await runE2E(import.meta.url, {
 }, async context => {
   const { path: workspace } = await materializeWorkspace(context, 'minimal');
   await context.writeStateJson('kcoder-home/settings.json', { providers: {} });
-  const gateway = await startGateway(context, { workspace, auth: true, label: 'mobile-pairing-settings-gateway' });
+  // This checks advertised QR identity and local Gateway auth, not public Relay reachability.
+  const advertisedUrl = 'https://pairing-gateway.example';
+  const gateway = await startGateway(context, { workspace, auth: true, label: 'mobile-pairing-settings-gateway',
+    // Pairing/Relay management uses Gateway auth; an unavailable Native component remains denied.
+    env: { KCODER_STUDIO_PUBLIC_ACCESS_URL: advertisedUrl, KCODER_STUDIO_PUBLIC_ORIGINS: advertisedUrl,
+      KCODER_NATIVE_CONNECTIVITY_BINDING_V1: Buffer.from('{}').toString('base64url') } });
   const browser = await startChromium(context, { label: 'mobile-pairing-settings-browser' });
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   const diagnostics = [];
@@ -33,11 +38,24 @@ await runE2E(import.meta.url, {
     ]);
     await page.getByTestId('desktop-sidebar').waitFor({ state: 'visible' });
     await page.goto(`${gateway.baseUrl}/settings/access-links`);
+    await page.getByTestId('gateway-relay-configured').waitFor({ state: 'visible' });
+    const appDetails = page.getByTestId('access-mobile-app-details');
+    const webDetails = page.getByTestId('access-mobile-web-details');
+    const devicesDetails = page.getByTestId('access-paired-devices-details');
+    assert.equal(await page.getByTestId('mobile-pairing-qr').isVisible(), false);
+    await page.screenshot({ path: context.pathInArtifacts('access-links.png') });
+    await appDetails.focus();
+    await appDetails.press('Enter');
     await page.getByTestId('mobile-pairing-qr').waitFor({ state: 'visible' });
+    const relay = await page.evaluate(async () => (await fetch('/api/relay', { cache: 'no-store' })).json());
+    assert.equal(relay.configured, false);
+    assert.equal(relay.externallyManaged, true, 'an advertised HTTPS URL alone is not Relay registration evidence');
+    assert.equal(relay.publicBaseUrl, advertisedUrl);
+    await webDetails.click();
     await page.getByTestId('mobile-web-address').fill('https://mobile-web.example');
     await page.getByTestId('mobile-web-pairing-qr').waitFor({ state: 'visible' });
     assert.equal(await page.getByTestId('settings-nav-access-links').getAttribute('aria-current'), 'page');
-    assert.equal(await page.getByTestId('mobile-gateway-address').inputValue(), gateway.baseUrl);
+    assert.equal(await page.getByTestId('mobile-gateway-address').inputValue(), advertisedUrl);
 
     const initial = await page.evaluate(async () => (await fetch('/api/mobile/pairing', { cache: 'no-store' })).json());
     context.registerSecret(initial.token);
@@ -63,12 +81,19 @@ await runE2E(import.meta.url, {
     context.registerSecret(paired.grant.refreshToken);
     assert.equal(paired.status, 200);
     await page.reload();
+    await devicesDetails.click();
     await page.getByText('E2E phone', { exact: true }).waitFor({ state: 'visible' });
+    await appDetails.click();
+    await webDetails.click();
 
     const adminOnly = await page.evaluate(async accessToken => fetch('/api/mobile/pairing', {
       headers: { authorization: `Bearer ${accessToken}` }, cache: 'no-store',
     }).then(response => response.status), paired.grant.accessToken);
     assert.equal(adminOnly, 403, 'paired phones cannot retrieve a code that authorizes other phones');
+    const relayAdminOnly = await page.evaluate(async accessToken => fetch('/api/relay', {
+      headers: { authorization: `Bearer ${accessToken}` }, cache: 'no-store',
+    }).then(response => response.status), paired.grant.accessToken);
+    assert.equal(relayAdminOnly, 403, 'paired phones cannot manage the Gateway Relay');
 
     await page.getByTestId('mobile-pairing-rotate').click();
     const rotated = await page.evaluate(async () => (await fetch('/api/mobile/pairing', { cache: 'no-store' })).json());
@@ -91,11 +116,16 @@ await runE2E(import.meta.url, {
     assert.equal(revokedRefresh, 401, 'revoked device refresh credentials stop working');
 
     const gatewayAddress = page.getByTestId('mobile-gateway-address');
+    await page.setViewportSize({ width: 760, height: 900 });
+    const content = page.getByTestId('browser-access-settings-page');
+    assert.ok(await content.evaluate(node => node.scrollWidth <= node.clientWidth + 1),
+      'The access settings and expanded link forms fit a narrow viewport');
     await gatewayAddress.fill('javascript:alert(1)');
-    await page.getByText('请输入有效的 Gateway 地址以生成二维码。').waitFor({ state: 'visible' });
+    await page.getByText('请输入有效的 Gateway 地址以生成二维码。').first().waitFor({ state: 'visible' });
+    assert.equal(await page.getByText('请输入有效的 Gateway 地址以生成二维码。').count(), 2);
     assert.equal(await page.getByTestId('mobile-pairing-qr').count(), 0);
     assert.deepEqual(diagnostics, []);
-    return { settingsRoute: true, mobileAppAndWebQrShown: true, codeRotation: true, pairedDeviceSurvivedRotation: true, revokeRejectedRefresh: true, invalidAddressBlocked: true };
+    return { settingsRoute: true, sharedGatewayRelayUi: true, relayManagementDeniedForPhone: true, mobileAppAndWebQrShown: true, codeRotation: true, pairedDeviceSurvivedRotation: true, revokeRejectedRefresh: true, invalidAddressBlocked: true };
   } finally {
     await page.close();
     await browser.close();

@@ -1,0 +1,20 @@
+export const migrationCodexEn = {
+  "migration_codex.title": "Codex project layer details",
+  "migration_codex.merge": "Merge project model overrides…",
+  "migration_codex.replacement": "This selected model snapshot replaces single-file model selections. Review MCP separately; it is not merged here.",
+  "migration_codex.scope": "Selected Codex project snapshot",
+  "migration_codex.boundary": "Selected trusted static files only; this does not establish the source process’s final configuration. CLI flags, process environment, managed policy and full Git/worktree runtime routing remain unobserved. Values and source paths are hidden.",
+  "migration_codex.precedence": "User → explicitly selected profile → project root to working directory. The nearest supported model field wins. Project Provider/authentication/profile routing never becomes user authority.",
+  "migration_codex.user": "User layer",
+  "migration_codex.profile": "Selected profile",
+  "migration_codex.project": "Project layer {n}",
+  "migration_codex.provider": "Provider {n}",
+  "migration_codex.ignored": "Not adopted by this snapshot; routing authority is preserved",
+  "migration_codex.origin": "Field source",
+  "migration_codex.command_line_overrides": "CLI overrides",
+  "migration_codex.source_process_environment": "Source process environment",
+  "migration_codex.system_cloud_managed_defaults": "System/cloud defaults",
+  "migration_codex.managed_requirements": "Managed requirements",
+  "migration_codex.separate_mcp_namespaces": "Separate MCP namespaces",
+  "migration_codex.git_worktree_runtime_routing": "Git/worktree runtime routing"
+};

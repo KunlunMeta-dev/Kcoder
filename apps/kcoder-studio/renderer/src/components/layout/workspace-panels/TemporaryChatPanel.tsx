@@ -1,3 +1,5 @@
+import { composerInputHistoryScope } from '@/components/chat/composer/composerInputHistory'
+import { ConversationWidgetsProvider } from '@/components/chat/widgets/ConversationWidgetsProvider'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { MessageCircle } from 'lucide-react'
 import { ScrollableMessageArea } from '@/components/chat/ScrollableMessageArea'
@@ -328,6 +330,7 @@ export function TemporaryChatPanel({
   }, [address, cancelRuntimePaneTask])
 
   return (
+    <ConversationWidgetsProvider address={address} messages={messages} onSendPrompt={text => setInput(value => value ? `${value}\n\n${text}` : text)}>
     <section data-testid={testId} className="flex min-h-0 flex-1 flex-col">
       {messages.length === 0 ? (
         <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-8 text-center text-sm text-text-muted">
@@ -352,6 +355,8 @@ export function TemporaryChatPanel({
       )}
       <div className="shrink-0 bg-background px-4 py-3">
         <BufferedChatInput
+          historyMessages={messages}
+          inputHistoryScope={composerInputHistoryScope(address, instanceId)}
           value={input}
           onChange={setInput}
           onSubmit={send}
@@ -366,5 +371,6 @@ export function TemporaryChatPanel({
         />
       </div>
     </section>
+    </ConversationWidgetsProvider>
   )
 }

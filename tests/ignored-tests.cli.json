@@ -1,0 +1,155 @@
+{
+  "schemaVersion": 1,
+  "kind": "named_native_prerequisite_inventory_not_test_pass",
+  "suites": {
+    "cli-kcoder-unit": {
+      "cases": {
+        "linux": [
+          "app_server::integrations::connectivity::host_process::tests::actual_supervised_node_host_bootstraps_reads_and_reclaims_owned_tree",
+          "app_server::integrations::connectivity::task_capability_scope_runtime::tests::ct85_owned::owned_dispatch",
+          "app_server::integrations::connectivity::task_capability_scope_runtime::tests::interrupt_rebind::owned_dispatch",
+          "app_server::integrations::core::remote_delegations::factory::tests::actual_existing_runtime_goal_uses_finite_original_source_slot_without_fixture_budget_installer",
+          "app_server::integrations::core::remote_delegations::factory::tests::actual_independent_receiver_native_parent_generates_docx_and_returns_complete_original_bytes",
+          "app_server::integrations::core::remote_delegations::factory::tests::actual_material_parse_failure_prevents_provider_and_settles_original_receiver_slot",
+          "app_server::integrations::core::remote_delegations::factory::tests::actual_normal_dispatch_native_receiver_original_budgets_and_artifact_reader_form_one_chain",
+          "app_server::integrations::core::remote_delegations::factory::tests::actual_ordinary_accepted_source_without_runtime_uses_explicit_outbound_budget_and_original_receiver",
+          "app_server::integrations::core::remote_delegations::factory::tests::actual_original_complete_material_reaches_native_receiver_store_and_paginated_reader_before_provider",
+          "app_server::integrations::core::remote_delegations::factory::tests::actual_other_accepted_engine_cancels_only_the_original_receiver_and_preserves_unknown_model_charge",
+          "app_server::integrations::core::remote_delegations::factory::tests::actual_product_goal_cancelled_receiver_retains_original_unknown_goal_tokens",
+          "app_server::integrations::core::remote_delegations::factory::tests::actual_product_goal_ordinary_source_holds_and_reconciles_only_original_native_budget",
+          "app_server::integrations::core::remote_delegations::factory::tests::actual_receiver_office_missing_own_discovery_permission_preserves_original_unconfirmed_output",
+          "app_server::integrations::core::remote_delegations::tests::actual_installed_native_reader_composes_with_the_accepted_factory_and_existing_artifact_store",
+          "app_server::integrations::core::runtime_driver::tests::workflow_tests::organization_pure_workflow_tests::actual_uid_pure_wait_and_code_roots_contend_before_any_node_effect",
+          "app_server::integrations::core::runtime_driver::tests::workflow_tests::organization_workflow_tests::actual_uid_direct_core_workflow_children_share_original_root_budget",
+          "app_server::integrations::knowledge::office_assets::tests::actual_office_document_node_binds_adopted_source_and_rejects_revocation_before_publication",
+          "app_server::integrations::knowledge::office_assets::tests::organization_native_tests::actual_uid_accepted_knowledge_sources_recheck_original_pdp",
+          "app_server::integrations::office::deferred_projection_tests::actual_default_search_execute_node_generation_projects_wrapper_and_keeps_history_and_prefix",
+          "app_server::integrations::office::deferred_projection_tests::canonical_reader_tests::actual_discovered_reader_pages_exact_native_source_and_rejects_invalid_or_unauthorized_refs",
+          "app_server::integrations::office::deferred_projection_tests::request_lifecycle_tests::actual_source_switch_new_material_first_repeat_real_compact_target_reopen_preserve_prefix_and_bounded_refs",
+          "app_server::integrations::office::installed_resources::tests::actual_native_resource_resolver_probes_electron_as_node_and_generates_real_file",
+          "app_server::integrations::office::installed_resources::tests::actual_native_resource_resolver_probes_plain_node_and_generates_real_file",
+          "app_server::integrations::office::installed_resources::tests::actual_owned_node_closed_stdout_timeout_and_cancel_stop_the_complete_tree",
+          "app_server::integrations::office::native_assets::tests::actual_generated_docx_is_downloadable_by_existing_attachment_contract_with_canonical_source",
+          "app_server::integrations::office::native_host::tests::actual_personal_host_generates_and_reads_canonical_source_with_real_dataset_identity",
+          "app_server::integrations::office::node_generator::tests::actual_node_process_generates_three_formats_and_cancels_owned_process",
+          "app_server::integrations::office::node_generator::tests::closed_stdout_does_not_escape_timeout_or_cancellation",
+          "app_server::integrations::office::organization_policy::native_tests::actual_uid_live_root_office_host_enforces_dedicated_action_grants",
+          "app_server::integrations::office::read_worker::process::tests::actual_driver_reads_and_cancels_its_owned_tree_under_one_budget",
+          "app_server::isolated_test_profile::record_fixture_hook_group",
+          "app_server::tests::catalog_list_component_cost",
+          "app_server::tests::catalog_list_component_stages",
+          "app_server::tests::snapshot_policy_unreadable_file_cannot_be_reported_as_success",
+          "app_server::thread_goal_status_batch_requests::tests::accepted_turn_tool_goal_and_later_append_keep_the_original_observer",
+          "profile_binding::tests::actual_chromium_profiles_keep_cookie_identity_exclusive_reconcile_start_and_release_owned_tree"
+        ],
+        "macos": [
+          "app_server::integrations::connectivity::task_capability_scope_runtime::tests::ct85_owned::owned_dispatch",
+          "app_server::integrations::connectivity::task_capability_scope_runtime::tests::interrupt_rebind::owned_dispatch",
+          "app_server::integrations::core::remote_delegations::factory::tests::actual_existing_runtime_goal_uses_finite_original_source_slot_without_fixture_budget_installer",
+          "app_server::integrations::core::remote_delegations::factory::tests::actual_material_parse_failure_prevents_provider_and_settles_original_receiver_slot",
+          "app_server::integrations::core::remote_delegations::factory::tests::actual_normal_dispatch_native_receiver_original_budgets_and_artifact_reader_form_one_chain",
+          "app_server::integrations::core::remote_delegations::factory::tests::actual_ordinary_accepted_source_without_runtime_uses_explicit_outbound_budget_and_original_receiver",
+          "app_server::integrations::core::remote_delegations::factory::tests::actual_original_complete_material_reaches_native_receiver_store_and_paginated_reader_before_provider",
+          "app_server::integrations::core::remote_delegations::factory::tests::actual_other_accepted_engine_cancels_only_the_original_receiver_and_preserves_unknown_model_charge",
+          "app_server::integrations::core::remote_delegations::factory::tests::actual_product_goal_cancelled_receiver_retains_original_unknown_goal_tokens",
+          "app_server::integrations::core::remote_delegations::factory::tests::actual_product_goal_ordinary_source_holds_and_reconciles_only_original_native_budget",
+          "app_server::integrations::core::remote_delegations::tests::actual_installed_native_reader_composes_with_the_accepted_factory_and_existing_artifact_store",
+          "app_server::integrations::knowledge::office_assets::tests::actual_office_document_node_binds_adopted_source_and_rejects_revocation_before_publication",
+          "app_server::integrations::office::deferred_projection_tests::actual_default_search_execute_node_generation_projects_wrapper_and_keeps_history_and_prefix",
+          "app_server::integrations::office::deferred_projection_tests::canonical_reader_tests::actual_discovered_reader_pages_exact_native_source_and_rejects_invalid_or_unauthorized_refs",
+          "app_server::integrations::office::deferred_projection_tests::request_lifecycle_tests::actual_source_switch_new_material_first_repeat_real_compact_target_reopen_preserve_prefix_and_bounded_refs",
+          "app_server::integrations::office::installed_resources::tests::actual_native_resource_resolver_probes_electron_as_node_and_generates_real_file",
+          "app_server::integrations::office::installed_resources::tests::actual_native_resource_resolver_probes_plain_node_and_generates_real_file",
+          "app_server::integrations::office::native_assets::tests::actual_generated_docx_is_downloadable_by_existing_attachment_contract_with_canonical_source",
+          "app_server::integrations::office::native_host::tests::actual_personal_host_generates_and_reads_canonical_source_with_real_dataset_identity",
+          "app_server::integrations::office::node_generator::tests::actual_node_process_generates_three_formats_and_cancels_owned_process",
+          "app_server::integrations::office::node_generator::tests::closed_stdout_does_not_escape_timeout_or_cancellation",
+          "app_server::integrations::office::read_worker::process::tests::actual_driver_reads_and_cancels_its_owned_tree_under_one_budget",
+          "app_server::tests::catalog_list_component_cost",
+          "app_server::tests::catalog_list_component_stages",
+          "app_server::thread_goal_status_batch_requests::tests::accepted_turn_tool_goal_and_later_append_keep_the_original_observer"
+        ],
+        "windows": [
+          "app_server::integrations::connectivity::task_capability_scope_runtime::tests::ct85_owned::owned_dispatch",
+          "app_server::integrations::connectivity::task_capability_scope_runtime::tests::interrupt_rebind::owned_dispatch",
+          "app_server::integrations::core::remote_delegations::factory::tests::actual_existing_runtime_goal_uses_finite_original_source_slot_without_fixture_budget_installer",
+          "app_server::integrations::core::remote_delegations::factory::tests::actual_material_parse_failure_prevents_provider_and_settles_original_receiver_slot",
+          "app_server::integrations::core::remote_delegations::factory::tests::actual_normal_dispatch_native_receiver_original_budgets_and_artifact_reader_form_one_chain",
+          "app_server::integrations::core::remote_delegations::factory::tests::actual_ordinary_accepted_source_without_runtime_uses_explicit_outbound_budget_and_original_receiver",
+          "app_server::integrations::core::remote_delegations::factory::tests::actual_original_complete_material_reaches_native_receiver_store_and_paginated_reader_before_provider",
+          "app_server::integrations::core::remote_delegations::factory::tests::actual_other_accepted_engine_cancels_only_the_original_receiver_and_preserves_unknown_model_charge",
+          "app_server::integrations::core::remote_delegations::factory::tests::actual_product_goal_cancelled_receiver_retains_original_unknown_goal_tokens",
+          "app_server::integrations::core::remote_delegations::factory::tests::actual_product_goal_ordinary_source_holds_and_reconciles_only_original_native_budget",
+          "app_server::integrations::core::remote_delegations::tests::actual_installed_native_reader_composes_with_the_accepted_factory_and_existing_artifact_store",
+          "app_server::integrations::knowledge::office_assets::tests::actual_office_document_node_binds_adopted_source_and_rejects_revocation_before_publication",
+          "app_server::integrations::office::deferred_projection_tests::actual_default_search_execute_node_generation_projects_wrapper_and_keeps_history_and_prefix",
+          "app_server::integrations::office::deferred_projection_tests::canonical_reader_tests::actual_discovered_reader_pages_exact_native_source_and_rejects_invalid_or_unauthorized_refs",
+          "app_server::integrations::office::deferred_projection_tests::request_lifecycle_tests::actual_source_switch_new_material_first_repeat_real_compact_target_reopen_preserve_prefix_and_bounded_refs",
+          "app_server::integrations::office::installed_resources::tests::actual_native_resource_resolver_probes_electron_as_node_and_generates_real_file",
+          "app_server::integrations::office::installed_resources::tests::actual_native_resource_resolver_probes_plain_node_and_generates_real_file",
+          "app_server::integrations::office::native_assets::tests::actual_generated_docx_is_downloadable_by_existing_attachment_contract_with_canonical_source",
+          "app_server::integrations::office::native_host::tests::actual_personal_host_generates_and_reads_canonical_source_with_real_dataset_identity",
+          "app_server::integrations::office::node_generator::tests::actual_node_process_generates_three_formats_and_cancels_owned_process",
+          "app_server::integrations::office::node_generator::tests::closed_stdout_does_not_escape_timeout_or_cancellation",
+          "app_server::integrations::office::read_worker::process::tests::actual_driver_reads_and_cancels_its_owned_tree_under_one_budget",
+          "app_server::tests::catalog_list_component_cost",
+          "app_server::tests::catalog_list_component_stages",
+          "app_server::thread_goal_status_batch_requests::tests::accepted_turn_tool_goal_and_later_append_keep_the_original_observer",
+          "profile_binding::tests::actual_chromium_profiles_keep_cookie_identity_exclusive_reconcile_start_and_release_owned_tree"
+        ]
+      },
+      "prerequisites": {
+        "connectivity": "Explicit same-source standalone supervisor and owned local Node/SDK fixtures; no platform accounts",
+        "office": "Explicit prepared sealed Office components/Node/Electron/current native reader inputs; no live model",
+        "measurements": "Two original explicit isolated list measurements; no timing threshold",
+        "remote_delegations": "Explicit same-source immutable Native binary, sealed Office Reader resources and owned loopback ACP/HTTP; five additional Goal/material cases require their actual current Native and original State ledger. No paid model or external endpoint. Ignored listing is not a pass; latest B source-pinned evidence is separate from Root common-native validation.",
+        "browser_profiles": "Explicit installed Chromium and owned private profiles/loopback HTTP; selected actual gate must pass independently of this ignored inventory",
+        "automation_office_claim": "Explicit same-source owned supervisor, sealed Office Node launch and owned normal CLI private-owner program; RUST_MIN_STACK=16777216. libtest drives genuine Core/Workflow/native P-ASSET/full-byte export/explicit ACK with dropped response and original claim readback. Controlled Provider3/0paid; no platform or installed-product claim.",
+        "additional_current_native_owners": "Six previously unlisted Linux native cases: existing channel lifecycle/private input, actual Linux UID Office/knowledge policy and original receiver Office/own discovery. Explicit same-source native/Node/private UID/sealed Office prerequisites remain; this inventory is not a test pass. Other platform lists await their own actual binaries.",
+        "automation_known_restriction": "Explicit owned native Core/Main/SDK supervisor and controlled restricted protocol outcome. Existing Core result remains readable; delivery fails independently, no automatic resend. Ignored listing is not a pass.",
+        "current_owned_20261027": {
+          "app_server::tests::snapshot_policy_unreadable_file_cannot_be_reported_as_success": "Requires actual unprivileged Unix permission denial. Default Root inventory remains ignored; separate registered native-snapshot-permissions owned UID65534 actual1PASS with all cleanup completed (20261027-191657.278Z). Listing/skipping alone is never a pass."
+        },
+        "current_owned_20261028": {
+          "app_server::integrations::office::deferred_projection_tests::request_lifecycle_tests::actual_source_switch_new_material_first_repeat_real_compact_target_reopen_preserve_prefix_and_bounded_refs": "Explicit original Office Node and owned local Python MCP, real compaction/new State/SessionLease; controlled Provider0paid. Root actual1PASS6.16s evidence root-twd03-real-source-material-compact-reopen-signoff-20261028.json. Ignored inventory is not a pass."
+        },
+        "goal_metadata_observation": "Isolated owned profile and workspace, with a controlled in-process Provider; an ignored listing is not a pass.",
+        "previously_unlisted_linux_channel_cases": "Existing Linux cases require the original owned Main/SDK/Core supervisor and controlled resources; inventory alone is not a pass.",
+        "existing_isolated_profile_hook_helper": "Existing committed cfg(unix) owned Hook subprocess helper, observed in the actual Linux test binary; requires its outer fixture, exact Hook PID and private profile. No new ignored test source and not counted as a pass. Other platforms are not rebaselined without their actual binaries.",
+        "ct85_owned_dispatch": "Internal owned subprocess helper; run through its named outer CT-85 tests with a private profile. Listing or skipping this helper is not a test pass.",
+        "existing_unlisted_channel_cases_20261105": {},
+        "interrupt_rebind_owned_dispatch": "Internal owned subprocess helper; run only through the three named outer interruption regressions with a private profile. Listing or skipping this helper is not a test pass."
+      }
+    },
+    "cli-app-server-stdio": {
+      "cases": {
+        "linux": [
+          "browser_profile_catalog::actual_browser_parent_sigkill_recovers_only_original_confirmed_cleanup_receipt",
+          "bundled_searxng_starts_through_the_actual_owned_cli_and_obeys_activation",
+          "goal_append_probe::real_goal_followup_reports_actual_source_receipt_after_assistant_append",
+          "integrations_office::fixed_knowledge_material::integration_office_stdio_fixed_publication_material_chain_and_authorization_windows",
+          "integrations_office::integration_office_stdio_unavailable_conditions_keep_ordinary_turns_working",
+          "integrations_office::integration_office_stdio_verified_parent_generates_docx_and_canonical_source",
+          "integrations_office_material::integration_office_original_material_generation_ack_and_cold_reopen_form_one_chain",
+          "integrations_office_material::integration_office_public_material_upload_survives_disconnect_and_native_read",
+          "integrations_task_workspace_sources::session_with_previous_task_capability_scope_binding_failure_can_continue_after_upgrade",
+          "thread_goal_status_batch::goal_batch_real_stdio_negotiation_and_per_thread_results",
+          "work_scope_closed::unverified_work_scope_stays_closed_without_affecting_ordinary_session"
+        ],
+        "macos": [],
+        "windows": [
+          "thread_goal_status_batch::goal_batch_real_stdio_negotiation_and_per_thread_results"
+        ]
+      },
+      "prerequisites": {
+        "searxng": "Existing prepared bundled service resources and explicit owned CLI gate",
+        "office": "Explicit same-source sealed Office standalone-Node observation; original public protocol fixture",
+        "browser_profiles": "Explicit installed Chromium and private D-Bus; actual parent SIGKILL, original cleanup receipt and no replay",
+        "goal_observation": "Isolated owned profile/workspace and a controlled same-source native CLI; Windows positive-path testing requires an explicitly labeled capability-enabled test build. Ignored listing is not a pass.",
+        "task_capability_scope_upgrade": "Explicit owned pre-fix native CLI binary and isolated profile to verify the original recovery path.",
+        "work_scope": "Linux isolated network namespace with loopback, a private profile and masked personal configuration; explicit --ignored execution. This only checks the unadvertised path, not cross-account Work access."
+      }
+    }
+  },
+  "verificationBoundary": "Linux names were enumerated from actual current test binaries. macOS/Windows lists include the shared Office lifecycle, QR terminal-peer, and Goal observation tests according to their cfg scopes and remain pending actual platform test-binary enumeration; no ignored listing is a pass or substitute for native suites."
+}

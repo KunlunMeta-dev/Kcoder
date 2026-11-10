@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Activity, Bell, Check, CircleDot, Loader2, type LucideIcon } from 'lucide-react'
+import { Loader2 } from 'lucide-react'
 import { useTranslation } from '@/hooks/useTranslation'
 import {
   SettingsGroup,
@@ -9,9 +9,13 @@ import {
   SettingsSwitch,
 } from './settings-ui'
 import { applyLanguagePreference, languagePreferenceOptions } from '@/i18n/languagePreference'
-import { ExternalContentImportDialog } from './ExternalContentImportDialog'
+import { MigrationDialog } from './MigrationDialog'
+import { isKCoderGatewayPage } from '@/kcoder/gatewayRpc'
 import { ClientAvatarSettings } from '@/features/appearance/ClientAvatar'
-import { isNativeTauriHost } from '@/lib/runtime-environment'
+import {
+  setInlineWidgetsEnabled,
+  useInlineWidgetsEnabled,
+} from '@/features/workbench/studioWorkMode'
 import { desktopHost } from '@/kcoder/desktopHost'
 import {
   setProcessingWindowDefault,
@@ -24,7 +28,7 @@ import {
   type AppLanguagePreference,
   type AppPreferences,
   type AppPreferencesPatch,
-} from '@/tauri/appPreferences'
+} from '@/host/appPreferences'
 
 type BooleanPreferenceKey = keyof AppPreferencesPatch
 
@@ -38,18 +42,12 @@ interface SwitchRowProps {
 const GENERAL_ROW_CLASS_NAME = 'py-4'
 const GENERAL_ROW_LABEL_CLASS_NAME = 'font-normal'
 
-interface TrayDisplayOption {
-  preferenceKey: BooleanPreferenceKey
-  testId: string
-  label: string
-  description: string
-  icon: LucideIcon
-}
-
 export function GeneralSettingsPage() {
   const { t } = useTranslation('common')
-  const nativeRuntime = isNativeTauriHost()
+  const { t: migrationText } = useTranslation('migration')
+  const gatewayRuntime = isKCoderGatewayPage()
   const processingWindowEnabled = useProcessingWindowDefault()
+  const inlineWidgetsEnabled = useInlineWidgetsEnabled()
   const [preferences, setPreferences] = useState<AppPreferences>(defaultAppPreferences)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -122,23 +120,6 @@ export function GeneralSettingsPage() {
     />
   )
 
-  const trayDisplayOptions: TrayDisplayOption[] = [
-    {
-      preferenceKey: 'trayUnreadEnabled',
-      testId: 'general-tray-unread-toggle',
-      label: t('workbench.general_settings_tray_unread'),
-      description: t('workbench.general_settings_tray_unread_description'),
-      icon: CircleDot,
-    },
-    {
-      preferenceKey: 'trayRunningEnabled',
-      testId: 'general-tray-running-toggle',
-      label: t('workbench.general_settings_tray_running'),
-      description: t('workbench.general_settings_tray_running_description'),
-      icon: Activity,
-    },
-  ]
-
   const handleLanguageChange = async (language: AppLanguagePreference) => {
     if (language === preferences.language) {
       return
@@ -206,26 +187,27 @@ export function GeneralSettingsPage() {
               </div>
             }
           />
-          {nativeRuntime &&
-            renderSwitchRow({
-              preferenceKey: 'showMainWindowOnLaunch',
-              testId: 'general-show-main-window-on-launch-toggle',
-              label: t('workbench.general_settings_show_main_window_on_launch'),
-              description: t('workbench.general_settings_show_main_window_on_launch_description'),
-            })}
-          {nativeRuntime &&
-            renderSwitchRow({
-              preferenceKey: 'systemDragEnabled',
-              testId: 'general-system-drag-toggle',
-              label: t('workbench.general_settings_system_drag'),
-              description: t('workbench.general_settings_system_drag_description'),
-            })}
+
           {renderSwitchRow({
             preferenceKey: 'experimentalFeaturesEnabled',
             testId: 'general-experimental-features-toggle',
             label: t('workbench.general_settings_experimental_features'),
             description: t('workbench.general_settings_experimental_features_description'),
           })}
+          <SettingsRow
+            label={t('workbench.work_mode.inline_widgets')}
+            description={t('workbench.work_mode.inline_widgets_help')}
+            className={GENERAL_ROW_CLASS_NAME}
+            labelClassName={GENERAL_ROW_LABEL_CLASS_NAME}
+            control={
+              <SettingsSwitch
+                data-testid="general-inline-widgets-toggle"
+                aria-label={t('workbench.work_mode.inline_widgets')}
+                checked={inlineWidgetsEnabled}
+                onCheckedChange={setInlineWidgetsEnabled}
+              />
+            }
+          />
           <SettingsRow
             label={t('workbench.general_settings_processing_window')}
             description={t('workbench.general_settings_processing_window_description')}
@@ -248,10 +230,28 @@ export function GeneralSettingsPage() {
               />
             }
           />
-          {nativeRuntime && (
+          {Boolean(desktopHost()) &&
+            renderSwitchRow({
+              preferenceKey: 'closeToTrayEnabled',
+              testId: 'general-close-to-tray-toggle',
+              label: t('workbench.general_settings_close_to_tray'),
+              description: preferences.closeToTrayEnabled
+                ? t('workbench.general_settings_background_description')
+                : t('workbench.general_settings_background_disabled_description'),
+            })}
+
+          {gatewayRuntime && (
             <SettingsRow
-              label={t('workbench.external_import_row_title')}
-              description={t('workbench.external_import_row_description')}
+              label={
+                gatewayRuntime
+                  ? migrationText('row_title')
+                  : t('workbench.external_import_row_title')
+              }
+              description={
+                gatewayRuntime
+                  ? migrationText('row_description')
+                  : t('workbench.external_import_row_description')
+              }
               className={GENERAL_ROW_CLASS_NAME}
               labelClassName={GENERAL_ROW_LABEL_CLASS_NAME}
               control={
@@ -261,90 +261,10 @@ export function GeneralSettingsPage() {
                   onClick={() => setShowImportDialog(true)}
                   className="h-8 rounded-md bg-surface px-3 text-sm font-medium text-text-primary hover:bg-muted"
                 >
-                  {t('workbench.external_import_action')}
+                  {gatewayRuntime
+                    ? migrationText('row_action')
+                    : t('workbench.external_import_action')}
                 </button>
-              }
-            />
-          )}
-          {(nativeRuntime || Boolean(desktopHost())) &&
-            renderSwitchRow({
-              preferenceKey: 'closeToTrayEnabled',
-              testId: 'general-close-to-tray-toggle',
-              label: t('workbench.general_settings_close_to_tray'),
-              description: preferences.closeToTrayEnabled
-                ? t('workbench.general_settings_background_description')
-                : t('workbench.general_settings_background_disabled_description'),
-            })}
-          {nativeRuntime &&
-            renderSwitchRow({
-              preferenceKey: 'preventSleepWhileTasksRunning',
-              testId: 'general-prevent-sleep-while-tasks-running-toggle',
-              label: t('workbench.general_settings_prevent_sleep_while_tasks_running'),
-              description: t(
-                'workbench.general_settings_prevent_sleep_while_tasks_running_description'
-              ),
-            })}
-          {nativeRuntime &&
-            renderSwitchRow({
-              preferenceKey: 'taskCompletionNotificationsEnabled',
-              testId: 'general-task-completion-notifications-toggle',
-              label: t('workbench.general_settings_task_completion_notifications'),
-              description: t(
-                'workbench.general_settings_task_completion_notifications_description'
-              ),
-            })}
-          {nativeRuntime && (
-            <SettingsRow
-              label={
-                <span className="flex items-center gap-2">
-                  <Bell className="h-4 w-4 text-text-secondary" />
-                  {t('workbench.general_settings_tray_display_content')}
-                </span>
-              }
-              description={t('workbench.general_settings_tray_display_content_description')}
-              className={GENERAL_ROW_CLASS_NAME}
-              labelClassName={GENERAL_ROW_LABEL_CLASS_NAME}
-              control={
-                <div className="grid w-[280px] max-w-full shrink-0 grid-cols-2 gap-2">
-                  {trayDisplayOptions.map(option => {
-                    const Icon = option.icon
-                    const selected = Boolean(preferences[option.preferenceKey])
-                    return (
-                      <button
-                        key={option.preferenceKey}
-                        data-testid={option.testId}
-                        type="button"
-                        aria-pressed={selected}
-                        title={option.description}
-                        disabled={loading || saving}
-                        onClick={() => void handlePreferenceChange(option.preferenceKey, !selected)}
-                        className={`group flex h-9 items-center justify-between gap-2 rounded-md border px-2.5 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${
-                          selected
-                            ? 'border-text-primary/50 bg-muted text-text-primary'
-                            : 'border-border bg-background text-text-secondary hover:border-text-muted/40 hover:bg-muted/40 hover:text-text-primary'
-                        }`}
-                      >
-                        <span className="flex min-w-0 items-center gap-1.5">
-                          <Icon
-                            className={`h-4 w-4 shrink-0 ${
-                              selected ? 'text-text-primary' : 'text-text-secondary'
-                            }`}
-                          />
-                          <span className="truncate">{option.label}</span>
-                        </span>
-                        <span
-                          className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border transition ${
-                            selected
-                              ? 'border-text-primary bg-text-primary text-background'
-                              : 'border-border bg-surface group-hover:border-text-muted/40'
-                          }`}
-                        >
-                          {selected && <Check className="h-3 w-3" />}
-                        </span>
-                      </button>
-                    )
-                  })}
-                </div>
               }
             />
           )}
@@ -363,8 +283,8 @@ export function GeneralSettingsPage() {
           </span>
         </div>
       )}
-      {nativeRuntime && showImportDialog && (
-        <ExternalContentImportDialog onClose={() => setShowImportDialog(false)} />
+      {gatewayRuntime && showImportDialog && (
+        <MigrationDialog onClose={() => setShowImportDialog(false)} />
       )}
     </SettingsPage>
   )

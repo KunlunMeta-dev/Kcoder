@@ -13,6 +13,21 @@ service_dir="$repo_dir/scripts/launch/services/systemd"
 client_nginx_config="$service_dir/kcoder-studio-client.nginx.conf"
 mobile_nginx_config="$service_dir/kcoder-studio-mobile-web.nginx.conf"
 
+# The selected checkout owns the development profile, regardless of the caller cwd.
+(
+  unset KCODER_HOME KCODER_DEV_HOME KCODER_CONFIG_DIR
+  source "$repo_dir/scripts/install/lib/profile.sh"
+  cd /
+  kcoder_launch_init "$repo_dir/scripts/launch" dev
+  [[ "$KCODER_HOME" == "$repo_dir/target/home" ]]
+  unset KCODER_HOME
+  kcoder_launch_init "$repo_dir/scripts/launch" release
+  [[ "$KCODER_HOME" == "$HOME/.config/kcoder" ]]
+  export KCODER_HOME="$repo_dir/target/explicit-profile"
+  kcoder_launch_init "$repo_dir/scripts/launch" dev
+  [[ "$KCODER_HOME" == "$repo_dir/target/explicit-profile" ]]
+)
+
 bash -n "$startup" "$dev_entrypoint" "$release_entrypoint" "$desktop_entrypoint" "$client_installer"
 different_user="kcoder-contract-user"
 if [[ "$(id -un)" == "$different_user" ]]; then
@@ -34,7 +49,9 @@ grep -Fq 'profile="${KCODER_STUDIO_PROFILE:-dev}"' "$startup"
 grep -Fq 'user_home="${KCODER_STUDIO_SERVICE_HOME:-${HOME:?HOME must be set}}"' "$startup"
 grep -Fq 'binary_name=kcoder-dev' "$startup"
 grep -Fq 'kcoder_prepare_binary "$binary_policy"' "$startup"
-grep -Fq 'install -m 0755 "$source_binary" "$user_bin"' "$startup"
+grep -Fq 'install -m 0755 "$source_binary" "$binary_stage"' "$startup"
+grep -Fq 'mv -f -- "$binary_stage" "$user_bin"' "$startup"
+grep -Fq '"$source_binary" config validate' "$startup"
 grep -Fq 'export KCODER_HOME="$profile_home"' "$startup"
 grep -Fq 'kcoder_sync_development_config' "$startup"
 grep -Fq 'config migrate' "$startup"
@@ -49,8 +66,8 @@ grep -Fq 'kcoder-studio-electron.sh' "$release_entrypoint"
 grep -Fq 'cli-release.sh' "$release_entrypoint"
 grep -Fq 'install_services="${KCODER_STUDIO_INSTALL_SERVICES:-true}"' "$dev_entrypoint"
 grep -Fq 'install_services="${KCODER_STUDIO_INSTALL_SERVICES:-true}"' "$release_entrypoint"
-grep -Fq 'install_web_services()' "$dev_entrypoint"
-grep -Fq 'install_web_services()' "$release_entrypoint"
+grep -Fq -- '--install-services' "$dev_entrypoint"
+grep -Fq -- '--install-services' "$release_entrypoint"
 grep -Fq -- '--direct' "$dev_entrypoint"
 grep -Fq -- '--direct' "$release_entrypoint"
 grep -Fq -- '--profile dev' "$dev_entrypoint" || grep -Fq -- '--dev' "$dev_entrypoint"
@@ -90,26 +107,17 @@ for unit in \
   grep -Fq '@KCODER_STUDIO_SERVICE_GROUP@' "$service_dir/$unit"
   grep -Fq '@KCODER_STUDIO_SERVICE_HOME@' "$service_dir/$unit"
   grep -Fq '@KCODER_STUDIO_SERVICE_PATH@' "$service_dir/$unit"
-  grep -Fq "$unit" "$dev_entrypoint"
-  grep -Fq "$unit" "$release_entrypoint"
+  grep -Fq "$unit" "$startup"
 done
-grep -Fq '@KCODER_STUDIO_REPO_DIR@|$repo_dir|g' "$dev_entrypoint"
-grep -Fq '@KCODER_STUDIO_REPO_DIR@|$repo_dir|g' "$release_entrypoint"
+grep -Fq '@KCODER_STUDIO_REPO_DIR@|$repo_dir|g' "$startup"
 grep -Fq '@KCODER_STUDIO_MOBILE_CI_ENV@' "$service_dir/kcoder-studio-mobile-bundler.service"
-grep -Fq '@KCODER_STUDIO_MOBILE_CI_ENV@|$mobile_ci_env|g' "$dev_entrypoint"
-grep -Fq '@KCODER_STUDIO_MOBILE_CI_ENV@|$mobile_ci_env|g' "$release_entrypoint"
-grep -Fq '@KCODER_STUDIO_SERVICE_USER@|$service_user|g' "$dev_entrypoint"
-grep -Fq '@KCODER_STUDIO_SERVICE_USER@|$service_user|g' "$release_entrypoint"
-grep -Fq '@KCODER_STUDIO_SERVICE_GROUP@|$service_group|g' "$dev_entrypoint"
-grep -Fq '@KCODER_STUDIO_SERVICE_GROUP@|$service_group|g' "$release_entrypoint"
-grep -Fq '@KCODER_STUDIO_SERVICE_HOME@|$service_home|g' "$dev_entrypoint"
-grep -Fq '@KCODER_STUDIO_SERVICE_HOME@|$service_home|g' "$release_entrypoint"
-grep -Fq '@KCODER_STUDIO_SERVICE_PATH@|$service_path|g' "$dev_entrypoint"
-grep -Fq '@KCODER_STUDIO_SERVICE_PATH@|$service_path|g' "$release_entrypoint"
-grep -Fq '@KCODER_STUDIO_NODE_BIN@|$node_bin|g' "$dev_entrypoint"
-grep -Fq '@KCODER_STUDIO_NODE_BIN@|$node_bin|g' "$release_entrypoint"
-grep -Fq '@KCODER_STUDIO_NPM_BIN@|$npm_bin|g' "$dev_entrypoint"
-grep -Fq '@KCODER_STUDIO_NPM_BIN@|$npm_bin|g' "$release_entrypoint"
+grep -Fq '@KCODER_STUDIO_MOBILE_CI_ENV@|$mobile_ci_env|g' "$startup"
+grep -Fq '@KCODER_STUDIO_SERVICE_USER@|$service_user|g' "$startup"
+grep -Fq '@KCODER_STUDIO_SERVICE_GROUP@|$service_group|g' "$startup"
+grep -Fq '@KCODER_STUDIO_SERVICE_HOME@|$user_home|g' "$startup"
+grep -Fq '@KCODER_STUDIO_SERVICE_PATH@|$service_path|g' "$startup"
+grep -Fq '@KCODER_STUDIO_NODE_BIN@|$node_bin|g' "$startup"
+grep -Fq '@KCODER_STUDIO_NPM_BIN@|$npm_bin|g' "$startup"
 grep -Fq '@KCODER_STUDIO_NODE_BIN@' "$service_dir/kcoder-studio-web.service"
 grep -Fq '@KCODER_STUDIO_NODE_BIN@' "$service_dir/kcoder-studio-mobile-bundler.service"
 grep -Fq '@KCODER_STUDIO_NPM_BIN@' "$service_dir/kcoder-studio-mobile-bundler.service"
@@ -132,8 +140,7 @@ if rg -n 'listen 0\.0\.0\.0:' "$service_dir"; then
   echo "Studio nginx must not listen on public wildcard addresses." >&2
   exit 1
 fi
-grep -Fq 'daemon-reload' "$dev_entrypoint"
-grep -Fq 'daemon-reload' "$release_entrypoint"
+grep -Fq 'daemon-reload' "$startup"
 grep -Fq 'ln -sfn' "$client_installer"
 
 # Deployment uses the Gateway artifact; development retains its 4175 proxy.
@@ -143,3 +150,4 @@ grep -Fq 'if [[ "$profile" == dev ]]; then' "$startup"
 grep -Fq 'mobile_url="http://127.0.0.1:$gateway_port/mobile/"' "$startup"
 grep -Fq 'mobile_url=http://127.0.0.1:4175' "$startup"
 echo "studio startup contract: ok"
+bash "$repo_dir/scripts/launch/tests/kcoder-studio-web-transaction.sh"

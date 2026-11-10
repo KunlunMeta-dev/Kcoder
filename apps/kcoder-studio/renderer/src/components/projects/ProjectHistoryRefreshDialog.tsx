@@ -1,3 +1,4 @@
+import { SettingsSelect } from '@/components/settings/SettingsSelect'
 import { Checkbox } from '@/components/ui/checkbox'
 import { useEffect, useRef, useState } from 'react'
 import { RuntimeTargetConfirmDialog } from '@/components/settings/RuntimeTargetConfirmDialog'
@@ -134,7 +135,7 @@ export function ProjectHistoryRefreshDialog({
     >
       <label className="block text-sm text-text-secondary">
         {t('history_refresh.target')}
-        <select
+        <SettingsSelect
           data-testid="history-refresh-target"
           className="mt-2 block min-h-11 w-full rounded-lg border border-border bg-background px-3 text-base text-text-primary focus-visible:outline-blue-500"
           disabled={pending || paused || complete}
@@ -158,7 +159,7 @@ export function ProjectHistoryRefreshDialog({
               {value.deviceName || value.deviceId} · {value.workspacePath}
             </option>
           ))}
-        </select>
+        </SettingsSelect>
       </label>
       <label className="flex min-h-11 items-start gap-2 text-sm text-text-secondary">
         <Checkbox

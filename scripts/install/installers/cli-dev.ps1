@@ -64,14 +64,14 @@ function Test-KCoderBinary([string] $Candidate) {
 }
 
 function Sync-DevelopmentConfig([string] $Binary) {
-    # Replace only the isolated dev settings layer; release settings and
-    # credentials live in the formal profile and are never touched here.
+    # Model configuration is owned by the development user profile.
     $settingsPath = Join-Path $devConfigDir 'settings.json'
-    Remove-Item -LiteralPath $settingsPath -Force -ErrorAction SilentlyContinue
-    & $Binary config migrate *> $null
-    if ($LASTEXITCODE -ne 0) { throw "Development config migrate exited $LASTEXITCODE" }
-    & $Binary config import --scope user --file (Join-Path $repoDir 'crates/kcoder_config/setting_dev_user.jsonc') *> $null
-    if ($LASTEXITCODE -ne 0) { throw "Development settings import exited $LASTEXITCODE" }
+    if (-not (Test-Path -LiteralPath $settingsPath)) {
+        & $Binary config migrate *> $null
+        if ($LASTEXITCODE -ne 0) { throw "Development config migrate exited $LASTEXITCODE" }
+        & $Binary config import --scope user --file (Join-Path $repoDir 'crates/kcoder_config/setting_dev_user.jsonc') *> $null
+        if ($LASTEXITCODE -ne 0) { throw "Development settings import exited $LASTEXITCODE" }
+    }
     $sourceDotenv = Join-Path $repoDir '.env'
     if ((Test-Path -LiteralPath $sourceDotenv -PathType Leaf) -and
         ((Get-Content -Raw -LiteralPath $sourceDotenv) -match '(?m)^\s*(export\s+)?KUNLUNMETA_BASE_API_KEY\s*=')) {

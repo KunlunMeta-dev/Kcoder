@@ -1,0 +1,38 @@
+[package]
+name = "kcoder_attachments"
+description = "Connection-owned attachment staging and bounded attachment I/O."
+publish = false
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+base64 = "0.22"
+fs2 = "0.4"
+kcoder_app_protocol = { path = "../../../kcoder_app_protocol" }
+kcoder_attachment_retention = { path = "../attachment_retention" }
+kcoder_fs = { path = "../../../kcoder_config/internal/fs" }
+kcoder_tool_input = { path = "../../../kcoder_tools/internal/tool_input" }
+kcoder_transcript = { path = "../transcript" }
+kcoder_types = { path = "../../../kcoder_types" }
+serde_json.workspace = true
+sha2.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+libc.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Security", "Win32_Storage_FileSystem"] }
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lib]
+path = "../../src/internal/attachments/lib.rs"

@@ -101,7 +101,7 @@ function GroupSection({ groupKey, items, onSelectItem }: GroupSectionProps) {
   const { t } = useTranslation('common')
   const meta = GROUP_META[groupKey]
   return (
-    <section className="overflow-hidden rounded-2xl border border-border bg-background shadow-sm">
+    <section className="studio-card overflow-hidden rounded-2xl border border-border bg-background shadow-sm">
       <header className="flex items-center gap-2 border-b border-border px-4 py-3">
         <span className={cn('h-2 w-2 rounded-full', meta.dotClass)} />
         <h2 className="text-sm font-semibold">{t(meta.labelKey, meta.fallback)}</h2>
@@ -139,7 +139,7 @@ function ListView({
   return (
     <div
       data-testid="my-work-list"
-      className="overflow-hidden rounded-2xl border border-border bg-background shadow-sm"
+      className="studio-card overflow-hidden rounded-2xl border border-border bg-background shadow-sm"
     >
       <div className="grid grid-cols-[minmax(0,1fr)_110px_120px_80px_90px] items-center gap-3 border-b border-border bg-muted/30 px-4 py-2 text-xs text-text-muted">
         <span>{t('todo.my_work_col_task', '任务')}</span>

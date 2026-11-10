@@ -1,0 +1,10 @@
+{
+  "activeTab": "files",
+  "activePanelId": "files-1",
+  "composerDraft": "Unsent historical draft",
+  "panels": [
+    { "id": "agent", "kind": "agent", "title": "Agent" },
+    { "id": "files-1", "kind": "files", "title": "notes.md",
+      "fileDraft": { "path": "/workspace/notes.md", "revision": "old-revision", "content": "Unsaved file changes", "updatedAt": 1 } }
+  ]
+}

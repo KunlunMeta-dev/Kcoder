@@ -1,11 +1,17 @@
 //! Persistent attempt lifecycle. Visible partial output is never fed back to the model.
-use super::*;
+use crate::recent_error;
+use anyhow::{Context, Result, ensure};
+use kcoder_app_events::now_millis;
+use kcoder_cli_storage::{private_files::hex_sha256, transcript_artifact_journal};
+use kcoder_engine::{EngineEvent, QueryEngine};
 use kcoder_state::turn_attempt_store::{
     TurnAttemptBeginOutcome, TurnAttemptCompletion, TurnAttemptRecord, TurnAttemptStore,
 };
 use kcoder_types::{TurnAttemptIdentity, TurnAttemptStatus, TurnRetainedInputV1};
+use serde_json::{Value, json};
+use std::collections::HashSet;
 
-pub(super) fn request_fingerprint(params: &kcoder_app_protocol::TurnStartParams) -> Result<String> {
+pub fn request_fingerprint(params: &kcoder_app_protocol::TurnStartParams) -> Result<String> {
     let mut canonical = params.clone();
     canonical.retry_model_configuration =
         Some(params.retry_model_configuration.unwrap_or_default());
@@ -25,10 +31,10 @@ pub(super) fn request_fingerprint(params: &kcoder_app_protocol::TurnStartParams)
     Ok(hex_sha256(&serde_json::to_vec(&canonical)?))
 }
 
-pub(super) fn store(engine: &QueryEngine, thread: &str) -> Result<TurnAttemptStore> {
+pub fn store(engine: &QueryEngine, thread: &str) -> Result<TurnAttemptStore> {
     TurnAttemptStore::open(&engine.session_storage_dir_for(thread), thread)
 }
-pub(super) fn begin(
+pub fn begin(
     engine: &QueryEngine,
     identity: &TurnAttemptIdentity,
     continuing: bool,
@@ -50,7 +56,7 @@ pub(super) fn begin(
 /// The trusted turn adapter supplies server-derived materialized artifact facts.
 /// Validate against the same request and compute its digest before any store I/O.
 /// Persist them atomically with Accepted; no second acceptance ledger is created.
-pub(super) fn begin_with_retained_input(
+pub fn begin_with_retained_input(
     engine: &QueryEngine,
     identity: &TurnAttemptIdentity,
     continuing: bool,
@@ -69,7 +75,9 @@ pub(super) fn begin_with_retained_input(
     );
     let fingerprint = request_fingerprint(params)?;
     begin_record(
-        engine,
+        &engine
+            .clone()
+            .with_client_presentation(params.client_presentation.clone()),
         identity,
         continuing,
         params.retry_operation_id.as_deref(),
@@ -104,6 +112,7 @@ fn begin_record(
         input_context_hash,
         request_fingerprint: Some(request_fingerprint),
         retained_input,
+        client_presentation: engine.client_presentation_snapshot(),
         status: TurnAttemptStatus::Accepted,
         completion: None,
     };
@@ -123,7 +132,7 @@ fn begin_record(
     );
     Ok(())
 }
-pub(super) fn latest(store: &TurnAttemptStore, turn: &str) -> Result<Option<TurnAttemptRecord>> {
+pub fn latest(store: &TurnAttemptStore, turn: &str) -> Result<Option<TurnAttemptRecord>> {
     let records = store
         .list()?
         .into_iter()
@@ -140,7 +149,7 @@ pub(super) fn latest(store: &TurnAttemptStore, turn: &str) -> Result<Option<Turn
     ensure!(tips.len() <= 1, "attempt history has conflicting branches");
     Ok(tips.first().map(|record| (*record).clone()))
 }
-pub(super) fn finish(
+pub fn finish(
     engine: &QueryEngine,
     identity: &TurnAttemptIdentity,
     status: &str,
@@ -180,10 +189,13 @@ pub(super) fn finish(
             )
         },
     )?;
+    if engine.observe_native_execution_terminal().is_err() {
+        tracing::warn!("native task budget terminal reconciliation remains pending");
+    }
     Ok(())
 }
 
-pub(super) fn records(engine: &QueryEngine, thread: &str) -> Result<Vec<TurnAttemptRecord>> {
+pub fn records(engine: &QueryEngine, thread: &str) -> Result<Vec<TurnAttemptRecord>> {
     let records =
         match TurnAttemptStore::open_existing(&engine.session_storage_dir_for(thread), thread)? {
             Some(store) => store.list()?,
@@ -192,201 +204,15 @@ pub(super) fn records(engine: &QueryEngine, thread: &str) -> Result<Vec<TurnAtte
     validate_records(records)
 }
 
-pub(super) fn validate_records(
-    mut records: Vec<TurnAttemptRecord>,
-) -> Result<Vec<TurnAttemptRecord>> {
-    let by_id = records
-        .iter()
-        .map(|record| (record.identity.attempt_id.as_str(), record))
-        .collect::<HashMap<_, _>>();
-    ensure!(by_id.len() == records.len(), "duplicate attempt identity");
-    let mut children = HashSet::new();
-    let mut depths = HashMap::new();
-    for record in &records {
-        record.validate()?;
-        let mut depth = 0usize;
-        let mut current = record;
-        while let Some(parent_id) = &current.parent_attempt_id {
-            let parent = by_id
-                .get(parent_id.as_str())
-                .context("attempt parent is missing")?;
-            ensure!(
-                parent.identity.turn_id == record.identity.turn_id,
-                "attempt parent belongs to another turn"
-            );
-            depth += 1;
-            ensure!(depth < records.len(), "attempt history cycle");
-            current = parent;
-        }
-        depths.insert(record.identity.attempt_id.clone(), depth);
-        if let Some(parent) = &record.parent_attempt_id {
-            ensure!(
-                children.insert(parent),
-                "attempt history has conflicting branches"
-            );
-        }
-    }
-    records.sort_by_key(|record| depths[&record.identity.attempt_id]);
-    Ok(records)
-}
-
-pub(super) struct AttemptRows {
-    unrepresented: std::collections::BTreeMap<(u64, String), Vec<ThreadMessage>>,
-    anchored: HashMap<String, Vec<ThreadMessage>>,
-    remaining: HashMap<String, Vec<ThreadMessage>>,
-}
-impl AttemptRows {
-    pub(super) fn new(
-        records: Vec<TurnAttemptRecord>,
-        represented: &HashSet<String>,
-        admitted_users: &HashSet<String>,
-        visible_uuids: &HashSet<String>,
-    ) -> Self {
-        let children = records
-            .iter()
-            .filter_map(|record| {
-                record
-                    .parent_attempt_id
-                    .as_ref()
-                    .map(|parent| (parent.clone(), record.identity.attempt_id.clone()))
-            })
-            .collect::<HashMap<_, _>>();
-        let mut result = Self {
-            unrepresented: std::collections::BTreeMap::new(),
-            anchored: HashMap::new(),
-            remaining: HashMap::new(),
-        };
-        for record in records {
-            let completion = match record.completion {
-                Some(completion) => completion,
-                None if !record.status.is_known() => TurnAttemptCompletion {
-                    status: record.status.clone(),
-                    finished_at_ms: record.accepted_at_ms,
-                    error: None,
-                    provider_failure: None,
-                    partial_output: String::new(),
-                    partial_output_truncated: false,
-                    committed_history_uuid: None,
-                },
-                None => continue,
-            };
-            if completion.status == TurnAttemptStatus::Completed {
-                continue;
-            }
-            let row = ThreadMessage {
-                id: format!(
-                    "attempt-outcome-{}",
-                    hex_sha256(
-                        format!(
-                            "{}:{}",
-                            record.identity.thread_id, record.identity.attempt_id
-                        )
-                        .as_bytes()
-                    )
-                ),
-                client_message_id: None,
-                turn_id: Some(record.identity.turn_id.clone()),
-                attempt_id: Some(record.identity.attempt_id.clone()),
-                continued_by_attempt_id: children.get(&record.identity.attempt_id).cloned(),
-                role: "assistant".into(),
-                content: completion.partial_output,
-                status: Some(match &completion.status {
-                    TurnAttemptStatus::Interrupted => "cancelled".into(),
-                    TurnAttemptStatus::Failed => "failed".into(),
-                    TurnAttemptStatus::Unknown(raw) => raw.clone(),
-                    _ => continue,
-                }),
-                error: completion.error,
-                error_type: completion
-                    .provider_failure
-                    .as_ref()
-                    .map(|failure| failure.category.as_str().into()),
-                provider_failure: completion.provider_failure,
-                blocks: Vec::new(),
-                timestamp_ms: completion.finished_at_ms,
-                content_truncated: completion.partial_output_truncated,
-                content_original_chars: None,
-            };
-            if !represented.contains(&record.identity.turn_id) {
-                // Never resurrect a real user turn removed by rewind/compaction, nor
-                // detach a failed attempt from a committed anchor that was removed.
-                if !admitted_users.contains(&record.identity.turn_id)
-                    && completion
-                        .committed_history_uuid
-                        .as_ref()
-                        .is_none_or(|uuid| visible_uuids.contains(uuid))
-                {
-                    let number = record
-                        .identity
-                        .turn_id
-                        .strip_prefix("turn-")
-                        .and_then(|id| id.parse::<u64>().ok())
-                        .unwrap_or(u64::MAX);
-                    result
-                        .unrepresented
-                        .entry((number, record.identity.turn_id))
-                        .or_default()
-                        .push(row);
-                }
-                continue;
-            }
-            if let Some(anchor) = completion.committed_history_uuid {
-                result.anchored.entry(anchor).or_default().push(row);
-            } else {
-                result
-                    .remaining
-                    .entry(record.identity.turn_id)
-                    .or_default()
-                    .push(row);
-            }
-        }
-        result
-    }
-    pub(super) fn before_turn(&mut self, next: Option<&str>) -> Option<Vec<ThreadMessage>> {
-        let (key, _) = self.unrepresented.first_key_value()?;
-        let should_emit = next.is_none_or(|turn| {
-            turn.strip_prefix("turn-")
-                .and_then(|id| id.parse::<u64>().ok())
-                .is_some_and(|number| key.0 < number)
-        });
-        should_emit.then(|| {
-            self.unrepresented
-                .pop_first()
-                .expect("checked first orphan exists")
-                .1
-        })
-    }
-    pub(super) fn after_entry(
-        &mut self,
-        uuid: Option<&str>,
-        turn: Option<&str>,
-    ) -> Vec<ThreadMessage> {
-        let Some(uuid) = uuid else {
-            return Vec::new();
-        };
-        let mut rows = Vec::new();
-        for row in self.anchored.remove(uuid).unwrap_or_default() {
-            if row.turn_id.as_deref() == turn {
-                rows.push(row);
-            } else if let Some(turn) = &row.turn_id {
-                self.remaining.entry(turn.clone()).or_default().push(row);
-            }
-        }
-        rows
-    }
-    pub(super) fn finish_turn(&mut self, turn: Option<&str>) -> Vec<ThreadMessage> {
-        turn.and_then(|turn| self.remaining.remove(turn))
-            .unwrap_or_default()
-    }
-}
+use kcoder_transcript_observation::validate_records;
 
 #[derive(Default)]
-pub(super) struct PartialOutput {
+pub struct PartialOutput {
     text: String,
     truncated: bool,
 }
 impl PartialOutput {
-    pub(super) fn observe(&mut self, event: &EngineEvent) {
+    pub fn observe(&mut self, event: &EngineEvent) {
         match event {
             EngineEvent::AssistantMessageStarted | EngineEvent::AssistantMessageDone => {
                 self.text.clear();
@@ -409,7 +235,7 @@ impl PartialOutput {
 
 /// A recovery identity names one failed attempt, not every failure in the logical turn.
 /// Replay is based on that attempt's terminal evidence, never a later turn outcome.
-pub(super) fn retry_admission(
+pub fn retry_admission(
     engine: &QueryEngine,
     thread: &str,
     turn: &str,
@@ -482,7 +308,7 @@ pub(super) fn retry_admission(
 }
 
 /// The parent must have an accepted ledger entry before its snapshot is trusted.
-pub(super) fn prepare_continuation_model(
+pub fn prepare_continuation_model(
     engine: &QueryEngine,
     params: &kcoder_app_protocol::TurnStartParams,
 ) -> Result<()> {
@@ -517,6 +343,19 @@ pub(super) fn prepare_continuation_model(
             parent.status == TurnAttemptStatus::Failed,
             "parent attempt is not failed"
         );
+        let projection_key = |value: Option<&kcoder_types::ClientPresentationV1>| {
+            (
+                value
+                    .and_then(|value| value.studio_work_mode)
+                    .unwrap_or_default(),
+                value.is_some_and(|value| value.inline_widgets),
+            )
+        };
+        ensure!(
+            projection_key(parent.client_presentation.as_ref())
+                == projection_key(params.client_presentation.as_ref()),
+            "Failed-turn continuation requires the original Studio mode and presentation tools. Start a new turn explicitly to change mode or client capabilities"
+        );
         if let Some(snapshot) = store.load_model_snapshot(&parent.identity)? {
             return engine.prepare_client_model_continuation(
                 &snapshot,
@@ -547,101 +386,39 @@ pub(super) fn prepare_continuation_model(
     engine.set_client_runtime_options(params.proxy_url.as_deref(), params.service_tier.as_deref())
 }
 
-pub(super) fn save_model_snapshot(
-    engine: &QueryEngine,
-    identity: &TurnAttemptIdentity,
-) -> Result<()> {
+pub fn save_model_snapshot(engine: &QueryEngine, identity: &TurnAttemptIdentity) -> Result<()> {
     if let Some(snapshot) = engine.freeze_client_model()? {
         store(engine, &identity.thread_id)?.save_model_snapshot(identity, &snapshot)?;
     }
     Ok(())
 }
 
+pub use kcoder_attachment_retention::acceptance::{
+    VerifiedAcceptedTurnProof, strict_client_message_turn, verified_retained_acceptance_in,
+};
+
+pub fn verified_retained_acceptance(
+    engine: &QueryEngine,
+    scope: &kcoder_attachment_retention::model::Scope,
+    identity: &TurnAttemptIdentity,
+    client_message_id: &str,
+    fingerprint: &str,
+    parent: &kcoder_config::PrivateDirectory,
+) -> Result<VerifiedAcceptedTurnProof> {
+    verified_retained_acceptance_in(
+        &engine.session_storage_dir_for(&identity.thread_id),
+        scope,
+        identity,
+        client_message_id,
+        fingerprint,
+        parent,
+    )
+}
+
 #[cfg(test)]
 mod projection_tests {
     use super::*;
-    #[test]
-    fn retained_acceptance_rejects_wrong_request_before_store_io() {
-        let temp = tempfile::tempdir().unwrap();
-        let engine = super::super::tests::catalog_list_test_engine(temp.path());
-        let identity = TurnAttemptIdentity {
-            thread_id: "thread".into(),
-            turn_id: "turn".into(),
-            attempt_id: "attempt".into(),
-        };
-        let params: kcoder_app_protocol::TurnStartParams = serde_json::from_value(json!({
-            "threadId":"thread", "clientMessageId":"original-message", "input":[]
-        }))
-        .unwrap();
-        let binding: TurnRetainedInputV1 = serde_json::from_value(json!({
-            "version":1,"scopeId":"a".repeat(64),"clientMessageId":"other-message",
-            "artifacts":[{
-                "retentionId":"r1.root.1.0123456789abcdef0123456789abcdef",
-                "expectedReceiptRevision":1,"rootNamespace":"root","epoch":1,
-                "ownerId":"owner","entryId":"entry","entryRevision":1,
-                "artifactName":"entry.bytes",
-                "artifactParentIdentity": kcoder_types::PrivateFileIdentityV1 {
-                    version:1,kind:kcoder_types::PrivateFileKind::Directory,
-                    native:kcoder_types::PrivateNativeFileIdentity::Linux { device:1,inode:2 }
-                },
-                "artifactIdentity": kcoder_types::PrivateFileIdentityV1 {
-                    version:1,kind:kcoder_types::PrivateFileKind::RegularFile,
-                    native:kcoder_types::PrivateNativeFileIdentity::Linux { device:1,inode:3 }
-                },
-                "artifactSha256":"b".repeat(64),"artifactSize":0
-            }]
-        }))
-        .unwrap();
-        let attempts = engine
-            .session_storage_dir_for("thread")
-            .join("turn-attempts");
-        assert!(!attempts.exists());
-        let error = begin_with_retained_input(
-            &engine,
-            &identity,
-            false,
-            "c".repeat(64),
-            &params,
-            binding.clone(),
-        )
-        .unwrap_err();
-        assert!(error.to_string().contains("client message differs"));
-        assert!(!attempts.exists());
-        let mut binding = binding;
-        binding.client_message_id = "original-message".into();
-        let mut foreign = params.clone();
-        foreign.thread_id = "foreign-thread".into();
-        let error = begin_with_retained_input(
-            &engine,
-            &identity,
-            false,
-            "c".repeat(64),
-            &foreign,
-            binding.clone(),
-        )
-        .unwrap_err();
-        assert!(error.to_string().contains("thread differs"));
-        assert!(!attempts.exists());
-        begin_with_retained_input(
-            &engine,
-            &identity,
-            false,
-            "c".repeat(64),
-            &params,
-            binding.clone(),
-        )
-        .unwrap();
-        let record = store(&engine, "thread")
-            .unwrap()
-            .load(&identity)
-            .unwrap()
-            .unwrap();
-        assert_eq!(
-            record.request_fingerprint,
-            Some(request_fingerprint(&params).unwrap())
-        );
-        assert_eq!(record.retained_input, Some(binding));
-    }
+    use kcoder_transcript::AttemptRows;
 
     #[test]
     fn retry_request_fingerprint_covers_configuration_without_storing_values() {
@@ -685,6 +462,7 @@ mod projection_tests {
             input_context_hash: "a".repeat(64),
             request_fingerprint: None,
             retained_input: None,
+            client_presentation: None,
             status: TurnAttemptStatus::Failed,
             completion: Some(TurnAttemptCompletion {
                 status: TurnAttemptStatus::Failed,

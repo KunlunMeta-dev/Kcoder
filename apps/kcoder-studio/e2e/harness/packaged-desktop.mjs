@@ -4,15 +4,22 @@ import { requireExecutable, waitFor } from './run-context.mjs';
 
 /** Start only this run's packaged Electron with its private app/profile data. */
 export async function startPackagedDesktop(context, {
-  root, label, servers, workspace, timeoutMs = 60000,
+  root, label, servers, workspace, timeoutMs = 60000, profileNamespace = '', profileScratch, entry = 'kcoder-studio', environment = {},
 }, { executable = requireExecutable, connect = endpoint => chromium.connectOverCDP(endpoint) } = {}) {
+  if (profileNamespace && !/^[A-Za-z0-9][A-Za-z0-9-]{0,63}$/.test(profileNamespace)) throw new Error('Invalid owned profile namespace');
+  const profilePath = name => {
+    const parts = profileNamespace ? [profileNamespace, name] : [name];
+    return profileScratch ? context.pathInScratch(profileScratch, ...parts) : context.pathInState(...parts);
+  };
   root = resolve(root);
-  const binary = await executable(join(root, process.platform === 'win32' ? 'kcoder-studio.exe' : 'kcoder-studio'), 'packaged Studio');
+  if (!['kcoder-studio', 'AppRun'].includes(entry) || entry === 'AppRun' && process.platform !== 'linux') throw new Error('Invalid owned packaged entry');
+  const binary = await executable(join(root, process.platform === 'win32' ? 'kcoder-studio.exe' : entry), 'packaged Studio');
   const env = context.isolatedEnvironment({
-    KCODER_CONFIG_DIR: context.pathInState('home'),
+    ...environment,
+    KCODER_CONFIG_DIR: profilePath('home'),
     KCODER_STUDIO_SERVERS_FILE: servers,
     KCODER_STUDIO_WORKSPACE: workspace,
-    KCODER_STUDIO_DESKTOP_USER_DATA_DIR: context.pathInState('desktop-profile'),
+    KCODER_STUDIO_DESKTOP_USER_DATA_DIR: profilePath('desktop-profile'),
   }, ['DISPLAY', 'XAUTHORITY']);
   const args = ['--remote-debugging-address=127.0.0.1', '--remote-debugging-port=0'];
   if (process.env.KCODER_E2E_CHROMIUM_NO_SANDBOX === '1') args.unshift('--no-sandbox');
@@ -36,7 +43,7 @@ export async function startPackagedDesktop(context, {
   // Navigation before the initial loadURL finishes can abort host startup.
   await page.getByTestId('chat-message-input').waitFor({ timeout: timeoutMs });
   let stopped = false;
-  return { page, root, async stop() {
+  return { page, browser, root, async stop() {
     if (stopped) return;
     stopped = true;
     try { await disconnect(); } finally { await context.stopOwned(label); }

@@ -5,7 +5,31 @@ use kcoder_mcp::McpServerConfig;
 use serde_json::Value;
 use std::path::Path;
 
-pub(super) fn install(path: &Path, config: McpServerConfig) -> Result<()> {
+pub fn set_enabled(path: &Path, name: &str, enabled: bool) -> Result<()> {
+    if name.is_empty() || name.len() > 512 || name.chars().any(char::is_control) {
+        bail!("Invalid MCP server name");
+    }
+    kcoder_config::update_settings_file(path, |document| {
+        let disabled = document
+            .as_object_mut()
+            .context("User settings must be an object")?
+            .entry("mcp_disabled_servers")
+            .or_insert_with(|| Value::Array(Vec::new()))
+            .as_array_mut()
+            .context("Disabled MCP servers must be an array")?;
+        if disabled.iter().any(|item| !item.is_string()) {
+            bail!("Disabled MCP server names must be strings");
+        }
+        disabled.retain(|item| item.as_str() != Some(name));
+        if !enabled {
+            disabled.push(Value::String(name.into()));
+        }
+        Ok(())
+    })?;
+    Ok(())
+}
+
+pub fn install(path: &Path, config: McpServerConfig) -> Result<()> {
     validate(&config)?;
     kcoder_config::update_settings_file(path, |document| {
         let object = document
@@ -28,7 +52,7 @@ pub(super) fn install(path: &Path, config: McpServerConfig) -> Result<()> {
     Ok(())
 }
 
-pub(super) fn remove(path: &Path, name: &str) -> Result<()> {
+pub fn remove(path: &Path, name: &str) -> Result<()> {
     kcoder_config::update_settings_file(path, |document| {
         let servers = document
             .get_mut("mcp_servers")
@@ -45,6 +69,7 @@ pub(super) fn remove(path: &Path, name: &str) -> Result<()> {
 }
 
 fn validate(config: &McpServerConfig) -> Result<()> {
+    kcoder_mcp::server_policy::validate(config)?;
     if config.name.trim().is_empty()
         || config.name.len() > 128
         || config.name.chars().any(char::is_control)
@@ -52,8 +77,11 @@ fn validate(config: &McpServerConfig) -> Result<()> {
     {
         bail!("Invalid or reserved MCP server name");
     }
-    if config.transport != "http" && !config.headers.is_empty() {
-        bail!("Custom headers are supported only for Streamable HTTP MCP servers");
+    if config.transport != "http"
+        && (config.transport != "searxng" || config.url.is_empty())
+        && !config.headers.is_empty()
+    {
+        bail!("Custom headers require Streamable HTTP or an external SearXNG instance");
     }
     if config.transport != "stdio"
         && (!config.command.is_empty() || !config.args.is_empty() || !config.env.is_empty())
@@ -64,6 +92,11 @@ fn validate(config: &McpServerConfig) -> Result<()> {
         bail!("A server URL requires HTTP or SSE transport");
     }
     match config.transport.as_str() {
+        "searxng" => {
+            if !config.url.is_empty() {
+                kcoder_mcp::searxng::search_endpoint(&config.url)?;
+            }
+        }
         "stdio" if !config.command.trim().is_empty() && !config.command.contains('\0') => {}
         "http" | "sse" => {
             let url =
@@ -100,6 +133,59 @@ mod tests {
     use super::*;
     fn config(name: &str) -> McpServerConfig {
         serde_json::from_value(serde_json::json!({"name":name,"transport":"http","url":"https://mcp.example.test/mcp"})).unwrap()
+    }
+
+    #[test]
+    fn bundled_search_needs_no_external_url_and_rejects_ignored_launch_options() {
+        let mut config: McpServerConfig =
+            serde_json::from_value(serde_json::json!({"name":"searxng","transport":"searxng"}))
+                .unwrap();
+        assert!(validate(&config).is_ok());
+        config.command = "python".into();
+        assert!(validate(&config).is_err());
+        config.command.clear();
+        config.url = "https://example.test/search".into();
+        config
+            .headers
+            .insert("Authorization".into(), "Bearer fixture".into());
+        assert!(validate(&config).is_ok());
+        config.url.clear();
+        assert!(validate(&config).is_err());
+    }
+
+    #[test]
+    fn activation_is_idempotent_and_does_not_materialize_plugin_configuration_or_touch_credentials()
+    {
+        let root = tempfile::tempdir().unwrap();
+        let file = root.path().join("settings.jsonc");
+        std::fs::write(&file, "{\n// keep provider choices\n\"providers\":{},\"mcp_servers\":[{\"name\":\"custom\",\"command\":\"server\"}]}\n").unwrap();
+        let credentials = root.path().join("credentials.json");
+        std::fs::write(&credentials, "untouched-private-store").unwrap();
+        set_enabled(&file, "plugin.example.search", false).unwrap();
+        set_enabled(&file, "plugin.example.search", false).unwrap();
+        set_enabled(&file, "custom", false).unwrap();
+        let document = kcoder_config::read_settings_file(&file).unwrap();
+        assert_eq!(
+            document["mcp_disabled_servers"],
+            serde_json::json!(["plugin.example.search", "custom"])
+        );
+        assert_eq!(document["mcp_servers"].as_array().unwrap().len(), 1);
+        assert!(document["providers"].as_object().unwrap().is_empty());
+        set_enabled(&file, "plugin.example.search", true).unwrap();
+        let document = kcoder_config::read_settings_file(&file).unwrap();
+        assert_eq!(
+            document["mcp_disabled_servers"],
+            serde_json::json!(["custom"])
+        );
+        assert_eq!(
+            std::fs::read_to_string(credentials).unwrap(),
+            "untouched-private-store"
+        );
+        assert!(
+            std::fs::read_to_string(file)
+                .unwrap()
+                .contains("// keep provider choices")
+        );
     }
 
     #[test]

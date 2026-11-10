@@ -1,257 +1,43 @@
-use super::{
-    LivecrawlMode, SearchResult, SearchType, WebSearchInput, filter_results, format_results,
-};
+use super::{SearchFailure, WebSearchInput, format_results, http::SearchHttp};
 use crate::ToolError;
-use futures::StreamExt;
-use reqwest::header::{ACCEPT, CONTENT_TYPE, HeaderValue, USER_AGENT};
+use kcoder_types::web_search::{WebSearchErrorKind, WebSearchPageV1};
+use kcoder_web::providers::exa::ENDPOINT;
 use serde_json::{Value, json};
 use std::time::Instant;
 
-pub(super) const ENDPOINT: &str = "https://mcp.exa.ai/mcp";
-const MAX_RESPONSE_BYTES: usize = 2 * 1024 * 1024;
-
-struct SearchSession<'a> {
-    client: &'a reqwest::Client,
-    endpoint: &'a str,
-    id: Option<HeaderValue>,
-}
-
-async fn close_session(client: &reqwest::Client, endpoint: &str, id: HeaderValue) {
-    let _ = client
-        .delete(endpoint)
-        .header("Mcp-Session-Id", id)
-        .header("MCP-Protocol-Version", "2025-03-26")
-        .header(USER_AGENT, "KCoder/0.1")
-        .timeout(std::time::Duration::from_secs(2))
-        .send()
-        .await;
-}
-
-impl SearchSession<'_> {
-    async fn close(&mut self) {
-        if let Some(id) = self.id.clone() {
-            close_session(self.client, self.endpoint, id).await;
-            self.id = None;
-        }
-    }
-}
-
-impl Drop for SearchSession<'_> {
-    fn drop(&mut self) {
-        // Engine cancellation and the overall timeout drop the search future.
-        // Retain cleanup ownership even when no caller remains to await it;
-        // DELETE is idempotent and bounded, and its private session header is
-        // never included in logs or tool output.
-        let Some(id) = self.id.take() else { return };
-        let Ok(runtime) = tokio::runtime::Handle::try_current() else {
-            return;
-        };
-        let client = self.client.clone();
-        let endpoint = self.endpoint.to_owned();
-        runtime.spawn(async move {
-            close_session(&client, &endpoint, id).await;
-        });
-    }
-}
-
-fn failure(message: impl Into<String>) -> ToolError {
-    ToolError::Execution(message.into())
-}
-
-fn result(message: Value, id: u64) -> Result<Option<Value>, ToolError> {
-    if message.get("id").and_then(Value::as_u64) != Some(id) {
-        return Ok(None);
-    }
-    if let Some(error) = message.get("error") {
-        return Err(failure(format!(
-            "Search service RPC failed (code {})",
-            error.get("code").unwrap_or(&Value::Null)
-        )));
-    }
-    message
-        .get("result")
-        .cloned()
-        .map(Some)
-        .ok_or_else(|| failure("Search service returned an invalid RPC response"))
-}
-
-async fn rpc(
+async fn search_page(
     client: &reqwest::Client,
+    input: &WebSearchInput,
     endpoint: &str,
-    session: &mut Option<HeaderValue>,
-    method: &str,
-    params: Value,
-    id: Option<u64>,
-) -> Result<Value, ToolError> {
-    let mut body = json!({"jsonrpc":"2.0","method":method,"params":params});
-    if let Some(id) = id {
-        body["id"] = json!(id);
-    }
-    let mut request = client
-        .post(endpoint)
-        .header(USER_AGENT, "KCoder/0.1")
-        .header(ACCEPT, "application/json, text/event-stream")
-        .header(CONTENT_TYPE, "application/json")
-        .header("MCP-Protocol-Version", "2025-03-26")
-        .json(&body);
-    if let Some(session) = session.as_ref() {
-        request = request.header("Mcp-Session-Id", session);
-    }
-    let response = request.send().await.map_err(|error| {
-        failure(format!(
-            "Cannot reach search service: {}",
-            error.without_url()
-        ))
-    })?;
-    if !response.status().is_success() {
-        return Err(failure(format!(
-            "Search service returned HTTP {}; search was not completed",
-            response.status().as_u16()
-        )));
-    }
-    if let Some(value) = response.headers().get("Mcp-Session-Id") {
-        *session = Some(value.clone());
-    }
-    let Some(id) = id else {
-        return Ok(Value::Null);
-    };
-    let sse = response
-        .headers()
-        .get(CONTENT_TYPE)
-        .and_then(|value| value.to_str().ok())
-        .is_some_and(|value| value.starts_with("text/event-stream"));
-    let mut stream = response.bytes_stream();
-    let mut bytes = Vec::new();
-    let mut received = 0usize;
-    let mut event_data = String::new();
-    while let Some(chunk) = stream.next().await {
-        let chunk = chunk.map_err(|error| {
-            failure(format!(
-                "Search response interrupted: {}",
-                error.without_url()
-            ))
-        })?;
-        received = received.saturating_add(chunk.len());
-        if received > MAX_RESPONSE_BYTES {
-            return Err(failure("Search response exceeds the 2 MiB limit"));
-        }
-        bytes.extend_from_slice(&chunk);
-        if sse {
-            while let Some(end) = bytes.iter().position(|byte| *byte == b'\n') {
-                let line = String::from_utf8(bytes.drain(..=end).collect())
-                    .map_err(|_| failure("Search service returned invalid UTF-8"))?;
-                let line = line.trim_end_matches(['\r', '\n']);
-                if line.is_empty() {
-                    if !event_data.is_empty() {
-                        let message: Value = serde_json::from_str(&event_data)
-                            .map_err(|_| failure("Search service returned invalid SSE JSON"))?;
-                        event_data.clear();
-                        if let Some(value) = result(message, id)? {
-                            return Ok(value);
-                        }
-                    }
-                } else if let Some(data) = line.strip_prefix("data:") {
-                    if !event_data.is_empty() {
-                        event_data.push('\n');
-                    }
-                    event_data.push_str(data.strip_prefix(' ').unwrap_or(data));
-                }
-            }
-        }
-    }
-    if sse {
-        if !event_data.is_empty() {
-            let message = serde_json::from_str(&event_data)
-                .map_err(|_| failure("Search service returned invalid SSE JSON"))?;
-            if let Some(value) = result(message, id)? {
-                return Ok(value);
-            }
-        }
-    } else {
-        let message = serde_json::from_slice(&bytes)
-            .map_err(|_| failure("Search service returned invalid JSON"))?;
-        if let Some(value) = result(message, id)? {
-            return Ok(value);
-        }
-    }
-    Err(failure("Search service closed without a matching response"))
+) -> Result<WebSearchPageV1, SearchFailure> {
+    kcoder_web::providers::exa::search_page(
+        &SearchHttp {
+            client,
+            ctx: None,
+            guard: None,
+        },
+        input,
+        endpoint,
+    )
+    .await
 }
 
-fn parse_results(text: &str) -> Vec<SearchResult> {
-    let mut results = Vec::new();
-    let mut current: Option<SearchResult> = None;
-    for line in text.lines() {
-        if let Some(title) = line.strip_prefix("Title: ") {
-            if let Some(value) = current.take() {
-                results.push(value);
-            }
-            current = Some(SearchResult {
-                title: title.to_owned(),
-                url: String::new(),
-                snippet: String::new(),
-            });
-        } else if let Some(value) = current.as_mut() {
-            if let Some(url) = line.strip_prefix("URL: ") {
-                value.url = url.trim().to_owned();
-            } else if !line.starts_with("Published:")
-                && !line.starts_with("Author:")
-                && line != "---"
-                && line != "Highlights:"
-                && value.snippet.chars().count() < 4000
-            {
-                value.snippet.push_str(line);
-                value.snippet.push('\n');
-            }
-        }
-    }
-    if let Some(value) = current {
-        results.push(value);
-    }
-    results.retain(|value| {
-        reqwest::Url::parse(&value.url)
-            .is_ok_and(|url| matches!(url.scheme(), "http" | "https") && url.host_str().is_some())
-    });
-    results
-}
-
+#[cfg(test)]
 pub(super) async fn search(
     client: &reqwest::Client,
     input: &WebSearchInput,
     endpoint: &str,
 ) -> Result<String, ToolError> {
     let started = Instant::now();
-    let mut session = SearchSession {
-        client,
-        endpoint,
-        id: None,
-    };
-    let outcome = async {
-    rpc(client, endpoint, &mut session.id, "initialize", json!({"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"kcoder","version":env!("CARGO_PKG_VERSION")}}), Some(1)).await?;
-    rpc(client, endpoint, &mut session.id, "notifications/initialized", json!({}), None).await?;
-    let tools = rpc(client, endpoint, &mut session.id, "tools/list", json!({}), Some(2)).await?;
-    let tool = tools.get("tools").and_then(Value::as_array).and_then(|tools| tools.iter().find(|tool| tool["name"] == "web_search_exa"))
-        .ok_or_else(|| failure("Search service does not expose web_search_exa"))?;
-    let properties = &tool["inputSchema"]["properties"];
-    let limit = input.num_results.unwrap_or(match input.search_type { Some(SearchType::Fast) => 5, Some(SearchType::Deep) => 16, _ => 8 }).min(20);
-    let mut arguments = json!({"query":input.query,"numResults":limit});
-    let mut objective = format!("Find documents directly answering this query: {}. Prefer original sources and specific relevant pages over generic homepages.", input.query);
-    if let Some(domains) = &input.allowed_domains { objective.push_str(&format!(" Only include domains: {}.", domains.join(", "))); }
-    if let Some(domains) = &input.blocked_domains { objective.push_str(&format!(" Exclude domains: {}.", domains.join(", "))); }
-    if matches!(input.livecrawl, Some(LivecrawlMode::Preferred)) { objective.push_str(" Prefer freshly retrieved content where available."); }
-    if properties.get("objective").is_some() { arguments["objective"] = json!(objective.chars().take(4096).collect::<String>()); }
-    if properties.get("type").is_some() { arguments["type"] = json!(match input.search_type { Some(SearchType::Fast) => "fast", Some(SearchType::Deep) => "deep", _ => "auto" }); }
-    if properties.get("livecrawl").is_some() { arguments["livecrawl"] = json!(if matches!(input.livecrawl, Some(LivecrawlMode::Preferred)) { "preferred" } else { "fallback" }); }
-    if properties.get("contextMaxCharacters").is_some() { arguments["contextMaxCharacters"] = json!(input.context_max_characters.unwrap_or(10_000)); }
-    let output = rpc(client, endpoint, &mut session.id, "tools/call", json!({"name":"web_search_exa","arguments":arguments}), Some(3)).await?;
-    if output.get("isError").and_then(Value::as_bool) == Some(true) { return Err(failure("Search service rejected the query or reached its usage limit")); }
-    let text = output.get("content").and_then(Value::as_array).map(|items| items.iter().filter(|item| item["type"] == "text").filter_map(|item| item["text"].as_str()).collect::<Vec<_>>().join("\n\n")).unwrap_or_default();
-    let results = parse_results(&text);
-    if results.is_empty() { return Err(failure("Search service returned no usable result links")); }
-    let selected = filter_results(results, input).into_iter().take(limit).collect::<Vec<_>>();
-    Ok(format_results(&selected, &input.query, started.elapsed().as_millis() as u64, input.context_max_characters.unwrap_or(10_000)))
-    }.await;
-    session.close().await;
-    outcome
+    let page = search_page(client, input, endpoint)
+        .await
+        .map_err(|error| ToolError::Execution(error.to_string()))?;
+    Ok(format_results(
+        &page.results,
+        &input.query,
+        started.elapsed().as_millis() as u64,
+        input.context_max_characters.unwrap_or(10_000),
+    ))
 }
 
 #[cfg(test)]
@@ -308,6 +94,89 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn transport_preserves_explicit_rate_limit_metadata_on_tool_errors() {
+        for advanced in [false, true] {
+            for (marker, expected) in [
+                (json!(true), WebSearchErrorKind::RateLimited),
+                (json!("true"), WebSearchErrorKind::ContractInvalid),
+            ] {
+                let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+                let endpoint = format!("http://{}/mcp", listener.local_addr().unwrap());
+                let name = if advanced {
+                    "web_search_advanced_exa"
+                } else {
+                    "web_search_exa"
+                };
+                let server = tokio::spawn(async move {
+                    for step in 0..5 {
+                        let (mut socket, header, body) = accept_fixture_request(&listener).await;
+                        let response = match step {
+                            0 => json!({"id":1,"result":{"protocolVersion":"2025-03-26"}}),
+                            1 => {
+                                assert_eq!(body["method"], "notifications/initialized");
+                                fixture_reply(&mut socket, 202, "").await;
+                                continue;
+                            }
+                            2 => {
+                                json!({"id":2,"result":{"tools":[{"name":name,"inputSchema":{"properties":{"query":{},"numResults":{},"userLocation":{}}}}]}})
+                            }
+                            3 => {
+                                assert_eq!(body["method"], "tools/call");
+                                assert_eq!(body["params"]["name"], name);
+                                json!({"id":3,"result":{"isError":true,"_meta":{"ai.exa/rateLimited":marker},"content":[{"type":"text","text":"Service limit"}]}})
+                            }
+                            _ => {
+                                assert!(header.starts_with("delete "));
+                                fixture_reply(&mut socket, 204, "").await;
+                                break;
+                            }
+                        };
+                        fixture_reply(&mut socket, 200, &response.to_string()).await;
+                    }
+                });
+                let client = reqwest::Client::builder().no_proxy().build().unwrap();
+                let mut request = json!({"query":"owned error metadata fixture"});
+                if advanced {
+                    request["region"] = json!("US");
+                }
+                let input = serde_json::from_value(request).unwrap();
+                let error = tokio::time::timeout(
+                    std::time::Duration::from_secs(5),
+                    search_page(&client, &input, &endpoint),
+                )
+                .await
+                .unwrap()
+                .unwrap_err();
+                assert_eq!(error.kind, expected);
+                assert!(error.request_sent);
+                tokio::time::timeout(std::time::Duration::from_secs(3), server)
+                    .await
+                    .unwrap()
+                    .unwrap();
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn failed_initialization_is_not_recorded_as_a_search_query() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let endpoint = format!("http://{}/mcp", listener.local_addr().unwrap());
+        let server = tokio::spawn(async move {
+            let (mut socket, _, body) = accept_fixture_request(&listener).await;
+            assert_eq!(body["method"], "initialize");
+            // No session was established, so the endpoint has no cleanup lease.
+            use tokio::io::AsyncWriteExt;
+            socket.write_all(b"HTTP/1.1 429 Too Many Requests\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").await.unwrap();
+        });
+        let client = reqwest::Client::builder().no_proxy().build().unwrap();
+        let input = serde_json::from_value(json!({"query":"fixture query"})).unwrap();
+        let error = search_page(&client, &input, &endpoint).await.unwrap_err();
+        assert_eq!(error.kind, WebSearchErrorKind::RateLimited);
+        assert!(!error.request_sent);
+        server.await.unwrap();
+    }
+
+    #[tokio::test]
     async fn cancellation_closes_the_acquired_search_session() {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();
@@ -349,6 +218,128 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn policy_revoked_during_handshake_never_sends_the_search_query() {
+        use std::sync::{
+            Arc,
+            atomic::{AtomicBool, Ordering},
+        };
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let endpoint = format!("http://{}/mcp", listener.local_addr().unwrap());
+        let allowed = Arc::new(AtomicBool::new(true));
+        let state = allowed.clone();
+        let server = tokio::spawn(async move {
+            for step in 0..4 {
+                let (mut socket, header, body) = accept_fixture_request(&listener).await;
+                assert!(!body.to_string().contains("query-not-for-dispatch"));
+                match step {
+                    0 => {
+                        fixture_reply(
+                            &mut socket,
+                            200,
+                            &json!({"id":1,"result":{"protocolVersion":"2025-03-26"}}).to_string(),
+                        )
+                        .await
+                    }
+                    1 => fixture_reply(&mut socket, 202, "").await,
+                    2 => {
+                        assert_eq!(body["method"], "tools/list");
+                        state.store(false, Ordering::SeqCst);
+                        fixture_reply(&mut socket,200,&json!({"id":2,"result":{"tools":[{"name":"web_search_exa","inputSchema":{"properties":{"query":{},"numResults":{}}}}]}}).to_string()).await;
+                    }
+                    _ => {
+                        assert!(header.starts_with("delete "));
+                        fixture_reply(&mut socket, 204, "").await;
+                    }
+                }
+            }
+        });
+        let guard = super::super::SearchDispatchGuard::new(move |_| {
+            if allowed.load(Ordering::SeqCst) {
+                Ok(())
+            } else {
+                Err(SearchFailure::new(
+                    WebSearchErrorKind::PolicyDenied,
+                    "fixture revocation",
+                    false,
+                ))
+            }
+        });
+        let request = serde_json::from_value(json!({"query":"query-not-for-dispatch"})).unwrap();
+        let client = reqwest::Client::builder().no_proxy().build().unwrap();
+        let error = kcoder_web::providers::exa::search_page(
+            &SearchHttp {
+                client: &client,
+                ctx: None,
+                guard: Some(&guard),
+            },
+            &request,
+            &endpoint,
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(error.kind, WebSearchErrorKind::PolicyDenied);
+        assert!(!error.request_sent);
+        tokio::time::timeout(std::time::Duration::from_secs(3), server)
+            .await
+            .unwrap()
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn advanced_region_and_dates_use_one_toolset_and_do_not_enable_extra_synthesis() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let endpoint = format!(
+            "http://{}/mcp?tools=web_search_advanced_exa",
+            listener.local_addr().unwrap()
+        );
+        let server = tokio::spawn(async move {
+            loop {
+                let (mut socket, header, body) = accept_fixture_request(&listener).await;
+                assert!(
+                    header
+                        .lines()
+                        .next()
+                        .unwrap()
+                        .contains("/mcp?tools=web_search_advanced_exa")
+                );
+                if header.starts_with("delete ") {
+                    fixture_reply(&mut socket, 204, "").await;
+                    break;
+                }
+                let result = match body["method"].as_str().unwrap() {
+                    "initialize" => json!({"id":1,"result":{"protocolVersion":"2025-03-26"}}),
+                    "notifications/initialized" => {
+                        fixture_reply(&mut socket, 202, "").await;
+                        continue;
+                    }
+                    "tools/list" => {
+                        json!({"id":2,"result":{"tools":[{"name":"web_search_advanced_exa","inputSchema":{"properties":{"query":{},"numResults":{},"type":{},"userLocation":{},"startPublishedDate":{},"endPublishedDate":{},"enableSummary":{},"enableHighlights":{}}}}]}})
+                    }
+                    "tools/call" => {
+                        assert_eq!(body["params"]["name"], "web_search_advanced_exa");
+                        let args = &body["params"]["arguments"];
+                        assert_eq!(args["type"], "auto");
+                        assert_eq!(args["userLocation"], "CN");
+                        assert_eq!(args["enableSummary"], false);
+                        assert!(args["startPublishedDate"].as_str().unwrap().len() == 10);
+                        assert!(args["endPublishedDate"].as_str().unwrap().len() == 10);
+                        assert!(args.get("additionalQueries").is_none());
+                        let text=json!({"results":[{"title":"Fixture","url":"https://example.com/current","publishedDate":"2026-10-30T12:00:00Z","highlights":["Observed excerpt"]}]}).to_string();
+                        json!({"id":3,"result":{"content":[{"type":"text","text":text}]}})
+                    }
+                    _ => panic!("unexpected RPC"),
+                };
+                fixture_reply(&mut socket, 200, &result.to_string()).await;
+            }
+        });
+        let input=serde_json::from_value(json!({"query":"fixture public query","region":"CN","time_range":"week","search_type":"deep"})).unwrap();
+        let client = reqwest::Client::builder().no_proxy().build().unwrap();
+        let page = search_page(&client, &input, &endpoint).await.unwrap();
+        assert_eq!(page.results[0].url, "https://example.com/current");
+        server.await.unwrap();
+    }
+
+    #[tokio::test]
     async fn query_round_trips_unicode_spaces_and_urls_and_oversize_is_an_error() {
         for (query, oversized) in [
             ("Python asyncio guide", false),
@@ -378,7 +369,7 @@ mod tests {
                         "tools/call" => {
                             assert_eq!(body["params"]["arguments"]["query"], expected);
                             if oversized {
-                                json!({"id":3,"result":{"padding":"x".repeat(MAX_RESPONSE_BYTES)}})
+                                json!({"id":3,"result":{"padding":"x".repeat(2 * 1024 * 1024)}})
                             } else {
                                 json!({"id":3,"result":{"content":[{"type":"text","text":"Title: Fixture matching request\nURL: https://example.com/%E4%B8%AD?q=a%2Bb&lang=zh\nHighlights:\nSource fixture"}]}})
                             }
@@ -480,7 +471,7 @@ mod tests {
                         );
                         assert!(args.get("type").is_none());
                         assert!(args.get("livecrawl").is_none());
-                        (200, "application/json", json!({"id":3,"result":{"content":[{"type":"text","text":"Title: Async IO\nURL: https://docs.python.org/3/library/asyncio.html\nHighlights:\nPython asyncio docs\n\nTitle: unrelated\nURL: https://example.org/\nHighlights:\nother"}]}}).to_string())
+                        (200, "application/json", json!({"id":3,"result":{"content":[{"type":"text","text":"Title: Async IO\nURL: https://docs.python.org/3/library/asyncio.html\nHighlights:\nPython asyncio docs\n\n---\n\nTitle: unrelated\nURL: https://example.org/\nHighlights:\nother"}]}}).to_string())
                     }
                     _ => {
                         assert!(header.starts_with("delete "));
@@ -511,7 +502,9 @@ mod tests {
         let input: WebSearchInput =
             serde_json::from_value(json!({"query":"Python asyncio documentation","num_results":3}))
                 .unwrap();
-        let output = search(&tool.client, &input, ENDPOINT).await.unwrap();
+        let output = search(&tool.runtime.client, &input, ENDPOINT)
+            .await
+            .unwrap();
         assert!(
             output.contains("docs.python.org/3/library/asyncio"),
             "{output}"
@@ -539,7 +532,9 @@ mod tests {
         ] {
             let input: WebSearchInput =
                 serde_json::from_value(json!({"query":query,"num_results":5})).unwrap();
-            let output = search(&tool.client, &input, ENDPOINT).await.unwrap();
+            let output = search(&tool.runtime.client, &input, ENDPOINT)
+                .await
+                .unwrap();
             println!("{output}");
             // Check returned result content, excluding the query heading.
             let content = output
@@ -553,22 +548,5 @@ mod tests {
                 "No relevant result for {query}: {output}"
             );
         }
-    }
-
-    #[test]
-    fn parses_structured_search_text_without_accepting_script_links() {
-        let results = parse_results(
-            "Title: Async IO\nURL: https://docs.python.org/3/library/asyncio.html\nHighlights:\nasyncio documentation\n\n---\n\nTitle: unsafe\nURL: javascript:alert(1)\n",
-        );
-        assert_eq!(results.len(), 1);
-        assert_eq!(results[0].title, "Async IO");
-        assert!(results[0].snippet.contains("asyncio documentation"));
-    }
-
-    #[test]
-    fn rpc_envelopes_require_the_matching_id_and_surface_failures() {
-        assert!(result(json!({"id":2,"result":{}}), 1).unwrap().is_none());
-        assert!(result(json!({"id":1,"error":{"code":-32600}}), 1).is_err());
-        assert!(result(json!({"id":1}), 1).is_err());
     }
 }

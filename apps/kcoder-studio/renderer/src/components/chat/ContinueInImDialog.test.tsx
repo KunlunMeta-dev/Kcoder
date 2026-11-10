@@ -98,6 +98,7 @@ describe('ContinueInImDialog', () => {
   })
 
   test('remembers submitted private IM sessions for the next open', async () => {
+    localStorage.setItem('wework.continueInIm.lastSessionKeys', '["session-2"]')
     const firstSubmit = vi.fn().mockResolvedValue(undefined)
     const { unmount } = render(
       <ContinueInImDialog
@@ -110,11 +111,16 @@ describe('ContinueInImDialog', () => {
       />
     )
 
-    await userEvent.click(screen.getByTestId('continue-im-session-session-1'))
+    expect(screen.getByTestId('continue-im-session-session-2')).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    )
     await userEvent.click(screen.getByTestId('continue-im-session-session-2'))
+    await userEvent.click(screen.getByTestId('continue-im-session-session-1'))
     await userEvent.click(screen.getByTestId('continue-im-submit-button'))
 
-    await waitFor(() => expect(firstSubmit).toHaveBeenCalledWith(['session-2']))
+    await waitFor(() => expect(firstSubmit).toHaveBeenCalledWith(['session-1']))
+    expect(localStorage.getItem('kcoder.continueInIm.lastSessionKeys')).toBe('["session-1"]')
     unmount()
 
     render(
@@ -130,11 +136,11 @@ describe('ContinueInImDialog', () => {
 
     expect(screen.getByTestId('continue-im-session-session-1')).toHaveAttribute(
       'aria-pressed',
-      'false'
+      'true'
     )
     expect(screen.getByTestId('continue-im-session-session-2')).toHaveAttribute(
       'aria-pressed',
-      'true'
+      'false'
     )
   })
 

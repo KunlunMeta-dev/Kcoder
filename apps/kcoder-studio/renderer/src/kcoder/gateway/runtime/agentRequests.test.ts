@@ -57,6 +57,8 @@ describe('subagent addressed Gateway host contract', () => {
         ].includes(method)
       ) {
         requests.push({ method, params })
+        if (method === 'agent/stop') return { agentId: params.agentId, threadId: params.threadId,
+          expectedBackgroundRun: params.expectedBackgroundRun, stopped: true, status: 'stopped' } as T
         return {
           agentId: params.agentId,
           threadId: params.threadId,
@@ -196,11 +198,16 @@ describe('subagent addressed Gateway host contract', () => {
   test('stop carries actual background run CAS and fails closed without capability', async () => {
     const { runtime, task, client, requests } = await setup()
     const expectedBackgroundRun = {
-      parentSessionId: 'parent',
+      parentSessionId: 'thread-agent-host',
       agentId: 'actual-agent',
       runId: 'run-1',
     }
+    const core = runtime as unknown as GatewayRuntimeCore
+    const original = core.tasks.get(task.taskId)!
+    const address = { runtime: 'kcoder' as const, deviceId: original.serverId,
+      taskId: original.taskId, threadId: original.threadId, workspacePath: original.workspacePath }
     await runtime.request('runtime.tasks.agent_stop', {
+      address,
       taskId: task.taskId,
       agentId: 'actual-agent',
       expectedBackgroundRun,
@@ -209,11 +216,12 @@ describe('subagent addressed Gateway host contract', () => {
     client.supportsExperimental = cap => cap !== 'agentStopV1'
     await expect(
       runtime.request('runtime.tasks.agent_stop', {
+        address,
         taskId: task.taskId,
         agentId: 'actual-agent',
         expectedBackgroundRun,
       })
-    ).rejects.toThrow('agentStopV1')
+    ).rejects.toMatchObject({ code: -32038 })
     expect(requests).toHaveLength(1)
   })
   test('stale account response is rejected without exposing public content', async () => {

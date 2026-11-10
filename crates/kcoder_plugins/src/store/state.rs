@@ -8,7 +8,7 @@ use std::io::Read;
 use std::path::{Component, Path, PathBuf};
 
 pub(super) const STORE_STATE_VERSION: u32 = 1;
-const MAX_STATE_BYTES: u64 = 1024 * 1024;
+pub(super) const MAX_STATE_BYTES: u64 = 1024 * 1024;
 const STATE_FILE_NAME: &str = "state.json";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -23,6 +23,8 @@ pub struct InstalledPluginRecord {
     pub total_bytes: u64,
     pub cache_relative_path: PathBuf,
     pub source: InstalledPluginSource,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project_identity: Option<String>,
 }
 
 impl InstalledPluginRecord {
@@ -32,6 +34,14 @@ impl InstalledPluginRecord {
 
     pub(super) fn validate(&self) -> Result<()> {
         validate_store_relative_path(&self.cache_relative_path)?;
+        if self.project_identity.as_ref().is_some_and(|value| {
+            value.len() != 64
+                || !value
+                    .bytes()
+                    .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+        }) {
+            bail!("plugin_project_mapping_changed");
+        }
         let expected_prefix = Path::new("cache")
             .join(self.plugin_id.marketplace_name())
             .join(self.plugin_id.plugin_name());
@@ -147,7 +157,7 @@ impl StoreState {
             .context("failed to atomically persist plugin store state")
     }
 
-    fn validate(&self) -> Result<()> {
+    pub(super) fn validate(&self) -> Result<()> {
         if self.state_version != STORE_STATE_VERSION {
             bail!(
                 "unsupported plugin store state version {} (expected {STORE_STATE_VERSION})",
@@ -191,6 +201,7 @@ mod tests {
             file_count: 1,
             total_bytes: 4,
             cache_relative_path: PathBuf::from(path),
+            project_identity: None,
             source: InstalledPluginSource::Local {
                 canonical_path: PathBuf::from("/source/demo"),
             },

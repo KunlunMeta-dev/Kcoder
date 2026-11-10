@@ -18,7 +18,7 @@ import { ComposerModePill, GoalDraftPill } from './GoalDraftPill'
 import { ContextUsageIndicator } from './ContextUsageIndicator'
 import { ModelSelector } from './ModelSelector'
 import { QuickPhraseMenu } from './QuickPhraseMenu'
-import type { QuickPhrase } from '@/tauri/appPreferences'
+import type { QuickPhrase } from '@/host/appPreferences'
 
 interface ComposerToolbarProps {
   textOnly?: boolean
@@ -170,6 +170,7 @@ export function ComposerToolbar({
       </div>
       <div
         data-testid="composer-toolbar-model-controls"
+        aria-busy={!isModelSelectionReady}
         className="ml-auto flex min-w-0 max-w-full shrink-0 items-center gap-1.5"
       >
         {!textOnly && (
@@ -179,26 +180,23 @@ export function ComposerToolbar({
             onCompactContext={onCompactContext}
           />
         )}
-        {!textOnly &&
-          (isModelSelectionReady ? (
-            <ModelSelector
-              models={models}
-              selectedModel={selectedModel}
-              selectedModelOptions={selectedModelOptions}
-              nextTurn={isStreaming && modelChangePending}
-              openSignal={modelSelectorOpenSignal}
-              onOpenChange={onModelSelectorOpenChange}
-              disabled={disabled}
-              onSelectModel={onSelectModel}
-              onSelectModelAndOptions={onSelectModelAndOptions}
-              onSelectModelOption={onSelectModelOption}
-              onBlockedModelSelect={onBlockedModelSelect}
-              buttonClassName="opacity-90 hover:opacity-100"
-              maxClosedWidth={compact ? NARROW_MODEL_SELECTOR_MAX_WIDTH : undefined}
-            />
-          ) : (
-            <div className="h-11 w-32 shrink-0" data-testid="model-selector-loading" />
-          ))}
+        {!textOnly && (
+          <ModelSelector
+            models={models}
+            selectedModel={selectedModel}
+            selectedModelOptions={selectedModelOptions}
+            nextTurn={isStreaming && modelChangePending}
+            openSignal={modelSelectorOpenSignal}
+            onOpenChange={onModelSelectorOpenChange}
+            disabled={disabled || !isModelSelectionReady}
+            onSelectModel={onSelectModel}
+            onSelectModelAndOptions={onSelectModelAndOptions}
+            onSelectModelOption={onSelectModelOption}
+            onBlockedModelSelect={onBlockedModelSelect}
+            buttonClassName="opacity-90 hover:opacity-100"
+            maxClosedWidth={compact ? NARROW_MODEL_SELECTOR_MAX_WIDTH : undefined}
+          />
+        )}
         {textOnly ? (
           <>
             {isStreaming && onPause && (

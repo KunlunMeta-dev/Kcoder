@@ -29,7 +29,9 @@ import type { ProcessingBlock, ToolBlock } from '@/types/workbench'
 import {
   isAnsweredRequestUserInputBlock,
   isHiddenRequestUserInputBlock,
+  isPendingRequestUserInputBlock,
   isRequestUserInputBlock,
+  requestUserInputBlockKey,
   type RequestUserInputBlock,
 } from '../requestUserInputMessages'
 import {
@@ -59,6 +61,7 @@ import {
 } from './toolBlockActivity'
 import { isImageViewToolName } from './toolBlockKinds'
 import { usePersistentProcessingExpansion } from './processingExpansionState'
+import { useInitialConversationPreferences } from '@/features/appearance/useConversationPreferences'
 import { WebSearchActivityRows } from './WebSearchSources'
 import { getWebSearchActivityItems } from './webSearchActivity'
 import { getDurationText, getWholeSecondsDurationText } from './processingDuration'
@@ -69,7 +72,6 @@ type ProcessingDisplayItem =
   | ProcessingDisplayRow
   | {
       type: 'request_user_input'
-      id: string
       block: RequestUserInputBlock
     }
 
@@ -117,10 +119,13 @@ export function ToolBlocksDisplay({
 }: ToolBlocksDisplayProps) {
   const catalog = useContext(ToolsCatalogContext)
   const { t } = useTranslation('chat')
+  const preferences = useInitialConversationPreferences()
   const hasRunningBlock = blocks.some(b => isActiveToolCallStatus(b.status))
   const isRunning = (isStreaming && processingPhase === 'live') || hasRunningBlock
+  const initialExpanded = !preferences.toolsCollapsedByDefault
   const [userExpanded, setUserExpanded] = usePersistentProcessingExpansion(
-    stateKey ? `${stateKey}:processing` : undefined
+    stateKey ? `${stateKey}:processing` : undefined,
+    initialExpanded
   )
   const [livePreviewCollapsed, setLivePreviewCollapsed] = useState(false)
   const [mountedAt] = useState(() => Date.now())
@@ -131,9 +136,20 @@ export function ToolBlocksDisplay({
 
   useEffect(() => {
     if (!isRunning) return
-    const timer = window.setInterval(() => setNow(Date.now()), 100)
-    return () => window.clearInterval(timer)
-  }, [isRunning])
+    // The header shows whole seconds; re-render the block list only when the
+    // elapsed second changes instead of ten times a second.
+    let timer: number | undefined
+    const schedule = () => {
+      const elapsed = Date.now() - turnStartedAt
+      const delay = 1000 - (((elapsed % 1000) + 1000) % 1000)
+      timer = window.setTimeout(() => {
+        setNow(Date.now())
+        schedule()
+      }, delay)
+    }
+    schedule()
+    return () => window.clearTimeout(timer)
+  }, [isRunning, turnStartedAt])
 
   useEffect(() => {
     if (isRunning) {
@@ -171,8 +187,7 @@ export function ToolBlocksDisplay({
         return
       }
 
-      const isUnansweredRequest =
-        block.status !== 'error' && !isAnsweredRequestUserInputBlock(block)
+      const isUnansweredRequest = isPendingRequestUserInputBlock(block)
       const shouldHidePendingRequest =
         isUnansweredRequest &&
         (hideRequestUserInputBlocks || isHiddenRequestUserInputBlock(block, hiddenIds))
@@ -181,7 +196,6 @@ export function ToolBlocksDisplay({
       flushRegularBlocks()
       items.push({
         type: 'request_user_input',
-        id: block.id,
         block,
       })
     })
@@ -283,11 +297,17 @@ export function ToolBlocksDisplay({
         <div className="flex min-w-0 flex-col gap-3 pt-0.5">
           {displayItems.map(item => {
             if (item.type === 'request_user_input') {
-              return isAnsweredRequestUserInputBlock(item.block) ? (
-                <RequestUserInputSummary key={item.id} payload={item.block.renderPayload} />
+              return (
+                (item.block.status === 'done' && item.block.renderPayload.resolved === true) ||
+                isAnsweredRequestUserInputBlock(item.block)
+              ) ? (
+                <RequestUserInputSummary
+                  key={requestUserInputBlockKey(item.block)}
+                  payload={item.block.renderPayload}
+                />
               ) : (
                 <RequestUserInputCard
-                  key={item.id}
+                  key={requestUserInputBlockKey(item.block)}
                   payload={item.block.renderPayload}
                   disabled={item.block.status === 'error'}
                   onSubmit={onRequestUserInputSubmit}
@@ -843,7 +863,7 @@ function CollapsibleProcessingContent({
       inert={!expanded ? true : undefined}
       onTransitionEnd={handleTransitionEnd}
       className={[
-        'transition-[max-height,opacity] duration-[260ms] ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none',
+        'transition-[max-height,opacity] duration-[260ms] ease-[cubic-bezier(0.16,1,0.3,1)]',
         allowOverflow ? 'overflow-visible' : 'overflow-hidden',
         expanded ? 'opacity-100' : 'pointer-events-none opacity-0',
       ].join(' ')}
@@ -853,7 +873,7 @@ function CollapsibleProcessingContent({
         <div
           ref={contentRef}
           className={[
-            'min-h-0 transition-transform duration-[260ms] ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none',
+            'min-h-0 transition-transform duration-[260ms] ease-[cubic-bezier(0.16,1,0.3,1)]',
             allowOverflow ? 'overflow-visible' : 'overflow-hidden',
             expanded ? 'translate-y-0' : '-translate-y-1',
           ].join(' ')}

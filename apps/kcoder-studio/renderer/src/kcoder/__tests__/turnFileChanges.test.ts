@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-vi.mock('@/tauri/localExecutor', () => ({ requestLocalExecutor: vi.fn(async () => ({})) }))
+vi.mock('@/host/localExecutor', () => ({ requestLocalExecutor: vi.fn(async () => ({})) }))
 
-import { requestLocalExecutor } from '@/tauri/localExecutor'
+import { requestLocalExecutor } from '@/host/localExecutor'
 import { readTurnFileChangesPolicy, saveTurnFileChangesPolicy } from '@/kcoder/turnFileChanges'
 
 const request = vi.mocked(requestLocalExecutor)

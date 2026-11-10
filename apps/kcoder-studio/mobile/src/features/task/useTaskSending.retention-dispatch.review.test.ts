@@ -1,6 +1,6 @@
 import { beforeEach, expect, test, vi } from "vitest";
 import { MobileRpcError } from "@/gateway/rpc";
-import { TaskMessageQueue } from "@/runtime/task-message-queue";
+import { TaskMessageQueue, type QueuedTaskMessage } from "@/runtime/task-message-queue";
 import type { WorkspaceFailedSubmission } from "@/storage/workspace-preferences";
 import { RETAIN_TASK_ATTACHMENTS } from "../../../../shared/attachmentRetention";
 import { useTaskSending } from "./useTaskSending";
@@ -128,7 +128,7 @@ function makeOwner(options: {
   id: string;
   task?: any;
   initialFailed?: ReturnType<typeof failedRecord>;
-  queued?: { id: string; content: string; attachments: typeof RETRY_ATTACHMENT[]; createdAt: number }[];
+  queued?: QueuedTaskMessage[];
   input?: string;
   authorizationGeneration?: string;
 }) {
@@ -136,11 +136,13 @@ function makeOwner(options: {
     input: string;
     attachments: typeof RETRY_ATTACHMENT[];
     persistedDraft: string | undefined;
+    persistedQueue: QueuedTaskMessage[] | undefined;
     persistedFailed: WorkspaceFailedSubmission[] | undefined;
   } = {
     input: options.input ?? "",
     attachments: [] as typeof RETRY_ATTACHMENT[],
     persistedDraft: options.input,
+    persistedQueue: options.queued,
     persistedFailed: options.initialFailed,
   };
   const retainCalls = observed<{ method: string; params: unknown }>();
@@ -239,6 +241,13 @@ function makeOwner(options: {
   owner.onFailedSubmissionsChange = vi.fn(async (value: WorkspaceFailedSubmission[] | undefined) => {
     state.persistedFailed = value;
   });
+  owner.onQueueCommit = vi.fn(async (value: {
+    queuedMessages?: QueuedTaskMessage[];
+    failedSubmissions?: WorkspaceFailedSubmission[];
+  }) => {
+    state.persistedQueue = value.queuedMessages;
+    state.persistedFailed = value.failedSubmissions;
+  });
   owner.setInput = (next: string | ((current: string) => string)) => {
     const value = typeof next === "function" ? next(state.input) : next;
     state.input = value;
@@ -272,7 +281,7 @@ function makeHookHost() {
         queuedMessages: owner.messageQueue.getSnapshot(),
         initialFailedSubmissions: owner.initialFailedSubmissions,
         onFailedSubmissionsChange: owner.onFailedSubmissionsChange,
-        onQueueCommit: vi.fn(async () => {}),
+        onQueueCommit: owner.onQueueCommit,
         input: owner.state.input,
         setInput: owner.setInput,
         inputIntentRef: owner.inputIntentRef,
@@ -322,7 +331,7 @@ test("a failed-send retry retains attachments before one send with the original 
     "the original message body",
     [{ ...RETRY_ATTACHMENT }],
     undefined,
-    { clientMessageId: RETRY_ID },
+    { clientMessageId: RETRY_ID, permissionMode: "default" },
   ]);
   owner.resolveSend(0);
   await retry;
@@ -408,7 +417,9 @@ test("a restored queue row remains after retain returns unknown and is not sent"
   await owner.runningTransitions.waitFor(2);
 
   expect(owner.sendCalls.values).toHaveLength(0);
-  expect(owner.messageQueue.getSnapshot()).toEqual([row]);
+  expect(owner.messageQueue.getSnapshot()).toEqual([
+    { ...row, permissionMode: "default" },
+  ]);
   expect(owner.queueErrorsNonNull.values).toHaveLength(1);
 });
 
@@ -432,6 +443,77 @@ test("removing a queued row while retain is held prevents its later dispatch", a
   expect(owner.sendCalls.values).toHaveLength(0);
   expect(owner.messageQueue.getSnapshot()).toHaveLength(0);
   expect(owner.retainCalls.values).toHaveLength(1);
+});
+
+test("a queued turn freezes its first permission before persistence and reuses it after reload", async () => {
+  const row: QueuedTaskMessage = {
+    id: "queued-permission-stable-id",
+    content: "queued body",
+    attachments: [{ ...RETRY_ATTACHMENT }],
+    createdAt: 900,
+  };
+  const owner = makeOwner({ id: "queue-permission", queued: [row] });
+  owner.snapshot.permissionMode = "ask";
+  const persistenceStarted = deferred<void>();
+  const releasePersistence = deferred<void>();
+  owner.onQueueCommit = vi.fn(async (value: {
+    queuedMessages?: QueuedTaskMessage[];
+    failedSubmissions?: WorkspaceFailedSubmission[];
+  }) => {
+    owner.state.persistedQueue = value.queuedMessages;
+    owner.state.persistedFailed = value.failedSubmissions;
+    persistenceStarted.resolve(undefined);
+    await releasePersistence.promise;
+  });
+
+  const host = makeHookHost();
+  const first = host.render(owner);
+  first.effects.at(-1)?.();
+  await persistenceStarted.promise;
+  expect(owner.state.persistedQueue?.[0]).toMatchObject({
+    id: row.id,
+    permissionMode: "ask",
+  });
+
+  // The user may change the preference while the storage write is suspended;
+  // this queue identity keeps the mode captured at its first dispatch boundary.
+  owner.snapshot.permissionMode = "yolo";
+  expect(owner.retainCalls.values).toHaveLength(0);
+  releasePersistence.resolve(undefined);
+  await owner.retainCalls.waitFor(1);
+  owner.rejectRetain(0, new Error("temporary retention failure"));
+  await owner.queueErrorsNonNull.waitFor(1);
+  await owner.runningTransitions.waitFor(2);
+  expect(owner.sendCalls.values).toHaveLength(0);
+  expect(owner.messageQueue.first()).toMatchObject({
+    id: row.id,
+    permissionMode: "ask",
+  });
+
+  // Restore only the durable queue projection and retry under a different
+  // current UI selection. The stable queued id must keep its original mode.
+  const restored = makeOwner({
+    id: "queue-permission-reload",
+    queued: owner.state.persistedQueue!,
+  });
+  restored.snapshot.permissionMode = "yolo";
+  const retry = makeHookHost().render(restored);
+  retry.effects.at(-1)?.();
+  await restored.retainCalls.waitFor(1);
+  restored.resolveRetain(0);
+  await restored.sendCalls.waitFor(1);
+
+  expect(restored.sendCalls.values[0]).toEqual([
+    row.content,
+    row.attachments,
+    undefined,
+    { clientMessageId: row.id, permissionMode: "ask" },
+  ]);
+  expect(restored.state.persistedQueue?.[0]).toMatchObject({
+    id: row.id,
+    permissionMode: "ask",
+  });
+  restored.resolveSend(0);
 });
 
 test("an unknown turn-start acceptance cannot trigger a second retain or send", async () => {

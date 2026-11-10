@@ -1,7 +1,8 @@
 // Independent HTTP contract review for durable device-token rotation.
 import { afterEach, expect, it, vi } from "vitest";
-import { GatewaySessionExpiredError, refreshMobileSession } from "./http";
-import type { GatewayProfile } from "./types";
+import { GatewaySessionExpiredError, installGatewayAuthorizationDenialRecorder, refreshMobileSession } from "./http";
+import type { GatewayAuthorizationDenialWitness, GatewayProfile } from "./types";
+import { ProfileCoordinator } from "@/state/profile-coordinator";
 
 const profile: GatewayProfile = {
   id: "refresh-review", label: "Review", baseUrl: "https://gateway.example/g/tenant-a",
@@ -9,7 +10,8 @@ const profile: GatewayProfile = {
   authMode: "device", deviceId: "device-review-12345678", authorizationGeneration: "family-review",
   refreshToken: "a".repeat(64), refreshExpiresAt: Date.now() + 86_400_000,
 };
-afterEach(() => vi.unstubAllGlobals());
+let removeDenialRecorder: (() => void) | undefined;
+afterEach(() => { removeDenialRecorder?.(); removeDenialRecorder = undefined; vi.unstubAllGlobals(); });
 
 it("sends one stable rotation intent to the selected Gateway route and validates family identity", async () => {
   const response = {
@@ -45,4 +47,22 @@ it.each([401, 409])("treats refresh status %s as revoked/conflicting authorizati
 
   await expect(refreshMobileSession(profile, "same-device-rotation-0002")).rejects.toBeInstanceOf(GatewaySessionExpiredError);
   expect(fetch).toHaveBeenCalledOnce();
+});
+
+it("persists only a terminal refresh 401, not a rotation conflict 409", async () => {
+  const current = { ...profile };
+  const coordinator = new ProfileCoordinator();
+  coordinator.hydrate({ profiles: [current], activeId: current.id });
+  const record = vi.fn((witness: GatewayAuthorizationDenialWitness) => coordinator.recordAuthorizationDenial(witness, async () => {}));
+  removeDenialRecorder = installGatewayAuthorizationDenialRecorder(record, witness => coordinator.isCurrentAuthorizationDenial(witness));
+  const fetch = vi.fn()
+    .mockResolvedValueOnce(new Response("{}", { status: 409 }))
+    .mockResolvedValueOnce(new Response("{}", { status: 401 }));
+  vi.stubGlobal("fetch", fetch);
+
+  await expect(refreshMobileSession(current, "same-device-rotation-0003")).rejects.toBeInstanceOf(GatewaySessionExpiredError);
+  expect(record).not.toHaveBeenCalled();
+  await expect(refreshMobileSession(current, "same-device-rotation-0003")).rejects.toBeInstanceOf(GatewaySessionExpiredError);
+  expect(record).toHaveBeenCalledOnce();
+  expect(coordinator.isAuthorizationDenied(current)).toBe(true);
 });

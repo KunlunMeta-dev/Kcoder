@@ -14,6 +14,17 @@ from source_facts import REGISTRY_SOURCE, WIRING_SOURCE, tool_profile_facts
 
 
 ROOT = Path(__file__).resolve().parents[2]
+TOOL_INPUT_DECLARATION_SOURCES = {
+    "crates/kcoder_tools/src/goal.rs": "crates/kcoder_tools/src/internal/tool_input/builtin/goal.rs",
+    "crates/kcoder_tools/src/skill_hub.rs": "crates/kcoder_tools/src/internal/tool_input/builtin/skill_hub.rs",
+    "crates/kcoder_tools/src/skill_manage.rs": "crates/kcoder_tools/src/internal/tool_input/builtin/skill_manage.rs",
+    "crates/kcoder_tools/src/task.rs": "crates/kcoder_tools/src/internal/tool_input/builtin/task.rs",
+    "crates/kcoder_tools/src/workflow.rs": "crates/kcoder_tools/src/internal/tool_input/builtin/workflow.rs",
+    "crates/kcoder_tools/src/workflow_draft.rs": "crates/kcoder_tools/src/internal/tool_input/builtin/workflow_draft.rs",
+    "crates/kcoder_tools/src/grep.rs": "crates/kcoder_tools/src/internal/file_search/grep/input.rs",
+    "crates/kcoder_tools/src/skill_curator.rs": "crates/kcoder_tools/src/internal/skill_support/curator/input.rs",
+    "crates/kcoder_tools/src/web_search.rs": "crates/kcoder_tools/src/internal/web/search/request.rs",
+}
 
 
 def jsonc(text: str):
@@ -186,19 +197,16 @@ def rpc_reference():
     return "".join(lines)
 
 
-def cli_reference():
-    source = "crates/kcoder_cli/src/cli_args.rs"
+def cli_source_rows(source):
     text = (ROOT / source).read_text()
-    lines = [header("CLI 参数参考", [source]),
-             "名称由 clap 声明派生。这里保留源码中的英文参数说明；中文使用流程见 CLI 与 TUI 指南。"
-             "不要把内部 worker 参数作为普通用户入口。\n\n"]
+    lines = []
     current = ""
     comments = []
     attributes = []
     in_attribute = False
     for number, raw in enumerate(text.splitlines(), 1):
         stripped = raw.strip()
-        declaration = re.search(r"pub\(super\) (?:struct|enum) (\w+)", raw)
+        declaration = re.search(r"pub(?:\((?:super|crate)\))? (?:struct|enum) (\w+)", raw)
         if declaration:
             current = declaration[1]
             lines += [f"\n## {current}\n\n", "| 声明 | 参数或值 | 属性 | 说明 |\n", "| --- | --- | --- | --- |\n"]
@@ -210,7 +218,7 @@ def cli_reference():
             attributes.append(stripped)
             in_attribute = not stripped.endswith("]")
         elif current:
-            field = re.match(r"(?:pub\(super\)\s+)?([a-z_]\w*):\s*(.+),", stripped)
+            field = re.match(r"(?:pub(?:\((?:super|crate)\))?\s+)?([a-z_]\w*):\s*(.+),", stripped)
             variant = re.match(r"([A-Z]\w*)\s*(?:\{|,)", stripped)
             if field or variant:
                 name = field[1] if field else variant[1]
@@ -227,10 +235,24 @@ def cli_reference():
     return "".join(lines)
 
 
+def cli_reference():
+    sources = ["crates/kcoder_cli/src/cli_args.rs"]
+    sources += [str(path.relative_to(ROOT)) for path in
+                sorted((ROOT / "crates/kcoder_cli/src/cli_args").rglob("*.rs"))]
+    sources += ["crates/kcoder_cli/src/internal/migration_client/cli_args.rs"]
+    sources += [str(path.relative_to(ROOT)) for path in
+                sorted((ROOT / "crates/kcoder_cli/src/internal/migration_client/cli_args").rglob("*.rs"))]
+    lines = [header("CLI 参数参考", sources),
+             "名称由 clap 声明派生。这里保留源码中的英文参数说明；中文使用流程见 CLI 与 TUI 指南。"
+             "不要把内部 worker 参数作为普通用户入口。\n\n"]
+    lines.extend(cli_source_rows(source) for source in sources)
+    return "".join(lines)
+
+
 def tool_reference():
     files = sorted((ROOT / "crates/kcoder_tools/src").rglob("*.rs"))
     sources = [str(p.relative_to(ROOT)) for p in files if "impl Tool for" in p.read_text() and "tests" not in p.parts and not p.name.endswith("_tests.rs")]
-    lines = [header("内置工具源码参考", sources),
+    lines = [header("内置工具源码参考", sources + list(TOOL_INPUT_DECLARATION_SOURCES.values())),
              "本表索引源码中显式声明的 Tool 实现及附近的输入类型。宏生成、MCP、插件和宿主注入的工具还需检查注册器；"
              "实际工具清单和参数 schema 以本轮 tools/catalog 与角色注册表为准。"
              "只读与并发是调用策略，不根据名称或 schema 外观推断。\n\n",
@@ -242,7 +264,9 @@ def tool_reference():
         text = (ROOT / source).read_text()
         if "#[cfg(test)]" in text:
             text = text[:text.index("#[cfg(test)]")]
-        inputs = re.findall(r"pub (?:struct|enum) (\w*Input\w*)", text)
+        input_source = TOOL_INPUT_DECLARATION_SOURCES.get(source)
+        input_text = (ROOT / input_source).read_text() if input_source else text
+        inputs = re.findall(r"pub (?:struct|enum) (\w*Input\w*)", input_text)
         for match in re.finditer(r"impl Tool for ([A-Za-z_][A-Za-z0-9_]*)", text):
             line = text.count("\n", 0, match.start()) + 1
             lines.append(f"| `{match[1]}` | " + "、".join(f"`{n}`" for n in inputs) + f" | {source_link(source, line)} |\n")
@@ -410,7 +434,11 @@ def protocol_types():
 
 def tool_inputs():
     files = sorted((ROOT / "crates/kcoder_tools/src").glob("*.rs"))
-    selected = [p for p in files if re.search(r"^pub struct \w*Input\w*", p.read_text(), re.M)]
+    declarations = [
+        ROOT / TOOL_INPUT_DECLARATION_SOURCES.get(str(file.relative_to(ROOT)), file.relative_to(ROOT))
+        for file in files
+    ]
+    selected = [p for p in declarations if re.search(r"^pub struct \w*Input\w*", p.read_text(), re.M)]
     return type_reference(selected, "工具输入与公开数据类型")
 
 
@@ -431,7 +459,8 @@ def limits_reference():
     sources = [
         "crates/kcoder_workflow/src/graph.rs", "crates/kcoder_workflow/src/graph_data.rs",
         "crates/kcoder_knowledge/src/ingest.rs", "crates/kcoder_tools/src/wiki_document.rs",
-        "crates/kcoder_tools/src/image_input.rs", "crates/kcoder_cli/src/app_server/protocol_io.rs",
+        "crates/kcoder_tools/src/internal/document_parsers/lib.rs",
+        "crates/kcoder_tools/src/image_input.rs", "crates/kcoder_cli/src/internal/host_transport/protocol_io.rs",
         "crates/kcoder_computer_use/src/policy.rs", "crates/kcoder_computer_use/src/framing.rs",
     ]
     lines = [header("资源与额度声明", sources),

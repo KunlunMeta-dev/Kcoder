@@ -29,6 +29,10 @@ pub(super) fn write_scope_unlocked(
     // omitted fields while still rejecting invalid values for present fields.
     validate_settings_document(value)
         .with_context(|| format!("invalid {} settings", scope.as_str()))?;
+    crate::project_mcp::validate_scope(value, scope == ConfigScope::Project)?;
+    if let Some(existing) = read_raw_optional_json_object(paths.for_scope(scope))? {
+        crate::migrations::validate_version(&existing)?;
+    }
     write_json_atomic(paths.for_scope(scope), value, scope == ConfigScope::User)?;
     if matches!(scope, ConfigScope::Project | ConfigScope::Local) {
         ensure_project_gitignore(&paths.project_root)?;
@@ -53,13 +57,13 @@ where
             .map(|document| document.value.clone())
             .unwrap_or_else(|| Value::Object(Map::new()));
         let mut value = original.clone();
-        normalize_config_version(&mut value).map_err(|error| {
+        migrate_settings_document(&mut value).map_err(|error| {
             anyhow::anyhow!("invalid settings version in {}: {error}", path.display())
         })?;
-        normalize_legacy_settings_document(&mut value);
         update(&mut value)?;
         validate_settings_document(&value)
             .with_context(|| format!("invalid {} settings", scope.as_str()))?;
+        crate::project_mcp::validate_scope(&value, scope == ConfigScope::Project)?;
         write_jsonc_update_atomic(
             path,
             source.as_ref().map(|document| document.source.as_str()),
@@ -95,10 +99,12 @@ where
             .as_ref()
             .map(|document| document.value.clone())
             .unwrap_or_else(|| Value::Object(Map::new()));
+        crate::migrations::validate_version(&original)?;
         let mut value = original.clone();
         update(&mut value)?;
         validate_settings_document(&value)
             .with_context(|| format!("invalid user settings in {}", path.display()))?;
+        crate::project_mcp::validate_scope(&value, false)?;
         write_jsonc_update_atomic(
             path,
             source.as_ref().map(|document| document.source.as_str()),
@@ -120,6 +126,16 @@ pub fn read_settings_file(path: &Path) -> Result<Value> {
     let _transaction_guard = provider_transaction::read_guard(path)?;
     read_raw_optional_json_object(path)
         .map(|value| value.unwrap_or_else(|| Value::Object(Map::new())))
+}
+
+/// Project one optional settings document without materializing an absent store.
+/// This is not a guard for subsequent credential reads or layered snapshots.
+pub fn read_settings_file_if_present(path: &Path) -> Result<Option<Value>> {
+    if !provider_transaction::settings_or_transaction_present(path)? {
+        // Finish the empty projection here; never follow it with an unguarded read.
+        return Ok(None);
+    }
+    read_settings_file(path).map(Some)
 }
 
 pub(super) fn lock_settings_path(path: &Path) -> Result<fs::File> {
@@ -157,6 +173,7 @@ pub fn write_scope_if_missing(
     }
     validate_settings_document(value)
         .with_context(|| format!("invalid {} settings", scope.as_str()))?;
+    crate::project_mcp::validate_scope(value, scope == ConfigScope::Project)?;
     let path = paths.for_scope(scope);
     let _transaction_guard = provider_transaction::write_guard(path)?;
     let lock = lock_settings_path(path)?;
@@ -226,10 +243,9 @@ pub(super) fn read_optional_json_object(path: &Path) -> Result<Option<Value>> {
     let Some(mut value) = read_raw_optional_json_object(path)? else {
         return Ok(None);
     };
-    normalize_config_version(&mut value).map_err(|error| {
+    migrate_settings_document(&mut value).map_err(|error| {
         anyhow::anyhow!("invalid settings version in {}: {error}", path.display())
     })?;
-    normalize_legacy_settings_document(&mut value);
     Ok(Some(value))
 }
 
@@ -317,7 +333,7 @@ pub(super) fn write_jsonc_update_atomic(
     write_bytes_atomic(path, rendered.as_bytes(), require_user_only)
 }
 
-pub(super) fn reconcile_jsonc_object(
+pub(crate) fn reconcile_jsonc_object(
     object: &CstObject,
     original: &Map<String, Value>,
     updated: &Map<String, Value>,

@@ -52,6 +52,8 @@ interface DesktopSettingsMenuProps {
   onLogout: () => void
   onLogin?: () => void
   showLogout?: boolean
+  productLogin?: boolean
+  logoutLabel?: string
   // KCoder account targets with their per-context login state; when present,
   // the menu grows a per-target login/switch/sign-out section.
   accountTargets?: GatewayServer[]
@@ -63,6 +65,8 @@ export function DesktopSettingsMenu({
   onLogout,
   onLogin,
   showLogout,
+  productLogin,
+  logoutLabel,
   accountTargets,
   onAccountLogout,
 }: DesktopSettingsMenuProps) {
@@ -152,11 +156,8 @@ export function DesktopSettingsMenu({
           <SettingsMenuItem
             testId="login-menu-button"
             icon={<LogIn className="h-4 w-4 shrink-0 text-primary" />}
-            label={t('workbench.account_cloud_login', '云登录不可用')}
-            description={t(
-              'workbench.account_cloud_login_description',
-              '当前客户端不提供旧版云登录'
-            )}
+            label={t(productLogin ? 'workbench.kcoder_account_login' : 'workbench.account_cloud_login')}
+            description={t(productLogin ? 'workbench.kcoder_account_purpose' : 'workbench.account_cloud_login_description')}
             onClick={onLogin}
           />
           <div className="mx-4 my-1.5 border-t border-border/70" />
@@ -280,7 +281,7 @@ export function DesktopSettingsMenu({
           <SettingsMenuItem
             testId="logout-menu-button"
             icon={<LogOut className="h-4 w-4 shrink-0 text-text-secondary" />}
-            label={t('workbench.logout', '退出登录')}
+            label={logoutLabel ?? t('workbench.logout', '退出登录')}
             onClick={onLogout}
           />
         </>

@@ -60,7 +60,7 @@ impl Before {
         let inner = state.read_inner();
         Self {
             snapshot,
-            ids: inner.message_history_ids.clone(),
+            ids: inner.message_history_ids.to_vec(),
             head: inner.last_history_uuid.clone(),
             revision: inner.message_revision.clone(),
             timestamps: (inner.session_created_at_ms, inner.session_updated_at_ms),
@@ -114,6 +114,22 @@ fn runtime() -> tokio::runtime::Runtime {
         .enable_all()
         .build()
         .unwrap()
+}
+
+#[test]
+fn committed_rewind_invalidates_both_original_observation_paths() {
+    let (_root, state, _path, _cached) = direct_fixture();
+    let observed = state
+        .observe_current_history_messages(&state.session_id(), &[])
+        .unwrap();
+    assert!(observed.is_current(&state));
+    assert_eq!(observed.try_is_current(&state), Some(true));
+    let outcome = runtime()
+        .block_on(state.truncate_messages_for_rewind(1, 1))
+        .unwrap();
+    assert!(outcome.removed > 0);
+    assert!(!observed.is_current(&state));
+    assert_eq!(observed.try_is_current(&state), Some(false));
 }
 
 #[test]

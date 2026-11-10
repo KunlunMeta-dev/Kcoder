@@ -14,14 +14,14 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('./runtime-environment', () => ({
-  isTauriRuntime: () => true,
+  isGatewayRuntime: () => true,
 }))
 
-vi.mock('@tauri-apps/api/core', () => ({
+vi.mock('@/lib/runtime-commands', () => ({
   invoke: mocks.invoke,
 }))
 
-vi.mock('@/tauri/droppedFiles', () => ({
+vi.mock('@/host/droppedFiles', () => ({
   readDroppedFiles: mocks.readDroppedFiles,
 }))
 
@@ -55,7 +55,7 @@ describe('workspace path transfer', () => {
     ])
   })
 
-  test('asks Tauri to inspect native clipboard paths with URI fallbacks', async () => {
+  test('asks Gateway to inspect native clipboard paths with URI fallbacks', async () => {
     const data = clipboardData({
       'text/uri-list': 'file:///Users/alice/project/frontend',
     })
@@ -69,7 +69,7 @@ describe('workspace path transfer', () => {
     })
   })
 
-  test('asks Tauri to inspect native dropped paths with URI fallbacks', async () => {
+  test('asks Gateway to inspect native dropped paths with URI fallbacks', async () => {
     const data = clipboardData({
       'text/uri-list': 'file:///Users/alice/project/frontend',
     })

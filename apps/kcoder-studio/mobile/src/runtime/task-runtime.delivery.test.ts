@@ -2,6 +2,8 @@ import { gatewaySessionExpired } from "@/gateway/http";
 import { GatewayRpcClient, type RpcMessage } from "@/gateway/rpc";
 import type { ThreadMessage } from "@/gateway/types";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { resetTaskRuntimeAsyncStorage, taskRuntimeAsyncStorage } from "@/test/task-runtime-async-storage-fixture";
+import { loadWorkspaceState, workspaceStateAuthorizationScope, workspaceStateStorageKey } from "@/storage/workspace-preferences";
 import { TaskRuntime, taskRuntimeTestHelpers } from "./task-runtime";
 import { profile, server } from "./task-runtime/fixture.test-support";
 
@@ -9,6 +11,10 @@ vi.mock("@/gateway/http", () => ({
   ensureGatewayAuthorization: vi.fn(async () => {}),
   gatewaySessionExpired: vi.fn(async () => false),
 }));
+vi.mock("@react-native-async-storage/async-storage", async () => {
+  const { taskRuntimeAsyncStorage } = await import("@/test/task-runtime-async-storage-fixture");
+  return { default: taskRuntimeAsyncStorage };
+});
 
 type Frame = RpcMessage & { params?: Record<string, unknown> };
 type TurnStartBehavior = "complete" | "close-after-write" | "throw-from-send" | "invalid-reply";
@@ -109,6 +115,7 @@ class DeliveryWebSocket {
 const originalWebSocket = globalThis.WebSocket;
 
 beforeEach(() => {
+  resetTaskRuntimeAsyncStorage();
   DeliveryWebSocket.instances = [];
   DeliveryWebSocket.history = [];
   globalThis.WebSocket = DeliveryWebSocket as unknown as typeof WebSocket;
@@ -227,6 +234,34 @@ describe("Mobile RPC turn delivery classification", () => {
     runtime.close();
   });
 
+  it("blocks a send from a persisted pending transcript action", async () => {
+    const runtime = await resumeRuntime();
+    const scope = workspaceStateAuthorizationScope(profile, server);
+    const pendingAction = {
+      id: "mobile-transcript-persisted-pending",
+      kind: "edit",
+      phase: "blocked",
+      sourceMessageId: "history-user",
+      cwd: "/workspace",
+      text: "persisted correction",
+    };
+    await taskRuntimeAsyncStorage.setItem(
+      workspaceStateStorageKey(profile.id, server.id, "thread-1", scope),
+      JSON.stringify({ activeTab: "agent", transcriptAction: pendingAction }),
+    );
+
+    expect(runtime.getSnapshot().transcriptActionPending).not.toBe(true);
+    await expect(runtime.send("must remain blocked")).rejects.toMatchObject({
+      name: "MobileRpcError",
+      delivery: "not-sent",
+    });
+    expect(frames("turn/start")).toHaveLength(0);
+    await expect(loadWorkspaceState(profile.id, server.id, "thread-1", scope)).resolves.toMatchObject({
+      transcriptAction: pendingAction,
+    });
+    runtime.close();
+  });
+
   it("does not mark a failed-attempt continuation unknown when its request never reaches the socket", async () => {
     DeliveryWebSocket.history = [
       {
@@ -242,6 +277,7 @@ describe("Mobile RPC turn delivery classification", () => {
         turnId: "turn-1",
         attemptId: "turn-1",
         status: "failed",
+        providerFailure: { category: "network_error", recovery_action: "diagnose_only", retryable: true, resume_safe: true },
         content: "partial result",
         timestampMs: 2,
       },

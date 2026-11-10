@@ -23,6 +23,8 @@ export interface ComposerTextareaProps {
   textOnly?: boolean
   executionModes?: import('./composerExecutionModes').ComposerExecutionModeControls
   value: string
+  inputHistory?: readonly string[]
+  inputHistoryScope?: string
   onChange: (value: string) => void
   onSubmit: (submittedValue?: string, options?: ComposerSubmitOptions) => void
   canSend: boolean

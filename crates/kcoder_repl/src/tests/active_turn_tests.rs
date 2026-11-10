@@ -20,3 +20,4 @@ include!("active_turn_tests/status_layout_scrollback.rs");
 include!("active_turn_tests/streaming_active_turn.rs");
 include!("active_turn_tests/commands_cancel.rs");
 include!("active_turn_tests/outline_navigation.rs");
+include!("active_turn_tests/back_to_bottom.rs");

@@ -2,18 +2,47 @@
 //! Producer/transfer/deletion lifecycle and public capability remain incomplete;
 //! legacy attachment ownership is separate.
 #![allow(dead_code)]
-pub(super) mod model;
+#[path = "attachment_retention/acceptance.rs"]
+pub mod acceptance;
+#[path = "attachment_retention/cleanup.rs"]
+pub mod cleanup;
+#[path = "attachment_retention/device_cleanup.rs"]
+mod device_cleanup;
+#[path = "attachment_retention/dispatch.rs"]
+pub mod dispatch;
+#[path = "attachment_retention/model.rs"]
+pub mod model;
+#[path = "attachment_retention/owner_init.rs"]
 mod owner_init;
+#[path = "attachment_retention/owner_retirement.rs"]
 mod owner_retirement;
+#[path = "attachment_retention/reaper.rs"]
+pub mod reaper;
+#[cfg(all(test, target_os = "linux"))]
+#[path = "attachment_retention/reaper_tests.rs"]
+mod reaper_tests;
+#[path = "attachment_retention/release.rs"]
 mod release;
+#[path = "retention_context.rs"]
+pub mod retention_context;
+#[path = "attachment_retention/retirement.rs"]
 mod retirement;
+#[path = "attachment_retention/storage.rs"]
 mod storage;
 #[cfg(all(test, target_os = "linux"))]
+#[path = "attachment_retention/tests.rs"]
 mod tests;
+#[path = "attachment_retention/transfer.rs"]
+pub mod transfer;
+#[path = "attachment_retention/transfer_abort.rs"]
+pub mod transfer_abort;
+#[path = "attachment_retention/upload.rs"]
 mod upload;
+#[path = "../internal/attachment_retention/workspace_receipt_request.rs"]
+pub mod workspace_receipt_request;
 
 #[cfg(all(test, target_os = "linux"))]
-pub(super) fn pause_release_projection_test_hook(phase: &str, retention_id: &str) {
+fn pause_release_projection_test_hook(phase: &str, retention_id: &str) {
     tests::release_consume_race_review::pause_before_final_projection(phase, retention_id);
 }
 
@@ -28,7 +57,7 @@ use storage::{Store, Transaction, digest, missing};
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum RetentionFailure {
+pub enum RetentionFailure {
     Conflict,
     Capacity,
     ReservePrepaidSlotUnavailable,
@@ -50,12 +79,12 @@ impl std::fmt::Display for RetentionFailure {
 }
 impl std::error::Error for RetentionFailure {}
 
-pub(super) struct RetentionService {
+pub struct RetentionService {
     store: Store,
 }
 /// Keeps the original or recovered exclusive OS lease pinned. Drop releases the
 /// lock only; sealed/unknown data and budgets never disappear on connection exit.
-pub(super) struct OwnerLease {
+pub struct OwnerLease {
     id: String,
     scope_hash: String,
     lease: VerifiedPrivateEntry,
@@ -63,12 +92,14 @@ pub(super) struct OwnerLease {
 }
 /// Private adapter for authoritative turn facts. The future dispatch layer must
 /// obtain this from the existing durable turn receipt domain, never RPC fields.
-pub(super) trait AcceptedTurnProof {
-    fn is_exactly_accepted(&self, scope: &Scope, binding: &TransferBinding) -> Result<bool>;
+/// Implementations compare immutable, lock-external proof capabilities only.
+/// They must perform no IO, await, or reentrant retention-service calls here.
+pub trait AcceptedTurnProof {
+    fn is_exactly_accepted(&self, query: &transfer::AcceptedTurnQuery) -> Result<bool>;
 }
-pub(super) struct NoAcceptedTurnProof;
+pub struct NoAcceptedTurnProof;
 impl AcceptedTurnProof for NoAcceptedTurnProof {
-    fn is_exactly_accepted(&self, _: &Scope, _: &TransferBinding) -> Result<bool> {
+    fn is_exactly_accepted(&self, _: &transfer::AcceptedTurnQuery) -> Result<bool> {
         Ok(false)
     }
 }
@@ -224,10 +255,10 @@ fn decrement(value: &mut u64, amount: u64) -> Result<()> {
 
 impl RetentionService {
     /// Fixed startup account root only; never constructed from RPC parameters.
-    pub(super) fn open_account_root(account: &Path, durable: bool) -> Result<Self> {
+    pub fn open_account_root(account: &Path, durable: bool) -> Result<Self> {
         Self::open(account, durable, Limits::default())
     }
-    pub(super) fn validate_adapter_scope(
+    pub fn validate_adapter_scope(
         &self,
         context: &TrustedRetentionContextV1,
         workspace: &str,
@@ -247,7 +278,7 @@ impl RetentionService {
     ) -> Result<Scope> {
         scope_key(context, canonical_workspace_digest)
     }
-    pub(super) fn full_scope(
+    pub fn full_scope(
         &self,
         context: &TrustedRetentionContextV1,
         workspace: &str,
@@ -346,6 +377,7 @@ impl RetentionService {
             manifest: None,
             manifest_retirement: None,
             cleanup_capacity: RECORD_BYTES,
+            device_cleanup: None,
         };
         tx.put(Area::Owners, &owner.id, epoch, &owner)?;
         tx.commit()?; // Capacity and exact private locators precede creation.
@@ -645,7 +677,7 @@ impl RetentionService {
         tx.commit()?;
         Ok(stage(self.namespace(), &entry))
     }
-    pub(super) fn reserve(
+    pub fn reserve(
         &self,
         scope: &Scope,
         client_request_id: &str,
@@ -697,6 +729,7 @@ impl RetentionService {
             );
             return Ok(record.wire);
         }
+        self.require_live_scope(&tx, scope)?;
         if tx
             .registered_binding_scope(
                 epoch,
@@ -806,12 +839,14 @@ impl RetentionService {
                 cleanup_capacity: RECORD_BYTES,
                 terminal_budget: 2 * RECORD_BYTES,
                 release_intent: None,
+                transfer_intent: None,
+                cleanup_intent: None,
             },
         )?;
         tx.commit()?;
         Ok(wire)
     }
-    pub(super) fn read(
+    pub fn read(
         &self,
         scope: &Scope,
         selector: &RetentionReceiptSelectorV1,
@@ -871,13 +906,12 @@ impl RetentionService {
                 }
             }
         };
-        if epoch_retired.is_none() && receipt.is_none() {
-            if let Some(known_scope) = tx.registered_binding_scope(epoch, selector)? {
-                ensure!(known_scope == scope.hash, RetentionFailure::Conflict);
-                anyhow::bail!(
-                    "known retention binding missing projection; reconciliation required"
-                );
-            }
+        if epoch_retired.is_none()
+            && receipt.is_none()
+            && let Some(known_scope) = tx.registered_binding_scope(epoch, selector)?
+        {
+            ensure!(known_scope == scope.hash, RetentionFailure::Conflict);
+            anyhow::bail!("known retention binding missing projection; reconciliation required");
         }
         if let Some(receipt) = &receipt {
             ensure!(
@@ -1170,13 +1204,22 @@ impl RetentionService {
         }
         Ok(())
     }
-    pub(super) fn consume(
+    pub fn consume(
         &self,
         scope: &Scope,
         ack: &RetentionConsumeAckV1,
         proof: &dyn AcceptedTurnProof,
     ) -> Result<RetentionConsumeStatusV1> {
         atom(&ack.client_ack_id)?;
+        self.consume_terminal(scope, ack, proof, None)
+    }
+    fn consume_terminal(
+        &self,
+        scope: &Scope,
+        ack: &RetentionConsumeAckV1,
+        proof: &dyn AcceptedTurnProof,
+        administrative: Option<&RetentionAdministrativeTerminalV1>,
+    ) -> Result<RetentionConsumeStatusV1> {
         let epoch = checked_id(&ack.retention_id, self.namespace())?;
         let mut tx = self.store.transaction()?;
         if let Some(proof) = retired(&tx, self.namespace(), epoch)? {
@@ -1194,11 +1237,36 @@ impl RetentionService {
         if let Some(prior) = tx.read::<Tombstone>(Area::Consumed, &ack.retention_id)? {
             ensure!(
                 prior.scope_hash == scope.hash
+                    && prior.retention_id == ack.retention_id
+                    && prior.epoch == epoch
                     && prior.revision == ack.terminal_revision
-                    && prior.client_ack_id == ack.client_ack_id,
+                    && prior.client_ack_id == ack.client_ack_id
+                    && prior.administrative.as_ref() == administrative,
                 RetentionFailure::Conflict
             );
             return Ok(RetentionConsumeStatusV1::Consumed);
+        }
+        if let Some(terminal) = administrative {
+            let intent = receipt
+                .cleanup_intent
+                .as_ref()
+                .context("cleanup intent missing")?;
+            let current = self.cleanup_query_in(&tx, scope, &receipt, &intent.query.request)?;
+            ensure!(
+                current == intent.query
+                    && intent.query_sha256 == digest(&serde_json::to_vec(&current)?)
+                    && terminal.operation_id == intent.query.request.operation_id
+                    && terminal.root_namespace == self.namespace()
+                    && terminal.epoch == receipt.epoch
+                    && terminal.scope_id == scope.hash
+                    && terminal.retention_id == receipt.wire.retention_id
+                    && terminal.terminal_revision == receipt.wire.revision
+                    && terminal.reason == intent.query.request.reason
+                    && ack.client_ack_id.is_empty(),
+                RetentionFailure::Conflict
+            );
+        } else {
+            ensure!(receipt.cleanup_intent.is_none(), RetentionFailure::Conflict);
         }
         ensure!(
             receipt.wire.revision == ack.terminal_revision
@@ -1208,6 +1276,12 @@ impl RetentionService {
                 ),
             RetentionFailure::Conflict
         );
+        if receipt.wire.state == RetentionReceiptStateV1::Transferred {
+            ensure!(
+                proof.is_exactly_accepted(&self.transfer_query(&tx, scope, &receipt)?)?,
+                RetentionFailure::ProofUnavailable
+            );
+        }
         for reference in &receipt.wire.entries {
             let entry: Entry = tx
                 .read(Area::Entries, &reference.stage_ref.entry_id)?
@@ -1220,13 +1294,7 @@ impl RetentionService {
             );
             if entry.phase == EntryPhase::Transferred {
                 ensure!(
-                    proof.is_exactly_accepted(
-                        scope,
-                        entry
-                            .transfer
-                            .as_ref()
-                            .context("transfer acceptance binding absent")?
-                    )?,
+                    receipt.wire.state == RetentionReceiptStateV1::Transferred,
                     RetentionFailure::ProofUnavailable
                 );
             }
@@ -1274,6 +1342,7 @@ impl RetentionService {
                 revision: ack.terminal_revision,
                 client_ack_id: ack.client_ack_id.clone(),
                 epoch,
+                administrative: administrative.cloned(),
             },
         )?;
         receipt.wire.state = RetentionReceiptStateV1::Consumed;

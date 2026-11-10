@@ -1,0 +1,599 @@
+{
+  "MemoryOrigin": {
+    "valid": [
+      {
+        "name": "valid_MemoryOrigin",
+        "value": "manual"
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject_invalid_MemoryOrigin",
+        "value": "unsupported_fixture_case"
+      }
+    ]
+  },
+  "MemoryReviewStatus": {
+    "valid": [
+      {
+        "name": "valid_MemoryReviewStatus",
+        "value": "candidate"
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject_invalid_MemoryReviewStatus",
+        "value": "unsupported_fixture_case"
+      }
+    ]
+  },
+  "MemoryProvenance": {
+    "valid": [
+      {
+        "name": "valid_MemoryProvenance",
+        "value": {
+          "kind": "native_user_request",
+          "sourceId": "fixture-operation",
+          "sourceRevision": "1",
+          "description": "Synthetic native user request"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject_invalid_MemoryProvenance",
+        "value": {
+          "kind": "native_user_request",
+          "sourceId": "fixture-operation",
+          "sourceRevision": "1",
+          "description": "Synthetic native user request",
+          "__untrustedAuthority": true
+        }
+      }
+    ]
+  },
+  "MemoryProposal": {
+    "valid": [
+      {
+        "name": "valid_MemoryProposal",
+        "value": {
+          "title": "报告偏好",
+          "content": "先列结论，再附来源表。",
+          "category": "preference",
+          "origin": "manual",
+          "provenance": [
+            {
+              "kind": "native_user_request",
+              "sourceId": "fixture-memory-operation",
+              "sourceRevision": "1",
+              "description": "Synthetic authenticated control request"
+            }
+          ],
+          "validUntilMs": null
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject_invalid_MemoryProposal",
+        "value": {
+          "title": "报告偏好",
+          "content": "先列结论，再附来源表。",
+          "category": "preference",
+          "origin": "manual",
+          "provenance": [
+            {
+              "kind": "native_user_request",
+              "sourceId": "fixture-memory-operation",
+              "sourceRevision": "1",
+              "description": "Synthetic authenticated control request"
+            }
+          ],
+          "validUntilMs": null,
+          "__untrustedAuthority": true
+        }
+      }
+    ]
+  },
+  "ReviewedMemory": {
+    "valid": [
+      {
+        "name": "valid_ReviewedMemory",
+        "value": {
+          "id": "memory-0000000000000001",
+          "owner": {
+            "accountId": "fixture-account",
+            "targetId": "fixture-target",
+            "workspaceId": null
+          },
+          "revision": 1,
+          "proposal": {
+            "title": "报告偏好",
+            "content": "先列结论，再附来源表。",
+            "category": "preference",
+            "origin": "manual",
+            "provenance": [
+              {
+                "kind": "native_user_request",
+                "sourceId": "fixture-memory-operation",
+                "sourceRevision": "1",
+                "description": "Synthetic authenticated control request"
+              }
+            ],
+            "validUntilMs": null
+          },
+          "reviewStatus": "candidate",
+          "enabled": false,
+          "deleted": false,
+          "sourceVerified": false,
+          "updatedAtMs": 1000
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject_invalid_ReviewedMemory",
+        "value": {
+          "id": "memory-0000000000000001",
+          "owner": {
+            "accountId": "fixture-account",
+            "targetId": "fixture-target",
+            "workspaceId": null
+          },
+          "revision": 1,
+          "proposal": {
+            "title": "报告偏好",
+            "content": "先列结论，再附来源表。",
+            "category": "preference",
+            "origin": "manual",
+            "provenance": [
+              {
+                "kind": "native_user_request",
+                "sourceId": "fixture-memory-operation",
+                "sourceRevision": "1",
+                "description": "Synthetic authenticated control request"
+              }
+            ],
+            "validUntilMs": null
+          },
+          "reviewStatus": "candidate",
+          "enabled": false,
+          "deleted": false,
+          "sourceVerified": false,
+          "updatedAtMs": 1000,
+          "__untrustedAuthority": true
+        }
+      }
+    ]
+  },
+  "MemoryReview": {
+    "valid": [
+      {
+        "name": "valid_MemoryReview",
+        "value": {
+          "action": "accept",
+          "editedContent": null
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject_invalid_MemoryReview",
+        "value": {
+          "action": "unsupported_review"
+        }
+      }
+    ]
+  },
+  "MemoryTaskSnapshot": {
+    "valid": [
+      {
+        "name": "valid_MemoryTaskSnapshot",
+        "value": {
+          "owner": {
+            "accountId": "fixture-account",
+            "targetId": "fixture-target",
+            "workspaceId": null
+          },
+          "taskId": "fixture-task",
+          "memories": [
+            {
+              "id": "memory-0000000000000001",
+              "owner": {
+                "accountId": "fixture-account",
+                "targetId": "fixture-target",
+                "workspaceId": null
+              },
+              "revision": 1,
+              "proposal": {
+                "title": "报告偏好",
+                "content": "先列结论，再附来源表。",
+                "category": "preference",
+                "origin": "manual",
+                "provenance": [
+                  {
+                    "kind": "native_user_request",
+                    "sourceId": "fixture-memory-operation",
+                    "sourceRevision": "1",
+                    "description": "Synthetic authenticated control request"
+                  }
+                ],
+                "validUntilMs": null
+              },
+              "reviewStatus": "candidate",
+              "enabled": false,
+              "deleted": false,
+              "sourceVerified": false,
+              "updatedAtMs": 1000
+            }
+          ],
+          "capturedAtMs": 1000,
+          "omittedCount": 0
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject_invalid_MemoryTaskSnapshot",
+        "value": {
+          "owner": {
+            "accountId": "fixture-account",
+            "targetId": "fixture-target",
+            "workspaceId": null
+          },
+          "taskId": "fixture-task",
+          "memories": [
+            {
+              "id": "memory-0000000000000001",
+              "owner": {
+                "accountId": "fixture-account",
+                "targetId": "fixture-target",
+                "workspaceId": null
+              },
+              "revision": 1,
+              "proposal": {
+                "title": "报告偏好",
+                "content": "先列结论，再附来源表。",
+                "category": "preference",
+                "origin": "manual",
+                "provenance": [
+                  {
+                    "kind": "native_user_request",
+                    "sourceId": "fixture-memory-operation",
+                    "sourceRevision": "1",
+                    "description": "Synthetic authenticated control request"
+                  }
+                ],
+                "validUntilMs": null
+              },
+              "reviewStatus": "candidate",
+              "enabled": false,
+              "deleted": false,
+              "sourceVerified": false,
+              "updatedAtMs": 1000
+            }
+          ],
+          "capturedAtMs": 1000,
+          "omittedCount": 0,
+          "__untrustedAuthority": true
+        }
+      }
+    ]
+  },
+  "MemoryListParams": {
+    "valid": [
+      {
+        "name": "valid_MemoryListParams",
+        "value": {
+          "after": null,
+          "includeCandidates": true
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject_invalid_MemoryListParams",
+        "value": {
+          "after": null,
+          "includeCandidates": true,
+          "__untrustedAuthority": true
+        }
+      }
+    ]
+  },
+  "MemoryReadParams": {
+    "valid": [
+      {
+        "name": "valid_MemoryReadParams",
+        "value": {
+          "memoryId": "memory-0000000000000001"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject_invalid_MemoryReadParams",
+        "value": {
+          "memoryId": "memory-0000000000000001",
+          "__untrustedAuthority": true
+        }
+      }
+    ]
+  },
+  "MemoryProposeParams": {
+    "valid": [
+      {
+        "name": "valid_MemoryProposeParams",
+        "value": {
+          "proposal": {
+            "title": "报告偏好",
+            "content": "先列结论，再附来源表。",
+            "category": "preference",
+            "origin": "manual",
+            "provenance": [
+              {
+                "kind": "native_user_request",
+                "sourceId": "fixture-memory-operation",
+                "sourceRevision": "1",
+                "description": "Synthetic authenticated control request"
+              }
+            ],
+            "validUntilMs": null
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject_invalid_MemoryProposeParams",
+        "value": {
+          "proposal": {
+            "title": "报告偏好",
+            "content": "先列结论，再附来源表。",
+            "category": "preference",
+            "origin": "manual",
+            "provenance": [
+              {
+                "kind": "native_user_request",
+                "sourceId": "fixture-memory-operation",
+                "sourceRevision": "1",
+                "description": "Synthetic authenticated control request"
+              }
+            ],
+            "validUntilMs": null
+          },
+          "__untrustedAuthority": true
+        }
+      }
+    ]
+  },
+  "MemoryReviewParams": {
+    "valid": [
+      {
+        "name": "valid_MemoryReviewParams",
+        "value": {
+          "memoryId": "memory-0000000000000001",
+          "review": {
+            "action": "accept",
+            "editedContent": null
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject_invalid_MemoryReviewParams",
+        "value": {
+          "memoryId": "memory-0000000000000001",
+          "review": {
+            "action": "accept",
+            "editedContent": null
+          },
+          "__untrustedAuthority": true
+        }
+      }
+    ]
+  },
+  "MemoryEnableParams": {
+    "valid": [
+      {
+        "name": "valid_MemoryEnableParams",
+        "value": {
+          "memoryId": "memory-0000000000000001",
+          "enabled": false
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject_invalid_MemoryEnableParams",
+        "value": {
+          "memoryId": "memory-0000000000000001",
+          "enabled": false,
+          "__untrustedAuthority": true
+        }
+      }
+    ]
+  },
+  "MemoryEditParams": {
+    "valid": [
+      {
+        "name": "valid_MemoryEditParams",
+        "value": {
+          "memoryId": "memory-0000000000000001",
+          "content": "修订后的合成偏好"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject_invalid_MemoryEditParams",
+        "value": {
+          "memoryId": "memory-0000000000000001",
+          "content": "修订后的合成偏好",
+          "__untrustedAuthority": true
+        }
+      }
+    ]
+  },
+  "MemoryListResult": {
+    "valid": [
+      {
+        "name": "valid_MemoryListResult",
+        "value": {
+          "page": {
+            "items": [
+              {
+                "id": "memory-0000000000000001",
+                "owner": {
+                  "accountId": "fixture-account",
+                  "targetId": "fixture-target",
+                  "workspaceId": null
+                },
+                "revision": 1,
+                "proposal": {
+                  "title": "报告偏好",
+                  "content": "先列结论，再附来源表。",
+                  "category": "preference",
+                  "origin": "manual",
+                  "provenance": [
+                    {
+                      "kind": "native_user_request",
+                      "sourceId": "fixture-memory-operation",
+                      "sourceRevision": "1",
+                      "description": "Synthetic authenticated control request"
+                    }
+                  ],
+                  "validUntilMs": null
+                },
+                "reviewStatus": "candidate",
+                "enabled": false,
+                "deleted": false,
+                "sourceVerified": false,
+                "updatedAtMs": 1000
+              }
+            ],
+            "nextCursor": null
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject_invalid_MemoryListResult",
+        "value": {
+          "page": {
+            "items": [
+              {
+                "id": "memory-0000000000000001",
+                "owner": {
+                  "accountId": "fixture-account",
+                  "targetId": "fixture-target",
+                  "workspaceId": null
+                },
+                "revision": 1,
+                "proposal": {
+                  "title": "报告偏好",
+                  "content": "先列结论，再附来源表。",
+                  "category": "preference",
+                  "origin": "manual",
+                  "provenance": [
+                    {
+                      "kind": "native_user_request",
+                      "sourceId": "fixture-memory-operation",
+                      "sourceRevision": "1",
+                      "description": "Synthetic authenticated control request"
+                    }
+                  ],
+                  "validUntilMs": null
+                },
+                "reviewStatus": "candidate",
+                "enabled": false,
+                "deleted": false,
+                "sourceVerified": false,
+                "updatedAtMs": 1000
+              }
+            ],
+            "nextCursor": null
+          },
+          "__untrustedAuthority": true
+        }
+      }
+    ]
+  },
+  "MemoryReadResult": {
+    "valid": [
+      {
+        "name": "valid_MemoryReadResult",
+        "value": {
+          "memory": {
+            "id": "memory-0000000000000001",
+            "owner": {
+              "accountId": "fixture-account",
+              "targetId": "fixture-target",
+              "workspaceId": null
+            },
+            "revision": 1,
+            "proposal": {
+              "title": "报告偏好",
+              "content": "先列结论，再附来源表。",
+              "category": "preference",
+              "origin": "manual",
+              "provenance": [
+                {
+                  "kind": "native_user_request",
+                  "sourceId": "fixture-memory-operation",
+                  "sourceRevision": "1",
+                  "description": "Synthetic authenticated control request"
+                }
+              ],
+              "validUntilMs": null
+            },
+            "reviewStatus": "candidate",
+            "enabled": false,
+            "deleted": false,
+            "sourceVerified": false,
+            "updatedAtMs": 1000
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject_invalid_MemoryReadResult",
+        "value": {
+          "memory": {
+            "id": "memory-0000000000000001",
+            "owner": {
+              "accountId": "fixture-account",
+              "targetId": "fixture-target",
+              "workspaceId": null
+            },
+            "revision": 1,
+            "proposal": {
+              "title": "报告偏好",
+              "content": "先列结论，再附来源表。",
+              "category": "preference",
+              "origin": "manual",
+              "provenance": [
+                {
+                  "kind": "native_user_request",
+                  "sourceId": "fixture-memory-operation",
+                  "sourceRevision": "1",
+                  "description": "Synthetic authenticated control request"
+                }
+              ],
+              "validUntilMs": null
+            },
+            "reviewStatus": "candidate",
+            "enabled": false,
+            "deleted": false,
+            "sourceVerified": false,
+            "updatedAtMs": 1000
+          },
+          "__untrustedAuthority": true
+        }
+      }
+    ]
+  }
+}

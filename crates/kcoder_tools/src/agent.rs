@@ -249,7 +249,7 @@ pub struct AgentInput {
     /// a dedicated exploration tool, when attached, for read-only reconnaissance.
     #[serde(default)]
     pub agent_type: Option<String>,
-    /// Exact registered plugin prompt skill name. Loads the plugin's command/agent instructions and enforces its tool restrictions in the child. Keep agent_type omitted or general; message supplies the task and arguments.
+    /// Exact registered plugin prompt or reviewed imported Agent skill name. Loads its instructions and enforces its tool restrictions in the child. Imported Agents also preserve their explicit native model mapping; source model aliases, approval grants and user-question permissions are never imported. Keep agent_type omitted or general; message supplies the task and arguments.
     #[serde(default)]
     pub plugin_agent: Option<String>,
     #[serde(skip)]
@@ -1388,6 +1388,13 @@ async fn spawn_agent_with_kind(
         .and_then(|p| p.allowed_tools.as_ref())
     {
         options.tool_allowlist = Some(allowlist.clone());
+    }
+    if let Some(execution) = input
+        .plugin_policy
+        .as_ref()
+        .and_then(|policy| policy.imported_agent.as_ref())
+    {
+        options.runtime_selection = crate::imported_agent::runtime(execution)?;
     }
     if let Some(persona) = persona.as_ref() {
         debug_assert_eq!(persona.base_role, agent_kind);

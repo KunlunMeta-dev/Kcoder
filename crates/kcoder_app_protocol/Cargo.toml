@@ -8,14 +8,24 @@ repository.workspace = true
 rust-version.workspace = true
 
 [features]
-json-schema = ["dep:schemars", "kcoder_types/json-schema"]
+json-schema = [
+    "dep:schemars",
+    "kcoder_channel_protocol/json-schema",
+    "kcoder_integration_protocol/json-schema",
+    "kcoder_types/json-schema",
+]
 
 [dependencies]
-schemars = { version = "0.8", optional = true }
+kcoder_channel_protocol = { path = "internal/channel_protocol" }
+kcoder_integration_protocol = { path = "internal/integration_protocol" }
 kcoder_types = { path = "../kcoder_types" }
+schemars = { version = "0.8", optional = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
+
+[build-dependencies]
+sha2 = { workspace = true }
 
 [[example]]
 name = "export_contracts"

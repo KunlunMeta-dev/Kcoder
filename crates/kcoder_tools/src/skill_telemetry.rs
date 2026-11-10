@@ -1,4 +1,4 @@
-use crate::ToolError;
+use crate::SkillSupportError;
 use chrono::{DateTime, Utc};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -128,7 +128,7 @@ pub enum SkillTelemetryEvent {
     Patch,
 }
 
-pub(crate) fn usage_query(cwd: &Path, name: Option<&str>) -> Result<Value, ToolError> {
+pub fn usage_query(cwd: &Path, name: Option<&str>) -> Result<Value, SkillSupportError> {
     let root = project_skills_root(cwd);
     let output = match name {
         None => {
@@ -138,7 +138,7 @@ pub(crate) fn usage_query(cwd: &Path, name: Option<&str>) -> Result<Value, ToolE
                 .find(|store| store.scope == "project")
                 .map(|store| &store.store)
                 .ok_or_else(|| {
-                    ToolError::Execution("project usage store was not loaded".to_string())
+                    SkillSupportError::Execution("project usage store was not loaded".to_string())
                 })?;
             serde_json::json!({
                 "success": true,
@@ -151,7 +151,7 @@ pub(crate) fn usage_query(cwd: &Path, name: Option<&str>) -> Result<Value, ToolE
         Some(name) => {
             let stores = load_usage_query_stores(cwd).map_err(to_tool_error)?;
             let record = find_usage_record(&stores, name).ok_or_else(|| {
-                ToolError::InvalidInput(format!("usage for skill '{name}' was not found"))
+                SkillSupportError::InvalidInput(format!("usage for skill '{name}' was not found"))
             })?;
             serde_json::json!({
                 "success": true,
@@ -516,11 +516,11 @@ fn record_skill_event_for_source(
 
 pub(crate) fn usage_root_for_source(cwd: &Path, source: &Path) -> PathBuf {
     let project_root = project_skills_root(cwd);
-    if crate::sandbox::path_starts_with(source, &project_root) {
+    if kcoder_shell_isolation::sandbox::path_starts_with(source, &project_root) {
         return project_root;
     }
     if let Some(user_root) = user_skills_root()
-        && crate::sandbox::path_starts_with(source, &user_root)
+        && kcoder_shell_isolation::sandbox::path_starts_with(source, &user_root)
     {
         return user_root;
     }
@@ -659,8 +659,8 @@ fn atomic_write(path: &Path, content: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn to_tool_error(error: anyhow::Error) -> ToolError {
-    ToolError::Execution(error.to_string())
+fn to_tool_error(error: anyhow::Error) -> SkillSupportError {
+    SkillSupportError::Execution(error.to_string())
 }
 
 fn load_skill_contents(root: &Path) -> anyhow::Result<BTreeMap<String, String>> {

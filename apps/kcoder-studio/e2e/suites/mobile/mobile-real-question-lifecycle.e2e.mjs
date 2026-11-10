@@ -25,7 +25,7 @@ await runE2E(import.meta.url, {
   const mobileWeb = await exportMobileWeb(context, {
     label: "mobile-question-lifecycle-export",
     outputName: "mobile-web-export",
-    dependencyRoot: resolve(repoRoot, "target/packages/kcoder-studio-mobile/20260930-153437.732Z-arm64-release/caches/mobile-node_modules"),
+    dependencyRoot: process.env.KCODER_E2E_MOBILE_DEPENDENCY_ROOT || undefined,
   });
   const workspace = context.pathInState("workspace");
   const configDir = context.pathInState("config");

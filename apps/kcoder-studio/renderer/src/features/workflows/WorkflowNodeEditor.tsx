@@ -1,3 +1,4 @@
+import { SettingsSelect } from '@/components/settings/SettingsSelect'
 import { X } from 'lucide-react'
 import { workflowRouteLabels } from './workflowApi'
 import { WorkflowNodeConfigFields } from './WorkflowNodeConfigFields'
@@ -73,7 +74,7 @@ export function WorkflowNodeEditor({
       disabled={busy || saving}
       aria-busy={busy || saving}
       aria-labelledby="workflow-node-editor-title"
-      className="min-w-0 w-full shrink-0 space-y-4 overflow-y-auto rounded-xl border border-border/60 bg-background p-4 lg:w-80"
+      className="studio-card-spacing min-w-0 w-full shrink-0 space-y-4 overflow-y-auto rounded-xl border border-border/60 bg-background lg:w-80"
     >
       <div className="flex items-center justify-between gap-2">
         <h2 id="workflow-node-editor-title" className="text-base font-medium">
@@ -124,7 +125,7 @@ export function WorkflowNodeEditor({
       </label>
       <label className="block space-y-1 text-sm">
         {t('workflowCanvas.nodeType')}
-        <select
+        <SettingsSelect
           data-testid="workflow-node-kind"
           className={inputClass}
           value={kind}
@@ -207,7 +208,7 @@ export function WorkflowNodeEditor({
               {t(`workflowCanvas.kind_${value}`)}
             </option>
           ))}
-        </select>
+        </SettingsSelect>
       </label>
       {(kind === 'agent' ||
         (kind === 'loop' && !(parsedConfig.loop as { body?: unknown } | undefined)?.body)) && (
@@ -225,7 +226,7 @@ export function WorkflowNodeEditor({
           </label>
           <label className="block space-y-1 text-sm">
             {t('workflowCanvas.role')}
-            <select
+            <SettingsSelect
               data-testid="workflow-node-role"
               className={inputClass}
               value={draft.agentType}
@@ -255,7 +256,7 @@ export function WorkflowNodeEditor({
               ].includes(draft.agentType) && (
                 <option value={draft.agentType}>{draft.agentType}</option>
               )}
-            </select>
+            </SettingsSelect>
           </label>
           <label className="block space-y-1 text-sm">
             {t('workflowCanvas.maxTurns')}
@@ -306,7 +307,7 @@ export function WorkflowNodeEditor({
       </details>
       <label className="block space-y-1 text-sm">
         {t('workflowCanvas.runIf')}
-        <select
+        <SettingsSelect
           className={inputClass}
           data-testid="workflow-run-if-source"
           value={draft.runIf?.nodeId ?? ''}
@@ -342,10 +343,10 @@ export function WorkflowNodeEditor({
                 {candidate.title || candidate.id}
               </option>
             ))}
-        </select>
+        </SettingsSelect>
       </label>
       {draft.runIf && (
-        <select
+        <SettingsSelect
           aria-label={t('workflowCanvas.branchValue')}
           className={inputClass}
           data-testid="workflow-run-if-value"
@@ -376,7 +377,7 @@ export function WorkflowNodeEditor({
               <option value="false">{t('workflowCanvas.falseBranch')}</option>
             </>
           )}
-        </select>
+        </SettingsSelect>
       )}
       <fieldset className="space-y-2">
         <legend className="mb-2 text-sm">{t('workflowCanvas.dependencies')}</legend>

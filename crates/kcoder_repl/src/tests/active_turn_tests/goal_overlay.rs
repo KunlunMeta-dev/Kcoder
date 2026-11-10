@@ -597,8 +597,16 @@ async fn turn_failure_pauses_active_goal_without_overwriting_terminal_status() {
 #[tokio::test]
 async fn provider_failure_goal_status_uses_typed_category_not_quota_text() {
     for (category, message, expected) in [
-        (kcoder_types::ProviderFailureCategory::AuthenticationError, "insufficient_quota usage limit", GoalStatus::Paused),
-        (kcoder_types::ProviderFailureCategory::QuotaExceeded, "opaque provider failure", GoalStatus::UsageLimited),
+        (
+            kcoder_types::ProviderFailureCategory::AuthenticationError,
+            "insufficient_quota usage limit",
+            GoalStatus::Paused,
+        ),
+        (
+            kcoder_types::ProviderFailureCategory::QuotaExceeded,
+            "opaque provider failure",
+            GoalStatus::UsageLimited,
+        ),
     ] {
         let tmp = tempfile::tempdir().unwrap();
         let engine = test_engine(tmp.path());
@@ -615,7 +623,8 @@ async fn provider_failure_goal_status_uses_typed_category_not_quota_text() {
                 resume_safe: false,
                 retry_after_ms: None,
             },
-        }).unwrap();
+        })
+        .unwrap();
         stop_active_goal_after_turn_failure(&engine, &start_goal, failure, &tx).await;
         let goal = engine.state.goal().unwrap();
         assert_eq!(goal.status, expected, "{category:?}");
@@ -1032,23 +1041,23 @@ fn question_dialog_adds_auto_other_option_for_single_choice() {
         dialog.request.questions[0].options.len() + 1
     );
     assert!(text.contains("None of the above"));
-    assert!(text.contains("Optionally, describe the better answer"));
+    assert!(text.contains("Write your own answer here"));
 }
 
 #[test]
-fn question_dialog_does_not_add_auto_other_option_for_multi_select() {
+fn question_dialog_adds_free_answer_for_multi_select() {
     let (tx, _rx) = tokio::sync::oneshot::channel();
     let mut dialog = question_dialog(tx);
     dialog.request.questions[0].multi_select = true;
 
     assert_eq!(
         question_dialog_option_count(&dialog.request.questions[0]),
-        dialog.request.questions[0].options.len()
+        dialog.request.questions[0].options.len() + 1
     );
 }
 
 #[test]
-fn question_dialog_other_option_submits_label() {
+fn question_dialog_other_option_edits_and_submits_the_actual_answer() {
     let (tx, mut rx) = tokio::sync::oneshot::channel();
     let dialog = question_dialog(tx);
     let mut app = ReplApp {
@@ -1059,13 +1068,88 @@ fn question_dialog_other_option_submits_label() {
 
     app.handle_key(KeyEvent::new(KeyCode::End, KeyModifiers::NONE));
     app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+    assert!(rx.try_recv().is_err());
+    assert!(app.handle_paste_text_for_active_overlay("都不符合。\n请先核对原始资料。"));
+    app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
 
     let response = rx.try_recv().expect("question response");
     assert_eq!(
         response.answers.get("Pick one").map(String::as_str),
-        Some(QUESTION_DIALOG_OTHER_OPTION_LABEL)
+        Some("都不符合。\n请先核对原始资料。")
     );
     assert!(app.pending_question.is_none());
+}
+
+#[test]
+fn question_dialog_multi_select_allows_only_custom_text() {
+    let (tx, mut rx) = tokio::sync::oneshot::channel();
+    let mut dialog = question_dialog(tx);
+    dialog.request.questions[0].multi_select = true;
+    dialog.states = question_dialog_initial_states(&dialog.request);
+    dialog.selected.clear();
+    let mut app = ReplApp {
+        pending_question: Some(dialog),
+        last_frame_area: Some(Rect::new(0, 0, 100, 30)),
+        ..ReplApp::default()
+    };
+    app.handle_key(KeyEvent::new(KeyCode::End, KeyModifiers::NONE));
+    app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+    assert!(app.handle_paste_text_for_active_overlay("仅采用我自己的方案"));
+    app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+    assert_eq!(
+        rx.try_recv()
+            .unwrap()
+            .answers
+            .get("Pick one")
+            .map(String::as_str),
+        Some("仅采用我自己的方案")
+    );
+}
+
+#[test]
+fn question_dialog_custom_answer_edits_whole_unicode_graphemes() {
+    let (tx, mut rx) = tokio::sync::oneshot::channel();
+    let mut app = ReplApp {
+        pending_question: Some(question_dialog(tx)),
+        last_frame_area: Some(Rect::new(0, 0, 100, 30)),
+        ..ReplApp::default()
+    };
+    app.handle_key(KeyEvent::new(KeyCode::End, KeyModifiers::NONE));
+    app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+    assert!(app.handle_paste_text_for_active_overlay("自定义👩‍💻"));
+    app.handle_key(KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE));
+    app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::SHIFT));
+    assert!(app.handle_paste_text_for_active_overlay("下一行"));
+    app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+    assert_eq!(
+        rx.try_recv()
+            .unwrap()
+            .answers
+            .get("Pick one")
+            .map(String::as_str),
+        Some("自定义\n下一行")
+    );
+}
+
+#[test]
+fn question_dialog_leaving_empty_custom_editor_does_not_submit_an_other_label() {
+    let (tx, mut rx) = tokio::sync::oneshot::channel();
+    let mut dialog = question_dialog(tx);
+    dialog.request.questions[0].multi_select = true;
+    dialog.states = question_dialog_initial_states(&dialog.request);
+    dialog.selected.clear();
+    let mut app = ReplApp {
+        pending_question: Some(dialog),
+        last_frame_area: Some(Rect::new(0, 0, 100, 30)),
+        ..ReplApp::default()
+    };
+    app.handle_key(KeyEvent::new(KeyCode::End, KeyModifiers::NONE));
+    app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+    app.handle_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+    app.handle_key(KeyEvent::new(KeyCode::Home, KeyModifiers::NONE));
+    app.handle_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+    assert!(rx.try_recv().is_err());
+    assert!(app.pending_question.is_some());
 }
 
 #[test]
@@ -1207,6 +1291,8 @@ fn slash_menu_prefix_matches_preserve_registry_order() {
             "/memories",
             "/moa",
             "/moa-plan",
+            "/migration",
+            "/migrate",
             "/mcp",
         ]
     );

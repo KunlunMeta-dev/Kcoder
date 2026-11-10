@@ -1,5 +1,5 @@
-import { invoke } from '@tauri-apps/api/core'
-import { isTauriRuntime } from './runtime-environment'
+import { invoke } from '@/lib/runtime-commands'
+import { isGatewayRuntime } from './runtime-environment'
 
 export interface NativeWorkspacePath {
   path: string
@@ -13,14 +13,14 @@ export interface NativeWorkspacePathPickerOptions {
 }
 
 export function canOpenNativeWorkspacePathPicker(): boolean {
-  return isTauriRuntime()
+  return isGatewayRuntime()
 }
 
 export async function openNativeWorkspacePathPicker(
   initialDirectory?: string,
   options: NativeWorkspacePathPickerOptions = {}
 ): Promise<NativeWorkspacePath[]> {
-  if (!isTauriRuntime()) return []
+  if (!isGatewayRuntime()) return []
 
   const selected = await invoke<NativeWorkspacePath[]>('pick_workspace_paths', {
     initialDirectory: initialDirectory?.trim() || null,

@@ -1,56 +1,10 @@
 {
   "$schema": "./settings.schema.jsonc",
   "permission_mode": "yolo",
-  "providers": {
-    "openai-responses": {
-      "api_format": "openai_responses",
-      "endpoint": "https://api.openai.com/v1",
-      "default_model": "gpt-5.2",
-      "reasoning_effort": "high",
-      "context_window_tokens": 400000,
-      "output_headroom_tokens": 32768,
-      "max_output_tokens": 262144,
-      "request_timeout_secs": 300,
-      "no_proxy": false,
-      "extra_body": {}
-    },
-    "openai-chat": {
-      "api_format": "openai_chat_completions",
-      "endpoint": "https://api.openai.com/v1",
-      "default_model": "gpt-4o",
-      "context_window_tokens": 128000,
-      "output_headroom_tokens": 16384,
-      "max_output_tokens": 16384,
-      "request_timeout_secs": 300,
-      "no_proxy": false,
-      "extra_body": {}
-    },
-    "local-openai-chat": {
-      "api_format": "openai_chat_completions",
-      "endpoint": "http://127.0.0.1:8000/v1",
-      "default_model": "local-model",
-      "context_window_tokens": 128000,
-      "output_headroom_tokens": 8192,
-      "max_output_tokens": 8192,
-      "request_timeout_secs": 300,
-      "no_proxy": true,
-      "extra_body": {}
-    },
-    "kimi": {
-      "api_format": "openai_chat_completions",
-      "endpoint": "https://api.kimi.com/coding/v1",
-      "default_model": "kimi-for-coding",
-      "context_window_tokens": 256000,
-      "output_headroom_tokens": 40960,
-      "max_output_tokens": 40960,
-      "request_timeout_secs": 600,
-      "user_agent": "kcoder-rust/0.1.0",
-      "max_retries": 3,
-      "retry_base_delay_ms": 500,
-      "no_proxy": false,
-      "extra_body": {}
-    }
-  },
+  // Configure model services in the target's own settings.
+  // Omitted selections retain mode defaults; [] explicitly selects no tools.
+  "tools": { "studio": {} },
+  "web": { "search": { "mode": "auto" }, "fetch": { "networkPolicy": "public", "proxyMode": "inherit" } },
   "tui": {
     "alternate_screen": "auto"
   },
@@ -107,8 +61,12 @@
       }
     },
     "foreground_budget_ms": {
-      "default_ms": 300000,
+      "default_ms": 120000,
       "tools": {}
+    },
+    "execution_timeout_ms": {
+      "bash": 1800000,
+      "PowerShell": 1800000
     },
     "task_output_timeout_ms": {
       "default_ms": 5000,
@@ -117,6 +75,48 @@
     },
     "permission_denials": {
       "consecutive_limit": 2
+    }
+  },
+  // Expert and channel management are available by default; platform connections remain explicit.
+  // Settings contain no credentials or grants.
+  "integrations": {
+    "remotes": { "enabled": false, "nativeAcpPeers": [], "nativeSshPeers": [], "outbound": { "enabled": false, "maximumTotalTokens": 16384, "maximumModelCalls": 1, "maximumDurationSeconds": 120 }, "receiver": { "enabled": false, "allowSameAccountAcp": false, "allowedSenderAccounts": [], "acceptMaterials": false, "maximumMaterialBytes": 0, "office": { "enabled": false, "allowedFormats": [], "allowedTools": [], "startupConfiguration": null }, "maximumTotalTokens": 16384, "maximumModelCalls": 1, "maximumDurationSeconds": 120 } },
+    // Optional channelTaskBudget is omitted to preserve existing task limits.
+    "core": { "modelPolicies": [] },
+    "office": {
+      "enabled": true,
+      "allowOrganizationTemplates": false,
+      "allowExternalDelivery": false,
+      "allowedFormats": [
+        "docx",
+        "xlsx",
+        "pptx",
+        "csv",
+        "json"
+      ],
+      "maxOutputBytes": 20971520,
+      "maxDatasetRows": 10000,
+      "datasetPageRows": 100,
+      "projectionPreviewChars": 2000,
+      "generationTimeoutMs": 30000
+    },
+    "connectivity": {
+      "enabled": true,
+      "maxConnections": 16,
+      "maxPendingEvents": 1000,
+      "maxMetadataBytes": 67108864,
+      "maxAttachmentBytes": 104857600,
+      "replayRetentionMs": 2592000000
+    },
+    "knowledge": {
+      "memory_center_enabled": false,
+      "publications_enabled": false,
+      "business_automation_enabled": false,
+      "observer_candidates_enabled": false,
+      "auxiliary_extraction_enabled": false,
+      "extraction_maximum_tokens": 2000,
+      "extraction_maximum_input_bytes": 65536,
+      "extraction_maximum_candidates": 8
     }
   },
   "memory": {

@@ -1,3 +1,4 @@
+import { SettingsSelect } from '@/components/settings/SettingsSelect'
 import { useState } from 'react'
 import { useTranslation } from '@/hooks/useTranslation'
 
@@ -57,7 +58,7 @@ export function McpClientAuthorizationForm({
           </label>
           <label>
             {t('workbench.mcp_client_method')}
-            <select
+            <SettingsSelect
               className={input}
               value={method}
               disabled={disabled}
@@ -69,7 +70,7 @@ export function McpClientAuthorizationForm({
               <option value="none">{t('workbench.mcp_client_public')}</option>
               <option value="client_secret_basic">client_secret_basic</option>
               <option value="client_secret_post">client_secret_post</option>
-            </select>
+            </SettingsSelect>
           </label>
           {method !== 'none' && (
             <label>

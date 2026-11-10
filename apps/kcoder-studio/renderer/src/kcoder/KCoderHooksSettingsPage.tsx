@@ -1,3 +1,4 @@
+import { currentHostServer } from '@/features/runtime-target/currentHostTarget'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { FileCode2, RefreshCw, Server, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -66,7 +67,7 @@ export function KCoderHooksSettingsPage() {
         setTargets(items)
         setReady(true)
         setServerId(previous =>
-          items.some(item => item.id === previous) ? previous : (items[0]?.id ?? '')
+          items.some(item => item.id === previous) ? previous : (currentHostServer(items)?.id ?? '')
         )
         if (changed) setScopeVersion(value => value + 1)
       } catch {
@@ -244,7 +245,7 @@ export function KCoderHooksSettingsPage() {
         </p>
       )}
       {snapshot && snapshotScope === targetScope && ready && !loginRequired && (
-        <section className="rounded-2xl border border-border bg-surface/50 p-5">
+        <section className="studio-card-spacing rounded-2xl border border-border bg-surface/50">
           <div className="mb-3 flex items-start gap-2 text-sm">
             <FileCode2 className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
             <code data-testid="hooks-config-path" className="min-w-0 break-all text-code-sm">

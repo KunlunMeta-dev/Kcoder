@@ -30,8 +30,12 @@ fn resident_resume_after_hook_rejection_does_not_commit_a_missing_user_turn() {
     assert_eq!(blocked_rows.len(), 1, "{blocked_history}");
     assert_eq!(blocked_rows[0]["role"], "assistant");
     assert_eq!(blocked_rows[0]["status"], "failed");
-    server.send(json!({"id":41,"method":"thread/read/indexed","params":{"threadId":id,"limit":20}}));
-    assert_eq!(server.response(41)["result"]["messages"], blocked_history["result"]["messages"]);
+    server
+        .send(json!({"id":41,"method":"thread/read/indexed","params":{"threadId":id,"limit":20}}));
+    assert_eq!(
+        server.response(41)["result"]["messages"],
+        blocked_history["result"]["messages"]
+    );
     server.send(json!({"jsonrpc":"2.0","id":4,"method":"thread/resume","params":{"threadId":id}}));
     assert!(server.response(4)["result"]["thread"].is_object());
     server.send(json!({"jsonrpc":"2.0","id":5,"method":"turn/start","params":{"threadId":id,"input":[{"type":"text","text":"allowed"}]}}));
@@ -45,8 +49,12 @@ fn resident_resume_after_hook_rejection_does_not_commit_a_missing_user_turn() {
         json!({"jsonrpc":"2.0","id":6,"method":"thread/read","params":{"threadId":id,"limit":20}}),
     );
     let transcript_result = server.response(6);
-    let user = transcript_result["result"]["messages"].as_array().unwrap().iter()
-        .find(|message| message["role"] == "user").unwrap();
+    let user = transcript_result["result"]["messages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|message| message["role"] == "user")
+        .unwrap();
     assert_eq!(user["turnId"], "turn-2");
     let transcript = transcript_result.to_string();
     assert!(transcript.contains("allowed"));
@@ -55,22 +63,37 @@ fn resident_resume_after_hook_rejection_does_not_commit_a_missing_user_turn() {
     assert_eq!(rows[0]["status"], "failed");
     assert_eq!(rows[0]["turnId"], "turn-1");
     assert_eq!(rows[0]["attemptId"], "turn-1");
-    assert!(!rows.iter().any(|row| row["role"] == "user" && row["content"] == "blocked"));
+    assert!(
+        !rows
+            .iter()
+            .any(|row| row["role"] == "user" && row["content"] == "blocked")
+    );
     server.send(json!({"jsonrpc":"2.0","id":7,"method":"thread/read/indexed","params":{"threadId":id,"limit":20}}));
-    assert_eq!(server.response(7)["result"]["messages"], transcript_result["result"]["messages"]);
+    assert_eq!(
+        server.response(7)["result"]["messages"],
+        transcript_result["result"]["messages"]
+    );
     server.shutdown();
-    let mut restored = TestAppServer::start_scenario(temp.path(), &settings, "thinking-preview", "0", "0", "0");
+    let mut restored =
+        TestAppServer::start_scenario(temp.path(), &settings, "thinking-preview", "0", "0", "0");
     restored.initialize(1);
-    restored.send(json!({"jsonrpc":"2.0","id":2,"method":"thread/resume","params":{"threadId":id}}));
+    restored
+        .send(json!({"jsonrpc":"2.0","id":2,"method":"thread/resume","params":{"threadId":id}}));
     assert!(restored.response(2).get("error").is_none());
     restored.send(json!({"jsonrpc":"2.0","id":3,"method":"turn/start","params":{"threadId":id,"input":[{"type":"text","text":"allowed after restart"}]}}));
     assert_eq!(restored.response(3)["result"]["turn"]["id"], "turn-3");
     restored.wait_for_method("turn/completed");
-    restored.send(json!({"jsonrpc":"2.0","id":4,"method":"thread/read","params":{"threadId":id,"limit":20}}));
+    restored.send(
+        json!({"jsonrpc":"2.0","id":4,"method":"thread/read","params":{"threadId":id,"limit":20}}),
+    );
     let history = restored.response(4);
-    let turns = history["result"]["messages"].as_array().unwrap().iter()
+    let turns = history["result"]["messages"]
+        .as_array()
+        .unwrap()
+        .iter()
         .filter(|message| message["role"] == "user")
-        .map(|message| message["turnId"].as_str().unwrap()).collect::<Vec<_>>();
+        .map(|message| message["turnId"].as_str().unwrap())
+        .collect::<Vec<_>>();
     assert_eq!(turns, vec!["turn-2", "turn-3"]);
     assert_eq!(history["result"]["messages"][0]["status"], "failed");
     assert_eq!(history["result"]["messages"][0]["attemptId"], "turn-1");
@@ -311,12 +334,6 @@ fn resident_threads_run_concurrently_and_interrupt_is_thread_scoped() {
     let interrupted = server.response(7);
     assert_eq!(interrupted["result"]["interrupted"], true, "{interrupted}");
 
-    server.send(json!({
-        "jsonrpc": "2.0", "id": 8, "method": "turn/interrupt",
-        "params": {"threadId": first, "turnId": first_turn}
-    }));
-    assert_eq!(server.response(8)["result"]["interrupted"], false);
-
     let deadline = Instant::now() + Duration::from_secs(30);
     loop {
         let value = server.next_value(deadline);
@@ -328,9 +345,26 @@ fn resident_threads_run_concurrently_and_interrupt_is_thread_scoped() {
             break;
         }
     }
+    // Acceptance is not a cleanup barrier. An exact repeated stop may confirm
+    // pending cancellation; after it settles there must be no matching turn.
+    let deadline = Instant::now() + Duration::from_secs(30);
+    for request_id in 8.. {
+        server.send(json!({
+            "jsonrpc": "2.0", "id": request_id, "method": "turn/interrupt",
+            "params": {"threadId": first, "turnId": first_turn}
+        }));
+        let response = server.response(request_id);
+        match response["result"]["interrupted"].as_bool() {
+            Some(false) => break,
+            Some(true) => {
+                assert!(Instant::now() < deadline, "owned cancellation did not settle");
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            None => panic!("invalid interruption response: {response}"),
+        }
+    }
     server.shutdown();
 }
-
 
 #[test]
 fn shorten_wait_reports_and_does_not_cancel_the_running_turn() {
@@ -366,9 +400,13 @@ fn shorten_wait_reports_and_does_not_cancel_the_running_turn() {
 
     server.send(json!({"jsonrpc":"2.0","id":5,"method":"thread/list","params":{}}));
     let running = server.response(5);
-    assert!(running["result"]["threads"].as_array().unwrap().iter().any(
-        |thread| { thread["id"] == thread_id && thread["status"] == "running" }
-    ));
+    assert!(
+        running["result"]["threads"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|thread| { thread["id"] == thread_id && thread["status"] == "running" })
+    );
 
     server.send(json!({
         "jsonrpc": "2.0", "id": 6, "method": "turn/interrupt",
@@ -535,7 +573,18 @@ fn one_app_server_keeps_multiple_threads_resident_and_routes_status_delete_and_t
         "jsonrpc": "2.0", "id": 12, "method": "thread/delete",
         "params": {"threadId": empty}
     }));
-    assert_eq!(server.response(12)["result"]["deleted"], true);
+    let empty_deleted = server.response(12);
+    assert_eq!(empty_deleted["result"]["deleted"], true, "{empty_deleted}");
+    server.send(json!({
+        "jsonrpc": "2.0", "id": 120, "method": "thread/delete",
+        "params": {"threadId": "never-created-empty-session"}
+    }));
+    let unknown = server.response(120);
+    assert_eq!(unknown["error"]["code"], -32035, "{unknown}");
+    assert!(
+        unknown.get("result").is_none(),
+        "absence alone must not authorize a cold deletion"
+    );
     server.send(json!({
         "jsonrpc": "2.0", "id": 13, "method": "thread/resume",
         "params": {"threadId": empty}
@@ -776,12 +825,28 @@ fn turn_file_changes_commands_route_to_the_explicit_resident_thread() {
             "args": [artifact_a]
         }
     }));
+    let rejected = server.response(8);
+    assert!(rejected.get("error").is_none(), "{rejected}");
+    assert_eq!(rejected["result"]["stdout"]["success"], false, "{rejected}");
     assert_eq!(
-        server.response(8)["result"]["stdout"]["file_changes"]["status"],
-        "reverted"
+        rejected["result"]["stdout"]["file_changes"]["status"], "active",
+        "{rejected}"
     );
-    assert!(!temp.path().join("a.txt").exists());
-    assert!(temp.path().join("b.txt").exists());
+    assert_eq!(
+        rejected["result"]["stdout"]["file_changes"]["revertible"], false,
+        "{rejected}"
+    );
+    assert!(
+        rejected["result"]["stdout"]["error"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("current-file applicability proof"),
+        "{rejected}"
+    );
+    // This hand-written legacy artifact has no protected applicability proof.
+    // Refusing reversal must preserve both the selected and peer thread's files.
+    assert_eq!(std::fs::read(temp.path().join("a.txt")).unwrap(), b"a\n");
+    assert_eq!(std::fs::read(temp.path().join("b.txt")).unwrap(), b"b\n");
 
     server.send(json!({
         "jsonrpc": "2.0", "id": 9, "method": "device/execute",

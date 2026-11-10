@@ -153,8 +153,13 @@ impl WorkflowRunStore {
         definition: &kcoder_types::workflow::WorkflowDefinition,
         args: &Value,
     ) -> Result<(), ToolError> {
-        let library = WorkflowStore::new(crate::workflow_draft::library_root(ctx)?);
         let state = self.state.lock().unwrap().clone();
+        let native = state.native_definition;
+        let library = WorkflowStore::new(if native {
+            self.run_dir.clone()
+        } else {
+            crate::workflow_draft::library_root(ctx)?
+        });
         let count = library
             .next_verification_attempt(&state.run_id)
             .map_err(|e| ToolError::Execution(e.to_string()))?;
@@ -222,7 +227,7 @@ impl WorkflowRunStore {
         let mut guard = self.verification.lock().unwrap();
         *guard = Some((library, evidence, definition.clone()));
         let (library, evidence, pinned) = guard.as_ref().expect("verification was initialized");
-        if state.resume_count == 0 {
+        if state.resume_count == 0 && !native {
             library.admit_verification(evidence, pinned)
         } else {
             library.record_verification_pinned(evidence, pinned)
@@ -331,6 +336,11 @@ impl WorkflowRunStore {
         let Some((library, evidence, pinned)) = guard.as_mut() else {
             return Ok(());
         };
+        if let Some(observation) = self.observation.lock().unwrap().as_ref() {
+            evidence.interaction_modified |= observation
+                .interaction_modified()
+                .map_err(|error| ToolError::Execution(error.to_string()))?;
+        }
         evidence.execution_status = output["status"].as_str().unwrap_or("unknown").into();
         evidence.updated_at_ms = now_millis();
         evidence.outcome_certainty = if self.effect_outcomes_known()? {
@@ -765,6 +775,9 @@ mod tests {
             require_legacy_agent_request: false,
             verification_store: None,
             isolate_context: true,
+            pinned_model: None,
+            native_parent_state: None,
+            collaboration_artifacts: None,
             runner: runner.clone(),
             arrangement_mode: false,
             resume_run_dir: None,

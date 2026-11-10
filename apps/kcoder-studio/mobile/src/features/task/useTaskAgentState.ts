@@ -22,7 +22,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import { AppState, FlatList, Keyboard, TextInput } from "react-native";
+import { AppState, Keyboard, type FlatListInstance, type TextInputInstance } from "react-native";
 import { releaseLocalAttachmentPreview } from "./attachmentPreparation";
 import { type AgentPanelProps, type ComposerStagedAttachment } from "./types";
 
@@ -46,7 +46,7 @@ export function useTaskAgentState({
   onTurnPreferencesChange,
   onOpenFile,
   onOpenChanges,
-}: AgentPanelProps) {
+}: AgentPanelProps, workspaceReady = true) {
   const snapshot = useSyncExternalStore(
     task.subscribe,
     task.getSnapshot,
@@ -81,7 +81,7 @@ export function useTaskAgentState({
     [],
   );
 
-  const messageInputRef = useRef<TextInput>(null);
+  const messageInputRef = useRef<TextInputInstance>(null);
 
   const goalEditExpectationRef = useRef<{
     command: "/goal" | "/goal-pro" | "/ultgoal";
@@ -154,8 +154,6 @@ export function useTaskAgentState({
     if (!modelBusy) setModelPickerOpen(false);
   };
 
-  const modelPickerRef = useModalFocusTrap(modelPickerOpen, closeModelPicker);
-
   useEffect(() => {
     const generation = ++mountGeneration.current;
     mountedRef.current = true;
@@ -178,7 +176,7 @@ export function useTaskAgentState({
     };
   }, [demo, task]);
 
-  const messageListRef = useRef<FlatList<ChatMessage>>(null);
+  const messageListRef = useRef<FlatListInstance>(null);
 
   const messageListLayoutHeight = useRef(0);
 
@@ -197,21 +195,24 @@ export function useTaskAgentState({
   const draftHydrated = useRef(false);
 
   useEffect(() => {
-    if (draftHydrated.current || initialDraft === undefined) return;
+    if (!workspaceReady || draftHydrated.current) return;
     draftHydrated.current = true;
+    if (initialDraft === undefined) return;
     // An empty input may be an intentional edit, not an unhydrated value.
     if (inputIntentRef.current.revision === 0) setInput(initialDraft);
-  }, [initialDraft]);
+  }, [initialDraft, workspaceReady]);
 
   useEffect(() => {
+    if (!workspaceReady) return;
     const timer = setTimeout(
       () => ignorePersistenceFailure(onDraftChange?.(input || undefined)),
       350,
     );
     return () => clearTimeout(timer);
-  }, [input, onDraftChange]);
+  }, [input, onDraftChange, workspaceReady]);
 
   useEffect(() => {
+    if (!workspaceReady) return;
     if (
       !queueHydrated.current &&
       messageQueue.getSnapshot().length === 0 &&
@@ -233,6 +234,7 @@ export function useTaskAgentState({
       lastQueuePersistence.current = signature;
     }));
   }, [
+    workspaceReady,
     initialQueuedMessages,
     messageQueue,
     onQueuedMessagesChange,
@@ -241,7 +243,7 @@ export function useTaskAgentState({
 
   const onDraftChangeRef = useRef(onDraftChange);
 
-  onDraftChangeRef.current = onDraftChange;
+  onDraftChangeRef.current = workspaceReady ? onDraftChange : undefined;
 
   useEffect(
     () => () => {
@@ -253,6 +255,7 @@ export function useTaskAgentState({
   );
 
   useEffect(() => {
+    if (!workspaceReady) return;
     const subscription = AppState.addEventListener("change", (state) => {
       if (state !== "active")
         ignorePersistenceFailure(
@@ -260,7 +263,7 @@ export function useTaskAgentState({
         );
     });
     return () => subscription.remove();
-  }, [onDraftChange]);
+  }, [onDraftChange, workspaceReady]);
 
   useEffect(() => {
     const followIntent = messageFollowState.current;
@@ -387,7 +390,6 @@ export function useTaskAgentState({
     openAttachmentSheet,
     attachmentSheetRef,
     closeModelPicker,
-    modelPickerRef,
     messageListRef,
     messageListLayoutHeight,
     messageFollowState,

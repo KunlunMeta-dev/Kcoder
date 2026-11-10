@@ -1,5 +1,5 @@
 import { Monitor, Settings2, SquareTerminal, X } from 'lucide-react'
-import { memo, useCallback, useEffect, useMemo, useState } from 'react'
+import { Suspense, memo, useCallback, useEffect, useMemo, useState } from 'react'
 import type { KeyboardEvent } from 'react'
 import type { WorkspaceSessionApi } from '@/features/workbench/workbenchServices'
 import { useTranslation } from '@/hooks/useTranslation'
@@ -12,7 +12,7 @@ import { WorkspacePanelCards } from './WorkspacePanelCards'
 import type { WorkspacePanelMenuActions } from './workspace-panel-tools'
 import { isKCoderGatewayPage } from '@/kcoder/gatewayRpc'
 import { listSshConnections, type SshConnectionProfile } from '@/kcoder/sshTerminal'
-import { SshTerminalPane } from '@/kcoder/SshTerminalPane'
+import { LazySshTerminalPane as SshTerminalPane } from './workspacePanelChunks'
 import { navigateTo } from '@/lib/navigation'
 
 interface BottomWorkspacePanelTab {
@@ -47,12 +47,15 @@ interface PersistedBottomTerminalTabs {
   tabIds: string[]
 }
 
-const BOTTOM_TERMINAL_TABS_STORAGE_PREFIX = 'wework.workspace.bottom-terminal-tabs.v1:'
+const BOTTOM_TERMINAL_TABS_STORAGE_PREFIX = 'kcoder.workspace.bottom-terminal-tabs.v1:'
+const LEGACY_BOTTOM_TERMINAL_TABS_STORAGE_PREFIX = 'wework.workspace.bottom-terminal-tabs.v1:'
 
 function readPersistedTabs(persistenceKey: string): PersistedBottomTerminalTabs {
   try {
     const value = JSON.parse(
-      window.localStorage.getItem(`${BOTTOM_TERMINAL_TABS_STORAGE_PREFIX}${persistenceKey}`) ?? ''
+      window.localStorage.getItem(BOTTOM_TERMINAL_TABS_STORAGE_PREFIX + persistenceKey) ??
+        window.localStorage.getItem(LEGACY_BOTTOM_TERMINAL_TABS_STORAGE_PREFIX + persistenceKey) ??
+        ''
     ) as Partial<PersistedBottomTerminalTabs>
     const tabIds = Array.isArray(value.tabIds)
       ? value.tabIds
@@ -423,11 +426,13 @@ function BottomWorkspaceTabContent({
   return (
     <div hidden={!active} className="absolute inset-0 min-h-0 w-full">
       {tab.sshProfile ? (
-        <SshTerminalPane
-          profile={tab.sshProfile}
-          sessionId={tab.id}
-          active={panelActive && active}
-        />
+        <Suspense fallback={null}>
+          <SshTerminalPane
+            profile={tab.sshProfile}
+            sessionId={tab.id}
+            active={panelActive && active}
+          />
+        </Suspense>
       ) : (
         <WorkspacePanelCards
           showWorkbenchBackground={showWorkbenchBackground}

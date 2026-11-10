@@ -35,8 +35,6 @@ describe('createRemoteTerminalClient', () => {
       apiBaseUrl: '/api',
       socketBaseUrl: 'http://socket.example',
       socketPath: '/socket.io',
-      loginMode: 'all',
-      oidcLoginText: '',
       cloudDeviceScalingWikiUrl: '',
     })
     emitMock.mockImplementation((event, payload, ack) => {

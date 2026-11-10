@@ -227,7 +227,8 @@ await runE2E(import.meta.url, {
   assert.equal(rpcMethods.filter(method => method === "terminal/start").length, terminalStartsBeforeReload,
     "刷新必须 attach 恢复后的 PTY，不能再创建第三个会话");
   const terminalClosesBeforeUserClose = rpcMethods.filter(method => method === "terminal/close").length;
-  await page.locator('[data-testid="workspace-tab-switcher"]:visible').click();
+  await page.getByTestId("task-more").click();
+  await page.getByTestId("task-menu-workspace").click();
   page.once("dialog", dialog => dialog.accept());
   await page.getByLabel("关闭终端 1", { exact: true }).click();
   await page.getByTestId("workspace-tab-terminal-1").waitFor({ state: "hidden", timeout: 30_000 });
@@ -284,7 +285,8 @@ async function waitFor(read, timeoutMs, label) {
 }
 
 async function selectPanel(page, id) {
-  await page.locator('[data-testid="workspace-tab-switcher"]:visible').click();
+  await page.getByTestId("task-more").click();
+  await page.getByTestId("task-menu-workspace").click();
   await page.locator(`[data-testid="workspace-tab-${id}"]:visible`).click();
 }
 

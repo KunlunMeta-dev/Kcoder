@@ -118,3 +118,28 @@ test('an early SSH exit cannot be overwritten by a late connect acknowledgement'
   await failure
   connection.dispose()
 })
+
+
+test('relay mount scopes SSH profiles and terminal WebSockets to the same Gateway', async () => {
+  const base = document.createElement('meta')
+  base.name = 'kcoder-app-base-path'
+  base.content = '/g/owned-gateway'
+  document.head.appendChild(base)
+  const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ connections: [] }) })
+  vi.stubGlobal('fetch', fetchMock)
+  await listSshConnections()
+  expect(fetchMock).toHaveBeenCalledWith(
+    '/g/owned-gateway/api/ssh-connections',
+    expect.objectContaining({ credentials: 'same-origin' })
+  )
+  const connection = new SshTerminalConnection()
+  try {
+    const pending = connection.connect('remote')
+    await vi.waitFor(() => expect(FakeSocket.latest.sent).toHaveLength(1))
+    expect(FakeSocket.latest.url.pathname).toBe('/g/owned-gateway/rpc')
+    FakeSocket.latest.message({ id: 1, result: { status: 'connected' } })
+    await pending
+  } finally {
+    connection.dispose()
+  }
+})

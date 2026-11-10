@@ -1,4 +1,5 @@
 import { describe, expect, test, vi } from 'vitest'
+import { notifyAccountContextChange } from '@/kcoder/accountContextEvents'
 import {
   buildPullRequestUrl,
   checkoutProjectBranch,
@@ -133,6 +134,56 @@ describe('workspaceHasUncommittedChanges', () => {
 })
 
 describe('loadProjectEnvironment', () => {
+  test('isolates pending environment reads after an account change', async () => {
+    let releaseOld!: () => void
+    let releaseNew!: () => void
+    const oldGate = new Promise<void>(resolve => { releaseOld = resolve })
+    const newGate = new Promise<void>(resolve => { releaseNew = resolve })
+    let calls = 0
+    const executeCommand = vi.fn(async () => {
+      const call = ++calls
+      await (call <= 3 ? oldGate : newGate)
+      return { success: true, stdout: '', stderr: '' }
+    })
+    const api = { executeCommand }
+    const target = { deviceId: 'account-change-device', path: '/workspace' }
+    const old = loadProjectEnvironment(api, null, target)
+    const oldResult = expect(old).rejects.toMatchObject({ name: 'AbortError' })
+    await Promise.resolve()
+    notifyAccountContextChange(target.deviceId)
+    const fresh = loadProjectEnvironment(api, null, target)
+    await Promise.resolve()
+    expect(executeCommand).toHaveBeenCalledTimes(6)
+    releaseNew()
+    await fresh
+    releaseOld()
+    await oldResult
+  })
+  test('reuses an unfinished environment read even after the cache TTL', async () => {
+    let release!: () => void
+    const gate = new Promise<void>(resolve => { release = resolve })
+    const executeCommand = vi.fn(async () => {
+      await gate
+      return { success: true, stdout: '', stderr: '' }
+    })
+    const api = { executeCommand }
+    const target = { deviceId: 'slow-device', path: '/slow-workspace' }
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(1000)
+    try {
+      const first = loadProjectEnvironment(api, null, target)
+      await Promise.resolve()
+      expect(executeCommand).toHaveBeenCalledTimes(3)
+      clock.mockReturnValue(7000)
+      const second = loadProjectEnvironment(api, null, target)
+      await Promise.resolve()
+      expect(executeCommand).toHaveBeenCalledTimes(3)
+      release()
+      expect(await second).toEqual(await first)
+      expect(executeCommand).toHaveBeenCalledTimes(4)
+    } finally {
+      clock.mockRestore()
+    }
+  })
   test('resolves git checkout path to an absolute device workspace path', async () => {
     const executeCommand = vi
       .fn()

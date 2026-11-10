@@ -1,0 +1,1164 @@
+{
+  "MemoryEditParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "content": {
+        "type": "string"
+      },
+      "memoryId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "content",
+      "memoryId"
+    ],
+    "title": "MemoryEditParams",
+    "type": "object"
+  },
+  "MemoryEnableParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "enabled": {
+        "type": "boolean"
+      },
+      "memoryId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "enabled",
+      "memoryId"
+    ],
+    "title": "MemoryEnableParams",
+    "type": "object"
+  },
+  "MemoryListParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "after": {
+        "default": null,
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "includeCandidates": {
+        "default": true,
+        "type": "boolean"
+      }
+    },
+    "title": "MemoryListParams",
+    "type": "object"
+  },
+  "MemoryListResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationNullable_for_String": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationOwner": {
+        "additionalProperties": false,
+        "description": "Stable owner identity excludes refreshable authorization/configuration generations.",
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "organizationId": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationNullable_for_String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "$ref": "#/definitions/IntegrationNullable_for_String"
+          }
+        },
+        "required": [
+          "accountId",
+          "targetId",
+          "workspaceId"
+        ],
+        "type": "object"
+      },
+      "KnowledgePage_for_ReviewedMemory": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/definitions/ReviewedMemory"
+            },
+            "type": "array"
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "MemoryOrigin": {
+        "enum": [
+          "manual",
+          "observer",
+          "imported",
+          "existing_observation"
+        ],
+        "type": "string"
+      },
+      "MemoryProposal": {
+        "additionalProperties": false,
+        "properties": {
+          "category": {
+            "type": "string"
+          },
+          "content": {
+            "type": "string"
+          },
+          "origin": {
+            "$ref": "#/definitions/MemoryOrigin"
+          },
+          "provenance": {
+            "items": {
+              "$ref": "#/definitions/MemoryProvenance"
+            },
+            "type": "array"
+          },
+          "title": {
+            "type": "string"
+          },
+          "validUntilMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "category",
+          "content",
+          "origin",
+          "provenance",
+          "title"
+        ],
+        "type": "object"
+      },
+      "MemoryProvenance": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "sourceId": {
+            "type": "string"
+          },
+          "sourceRevision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "description",
+          "kind",
+          "sourceId",
+          "sourceRevision"
+        ],
+        "type": "object"
+      },
+      "MemoryReviewStatus": {
+        "enum": [
+          "candidate",
+          "confirmed",
+          "rejected"
+        ],
+        "type": "string"
+      },
+      "ReviewedMemory": {
+        "additionalProperties": false,
+        "properties": {
+          "deleted": {
+            "default": false,
+            "type": "boolean"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          },
+          "owner": {
+            "$ref": "#/definitions/IntegrationOwner"
+          },
+          "proposal": {
+            "$ref": "#/definitions/MemoryProposal"
+          },
+          "reviewStatus": {
+            "$ref": "#/definitions/MemoryReviewStatus"
+          },
+          "revision": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sourceVerified": {
+            "description": "User acceptance never certifies an imported source as externally verified.",
+            "type": "boolean"
+          },
+          "updatedAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "enabled",
+          "id",
+          "owner",
+          "proposal",
+          "reviewStatus",
+          "revision",
+          "sourceVerified",
+          "updatedAtMs"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "page": {
+        "$ref": "#/definitions/KnowledgePage_for_ReviewedMemory"
+      }
+    },
+    "required": [
+      "page"
+    ],
+    "title": "MemoryListResult",
+    "type": "object"
+  },
+  "MemoryOrigin": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "manual",
+      "observer",
+      "imported",
+      "existing_observation"
+    ],
+    "title": "MemoryOrigin",
+    "type": "string"
+  },
+  "MemoryProposal": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "MemoryOrigin": {
+        "enum": [
+          "manual",
+          "observer",
+          "imported",
+          "existing_observation"
+        ],
+        "type": "string"
+      },
+      "MemoryProvenance": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "sourceId": {
+            "type": "string"
+          },
+          "sourceRevision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "description",
+          "kind",
+          "sourceId",
+          "sourceRevision"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "category": {
+        "type": "string"
+      },
+      "content": {
+        "type": "string"
+      },
+      "origin": {
+        "$ref": "#/definitions/MemoryOrigin"
+      },
+      "provenance": {
+        "items": {
+          "$ref": "#/definitions/MemoryProvenance"
+        },
+        "type": "array"
+      },
+      "title": {
+        "type": "string"
+      },
+      "validUntilMs": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "category",
+      "content",
+      "origin",
+      "provenance",
+      "title"
+    ],
+    "title": "MemoryProposal",
+    "type": "object"
+  },
+  "MemoryProposeParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "MemoryOrigin": {
+        "enum": [
+          "manual",
+          "observer",
+          "imported",
+          "existing_observation"
+        ],
+        "type": "string"
+      },
+      "MemoryProposal": {
+        "additionalProperties": false,
+        "properties": {
+          "category": {
+            "type": "string"
+          },
+          "content": {
+            "type": "string"
+          },
+          "origin": {
+            "$ref": "#/definitions/MemoryOrigin"
+          },
+          "provenance": {
+            "items": {
+              "$ref": "#/definitions/MemoryProvenance"
+            },
+            "type": "array"
+          },
+          "title": {
+            "type": "string"
+          },
+          "validUntilMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "category",
+          "content",
+          "origin",
+          "provenance",
+          "title"
+        ],
+        "type": "object"
+      },
+      "MemoryProvenance": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "sourceId": {
+            "type": "string"
+          },
+          "sourceRevision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "description",
+          "kind",
+          "sourceId",
+          "sourceRevision"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "proposal": {
+        "$ref": "#/definitions/MemoryProposal"
+      }
+    },
+    "required": [
+      "proposal"
+    ],
+    "title": "MemoryProposeParams",
+    "type": "object"
+  },
+  "MemoryProvenance": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "description": {
+        "type": "string"
+      },
+      "kind": {
+        "type": "string"
+      },
+      "sourceId": {
+        "type": "string"
+      },
+      "sourceRevision": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "description",
+      "kind",
+      "sourceId",
+      "sourceRevision"
+    ],
+    "title": "MemoryProvenance",
+    "type": "object"
+  },
+  "MemoryReadParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "memoryId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "memoryId"
+    ],
+    "title": "MemoryReadParams",
+    "type": "object"
+  },
+  "MemoryReadResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationNullable_for_String": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationOwner": {
+        "additionalProperties": false,
+        "description": "Stable owner identity excludes refreshable authorization/configuration generations.",
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "organizationId": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationNullable_for_String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "$ref": "#/definitions/IntegrationNullable_for_String"
+          }
+        },
+        "required": [
+          "accountId",
+          "targetId",
+          "workspaceId"
+        ],
+        "type": "object"
+      },
+      "MemoryOrigin": {
+        "enum": [
+          "manual",
+          "observer",
+          "imported",
+          "existing_observation"
+        ],
+        "type": "string"
+      },
+      "MemoryProposal": {
+        "additionalProperties": false,
+        "properties": {
+          "category": {
+            "type": "string"
+          },
+          "content": {
+            "type": "string"
+          },
+          "origin": {
+            "$ref": "#/definitions/MemoryOrigin"
+          },
+          "provenance": {
+            "items": {
+              "$ref": "#/definitions/MemoryProvenance"
+            },
+            "type": "array"
+          },
+          "title": {
+            "type": "string"
+          },
+          "validUntilMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "category",
+          "content",
+          "origin",
+          "provenance",
+          "title"
+        ],
+        "type": "object"
+      },
+      "MemoryProvenance": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "sourceId": {
+            "type": "string"
+          },
+          "sourceRevision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "description",
+          "kind",
+          "sourceId",
+          "sourceRevision"
+        ],
+        "type": "object"
+      },
+      "MemoryReviewStatus": {
+        "enum": [
+          "candidate",
+          "confirmed",
+          "rejected"
+        ],
+        "type": "string"
+      },
+      "ReviewedMemory": {
+        "additionalProperties": false,
+        "properties": {
+          "deleted": {
+            "default": false,
+            "type": "boolean"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          },
+          "owner": {
+            "$ref": "#/definitions/IntegrationOwner"
+          },
+          "proposal": {
+            "$ref": "#/definitions/MemoryProposal"
+          },
+          "reviewStatus": {
+            "$ref": "#/definitions/MemoryReviewStatus"
+          },
+          "revision": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sourceVerified": {
+            "description": "User acceptance never certifies an imported source as externally verified.",
+            "type": "boolean"
+          },
+          "updatedAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "enabled",
+          "id",
+          "owner",
+          "proposal",
+          "reviewStatus",
+          "revision",
+          "sourceVerified",
+          "updatedAtMs"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "memory": {
+        "$ref": "#/definitions/ReviewedMemory"
+      }
+    },
+    "required": [
+      "memory"
+    ],
+    "title": "MemoryReadResult",
+    "type": "object"
+  },
+  "MemoryReview": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "oneOf": [
+      {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "enum": [
+              "accept"
+            ],
+            "type": "string"
+          },
+          "editedContent": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "type": "object"
+      },
+      {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "enum": [
+              "reject"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "type": "object"
+      }
+    ],
+    "title": "MemoryReview"
+  },
+  "MemoryReviewParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "MemoryReview": {
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "action": {
+                "enum": [
+                  "accept"
+                ],
+                "type": "string"
+              },
+              "editedContent": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "action"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "action": {
+                "enum": [
+                  "reject"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "action"
+            ],
+            "type": "object"
+          }
+        ]
+      }
+    },
+    "properties": {
+      "memoryId": {
+        "type": "string"
+      },
+      "review": {
+        "$ref": "#/definitions/MemoryReview"
+      }
+    },
+    "required": [
+      "memoryId",
+      "review"
+    ],
+    "title": "MemoryReviewParams",
+    "type": "object"
+  },
+  "MemoryReviewStatus": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "candidate",
+      "confirmed",
+      "rejected"
+    ],
+    "title": "MemoryReviewStatus",
+    "type": "string"
+  },
+  "MemoryTaskSnapshot": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationNullable_for_String": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationOwner": {
+        "additionalProperties": false,
+        "description": "Stable owner identity excludes refreshable authorization/configuration generations.",
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "organizationId": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationNullable_for_String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "$ref": "#/definitions/IntegrationNullable_for_String"
+          }
+        },
+        "required": [
+          "accountId",
+          "targetId",
+          "workspaceId"
+        ],
+        "type": "object"
+      },
+      "MemoryOrigin": {
+        "enum": [
+          "manual",
+          "observer",
+          "imported",
+          "existing_observation"
+        ],
+        "type": "string"
+      },
+      "MemoryProposal": {
+        "additionalProperties": false,
+        "properties": {
+          "category": {
+            "type": "string"
+          },
+          "content": {
+            "type": "string"
+          },
+          "origin": {
+            "$ref": "#/definitions/MemoryOrigin"
+          },
+          "provenance": {
+            "items": {
+              "$ref": "#/definitions/MemoryProvenance"
+            },
+            "type": "array"
+          },
+          "title": {
+            "type": "string"
+          },
+          "validUntilMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "category",
+          "content",
+          "origin",
+          "provenance",
+          "title"
+        ],
+        "type": "object"
+      },
+      "MemoryProvenance": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "sourceId": {
+            "type": "string"
+          },
+          "sourceRevision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "description",
+          "kind",
+          "sourceId",
+          "sourceRevision"
+        ],
+        "type": "object"
+      },
+      "MemoryReviewStatus": {
+        "enum": [
+          "candidate",
+          "confirmed",
+          "rejected"
+        ],
+        "type": "string"
+      },
+      "ReviewedMemory": {
+        "additionalProperties": false,
+        "properties": {
+          "deleted": {
+            "default": false,
+            "type": "boolean"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          },
+          "owner": {
+            "$ref": "#/definitions/IntegrationOwner"
+          },
+          "proposal": {
+            "$ref": "#/definitions/MemoryProposal"
+          },
+          "reviewStatus": {
+            "$ref": "#/definitions/MemoryReviewStatus"
+          },
+          "revision": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sourceVerified": {
+            "description": "User acceptance never certifies an imported source as externally verified.",
+            "type": "boolean"
+          },
+          "updatedAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "enabled",
+          "id",
+          "owner",
+          "proposal",
+          "reviewStatus",
+          "revision",
+          "sourceVerified",
+          "updatedAtMs"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "capturedAtMs": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "memories": {
+        "items": {
+          "$ref": "#/definitions/ReviewedMemory"
+        },
+        "type": "array"
+      },
+      "omittedCount": {
+        "default": 0,
+        "format": "uint",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "owner": {
+        "$ref": "#/definitions/IntegrationOwner"
+      },
+      "taskId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "capturedAtMs",
+      "memories",
+      "owner",
+      "taskId"
+    ],
+    "title": "MemoryTaskSnapshot",
+    "type": "object"
+  },
+  "ReviewedMemory": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationNullable_for_String": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationOwner": {
+        "additionalProperties": false,
+        "description": "Stable owner identity excludes refreshable authorization/configuration generations.",
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "organizationId": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationNullable_for_String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "$ref": "#/definitions/IntegrationNullable_for_String"
+          }
+        },
+        "required": [
+          "accountId",
+          "targetId",
+          "workspaceId"
+        ],
+        "type": "object"
+      },
+      "MemoryOrigin": {
+        "enum": [
+          "manual",
+          "observer",
+          "imported",
+          "existing_observation"
+        ],
+        "type": "string"
+      },
+      "MemoryProposal": {
+        "additionalProperties": false,
+        "properties": {
+          "category": {
+            "type": "string"
+          },
+          "content": {
+            "type": "string"
+          },
+          "origin": {
+            "$ref": "#/definitions/MemoryOrigin"
+          },
+          "provenance": {
+            "items": {
+              "$ref": "#/definitions/MemoryProvenance"
+            },
+            "type": "array"
+          },
+          "title": {
+            "type": "string"
+          },
+          "validUntilMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "category",
+          "content",
+          "origin",
+          "provenance",
+          "title"
+        ],
+        "type": "object"
+      },
+      "MemoryProvenance": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "sourceId": {
+            "type": "string"
+          },
+          "sourceRevision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "description",
+          "kind",
+          "sourceId",
+          "sourceRevision"
+        ],
+        "type": "object"
+      },
+      "MemoryReviewStatus": {
+        "enum": [
+          "candidate",
+          "confirmed",
+          "rejected"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "deleted": {
+        "default": false,
+        "type": "boolean"
+      },
+      "enabled": {
+        "type": "boolean"
+      },
+      "id": {
+        "type": "string"
+      },
+      "owner": {
+        "$ref": "#/definitions/IntegrationOwner"
+      },
+      "proposal": {
+        "$ref": "#/definitions/MemoryProposal"
+      },
+      "reviewStatus": {
+        "$ref": "#/definitions/MemoryReviewStatus"
+      },
+      "revision": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "sourceVerified": {
+        "description": "User acceptance never certifies an imported source as externally verified.",
+        "type": "boolean"
+      },
+      "updatedAtMs": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "enabled",
+      "id",
+      "owner",
+      "proposal",
+      "reviewStatus",
+      "revision",
+      "sourceVerified",
+      "updatedAtMs"
+    ],
+    "title": "ReviewedMemory",
+    "type": "object"
+  }
+}

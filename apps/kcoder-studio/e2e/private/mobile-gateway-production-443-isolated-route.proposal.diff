@@ -1,0 +1,14 @@
+# Sanitized insertion-only Caddyfile hunk; intentionally not apply-ready.
+# Candidate only: the runner must adapt and order-check this exact hunk before write.
+# Replace placeholders only from a RunContext and its owned Relay identity.
+@@ existing :443 site, before the /g/* -> 127.0.0.1:80 fallback @@
++  @kcux_mobile_<run-id> {
++    host hyf2333.top
++    path /g/<gateway-id> /g/<gateway-id>/*
++  }
++  handle @kcux_mobile_<run-id> {
++    reverse_proxy 127.0.0.1:18454 {
++      header_up Host {http.request.hostport}
++      flush_interval -1
++    }
++  }

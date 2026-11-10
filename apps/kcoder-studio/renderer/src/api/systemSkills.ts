@@ -7,7 +7,6 @@ import type {
   SystemSkillListResponse,
   SystemSkillProviderListResponse,
 } from '@/types/api'
-import { getRuntimeConfig } from '@/config/runtime'
 import type { HttpClient } from './http'
 
 export interface SystemSkillListParams {
@@ -73,22 +72,7 @@ export function createSystemSkillApi(client: HttpClient) {
       formData.append('name', name)
       formData.append('namespace', 'default')
 
-      const { apiBaseUrl } = getRuntimeConfig()
-
-      return fetch(`${apiBaseUrl}/v1/kinds/skills/upload`, {
-        method: 'POST',
-        headers: {
-          ...(localStorage.getItem('auth_token')
-            ? { Authorization: `Bearer ${localStorage.getItem('auth_token')}` }
-            : {}),
-        },
-        body: formData,
-      }).then(async (response) => {
-        if (!response.ok) {
-          throw new Error((await response.text()) || `HTTP ${response.status}`)
-        }
-        return response.json() as Promise<PersonalSkill>
-      })
+      return client.post('/v1/kinds/skills/upload', formData)
     },
     deletePersonalSkill(id: number): Promise<void> {
       return client.delete(`/v1/kinds/skills/${id}`)

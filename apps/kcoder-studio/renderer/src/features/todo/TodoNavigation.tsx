@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { LOCAL_USER } from '@/api/local/localSession'
 import {
   Check,
   ChevronDown,
@@ -387,12 +388,12 @@ export function TodoSidebar({
                 >
                   <button
                     type="button"
-                    data-testid="todo-sidebar-open-in-wework"
+                    data-testid="todo-sidebar-open-in-kcoder"
                     onClick={onOpenProjects}
                     className="flex h-8 w-full items-center gap-2 rounded px-2 text-xs text-[#4F575F] hover:bg-[#F2F4F5] dark:text-text-secondary dark:hover:bg-muted"
                   >
                     <FolderOpen className="h-3.5 w-3.5" />
-                    {t('todo.open_in_wework', '在 Wework 中打开')}
+                    {t('todo.open_in_kcoder', '在 KCoder 中打开')}
                   </button>
                   <button
                     type="button"
@@ -473,7 +474,7 @@ export function TodoSidebar({
               {user?.user_name || 'local'}
             </span>
             <span className="block truncate text-xs text-[#737B83]">
-              {user?.email || 'local@wework.local'}
+              {user?.email || LOCAL_USER.email}
             </span>
           </span>
         </div>

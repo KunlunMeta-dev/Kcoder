@@ -3,14 +3,15 @@ import { Directory, File, Paths, type FileHandle } from "expo-file-system";
 import { hashBoundedSource } from "@/protocol/sha256-stream";
 import type { AttachmentBytesBackend, DurableByteSource } from "./staged-attachment-bytes";
 
-const MANIFEST = "kcoder-staged-attachments-v1";
-const directory = () => new Directory(Paths.document, "kcoder-staged-attachments-v1");
-function fileFor(id: string): File {
-  if (!/^[a-f0-9]{32}$/.test(id)) throw new Error("Invalid staged attachment locator");
-  return new File(directory(), `${id}.bytes`);
-}
 /** Caller holds the shared profile-index gate for every manifest transaction. */
-export function createAttachmentBytesBackend(): AttachmentBytesBackend {
+export function createAttachmentBytesBackend(namespace = "kcoder-staged-attachments-v1"): AttachmentBytesBackend {
+  if (!/^kcoder-[a-z0-9-]+$/.test(namespace)) throw new Error("Invalid local attachment namespace");
+  const MANIFEST = namespace;
+  const directory = () => new Directory(Paths.document, namespace);
+  const fileFor = (id: string): File => {
+    if (!/^[a-f0-9]{32}$/.test(id)) throw new Error("Invalid staged attachment locator");
+    return new File(directory(), `${id}.bytes`);
+  };
   return {
     kind: "native",
     async transaction(change) {
@@ -51,7 +52,7 @@ export function createAttachmentBytesBackend(): AttachmentBytesBackend {
           try {
             if (handle.size !== expectedSize) throw new Error("附件原始文件长度已变化");
             handle.offset = offset;
-            const bytes = handle.readBytes(length);
+            const bytes = handle.readBytesSync(length);
             if (bytes.length !== length) throw new Error("附件原始文件读取不完整");
             return bytes;
           } finally { handle.close(); }
@@ -75,7 +76,7 @@ export function createAttachmentBytesBackend(): AttachmentBytesBackend {
             const bytes = await source.read(offset, length);
             if (!isCurrent() || signal?.aborted) throw new Error("附件保存已取消");
             if (bytes.byteLength !== length) throw new Error("附件原始文件读取不完整");
-            await withOwnership(() => { handle!.offset = offset; handle!.writeBytes(bytes); });
+            await withOwnership(() => { handle!.offset = offset; handle!.writeBytesSync(bytes); });
             return bytes;
           },
         }, isCurrent, signal);

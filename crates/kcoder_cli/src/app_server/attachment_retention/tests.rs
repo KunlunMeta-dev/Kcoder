@@ -21,15 +21,14 @@ const INIT_CRASH_CHILD_ARM_VALUE: &str = "retention-init-crash-child-v1";
 const INIT_CRASH_CHILD_ROOT_ENV: &str = "KCODER_TEST_RETENTION_INIT_CRASH_ROOT";
 const INIT_CRASH_CHILD_STEP_ENV: &str = "KCODER_TEST_RETENTION_INIT_CRASH_STEP";
 const INIT_CRASH_READY_FILE: &str = "retention-init-child-ready.txt";
-const INIT_CRASH_CHILD_TEST: &str =
-    "app_server::attachment_retention::tests::retention_owner_init_crash_child_helper";
+const INIT_CRASH_CHILD_TEST: &str = "tests::retention_owner_init_crash_child_helper";
 
 fn owned_fixture_parent() -> PathBuf {
     let parent = PathBuf::from(
         std::env::var_os("CARGO_MANIFEST_DIR")
             .expect("Cargo must provide the runtime manifest directory"),
     )
-    .join("../..")
+    .join("../../../..")
     .canonicalize()
     .expect("resolve source workspace")
     .join("target/test/crates/kcoder_cli/retention-fixtures");

@@ -862,6 +862,23 @@ async fn file_write_tool_preserves_utf16le_encoding_when_overwriting() {
     let bytes = std::fs::read(&file_path).unwrap();
     assert!(bytes.starts_with(&[0xff, 0xfe]));
     assert_eq!(decode_utf16le_bytes(&bytes), "new\n");
+    assert!(
+        output
+            .execution_metadata
+            .iter()
+            .any(|m| matches!(m, kcoder_tools::ToolExecutionMetadata::Artifact { .. }))
+    );
+    for metadata in &output.execution_metadata {
+        if let kcoder_tools::ToolExecutionMetadata::Artifact { path, sha256 } = metadata {
+            let bytes = std::fs::read(path).unwrap();
+            assert_eq!(
+                *sha256,
+                format!("{:x}", <sha2::Sha256 as sha2::Digest>::digest(&bytes)),
+                "artifact identity must cover the encoded bytes at {}",
+                path.display()
+            );
+        }
+    }
 }
 
 #[tokio::test]
@@ -943,6 +960,23 @@ async fn file_edit_tool_preserves_utf16le_encoding() {
     let bytes = std::fs::read(&file_path).unwrap();
     assert!(bytes.starts_with(&[0xff, 0xfe]));
     assert_eq!(decode_utf16le_bytes(&bytes), "alpha\r\ngamma\r\n");
+    assert!(
+        output
+            .execution_metadata
+            .iter()
+            .any(|m| matches!(m, kcoder_tools::ToolExecutionMetadata::Artifact { .. }))
+    );
+    for metadata in &output.execution_metadata {
+        if let kcoder_tools::ToolExecutionMetadata::Artifact { path, sha256 } = metadata {
+            let bytes = std::fs::read(path).unwrap();
+            assert_eq!(
+                *sha256,
+                format!("{:x}", <sha2::Sha256 as sha2::Digest>::digest(&bytes)),
+                "artifact identity must cover the encoded bytes at {}",
+                path.display()
+            );
+        }
+    }
 }
 
 #[tokio::test]
@@ -1810,6 +1844,23 @@ async fn apply_patch_tool_preserves_crlf_and_utf16le_encodings() {
     )
     .unwrap();
     assert_eq!(restored, "ho\n");
+    assert!(
+        output
+            .execution_metadata
+            .iter()
+            .any(|m| matches!(m, kcoder_tools::ToolExecutionMetadata::Artifact { .. }))
+    );
+    for metadata in &output.execution_metadata {
+        if let kcoder_tools::ToolExecutionMetadata::Artifact { path, sha256 } = metadata {
+            let bytes = std::fs::read(path).unwrap();
+            assert_eq!(
+                *sha256,
+                format!("{:x}", <sha2::Sha256 as sha2::Digest>::digest(&bytes)),
+                "artifact identity must cover the encoded bytes at {}",
+                path.display()
+            );
+        }
+    }
 }
 
 #[tokio::test]
@@ -1891,4 +1942,37 @@ async fn apply_patch_tool_add_overwrites_an_existing_file() {
         std::fs::read_to_string(tmp.path().join("x.txt")).unwrap(),
         "new\n"
     );
+}
+
+#[tokio::test]
+async fn foreground_failure_preserves_native_process_metadata_without_parsing_error_text() {
+    let root = TempDir::new().unwrap();
+    let ctx = ToolContext::new(AppState::new(root.path()));
+    let (sender, receiver) = tokio::sync::broadcast::channel(8);
+    sender
+        .send(kcoder_tools::background::BackgroundJobEvent::Failed {
+            id: "owned-failure".into(),
+            error: "unstructured failure text".into(),
+            execution_metadata: vec![kcoder_tools::ToolExecutionMetadata::Process {
+                exit_code: Some(7),
+                signal: None,
+                cwd: root.path().into(),
+            }],
+        })
+        .unwrap();
+    let outcome =
+        kcoder_tools::background::wait_for_foreground_completion(&ctx, "owned-failure", receiver)
+            .await
+            .unwrap();
+    let kcoder_tools::background::ForegroundWaitOutcome::Completed(output) = outcome else {
+        panic!("failure must settle")
+    };
+    assert!(output.is_error);
+    assert!(output.execution_metadata.iter().any(|m| matches!(
+        m,
+        kcoder_tools::ToolExecutionMetadata::Process {
+            exit_code: Some(7),
+            ..
+        }
+    )));
 }

@@ -24,6 +24,7 @@ use syntect::parsing::SyntaxSet;
 use syntect::util::LinesWithEndings;
 use two_face::theme::EmbeddedThemeName;
 
+#[path = "highlight/streaming.rs"]
 mod streaming;
 
 static SYNTAX_SET: OnceLock<SyntaxSet> = OnceLock::new();
@@ -61,7 +62,7 @@ fn theme(theme_name: &str) -> &'static Theme {
         .expect("theme set is non-empty")
 }
 
-pub(crate) fn theme_names() -> Vec<String> {
+pub fn theme_names() -> Vec<String> {
     let mut themes = vec![DEFAULT_THEME_NAME.to_string()];
     themes.extend(theme_set().keys().cloned());
     themes.sort_by_key(|theme| theme.to_ascii_lowercase());
@@ -170,7 +171,7 @@ fn find_syntax(lang: &str) -> Option<&'static SyntaxReference> {
     ss.find_syntax_by_extension(lang)
 }
 
-pub(crate) fn exceeds_highlight_limits(total_bytes: usize, total_lines: usize) -> bool {
+pub fn exceeds_highlight_limits(total_bytes: usize, total_lines: usize) -> bool {
     total_bytes > MAX_HIGHLIGHT_BYTES || total_lines > MAX_HIGHLIGHT_LINES
 }
 
@@ -229,11 +230,11 @@ fn plain_code_lines(code: &str) -> Vec<Line<'static>> {
     lines
 }
 
-pub(crate) fn highlight_code_to_lines(code: &str, lang: &str) -> Vec<Line<'static>> {
+pub fn highlight_code_to_lines(code: &str, lang: &str) -> Vec<Line<'static>> {
     highlight_code_to_lines_with_theme(code, lang, DEFAULT_THEME_NAME)
 }
 
-pub(crate) fn highlight_code_to_lines_with_theme(
+pub fn highlight_code_to_lines_with_theme(
     code: &str,
     lang: &str,
     theme_name: &str,
@@ -244,18 +245,15 @@ pub(crate) fn highlight_code_to_lines_with_theme(
     }
 }
 
-pub(crate) fn highlight_bash_to_lines(script: &str) -> Vec<Line<'static>> {
+pub fn highlight_bash_to_lines(script: &str) -> Vec<Line<'static>> {
     highlight_code_to_lines(script, "bash")
 }
 
-pub(crate) fn highlight_code_to_styled_spans(
-    code: &str,
-    lang: &str,
-) -> Option<Vec<Vec<Span<'static>>>> {
+pub fn highlight_code_to_styled_spans(code: &str, lang: &str) -> Option<Vec<Vec<Span<'static>>>> {
     highlight_code_to_styled_spans_with_theme(code, lang, DEFAULT_THEME_NAME)
 }
 
-pub(crate) fn highlight_code_to_styled_spans_with_theme(
+pub fn highlight_code_to_styled_spans_with_theme(
     code: &str,
     lang: &str,
     theme_name: &str,
@@ -264,7 +262,7 @@ pub(crate) fn highlight_code_to_styled_spans_with_theme(
 }
 
 /// Read the first available semantic foreground color from the active code theme for reuse by elements such as Markdown table headers.
-pub(crate) fn foreground_style_for_scopes_with_theme(
+pub fn foreground_style_for_scopes_with_theme(
     theme_name: &str,
     scope_names: &[&str],
 ) -> Option<Style> {

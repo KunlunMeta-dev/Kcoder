@@ -207,60 +207,6 @@ fn compact_prompt_ends_with_an_inert_history_protocol_guard() {
 }
 
 #[test]
-fn ptl_retry_drops_oldest_user_turn_group() {
-    let messages = vec![
-        Message::user_text("first ask"),
-        Message::Assistant {
-            content: vec![ContentBlock::ToolUse {
-                id: "call_1".to_string(),
-                name: "Read".to_string(),
-                input: serde_json::json!({"file_path":"a.rs"}),
-            }],
-            usage: None,
-        },
-        Message::User {
-            origin: kcoder_types::MessageOrigin::Unknown,
-            content: vec![ContentBlock::ToolResult {
-                tool_use_id: "call_1".to_string(),
-                content: vec![ContentBlock::Text {
-                    text: "first result".to_string(),
-                }],
-                is_error: Some(false),
-            }],
-        },
-        Message::assistant_text("first final"),
-        Message::user_text("second ask"),
-        Message::assistant_text("second final"),
-        Message::user_text("third ask"),
-    ];
-
-    let truncated = truncate_head_for_ptl_retry(messages, 6).unwrap();
-    let rendered = truncated
-        .iter()
-        .map(|message| message.preview(200))
-        .collect::<Vec<_>>()
-        .join("\n");
-
-    assert!(rendered.contains(PTL_RETRY_MARKER));
-    assert!(!rendered.contains("first ask"));
-    assert!(!rendered.contains("first result"));
-    assert!(rendered.contains("second ask"));
-    assert!(rendered.contains("third ask"));
-}
-
-#[test]
-fn ptl_retry_requires_at_least_two_old_groups() {
-    let messages = vec![
-        Message::user_text("only old ask"),
-        Message::assistant_text("only old answer"),
-        Message::user_text("recent ask"),
-    ];
-
-    let err = truncate_head_for_ptl_retry(messages, 2).unwrap_err();
-    assert!(err.to_string().contains("not enough message groups"));
-}
-
-#[test]
 fn finds_compact_summary_only_at_model_history_start() {
     let messages = vec![
         Message::compaction_text(format_compact_summary_message("first summary")),

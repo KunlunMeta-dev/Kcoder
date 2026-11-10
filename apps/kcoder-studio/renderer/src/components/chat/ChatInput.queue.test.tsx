@@ -45,7 +45,6 @@ describe('ChatInput queue', () => {
       configurable: true,
       value: originalInnerWidth,
     })
-    delete (window as typeof window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__
   })
   test('offers interrupt-and-send while the assistant is streaming', async () => {
     const onSubmit = vi.fn()
@@ -196,7 +195,7 @@ describe('ChatInput queue', () => {
       />
     )
 
-    const interruptButton = screen.getByTestId('queue-interrupt-button-sending-guidance')
+    const interruptButton = await screen.findByTestId('queue-interrupt-button-sending-guidance')
     expect(screen.getByText('引导中')).toBeInTheDocument()
     expect(interruptButton).toHaveTextContent('workbench.interrupt_and_send_short')
     expect(interruptButton).toHaveClass('text-text-secondary', 'hover:bg-muted')
@@ -337,7 +336,7 @@ describe('ChatInput queue', () => {
     expect(screen.queryByText('已排队，当前回复结束后发送')).not.toBeInTheDocument()
   })
 
-  test('shows sending notices for queued rows that are actively being sent', () => {
+  test('shows sending notices for queued rows that are actively being sent', async () => {
     const queuedMessages: QueuedWorkbenchMessage[] = [
       {
         id: 'queued-sending',
@@ -360,7 +359,7 @@ describe('ChatInput queue', () => {
       />
     )
 
-    expect(screen.getByText('执行ls')).toBeInTheDocument()
+    expect(await screen.findByText('执行ls')).toBeInTheDocument()
     expect(screen.getByText('正在发送')).toBeInTheDocument()
   })
 })

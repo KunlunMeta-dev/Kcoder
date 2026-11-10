@@ -1,0 +1,4 @@
+authlib==1.7.2
+cryptography==48.0.1
+joserfc==1.7.1
+requests==2.34.2

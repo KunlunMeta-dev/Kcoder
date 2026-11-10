@@ -401,12 +401,23 @@ async fn execute_command_hook(
         .unwrap_or_default()
         .to_ascii_lowercase();
     let is_powershell = matches!(shell_name.as_str(), "powershell" | "pwsh");
-    let template_mode = if is_powershell {
-        TemplateMode::PowerShell
+    let template_shell = if is_powershell {
+        crate::command_template::CommandShell::PowerShell
+    } else if is_posix_shell(&shell_name) {
+        crate::command_template::CommandShell::Posix
     } else {
-        TemplateMode::Shell
+        crate::command_template::CommandShell::Other
     };
-    let rendered_command = render_hook_template(command, input, template_mode, &json_input);
+    let rendered = match crate::command_template::render(command, template_shell, |key| {
+        key.map_or_else(
+            || Some(json_input.clone()),
+            |key| resolve_hook_template_value(input, key, &json_input),
+        )
+    }) {
+        Ok(rendered) => rendered,
+        Err(error) => return HookOutcome::Error(error),
+    };
+    let rendered_command = rendered.command;
     if is_powershell {
         command_builder
             .arg("-NoProfile")
@@ -463,6 +474,7 @@ async fn execute_command_hook(
         }
     }
     command_builder
+        .envs(rendered.environment)
         .env("SHELL", &shell_program)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -470,6 +482,7 @@ async fn execute_command_hook(
         .env("KCODER_HOOK_EVENT", input.event.as_str())
         .env("KCODER_HOOK_QUERY", &input.query)
         .kill_on_drop(true);
+    let hook_cwd = hook_working_dir(input);
     if let Some(source) = source.filter(|source| source.kind == HookSourceKind::Plugin) {
         // External plugins commonly use these variables to address their own files.
         // Provide all three names for compatibility with existing plugin conventions.
@@ -482,11 +495,15 @@ async fn execute_command_hook(
             .env("QODER_PLUGIN_ROOT", &root)
             .env("TRAE_PLUGIN_ROOT", &root)
             .env("PLUGIN_ROOT", &root);
+        if let Some(cwd) = hook_cwd.as_deref() {
+            let project_dir = plugin_root_environment(cwd, &shell_name, cfg!(windows));
+            command_builder.env("CODEBUDDY_PROJECT_DIR", project_dir);
+        }
     }
     #[cfg(unix)]
     command_builder.process_group(0);
 
-    if let Some(cwd) = hook_working_dir(input) {
+    if let Some(cwd) = hook_cwd {
         command_builder.env("PWD", &cwd).current_dir(cwd);
     }
 
@@ -807,42 +824,25 @@ If the condition in the prompt is not met, return:
 
 Do not include any markdown formatting or additional keys."#;
 
-#[derive(Debug, Clone, Copy)]
-enum TemplateMode {
-    Raw,
-    Shell,
-    PowerShell,
-}
-
 fn add_arguments_to_prompt(prompt: &str, input: &HookInput, arguments: &str) -> String {
-    render_hook_template(prompt, input, TemplateMode::Raw, arguments)
+    render_hook_template(prompt, input, arguments)
 }
 
-fn render_hook_template(
-    template: &str,
-    input: &HookInput,
-    mode: TemplateMode,
-    arguments: &str,
-) -> String {
-    let rendered = template.replace("$ARGUMENTS", &format_template_value(arguments, mode));
+fn render_hook_template(template: &str, input: &HookInput, arguments: &str) -> String {
     hook_placeholder_regex()
-        .replace_all(&rendered, |captures: &regex::Captures<'_>| {
-            let key = captures.get(1).map(|m| m.as_str()).unwrap_or_default();
-            match resolve_hook_template_value(input, key, arguments) {
-                Some(value) => format_template_value(&value, mode),
-                None => captures
-                    .get(0)
-                    .map(|m| m.as_str())
-                    .unwrap_or_default()
-                    .to_string(),
-            }
+        .replace_all(template, |captures: &regex::Captures<'_>| {
+            let Some(key) = captures.get(1).map(|m| m.as_str()) else {
+                return arguments.to_owned();
+            };
+            resolve_hook_template_value(input, key, arguments)
+                .unwrap_or_else(|| captures.get(0).unwrap().as_str().to_owned())
         })
         .into_owned()
 }
 
-fn hook_placeholder_regex() -> &'static regex::Regex {
+pub(crate) fn hook_placeholder_regex() -> &'static regex::Regex {
     static RE: OnceLock<regex::Regex> = OnceLock::new();
-    RE.get_or_init(|| regex::Regex::new(r"\{\{\s*([A-Za-z0-9_.-]+)\s*\}\}").unwrap())
+    RE.get_or_init(|| regex::Regex::new(r"\$ARGUMENTS|\{\{\s*([A-Za-z0-9_.-]+)\s*\}\}").unwrap())
 }
 
 fn resolve_hook_template_value(input: &HookInput, key: &str, arguments: &str) -> Option<String> {
@@ -899,69 +899,48 @@ fn json_value_to_template_string(value: &serde_json::Value) -> String {
     }
 }
 
-fn format_template_value(value: &str, mode: TemplateMode) -> String {
-    match mode {
-        TemplateMode::Raw => value.to_string(),
-        TemplateMode::Shell => shell_quote(value),
-        TemplateMode::PowerShell => powershell_quote(value),
-    }
-}
-
-fn shell_quote(value: &str) -> String {
-    if value.is_empty() {
-        return "''".to_string();
-    }
-    format!("'{}'", value.replace('\'', "'\"'\"'"))
-}
-
-fn powershell_quote(value: &str) -> String {
-    format!("'{}'", value.replace('\'', "''"))
-}
-
 fn anthropic_model_prefix() -> &'static str {
     concat!("cla", "ude")
 }
 
-fn build_provider(model: Option<&str>) -> Result<Arc<dyn Provider>, String> {
-    if let Some(model) = model {
+fn build_provider(model: &str) -> Result<Arc<dyn Provider>, String> {
+    enum Transport {
+        Anthropic,
+        Gemini,
+        OpenAi,
+    }
+    let (transport, endpoint_var, key_var) =
         if model.starts_with(&format!("{}-", anthropic_model_prefix())) {
-            if let Ok(key) = std::env::var("ANTHROPIC_API_KEY") {
-                return AnthropicProvider::new(key)
-                    .map(|p| Arc::new(p) as Arc<dyn Provider>)
-                    .map_err(|e| e.to_string());
-            }
+            (
+                Transport::Anthropic,
+                "ANTHROPIC_BASE_URL",
+                "ANTHROPIC_API_KEY",
+            )
         } else if model.starts_with("gemini-") {
-            if let Ok(key) = std::env::var("GEMINI_API_KEY") {
-                return GeminiProvider::new(key, model)
-                    .map(|p| Arc::new(p) as Arc<dyn Provider>)
-                    .map_err(|e| e.to_string());
-            }
+            (Transport::Gemini, "GEMINI_BASE_URL", "GEMINI_API_KEY")
         } else {
-            if let Ok(key) = std::env::var("OPENAI_API_KEY") {
-                return OpenAiProvider::new(key, model)
-                    .map(|p| Arc::new(p) as Arc<dyn Provider>)
-                    .map_err(|e| e.to_string());
-            }
-        }
+            (Transport::OpenAi, "OPENAI_BASE_URL", "OPENAI_API_KEY")
+        };
+    let configured = |name| {
+        std::env::var(name)
+            .ok()
+            .map(|value| value.trim().to_owned())
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| format!("{name} must be configured for this hook model"))
+    };
+    let endpoint = configured(endpoint_var)?;
+    let key = configured(key_var)?;
+    // The explicitly configured model uses its own transport. A missing key
+    // or endpoint must never redirect this hook to a different deployment.
+    match transport {
+        Transport::Anthropic => AnthropicProvider::new(key)
+            .map(|p| Arc::new(p.with_base_url(endpoint)) as Arc<dyn Provider>),
+        Transport::Gemini => GeminiProvider::new(key, model)
+            .map(|p| Arc::new(p.with_base_url(endpoint)) as Arc<dyn Provider>),
+        Transport::OpenAi => OpenAiProvider::new(key, model)
+            .map(|p| Arc::new(p.with_base_url(endpoint)) as Arc<dyn Provider>),
     }
-
-    if let Ok(key) = std::env::var("ANTHROPIC_API_KEY") {
-        return AnthropicProvider::new(key)
-            .map(|p| Arc::new(p) as Arc<dyn Provider>)
-            .map_err(|e| e.to_string());
-    }
-    if let Ok(key) = std::env::var("OPENAI_API_KEY") {
-        return OpenAiProvider::new(key, "gpt-4o-mini")
-            .map(|p| Arc::new(p) as Arc<dyn Provider>)
-            .map_err(|e| e.to_string());
-    }
-    if let Ok(key) = std::env::var("GEMINI_API_KEY") {
-        return GeminiProvider::new(key, "gemini-2.0-flash")
-            .map(|p| Arc::new(p) as Arc<dyn Provider>)
-            .map_err(|e| e.to_string());
-    }
-
-    Err("no LLM API key found for prompt/agent hook (ANTHROPIC_API_KEY, OPENAI_API_KEY, or GEMINI_API_KEY)".into())
+    .map_err(|e| e.to_string())
 }
 
 fn hook_working_dir(input: &HookInput) -> Option<PathBuf> {
@@ -1148,6 +1127,11 @@ async fn execute_llm_hook(
     model: Option<&str>,
     kind: &str,
 ) -> HookOutcome {
+    let Some(model) = model.map(str::trim).filter(|model| !model.is_empty()) else {
+        return HookOutcome::Error(format!(
+            "{kind} hook requires an explicitly configured model"
+        ));
+    };
     let provider = match build_provider(model) {
         Ok(p) => p,
         Err(e) => return HookOutcome::Error(e),
@@ -1158,16 +1142,7 @@ async fn execute_llm_hook(
         Err(e) => return HookOutcome::Error(format!("failed to serialize hook input: {}", e)),
     };
 
-    let model_id = model
-        .map(String::from)
-        .unwrap_or_else(|| match provider.name() {
-            "anthropic" => format!("{}-3-5-haiku-latest", anthropic_model_prefix()),
-            "openai" => "gpt-4o-mini".to_string(),
-            "gemini" => "gemini-2.0-flash".to_string(),
-            _ => "default".to_string(),
-        });
-
-    let request = MessagesRequest::new(model_id, vec![Message::user_text(rendered)])
+    let request = MessagesRequest::new(model, vec![Message::user_text(rendered)])
         .with_system(HOOK_SYSTEM_PROMPT)
         .with_max_tokens(1024);
 
@@ -1208,6 +1183,18 @@ mod tests {
     use super::*;
     use serde_json::json;
     use std::time::Duration;
+
+    #[tokio::test]
+    async fn model_hooks_reject_missing_model_before_provider_setup() {
+        for kind in ["prompt", "agent"] {
+            for model in [None, Some(" ")] {
+                let result = execute_llm_hook("test", &sample_input(), 1, model, kind).await;
+                assert!(
+                    matches!(result, HookOutcome::Error(message) if message.contains("explicitly configured model"))
+                );
+            }
+        }
+    }
 
     async fn fixture_http_hook_response(
         headers: String,
@@ -1418,7 +1405,6 @@ mod tests {
         let rendered = render_hook_template(
             "{{event}} {{query}} {{data.command}} {{data.args.1}} {{cwd}} {{missing}} $ARGUMENTS",
             &input,
-            TemplateMode::Raw,
             &arguments,
         );
 
@@ -1428,21 +1414,42 @@ mod tests {
     }
 
     #[test]
-    fn render_hook_template_quotes_shell_values() {
+    fn inserted_hook_arguments_are_not_reinterpreted_as_template() {
         let input = sample_input();
-        let rendered = render_hook_template(
-            "printf %s {{query}} {{cwd}}",
-            &input,
-            TemplateMode::Shell,
-            "{}",
+        let arguments = "before {{event}} and $ARGUMENTS after";
+        let rendered = render_hook_template("Write-Output $ARGUMENTS {{event}}", &input, arguments);
+        assert_eq!(
+            rendered,
+            "Write-Output before {{event}} and $ARGUMENTS after PreToolUse"
         );
-
-        assert_eq!(rendered, "printf %s 'Bash; exit 42' '/tmp/kcoder code'");
     }
 
+    #[cfg(unix)]
     #[test]
-    fn shell_quote_handles_single_quotes() {
-        assert_eq!(shell_quote("it's ready"), "'it'\"'\"'s ready'");
+    fn hook_arguments_cannot_escape_shell_through_nested_placeholders() {
+        let directory = tempfile::tempdir().unwrap();
+        let marker = directory.path().join("unexpected-command");
+        let payload = format!("{{{{tool_output}}}}$(touch {})", marker.display());
+        let input = sample_input().with_extra("tool_output", serde_json::json!(payload));
+        let arguments = serde_json::to_string(&input).unwrap();
+        let rendered = crate::command_template::render(
+            "printf %s $ARGUMENTS",
+            crate::command_template::CommandShell::Posix,
+            |_| Some(arguments.clone()),
+        )
+        .unwrap();
+        let output = std::process::Command::new("/bin/sh")
+            .arg("-c")
+            .arg(rendered.command)
+            .envs(rendered.environment)
+            .output()
+            .unwrap();
+        assert!(output.status.success());
+        assert_eq!(output.stdout, arguments.as_bytes());
+        assert!(
+            !marker.exists(),
+            "the input must not execute shell commands"
+        );
     }
 
     #[test]
@@ -1478,6 +1485,91 @@ mod tests {
             assert_eq!(
                 plugin_root_environment(Path::new(input), "bash", false),
                 std::ffi::OsString::from(input)
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn plugin_hook_gets_project_dir_from_existing_input_cwd() {
+        let temp = tempfile::tempdir().unwrap();
+        let cwd = temp.path().join("项目 workspace");
+        std::fs::create_dir_all(&cwd).unwrap();
+        let input = sample_input().with_extra("cwd", json!(cwd));
+        let source = HookSource::plugin("fixture", "fixture", temp.path());
+        let (shell, command) = if cfg!(windows) {
+            (
+                "powershell.exe",
+                "[Console]::Out.Write($env:CODEBUDDY_PROJECT_DIR)",
+            )
+        } else {
+            ("bash", "printf '%s' \"${CODEBUDDY_PROJECT_DIR-unset}\"")
+        };
+
+        let outcome = execute_command_hook(shell, command, 5, false, &input, Some(&source)).await;
+
+        match outcome {
+            HookOutcome::InvalidOutput(output) => {
+                assert_eq!(output, cwd.to_string_lossy());
+            }
+            other => panic!("expected project directory in raw stdout, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn plugin_hook_does_not_get_project_dir_without_existing_input_cwd() {
+        let temp = tempfile::tempdir().unwrap();
+        let source = HookSource::plugin("fixture", "fixture", temp.path());
+        let inputs = [
+            HookInput::new(HookEvent::Notification, "fixture", json!({})),
+            HookInput::new(HookEvent::Notification, "fixture", json!({}))
+                .with_extra("cwd", json!(temp.path().join("missing workspace"))),
+        ];
+        let (shell, command) = if cfg!(windows) {
+            (
+                "powershell.exe",
+                "if ($env:CODEBUDDY_PROJECT_DIR) { [Console]::Out.Write($env:CODEBUDDY_PROJECT_DIR) } else { [Console]::Out.Write('unset') }",
+            )
+        } else {
+            ("bash", "printf '%s' \"${CODEBUDDY_PROJECT_DIR-unset}\"")
+        };
+
+        for input in inputs {
+            let outcome =
+                execute_command_hook(shell, command, 5, false, &input, Some(&source)).await;
+            assert!(
+                matches!(&outcome, HookOutcome::InvalidOutput(output) if output == "unset"),
+                "expected project directory to be absent, got {outcome:?}"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn non_plugin_hook_does_not_get_project_dir() {
+        let temp = tempfile::tempdir().unwrap();
+        let input = HookInput::new(HookEvent::Notification, "fixture", json!({}))
+            .with_extra("cwd", json!(temp.path()));
+        let settings_source = HookSource {
+            kind: HookSourceKind::Settings,
+            id: "settings@fixture".into(),
+            name: "settings".into(),
+            root: temp.path().into(),
+            required_trust: None,
+            runtime_guard: None,
+        };
+        let (shell, command) = if cfg!(windows) {
+            (
+                "powershell.exe",
+                "if ($env:CODEBUDDY_PROJECT_DIR) { [Console]::Out.Write($env:CODEBUDDY_PROJECT_DIR) } else { [Console]::Out.Write('unset') }",
+            )
+        } else {
+            ("bash", "printf '%s' \"${CODEBUDDY_PROJECT_DIR-unset}\"")
+        };
+
+        for source in [None, Some(&settings_source)] {
+            let outcome = execute_command_hook(shell, command, 5, false, &input, source).await;
+            assert!(
+                matches!(&outcome, HookOutcome::InvalidOutput(output) if output == "unset"),
+                "expected non-plugin hook not to receive project directory, got {outcome:?}"
             );
         }
     }

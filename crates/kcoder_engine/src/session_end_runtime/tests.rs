@@ -58,7 +58,7 @@ fn test_engine_with_memory_manager(
         .provider(provider)
         .settings(settings)
         .memory_manager(memory_manager)
-        .build()
+        .build_with_profile_directory()
 }
 
 #[tokio::test]

@@ -1,0 +1,199 @@
+{
+  "MigrationTranscriptBlocksParams": [
+    {
+      "decoded": {
+        "cursor": 10,
+        "jobId": "job",
+        "record": 0
+      },
+      "name": "read_only_archive",
+      "value": {
+        "cursor": 10,
+        "jobId": "job",
+        "record": 0
+      }
+    }
+  ],
+  "MigrationTranscriptBlocksResult": [
+    {
+      "decoded": {
+        "blocks": [
+          {
+            "bodyAvailable": true,
+            "callId": null,
+            "decodedBytes": 13,
+            "index": 0,
+            "kind": "text",
+            "name": null,
+            "namespace": null,
+            "outcome": null,
+            "preview": "Archived text",
+            "sourceBytes": 15,
+            "sourceType": null
+          }
+        ],
+        "nextCursor": null,
+        "record": 0,
+        "totalBlocks": 1
+      },
+      "name": "read_only_archive",
+      "value": {
+        "blocks": [
+          {
+            "bodyAvailable": true,
+            "callId": null,
+            "decodedBytes": 13,
+            "index": 0,
+            "kind": "text",
+            "name": null,
+            "namespace": null,
+            "outcome": null,
+            "preview": "Archived text",
+            "sourceBytes": 15,
+            "sourceType": null
+          }
+        ],
+        "nextCursor": null,
+        "record": 0,
+        "totalBlocks": 1
+      }
+    }
+  ],
+  "MigrationTranscriptPageParams": [
+    {
+      "decoded": {
+        "cursor": 0,
+        "jobId": "job"
+      },
+      "name": "read_only_archive",
+      "value": {
+        "cursor": 0,
+        "jobId": "job"
+      }
+    }
+  ],
+  "MigrationTranscriptPageResult": [
+    {
+      "decoded": {
+        "adapterRevision": "fixed-revision",
+        "items": [
+          {
+            "blocks": [
+              {
+                "bodyAvailable": true,
+                "callId": null,
+                "decodedBytes": 13,
+                "index": 0,
+                "kind": "text",
+                "name": null,
+                "namespace": null,
+                "outcome": null,
+                "preview": "Archived text",
+                "sourceBytes": 15,
+                "sourceType": null
+              }
+            ],
+            "compactSummary": false,
+            "diagnostics": [],
+            "hidden": false,
+            "kind": "message",
+            "nextBlockCursor": null,
+            "parentId": null,
+            "record": 0,
+            "role": "assistant",
+            "sidechain": false,
+            "sourceId": "message",
+            "timestamp": null,
+            "totalBlocks": 1,
+            "totalDiagnostics": 0
+          }
+        ],
+        "nextCursor": null,
+        "normalizationComplete": true,
+        "project": null,
+        "source": "claude-code",
+        "sourceSessionId": "source-session",
+        "title": "Original title",
+        "totalRecords": 1
+      },
+      "name": "read_only_archive",
+      "value": {
+        "adapterRevision": "fixed-revision",
+        "items": [
+          {
+            "blocks": [
+              {
+                "bodyAvailable": true,
+                "callId": null,
+                "decodedBytes": 13,
+                "index": 0,
+                "kind": "text",
+                "name": null,
+                "namespace": null,
+                "outcome": null,
+                "preview": "Archived text",
+                "sourceBytes": 15,
+                "sourceType": null
+              }
+            ],
+            "compactSummary": false,
+            "diagnostics": [],
+            "hidden": false,
+            "kind": "message",
+            "nextBlockCursor": null,
+            "parentId": null,
+            "record": 0,
+            "role": "assistant",
+            "sidechain": false,
+            "sourceId": "message",
+            "timestamp": null,
+            "totalBlocks": 1,
+            "totalDiagnostics": 0
+          }
+        ],
+        "nextCursor": null,
+        "normalizationComplete": true,
+        "project": null,
+        "source": "claude-code",
+        "sourceSessionId": "source-session",
+        "title": "Original title",
+        "totalRecords": 1
+      }
+    }
+  ],
+  "MigrationTranscriptTextParams": [
+    {
+      "decoded": {
+        "blockIndex": 0,
+        "cursor": null,
+        "jobId": "job",
+        "record": 0
+      },
+      "name": "read_only_archive",
+      "value": {
+        "blockIndex": 0,
+        "jobId": "job",
+        "record": 0
+      }
+    }
+  ],
+  "MigrationTranscriptTextResult": [
+    {
+      "decoded": {
+        "decodedBytes": 13,
+        "encoding": "json_string",
+        "nextCursor": "opaque-position",
+        "sourceBytes": 15,
+        "text": "Archived text"
+      },
+      "name": "read_only_archive",
+      "value": {
+        "decodedBytes": 13,
+        "encoding": "json_string",
+        "nextCursor": "opaque-position",
+        "sourceBytes": 15,
+        "text": "Archived text"
+      }
+    }
+  ]
+}

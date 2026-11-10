@@ -10,7 +10,7 @@ use kcoder_api::ApiErrorKind;
 use kcoder_types::{ContentBlock, Message};
 use sha2::{Digest, Sha256};
 
-fn format_compact_history(old_messages: &[Message]) -> String {
+pub(super) fn format_compact_history(old_messages: &[Message]) -> String {
     old_messages
         .iter()
         .map(|msg| match msg {

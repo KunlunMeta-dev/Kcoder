@@ -12,6 +12,15 @@ New-Item -ItemType Directory -Path $resource,$pins -Force|Out-Null
 try {
  Set-Content (Join-Path $install 'kcoder-studio.exe') 'fixture not executable'
  Copy-Item -LiteralPath $IconSource -Destination (Join-Path $resource 'icon.ico')
+ $iconHash=(Get-FileHash -LiteralPath $IconSource -Algorithm SHA256).Hash.ToLowerInvariant()
+ $packagedIcon=Join-Path $resource "kcoder-$iconHash.ico"
+ Copy-Item -LiteralPath $IconSource -Destination $packagedIcon
+ function Get-ResourceSnapshot {
+   return (@(Get-ChildItem -LiteralPath $resource -Recurse -File|Sort-Object FullName|ForEach-Object {
+     $_.FullName.Substring($resource.Length)+'|'+$_.Length+'|'+(Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash
+   }) -join "`n")
+ }
+ $resourceBefore=Get-ResourceSnapshot
  $linkPath=Join-Path $root 'KCoder Studio.lnk'
  Copy-Item -LiteralPath $ShortcutTemplate -Destination $linkPath
  $shell=New-Object -ComObject WScript.Shell
@@ -31,7 +40,15 @@ try {
  if($appIdBefore -ne $appIdAfter){throw 'AppUserModelID changed'}
  if($shell.CreateShortcut($pin).IconLocation -ne $link.IconLocation){throw 'matching pinned link not repaired'}
  if((Get-FileHash $other).Hash -ne $otherHash){throw 'unrelated link modified'}
+ if((Get-ResourceSnapshot) -cne $resourceBefore){throw 'first repair changed packaged resources'}
  & $RepairScript -InstallDir $install -DesktopLink $linkPath -PinnedRoot $pins
  if((Get-ChildItem $resource -Filter 'kcoder-*.ico').Count -ne 1){throw 'repeat repair duplicated icon'}
+ if((Get-ResourceSnapshot) -cne $resourceBefore){throw 'repeat repair changed packaged resources'}
+ Remove-Item -LiteralPath $packagedIcon
+ $resourceMissing=Get-ResourceSnapshot
+ $rejected=$false
+ try { & $RepairScript -InstallDir $install -DesktopLink $linkPath -PinnedRoot $pins } catch { $rejected=$true }
+ if(!$rejected){throw 'missing packaged hash icon was not rejected'}
+ if((Get-ResourceSnapshot) -cne $resourceMissing){throw 'missing-icon failure changed packaged resources'}
  Write-Output "PASS: real Windows shortcut repair, pinned target filtering, AppID/arguments preserved, repeated upgrade idempotent"
 } finally { Remove-Item -LiteralPath $root -Recurse -Force }

@@ -20,6 +20,20 @@ use zeroize::Zeroizing;
 
 const MAX_RECORD_BYTES: u64 = 1024 * 1024;
 
+pub use kcoder_mcp_policy::validate_account;
+
+pub(crate) fn scoped_key(account: Option<&str>, legacy: &[u8]) -> String {
+    let Some(account) = account else {
+        return format!("{:x}", Sha256::digest(legacy));
+    };
+    let mut digest = Sha256::new();
+    digest.update(b"native-oauth-account-slot-v1");
+    digest.update((account.len() as u64).to_le_bytes());
+    digest.update(account.as_bytes());
+    digest.update(legacy);
+    format!("{:x}", digest.finalize())
+}
+
 #[derive(Clone)]
 pub struct CredentialBinding {
     pub resource: Url,
@@ -30,6 +44,7 @@ pub struct CredentialBinding {
 
 pub struct OAuthTokenStore {
     pub(crate) directory: Arc<PrivateDirectory>,
+    pub(crate) account: Option<String>,
 }
 pub struct OAuthCredentialLease {
     directory: Arc<PrivateDirectory>,
@@ -59,8 +74,15 @@ fn is_missing(error: &anyhow::Error) -> bool {
 
 impl OAuthTokenStore {
     pub fn open(path: &Path) -> Result<Self> {
+        Self::open_for_account(path, None)
+    }
+
+    /// Select a credential slot inside the original store, retaining legacy keys when omitted.
+    pub fn open_for_account(path: &Path, account: Option<&str>) -> Result<Self> {
+        validate_account(account)?;
         Ok(Self {
             directory: Arc::new(PrivateDirectory::open_or_create(path)?),
+            account: account.map(str::to_owned),
         })
     }
 
@@ -79,7 +101,7 @@ impl OAuthTokenStore {
             binding.issuer.as_str(),
             &binding.client_id,
         ))?;
-        let name = format!("{:x}", Sha256::digest(key));
+        let name = scoped_key(self.account.as_deref(), &key);
         let directory = Arc::clone(&self.directory);
         tokio::task::spawn_blocking(move || {
             let lock = acquire_lock(&directory, &name)?;
@@ -156,7 +178,7 @@ impl OAuthTokenStore {
             bail!("Invalid OAuth registration binding");
         }
         let key = serde_json::to_vec(&("registration", issuer.as_str(), redirect.as_str()))?;
-        let name = format!("client-{:x}", Sha256::digest(key));
+        let name = format!("client-{}", scoped_key(self.account.as_deref(), &key));
         let directory = Arc::clone(&self.directory);
         let metadata = metadata.clone();
         let redirect = redirect.clone();
@@ -750,3 +772,6 @@ mod tests {
             });
     }
 }
+
+#[path = "authorization_revocation.rs"]
+mod revocation;

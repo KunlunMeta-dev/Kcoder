@@ -1,0 +1,7 @@
+# Imported only inside the existing 49.234.36.54:8451 HTTPS site.
+handle /fixtures/mobile-design-atlas-v1 {
+    redir /fixtures/mobile-design-atlas-v1/ 303
+}
+handle /fixtures/mobile-design-atlas-v1/* {
+    reverse_proxy 127.0.0.1:18673
+}

@@ -3,11 +3,10 @@
     "name": "KCoder Studio",
     "slug": "kcoder-studio",
     "scheme": "kcoder-studio",
-    "version": "0.1.0",
+    "version": "2.0.9",
     "icon": "./assets/icon.png",
     "orientation": "default",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "dev.kcoder.studio"
@@ -16,14 +15,17 @@
       "package": "dev.kcoder.studio",
       "blockedPermissions": [
         "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.WRITE_EXTERNAL_STORAGE",
-        "android.permission.SYSTEM_ALERT_WINDOW"
+        "android.permission.SYSTEM_ALERT_WINDOW",
+        "android.permission.BLUETOOTH"
       ],
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-foreground.png",
         "backgroundColor": "#0b0b0c"
-      }
+      },
+      "versionCode": 31
     },
     "web": {
       "bundler": "metro",
@@ -42,7 +44,7 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "允许 KCoder Studio 使用相机扫描 Gateway 配对二维码或拍摄任务附件",
+          "cameraPermission": "\u5141\u8bb8 KCoder Studio \u4f7f\u7528\u76f8\u673a\u626b\u63cf Gateway \u914d\u5bf9\u4e8c\u7ef4\u7801\u6216\u62cd\u6444\u4efb\u52a1\u9644\u4ef6",
           "microphonePermission": false,
           "recordAudioAndroid": false
         }
@@ -50,9 +52,15 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "允许 KCoder Studio 从照片图库选择任务附件",
-          "cameraPermission": "允许 KCoder Studio 拍摄任务附件",
+          "photosPermission": "\u5141\u8bb8 KCoder Studio \u4ece\u7167\u7247\u56fe\u5e93\u9009\u62e9\u4efb\u52a1\u9644\u4ef6",
+          "cameraPermission": "\u5141\u8bb8 KCoder Studio \u62cd\u6444\u4efb\u52a1\u9644\u4ef6",
           "microphonePermission": false
+        }
+      ],
+      [
+        "@config-plugins/react-native-webrtc",
+        {
+          "cameraPermission": "\u5141\u8bb8 KCoder Studio \u4f7f\u7528\u76f8\u673a\u626b\u63cf Gateway \u914d\u5bf9\u4e8c\u7ef4\u7801\u6216\u62cd\u6444\u4efb\u52a1\u9644\u4ef6"
         }
       ]
     ],

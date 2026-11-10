@@ -407,7 +407,11 @@ impl ReplApp {
     }
 
     pub(super) fn has_interruptible_turn(&self) -> bool {
-        self.turn_state.is_active() || self.is_loading || self.spinner.is_running()
+        self.turn_state.is_active()
+            || self.is_loading
+            || self.spinner.is_running()
+            || self.input_preparation.is_pending()
+            || self.input_start_retry_at.is_some()
     }
 
     pub(super) fn has_active_goal(&self) -> bool {
@@ -459,6 +463,24 @@ impl ReplApp {
     }
 
     pub(super) fn interrupt_current_turn(&mut self) -> Option<UserAction> {
+        if (self.input_preparation.is_pending()
+            || self.input_admission.is_some()
+            || self.input_start_retry_at.is_some())
+            && !self.turn_state.is_active()
+            && !self.is_loading
+        {
+            let accepted = self.input_admission.is_some();
+            self.cancel_preparing_inputs();
+            self.push_message(
+                MessageRole::System,
+                if accepted {
+                    "This input will not start a task. Its save result is still being confirmed; check the conversation before submitting it again."
+                } else {
+                    "Input preparation cancelled."
+                }.to_string(),
+            );
+            return Some(UserAction::Interrupt);
+        }
         if self.deferred_turn_finish_pending
             && !self.turn_state.is_active()
             && !self.has_active_goal()
@@ -497,7 +519,7 @@ impl ReplApp {
                 .unwrap_or(false);
             self.cancel_blocking_modals();
             self.set_loading(false);
-            self.flush_active_turn();
+            self.flush_interrupted_turn();
             if let Some(handle) = self.take_deferred_turn_finish_handle() {
                 await_turn_task_for_logging(handle);
             }
@@ -600,9 +622,91 @@ impl ReplApp {
         None
     }
 
+    fn finish_question_answer(&mut self) -> Option<UserAction> {
+        let area = self.last_frame_area;
+        let mut dialog = self.pending_question.take().unwrap();
+        question_dialog_commit_current_answer(&mut dialog);
+        question_dialog_save_current_state(&mut dialog);
+        dialog.focused = dialog.focused.saturating_add(1);
+        if dialog.focused < dialog.request.questions.len() {
+            question_dialog_restore_focused_state(&mut dialog, area);
+            self.pending_question = Some(dialog);
+        } else {
+            let response = UserQuestionResponse {
+                questions: dialog.request.questions,
+                answers: dialog.request.answers,
+                annotations: dialog.request.annotations,
+            };
+            let _ = dialog.response_tx.send(response);
+            self.close_overlay_state(OverlayKind::Question);
+            self.activate_next_modal_or_resume_spinner();
+        }
+        None
+    }
+
     pub(super) fn handle_question_key(&mut self, key: KeyEvent) -> Option<UserAction> {
         let area = self.last_frame_area;
         let dialog = self.pending_question.as_mut().unwrap();
+        if dialog
+            .states
+            .get(dialog.focused)
+            .is_some_and(|state| state.editing_custom)
+        {
+            if key.code == KeyCode::Enter && key.modifiers.is_empty() {
+                let state = &mut dialog.states[dialog.focused];
+                if state.custom_answer.trim().is_empty() {
+                    return None;
+                }
+                state.editing_custom = false;
+                return self.finish_question_answer();
+            }
+            if key.code == KeyCode::Enter && key.modifiers == KeyModifiers::SHIFT {
+                question_dialog_insert_custom(dialog, "\n");
+                return None;
+            }
+            if let KeyCode::Char(character) = key.code
+                && (!key
+                    .modifiers
+                    .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT)
+                    || key_hint::is_altgr(key.modifiers))
+            {
+                question_dialog_insert_custom(dialog, &character.to_string());
+                return None;
+            }
+            let state = &mut dialog.states[dialog.focused];
+            match key.code {
+                KeyCode::Esc => {
+                    state.editing_custom = false;
+                    if state.custom_answer.trim().is_empty() {
+                        dialog.selected.retain(|index| *index != dialog.cursor);
+                    }
+                }
+                KeyCode::Left => state.custom_cursor = state.custom_cursor.saturating_sub(1),
+                KeyCode::Right => {
+                    state.custom_cursor =
+                        (state.custom_cursor + 1).min(state.custom_answer.graphemes(true).count())
+                }
+                KeyCode::Home => state.custom_cursor = 0,
+                KeyCode::End => state.custom_cursor = state.custom_answer.graphemes(true).count(),
+                KeyCode::Backspace if state.custom_cursor > 0 => {
+                    let start =
+                        byte_index_for_grapheme(&state.custom_answer, state.custom_cursor - 1);
+                    let end = byte_index_for_grapheme(&state.custom_answer, state.custom_cursor);
+                    state.custom_answer.replace_range(start..end, "");
+                    state.custom_cursor -= 1;
+                }
+                KeyCode::Delete
+                    if state.custom_cursor < state.custom_answer.graphemes(true).count() =>
+                {
+                    let start = byte_index_for_grapheme(&state.custom_answer, state.custom_cursor);
+                    let end =
+                        byte_index_for_grapheme(&state.custom_answer, state.custom_cursor + 1);
+                    state.custom_answer.replace_range(start..end, "");
+                }
+                _ => {}
+            }
+            return None;
+        }
         let option_count = question_dialog_option_count(&dialog.request.questions[dialog.focused]);
         let multi_select = dialog.request.questions[dialog.focused].multi_select;
 
@@ -648,9 +752,7 @@ impl ReplApp {
             KeyCode::Char(' ') if multi_select && key.modifiers.is_empty() => {
                 let idx = dialog.cursor;
                 if dialog.selected.contains(&idx) {
-                    if dialog.selected.len() > 1 {
-                        dialog.selected.retain(|&i| i != idx);
-                    }
+                    dialog.selected.retain(|&i| i != idx);
                 } else {
                     dialog.selected.push(idx);
                     dialog.selected.sort_unstable();
@@ -659,23 +761,17 @@ impl ReplApp {
                 question_dialog_save_current_state(dialog);
             }
             KeyCode::Enter if key.modifiers.is_empty() => {
-                let mut dialog = self.pending_question.take().unwrap();
-                question_dialog_commit_current_answer(&mut dialog);
-                question_dialog_save_current_state(&mut dialog);
-                dialog.focused = dialog.focused.saturating_add(1);
-                if dialog.focused < dialog.request.questions.len() {
-                    question_dialog_restore_focused_state(&mut dialog, area);
-                    self.pending_question = Some(dialog);
-                } else {
-                    let response = UserQuestionResponse {
-                        questions: dialog.request.questions,
-                        answers: dialog.request.answers,
-                        annotations: dialog.request.annotations,
-                    };
-                    let _ = dialog.response_tx.send(response);
-                    self.close_overlay_state(OverlayKind::Question);
-                    self.activate_next_modal_or_resume_spinner();
+                if question_dialog_is_custom_option(
+                    &dialog.request.questions[dialog.focused],
+                    dialog.cursor,
+                ) {
+                    question_dialog_begin_custom(dialog);
+                    return None;
                 }
+                if multi_select && dialog.selected.is_empty() {
+                    return None;
+                }
+                return self.finish_question_answer();
             }
             KeyCode::Esc if key.modifiers.is_empty() => {
                 let dialog = self.pending_question.take().unwrap();

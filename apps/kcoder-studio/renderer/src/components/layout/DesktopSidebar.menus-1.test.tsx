@@ -3,7 +3,7 @@ import { openLocalWorkspace } from '@/lib/local-terminal'
 import { act, fireEvent, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
-import { enableTauri, localDevice, renderSidebar } from './sidebar/DesktopSidebar.test-support'
+import { enableGateway, localDevice, renderSidebar } from './sidebar/DesktopSidebar.test-support'
 const experimentalFeatures = vi.hoisted(() => ({ enabled: true }))
 vi.mock('@/features/experimental-features/useExperimentalFeaturesEnabled', () => ({
   useExperimentalFeaturesEnabled: () => experimentalFeatures.enabled,
@@ -15,7 +15,7 @@ describe('DesktopSidebar menus', () => {
   beforeEach(() => {
     experimentalFeatures.enabled = true
     localStorage.clear()
-    enableTauri()
+    enableGateway()
     Element.prototype.scrollIntoView = vi.fn()
     vi.mocked(openLocalWorkspace).mockReset()
   })
@@ -181,7 +181,7 @@ describe('DesktopSidebar menus', () => {
     })
   })
 
-  test('renames a runtime conversation from double click dialog', async () => {
+  test('double clicking opens a conversation without prompting to rename; the context menu can rename it', async () => {
     const user = userEvent.setup()
     const onOpenRuntimeTask = vi.fn()
     const onRenameRuntimeTask = vi.fn().mockResolvedValue(undefined)
@@ -216,6 +216,16 @@ describe('DesktopSidebar menus', () => {
     })
 
     await user.dblClick(screen.getByTestId('runtime-local-task-row-codex-rename'))
+
+    expect(onOpenRuntimeTask).toHaveBeenCalled()
+    expect(onRenameRuntimeTask).not.toHaveBeenCalled()
+    expect(screen.queryByTestId('rename-runtime-local-task-input-codex-rename')).not.toBeInTheDocument()
+
+    fireEvent.contextMenu(screen.getByTestId('runtime-local-task-row-codex-rename'), {
+      clientX: 120,
+      clientY: 80,
+    })
+    await user.click(screen.getByTestId('runtime-local-task-menu-rename-codex-rename'))
 
     expect(screen.getByTestId('rename-runtime-local-task-input-codex-rename')).toHaveValue(
       '对齐需求核心点'

@@ -1,5 +1,24 @@
 import { HeaderWebSocket } from "./header-websocket.mjs";
 
+/** Reuse the authenticated page's owned Gateway session without retaining its secrets. */
+export async function openPageGatewayRpc(context, page, gateway, label, { open = openRpc } = {}) {
+  const token = await page.locator('meta[name="kcoder-rpc-token"]').getAttribute('content');
+  if (!token) throw new Error('Authenticated page RPC token is unavailable');
+  context.registerSecret(token);
+  let cookies = await page.context().cookies(gateway.baseUrl);
+  if (!cookies.length && typeof page.context().newCDPSession === 'function') {
+    const channel = await page.context().newCDPSession(page);
+    try { cookies = (await channel.send('Network.getCookies', { urls: [gateway.baseUrl] })).cookies; }
+    finally { await channel.detach(); }
+  }
+  const cookie = cookies.map(item => `${item.name}=${item.value}`).join('; ');
+  if (!cookie) throw new Error('Owned authenticated page session cookie is unavailable');
+  context.registerSecret(cookie);
+  const rpc = await open(gatewayRpcUrl(gateway, 'local', token), { headers: { Cookie: cookie, Origin: gateway.baseUrl } });
+  context.addCleanup(label, () => closeRpcAndWait(rpc, label));
+  return rpc;
+}
+
 export async function openRpc(url, options = {}) {
   const socket = new HeaderWebSocket(url, options.headers || {});
   await new Promise((resolveOpen, reject) => {
@@ -7,12 +26,19 @@ export async function openRpc(url, options = {}) {
       socket.close();
       reject(new Error(`WebSocket open timed out after ${options.timeoutMs || 10_000}ms`));
     }, options.timeoutMs || 10_000);
+    const closedBeforeOpen = () => {
+      clearTimeout(timer);
+      reject(new Error("WebSocket closed before the upgrade completed"));
+    };
+    socket.addEventListener("close", closedBeforeOpen, { once: true });
     socket.addEventListener("open", () => {
       clearTimeout(timer);
+      socket.removeEventListener("close", closedBeforeOpen);
       resolveOpen();
     }, { once: true });
     socket.addEventListener("error", () => {
       clearTimeout(timer);
+      socket.removeEventListener("close", closedBeforeOpen);
       reject(new Error(`WebSocket connection failed: ${redactUrl(url)}`));
     }, { once: true });
   });
@@ -24,6 +50,24 @@ export function rpcClient(socket) {
   const pending = new Map();
   const messages = [];
   const waiters = new Set();
+  let disconnected = false;
+  const disconnectedError = () => new Error('RPC connection closed; upstream outcome is unknown. Read the original receipt before retrying.');
+  const settleDisconnected = () => {
+    if (disconnected) return;
+    disconnected = true;
+    for (const request of pending.values()) {
+      clearTimeout(request.timer);
+      request.reject(disconnectedError());
+    }
+    pending.clear();
+    for (const waiter of waiters) {
+      clearTimeout(waiter.timer);
+      waiter.reject(disconnectedError());
+    }
+    waiters.clear();
+  };
+  socket.addEventListener('close', settleDisconnected);
+  socket.addEventListener('error', settleDisconnected);
   socket.addEventListener("message", event => {
     const message = JSON.parse(event.data);
     messages.push(message);
@@ -44,6 +88,7 @@ export function rpcClient(socket) {
   return {
     socket,
     request(method, params = {}, timeoutMs = 30_000) {
+      if (disconnected) return Promise.reject(disconnectedError());
       const id = nextId++;
       return new Promise((resolveRequest, reject) => {
         const timer = setTimeout(() => {
@@ -63,10 +108,12 @@ export function rpcClient(socket) {
     waitFor(predicate, timeoutMs, label) {
       const existing = messages.find(predicate);
       if (existing) return Promise.resolve(existing);
+      if (disconnected) return Promise.reject(disconnectedError());
       return new Promise((resolveWait, reject) => {
         const waiter = {
           predicate,
           resolve: resolveWait,
+          reject,
           timer: setTimeout(() => {
             waiters.delete(waiter);
             reject(new Error(`Timed out waiting for ${label}`));
@@ -104,10 +151,11 @@ export async function closeRpcAndWait(rpc, label = "RPC socket", timeoutMs = 5_0
   });
 }
 
-export async function initializeRpc(rpc, name) {
+export async function initializeRpc(rpc, name, experimental) {
   return rpc.request("initialize", {
     protocolVersion: "2026-07-27",
     clientInfo: { name, version: "1" },
+    ...(experimental ? { capabilities: { experimental } } : {}),
   });
 }
 

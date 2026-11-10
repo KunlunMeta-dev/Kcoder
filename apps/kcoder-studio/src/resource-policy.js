@@ -2,7 +2,7 @@ import { constants } from 'node:fs';
 import { lstat, open } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parse } from 'jsonc-parser';
+import { parseVersionedJsonc } from '../../kcoder-channel-host/src/jsonc-file.mjs';
 
 function object(value, keys) {
   if (!value || typeof value !== 'object' || Array.isArray(value) ||
@@ -18,12 +18,15 @@ function integer(value, fallback, minimum, maximum) {
 }
 
 export function parseResourcePolicy(text) {
-  const errors = [];
-  const value = object(parse(text, errors, { allowTrailingComma: true }), ['$schema', 'meta', 'resources']);
-  if (errors.length) throw new Error('invalid resource policy JSONC');
-  if (value.$schema !== undefined && typeof value.$schema !== 'string') throw new Error('invalid resource policy schema reference');
-  const meta = object(value.meta === undefined ? {} : value.meta, ['config_version']);
-  if (meta.config_version !== undefined && meta.config_version !== 1) throw new Error('unsupported resource policy version');
+  let document;
+  try { ({ document } = parseVersionedJsonc(text, 1)); }
+  catch (error) {
+    if (error.code === 'CONFIG_VERSION_UNSUPPORTED') throw new Error('unsupported resource policy version');
+    if (error.code === 'CONFIG_JSONC_INVALID') throw new Error('invalid resource policy JSONC');
+    throw error;
+  }
+  const value = object(document, ['$schema', 'meta', 'resources']);
+  object(value.meta === undefined ? {} : value.meta, ['config_version']);
   const resources = object(value.resources === undefined ? {} : value.resources, ['idle_budget']);
   const budget = object(resources.idle_budget === undefined ? {} : resources.idle_budget, ['max_processes', 'max_resident_bytes', 'sweep_interval_ms', 'sample_max_age_ms', 'sample_limit']);
   const maxProcesses = budget.max_processes == null ? null : integer(budget.max_processes, null, 0, 10_000);
@@ -38,7 +41,7 @@ export function parseResourcePolicy(text) {
 }
 
 function unchangedFile(before, after) {
-  return after.isFile() && before.dev === after.dev && before.ino === after.ino &&
+  return after.isFile() && (before.dev === after.dev || (process.platform === 'win32' && before.dev === 0n)) && before.ino === after.ino &&
     before.size === after.size && before.mtimeNs === after.mtimeNs &&
     before.ctimeNs === after.ctimeNs;
 }

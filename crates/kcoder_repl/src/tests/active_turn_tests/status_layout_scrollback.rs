@@ -935,6 +935,41 @@ fn fullscreen_transcript_cache_ignores_footer_only_working_ticks() {
 }
 
 #[test]
+fn mouse_selection_keeps_painted_cells_when_new_output_arrives() {
+    let mut app = ReplApp {
+        fullscreen_surface: true,
+        ..ReplApp::default()
+    };
+    app.push_message(MessageRole::Assistant, "select 甲乙🙂e\u{301} tail");
+    let mut terminal = Terminal::with_options_and_cursor_position(
+        CaptureBackend::new(80, 24),
+        Position { x: 0, y: 23 },
+    )
+    .unwrap();
+    terminal.set_viewport_area(Rect::new(0, 0, 80, 24));
+    terminal.draw(|frame| app.draw(frame)).unwrap();
+    let before = app.last_transcript_visible_rows.clone();
+    let row = before.iter().position(|row| row.contains("甲乙")).unwrap();
+    let byte = before[row].find("甲乙").unwrap();
+    let column = unicode_width::UnicodeWidthStr::width(&before[row][..byte]) as u16;
+    let area = app.transcript_viewport.transcript_area().unwrap();
+    assert!(app.begin_transcript_selection(area.x + column + 4, area.y + row as u16));
+
+    app.push_message(MessageRole::Assistant, "new output\n".repeat(30));
+    terminal.draw(|frame| app.draw(frame)).unwrap();
+    assert_eq!(app.last_transcript_visible_rows, before);
+    assert!(app.update_transcript_selection(area.x + column + 7, area.y + row as u16));
+    assert!(app.transcript_selection_drag_active);
+    assert!(app.finish_transcript_selection(area.x + column + 7, area.y + row as u16));
+    assert!(app.copy_transcript_selection_with(|text| {
+        assert_eq!(text, "🙂e\u{301}");
+        Ok(clipboard_copy::ClipboardCopyResult::Native(None))
+    }));
+    terminal.draw(|frame| app.draw(frame)).unwrap();
+    assert!(app.last_transcript_visible_rows.iter().any(|row| row.contains("new output")));
+}
+
+#[test]
 fn fullscreen_review_window_ignores_same_height_active_tail_updates() {
     let mut app = ReplApp {
         fullscreen_surface: true,
@@ -1261,6 +1296,101 @@ fn active_tool_title_diamond_animates_only_while_a_tool_is_running() {
         app.active_tool_summary_indicator_at(Duration::from_millis(240)),
         "◇"
     );
+}
+
+#[test]
+fn mixed_committed_and_running_tool_summary_keeps_animating() {
+    for (name, input) in [
+        ("bash", r#"{"command":"sleep 12"}"#),
+        ("Sleep", r#"{"duration_seconds":12}"#),
+    ] {
+        let mut app = ReplApp::default();
+        app.start_loading();
+        app.push_tool_running(
+            "fast".into(),
+            "bash".into(),
+            r#"{"command":"echo done"}"#.into(),
+        );
+        app.push_tool_running("slow".into(), name.into(), input.into());
+        app.push_tool_done("fast".into(), "bash".into(), "done".into(), false);
+        assert!(app.commit_streaming_text_tick());
+        assert!(app.active_turn.as_ref().is_some_and(ActiveCell::has_running_tool_entries));
+
+        let active = app.active_turn_display_messages_for_render();
+        let (messages, active_from) = app.fullscreen_combined_messages(0, app.messages.len(), active);
+        assert!(active_from > 0, "the completed tool must be in committed history");
+
+        // Sample real rendered frames without assuming that the first draw
+        // lands on any particular phase of the animation.
+        let deadline = Instant::now() + Duration::from_secs(2);
+        let candidates = if cfg!(windows) {
+            ["o tools", "O tools", "o tools"]
+        } else {
+            ["◇ tools", "◈ tools", "◆ tools"]
+        };
+        let mut seen = std::collections::HashSet::new();
+        let mut rendered = String::new();
+        while seen.len() < 2 && Instant::now() < deadline {
+            let lines = app.render_display_messages_limited_with_mode(
+                &messages,
+                100,
+                None,
+                LineLimitMode::Tail,
+                Some(active_from),
+            );
+            rendered = lines_to_text(&lines);
+            for candidate in candidates {
+                if rendered.contains(candidate) {
+                    seen.insert(candidate);
+                }
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        assert!(seen.len() >= 2, "the running tool summary did not animate: {rendered}");
+        assert!(rendered.contains("running"), "{rendered}");
+
+        app.push_tool_done("slow".into(), name.into(), "done".into(), false);
+        let active = app.active_turn_display_messages_for_render();
+        let (messages, active_from) = app.fullscreen_combined_messages(0, app.messages.len(), active);
+        let settled = app.render_display_messages_limited_with_mode(
+            &messages, 100, None, LineLimitMode::Tail, Some(active_from),
+        );
+        let settled = lines_to_text(&settled);
+        assert!(settled.contains("◇ tools"), "{settled}");
+        assert!(!settled.contains("running"), "{settled}");
+    }
+}
+
+#[test]
+fn restored_running_tool_stays_static_during_another_live_turn() {
+    let mut app = ReplApp::default();
+    app.push_message(MessageRole::System, "⟳ Running tool: bash - old history");
+    app.push_message(MessageRole::User, "a new task");
+    app.start_loading();
+    app.push_tool_running("current".into(), "Sleep".into(), r#"{"duration_seconds":12}"#.into());
+    let active = app.active_turn_display_messages_for_render();
+    let (messages, active_from) = app.fullscreen_combined_messages(0, app.messages.len(), active);
+    let deadline = Instant::now() + Duration::from_secs(2);
+    let current_frames = if cfg!(windows) {
+        ["o tools Sleep x1", "O tools Sleep x1", "o tools Sleep x1"]
+    } else {
+        ["◇ tools Sleep x1", "◈ tools Sleep x1", "◆ tools Sleep x1"]
+    };
+    let mut seen = std::collections::HashSet::new();
+    while seen.len() < 2 && Instant::now() < deadline {
+        let lines = app.render_display_messages_limited_with_mode(
+            &messages, 100, None, LineLimitMode::Tail, Some(active_from),
+        );
+        let rendered = lines_to_text(&lines);
+        assert!(rendered.contains("◇ tools bash x1"), "{rendered}");
+        for candidate in current_frames {
+            if rendered.contains(candidate) {
+                seen.insert(candidate);
+            }
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    assert!(seen.len() >= 2, "the current tool must keep animating");
 }
 
 #[test]

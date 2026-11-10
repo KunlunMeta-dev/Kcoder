@@ -19,6 +19,167 @@ fn render_texts(items: Vec<TranscriptRenderItem<'_>>) -> Vec<String> {
 }
 
 #[test]
+fn summary_tracks_only_running_tools_actually_included_in_the_group() {
+    let messages = vec![
+        make_msg(MessageRole::System, "[Tool use: bash] echo done"),
+        make_msg(MessageRole::System, "✓ Tool succeeded: bash - done"),
+        make_msg(MessageRole::System, "⟳ Running tool: bash - sleep 12"),
+    ];
+    let items = collapse_tool_runs(&messages, 10, true);
+    assert!(matches!(
+        items.as_slice(),
+        [TranscriptRenderItem::ToolSummary {
+            absolute_idx: 10,
+            last_running_idx: Some(12),
+            ..
+        }]
+    ));
+
+    // An excluded write card in the same run must not make the earlier
+    // completed summary look active.
+    let messages = vec![
+        make_msg(MessageRole::System, "[Tool use: bash] echo done"),
+        make_msg(MessageRole::System, "✓ Tool succeeded: bash - done"),
+        make_msg(MessageRole::System, "⟳ Running tool: write - file.txt"),
+    ];
+    let items = collapse_tool_runs(&messages, 10, true);
+    assert!(items.iter().any(|item| matches!(
+        item,
+        TranscriptRenderItem::ToolSummary {
+            absolute_idx: 10,
+            last_running_idx: None,
+            ..
+        }
+    )));
+}
+
+#[test]
+fn running_summary_member_is_tracked_for_mixed_tool_families() {
+    let names = [
+        "bash",
+        "PowerShell",
+        "Sleep",
+        "read",
+        "grep",
+        "glob",
+        "WebSearch",
+        "WebFetch",
+        "TaskOutput",
+        "mcp__example__lookup",
+    ];
+    for completed in names {
+        for running in names {
+            let messages = vec![
+                make_msg(
+                    MessageRole::System,
+                    &format!("[Tool use: {completed}] first"),
+                ),
+                make_msg(
+                    MessageRole::System,
+                    &format!("✓ Tool succeeded: {completed} - done"),
+                ),
+                make_msg(
+                    MessageRole::System,
+                    &format!("⟳ Running tool: {running} - waiting"),
+                ),
+            ];
+            let items = collapse_tool_runs(&messages, 10, true);
+            assert!(
+                items.iter().any(|item| matches!(
+                    item,
+                    TranscriptRenderItem::ToolSummary {
+                        absolute_idx: 10,
+                        last_running_idx: Some(12),
+                        ..
+                    }
+                )),
+                "completed={completed}, running={running}"
+            );
+        }
+    }
+}
+
+#[test]
+fn excluded_running_tool_does_not_hide_later_summarized_running_tool() {
+    let messages = vec![
+        make_msg(MessageRole::System, "[Tool use: bash] first"),
+        make_msg(MessageRole::System, "✓ Tool succeeded: bash - done"),
+        make_msg(MessageRole::System, "⟳ Running tool: write - draft.txt"),
+        make_msg(MessageRole::System, "⟳ Running tool: Sleep - waiting"),
+    ];
+    let items = collapse_tool_runs(&messages, 4, true);
+    assert!(items.iter().any(|item| matches!(
+        item,
+        TranscriptRenderItem::ToolSummary {
+            absolute_idx: 4,
+            last_running_idx: Some(7),
+            ..
+        }
+    )));
+    assert!(items.iter().any(|item| matches!(
+        item,
+        TranscriptRenderItem::Message {
+            absolute_idx: 6,
+            ..
+        }
+    )));
+}
+
+#[test]
+fn running_summary_survives_other_tool_completion_and_visible_failure() {
+    let messages = vec![
+        make_msg(MessageRole::System, "[Tool use: bash] first"),
+        make_msg(MessageRole::System, "✗ Tool failed: bash - failed"),
+        make_msg(MessageRole::System, "⟳ Running tool: grep - search"),
+        make_msg(MessageRole::System, "⟳ Running tool: Sleep - waiting"),
+    ];
+    let items = collapse_tool_runs(&messages, 0, true);
+    assert!(
+        items
+            .iter()
+            .any(|item| matches!(item, TranscriptRenderItem::ToolPair { .. }))
+    );
+    assert!(items.iter().any(|item| matches!(
+        item,
+        TranscriptRenderItem::ToolSummary {
+            last_running_idx: Some(3),
+            ..
+        }
+    )));
+
+    let mut one_remaining = messages;
+    one_remaining[3].text = "✓ Tool succeeded: Sleep - done".into();
+    let items = collapse_tool_runs(&one_remaining, 0, true);
+    assert!(items.iter().any(|item| matches!(
+        item,
+        TranscriptRenderItem::ToolSummary {
+            last_running_idx: Some(2),
+            ..
+        }
+    )));
+}
+
+#[test]
+fn user_messages_keep_historical_and_current_tool_summaries_separate() {
+    let messages = vec![
+        make_msg(MessageRole::System, "⟳ Running tool: bash - old history"),
+        make_msg(MessageRole::User, "start a different task"),
+        make_msg(MessageRole::System, "⟳ Running tool: Sleep - current"),
+    ];
+    let items = collapse_tool_runs(&messages, 5, true);
+    let indices = items
+        .iter()
+        .filter_map(|item| match item {
+            TranscriptRenderItem::ToolSummary {
+                last_running_idx, ..
+            } => *last_running_idx,
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(indices, vec![5, 7]);
+}
+
+#[test]
 fn consecutive_tool_messages_collapse_to_invocation_counts() {
     let msgs = vec![
         make_msg(MessageRole::System, "[Tool use: read] {\"file\":\"a.rs\"}"),

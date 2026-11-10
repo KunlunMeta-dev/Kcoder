@@ -531,8 +531,6 @@ export function calculateSidebarUpdateDownloadPercent(
   return Math.min(100, Math.round((downloadedBytes / totalBytes) * 100))
 }
 
-export const MACOS_WINDOW_CONTROLS_SAFE_AREA_CLASS = 'left-[92px]'
-
 export const SIDEBAR_ROW_METADATA_CLASS =
   'flex items-center gap-1 text-xs text-[rgb(var(--color-sidebar-text-muted))] group-hover/task:invisible'
 

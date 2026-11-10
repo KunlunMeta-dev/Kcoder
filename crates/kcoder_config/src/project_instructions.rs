@@ -70,6 +70,17 @@ pub fn load_project_md_contents(cwd: impl AsRef<Path>) -> Vec<(PathBuf, String)>
 /// Load the complete constraint set or return an actionable error. Limits apply
 /// before reading and are checked again because an open file can grow.
 pub fn try_load_project_md_contents(cwd: impl AsRef<Path>) -> Result<Vec<(PathBuf, String)>> {
+    Ok(read_project_guides(cwd)?
+        .into_iter()
+        .map(|(path, text, _)| (path, text))
+        .collect())
+}
+type ReadGuide = (
+    PathBuf,
+    String,
+    Option<kcoder_types::imported_instructions::NativeInstructionFact>,
+);
+fn read_project_guides(cwd: impl AsRef<Path>) -> Result<Vec<ReadGuide>> {
     let mut contents = Vec::new();
     let mut total = 0;
     for path in try_discover_project_md(cwd)? {
@@ -119,7 +130,8 @@ pub fn try_load_project_md_contents(cwd: impl AsRef<Path>) -> Result<Vec<(PathBu
         };
         ensure!(file.metadata()?.len() <= limit as u64, "{}", message());
         let mut bytes = Vec::new();
-        file.take(limit as u64 + 1)
+        (&file)
+            .take(limit as u64 + 1)
             .read_to_end(&mut bytes)
             .with_context(|| format!("project_instruction_read: cannot read {}", path.display()))?;
         ensure!(bytes.len() <= limit, "{}", message());
@@ -130,7 +142,18 @@ pub fn try_load_project_md_contents(cwd: impl AsRef<Path>) -> Result<Vec<(PathBu
                 path.display()
             )
         })?;
-        contents.push((path, content));
+        use sha2::Digest as _;
+        let fact = crate::PortableLeaseIdentity::from_regular_handle(&file)
+            .ok()
+            .and_then(|identity| {
+                serde_json::to_vec(&identity).ok().map(|bytes| {
+                    kcoder_types::imported_instructions::NativeInstructionFact {
+                        file_identity: format!("{:x}", sha2::Sha256::digest(bytes)),
+                        sha256: format!("{:x}", sha2::Sha256::digest(content.as_bytes())),
+                    }
+                })
+            });
+        contents.push((path, content, fact));
     }
     Ok(contents)
 }
@@ -146,17 +169,31 @@ pub fn build_project_md_system_prompt(cwd: impl AsRef<Path>) -> String {
 /// Engine construction uses this checked path so unreadable constraints cannot
 /// silently disappear while the model and tools continue executing.
 pub fn try_build_project_md_system_prompt(cwd: impl AsRef<Path>) -> Result<String> {
-    let contents = try_load_project_md_contents(cwd)?;
+    Ok(try_build_project_md_snapshot(cwd)?.prompt)
+}
+
+/// Prompt and optional dedup facts are derived from the exact same opened files and bytes.
+pub struct NativeProjectInstructions {
+    pub prompt: String,
+    pub facts: Vec<kcoder_types::imported_instructions::NativeInstructionFact>,
+}
+pub fn try_build_project_md_snapshot(cwd: impl AsRef<Path>) -> Result<NativeProjectInstructions> {
+    let contents = read_project_guides(cwd)?;
     if contents.is_empty() {
-        return Ok(String::new());
+        return Ok(NativeProjectInstructions {
+            prompt: String::new(),
+            facts: Vec::new(),
+        });
     }
+    let mut facts = Vec::new();
 
     let mut prompt = "# Project Instructions\nThe following files are operating instructions and constraints for this coding agent. They are not user requests. Do not summarize, repeat, or respond to them unless the user explicitly asks about project instructions.".to_string();
-    for (path, content) in contents {
+    for (path, content, fact) in contents {
+        facts.extend(fact);
         write!(prompt, "\n\n## {}\n\n{}", path.display(), content)
             .expect("writing to String cannot fail");
     }
-    Ok(prompt)
+    Ok(NativeProjectInstructions { prompt, facts })
 }
 
 #[cfg(test)]

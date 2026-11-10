@@ -1,7 +1,11 @@
+import { hasRuntimeTransport } from '@/lib/runtime-transport'
+import { installTestTransport, clearTestTransports } from '@/test/runtime-transport'
 import { notifyAccountContextChange } from '@/kcoder/accountContextEvents'
 import * as localPlugins from '@/api/local/codexPlugins'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { convertFileSrc, invoke, isTauri } from '@tauri-apps/api/core'
+import { clientResourceUrl } from '@/lib/client-resource-url'
+import { invoke } from '@/lib/runtime-commands'
+import { isGatewayRuntime as isGateway } from '@/lib/runtime-environment'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import '@/i18n'
@@ -9,11 +13,15 @@ import zh from '@/i18n/locales/zh-CN/common'
 import { GatewayRpcError } from '@/kcoder/gatewayRpc'
 import { PluginsWorkspace } from './PluginsWorkspace'
 
-vi.mock('@tauri-apps/api/core', () => ({
-  convertFileSrc: vi.fn((path: string) => `asset://localhost/${path.replace(/^\/+/, '')}`),
-  invoke: vi.fn(),
-  isTauri: vi.fn(() => false),
+vi.mock('@/lib/client-resource-url', () => ({
+  clientResourceUrl: vi.fn((path: string) => `asset://localhost/${path.replace(/^\/+/, '')}`),
 }))
+vi.mock('@/lib/runtime-commands', () => ({ invoke: vi.fn() }))
+vi.mock('@/lib/runtime-environment', async original => ({
+  ...(await original<typeof import('@/lib/runtime-environment')>()),
+  isGatewayRuntime: vi.fn(() => false),
+}))
+
 
 type CodexMarketplaceMock = {
   name: string
@@ -713,11 +721,11 @@ function mockSystemSkillsFetch(
 describe('PluginsWorkspace', () => {
   beforeEach(() => {
     notifyAccountContextChange('test-new-session')
-    vi.mocked(convertFileSrc).mockClear()
+    vi.mocked(clientResourceUrl).mockClear()
     vi.mocked(invoke).mockReset()
-    vi.mocked(isTauri).mockReturnValue(false)
+    vi.mocked(isGateway).mockImplementation(hasRuntimeTransport)
     window.localStorage.clear()
-    delete (window as typeof window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__
+    clearTestTransports()
     mockSystemSkillsFetch()
   })
 
@@ -742,7 +750,7 @@ describe('PluginsWorkspace', () => {
     expect(screen.queryByRole('tab', { name: 'MCP' })).not.toBeInTheDocument()
     expect(screen.queryByText('帮我整理本周的项目进度并生成可视化报告')).not.toBeInTheDocument()
     expect(await screen.findByText('Documents')).toBeInTheDocument()
-    expect(convertFileSrc).toHaveBeenCalledWith('/Users/test/plugins/documents/assets/logo.png')
+    expect(clientResourceUrl).toHaveBeenCalledWith('/Users/test/plugins/documents/assets/logo.png')
     expect(screen.getByText('Productivity')).toBeInTheDocument()
   })
 
@@ -829,11 +837,8 @@ describe('PluginsWorkspace', () => {
   })
 
   test('reads local plugin detail when trying an installed marketplace plugin in chat', async () => {
-    Object.defineProperty(window, '__TAURI_INTERNALS__', {
-      configurable: true,
-      value: {},
-    })
-    vi.mocked(isTauri).mockReturnValue(true)
+    installTestTransport(() => null)
+    vi.mocked(isGateway).mockReturnValue(true)
     mockCodexAppServerInvoke({
       marketplaces: [
         {
@@ -855,7 +860,7 @@ describe('PluginsWorkspace', () => {
         pluginName: 'documents',
       })
     )
-    expect(sessionStorage.getItem('wework:pending-plugin-trial')).toContain(
+    expect(sessionStorage.getItem('kcoder:pending-plugin-trial')).toContain(
       'plugin://documents@local-openai'
     )
   })
@@ -1057,7 +1062,7 @@ describe('PluginsWorkspace', () => {
   })
 
   test('explains target directory trust and clears the guidance after a successful retry', async () => {
-    Object.defineProperty(window, '__TAURI_INTERNALS__', { configurable: true, value: {} })
+    installTestTransport(() => null)
     mockCodexAppServerInvoke({ marketplaces: [{ name: 'existing', path: '/Users/test/existing' }] })
     const original = vi.mocked(invoke).getMockImplementation()!
     let deny = true
@@ -1092,10 +1097,7 @@ describe('PluginsWorkspace', () => {
   })
 
   test('normalizes a local marketplace manifest path to its source directory', async () => {
-    Object.defineProperty(window, '__TAURI_INTERNALS__', {
-      configurable: true,
-      value: {},
-    })
+    installTestTransport(() => null)
     mockCodexAppServerInvoke({
       marketplaces: [
         {
@@ -1122,10 +1124,7 @@ describe('PluginsWorkspace', () => {
   })
 
   test('loads the OpenAI official marketplace by default', async () => {
-    Object.defineProperty(window, '__TAURI_INTERNALS__', {
-      configurable: true,
-      value: {},
-    })
+    installTestTransport(() => null)
     mockCodexAppServerInvoke({
       marketplaces: [
         {
@@ -1147,7 +1146,7 @@ describe('PluginsWorkspace', () => {
   })
 
   test('adds a preset on demand and selects its returned marketplace', async () => {
-    Object.defineProperty(window, '__TAURI_INTERNALS__', { configurable: true, value: {} })
+    installTestTransport(() => null)
     mockCodexAppServerInvoke({ marketplaces: [] })
     const api = localPlugins.createLocalCodexPluginApi()
     const factory = vi
@@ -1181,7 +1180,7 @@ describe('PluginsWorkspace', () => {
   })
 
   test('retains a failed preset URL for retry without replacing an existing marketplace', async () => {
-    Object.defineProperty(window, '__TAURI_INTERNALS__', { configurable: true, value: {} })
+    installTestTransport(() => null)
     mockCodexAppServerInvoke({ marketplaces: [{ name: 'team', path: '/team' }] })
     const api = localPlugins.createLocalCodexPluginApi()
     const upsert = vi.fn(api.upsertMarketplace).mockRejectedValueOnce(new Error('Connection reset'))
@@ -1212,10 +1211,7 @@ describe('PluginsWorkspace', () => {
   })
 
   test('renders configured marketplaces in the selector and switches local marketplaces', async () => {
-    Object.defineProperty(window, '__TAURI_INTERNALS__', {
-      configurable: true,
-      value: {},
-    })
+    installTestTransport(() => null)
     mockCodexAppServerInvoke({
       marketplaces: [
         {
@@ -1263,11 +1259,8 @@ describe('PluginsWorkspace', () => {
   })
 
   test('shows a loading skeleton instead of the empty marketplace state while local plugins load', async () => {
-    Object.defineProperty(window, '__TAURI_INTERNALS__', {
-      configurable: true,
-      value: {},
-    })
-    vi.mocked(isTauri).mockReturnValue(true)
+    installTestTransport(() => null)
+    vi.mocked(isGateway).mockReturnValue(true)
     vi.mocked(invoke).mockImplementation((command: string) => {
       if (command === 'local_executor_codex_home_migration_status') {
         return Promise.resolve({
@@ -1295,11 +1288,8 @@ describe('PluginsWorkspace', () => {
   })
 
   test('sends remote plugin id for remote marketplace install', async () => {
-    Object.defineProperty(window, '__TAURI_INTERNALS__', {
-      configurable: true,
-      value: {},
-    })
-    vi.mocked(isTauri).mockReturnValue(true)
+    installTestTransport(() => null)
+    vi.mocked(isGateway).mockReturnValue(true)
     mockCodexAppServerInvoke({
       marketplaces: [
         {
@@ -1327,11 +1317,8 @@ describe('PluginsWorkspace', () => {
   })
 
   test('sends plugin name for local marketplace install', async () => {
-    Object.defineProperty(window, '__TAURI_INTERNALS__', {
-      configurable: true,
-      value: {},
-    })
-    vi.mocked(isTauri).mockReturnValue(true)
+    installTestTransport(() => null)
+    vi.mocked(isGateway).mockReturnValue(true)
     mockCodexAppServerInvoke({
       marketplaces: [
         {
@@ -1360,11 +1347,8 @@ describe('PluginsWorkspace', () => {
   })
 
   test('lists local skills through Codex app-server', async () => {
-    Object.defineProperty(window, '__TAURI_INTERNALS__', {
-      configurable: true,
-      value: {},
-    })
-    vi.mocked(isTauri).mockReturnValue(true)
+    installTestTransport(() => null)
+    vi.mocked(isGateway).mockReturnValue(true)
     mockCodexAppServerInvoke({
       skills: [
         {
@@ -1404,11 +1388,8 @@ describe('PluginsWorkspace', () => {
   })
 
   test('lists enabled local apps through Codex app-server', async () => {
-    Object.defineProperty(window, '__TAURI_INTERNALS__', {
-      configurable: true,
-      value: {},
-    })
-    vi.mocked(isTauri).mockReturnValue(true)
+    installTestTransport(() => null)
+    vi.mocked(isGateway).mockReturnValue(true)
     mockCodexAppServerInvoke({
       apps: [
         {
@@ -1459,10 +1440,7 @@ describe('PluginsWorkspace', () => {
   })
 
   test('deletes the selected local marketplace', async () => {
-    Object.defineProperty(window, '__TAURI_INTERNALS__', {
-      configurable: true,
-      value: {},
-    })
+    installTestTransport(() => null)
     mockCodexAppServerInvoke({
       marketplaces: [
         {
@@ -1486,10 +1464,7 @@ describe('PluginsWorkspace', () => {
   })
 
   test('manages local marketplaces with sort edit and delete actions', async () => {
-    Object.defineProperty(window, '__TAURI_INTERNALS__', {
-      configurable: true,
-      value: {},
-    })
+    installTestTransport(() => null)
     mockCodexAppServerInvoke({
       marketplaces: [
         {

@@ -7,16 +7,39 @@ pub(super) async fn query(
     params: Value,
     manager: &thread_runtime::ThreadManager,
     workspace_engine: &QueryEngine,
+    state: &ConnectionState,
 ) -> anyhow::Result<ToolsCatalogResult> {
     let params: ToolsCatalogParams =
         serde_json::from_value(params).context("invalid tools/catalog params")?;
+    if params.async_user_questions == Some(true) && !state.async_user_questions_v1 {
+        anyhow::bail!("asyncUserQuestionsV1 negotiation is required");
+    }
     let (engine, scope) = match params.thread_id.as_deref() {
-        Some(thread_id) => (
-            manager.engine(thread_id).context("tools/catalog requires a resident thread owned by this connection; resume it first")?,
-            ToolCatalogScope::Thread,
-        ),
+        Some(thread_id) => {
+            let original = integrations::connectivity::task_ui::prepare_resident_input(
+                state, manager, thread_id,
+            )?;
+            (original.or_else(||manager.engine(thread_id)).context("tools/catalog requires a resident thread owned by this connection; resume it first")?, ToolCatalogScope::Thread)
+        }
         None => (workspace_engine.clone(), ToolCatalogScope::Workspace),
     };
+    let presentation = studio_presentation::validate(
+        state,
+        params.client_presentation.as_ref(),
+        (scope == ToolCatalogScope::Thread).then(|| engine.state.studio_work_mode()),
+    )?;
+    let isolated_authorized = presentation
+        .as_ref()
+        .is_some_and(|value| value.isolated_widgets);
+    let engine = engine
+        .with_async_user_questions_supported(
+            state.async_user_questions_v1 && params.async_user_questions.unwrap_or(false),
+        )
+        .with_client_presentation(presentation)
+        .with_inline_widget_tool(
+            kcoder_tools::ShowWidgetTool::preview()
+                .with_isolated_html_authorized(isolated_authorized),
+        );
     Ok(bounded_result(
         params.thread_id,
         scope,

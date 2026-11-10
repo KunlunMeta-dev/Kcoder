@@ -25,6 +25,7 @@ pub(super) struct MemoryObserverModelDraftError {
     pub(super) phase: MemoryObserverFailurePhase,
     pub(super) failure: Option<kcoder_types::ProviderFailureDetails>,
     pub(super) source: Option<std::sync::Arc<kcoder_api::ApiErrorKind>>,
+    pub(super) deterministic_fallback_allowed: bool,
 }
 
 impl std::fmt::Display for MemoryObserverModelDraftError {
@@ -56,6 +57,7 @@ impl MemoryObserverModelDraftError {
             phase,
             failure: Some(failure),
             source: Some(std::sync::Arc::new(error)),
+            deterministic_fallback_allowed: true,
         }
     }
 
@@ -66,6 +68,17 @@ impl MemoryObserverModelDraftError {
             phase: MemoryObserverFailurePhase::Parse,
             failure: None,
             source: None,
+            deterministic_fallback_allowed: true,
+        }
+    }
+    pub(super) fn review(reason: &'static str, allow_fallback: bool) -> Self {
+        Self {
+            kind: MemoryObserverModelFallbackKind::Validation,
+            reason: reason.into(),
+            phase: MemoryObserverFailurePhase::Validation,
+            failure: None,
+            source: None,
+            deterministic_fallback_allowed: allow_fallback,
         }
     }
 }
@@ -76,7 +89,7 @@ pub(super) fn memory_observer_model_system_prompt(observer_model: &str) -> Strin
     let observer_model_json =
         serde_json::to_string(observer_model).unwrap_or_else(|_| "\"unknown\"".to_string());
     format!(
-        "You are KCoder's private memory observer. Review sanitized tool/session events and return only one JSON object. Do not include Markdown, prose, or tool calls. The JSON must conform to the schema below. Preserve source_event_ids exactly from the input bundle. Respect sanitization audit fields; never infer omitted private file paths, private verification targets, or omitted prompts. Set audit.model to {observer_model_json} unless a more specific observer model name is available, and set audit.generated_at_epoch to the current Unix epoch milliseconds if known.\n\nSchema:\n{schema}"
+        "You are a private memory observer. Review sanitized tool/session events and return only one JSON object. Do not include Markdown, prose, or tool calls. The JSON must conform to the schema below. Preserve source_event_ids exactly from the input bundle. Respect sanitization audit fields; never infer omitted private file paths, private verification targets, or omitted prompts. Set audit.model to {observer_model_json} exactly; do not invent another model or runtime identity, and set audit.generated_at_epoch to the current Unix epoch milliseconds if known.\n\nSchema:\n{schema}"
     )
 }
 

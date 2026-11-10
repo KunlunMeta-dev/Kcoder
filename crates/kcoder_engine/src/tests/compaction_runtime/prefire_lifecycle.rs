@@ -1,6 +1,148 @@
 use super::*;
 
 #[tokio::test]
+async fn changing_summary_settings_cancels_stale_prefire_before_replacement() {
+    let root = tempfile::tempdir().unwrap();
+    let requests = Arc::new(AtomicUsize::new(0));
+    let dropped = Arc::new(AtomicUsize::new(0));
+    let engine = prefire_scope_engine(
+        root.path(),
+        Arc::new(HangingPrefireProvider {
+            requests: requests.clone(),
+            dropped: dropped.clone(),
+        }),
+    );
+    engine
+        .maybe_prefire_compaction(&engine.context_budget(), 1_000)
+        .await;
+    wait_for_prefire_condition(|| requests.load(Ordering::SeqCst) == 1).await;
+    let old_identity = engine
+        .auto_compact_state
+        .read()
+        .unwrap()
+        .prefire_configuration;
+    engine.settings.write().unwrap().summary_max_tokens += 1;
+    engine
+        .maybe_prefire_compaction(&engine.context_budget(), 1_000)
+        .await;
+    wait_for_prefire_condition(|| requests.load(Ordering::SeqCst) == 2).await;
+    wait_for_prefire_condition(|| dropped.load(Ordering::SeqCst) == 1).await;
+    {
+        let state = engine.auto_compact_state.read().unwrap();
+        assert_ne!(state.prefire_configuration, old_identity);
+        assert!(state.prefire_in_flight);
+        assert!(state.prefire_note.is_none());
+    }
+    let mut messages = engine.state.messages();
+    messages[0] = Message::user_text("corrected source ".repeat(500));
+    engine.state.set_messages(messages);
+    engine
+        .maybe_prefire_compaction(&engine.context_budget(), 1_000)
+        .await;
+    wait_for_prefire_condition(|| requests.load(Ordering::SeqCst) == 3).await;
+    wait_for_prefire_condition(|| dropped.load(Ordering::SeqCst) == 2).await;
+    engine.prepare_session_replacement();
+    wait_for_prefire_condition(|| dropped.load(Ordering::SeqCst) == 3).await;
+}
+
+#[tokio::test]
+async fn cancelling_growth_summary_preserves_source_and_failure_budget() {
+    let root = tempfile::tempdir().unwrap();
+    let requests = Arc::new(AtomicUsize::new(0));
+    let dropped = Arc::new(AtomicUsize::new(0));
+    let engine = prefire_scope_engine(
+        root.path(),
+        Arc::new(HangingPrefireProvider {
+            requests: requests.clone(),
+            dropped: dropped.clone(),
+        }),
+    );
+    engine.settings.write().unwrap().context_window_tokens = Some(1_000_000);
+    engine
+        .settings
+        .write()
+        .unwrap()
+        .auto_compact_threshold_tokens = Some(700_000);
+    let mut messages = engine.state.messages();
+    messages[0] = Message::user_text("consumed source ".repeat(26_000));
+    engine.state.set_messages(messages.clone());
+    let task_engine = engine.clone();
+    let task = tokio::spawn(async move {
+        task_engine
+            .maybe_compact_prepared_request(1, &task_engine.context_budget(), 200_000)
+            .await
+    });
+    wait_for_prefire_condition(|| requests.load(Ordering::SeqCst) == 1).await;
+    engine.cancel_token().cancel();
+    assert!(
+        !tokio::time::timeout(std::time::Duration::from_secs(2), task)
+            .await
+            .unwrap()
+            .unwrap()
+    );
+    assert_eq!(
+        serde_json::to_value(engine.state.messages()).unwrap(),
+        serde_json::to_value(messages).unwrap()
+    );
+    assert_eq!(
+        engine
+            .auto_compact_state
+            .read()
+            .unwrap()
+            .consecutive_failures,
+        0
+    );
+    assert_eq!(dropped.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
+async fn prefire_uses_the_configured_summary_profile_and_host_provider() {
+    struct Source {
+        seen: std::sync::Mutex<Vec<Settings>>,
+        provider: Arc<dyn Provider>,
+    }
+    impl crate::ClientModelConfiguration for Source {
+        fn settings(&self, _: &str) -> Result<Settings> {
+            anyhow::bail!("prefire must use the current session snapshot")
+        }
+        fn provider(&self, settings: &Settings) -> Result<Arc<dyn Provider>> {
+            self.seen.lock().unwrap().push(settings.clone());
+            Ok(self.provider.clone())
+        }
+    }
+    let root = tempfile::tempdir().unwrap();
+    let requests = Arc::new(AtomicUsize::new(0));
+    let source = Arc::new(Source {
+        seen: std::sync::Mutex::new(Vec::new()),
+        provider: Arc::new(HangingPrefireProvider {
+            requests: requests.clone(),
+            dropped: Arc::new(AtomicUsize::new(0)),
+        }),
+    });
+    let engine = prefire_scope_engine(root.path(), Arc::new(EmptyProvider))
+        .with_client_model_configuration(source.clone());
+    {
+        let mut settings = engine.settings.write().unwrap();
+        let mut profile = kcoder_config::default_active_provider_config();
+        profile.default_model = "configured-summary".into();
+        profile.models.clear();
+        settings.providers.insert("summary-fixture".into(), profile);
+        settings.summary_profile = Some("summary-fixture".into());
+    }
+    engine
+        .maybe_prefire_compaction(&engine.context_budget(), 1_000)
+        .await;
+    wait_for_prefire_condition(|| requests.load(Ordering::SeqCst) == 1).await;
+    let seen = source.seen.lock().unwrap();
+    assert_eq!(seen.len(), 1);
+    assert_eq!(seen[0].active_provider.as_deref(), Some("summary-fixture"));
+    assert_eq!(seen[0].model, "configured-summary");
+    drop(seen);
+    engine.prepare_session_replacement();
+    settle_prefire().await;
+}
+
+#[tokio::test]
 async fn idle_reservation_blocks_prefire_and_rolls_back_partial_job_reservation() {
     let tmp = tempfile::tempdir().unwrap();
     let requests = Arc::new(AtomicUsize::new(0));

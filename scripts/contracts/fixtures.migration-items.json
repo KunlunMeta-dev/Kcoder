@@ -1,0 +1,77 @@
+{
+  "MigrationItemsParams": {
+    "valid": [
+      {
+        "name": "first_page",
+        "value": {
+          "jobId": "job"
+        }
+      },
+      {
+        "name": "next_page",
+        "value": {
+          "jobId": "job",
+          "cursor": "opaque"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unbounded_page",
+        "value": {
+          "jobId": "job",
+          "limit": 999999
+        }
+      }
+    ]
+  },
+  "MigrationItemsResult": {
+    "valid": [
+      {
+        "name": "empty_page",
+        "value": {
+          "items": []
+        }
+      },
+      {
+        "name": "review_item",
+        "value": {
+          "items": [
+            {
+              "id": "item",
+              "category": "mcp",
+              "sourceName": "documents",
+              "status": "requires_action",
+              "selectedByDefault": false,
+              "issues": [
+                {
+                  "code": "unsupported_field",
+                  "severity": "blocking",
+                  "field": "cwd"
+                }
+              ]
+            }
+          ],
+          "nextCursor": "cursor"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown_outcome",
+        "value": {
+          "items": [
+            {
+              "id": "item",
+              "category": "mcp",
+              "sourceName": "documents",
+              "status": "success",
+              "selectedByDefault": false,
+              "issues": []
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

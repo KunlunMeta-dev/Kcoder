@@ -1,0 +1,381 @@
+{
+  "ImportedMemoryProvenance": [
+    {
+      "decoded": {
+        "factsVerified": false,
+        "layout": "claude_auto_memory_v1",
+        "migrationJobId": "job-memory",
+        "source": "claude-code",
+        "sourceFile": "feedback.md",
+        "sourceGroup": "opaque-project-label",
+        "sourceModifiedAtMs": 1790000000000,
+        "sourceRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "name": "nonempty_unverified_notes",
+      "value": {
+        "factsVerified": false,
+        "layout": "claude_auto_memory_v1",
+        "migrationJobId": "job-memory",
+        "source": "claude-code",
+        "sourceFile": "feedback.md",
+        "sourceGroup": "opaque-project-label",
+        "sourceModifiedAtMs": 1790000000000,
+        "sourceRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    }
+  ],
+  "MigrationMemoryControlParams": [
+    {
+      "decoded": {
+        "confirmUnverifiedNotes": true,
+        "enabled": true,
+        "expectedRevision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "id": "ctx-memory-example",
+        "ownerOperationId": "op-memory-owner",
+        "requestId": "memory-activate-1"
+      },
+      "name": "nonempty_unverified_notes",
+      "value": {
+        "confirmUnverifiedNotes": true,
+        "enabled": true,
+        "expectedRevision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "id": "ctx-memory-example",
+        "ownerOperationId": "op-memory-owner",
+        "requestId": "memory-activate-1"
+      }
+    }
+  ],
+  "MigrationMemoryControlReadParams": [
+    {
+      "decoded": {
+        "requestId": "memory-activate-1"
+      },
+      "name": "nonempty_unverified_notes",
+      "value": {
+        "requestId": "memory-activate-1"
+      }
+    }
+  ],
+  "MigrationMemoryControlResult": [
+    {
+      "decoded": {
+        "current": {
+          "bytes": 42,
+          "enabled": false,
+          "id": "ctx-memory-example",
+          "name": "reviewed-note",
+          "ownerOperationId": "op-memory-owner",
+          "provenance": {
+            "factsVerified": false,
+            "layout": "claude_auto_memory_v1",
+            "migrationJobId": "job-memory",
+            "source": "claude-code",
+            "sourceFile": "feedback.md",
+            "sourceGroup": "opaque-project-label",
+            "sourceModifiedAtMs": 1790000000000,
+            "sourceRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "revision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "scope": {
+            "kind": "global"
+          }
+        },
+        "receipt": {
+          "appliedRevision": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "request": {
+            "confirmUnverifiedNotes": true,
+            "enabled": true,
+            "expectedRevision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "id": "ctx-memory-example",
+            "ownerOperationId": "op-memory-owner",
+            "requestId": "memory-activate-1"
+          }
+        }
+      },
+      "name": "nonempty_unverified_notes",
+      "value": {
+        "current": {
+          "bytes": 42,
+          "enabled": false,
+          "id": "ctx-memory-example",
+          "name": "reviewed-note",
+          "ownerOperationId": "op-memory-owner",
+          "provenance": {
+            "factsVerified": false,
+            "layout": "claude_auto_memory_v1",
+            "migrationJobId": "job-memory",
+            "source": "claude-code",
+            "sourceFile": "feedback.md",
+            "sourceGroup": "opaque-project-label",
+            "sourceModifiedAtMs": 1790000000000,
+            "sourceRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "revision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "scope": {
+            "kind": "global"
+          }
+        },
+        "receipt": {
+          "appliedRevision": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "request": {
+            "confirmUnverifiedNotes": true,
+            "enabled": true,
+            "expectedRevision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "id": "ctx-memory-example",
+            "ownerOperationId": "op-memory-owner",
+            "requestId": "memory-activate-1"
+          }
+        }
+      }
+    },
+    {
+      "decoded": {
+        "current": null,
+        "receipt": {
+          "appliedRevision": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "request": {
+            "confirmUnverifiedNotes": true,
+            "enabled": true,
+            "expectedRevision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "id": "ctx-memory-example",
+            "ownerOperationId": "op-memory-owner",
+            "requestId": "memory-activate-1"
+          }
+        }
+      },
+      "name": "receipt_does_not_recreate_removed_record",
+      "value": {
+        "current": null,
+        "receipt": {
+          "appliedRevision": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "request": {
+            "confirmUnverifiedNotes": true,
+            "enabled": true,
+            "expectedRevision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "id": "ctx-memory-example",
+            "ownerOperationId": "op-memory-owner",
+            "requestId": "memory-activate-1"
+          }
+        }
+      }
+    },
+    {
+      "decoded": {
+        "current": null,
+        "receipt": null
+      },
+      "name": "unknown_receipt",
+      "value": {
+        "current": null,
+        "receipt": null
+      }
+    }
+  ],
+  "MigrationMemoryDiscoverParams": [
+    {
+      "decoded": {
+        "source": "claude-code"
+      },
+      "name": "nonempty_unverified_notes",
+      "value": {
+        "source": "claude-code"
+      }
+    }
+  ],
+  "MigrationMemoryListParams": [
+    {
+      "decoded": {
+        "pageIndex": 0
+      },
+      "name": "nonempty_unverified_notes",
+      "value": {
+        "pageIndex": 0
+      }
+    }
+  ],
+  "MigrationMemoryListResult": [
+    {
+      "decoded": {
+        "items": [
+          {
+            "bytes": 42,
+            "enabled": false,
+            "id": "ctx-memory-example",
+            "name": "reviewed-note",
+            "ownerOperationId": "op-memory-owner",
+            "provenance": {
+              "factsVerified": false,
+              "layout": "claude_auto_memory_v1",
+              "migrationJobId": "job-memory",
+              "source": "claude-code",
+              "sourceFile": "feedback.md",
+              "sourceGroup": "opaque-project-label",
+              "sourceModifiedAtMs": 1790000000000,
+              "sourceRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            },
+            "revision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "scope": {
+              "kind": "global"
+            }
+          }
+        ],
+        "nextPage": null,
+        "totalRecords": 1
+      },
+      "name": "nonempty_unverified_notes",
+      "value": {
+        "items": [
+          {
+            "bytes": 42,
+            "enabled": false,
+            "id": "ctx-memory-example",
+            "name": "reviewed-note",
+            "ownerOperationId": "op-memory-owner",
+            "provenance": {
+              "factsVerified": false,
+              "layout": "claude_auto_memory_v1",
+              "migrationJobId": "job-memory",
+              "source": "claude-code",
+              "sourceFile": "feedback.md",
+              "sourceGroup": "opaque-project-label",
+              "sourceModifiedAtMs": 1790000000000,
+              "sourceRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            },
+            "revision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "scope": {
+              "kind": "global"
+            }
+          }
+        ],
+        "nextPage": null,
+        "totalRecords": 1
+      }
+    }
+  ],
+  "MigrationMemoryReadParams": [
+    {
+      "decoded": {
+        "id": "ctx-memory-example",
+        "offset": 0
+      },
+      "name": "nonempty_unverified_notes",
+      "value": {
+        "id": "ctx-memory-example",
+        "offset": 0
+      }
+    }
+  ],
+  "MigrationMemoryReadResult": [
+    {
+      "decoded": {
+        "nextOffset": null,
+        "record": {
+          "bytes": 42,
+          "enabled": false,
+          "id": "ctx-memory-example",
+          "name": "reviewed-note",
+          "ownerOperationId": "op-memory-owner",
+          "provenance": {
+            "factsVerified": false,
+            "layout": "claude_auto_memory_v1",
+            "migrationJobId": "job-memory",
+            "source": "claude-code",
+            "sourceFile": "feedback.md",
+            "sourceGroup": "opaque-project-label",
+            "sourceModifiedAtMs": 1790000000000,
+            "sourceRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "revision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "scope": {
+            "kind": "global"
+          }
+        },
+        "text": "An unverified model-authored note.",
+        "totalBytes": 42
+      },
+      "name": "nonempty_unverified_notes",
+      "value": {
+        "nextOffset": null,
+        "record": {
+          "bytes": 42,
+          "enabled": false,
+          "id": "ctx-memory-example",
+          "name": "reviewed-note",
+          "ownerOperationId": "op-memory-owner",
+          "provenance": {
+            "factsVerified": false,
+            "layout": "claude_auto_memory_v1",
+            "migrationJobId": "job-memory",
+            "source": "claude-code",
+            "sourceFile": "feedback.md",
+            "sourceGroup": "opaque-project-label",
+            "sourceModifiedAtMs": 1790000000000,
+            "sourceRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "revision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "scope": {
+            "kind": "global"
+          }
+        },
+        "text": "An unverified model-authored note.",
+        "totalBytes": 42
+      }
+    }
+  ],
+  "MigrationMemorySourcesParams": [
+    {
+      "decoded": {
+        "catalogId": "mem-catalog",
+        "cursor": null
+      },
+      "name": "nonempty_unverified_notes",
+      "value": {
+        "catalogId": "mem-catalog",
+        "cursor": null
+      }
+    }
+  ],
+  "MigrationMemorySourcesResult": [
+    {
+      "decoded": {
+        "catalogId": "mem-catalog",
+        "items": [
+          {
+            "blockedItems": 0,
+            "bytes": 42,
+            "files": 1,
+            "layout": "claude_auto_memory_v1",
+            "source": "claude-code",
+            "sourceGroup": "opaque-project-label",
+            "sourceId": "asset-memory-opaque"
+          }
+        ],
+        "nextCursor": null,
+        "problems": [],
+        "unobserved": [
+          "custom_memory_directories"
+        ]
+      },
+      "name": "nonempty_unverified_notes",
+      "value": {
+        "catalogId": "mem-catalog",
+        "items": [
+          {
+            "blockedItems": 0,
+            "bytes": 42,
+            "files": 1,
+            "layout": "claude_auto_memory_v1",
+            "source": "claude-code",
+            "sourceGroup": "opaque-project-label",
+            "sourceId": "asset-memory-opaque"
+          }
+        ],
+        "nextCursor": null,
+        "problems": [],
+        "unobserved": [
+          "custom_memory_directories"
+        ]
+      }
+    }
+  ]
+}

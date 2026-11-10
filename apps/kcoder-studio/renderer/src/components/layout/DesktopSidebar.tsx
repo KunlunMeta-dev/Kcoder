@@ -1,12 +1,8 @@
-import { navigateTo } from '@/lib/navigation'
+import { StudioWorkModeSwitcher } from './StudioWorkModeSwitcher'
 import { cn } from '@/lib/utils'
 import { Plus, Search } from 'lucide-react'
-import { DesktopAppSwitcher } from './DesktopAppSwitcher'
-import { DesktopWindowControls } from './DesktopWindowControls'
-import { MacOSTitleBarDragRegion } from './MacOSTitleBarDragRegion'
 import { AccountSection } from './sidebar/AccountSection'
 import { SidebarDialogs } from './sidebar/SidebarDialogs'
-import { MACOS_WINDOW_CONTROLS_SAFE_AREA_CLASS } from './sidebar/sidebarSelectors'
 import { SidebarButton } from './sidebar/SidebarWidgets'
 import { SidebarWorklists } from './sidebar/SidebarWorklists'
 import { type DesktopSidebarProps } from './sidebar/types'
@@ -15,7 +11,6 @@ import { useSidebarModel } from './sidebar/useSidebarModel'
 export function DesktopSidebar(props: DesktopSidebarProps) {
   const model = useSidebarModel(props)
   const {
-    activeItem,
     onNewChat,
     onOpenSearch,
     collapsed,
@@ -23,16 +18,11 @@ export function DesktopSidebar(props: DesktopSidebarProps) {
     hideResizeHandle,
     onPointerEnter,
     onPointerLeave,
-    onToggleSidebar,
-    onOpenWorkbench,
-    onOpenTodo,
-    onOpenApps,
     background,
     t,
     sidebarWidth,
     resizing,
     handleResizeStart,
-    usesOverlayTitlebar,
     windowFocused,
   } = model
   return (
@@ -44,7 +34,7 @@ export function DesktopSidebar(props: DesktopSidebarProps) {
       onPointerEnter={onPointerEnter}
       onPointerLeave={onPointerLeave}
       className={cn(
-        'relative z-popover h-full shrink-0 overflow-visible border-r border-black/[0.08] transition-[width,background-color] duration-[300ms] ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none will-change-[width] dark:border-white/[0.08]',
+        'relative z-popover h-full shrink-0 overflow-visible border-r border-black/[0.08] transition-[width,background-color] duration-[300ms] ease-[cubic-bezier(0.16,1,0.3,1)] will-change-[width] dark:border-white/[0.08]',
         background.imagePath && background.inSidebar
           ? 'bg-background/25'
           : 'bg-[rgb(var(--color-sidebar))]',
@@ -58,41 +48,9 @@ export function DesktopSidebar(props: DesktopSidebarProps) {
     >
       <div className="h-full overflow-hidden">
         <div
-          className={cn(
-            'relative flex h-full flex-col px-1.5',
-            usesOverlayTitlebar ? 'pt-[44px]' : 'pt-1.5'
-          )}
+          className="relative flex h-full flex-col px-1.5 pt-1.5"
           style={{ width: sidebarWidth }}
         >
-          {usesOverlayTitlebar && (
-            <MacOSTitleBarDragRegion className="absolute inset-x-0 top-0 z-0 h-[38px]" />
-          )}
-          {usesOverlayTitlebar && onToggleSidebar && (
-            <div
-              data-testid="desktop-sidebar-chrome-controls"
-              className={cn(
-                'absolute top-0 z-chrome flex h-[38px] items-center gap-1',
-                MACOS_WINDOW_CONTROLS_SAFE_AREA_CLASS
-              )}
-            >
-              <DesktopWindowControls
-                sidebarCollapsed={false}
-                onToggleSidebar={onToggleSidebar}
-                className="gap-1"
-              />
-              <DesktopAppSwitcher
-                activeApp={
-                  activeItem === 'todo' ? 'todo' : activeItem === 'plugins' ? 'apps' : 'studio'
-                }
-                onNavigate={app => {
-                  if (app === 'studio') onOpenWorkbench?.()
-                  if (app === 'todo') onOpenTodo?.()
-                  if (app === 'apps') onOpenApps?.()
-                  if (app === 'wegent') navigateTo('/app/wegent')
-                }}
-              />
-            </div>
-          )}
           <div className="mb-1 flex h-9 items-center justify-between px-2">
             <span className="min-w-0 truncate text-heading-sm font-semibold leading-6 text-[rgb(var(--color-sidebar-text-primary))]">
               {t('workbench.brand', 'KCoder Studio')}
@@ -110,6 +68,7 @@ export function DesktopSidebar(props: DesktopSidebarProps) {
               </button>
             )}
           </div>
+          <StudioWorkModeSwitcher address={props.currentRuntimeTask} onNewChat={onNewChat} />
           <nav className="space-y-0.5">
             <SidebarButton
               icon={Plus}

@@ -200,7 +200,9 @@ fn build_client(
     // `ClientBuilder::timeout` is a wall-clock timeout for the whole response
     // body, including SSE. Use it only for connection establishment so active
     // reasoning/final-output streams are never cut off mid-response.
-    let mut builder = reqwest::Client::builder().connect_timeout(Duration::from_secs(timeout_secs));
+    let mut builder = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .connect_timeout(Duration::from_secs(timeout_secs));
     if let Some(proxy_url) = proxy_url {
         builder = builder.proxy(reqwest::Proxy::all(proxy_url)?);
     } else if no_proxy {

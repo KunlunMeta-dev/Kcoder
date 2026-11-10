@@ -7,11 +7,11 @@ use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
 use tokio::io::AsyncReadExt;
 
-pub(super) const MAX_WORKSPACE_TEXT_BYTES: usize = 256 * 1024;
+pub const MAX_WORKSPACE_TEXT_BYTES: usize = 256 * 1024;
 const MAX_WORKSPACE_BINARY_CHUNK_BYTES: usize = 1024 * 1024;
 const MAX_WORKSPACE_TREE_SCAN_ENTRIES: usize = 10_000;
 
-pub(super) async fn read_text_file(
+pub async fn read_text_file(
     workspace_root: &Path,
     parent: &Path,
     name: &str,
@@ -55,7 +55,7 @@ pub(super) async fn read_text_file(
     }))
 }
 
-pub(super) async fn read_file_chunk(
+pub async fn read_file_chunk(
     workspace_root: &Path,
     parent: &Path,
     name: &str,
@@ -106,7 +106,7 @@ pub(super) async fn read_file_chunk(
     )?)
 }
 
-pub(super) async fn write_text_file(
+pub async fn write_text_file(
     workspace_root: &Path,
     parent: &Path,
     name: &str,
@@ -182,7 +182,7 @@ pub(super) async fn write_text_file(
     }))
 }
 
-pub(super) async fn create_text_file(
+pub async fn create_text_file(
     workspace_root: &Path,
     parent: &Path,
     name: &str,
@@ -210,7 +210,7 @@ pub(super) async fn create_text_file(
     read_text_file(workspace_root, parent, name, MAX_WORKSPACE_TEXT_BYTES).await
 }
 
-pub(super) async fn create_workspace_directory(
+pub async fn create_workspace_directory(
     workspace_root: &Path,
     parent: &Path,
     name: &str,
@@ -222,7 +222,7 @@ pub(super) async fn create_workspace_directory(
     entry_value(&directory, name).await
 }
 
-pub(super) async fn rename_entry(
+pub async fn rename_entry(
     workspace_root: &Path,
     parent: &Path,
     name: &str,
@@ -249,25 +249,21 @@ pub(super) async fn rename_entry(
     )
 }
 
-pub(super) async fn delete_entry(
+pub async fn delete_entry(
     workspace_root: &Path,
     parent: &Path,
     name: &str,
     recursive: bool,
 ) -> Result<Value> {
-    let entry = existing_entry_path(workspace_root, parent, name).await?;
-    let metadata = tokio::fs::symlink_metadata(&entry).await?;
-    if metadata.file_type().is_symlink() || metadata.is_file() {
-        tokio::fs::remove_file(&entry).await?;
-    } else if metadata.is_dir() {
-        if recursive {
-            tokio::fs::remove_dir_all(&entry).await?;
-        } else {
-            tokio::fs::remove_dir(&entry).await?;
-        }
-    } else {
-        anyhow::bail!("workspace entry type cannot be deleted")
-    }
+    super::workspace_io::validate_name(name)?;
+    let (_, directory) = super::workspace_io::parent(workspace_root, parent)?;
+    let name = name.to_owned();
+    tokio::task::spawn_blocking(move || -> Result<()> {
+        let _lease = super::workspace_io::writer_lock(&directory)?;
+        directory.remove_child_entry(name.as_ref(), recursive)
+    })
+    .await
+    .context("workspace delete task failed")??;
     Ok(json!({"deleted": true}))
 }
 
@@ -275,7 +271,7 @@ fn validate_entry_name(name: &str) -> Result<()> {
     super::workspace_io::validate_name(name)
 }
 
-pub(super) async fn workspace_parent(workspace_root: &Path, parent: &Path) -> Result<PathBuf> {
+pub async fn workspace_parent(workspace_root: &Path, parent: &Path) -> Result<PathBuf> {
     let root = canonicalize_for_client(workspace_root)?;
     let parent = path(&root, parent).await?;
     if !tokio::fs::metadata(&parent).await?.is_dir() {
@@ -290,15 +286,6 @@ async fn new_entry_path(workspace_root: &Path, parent: &Path, name: &str) -> Res
     if tokio::fs::try_exists(&candidate).await? {
         anyhow::bail!("workspace entry already exists")
     }
-    Ok(candidate)
-}
-
-async fn existing_entry_path(workspace_root: &Path, parent: &Path, name: &str) -> Result<PathBuf> {
-    validate_entry_name(name)?;
-    let candidate = workspace_parent(workspace_root, parent).await?.join(name);
-    tokio::fs::symlink_metadata(&candidate)
-        .await
-        .with_context(|| format!("workspace entry does not exist: {}", candidate.display()))?;
     Ok(candidate)
 }
 
@@ -318,7 +305,7 @@ async fn entry_value(path: &Path, name: &str) -> Result<Value> {
     }))
 }
 
-pub(super) async fn tree(workspace_root: &Path, requested: &Path) -> Result<Value> {
+pub async fn tree(workspace_root: &Path, requested: &Path) -> Result<Value> {
     let root = canonicalize_for_client(workspace_root).with_context(|| {
         format!(
             "failed to resolve workspace root {}",
@@ -368,13 +355,15 @@ pub(super) async fn tree(workspace_root: &Path, requested: &Path) -> Result<Valu
         })
     });
     let result = json!({"path": directory, "entries": entries});
-    if serde_json::to_vec(&result)?.len() > super::MAX_DEVICE_RESULT_BYTES {
+    if serde_json::to_vec(&result)?.len()
+        > kcoder_host_transport::protocol_io::MAX_DEVICE_RESULT_BYTES
+    {
         anyhow::bail!("workspace_tree response exceeds the gateway transport limit")
     }
     Ok(result)
 }
 
-pub(super) async fn list_directories(_workspace_root: &Path, requested: &Path) -> Result<Value> {
+pub async fn list_directories(_workspace_root: &Path, requested: &Path) -> Result<Value> {
     if !requested.is_absolute() {
         anyhow::bail!("directory path must be absolute")
     }
@@ -394,7 +383,7 @@ pub(super) async fn list_directories(_workspace_root: &Path, requested: &Path) -
     Ok(json!(directories))
 }
 
-pub(super) async fn create_directory(_workspace_root: &Path, requested: &Path) -> Result<Value> {
+pub async fn create_directory(_workspace_root: &Path, requested: &Path) -> Result<Value> {
     if !requested.is_absolute() {
         anyhow::bail!("directory path must be absolute")
     }
@@ -414,11 +403,11 @@ pub(super) async fn create_directory(_workspace_root: &Path, requested: &Path) -
 ///
 /// `dunce` keeps ordinary Win32 semantics while dropping the Windows verbatim
 /// namespace prefix, so protocol output never carries `\\?\` spellings.
-pub(super) fn canonicalize_for_client(path: &Path) -> std::io::Result<PathBuf> {
+pub fn canonicalize_for_client(path: &Path) -> std::io::Result<PathBuf> {
     dunce::canonicalize(path)
 }
 
-pub(super) async fn path(root: &Path, requested: &Path) -> Result<PathBuf> {
+pub async fn path(root: &Path, requested: &Path) -> Result<PathBuf> {
     if !requested.is_absolute() {
         anyhow::bail!("workspace path must be absolute")
     }
@@ -451,132 +440,6 @@ mod tests {
         assert_eq!(
             dunce::simplified(Path::new(r"\\?\C:\Users\dev\project")),
             Path::new(r"C:\Users\dev\project")
-        );
-    }
-
-    #[tokio::test]
-    async fn device_workspace_tree_is_bounded_to_the_configured_root() {
-        let workspace = tempfile::tempdir().unwrap();
-        std::fs::create_dir(workspace.path().join("src")).unwrap();
-        std::fs::write(workspace.path().join("README.md"), "hello").unwrap();
-        let result = super::super::device_execute(
-            workspace.path(),
-            &serde_json::from_value(
-                json!({"command_key": "workspace_tree", "path": workspace.path()}),
-            )
-            .unwrap(),
-        )
-        .await
-        .unwrap();
-        assert!(result.success);
-        assert_eq!(result.stdout["entries"][0]["name"], "src");
-        assert_eq!(result.stdout["entries"][0]["is_directory"], true);
-        assert!(
-            result.stdout["entries"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .any(|entry| entry["name"] == "README.md")
-        );
-        let file = super::super::device_execute(
-            workspace.path(),
-            &serde_json::from_value(json!({
-                "command_key": "workspace_read_text_file",
-                "path": workspace.path(),
-                "args": ["README.md"],
-                "max_output_bytes": 1024,
-            }))
-            .unwrap(),
-        )
-        .await
-        .unwrap();
-        assert_eq!(file.stdout["content"], "hello");
-        assert_eq!(file.stdout["editable"], true);
-        assert_eq!(
-            file.stdout["revision"],
-            format!("sha256:{:x}", sha2::Sha256::digest(b"hello"))
-        );
-
-        let revision = file.stdout["revision"].as_str().unwrap().to_string();
-        let saved = super::super::device_execute(
-            workspace.path(),
-            &serde_json::from_value(json!({
-                "command_key": "workspace_write_text_file",
-                "path": workspace.path(),
-                "args": ["README.md", revision],
-                "stdin": "updated",
-            }))
-            .unwrap(),
-        )
-        .await
-        .unwrap();
-        assert_eq!(saved.stdout["content"], "updated");
-        assert_eq!(
-            std::fs::read_to_string(workspace.path().join("README.md")).unwrap(),
-            "updated"
-        );
-
-        let stale = super::super::device_execute(
-            workspace.path(),
-            &serde_json::from_value(json!({
-                "command_key": "workspace_write_text_file",
-                "path": workspace.path(),
-                "args": ["README.md", "sha256:stale"],
-                "stdin": "must-not-win",
-            }))
-            .unwrap(),
-        )
-        .await
-        .unwrap_err();
-        assert!(stale.to_string().contains("changed on disk"));
-        assert_eq!(
-            std::fs::read_to_string(workspace.path().join("README.md")).unwrap(),
-            "updated"
-        );
-
-        std::fs::write(workspace.path().join("bytes.bin"), [0_u8, 1, 2, 3]).unwrap();
-        let chunk = super::super::device_execute(
-            workspace.path(),
-            &serde_json::from_value(json!({
-                "command_key": "workspace_read_file_chunk",
-                "path": workspace.path(),
-                "args": ["bytes.bin", "1"],
-            }))
-            .unwrap(),
-        )
-        .await
-        .unwrap();
-        assert_eq!(chunk.stdout["content_base64"], "AQID");
-        assert_eq!(chunk.stdout["offset"], 1);
-        assert_eq!(chunk.stdout["eof"], true);
-
-        let outside = tempfile::tempdir().unwrap();
-        let error = super::super::device_execute(
-            workspace.path(),
-            &serde_json::from_value(
-                json!({"command_key": "workspace_tree", "path": outside.path()}),
-            )
-            .unwrap(),
-        )
-        .await
-        .unwrap_err();
-        assert!(
-            error
-                .to_string()
-                .contains("outside the configured workspace")
-        );
-
-        for index in 0..200 {
-            std::fs::write(workspace.path().join(format!("entry-{index:03}.txt")), "x").unwrap();
-        }
-        let full_tree = tree(workspace.path(), workspace.path()).await.unwrap();
-        assert_eq!(full_tree["entries"].as_array().unwrap().len(), 203);
-        assert!(
-            full_tree["entries"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .any(|entry| entry["name"] == "README.md")
         );
     }
 
@@ -689,64 +552,5 @@ mod tests {
             .await
             .unwrap();
         assert!(!workspace.path().join("created").exists());
-    }
-
-    #[tokio::test]
-    async fn device_directory_commands_can_select_another_workspace() {
-        let workspace = tempfile::tempdir().unwrap();
-        std::fs::create_dir(workspace.path().join("existing")).unwrap();
-        std::fs::write(workspace.path().join("README.md"), "hello").unwrap();
-
-        let listed = super::super::device_execute(
-            workspace.path(),
-            &serde_json::from_value(json!({
-                "command_key": "ls_dirs",
-                "path": workspace.path(),
-            }))
-            .unwrap(),
-        )
-        .await
-        .unwrap();
-        assert_eq!(listed.stdout, json!(["existing"]));
-
-        let created_path = workspace.path().join("created");
-        let created = super::super::device_execute(
-            workspace.path(),
-            &serde_json::from_value(json!({
-                "command_key": "mkdir_p",
-                "args": [created_path],
-            }))
-            .unwrap(),
-        )
-        .await
-        .unwrap();
-        assert_eq!(created.stdout, json!(created_path));
-        assert!(created_path.is_dir());
-
-        let outside = tempfile::tempdir().unwrap();
-        std::fs::create_dir(outside.path().join("another-workspace")).unwrap();
-        let outside_result = super::super::device_execute(
-            workspace.path(),
-            &serde_json::from_value(json!({
-                "command_key": "ls_dirs",
-                "path": outside.path(),
-            }))
-            .unwrap(),
-        )
-        .await
-        .unwrap();
-        assert_eq!(outside_result.stdout, json!(["another-workspace"]));
-
-        let relative_error = super::super::device_execute(
-            workspace.path(),
-            &serde_json::from_value(json!({
-                "command_key": "ls_dirs",
-                "path": "relative/path",
-            }))
-            .unwrap(),
-        )
-        .await
-        .unwrap_err();
-        assert!(relative_error.to_string().contains("must be absolute"));
     }
 }

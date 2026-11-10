@@ -1,3 +1,7 @@
+import { isContract } from '../../../../../shared/generated/validator.mjs'
+import i18n from '@/i18n'
+import { studioWorkMode } from '@/features/workbench/studioWorkMode'
+import { studioCreationParams, studioPresentationParams } from '../../studioPresentation'
 import { computerUseConsent } from '../../computerUseConsent'
 import { computerUseTurnParams } from '../../gatewayComputerUse'
 import { createRandomUuid } from '@/lib/random-id'
@@ -8,7 +12,7 @@ import {
   executionSelectedModel,
   executionServiceTier,
 } from '../../executionParameters'
-import { turnModeParams } from '../../gatewayExecutionModes'
+import { executionModeParams, turnModeParams } from '../../gatewayExecutionModes'
 import { messagePrompt, messageTitle } from '../../gatewayMessageInput'
 import { GatewayRpcError, safeGatewayFailureDiagnostic, type GatewayServer } from '../../gatewayRpc'
 import type { GatewayClient } from '../../gatewayRuntimeTypes'
@@ -19,6 +23,7 @@ import { startTurnWithReceipt, TurnAcceptanceUnknownError } from '../../gatewayT
 import { modelSelectionModeParams } from '../../modelSelectionMode'
 import { EXECUTOR_EVENT, record, runtimeTaskId, text, type GatewayTask } from './contracts'
 import type { GatewayRuntimeCore } from './core'
+import { observeAcceptedTurnReceipt } from './turnReceiptObservation'
 
 export async function disposeTemporaryTask(
   this: GatewayRuntimeCore,
@@ -60,7 +65,7 @@ export async function createTask(
   const proxyUrl = this.compatibility.executionProxyUrl(execution)
   const serviceTier = executionServiceTier(execution)
   const modelSelection = record(params.modelSelection)
-  const selectionMode = params.modelSelectionMode ?? execution.modelSelectionMode
+  let selectionMode = params.modelSelectionMode ?? execution.modelSelectionMode
   let selectedModel =
     executionSelectedModel(execution, modelSelection) ?? text(modelSelection.providerId)
   const requestedTaskId = text(params.taskId) ?? text(execution.task_id) ?? createRandomUuid()
@@ -77,9 +82,13 @@ export async function createTask(
   const workspacePath = text(params.workspacePath) ?? server.workspacePath ?? '/'
   let client = await this.connectClient(server, 'runtime', workspacePath)
   let prompt: string
-  let started: { thread?: { id?: string } } | undefined
+  let started: Awaited<ReturnType<typeof startTaskThread>> | undefined
   try {
     await assertScope()
+    studioCreationParams(
+      { ...params, sessionMode: executionModeParams(params, client).sessionMode },
+      client
+    )
     modelSelectionModeParams(selectionMode, client, selectedModel ?? undefined)
     selectedModel = (await negotiateModelSelector(client, selectedModel)) ?? null
     const sharedContext = await this.sharedRuntimeContext(client)
@@ -113,6 +122,20 @@ export async function createTask(
         client = recovered
       },
     })
+    if (params.agentDefinition) {
+      const actualModel = text(started?.thread?.selectedModel)
+      if (actualModel) {
+        selectedModel = actualModel
+        selectionMode = 'explicit'
+      }
+    }
+    if (
+      params.studioWorkMode === 'kworker' &&
+      (!params.sessionMode || params.sessionMode === 'default') &&
+      started?.thread?.studioWorkMode !== 'kworker'
+    ) {
+      throw new Error(i18n.t('workbench.work_mode.unconfirmed'))
+    }
     await assertScope()
   } catch (error) {
     if (started?.thread?.id) {
@@ -169,7 +192,17 @@ export async function createTask(
     running: true,
     createdAt: now,
     updatedAt: now,
-    runtimeHandle: { threadId },
+    ...(started?.thread?.agentDefinition
+      ? { agentDefinition: started.thread.agentDefinition }
+      : {}),
+    studioWorkMode: studioWorkMode(started?.thread?.studioWorkMode),
+    runtimeHandle: {
+      threadId,
+      studioWorkMode: studioWorkMode(started?.thread?.studioWorkMode),
+      ...(started?.thread?.agentDefinition
+        ? { agentDefinition: started.thread.agentDefinition }
+        : {}),
+    },
   }
   this.tasks.set(taskId, createdTask)
   try {
@@ -212,6 +245,7 @@ export async function createTask(
       client,
       {
         ...turnModeParams(params, client),
+        ...studioPresentationParams(createdTask.studioWorkMode, client),
         ...computerUseTurnParams(params, client, server),
         ...modelSelectionModeParams(selectionMode, client, selectedModel ?? undefined),
         threadId,
@@ -240,13 +274,14 @@ export async function createTask(
     )
       computerUseConsent.set(server.id, taskId, true)
     this.pendingTurnStartByTask.delete(taskId)
-    const terminalReceipt = submitted.recovered && turn.turn?.status !== 'running'
+    const terminalReceipt = ['completed', 'failed', 'interrupted'].includes(turn.turn?.status ?? '')
     if (terminalReceipt) {
       const current = this.tasks.get(taskId) ?? createdTask
       this.tasks.set(taskId, { ...current, persisted: true, running: false, updatedAt: Date.now() })
     }
     if (!this.completedTurnKeys.delete(`${taskId}:${turnId}`) && !terminalReceipt) {
       this.trackActiveTurn(taskId, turnId)
+      observeAcceptedTurnReceipt(this, taskId, turnId, submitted.client, { threadId, clientMessageId: clientMessageId ?? undefined })
     }
   } catch (error) {
     this.pendingTurnStartByTask.delete(taskId)
@@ -301,7 +336,7 @@ export async function createTask(
     taskId,
     workspacePath,
     runtime: 'kcoder',
-    runtimeHandle: { threadId },
+    runtimeHandle: { threadId, studioWorkMode: createdTask.studioWorkMode },
   }
 }
 
@@ -357,7 +392,14 @@ export async function forkTaskAtTurn(this: GatewayRuntimeCore, params: Record<st
   if (!server) throw new Error(`任务服务器已不存在：${task.serverId}`)
   const sourceClient = this.clientByTask.get(task.taskId) ?? (await this.resumeTask(task))
   try {
-    const forked = await sourceClient.request<{ thread?: { id?: string } }>('thread/fork', {
+    const forked = await sourceClient.request<{
+      thread?: {
+        id?: string
+        studioWorkMode?: 'kcoder' | 'kworker'
+        agentDefinition?: import('../../../../../shared/generated/contracts').AgentTaskBinding
+        channelTaskSource?: import('../../../../../shared/generated/contracts').ChannelTaskSource
+      }
+    }>('thread/fork', {
       threadId: task.threadId,
       lastTurnId,
       cwd: task.workspacePath,
@@ -405,7 +447,23 @@ export async function forkTaskAtTurn(this: GatewayRuntimeCore, params: Record<st
       running: false,
       createdAt: now,
       updatedAt: now,
-      runtimeHandle: { threadId },
+      studioWorkMode: studioWorkMode(forked.thread?.studioWorkMode),
+      ...(isContract('AgentTaskBinding', forked.thread?.agentDefinition)
+        ? { agentDefinition: forked.thread!.agentDefinition }
+        : {}),
+      ...(isContract('ChannelTaskSource', forked.thread?.channelTaskSource)
+        ? { channelTaskSource: forked.thread!.channelTaskSource }
+        : {}),
+      runtimeHandle: {
+        threadId,
+        studioWorkMode: studioWorkMode(forked.thread?.studioWorkMode),
+        ...(isContract('AgentTaskBinding', forked.thread?.agentDefinition)
+          ? { agentDefinition: forked.thread!.agentDefinition }
+          : {}),
+        ...(isContract('ChannelTaskSource', forked.thread?.channelTaskSource)
+          ? { channelTaskSource: forked.thread!.channelTaskSource }
+          : {}),
+      },
       parent,
     }
     this.tasks.set(taskId, forkTask)
@@ -452,7 +510,12 @@ export async function forkTaskAtTurn(this: GatewayRuntimeCore, params: Record<st
         taskId,
         threadId,
         workspacePath: task.workspacePath,
-        runtimeHandle: { threadId },
+        runtimeHandle: {
+          threadId,
+          ...(forkTask.studioWorkMode === 'kworker'
+            ? { studioWorkMode: forkTask.studioWorkMode }
+            : {}),
+        },
       },
       runtime: 'kcoder',
     }

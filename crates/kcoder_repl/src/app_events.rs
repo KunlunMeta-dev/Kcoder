@@ -2,14 +2,52 @@
 
 use super::*;
 
+async fn apply_pending_model_switch(app: &mut ReplApp, engine: &QueryEngine) -> bool {
+    let Some(selection) = app.pending_model_switch.take() else {
+        return false;
+    };
+    let command = format!("/model {selection}");
+    if let Some(action) = handle_slash_command(&command, app, engine).await {
+        warn!(
+            ?action,
+            "deferred model selection produced an unexpected action"
+        );
+        app.push_message(
+            MessageRole::System,
+            "The queued model selection could not be applied at the tool boundary.",
+        );
+    }
+    app.refresh_engine_metadata(engine);
+    true
+}
+
 pub(super) async fn handle_app_event(
     event: AppEvent,
     app: &mut ReplApp,
     engine: &QueryEngine,
     tx: &AppEventSender,
-    _prompt: &TuiPermissionPrompt,
+    prompt: &TuiPermissionPrompt,
 ) -> HandledAppEvent {
     match event {
+        AppEvent::InputPreparationFinished {
+            id,
+            result,
+            hook_messages,
+        } => {
+            match complete_submitted_message(id, result, hook_messages, engine, app, tx, prompt)
+                .await
+            {
+                Ok(true) => HandledAppEvent::action(UserAction::Quit),
+                Ok(false) => HandledAppEvent::redraw(),
+                Err(error) => {
+                    app.push_message(
+                        MessageRole::System,
+                        format!("Input preparation failed: {error:#}"),
+                    );
+                    HandledAppEvent::redraw()
+                }
+            }
+        }
         AppEvent::Terminal(CEvent::Key(key)) => {
             let action = app.handle_key(key);
             if let Some(action) = action {
@@ -33,6 +71,7 @@ pub(super) async fn handle_app_event(
             }
         }
         AppEvent::Terminal(CEvent::Paste(text)) => {
+            app.clear_transcript_selection();
             if !app.handle_paste_text_for_active_overlay(&text) {
                 match app.handle_paste_text(&text) {
                     Ok(()) => {}
@@ -134,6 +173,90 @@ pub(super) async fn handle_app_event(
             }
         }
         AppEvent::FrameTick => {
+            let admission_changed = crate::input_admission::poll_input_admission(app).await;
+            if app.input_shutdown_pending {
+                if !app.input_preparation.has_unsettled()
+                    && app
+                        .input_admission
+                        .as_ref()
+                        .is_none_or(|admission| admission.observer.is_none())
+                    && !app.has_current_input_uncertainty()
+                {
+                    app.input_shutdown_pending = false;
+                    return HandledAppEvent::action(UserAction::Quit);
+                }
+                let now = Instant::now();
+                if app
+                    .input_shutdown_notice_until
+                    .is_some_and(|deadline| now >= deadline)
+                {
+                    app.input_shutdown_pending = false;
+                    return HandledAppEvent::action(UserAction::Quit);
+                }
+                if (app.has_current_input_uncertainty()
+                    || app
+                        .input_shutdown_deadline
+                        .is_some_and(|deadline| now >= deadline))
+                    && app.input_shutdown_notice_until.is_none()
+                {
+                    app.input_shutdown_timed_out = true;
+                    if app.input_admission.is_some() || app.has_current_input_uncertainty() {
+                        let owner = app
+                            .input_admission
+                            .as_ref()
+                            .map(|admission| admission.owner.clone())
+                            .or_else(|| app.input_uncertainty_owner.clone());
+                        app.mark_input_uncertain_for(owner);
+                        if app.input_unknown_diagnostic.is_none()
+                            && let Some(admission) = app.input_admission.as_ref()
+                        {
+                            app.input_unknown_diagnostic = Some((
+                                admission.uuid.clone(),
+                                "input confirmation did not finish before exit".into(),
+                            ));
+                        }
+                        app.push_message(MessageRole::System, "The save result for this input is not yet confirmed. Check the conversation before submitting it again.".to_string());
+                    } else {
+                        app.push_message(
+                            MessageRole::System,
+                            "Input preparation is still stopping. Exiting now.".to_string(),
+                        );
+                    }
+                    app.input_shutdown_notice_until = Some(now + Duration::from_millis(200));
+                    app.force_next_viewport_redraw();
+                }
+                return HandledAppEvent::redraw();
+            }
+            if admission_changed {
+                return HandledAppEvent::action(UserAction::TryStartTurn);
+            }
+            if app
+                .input_start_retry_at
+                .is_some_and(|deadline| Instant::now() >= deadline)
+            {
+                app.input_start_retry_at = None;
+                return HandledAppEvent::action(UserAction::TryStartTurn);
+            }
+            if let Some(deferred) = app.input_preparation.take_due(Instant::now()) {
+                match complete_submitted_message(
+                    deferred.id,
+                    deferred.result,
+                    deferred.hook_messages,
+                    engine,
+                    app,
+                    tx,
+                    prompt,
+                )
+                .await
+                {
+                    Ok(true) => return HandledAppEvent::action(UserAction::Quit),
+                    Ok(false) => {}
+                    Err(error) => app.push_message(
+                        MessageRole::System,
+                        format!("Input preparation failed: {error:#}"),
+                    ),
+                }
+            }
             let agent_picker_refreshed = slash::refresh_agent_picker(app, engine);
             let agent_view_refreshed = app.refresh_agent_view_transcript(engine, false).await;
             let transient_status_redraw = app.clear_expired_transient_status_at(Instant::now());
@@ -156,6 +279,8 @@ pub(super) async fn handle_app_event(
                 // Even an unchanged snapshot needs another draw to rearm child polling.
                 || app.agent_view.is_some()
                 || agent_picker_refreshed
+                || app.input_preparation.has_deferred()
+                || app.input_start_retry_at.is_some()
                 || app.copy_needs_tick()
                 || app.navigation_needs_tick()
                 || transient_status_redraw
@@ -189,6 +314,7 @@ pub(super) async fn handle_app_event(
             HandledAppEvent::redraw_and_flush()
         }
         AppEvent::ToolResult {
+            web_sources,
             id,
             name,
             text,
@@ -224,10 +350,20 @@ pub(super) async fn handle_app_event(
             if belongs_to_subagent_panel {
                 app.finish_subagent_tool_call(&id, &text, is_error);
             } else {
+                app.push_native_web_sources(&id, web_sources);
                 app.push_tool_done(id, name, text, is_error);
             }
             app.refresh_engine_metadata(engine);
             HandledAppEvent::redraw()
+        }
+        AppEvent::TurnToolResultBoundary { resume_tx } => {
+            let changed = apply_pending_model_switch(app, engine).await;
+            let _ = resume_tx.send(());
+            if changed {
+                HandledAppEvent::redraw_and_flush()
+            } else {
+                HandledAppEvent::quiet()
+            }
         }
         AppEvent::PermissionRequest {
             tool_name,
@@ -277,6 +413,11 @@ pub(super) async fn handle_app_event(
             HandledAppEvent::action(UserAction::Quit)
         }
         AppEvent::SystemNotice(text) => {
+            let text = if text == "kcoder.notice.imported_context_legacy_unobserved" {
+                "旧会话没有保存当时的导入上下文快照；当前资料没有被套用。需要使用当前资料时，请新建会话。".to_owned()
+            } else {
+                text
+            };
             app.push_message(MessageRole::System, text);
             HandledAppEvent::redraw()
         }
@@ -370,7 +511,7 @@ pub(super) async fn handle_app_event(
             failed_count,
         } => {
             app.refresh_engine_metadata(engine);
-            app.replace_transcript_from_history(&engine.state.messages());
+            app.replace_web_history(&web_sources::messages_for_state(&engine.state));
             app.push_message(
                 MessageRole::System,
                 format!(
@@ -406,8 +547,15 @@ pub(super) async fn handle_app_event(
             }
             HandledAppEvent::redraw()
         }
-        AppEvent::TurnFinished => {
-            app.defer_unapplied_turn_steers();
+        event @ (AppEvent::TurnFinished | AppEvent::TurnFinishedWithSteering { .. }) => {
+            apply_pending_model_switch(app, engine).await;
+            let unapplied_steers = match &event {
+                AppEvent::TurnFinishedWithSteering { unapplied_steers } => {
+                    unapplied_steers.as_slice()
+                }
+                _ => &[],
+            };
+            app.defer_unapplied_turn_steers(unapplied_steers);
             let handle = app.finish_turn_state();
             if app.should_defer_turn_finish_for_streaming() {
                 app.defer_turn_finish_until_streaming_drained(handle);
@@ -418,8 +566,8 @@ pub(super) async fn handle_app_event(
         }
         AppEvent::HistoryChanged => {
             app.refresh_engine_metadata(engine);
-            let messages = engine.state.messages();
-            app.replace_transcript_from_history(&messages);
+            let messages = web_sources::messages_for_state(&engine.state);
+            app.replace_web_history(&messages);
             app.reconcile_subagent_panels_from_engine(engine);
             HandledAppEvent::redraw()
         }

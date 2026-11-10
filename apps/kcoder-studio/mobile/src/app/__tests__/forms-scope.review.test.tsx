@@ -1,6 +1,11 @@
+vi.mock("@/storage/interface-version", () => ({ useInterfaceVersion: () => "modern" }));
+vi.mock("@/features/task/useNewTaskDraftConnection", () => ({ useNewTaskDraftConnection: () => ({ ready: true, client: null, error: null, supportsPermissions: true, retry() {} }) }));
+vi.mock("@/features/task/useNewTaskDraftAttachments", () => ({ useNewTaskDraftAttachments: () => ({ items: [], available: false, busy: false, locked: false, error: null, sheetOpen: false, open() {}, close() {}, select: async () => {}, remove: async () => {}, freeze: () => ({}), unlockUnsent: async () => {}, releaseUnclaimed: async () => {} }) }));
+vi.mock("@/features/interface/ConversationV3", () => ({ ConversationV3Background: () => null, ConversationV3WelcomeMark: () => null, ConversationV3Header: "ConversationV3Header" }));
 // Route-scope review using the real route functions and JSX handlers with a
 // deterministic hook host. This is deliberately not a mounted React test.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+vi.mock("@/features/task/NewTaskDraft", () => ({ NewTaskDraft: "NewTaskDraft" }));
 import { isValidElement, type ReactElement, type ReactNode } from "react";
 import { t } from "@/i18n";
 import NewWorkspaceRoute from "../new";
@@ -293,8 +298,17 @@ const api = vi.hoisted(() => {
       pendingCreateResults.push(gate);
       return gate;
     },
+    listWorkspaceCatalog: async (profile: any, server: any) => {
+      // OpenProject now consumes one combined catalog API. Keep both catalog
+      // branches independently held so these route tests can switch owners
+      // while A's directory/worktree results are still pending.
+      const directories = hold(reads.directories, profile, server);
+      const worktrees = hold(reads.worktrees, profile, server);
+      const [options, managedWorktrees] = await Promise.all([directories, worktrees]);
+      return { options, managedWorktrees };
+    },
     listWorkspaceOptions: (profile: any, server: any) => hold(reads.directories, profile, server),
-    listModels: (profile: any, server: any) => hold(reads.models, profile, server),
+    listModels: (profile: any, server: any, options: any) => hold(reads.models, profile, server, { workspacePath: options?.workspacePath }),
     listManagedWorktrees: (profile: any, server: any) => hold(reads.worktrees, profile, server),
     previewManagedWorktreeArchive: (profile: any, server: any, path: string) => hold(reads.previews, profile, server, { path }),
     archiveManagedWorktree: async (profile: any, server: any, preview: any, confirmed: boolean) => {
@@ -316,6 +330,8 @@ const api = vi.hoisted(() => {
       const promise = pending?.promise ?? Promise.resolve({
         disposed: false,
         getSnapshot: () => ({ threadId: "created-thread", title: "Created" }),
+        markInteractionsDisconnected() {},
+        setInteractionLedgerObserver() {},
         isDisposed() { return this.disposed; },
         hasLiveTerminalSessions: () => false,
         close() { this.disposed = true; },
@@ -388,6 +404,7 @@ vi.mock("react", async (importOriginal) => {
       host.memos[index] = { value: callback, deps };
       return callback;
     },
+    useSyncExternalStore: (_subscribe: () => () => void, getSnapshot: () => unknown) => getSnapshot(),
     useEffect: (effect: () => void | (() => void), deps: unknown[] = []) => {
       const index = host.effectIndex++;
       const previous = host.effects[index];
@@ -400,8 +417,9 @@ vi.mock("react", async (importOriginal) => {
 vi.mock("expo-router", () => ({
   useLocalSearchParams: () => host.params,
   useRouter: () => host.router,
+  useIsFocused: () => true,
+  useNavigation: () => ({ addListener: () => () => {} }),
 }));
-vi.mock("@react-navigation/native", () => ({ useIsFocused: () => true }));
 vi.mock("react-native-safe-area-context", () => ({ useSafeAreaInsets: () => host.insets }));
 vi.mock("react-native", () => ({
   ActivityIndicator: "ActivityIndicator",
@@ -414,14 +432,14 @@ vi.mock("react-native", () => ({
   Platform: { OS: "ios" },
   Pressable: "Pressable",
   ScrollView: "ScrollView",
-  StyleSheet: { create: (styles: unknown) => styles, hairlineWidth: 1, absoluteFillObject: {} },
+  StyleSheet: { create: (styles: unknown) => styles, hairlineWidth: 1, absoluteFill: {} },
   Text: "Text",
   TextInput: "TextInput",
   View: "View",
 }));
 vi.mock("lucide-react-native", () => Object.fromEntries([
   "Archive", "Check", "ChevronDown", "ChevronLeft", "FolderGit2", "FolderOpen",
-  "FolderPlus", "Github", "RotateCcw", "Search", "Server", "Sparkles", "Trash2", "X",
+  "FolderPlus", "Github", "RotateCcw", "Search", "Server", "SlidersHorizontal", "Sparkles", "Trash2", "X",
 ].map((name) => [name, name])));
 vi.mock("@/components/ui", () => ({ Button: "Button", EmptyState: "EmptyState", Field: "Field", StatusDot: "StatusDot" }));
 vi.mock("@/components/use-modal-focus-trap", () => ({ useModalFocusTrap: () => null }));
@@ -602,6 +620,10 @@ vi.mock("@/runtime/task-runtime", async () => {
     taskRuntimeRegistry: registryFacade,
   };
 });
+vi.mock("@/runtime/task-runtime/workspaces", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/runtime/task-runtime/workspaces")>();
+  return { ...actual, listWorkspaceCatalog: api.listWorkspaceCatalog };
+});
 vi.mock("@/theme", () => ({
   colors: new Proxy({}, { get: (_target, key) => String(key) }),
   useTheme: () => ({ colors: new Proxy({}, { get: (_target, key) => String(key) }), mode: "dark" }),
@@ -658,7 +680,7 @@ function appFor(activeProfile: GatewayProfile, activeServer: KCoderServer) {
   };
 }
 
-function renderRoute() {
+function renderRawRoute() {
   if (!host.route) throw new Error("route test host has no route");
   host.stateIndex = 0;
   host.refIndex = 0;
@@ -666,6 +688,10 @@ function renderRoute() {
   host.effectIndex = 0;
   host.pendingEffects = [];
   return host.route();
+}
+
+function renderRoute(): unknown {
+  return renderRawRoute();
 }
 
 function flushEffects() {
@@ -706,6 +732,31 @@ function byTestId(tree: unknown, testID: string) {
   return elements(tree).find((element) => element.props.testID === testID);
 }
 
+function draftProps(tree: unknown): Record<string, any> {
+  const draft = byTestId(tree, "new-task-draft");
+  if (!draft) throw new Error("/new route did not render its draft");
+  return draft.props;
+}
+
+function setDraftInput(tree: unknown, value: string): void {
+  (draftProps(tree).setInput as (value: string) => void)(value);
+}
+
+function selectDraftWorkspace(tree: unknown, serverId: string, path: string): void {
+  const select = draftProps(tree).onSelectWorkspace as ((selection: { serverId: string; path: string }) => void) | undefined;
+  if (!select) throw new Error("/new draft did not expose its current project selection callback");
+  select({ serverId, path });
+}
+
+function canSendDraft(tree: unknown): boolean {
+  const draft = draftProps(tree);
+  return Boolean(draft.ready && !draft.busy && String(draft.input ?? "").trim());
+}
+
+async function submitDraft(tree: unknown): Promise<void> {
+  await (draftProps(tree).submit as () => Promise<void>)();
+}
+
 function buttonWithText(tree: unknown, label: string) {
   return elements(tree).find((element) =>
     element.type === "Button" && textContent(element.props.children).trim() === label,
@@ -740,6 +791,18 @@ function newWorkspaceScope(profile: GatewayProfile, server: KCoderServer) {
   return JSON.stringify([workspaceStateAuthorizationScope(profile, server), profile.deviceId]);
 }
 
+async function seedWorkspacePreference(
+  profile: GatewayProfile,
+  server: KCoderServer,
+  value: { cwd: string; isolation: "local" | "worktree" },
+): Promise<void> {
+  seedSecureProfileMetadata(profile);
+  const savePreference = (newWorkspacePreferenceApi as any).saveNewWorkspacePreference as (
+    profileId: string, serverId: string, scope: string, preference: { cwd: string; isolation: "local" | "worktree" },
+  ) => Promise<void>;
+  await savePreference(profile.id, server.id, newWorkspaceScope(profile, server), value);
+}
+
 function requestsFor(collection: any[], profile: GatewayProfile, server: KCoderServer) {
   const expectedScope = threadListScopeKey(profile, server);
   return collection.filter((entry) => threadListScopeKey(entry.profile, entry.server) === expectedScope);
@@ -759,6 +822,24 @@ async function waitForEnabledButton(
     const button = findButton(tree);
     expect(button).toBeDefined();
     expect(button?.props.disabled).toBe(false);
+  });
+  return tree;
+}
+
+async function waitForReadyDraft(): Promise<unknown> {
+  let tree: unknown;
+  await vi.waitFor(() => {
+    tree = commitRoute();
+    expect(draftProps(tree).ready).toBe(true);
+  });
+  return tree;
+}
+
+async function waitForWorktreeDraft(): Promise<unknown> {
+  let tree: unknown;
+  await vi.waitFor(() => {
+    tree = commitRoute();
+    expect(draftProps(tree).createsWorktree).toBe(true);
   });
   return tree;
 }
@@ -933,8 +1014,8 @@ describe("new workspace route scope", () => {
     aModels.resolve([model("provider-a::model-a", "A model")]);
     await drainPromises();
     tree = commitRoute();
-    expect(byTestId(tree, "workspace-path")?.props.value).toBe(savedA.cwd);
-    expect(byTestId(tree, "workspace-git-ref")).toBeDefined();
+    expect(draftProps(tree).contextActual.cwd).toBe(savedA.cwd);
+    expect(draftProps(tree).createsWorktree).toBe(true);
     expect(await loadPreference(profileA.id, serverA.id, newWorkspaceScope(profileA, serverA))).toEqual(savedA);
 
     const profileB = profile("authorization-B", "token-B");
@@ -948,30 +1029,31 @@ describe("new workspace route scope", () => {
 
     // The first B render clears A's value before B's catalogs or preference load can resolve.
     tree = renderRoute();
-    expect(byTestId(tree, "workspace-path")?.props.value).not.toBe(savedA.cwd);
+    expect(draftProps(tree).contextActual.cwd).not.toBe(savedA.cwd);
     flushEffects();
     tree = commitRoute();
     const bDirectories = requestsFor(api.reads.directories, profileB, serverB)[0];
     const bModels = requestsFor(api.reads.models, profileB, serverB)[0];
     expect(bDirectories).toBeDefined();
     expect(bModels).toBeDefined();
+    const editedBPath = "/srv/principal-B/edited-B";
     bDirectories.resolve([
       workspace(savedB.cwd, "B saved project"),
       workspace(serverB.workspacePath!, "B root"),
+      workspace(editedBPath, "B edited project"),
     ]);
     bModels.resolve([model("provider-b::model-b", "B model")]);
     await drainPromises();
     tree = commitRoute();
-    expect(byTestId(tree, "workspace-path")?.props.value).toBe(savedB.cwd);
-    expect(byTestId(tree, "workspace-git-ref")).toBeUndefined();
+    expect(draftProps(tree).contextActual.cwd).toBe(savedB.cwd);
+    expect(draftProps(tree).createsWorktree).toBe(false);
 
-    const editedBPath = "/srv/principal-B/edited-B";
-    (byTestId(tree, "workspace-path")?.props.onChangeText as (value: string) => void)(editedBPath);
+    selectDraftWorkspace(tree, serverB.id, editedBPath);
     tree = renderRoute();
     flushEffects();
     await vi.waitFor(() => expect(localStorage.values.get(keyB)).toBe(JSON.stringify({ cwd: editedBPath, isolation: "local" })));
     tree = commitRoute();
-    expect(byTestId(tree, "workspace-path")?.props.value).toBe(editedBPath);
+    expect(draftProps(tree).contextActual.cwd).toBe(editedBPath);
     expect(localStorage.values.get(keyA)).toBe(JSON.stringify(savedA));
     await vi.waitFor(async () => {
       await expect(loadPreference(profileB.id, serverB.id, newWorkspaceScope(profileB, serverB)))
@@ -1015,12 +1097,10 @@ describe("new workspace route scope", () => {
     await drainPromises();
     tree = commitRoute();
 
-    const prompt = byTestId(tree, "new-workspace-prompt");
-    (prompt?.props.onChangeText as (value: string) => void)("create while the local preference read is unavailable");
-    tree = await waitForEnabledButton((current) => byTestId(current, "create-workspace"));
-    const create = byTestId(tree, "create-workspace");
-    expect(create?.props.disabled).toBe(false);
-    tap(create);
+    setDraftInput(tree, "create while the local preference read is unavailable");
+    tree = await waitForReadyDraft();
+    expect(draftProps(tree).ready).toBe(true);
+    void submitDraft(tree);
     await vi.waitFor(() => expect(api.creates).toHaveLength(1));
     await vi.waitFor(() => expect(replacements).toHaveLength(1));
     tree = commitRoute();
@@ -1038,7 +1118,7 @@ describe("new workspace route scope", () => {
       tree = renderRoute();
       expect(localStorage.getItemAttempts.filter((key) => key === preferenceKey)).toHaveLength(1);
       // The explicit Create intent also fences a preference that returns after navigation began.
-      expect(byTestId(tree, "workspace-path")?.props.value).toBe(serverA.workspacePath);
+      expect(draftProps(tree).contextActual.cwd).toBe(serverA.workspacePath);
     }
   });
 
@@ -1064,32 +1144,30 @@ describe("new workspace route scope", () => {
     let tree = commitRoute();
     const aDirectories = requestsFor(api.reads.directories, profileA, serverA)[0];
     const aModels = requestsFor(api.reads.models, profileA, serverA)[0];
+    const dirtyPath = "/srv/principal-A/dirty-before-hydration";
     aDirectories.resolve([
       workspace(serverA.workspacePath!, "A root"),
       workspace("/srv/principal-A/saved-before-hydration", "saved path"),
+      workspace(dirtyPath, "dirty path"),
     ]);
     aModels.resolve([model("provider-a::model-a", "A model")]);
     await drainPromises();
     tree = commitRoute();
 
     expect(readGate.started).toBe(true);
-    expect(byTestId(tree, "workspace-path")?.props.value).toBe(serverA.workspacePath);
-    expect(byTestId(tree, "workspace-git-ref")).toBeUndefined();
+    expect(draftProps(tree).contextActual.cwd).toBe(serverA.workspacePath);
+    expect(draftProps(tree).createsWorktree).toBe(false);
     expect(localStorage.values.get(preferenceKey)).toContain("saved-before-hydration");
     expect(localStorage.setItemAttempts.filter((entry) => entry.key === preferenceKey)).toHaveLength(0);
 
-    const dirtyPath = "/srv/principal-A/dirty-before-hydration";
-    (byTestId(tree, "workspace-path")?.props.onChangeText as (value: string) => void)(dirtyPath);
+    selectDraftWorkspace(tree, serverA.id, dirtyPath);
     tree = renderRoute();
-    tap(byTestId(tree, "workspace-isolation-worktree"));
-    tree = renderRoute();
-    expect(byTestId(tree, "workspace-path")?.props.value).toBe(dirtyPath);
+    expect(draftProps(tree).contextActual.cwd).toBe(dirtyPath);
 
     readGate.release?.();
     await drainPromises();
     tree = commitRoute();
-    expect(byTestId(tree, "workspace-path")?.props.value).toBe(dirtyPath);
-    expect(byTestId(tree, "workspace-git-ref")).toBeDefined();
+    expect(draftProps(tree).contextActual.cwd).toBe(dirtyPath);
   });
 
   it("keeps cwd and isolation dirty while an explicit preference-read retry is held", async () => {
@@ -1112,12 +1190,13 @@ describe("new workspace route scope", () => {
     let tree = commitRoute();
     const aDirectories = requestsFor(api.reads.directories, profileA, serverA)[0];
     const aModels = requestsFor(api.reads.models, profileA, serverA)[0];
-    aDirectories.resolve([workspace(serverA.workspacePath!, "A root")]);
+    const dirtyPath = "/srv/principal-A/dirty-during-retry";
+    aDirectories.resolve([workspace(serverA.workspacePath!, "A root"), workspace(dirtyPath, "dirty path")]);
     aModels.resolve([model("provider-a::model-a", "A model")]);
     await drainPromises();
     tree = commitRoute();
     expect(byTestId(tree, "new-workspace-preference-read-error")).toBeDefined();
-    expect(byTestId(tree, "workspace-path")?.props.value).toBe(serverA.workspacePath);
+    expect(draftProps(tree).contextActual.cwd).toBe(serverA.workspacePath);
     expect(localStorage.setItemAttempts.filter((entry) => entry.key === preferenceKey)).toHaveLength(0);
 
     const catalogCounts = [api.reads.directories.length, api.reads.models.length];
@@ -1128,21 +1207,17 @@ describe("new workspace route scope", () => {
     flushEffects();
     await vi.waitFor(() => expect(retryGate.started).toBe(true));
 
-    const dirtyPath = "/srv/principal-A/dirty-during-retry";
-    (byTestId(tree, "workspace-path")?.props.onChangeText as (value: string) => void)(dirtyPath);
+    selectDraftWorkspace(tree, serverA.id, dirtyPath);
     tree = renderRoute();
-    tap(byTestId(tree, "workspace-isolation-worktree"));
-    tree = renderRoute();
-    expect(byTestId(tree, "workspace-path")?.props.value).toBe(dirtyPath);
+    expect(draftProps(tree).contextActual.cwd).toBe(dirtyPath);
     expect([api.reads.directories.length, api.reads.models.length]).toEqual(catalogCounts);
 
     retryGate.release?.();
     await drainPromises();
     tree = commitRoute();
-    expect(byTestId(tree, "workspace-path")?.props.value).toBe(dirtyPath);
-    expect(byTestId(tree, "workspace-git-ref")).toBeDefined();
+    expect(draftProps(tree).contextActual.cwd).toBe(dirtyPath);
     expect(byTestId(tree, "new-workspace-preference-read-error")).toBeUndefined();
-    expect([api.reads.directories.length, api.reads.models.length]).toEqual(catalogCounts);
+    expect([api.reads.directories.length, api.reads.models.length]).toEqual([catalogCounts[0], catalogCounts[1] + 1]);
   });
 
   it("does not let an older same-owner preference save failure replace a newer successful value", async () => {
@@ -1166,28 +1241,33 @@ describe("new workspace route scope", () => {
     let tree = commitRoute();
     const aDirectories = requestsFor(api.reads.directories, profileA, serverA)[0];
     const aModels = requestsFor(api.reads.models, profileA, serverA)[0];
-    aDirectories.resolve([workspace("/srv/principal-A/initial", "initial"), workspace(serverA.workspacePath!, "root")]);
+    const olderPath = "/srv/principal-A/older-selection";
+    const newerPath = "/srv/principal-A/newer-selection";
+    aDirectories.resolve([
+      workspace("/srv/principal-A/initial", "initial"),
+      workspace(serverA.workspacePath!, "root"),
+      workspace(olderPath, "older selection"),
+      workspace(newerPath, "newer selection"),
+    ]);
     aModels.resolve([model("provider-a::model-a", "A model")]);
     await drainPromises();
     tree = commitRoute();
     await drainPromises();
-    expect(byTestId(tree, "workspace-path")?.props.value).toBe("/srv/principal-A/initial");
+    expect(draftProps(tree).contextActual.cwd).toBe("/srv/principal-A/initial");
     // Let hydration's own default/restore save settle before the test holds a later user edit.
     await waitForPreferenceWrites(profileA.id);
     localStorage.setItemAttempts.length = 0;
 
     const writeGate = { requests: [] as Array<{ key: string; value: string; resolve: () => void; reject: (error?: Error) => void }> };
     localStorage.holdPreferenceWrites = writeGate;
-    const olderPath = "/srv/principal-A/older-selection";
-    (byTestId(tree, "workspace-path")?.props.onChangeText as (value: string) => void)(olderPath);
+    selectDraftWorkspace(tree, serverA.id, olderPath);
     tree = renderRoute();
     flushEffects();
     await vi.waitFor(() => expect(writeGate.requests).toHaveLength(1));
     expect(writeGate.requests[0]).toMatchObject({ key: preferenceKey });
     expect(JSON.parse(writeGate.requests[0].value)).toEqual({ cwd: olderPath, isolation: "local" });
 
-    const newerPath = "/srv/principal-A/newer-selection";
-    (byTestId(tree, "workspace-path")?.props.onChangeText as (value: string) => void)(newerPath);
+    selectDraftWorkspace(tree, serverA.id, newerPath);
     tree = renderRoute();
     flushEffects();
     await drainPromises();
@@ -1201,7 +1281,7 @@ describe("new workspace route scope", () => {
     writeGate.requests[1].resolve();
     await drainPromises();
     tree = commitRoute();
-    expect(byTestId(tree, "workspace-path")?.props.value).toBe(newerPath);
+    expect(draftProps(tree).contextActual.cwd).toBe(newerPath);
     expect(byTestId(tree, "new-workspace-preference-error")).toBeUndefined();
     await expect(loadPreference(profileA.id, serverA.id, preferenceScope)).resolves.toEqual({ cwd: newerPath, isolation: "local" });
   });
@@ -1220,14 +1300,11 @@ describe("new workspace route scope", () => {
     await drainPromises();
     tree = commitRoute();
 
-    const prompt = byTestId(tree, "new-workspace-prompt");
-    (prompt?.props.onChangeText as (value: string) => void)("inspect this project");
+    setDraftInput(tree, "inspect this project");
+    selectDraftWorkspace(tree, serverA.id, "/srv/principal-A/private-project");
     tree = renderRoute();
-    const projectA = byTestId(tree, "workspace-option-%2Fsrv%2Fprincipal-A%2Fprivate-project");
-    expect(projectA).toBeDefined();
-    tap(projectA);
-    tree = renderRoute();
-    expect(byTestId(tree, "workspace-path")?.props.value).toBe("/srv/principal-A/private-project");
+    const staleSubmitA = draftProps(tree).submit as () => Promise<void>;
+    expect(draftProps(tree).contextActual.cwd).toBe("/srv/principal-A/private-project");
     expect(textContent(tree)).toContain("A private model");
 
     const profileB = profile("authorization-B", "token-B");
@@ -1238,12 +1315,12 @@ describe("new workspace route scope", () => {
     tree = renderRoute();
 
     // Same IDs can still denote another device authorization, principal, or target config.
-    expect.soft(byTestId(tree, "workspace-option-%2Fsrv%2Fprincipal-A%2Fprivate-project")).toBeUndefined();
-    expect.soft(byTestId(tree, "workspace-path")?.props.value).not.toBe("/srv/principal-A/private-project");
+    expect.soft(draftProps(tree).contextWorkspaces).not.toContainEqual(expect.objectContaining({ serverId: serverA.id, path: "/srv/principal-A/private-project" }));
+    expect.soft(draftProps(tree).contextActual.cwd).not.toBe("/srv/principal-A/private-project");
     expect.soft(textContent(tree)).not.toContain("A private model");
-    expect.soft(byTestId(tree, "new-workspace-prompt")?.props.value).not.toBe("inspect this project");
-    expect.soft(byTestId(tree, "create-workspace")?.props.disabled).toBe(true);
-    tap(byTestId(tree, "create-workspace"));
+    expect.soft(draftProps(tree).input).not.toBe("inspect this project");
+    expect.soft(draftProps(tree).ready).toBe(false);
+    void staleSubmitA();
     await drainPromises();
     expect.soft(api.creates).toHaveLength(0);
     expect.soft(api.creates.every((options: any) =>
@@ -1254,7 +1331,7 @@ describe("new workspace route scope", () => {
     tree = renderRoute();
     expect.soft(requestsFor(api.reads.directories, profileB, serverB).length).toBeGreaterThan(0);
     expect.soft(requestsFor(api.reads.models, profileB, serverB).length).toBeGreaterThan(0);
-    expect.soft(byTestId(tree, "create-workspace")?.props.disabled).toBe(true);
+    expect.soft(draftProps(tree).ready).toBe(false);
 
     const readB = requestsFor(api.reads.directories, profileB, serverB)[0];
     const modelB = requestsFor(api.reads.models, profileB, serverB)[0];
@@ -1263,24 +1340,28 @@ describe("new workspace route scope", () => {
       modelB.resolve([model("provider-b::private-model-b", "B private model")]);
       await drainPromises();
       tree = commitRoute();
-      expect(byTestId(tree, "workspace-path")?.props.value).toBe("/srv/principal-B");
-      expect(byTestId(tree, "workspace-option-%2Fsrv%2Fprincipal-B%2Fprivate-project")).toBeDefined();
+      expect(draftProps(tree).contextActual.cwd).toBe("/srv/principal-B");
+      expect(draftProps(tree).contextWorkspaces).toContainEqual(expect.objectContaining({ serverId: serverB.id, path: "/srv/principal-B/private-project" }));
       expect(textContent(tree)).toContain("B private model");
-      expect(byTestId(tree, "new-workspace-prompt")?.props.value).not.toBe("inspect this project");
-      expect(byTestId(tree, "create-workspace")?.props.disabled).toBe(true);
+      expect(draftProps(tree).input).not.toBe("inspect this project");
+      expect(canSendDraft(tree)).toBe(false);
 
-      const promptB = byTestId(tree, "new-workspace-prompt");
-      (promptB?.props.onChangeText as (value: string) => void)("inspect B project");
-      tree = await waitForEnabledButton((current) => byTestId(current, "create-workspace"));
-      expect(byTestId(tree, "create-workspace")?.props.disabled).toBe(false);
+      selectDraftWorkspace(tree, serverB.id, "/srv/principal-B/private-project");
+      setDraftInput(tree, "inspect B project");
+      commitRoute();
+      const workspaceModelB = requestsFor(api.reads.models, profileB, serverB).at(-1);
+      expect(workspaceModelB.workspacePath).toBe("/srv/principal-B/private-project");
+      workspaceModelB.resolve([model("provider-b::private-model-b", "B private model")]);
+      tree = await waitForReadyDraft();
+      expect(canSendDraft(tree)).toBe(true);
 
-      (byTestId(tree, "create-workspace")?.props.onPress as () => void)();
+      void submitDraft(tree);
       await vi.waitFor(() => expect(api.creates).toHaveLength(1));
       expect(api.creates).toHaveLength(1);
       expect(api.creates[0].profile).toBe(profileB);
       expect(api.creates[0].server).toBe(serverB);
-      expect(api.creates[0].cwd).toBe("/srv/principal-B");
-      expect(api.creates[0].model).toBe("provider-b::private-model-b");
+      expect(api.creates[0].cwd).toBe("/srv/principal-B/private-project");
+      expect(api.creates[0].model).toBeUndefined();
       expect(api.creates[0].prompt).toBe("inspect B project");
     }
   });
@@ -1299,10 +1380,11 @@ describe("new workspace route scope", () => {
     firstModel.reject(new Error("model catalog unavailable"));
     await drainPromises();
     tree = commitRoute();
-    expect(byTestId(tree, "new-workspace-error")).toBeDefined();
-    expect(byTestId(tree, "create-workspace")?.props.disabled).toBe(true);
+    expect(byTestId(tree, "new-workspace-error")).toBeUndefined();
+    expect(draftProps(tree).ready).toBe(false);
 
-    tap(byTestId(tree, "retry-new-workspace-catalogs"));
+    expect(byTestId(tree, "retry-new-workspace-catalogs")).toBeUndefined();
+    (draftProps(tree).contextRetry as { onRetry(): void }).onRetry();
     tree = commitRoute();
     const retriedDirectory = requestsFor(api.reads.directories, profileB, serverB).at(-1);
     const retriedModel = requestsFor(api.reads.models, profileB, serverB).at(-1);
@@ -1316,20 +1398,19 @@ describe("new workspace route scope", () => {
     await drainPromises();
     tree = commitRoute();
     expect(byTestId(tree, "new-workspace-error")).toBeUndefined();
-    expect(byTestId(tree, "workspace-path")?.props.value).toBe("/srv/principal-B");
+    expect(draftProps(tree).contextActual.cwd).toBe("/srv/principal-B");
     expect(textContent(tree)).toContain("B retry model");
 
-    const prompt = byTestId(tree, "new-workspace-prompt");
-    (prompt?.props.onChangeText as (value: string) => void)("create after B retry");
-    tree = await waitForEnabledButton((current) => byTestId(current, "create-workspace"));
-    expect(byTestId(tree, "create-workspace")?.props.disabled).toBe(false);
-    tap(byTestId(tree, "create-workspace"));
+    setDraftInput(tree, "create after B retry");
+    tree = await waitForReadyDraft();
+    expect(draftProps(tree).ready).toBe(true);
+    void submitDraft(tree);
     await vi.waitFor(() => expect(api.creates).toHaveLength(1));
     expect(api.creates).toHaveLength(1);
     expect(api.creates[0].profile).toBe(profileB);
     expect(api.creates[0].server).toBe(serverB);
     expect(api.creates[0].cwd).toBe("/srv/principal-B");
-    expect(api.creates[0].model).toBe("provider-b::retry-model");
+    expect(api.creates[0].model).toBeUndefined();
     expect(api.creates[0].prompt).toBe("create after B retry");
   });
 
@@ -1365,19 +1446,18 @@ describe("new workspace route scope", () => {
       aModels.resolve([model("provider-a::only-A", "A only model")]);
       await drainPromises();
       tree = commitRoute();
-      const promptA = byTestId(tree, "new-workspace-prompt");
-      (promptA?.props.onChangeText as (value: string) => void)("A-only unsent intent");
-      tap(byTestId(tree, "workspace-option-%2Fsrv%2Fshared-root%2Fprivate-A"));
+      setDraftInput(tree, "A-only unsent intent");
+      selectDraftWorkspace(tree, serverA.id, "/srv/shared-root/private-A");
       tree = renderRoute();
-      expect(byTestId(tree, "workspace-path")?.props.value).toBe("/srv/shared-root/private-A");
+      expect(draftProps(tree).contextActual.cwd).toBe("/srv/shared-root/private-A");
 
       host.app = appFor(profileB, serverB);
       tree = renderRoute();
-      expect.soft(byTestId(tree, "workspace-option-%2Fsrv%2Fshared-root%2Fprivate-A")).toBeUndefined();
-      expect.soft(byTestId(tree, "workspace-path")?.props.value).not.toBe("/srv/shared-root/private-A");
-      expect.soft(byTestId(tree, "new-workspace-prompt")?.props.value).not.toBe("A-only unsent intent");
-      expect.soft(byTestId(tree, "create-workspace")?.props.disabled).toBe(true);
-      tap(byTestId(tree, "create-workspace"));
+      expect.soft(draftProps(tree).contextWorkspaces).not.toContainEqual(expect.objectContaining({ serverId: serverA.id, path: "/srv/shared-root/private-A" }));
+      expect.soft(draftProps(tree).contextActual.cwd).not.toBe("/srv/shared-root/private-A");
+      expect.soft(draftProps(tree).input).not.toBe("A-only unsent intent");
+      expect.soft(draftProps(tree).ready).toBe(false);
+      void submitDraft(tree);
       await drainPromises();
       expect.soft(api.creates).toHaveLength(0);
 
@@ -1391,10 +1471,10 @@ describe("new workspace route scope", () => {
         bModels[0].resolve([model("provider-b::only-B", "B only model")]);
         await drainPromises();
         tree = commitRoute();
-        expect(byTestId(tree, "workspace-option-%2Fsrv%2Fshared-root%2Fprivate-B")).toBeDefined();
+        expect(draftProps(tree).contextWorkspaces).toContainEqual(expect.objectContaining({ serverId: serverB.id, path: "/srv/shared-root/private-B" }));
         expect(textContent(tree)).toContain("B only model");
-        expect(byTestId(tree, "new-workspace-prompt")?.props.value).not.toBe("A-only unsent intent");
-        expect(byTestId(tree, "create-workspace")?.props.disabled).toBe(true);
+        expect(draftProps(tree).input).not.toBe("A-only unsent intent");
+        expect(canSendDraft(tree)).toBe(false);
       }
     },
   );
@@ -1402,6 +1482,7 @@ describe("new workspace route scope", () => {
   it("keeps a shared A create runtime alive for a new A owner after A-to-B-to-A", async () => {
     const profileA = profile("authorization-A", "token-A");
     const serverA = server("/srv/principal-A", "principal-A");
+    await seedWorkspacePreference(profileA, serverA, { cwd: serverA.workspacePath!, isolation: "worktree" });
     const replacements: unknown[] = [];
     host.router = { push: () => {}, replace: (value: unknown) => replacements.push(value), back: () => {} };
     host.app = appFor(profileA, serverA);
@@ -1415,11 +1496,11 @@ describe("new workspace route scope", () => {
     await drainPromises();
     tree = commitRoute();
 
-    (byTestId(tree, "new-workspace-prompt")?.props.onChangeText as (value: string) => void)("same A creation intent");
-    tap(byTestId(tree, "workspace-isolation-worktree"));
-    tree = await waitForEnabledButton((current) => byTestId(current, "create-workspace"));
+    setDraftInput(tree, "same A creation intent");
+    tree = await waitForWorktreeDraft();
+    tree = await waitForReadyDraft();
     const pendingCreate = api.holdNextCreateResult();
-    tap(byTestId(tree, "create-workspace"));
+    void submitDraft(tree);
     // Worktree preparation uses scoped storage and profile-fence awaits before
     // the actual TaskRuntime producer is reached. Wait for that observable call.
     await vi.waitFor(() => expect(api.creates).toHaveLength(1));
@@ -1429,7 +1510,6 @@ describe("new workspace route scope", () => {
       server: serverA,
       cwd: "/srv/principal-A/prepared",
       prompt: "same A creation intent",
-      model: "provider-a::shared",
       managedWorktreeSourcePath: "/srv/principal-A",
     });
 
@@ -1455,7 +1535,7 @@ describe("new workspace route scope", () => {
     a2Models.resolve([model("provider-a::shared", "A shared model")]);
     await drainPromises();
     tree = await waitForEnabledButton((current) => byTestId(current, "recover-created-workspace-task"));
-    expect(byTestId(tree, "create-workspace")?.props.disabled).toBe(true);
+    expect(canSendDraft(tree)).toBe(false);
     tap(byTestId(tree, "recover-created-workspace-task"));
     await vi.waitFor(() => expect(api.creates).toHaveLength(2));
 
@@ -1467,7 +1547,6 @@ describe("new workspace route scope", () => {
       server: serverA,
       cwd: "/srv/principal-A/prepared",
       prompt: "same A creation intent",
-      model: "provider-a::shared",
       managedWorktreeSourcePath: "/srv/principal-A",
     });
 
@@ -1510,11 +1589,11 @@ describe("new workspace route scope", () => {
     aModels.resolve([model("provider-a::model-a", "A model")]);
     await drainPromises();
     tree = commitRoute();
-    (byTestId(tree, "new-workspace-prompt")?.props.onChangeText as (value: string) => void)("A pending creation");
-    tree = await waitForEnabledButton((current) => byTestId(current, "create-workspace"));
+    setDraftInput(tree, "A pending creation");
+    tree = await waitForReadyDraft();
 
     const pendingCreate = api.holdNextCreateResult();
-    tap(byTestId(tree, "create-workspace"));
+    void submitDraft(tree);
     await vi.waitFor(() => expect(api.creates).toHaveLength(1));
 
     const profileB = profile("authorization-B", "token-B");
@@ -1560,9 +1639,9 @@ describe("new workspace route scope", () => {
     aModels.resolve([model("provider-a::model-a", "A model")]);
     await drainPromises();
     tree = commitRoute();
-    (byTestId(tree, "new-workspace-prompt")?.props.onChangeText as (value: string) => void)("create before route exit");
-    tree = await waitForEnabledButton((current) => byTestId(current, "create-workspace"));
-    tap(byTestId(tree, "create-workspace"));
+    setDraftInput(tree, "create before route exit");
+    tree = await waitForReadyDraft();
+    void submitDraft(tree);
     await vi.waitFor(() => expect(api.creates).toHaveLength(1));
     await vi.waitFor(() => expect(replacements).toHaveLength(1));
     expect(api.creates).toHaveLength(1);
@@ -1580,6 +1659,7 @@ describe("new workspace route scope", () => {
   it("acknowledges and navigates after real registry commit despite previous-runtime cleanup failure", async () => {
     const profileA = profile("authorization-A", "token-A");
     const serverA = server("/srv/principal-A", "principal-A");
+    await seedWorkspacePreference(profileA, serverA, { cwd: serverA.workspacePath!, isolation: "worktree" });
     const registry = new TaskRuntimeRegistry();
     let previousCloseCalls = 0;
     const previousRuntime = {
@@ -1587,6 +1667,8 @@ describe("new workspace route scope", () => {
       getSnapshot: () => ({ threadId: "created-thread", running: false, interaction: null }),
       isDisposed() { return this.disposed; },
       hasLiveTerminalSessions: () => false,
+      markInteractionsDisconnected() {},
+      setInteractionLedgerObserver() {},
       close() {
         previousCloseCalls += 1;
         if (previousCloseCalls === 1) throw new Error("previous runtime cleanup failed");
@@ -1606,10 +1688,10 @@ describe("new workspace route scope", () => {
     aModels.resolve([model("provider-a::model-a", "A model")]);
     await drainPromises();
     tree = commitRoute();
-    (byTestId(tree, "new-workspace-prompt")?.props.onChangeText as (value: string) => void)("create with pending cleanup");
-    tap(byTestId(tree, "workspace-isolation-worktree"));
-    tree = await waitForEnabledButton((current) => byTestId(current, "create-workspace"));
-    tap(byTestId(tree, "create-workspace"));
+    setDraftInput(tree, "create with pending cleanup");
+    tree = await waitForWorktreeDraft();
+    tree = await waitForReadyDraft();
+    void submitDraft(tree);
     await vi.waitFor(() => expect(api.creates).toHaveLength(1));
 
     const createdRuntime = await api.createPromises[0];
@@ -1639,6 +1721,7 @@ describe("new workspace route scope", () => {
   it("keeps the adopted task and lets the bookkeeping consumer retry the exact receipt after two ACK write failures", async () => {
     const profileA = profile("authorization-A", "token-A");
     const serverA = server("/srv/principal-A", "principal-A");
+    await seedWorkspacePreference(profileA, serverA, { cwd: serverA.workspacePath!, isolation: "worktree" });
     const replacements: unknown[] = [];
     host.router = { push: () => {}, replace: (value: unknown) => replacements.push(value), back: () => {} };
     host.app = appFor(profileA, serverA);
@@ -1650,12 +1733,12 @@ describe("new workspace route scope", () => {
     await drainPromises();
     tree = commitRoute();
 
-    (byTestId(tree, "new-workspace-prompt")?.props.onChangeText as (value: string) => void)("create despite receipt ACK storage failure");
-    tap(byTestId(tree, "workspace-isolation-worktree"));
-    tree = await waitForEnabledButton((current) => byTestId(current, "create-workspace"));
+    setDraftInput(tree, "create despite receipt ACK storage failure");
+    tree = await waitForWorktreeDraft();
+    tree = await waitForReadyDraft();
     // Only consumed-record writes fail; the actual pending operation still persists its ID and result.
     localStorage.failConsumedWrites = 2;
-    tap(byTestId(tree, "create-workspace"));
+    void submitDraft(tree);
     await vi.waitFor(() => expect(api.receiptAcknowledgements).toHaveLength(1));
     const persisted = workspaceOperationRecord(profileA, serverA, "/srv/principal-A", "worktree");
     expect(persisted).not.toBeNull();
@@ -1759,6 +1842,8 @@ describe("new workspace route scope", () => {
           getSnapshot: () => ({ threadId, running: true, interaction: null }),
           isDisposed() { return this.disposed; },
           hasLiveTerminalSessions: () => false,
+          markInteractionsDisconnected() {},
+          setInteractionLedgerObserver() {},
           close() { throw new Error("pending cleanup remains unavailable"); },
         };
         const replacementRuntime = {
@@ -1766,6 +1851,8 @@ describe("new workspace route scope", () => {
           getSnapshot: () => ({ threadId, running: true, interaction: null }),
           isDisposed() { return this.disposed; },
           hasLiveTerminalSessions: () => false,
+          markInteractionsDisconnected() {},
+          setInteractionLedgerObserver() {},
           close() { this.disposed = true; },
         };
         registry.put(profileA.id, serverA.id, previousRuntime as never);
@@ -1783,9 +1870,9 @@ describe("new workspace route scope", () => {
       aModels.resolve([model("provider-a::model-a", "A model")]);
       await drainPromises();
       tree = commitRoute();
-      (byTestId(tree, "new-workspace-prompt")?.props.onChangeText as (value: string) => void)("blocked before creation");
-      tree = await waitForEnabledButton((current) => byTestId(current, "create-workspace"));
-      tap(byTestId(tree, "create-workspace"));
+      setDraftInput(tree, "blocked before creation");
+      tree = await waitForReadyDraft();
+      void submitDraft(tree);
       await vi.waitFor(() => expect(byTestId(commitRoute(), "new-workspace-error")).toBeDefined());
       tree = renderRoute();
 
@@ -1812,8 +1899,7 @@ describe("new workspace route scope", () => {
     aModels.resolve([model("provider-a::model-a", "A model")]);
     await drainPromises();
     tree = commitRoute();
-    const aPrompt = byTestId(tree, "new-workspace-prompt");
-    const capturedAInput = aPrompt?.props.onChangeText as (value: string) => void;
+    const capturedAInput = draftProps(tree).setInput as (value: string) => void;
     capturedAInput("A private draft");
     tree = renderRoute();
 
@@ -1831,13 +1917,12 @@ describe("new workspace route scope", () => {
     await drainPromises();
     tree = commitRoute();
 
-    const bPrompt = byTestId(tree, "new-workspace-prompt");
-    expect(bPrompt?.props.value).toBe("");
-    (bPrompt?.props.onChangeText as (value: string) => void)("B private draft");
+    expect(draftProps(tree).input).toBe("");
+    setDraftInput(tree, "B private draft");
     tree = renderRoute();
     capturedAInput("late A input event");
     tree = renderRoute();
-    expect(byTestId(tree, "new-workspace-prompt")?.props.value).toBe("B private draft");
+    expect(draftProps(tree).input).toBe("B private draft");
   });
 
   it("binds routed cwd only after its profile is active and never reuses it in another target scope", async () => {
@@ -1852,10 +1937,10 @@ describe("new workspace route scope", () => {
     // Change the real route params while AppContext still exposes the other profile.
     host.params = { profileId: profileA.id, serverId: serverA.id, cwd: "/srv/principal-A/from-route" };
     let tree = renderRoute();
-    expect(byTestId(tree, "workspace-path")?.props.value).not.toBe("/srv/principal-A/from-route");
+    expect(byTestId(tree, "new-task-draft")?.props.cwd).not.toBe("/srv/principal-A/from-route");
     flushEffects();
     tree = renderRoute();
-    expect(byTestId(tree, "workspace-path")?.props.value).not.toBe("/srv/principal-A/from-route");
+    expect(byTestId(tree, "new-task-draft")?.props.cwd).not.toBe("/srv/principal-A/from-route");
 
     host.app = { ...appFor(profileA, serverA), profiles: [profileA, profileWaiting] };
     tree = commitRoute();
@@ -1867,14 +1952,14 @@ describe("new workspace route scope", () => {
     aModels.resolve([model("provider-a::route-model", "A route model")]);
     await drainPromises();
     tree = commitRoute();
-    expect(byTestId(tree, "workspace-path")?.props.value).toBe("/srv/principal-A/from-route");
+    expect(byTestId(tree, "new-task-draft")?.props.cwd).toBe("/srv/principal-A/from-route");
 
     // Keep the route params identical while the same profile ID now has B authorization and target scope.
     const profileB = profile("authorization-B", "token-B", profileA.id);
     const serverB = server("/srv/principal-B", "principal-B", "admin");
     host.app = { ...appFor(profileB, serverB), profiles: [profileB, profileWaiting] };
     tree = renderRoute();
-    expect(byTestId(tree, "workspace-path")?.props.value).not.toBe("/srv/principal-A/from-route");
+    expect(byTestId(tree, "new-task-draft")?.props.cwd).not.toBe("/srv/principal-A/from-route");
     flushEffects();
     tree = renderRoute();
     const bDirectories = requestsFor(api.reads.directories, profileB, serverB)[0];
@@ -1885,8 +1970,8 @@ describe("new workspace route scope", () => {
     bModels.resolve([model("provider-b::route-model", "B route model")]);
     await drainPromises();
     tree = commitRoute();
-    expect(byTestId(tree, "workspace-path")?.props.value).toBe("/srv/principal-B");
-    expect(byTestId(tree, "workspace-path")?.props.value).not.toBe("/srv/principal-A/from-route");
+    expect(byTestId(tree, "new-task-draft")?.props.cwd).toBe("/srv/principal-B");
+    expect(byTestId(tree, "new-task-draft")?.props.cwd).not.toBe("/srv/principal-A/from-route");
   });
 
   it("does not publish late A or B catalogs across A to B to A; token renewal keeps A scope", async () => {
@@ -1903,7 +1988,7 @@ describe("new workspace route scope", () => {
     const serverB = server("/srv/principal-B", "principal-B", "admin");
     host.app = appFor(profileB, serverB);
     let tree = renderRoute();
-    expect.soft(byTestId(tree, "workspace-option-%2Fsrv%2Fprincipal-A%2Fprivate-project")).toBeUndefined();
+    expect.soft(draftProps(tree).contextWorkspaces).not.toContainEqual(expect.objectContaining({ serverId: serverA.id, path: "/srv/principal-A/private-project" }));
     flushEffects();
     const bDirectories = requestsFor(api.reads.directories, profileB, serverB);
     const bModels = requestsFor(api.reads.models, profileB, serverB);
@@ -1915,7 +2000,7 @@ describe("new workspace route scope", () => {
     a1Models.resolve([model("provider-a::late-model", "late A model")]);
     await drainPromises();
     tree = renderRoute();
-    expect.soft(byTestId(tree, "workspace-option-%2Fsrv%2Fprincipal-A%2Flate")).toBeUndefined();
+    expect.soft(draftProps(tree).contextWorkspaces).not.toContainEqual(expect.objectContaining({ serverId: serverA.id, path: "/srv/principal-A/late" }));
     expect.soft(textContent(tree)).not.toContain("late A model");
 
     // Return to A while B's requests are still held, then deliver B late.
@@ -1933,7 +2018,7 @@ describe("new workspace route scope", () => {
     for (const entry of bModels) entry.resolve([model("provider-b::late-model", "late B model")]);
     await drainPromises();
     tree = renderRoute();
-    expect.soft(byTestId(tree, "workspace-option-%2Fsrv%2Fprincipal-B%2Flate")).toBeUndefined();
+    expect.soft(draftProps(tree).contextWorkspaces).not.toContainEqual(expect.objectContaining({ serverId: serverB.id, path: "/srv/principal-B/late" }));
     expect.soft(textContent(tree)).not.toContain("late B model");
 
     if (a2Directories && a2Models) {
@@ -1941,7 +2026,7 @@ describe("new workspace route scope", () => {
       a2Models.resolve([model("provider-a::current-model", "current A model")]);
       await drainPromises();
       tree = commitRoute();
-      expect(byTestId(tree, "workspace-option-%2Fsrv%2Fprincipal-A%2Fcurrent")).toBeDefined();
+      expect(draftProps(tree).contextWorkspaces).toContainEqual(expect.objectContaining({ serverId: serverA.id, path: "/srv/principal-A/current" }));
       expect(textContent(tree)).toContain("current A model");
     }
 
@@ -2062,6 +2147,9 @@ describe("open project route scope", () => {
     aWorktrees.resolve([]);
     await drainPromises();
     tree = commitRoute();
+    expect(textContent(tree)).not.toMatch(/GitHub|TODO/);
+    for (const supportedMode of ["open_project.select_existing_directory", "open_project.create_directory", "open_project.create_git_worktree"])
+      expect(pressableWithText(tree, t(supportedMode))).toBeDefined();
     if (mode !== "open") {
       tap(pressableWithText(tree, t(label)));
       tree = renderRoute();

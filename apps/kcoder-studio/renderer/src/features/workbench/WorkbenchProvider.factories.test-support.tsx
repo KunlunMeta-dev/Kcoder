@@ -1,3 +1,4 @@
+import { installTestTransport, clearTestTransports } from '@/test/runtime-transport'
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { render } from '@testing-library/react'
 import { createContext, StrictMode, useContext, useEffect, useState } from 'react'
@@ -38,15 +39,12 @@ import type {
   User,
 } from '@/types/api'
 
-export function setTauriRuntime() {
-  Object.defineProperty(window, '__TAURI_INTERNALS__', {
-    value: {},
-    configurable: true,
-  })
+export function setGatewayRuntime() {
+  installTestTransport(() => null)
 }
 
-export function clearTauriRuntime() {
-  delete (window as Window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__
+export function clearGatewayRuntime() {
+  clearTestTransports()
 }
 
 export function deferred<T>() {

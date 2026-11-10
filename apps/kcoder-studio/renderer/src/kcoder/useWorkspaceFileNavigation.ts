@@ -1,3 +1,4 @@
+import { useWorkspaceFileEditorGuard } from './useWorkspaceFileEditorGuard'
 import {
   useCallback,
   useEffect,
@@ -9,6 +10,7 @@ import {
 } from 'react'
 import type { WorkspaceFileOpenRequest, WorkspaceTarget } from '@/types/workspace-files'
 import { captureAccountContextRevision, listenAccountContextChanges } from './accountContextEvents'
+import { useWorkspaceFileCommentDrafts } from './useWorkspaceFileCommentDrafts'
 
 interface FileNavigationState {
   scope: string
@@ -144,7 +146,15 @@ export function useWorkspaceFileNavigation(
     [scope]
   )
 
+  const comments = useWorkspaceFileCommentDrafts(
+    scope,
+    active.committedTarget ?? fallbackTarget,
+    ownerDeviceId
+  )
+  const fileEditorNavigation = useWorkspaceFileEditorGuard(scope, ownerDeviceId)
   return {
+    ...comments,
+    fileEditorNavigation,
     cancelFileOpenRequest,
     fileNavigationScope: scope,
     openFileRequest: active.request,

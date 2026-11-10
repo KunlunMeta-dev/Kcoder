@@ -1,0 +1,17 @@
+{
+  "adapt": "Adapt this static Agent to a native Agent",
+  "boundary": "Preserve the reviewed prompt and tool restrictions, then publish disabled. Source approvals, user-question permissions and unsupported dependencies stay pending.",
+  "inspect": "Inspect compatibility",
+  "failed": "Compatibility could not be confirmed. Retry the original preview.",
+  "updateRequired": "Update the target to adapt Agent definitions.",
+  "unsupported": "This definition needs unsupported behavior or dependencies. Keep its original pending definition for review.",
+  "modelPolicy": "Native model mapping",
+  "model": "Model identifier",
+  "provider": "Provider identifier",
+  "choose": "Choose explicitly",
+  "inherit": "Inherit the current model when spawned",
+  "target": "Use a configured provider and model",
+  "modelBoundary": "Source model aliases do not select native models. The configured deployment is checked at spawn and pinned for continuation. A changed deployment requires a new Agent.",
+  "tools": "Reviewed native tools",
+  "confirm": "I reviewed the source prompt, native model mapping and restricted tools. Publish disabled."
+}

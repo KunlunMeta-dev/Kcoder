@@ -89,6 +89,14 @@ impl SubagentCheckpointWriter for FilesystemSubagentCheckpointWriter {
     async fn write(&self, path: &Path, messages: &[Message]) -> anyhow::Result<()> {
         crate::agent::write_transcript_checkpoint(path, messages).await
     }
+    async fn write_with_context(
+        &self,
+        path: &Path,
+        messages: &[Message],
+        context: Option<&kcoder_state::context_archive::ContextHistoryCheckpoint>,
+    ) -> anyhow::Result<()> {
+        crate::agent::checkpoint::write_checkpoint_with_context(path, messages, true, context).await
+    }
 }
 
 pub(super) fn record_structured_memory_session(
@@ -138,23 +146,48 @@ impl QueryEngine {
                 task.kind == kcoder_state::TaskKind::Subagent
                     && task.parent_session_id.as_deref()
                         == Some(expected.parent_session_id.as_str())
-                    && task.delivery == kcoder_state::TaskDelivery::Background
+                    && matches!(
+                        task.delivery,
+                        kcoder_state::TaskDelivery::Background
+                            | kcoder_state::TaskDelivery::Foreground
+                    )
                     && task.background_run.as_ref() == Some(expected)
             })
-            && self
+            && (self
                 .background_jobs
                 .has_live_run(&expected.agent_id, expected)
+                || self.background_jobs.can_cancel_paused_run(expected))
     }
 
-    /// Stop exactly the viewed background worker through its existing bounded
+    /// Stop exactly the viewed managed worker through its existing bounded
     /// cancellation/cleanup implementation. No sibling or newly resumed run is targeted.
     pub async fn stop_subagent_run(
         &self,
         expected: &kcoder_types::BackgroundRunKey,
     ) -> anyhow::Result<bool> {
-        self.background_jobs
-            .abort_and_wait_for_run(&expected.agent_id, expected)
-            .await
+        if self
+            .state
+            .task(&expected.agent_id)
+            .is_some_and(|task| task.status == TaskStatus::Paused)
+            && !self
+                .background_jobs
+                .has_live_run(&expected.agent_id, expected)
+        {
+            return self.background_jobs.cancel_paused_for_run(expected);
+        }
+        if self
+            .state
+            .task(&expected.agent_id)
+            .is_some_and(|task| task.delivery == kcoder_state::TaskDelivery::Foreground)
+        {
+            self.background_jobs
+                .abort_owned_foreground_and_wait(expected)
+                .await
+        } else {
+            self.background_jobs
+                .abort_and_wait_for_run(&expected.agent_id, expected)
+                .await
+        }
     }
 
     /// Migrate a legacy private checkpoint to a public presentation artifact.
@@ -224,8 +257,9 @@ impl QueryEngine {
         // Publish completed public messages/tools at every safe boundary, even
         // when no new steering command was pending. Streaming activity itself
         // is projected by the host; this snapshot is its reconnect baseline.
-        if let Err(error) =
-            write_public_subagent_transcript(&control.transcript_path, &self.state.messages())
+        if self.native_tool_authorization.is_none()
+            && let Err(error) =
+                write_public_subagent_transcript(&control.transcript_path, &self.state.messages())
         {
             warn!("failed to project subagent boundary activity: {error}");
         }

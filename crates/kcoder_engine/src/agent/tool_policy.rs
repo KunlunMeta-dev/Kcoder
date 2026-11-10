@@ -2,9 +2,8 @@ use kcoder_config::PermissionMode;
 use kcoder_tools::{AgentKind, ToolRegistry};
 use std::collections::HashSet;
 
-/// Losing a live interaction host is a transient projection, not a changed
-/// execution grant. Keep the stored profile immutable and permit only removal
-/// of question tools; no file, shell, plugin, or role capability may drift.
+/// Resume legacy agents without restoring their former question permission.
+/// Keep the saved execution grants immutable; only question tools may disappear.
 pub(super) fn is_unbound_question_projection(saved: &[String], actual: &[String]) -> bool {
     let mut expected: Vec<_> = saved
         .iter()
@@ -24,6 +23,7 @@ pub fn all_agent_disallowed_tools() -> HashSet<&'static str> {
     let mut set = HashSet::new();
     // Canonical tool names.
     set.insert("AskUserQuestion");
+    set.insert("AskUserQuestionAsync");
     set.insert("EnterPlanMode");
     set.insert("ExitPlanMode");
     set.insert("TaskOutput");
@@ -125,7 +125,12 @@ pub fn agent_kind_allowed_tools(agent_kind: AgentKind) -> HashSet<&'static str> 
         "WebSearch",
         "WebFetch",
         "CtxInspect",
+        "ContextHistory",
         "Snip",
+        // Registered readers retain host capability, current resource policy
+        // and the task's literal native ceiling; this list adds no registry entry.
+        "Wiki",
+        "AutomationSourceRead",
     ];
     let shell = ["bash", "PowerShell"];
     let writes = ["edit", "write", "apply_patch"];
@@ -192,7 +197,12 @@ fn arrangement_agent_kind_allowed_tools(agent_kind: AgentKind) -> HashSet<&'stat
         "WebSearch",
         "WebFetch",
         "CtxInspect",
+        "ContextHistory",
         "Snip",
+        // Registered readers retain host capability, current resource policy
+        // and the task's literal native ceiling; this list adds no registry entry.
+        "Wiki",
+        "AutomationSourceRead",
     ];
     let shell = ["bash", "PowerShell"];
     let writes = ["edit", "write", "apply_patch"];
@@ -273,37 +283,6 @@ pub fn filter_tools_for_agent_kind_in_mode(
         )
     } else {
         filter_tools_for_agent_kind(tools, agent_kind, is_async)
-    }
-}
-
-/// A bound host communication surface adds no execution/write permission.
-/// Parent registry/profile and plugin allowlist still own the available tool instance.
-pub(super) fn filter_tools_for_agent_kind_with_bound_questions(
-    tools: &ToolRegistry,
-    agent_kind: AgentKind,
-    is_async: bool,
-    arrangement_mode: bool,
-    bound_questions: bool,
-) -> ToolRegistry {
-    let allow_questions = bound_questions && agent_kind == AgentKind::General && !arrangement_mode;
-    if !allow_questions {
-        return filter_tools_for_agent_kind_in_mode(tools, agent_kind, is_async, arrangement_mode);
-    }
-    let mut disallowed = all_agent_disallowed_tools();
-    disallowed.remove("AskUserQuestion");
-    disallowed.remove("ask_user_question");
-    let mut allowed = agent_kind_allowed_tools(agent_kind);
-    allowed.insert("AskUserQuestion");
-    allowed.insert("ask_user_question");
-    if is_async {
-        filter_tools_for_allowed_names(tools, &disallowed, &allowed)
-    } else {
-        let names = tools
-            .names()
-            .into_iter()
-            .filter(|name| !disallowed.contains(name.as_str()))
-            .collect::<Vec<_>>();
-        tools.filtered_to_names(&names)
     }
 }
 

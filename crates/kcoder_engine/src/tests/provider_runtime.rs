@@ -1202,7 +1202,7 @@ async fn partial_final_pre_response_retry_remains_valid_after_tool_round() {
 #[test]
 fn configured_catalog_does_not_replace_a_profile_model_with_the_running_model() {
     let temp = tempfile::tempdir().unwrap();
-    let mut settings = Settings::default();
+    let mut settings = crate::test_support::engine_builder::fixture_settings_with_default_provider();
     let mut glm = settings.providers.values().next().unwrap().clone();
     glm.default_model = "GLM-5.3".into();
     settings.providers.insert("GLM-5.3".into(), glm);
@@ -1565,6 +1565,7 @@ fn client_runtime_options_rebuild_provider_without_persisting_proxy() {
         provider: Some("openai".to_string()),
         api_format: Some(kcoder_config::ApiFormat::OpenaiResponses),
         openai_api_key: Some("test-key".to_string()),
+        openai_base_url: Some("http://127.0.0.1:9/v1".to_string()),
         model: "gpt-test".to_string(),
         ..Settings::default()
     };
@@ -1616,6 +1617,7 @@ fn client_runtime_options_preserve_provider_for_normalized_duplicates() {
         provider: Some("openai".to_string()),
         api_format: Some(kcoder_config::ApiFormat::OpenaiResponses),
         openai_api_key: Some("test-key".to_string()),
+        openai_base_url: Some("http://127.0.0.1:9/v1".to_string()),
         model: "gpt-test".to_string(),
         ..Settings::default()
     };
@@ -1649,6 +1651,7 @@ fn client_runtime_options_preserve_provider_for_repeated_proxy_clear() {
         provider: Some("openai".to_string()),
         api_format: Some(kcoder_config::ApiFormat::OpenaiResponses),
         openai_api_key: Some("test-key".to_string()),
+        openai_base_url: Some("http://127.0.0.1:9/v1".to_string()),
         model: "gpt-test".to_string(),
         ..Settings::default()
     };
@@ -1676,6 +1679,7 @@ fn client_runtime_options_validate_duplicates_before_preserving_provider() {
         provider: Some("openai".to_string()),
         api_format: Some(kcoder_config::ApiFormat::OpenaiResponses),
         openai_api_key: Some("test-key".to_string()),
+        openai_base_url: Some("http://127.0.0.1:9/v1".to_string()),
         model: "gpt-test".to_string(),
         ..Settings::default()
     };
@@ -1729,8 +1733,11 @@ fn fixed_provider_accepts_client_runtime_options_without_factory_rebuild() {
     }
 
     let tmp = tempfile::tempdir().unwrap();
-    let engine =
-        test_engine_with_settings(Arc::new(FixedProvider), tmp.path(), Settings::default());
+    let engine = test_engine_with_settings(
+        Arc::new(FixedProvider),
+        tmp.path(),
+        crate::test_support::engine_builder::fixture_settings_with_default_provider(),
+    );
 
     engine
         .set_client_runtime_options(Some("socks5://127.0.0.1:1080"), Some("fast"))
@@ -1853,6 +1860,7 @@ async fn cancelled_forked_agent_does_not_report_completion() {
             active_skills: Vec::new(),
             snapshot_provider: engine.provider_name(),
             snapshot_model: engine.model_name(),
+            context_history_anchor: None,
             full_context_compatible: true,
         }
         .into(),
@@ -1915,6 +1923,7 @@ async fn provider_failure_forked_agent_returns_error_without_waiting_for_recover
             active_skills: Vec::new(),
             snapshot_provider: engine.provider_name(),
             snapshot_model: engine.model_name(),
+            context_history_anchor: None,
             full_context_compatible: true,
         }
         .into(),
@@ -2330,7 +2339,7 @@ mod configuration_summary_tests {
         };
         let engine = crate::test_support::engine_builder::TestEngineBuilder::new(directory.path())
             .settings(settings)
-            .build();
+            .build_with_profile_directory();
         assert!(engine.set_client_reasoning_effort("none").is_err());
         assert_eq!(
             engine.settings.read().unwrap().model_reasoning_effort,
@@ -2346,7 +2355,7 @@ mod configuration_summary_tests {
         let engine = crate::test_support::engine_builder::TestEngineBuilder::new(temp.path())
             .settings(settings)
             .tool_registry(ToolRegistry::new().register(kcoder_tools::FileReadTool))
-            .build();
+            .build_with_profile_directory();
         let frozen = engine.active_model_configuration_summary().unwrap();
         assert!(!frozen.tools);
         let tools = frozen.tool_set.as_ref().unwrap();

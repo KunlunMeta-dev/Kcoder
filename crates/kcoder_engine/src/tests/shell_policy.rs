@@ -65,17 +65,93 @@ fn shell_file_change_tracking_skips_background_but_tracks_git_helpers() {
 }
 
 #[test]
+fn shell_file_change_tracking_skips_proven_read_only_commands() {
+    for (tool, command) in [
+        ("bash", "pwd"),
+        ("PowerShell", "Get-Content -LiteralPath notes.txt"),
+        ("PowerShell", "Get-ChildItem . | Select-Object Name,Length"),
+        ("PowerShell", "Test-Path -LiteralPath notes.txt"),
+        ("PowerShell", "get-location; get-date"),
+    ] {
+        assert!(
+            !should_track_shell_file_changes(tool, &serde_json::json!({"command": command})),
+            "read-only inspection must not scan the workspace: {tool}: {command}"
+        );
+    }
+}
+
+#[test]
+fn shell_file_change_tracking_keeps_powershell_mutations_and_unknown_commands() {
+    for command in [
+        "Set-Content notes.txt changed",
+        "Get-Content source.txt | Set-Content notes.txt",
+        "Get-ChildItem .; Remove-Item notes.txt",
+        "Get-Content source.txt > notes.txt",
+        "Write-Output (Remove-Item notes.txt)",
+        "Write-Output (& { Remove-Item notes.txt })",
+        "Get-EvilThing -Run payload",
+        "python script.py",
+        "git status",
+    ] {
+        assert!(
+            should_track_shell_file_changes("PowerShell", &serde_json::json!({"command": command})),
+            "mutation or unknown behavior must retain file tracking: {command}"
+        );
+    }
+    assert!(should_track_shell_file_changes("PowerShell", &serde_json::json!({})));
+    assert!(!should_track_shell_file_changes(
+        "PowerShell",
+        &serde_json::json!({"command": "Set-Content notes.txt changed", "run_in_background": true})
+    ));
+}
+
+#[tokio::test]
+#[ignore = "Creates an owned 6000-file workspace to measure metadata-scan overhead"]
+async fn powershell_read_only_snapshot_overhead_measurement() {
+    let workspace = tempfile::tempdir().unwrap();
+    for index in 0..6000 {
+        fs::write(workspace.path().join(format!("file-{index}.txt")), "fixture").unwrap();
+    }
+    let started = std::time::Instant::now();
+    for _ in 0..2 {
+        let snapshot = snapshot_files_async(workspace.path().to_path_buf()).await.unwrap();
+        assert_eq!(snapshot.len(), 6000);
+    }
+    let old_scan_time = started.elapsed();
+    let started = std::time::Instant::now();
+    let input = serde_json::json!({"command": "Get-Content -LiteralPath file-0.txt"});
+    let mut scan_count = 0;
+    if should_track_shell_file_changes("PowerShell", &input) {
+        for _ in 0..2 {
+            snapshot_files_async(workspace.path().to_path_buf()).await.unwrap();
+            scan_count += 1;
+        }
+    }
+    let optimized_time = started.elapsed();
+    assert_eq!(scan_count, 0);
+    eprintln!(
+        "snapshot-path measurement only; host={}; files=6000; old_scans=2; old_ms={:.3}; optimized_scans=0; optimized_ms={:.3}; not a PowerShell process benchmark",
+        std::env::consts::OS,
+        old_scan_time.as_secs_f64() * 1000.0,
+        optimized_time.as_secs_f64() * 1000.0,
+    );
+}
+
+#[test]
 fn shell_tool_timeout_defaults_to_settings_and_is_injected() {
-    let settings = Settings {
-        tool_timeout_ms: 600_000,
-        ..Settings::default()
-    };
-    let mut input = serde_json::json!({"command": "cargo test"});
+    let settings = Settings::default();
+    for name in ["bash", "PowerShell"] {
+        let mut input = serde_json::json!({"command": "cargo test"});
 
-    let timeout = effective_tool_timeout_ms("bash", &mut input, settings.tool_timeout_ms);
+        let timeout = effective_tool_timeout_ms(
+            name,
+            &mut input,
+            settings.tool_limits.execution_timeout_ms[name],
+        );
 
-    assert_eq!(timeout, 600_000);
-    assert_eq!(input["timeout"], serde_json::json!(600_000));
+        assert_eq!(timeout, 1_800_000);
+        assert_eq!(input["timeout"], serde_json::json!(1_800_000));
+    }
 }
 
 #[test]

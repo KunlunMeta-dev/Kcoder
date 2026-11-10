@@ -1,0 +1,33 @@
+[package]
+name = "kcoder_cli_headless"
+description = "Noninteractive KCoder command execution."
+publish = false
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+futures.workspace = true
+kcoder_cli_support = { path = "../cli_support" }
+kcoder_engine = { path = "../../../kcoder_engine" }
+kcoder_state = { path = "../../../kcoder_state" }
+kcoder_tools = { path = "../../../kcoder_tools" }
+kcoder_types = { path = "../../../kcoder_types" }
+serde_json.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+kcoder_config = { path = "../../../kcoder_config" }
+kcoder_permissions = { path = "../../../kcoder_permissions" }
+kcoder_memory = { path = "../../../kcoder_memory" }
+kcoder_skills = { path = "../../../kcoder_skills" }
+tempfile.workspace = true
+tokio-util.workspace = true
+
+[lib]
+path = "../../src/internal/cli_headless/lib.rs"

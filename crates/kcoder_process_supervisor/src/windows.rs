@@ -28,16 +28,19 @@ use windows_sys::Win32::System::JobObjects::{
     QueryInformationJobObject, SetInformationJobObject, TerminateJobObject,
 };
 use windows_sys::Win32::System::Threading::{
-    CREATE_SUSPENDED, CREATE_UNICODE_ENVIRONMENT, CreateProcessW, DeleteProcThreadAttributeList,
-    EXTENDED_STARTUPINFO_PRESENT, GetCurrentProcess, GetExitCodeProcess,
-    InitializeProcThreadAttributeList, PROC_THREAD_ATTRIBUTE_HANDLE_LIST, PROCESS_INFORMATION,
-    ResumeThread, STARTF_USESTDHANDLES, STARTUPINFOEXW, UpdateProcThreadAttribute,
-    WaitForSingleObject,
+    CREATE_NO_WINDOW, CREATE_SUSPENDED, CREATE_UNICODE_ENVIRONMENT, CreateProcessW,
+    DeleteProcThreadAttributeList, EXTENDED_STARTUPINFO_PRESENT, GetCurrentProcess,
+    GetExitCodeProcess, InitializeProcThreadAttributeList, PROC_THREAD_ATTRIBUTE_HANDLE_LIST,
+    PROCESS_INFORMATION, ResumeThread, STARTF_USESTDHANDLES, STARTUPINFOEXW,
+    UpdateProcThreadAttribute, WaitForSingleObject,
 };
 
 const WAIT_OBJECT_0_VALUE: u32 = 0;
 const WAIT_TIMEOUT_VALUE: u32 = 258;
 const START_TIMEOUT: Duration = Duration::from_secs(10);
+
+mod receipt_owner;
+pub use receipt_owner::run as run_with_cleanup_receipt;
 
 pub fn run<R: BufRead + Send + 'static>(request: SpawnRequest, input: R) -> Result<u32> {
     let mut status = StatusWriter::create(&request.status_file)?;
@@ -253,7 +256,10 @@ fn create_suspended_process(
             null(),
             null(),
             1,
-            CREATE_SUSPENDED | CREATE_UNICODE_ENVIRONMENT | EXTENDED_STARTUPINFO_PRESENT,
+            CREATE_NO_WINDOW
+                | CREATE_SUSPENDED
+                | CREATE_UNICODE_ENVIRONMENT
+                | EXTENDED_STARTUPINFO_PRESENT,
             environment.as_ptr().cast::<c_void>(),
             cwd.as_ptr(),
             &startup.StartupInfo,
@@ -290,6 +296,14 @@ struct Job {
 }
 
 impl Job {
+    fn assign_target(&self, process: HANDLE) -> Result<()> {
+        anyhow::ensure!(
+            unsafe { AssignProcessToJobObject(self.handle.0, process) } != 0,
+            "failed to assign suspended target to receipt Job: {}",
+            std::io::Error::last_os_error()
+        );
+        Ok(())
+    }
     fn create() -> Result<Self> {
         let handle = unsafe { CreateJobObjectW(null(), null()) };
         anyhow::ensure!(

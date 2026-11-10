@@ -2,8 +2,11 @@ import { SquareTerminal, X } from 'lucide-react'
 import { useTranslation } from '@/hooks/useTranslation'
 import { cn } from '@/lib/utils'
 import type { WorkspaceTarget } from '@/types/workspace-files'
-import { EmbeddedLocalTerminal } from './EmbeddedLocalTerminal'
-import { RemoteTerminal } from './RemoteTerminal'
+import { Suspense } from 'react'
+import {
+  LazyEmbeddedLocalTerminal as EmbeddedLocalTerminal,
+  LazyRemoteTerminal as RemoteTerminal,
+} from './workspacePanelChunks'
 import { WorkspaceAddMenu, type WorkspaceAddMenuItem } from './WorkspaceAddMenu'
 import { getTerminalSessionLabel, type WorkspaceTerminalSession } from './workspace-panel-tools'
 
@@ -98,40 +101,42 @@ export function WorkspaceTerminalWindow({
         </div>
       )}
       <div className="relative min-h-0 flex-1 overflow-hidden">
-        {terminalSessions.map(session => {
-          const isActive = session.session_id === activeTerminalSession.session_id
+        <Suspense fallback={null}>
+          {terminalSessions.map(session => {
+            const isActive = session.session_id === activeTerminalSession.session_id
 
-          return session.terminal_kind === 'local' ? (
-            <EmbeddedLocalTerminal
-              key={session.session_id}
-              sessionId={session.session_id}
-              active={panelActive && isActive}
-              taskId={workspaceTarget?.taskId}
-              workspacePath={activeWorkspacePath}
-              cwd={session.cwd ?? activeWorkspacePath}
-              title={getTerminalSessionLabel(session)}
-              onExit={() => onTerminalSessionExit(session.session_id)}
-              onTitleChange={title => onTerminalTitleChange(session.session_id, title)}
-              testIdsEnabled={testIdsEnabled}
-              showWorkbenchBackground={showWorkbenchBackground}
-            />
-          ) : (
-            <RemoteTerminal
-              key={session.session_id}
-              sessionId={session.session_id}
-              clientFactory={session.remoteClientFactory}
-              active={panelActive && isActive}
-              taskId={workspaceTarget?.taskId}
-              workspacePath={activeWorkspacePath}
-              cwd={session.path ?? session.cwd ?? activeWorkspacePath}
-              title={getTerminalSessionLabel(session)}
-              onExit={() => onTerminalSessionExit(session.session_id)}
-              onTitleChange={title => onTerminalTitleChange(session.session_id, title)}
-              testIdsEnabled={testIdsEnabled}
-              showWorkbenchBackground={showWorkbenchBackground}
-            />
-          )
-        })}
+            return session.terminal_kind === 'local' ? (
+              <EmbeddedLocalTerminal
+                key={session.session_id}
+                sessionId={session.session_id}
+                active={panelActive && isActive}
+                taskId={workspaceTarget?.taskId}
+                workspacePath={activeWorkspacePath}
+                cwd={session.cwd ?? activeWorkspacePath}
+                title={getTerminalSessionLabel(session)}
+                onExit={() => onTerminalSessionExit(session.session_id)}
+                onTitleChange={title => onTerminalTitleChange(session.session_id, title)}
+                testIdsEnabled={testIdsEnabled}
+                showWorkbenchBackground={showWorkbenchBackground}
+              />
+            ) : (
+              <RemoteTerminal
+                key={session.session_id}
+                sessionId={session.session_id}
+                clientFactory={session.remoteClientFactory}
+                active={panelActive && isActive}
+                taskId={workspaceTarget?.taskId}
+                workspacePath={activeWorkspacePath}
+                cwd={session.path ?? session.cwd ?? activeWorkspacePath}
+                title={getTerminalSessionLabel(session)}
+                onExit={() => onTerminalSessionExit(session.session_id)}
+                onTitleChange={title => onTerminalTitleChange(session.session_id, title)}
+                testIdsEnabled={testIdsEnabled}
+                showWorkbenchBackground={showWorkbenchBackground}
+              />
+            )
+          })}
+        </Suspense>
       </div>
     </div>
   )

@@ -3,6 +3,11 @@
 use super::*;
 use kcoder_types::{BackgroundEventIdentity, BackgroundRunKey};
 
+pub(crate) mod native_results;
+pub use native_results::{
+    NativeSubagentResultCapacity, NativeSubagentResultObservation, NativeSubagentResultReservation,
+};
+
 pub const MAX_BACKGROUND_RUNS_PER_TASK: usize = 256;
 pub const MAX_BACKGROUND_TASK_IDENTITIES: usize = 4096;
 
@@ -1024,6 +1029,28 @@ impl AppState {
         message_id: &str,
         notification: Option<&BackgroundEventIdentity>,
     ) -> anyhow::Result<()> {
+        self.commit_message_with_sources_guarded(message, message_id, notification, Vec::new())
+            .await
+    }
+
+    /// Commit source observations in the same durable record as a stable tool batch.
+    pub async fn commit_message_with_uuid_and_web_sources(
+        &self,
+        message: Message,
+        message_id: &str,
+        sources: Vec<kcoder_types::web_sources::WebSourcesV1>,
+    ) -> anyhow::Result<()> {
+        self.commit_message_with_sources_guarded(message, message_id, None, sources)
+            .await
+    }
+
+    async fn commit_message_with_sources_guarded(
+        &self,
+        message: Message,
+        message_id: &str,
+        notification: Option<&BackgroundEventIdentity>,
+        sources: Vec<kcoder_types::web_sources::WebSourcesV1>,
+    ) -> anyhow::Result<()> {
         anyhow::ensure!(
             !message_id.is_empty() && message_id.len() <= 128,
             "invalid history message identity"
@@ -1045,7 +1072,22 @@ impl AppState {
                 return Ok(());
             }
             let timestamp_ms = now_millis();
+            let history_attempt =
+                crate::history_append_context::current(self, &inner).or_else(|| {
+                    crate::history_append_context::web_source_history_identity(
+                        &sources,
+                        &inner.session_id,
+                        &message,
+                    )
+                });
+            let web_sources = sources.iter().filter(|receipt| {
+                history_attempt.as_ref() == Some(&receipt.identity)
+                    && receipt.matches(&inner.session_id, &receipt.tool_call_id)
+                    && matches!(&message, Message::User { content, .. } if content.iter().any(|block| matches!(block, ContentBlock::ToolResult { tool_use_id, .. } if tool_use_id == &receipt.tool_call_id)))
+            }).cloned().collect();
             let entry = HistoryEntry {
+                web_sources,
+                history_attempt: history_attempt.clone(),
                 session_id: inner.session_id.clone(),
                 timestamp_ms,
                 uuid: Some(message_id.to_owned()),
@@ -1120,6 +1162,10 @@ impl AppState {
             inner.messages.push(message);
             inner.message_history_ids.push(Some(message_id.to_owned()));
             Self::truncate_messages(&mut inner);
+            inner
+                .history_attempts
+                .record_sources(message_id, &entry.web_sources);
+            crate::history_append_context::remember(&mut inner, message_id, history_attempt);
             return Ok(());
         }
     }

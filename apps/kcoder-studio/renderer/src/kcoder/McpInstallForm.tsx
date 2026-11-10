@@ -1,3 +1,4 @@
+import { SettingsSelect } from '@/components/settings/SettingsSelect'
 import { useState } from 'react'
 import { useTranslation } from '@/hooks/useTranslation'
 
@@ -89,7 +90,7 @@ export function McpInstallForm({
           </label>
           <label>
             {t('workbench.mcp_transport')}
-            <select
+            <SettingsSelect
               className={input}
               value={transport}
               disabled={disabled}
@@ -101,7 +102,7 @@ export function McpInstallForm({
               <option value="http">Streamable HTTP</option>
               <option value="stdio">stdio</option>
               <option value="sse">SSE</option>
-            </select>
+            </SettingsSelect>
           </label>
           <label>
             {t(transport === 'stdio' ? 'workbench.mcp_command' : 'workbench.mcp_url')}

@@ -27,14 +27,16 @@ export function useTaskModelPreferences(
     model: string,
     reasoningEffort?: string,
   ) => {
-    if (modelBusy) return;
+    if (modelBusy) return false;
     setModelBusy(true);
     setModelError(null);
     try {
       await task.setTurnPreferences(model, reasoningEffort);
       await onTurnPreferencesChange?.(model, reasoningEffort);
+      return true;
     } catch (value) {
       setModelError(value instanceof Error ? value.message : String(value));
+      return false;
     } finally {
       setModelBusy(false);
     }

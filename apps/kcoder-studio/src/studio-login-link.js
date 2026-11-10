@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { chmod, lstat, mkdir, open, readFile, rename, rm } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { dirname, join, resolve, win32 } from 'node:path';
+import { dirname, join, resolve, posix, win32 } from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 
@@ -15,8 +15,15 @@ export function createGatewayToken(env = process.env) {
   return randomBytes(32).toString('base64url');
 }
 
-export function studioDataDirectory({ platform = process.platform, home, serversStore } = {}) {
-  const paths = platform === 'win32' ? win32 : { dirname, resolve };
+export function studioDataDirectory({ platform = process.platform, home, serversStore, dataDirectory } = {}) {
+  const paths = platform === 'win32' ? win32 : posix;
+  if (dataDirectory !== undefined && dataDirectory !== '') {
+    if (typeof dataDirectory !== 'string' || !paths.isAbsolute(dataDirectory)) {
+      throw new TypeError('KCODER_STUDIO_DATA_DIR must be an absolute path');
+    }
+    return paths.resolve(dataDirectory);
+  }
+  // Existing installations retain their original private state until explicitly relocated.
   if (serversStore) return paths.dirname(serversStore);
   const root = home ?? (platform === 'win32' ? (process.env.USERPROFILE || homedir()) : homedir());
   return paths.resolve(root, '.config', 'kcoder-studio');
@@ -24,7 +31,7 @@ export function studioDataDirectory({ platform = process.platform, home, servers
 
 export function studioLoginUrlPath({ platform = process.platform, home, serversStore, dataDirectory } = {}) {
   const paths = platform === 'win32' ? win32 : { join };
-  const directory = dataDirectory ?? studioDataDirectory({ platform, home, serversStore });
+  const directory = studioDataDirectory({ platform, home, serversStore, dataDirectory });
   return paths.join(directory, 'studio-login-url.txt');
 }
 
@@ -85,4 +92,13 @@ export async function writeStudioLoginUrl(url, {
     await handle?.close().catch(() => {});
     await rm(temporary, { force: true }).catch(() => {});
   }
+}
+
+export function loginUrl(base, token) {
+  const url = new URL(base);
+  const prefix = url.pathname.replace(/\/+$/, "");
+  url.pathname = `${prefix}/login`;
+  url.search = new URLSearchParams({ token, returnTo: `${prefix}/` }).toString();
+  url.hash = "";
+  return url.toString();
 }

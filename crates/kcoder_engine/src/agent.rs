@@ -26,6 +26,7 @@ mod artifact_validation;
 mod context_projection;
 #[cfg(test)]
 pub(crate) use context_projection::recent_parent_start;
+mod imported_profile;
 mod tool_policy;
 
 const SUBAGENT_MODEL_DETAIL_INTERVAL: std::time::Duration = std::time::Duration::from_millis(500);
@@ -194,6 +195,7 @@ pub(crate) struct ForkedAgentMaxTurnsReached {
 #[derive(Clone)]
 pub struct QueryEngineAgentRunner {
     engine: QueryEngine,
+    source_parent: Arc<crate::integrations::core::NativeToolExecutionWitness>,
 }
 
 #[derive(Debug, Clone)]
@@ -250,7 +252,7 @@ pub(crate) use execution::run_forked_agent_from_messages;
 pub use execution::run_forked_agent_with_tools;
 use execution::*;
 
-mod checkpoint;
+pub(crate) mod checkpoint;
 pub(super) use checkpoint::unmatched_tool_use_ids;
 pub(crate) use checkpoint::write_transcript_checkpoint;
 use checkpoint::*;
@@ -273,7 +275,9 @@ mod verification_workspace;
 pub use verification_workspace::ensure_goal_pro_workspace_baseline;
 use verification_workspace::*;
 
+mod owned_foreground;
 mod runner;
+mod verifier_owner;
 
 #[cfg(test)]
 #[path = "agent/tests.rs"]

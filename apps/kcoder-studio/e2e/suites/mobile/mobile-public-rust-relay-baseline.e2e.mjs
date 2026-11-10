@@ -370,7 +370,7 @@ await runE2E(import.meta.url, {
   // Full-chain intent: control and per-request data upgrades use public TLS and the test-owned remote Relay.
   const identityFile = await context.writeStateJson("relay-client-alpha.json", { ...identity, relayOrigin: origin });
   let online = false;
-  const client = await startRegisteredClient({ url: origin, pairingToken: fixture.pairingToken, identityFile,
+  const client = await startRegisteredClient({ url: origin, gatewaySecret: fixture.pairingToken, identityFile,
     gateway: gateway.baseUrl, onOnline: () => { online = true; }, onDiagnostic: collector.push });
   context.addCleanup("close owned registered Relay client", () => client.close());
   await waitFor(() => online, 15_000, "owned Relay client online through public TLS", 25, context.abortSignal);

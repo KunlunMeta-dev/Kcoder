@@ -1,3 +1,8 @@
+vi.mock("@/storage/interface-version", () => ({ useInterfaceVersion: () => "modern" }));
+vi.mock("@/features/task/useNewTaskDraftConnection", () => ({ useNewTaskDraftConnection: () => ({ ready: true, client: null, error: null, supportsPermissions: true, retry() {} }) }));
+vi.mock("@/features/task/useNewTaskDraftAttachments", () => ({ useNewTaskDraftAttachments: () => ({ items: [], available: false, busy: false, locked: false, error: null, sheetOpen: false, open() {}, close() {}, select: async () => {}, remove: async () => {}, freeze: () => ({}), unlockUnsent: async () => {}, releaseUnclaimed: async () => {} }) }));
+vi.mock("@/features/task/NewTaskDraft", () => ({ NewTaskDraft: "NewTaskDraft" }));
+vi.mock("@/features/interface/ConversationV3", () => ({ ConversationV3Background: () => null, ConversationV3WelcomeMark: () => null, ConversationV3Header: "ConversationV3Header" }));
 // Exercises the actual New route's handoff discovery and recovery handlers.
 // Storage responses and preference timing are controlled at the module seam;
 // durable storage authorization/scope behavior remains covered by storage tests.
@@ -32,6 +37,9 @@ const fixture = vi.hoisted(() => ({
   preferenceMode: "ready" as "ready" | "held" | "fail",
   preferenceGate: null as null | { promise: Promise<any>; reject: (error: unknown) => void; resolve: (value: unknown) => void },
   preferenceStarted: false,
+  preferenceValue: null as null | { cwd: string; isolation: "local" },
+  preferenceSaves: [] as Array<{ cwd: string; isolation: string }>,
+  workspaceOptions: [] as Array<{ path: string; label: string; kind: "workspace" }>,
   task: {
     getSnapshot: () => ({ threadId: "original-thread", title: "Original task" }),
     isDisposed: () => false,
@@ -67,6 +75,7 @@ vi.mock("react", async (importOriginal) => {
       if (old && deps.length === old.deps.length && deps.every((value, i) => Object.is(value, old.deps[i]))) return old.value;
       fixture.host.memos[index] = { value: callback, deps }; return callback;
     },
+    useSyncExternalStore: (_subscribe: () => () => void, getSnapshot: () => unknown) => getSnapshot(),
     useEffect: (effect: () => void | (() => void), deps: unknown[] = []) => {
       const index = fixture.host.effectIndex++;
       const old = fixture.host.effects[index];
@@ -79,15 +88,15 @@ vi.mock("react", async (importOriginal) => {
 vi.mock("expo-router", () => ({
   useLocalSearchParams: () => fixture.params,
   useRouter: () => ({ push: vi.fn(), back: vi.fn(), replace: (value: unknown) => fixture.routerReplacements.push(value) }),
+  useIsFocused: () => true,
 }));
-vi.mock("@react-navigation/native", () => ({ useIsFocused: () => true }));
 vi.mock("react-native-safe-area-context", () => ({ useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) }));
 vi.mock("react-native", () => ({
   ActivityIndicator: "ActivityIndicator", Dimensions: { get: () => ({ width: 390, height: 844 }), addEventListener: () => ({ remove: vi.fn() }) },
   KeyboardAvoidingView: "KeyboardAvoidingView", Modal: "Modal", Platform: { OS: "web" }, Pressable: "Pressable", ScrollView: "ScrollView",
-  StyleSheet: { create: (value: unknown) => value, hairlineWidth: 1, absoluteFillObject: {} }, Text: "Text", TextInput: "TextInput", View: "View",
+  StyleSheet: { create: (value: unknown) => value, hairlineWidth: 1, absoluteFill: {} }, Text: "Text", TextInput: "TextInput", View: "View",
 }));
-vi.mock("lucide-react-native", () => Object.fromEntries(["Check", "ChevronDown", "ChevronLeft", "FolderGit2", "FolderOpen", "FolderPlus", "Server", "Sparkles", "X"].map(name => [name, name])));
+vi.mock("lucide-react-native", () => Object.fromEntries(["Check", "ChevronDown", "ChevronLeft", "FolderGit2", "FolderOpen", "FolderPlus", "Server", "SlidersHorizontal", "Sparkles", "X"].map(name => [name, name])));
 vi.mock("@/components/ui", () => ({ Button: "Button", EmptyState: "EmptyState", Field: "Field", StatusDot: "StatusDot" }));
 vi.mock("@/components/use-modal-focus-trap", () => ({ useModalFocusTrap: () => null }));
 vi.mock("@/features/forms/WorkspaceOperationBookkeeping", () => ({ WorkspaceOperationBookkeeping: "WorkspaceOperationBookkeeping" }));
@@ -107,7 +116,7 @@ vi.mock("@/theme", () => {
 vi.mock("@/i18n/use-locale", () => ({ useLocale: () => "en" }));
 vi.mock("@/state/profile-coordinator", () => ({ profileAuthorizationScopeKey: (profile: any) => JSON.stringify([profile.id, profile.authorizationGeneration]) }));
 vi.mock("@/runtime/thread-list-projection", () => ({ threadListScopeKey: (profile: any, server: any) => JSON.stringify([profile.id, profile.authorizationGeneration, server.id]) }));
-vi.mock("@/storage/workspace-profile-fence", () => ({ captureWorkspaceProfileIdentity: (profile: any) => ({ id: profile.id, baseUrl: profile.baseUrl, deviceId: profile.deviceId, authorizationGeneration: profile.authorizationGeneration }) }));
+vi.mock("@/storage/workspace-profile-fence", () => ({ captureWorkspaceProfileIdentity: (profile: any) => ({ id: profile.id, baseUrl: profile.baseUrl, authorizationGeneration: profile.authorizationGeneration, deviceId: profile.deviceId }) }));
 vi.mock("@/storage/workspace-preferences", () => ({
   saveWorkspaceState: vi.fn(async () => {}),
   workspaceStateAuthorizationScope: (profile: any, server: any) => JSON.stringify([profile.id, profile.authorizationGeneration, server.id]),
@@ -117,9 +126,9 @@ vi.mock("@/storage/new-workspace-preferences", () => ({
     fixture.preferenceStarted = true;
     if (fixture.preferenceMode === "held") return fixture.preferenceGate!.promise;
     if (fixture.preferenceMode === "fail") throw new Error("injected preference read failure");
-    return null;
+    return fixture.preferenceValue;
   },
-  saveNewWorkspacePreference: async () => {},
+  saveNewWorkspacePreference: async (_profile: string, _server: string, _scope: string, value: { cwd: string; isolation: string }) => { fixture.preferenceSaves.push(value); },
   reasoningEffortLabel: (value: string) => value,
 }));
 vi.mock("@/storage/pending-workspace-operation", () => ({
@@ -139,10 +148,10 @@ vi.mock("@/storage/pending-workspace-operation-v2", () => ({
   verifyWorkspaceTaskHandoff: async (...args: unknown[]) => { fixture.verifyCalls.push(args); return fixture.verify ? fixture.verify(...args) : fixture.pending; },
   confirmWorkspaceOpenDelivery: async () => {},
 }));
-vi.mock("@/storage/pending-thread-creation", () => ({ readWorkspaceTaskHandoff: async () => fixture.pending }));
+vi.mock("@/storage/pending-thread-creation", () => ({ originalCreationInput: (value: any) => value.input, loadPendingThreadCreation: async () => null, pendingThreadCreationKey: () => "test-pending-key", readWorkspaceTaskHandoff: async () => fixture.pending }));
 vi.mock("@/runtime/task-runtime", () => ({
   defaultModelOption: () => null, modelOptionSelector: (value: any) => value.id, selectedModelOption: () => null,
-  listModels: async () => [], listWorkspaceOptions: async () => [], listManagedWorktrees: async () => [],
+  listModels: async () => [], listWorkspaceOptions: async () => fixture.workspaceOptions, listManagedWorktrees: async () => [],
   previewManagedWorktreeArchive: async () => null, archiveManagedWorktree: async () => {},
   prepareManagedWorktreeWithReceipt: async (...args: unknown[]) => { fixture.prepareCalls.push(args); throw new Error("unexpected worktree preparation"); },
   TaskRuntime: {
@@ -155,7 +164,14 @@ vi.mock("@/runtime/task-runtime", () => ({
   taskRuntimeRegistry: { get: () => undefined, put: vi.fn() },
 }));
 
+// RED validation may import the preserved pre-fix product file; the test stays versioned here.
+vi.mock("../new", async importOriginal => {
+  const before = process.env.KCODER_ABSENCE_NEW_BEFORE;
+  return before ? await import(/* @vite-ignore */ before) : await importOriginal();
+});
 import NewWorkspaceRoute from "../new";
+import { createWorkspaceAbsenceHandoff, forwardWorkspaceAbsenceHandoff } from "@/navigation/workspace-absence-handoff";
+import { captureSessionTranscriptScope } from "@/storage/session-transcript-scope";
 
 const profile = {
   id: "handoff-route-profile", label: "Gateway", baseUrl: "https://gateway.invalid", accessToken: "access-test-only", rpcToken: "rpc-test-only",
@@ -226,12 +242,117 @@ beforeEach(() => {
   fixture.verify = undefined;
   fixture.receiptLookup = undefined;
   fixture.preferenceMode = "ready"; fixture.preferenceGate = null; fixture.preferenceStarted = false;
+  fixture.preferenceValue = null; fixture.preferenceSaves.length = 0; fixture.workspaceOptions = [];
   fixture.task = { getSnapshot: () => ({ threadId: "thread-existing-7", title: "Original task" }), isDisposed: () => false, reconnectContext: undefined };
 });
 
 afterEach(() => {
   for (const effect of fixture.host.effects) effect?.cleanup?.();
   resetHost();
+});
+
+function absenceForm(absentCwd = "/workspace/source/deleted", root = "/workspace/source"): string {
+  const target = { ...server, description: "Recovery fixture", workspacePath: root, observationTargetIdentity: "a".repeat(64) };
+  fixture.app.runtime.servers = [target];
+  fixture.params = { profileId: profile.id, serverId: target.id };
+  fixture.receipt = null; fixture.lookup = async () => null;
+  fixture.workspaceOptions = [{ path: root, label: "Current parent", kind: "workspace" }];
+  const token = createWorkspaceAbsenceHandoff({ profile, server: target, cwd: absentCwd, threadId: "absent-thread", isCurrent: () => true,
+    observation: { scope: captureSessionTranscriptScope(profile, target, absentCwd, "absent-thread"), witness: null, isCurrent: () => true,
+      result: { version: 1, status: "absent", targetId: target.id, targetSignature: target.observationTargetIdentity,
+        workspacePath: absentCwd, loginGeneration: 1, observedAt: Date.now() } } });
+  expect(token).toEqual(expect.any(String));
+  expect(forwardWorkspaceAbsenceHandoff(token!, { isCurrent: () => true }, profile, target)).toBe(token);
+  fixture.params.workspaceAbsenceHandoff = token;
+  fixture.preferenceValue = { cwd: absentCwd, isolation: "local" };
+  return token!;
+}
+
+it("confirmed absence handoff replaces only the exact deleted leaf preference with its current catalog parent", async () => {
+  absenceForm();
+  const tree = await settle();
+  expect(byTestId(tree, "new-task-draft")?.props.cwd).toBe("/workspace/source");
+  expect(fixture.preferenceSaves.at(-1)?.cwd).toBe("/workspace/source");
+  expect(fixture.claimInputs).toEqual([]);
+  expect(fixture.prepareCalls).toEqual([]);
+});
+
+it("confirmed absence handoff uses the same-scope server default parent with an empty registered project catalog", async () => {
+  absenceForm();
+  fixture.workspaceOptions = [];
+  const tree = await settle();
+  expect(byTestId(tree, "new-task-draft")?.props.cwd).toBe("/workspace/source");
+  expect(fixture.preferenceSaves.at(-1)?.cwd).toBe("/workspace/source");
+  expect(fixture.claimInputs).toEqual([]);
+  expect(fixture.prepareCalls).toEqual([]);
+});
+
+it("confirmed absence handoff keeps the path empty when the same-scope server default is not an ancestor", async () => {
+  absenceForm("/workspace/source/deleted", "/workspace/source-peer");
+  fixture.workspaceOptions = [];
+  const tree = await settle();
+  expect(byTestId(tree, "new-task-draft")?.props.cwd).toBe("");
+  expect(fixture.preferenceSaves).toEqual([]);
+  expect(fixture.claimInputs).toEqual([]);
+  expect(fixture.prepareCalls).toEqual([]);
+});
+
+it("confirmed absence handoff preserves a different newer custom preference outside the catalog", async () => {
+  absenceForm(); fixture.preferenceValue = { cwd: "/custom/newer-selection", isolation: "local" };
+  const tree = await settle();
+  expect(byTestId(tree, "new-task-draft")?.props.cwd).toBe("/custom/newer-selection");
+  expect(fixture.preferenceSaves.at(-1)?.cwd).toBe("/custom/newer-selection");
+});
+
+it("confirmed absence handoff yields to explicit routed cwd and user edits before a held preference resolves", async () => {
+  absenceForm(); fixture.params.cwd = "/explicit/project";
+  expect(byTestId(await settle(), "new-task-draft")?.props.cwd).toBe("/explicit/project");
+  for (const effect of fixture.host.effects) effect?.cleanup?.();
+  resetHost(); absenceForm();
+  fixture.workspaceOptions = [
+    { path: "/workspace/source", label: "Current parent", kind: "workspace" },
+    { path: "/workspace/source/alternate", label: "Alternate project", kind: "workspace" },
+  ];
+  let resolve!: (value: unknown) => void;
+  fixture.preferenceMode = "held";
+  fixture.preferenceGate = { promise: new Promise(done => { resolve = done; }), resolve: value => resolve(value), reject: () => {} };
+  let tree = await settle();
+  byTestId(tree, "new-task-draft")!.props.onSelectWorkspace({ serverId: server.id, path: "/workspace/source/alternate" });
+  resolve({ cwd: "/workspace/source/deleted", isolation: "local" });
+  tree = await settle();
+  expect(byTestId(tree, "new-task-draft")?.props.cwd).toBe("/workspace/source/alternate");
+});
+
+it("confirmed absence handoff never guesses a parent absent from the current catalog", async () => {
+  absenceForm("/workspace/source/deleted", "/workspace/source-peer");
+  fixture.workspaceOptions = [{ path: "/workspace/source-peer", label: "Peer", kind: "workspace" }];
+  const tree = await settle();
+  expect(byTestId(tree, "new-task-draft")?.props.cwd).toBe("");
+  expect(fixture.preferenceSaves).toEqual([]);
+});
+
+it("confirmed absence handoff cannot survive form target A to B to A", async () => {
+  absenceForm(); await settle();
+  const original = fixture.app.runtime.servers[0];
+  fixture.app.runtime.servers = [{ ...original, observationTargetIdentity: "b".repeat(64) }];
+  await settle();
+  fixture.app.runtime.servers = [{ ...original }];
+  const tree = await settle();
+  expect(byTestId(tree, "new-task-draft")?.props.cwd).toBe("/workspace/source/deleted");
+});
+
+it("a bare absence notice or forged token cannot suppress a custom preference", async () => {
+  fixture.params = { profileId: profile.id, serverId: server.id, notice: "confirmed-workspace-absent", workspaceAbsenceHandoff: "forged" };
+  fixture.receipt = null; fixture.lookup = async () => null;
+  fixture.preferenceValue = { cwd: "/user/custom-not-in-catalog", isolation: "local" };
+  const tree = await settle();
+  expect(byTestId(tree, "new-task-draft")?.props.cwd).toBe("/user/custom-not-in-catalog");
+});
+
+it("confirmed absence preference matching handles real drive-path spellings", async () => {
+  absenceForm("C:/workspace/deleted", "C:\\workspace");
+  fixture.preferenceValue = { cwd: "C:\\workspace\\deleted", isolation: "local" };
+  expect(byTestId(await settle(), "new-task-draft")?.props.cwd).toBe("C:\\workspace");
 });
 
 it("discovers the distinct worktree handoff while preferences are held, and keeps recovery available after preference failure", async () => {
@@ -295,8 +416,8 @@ it("keeps ambiguous source matches visible and blocks a new create or recovery d
   const tree = await settle();
   expect(hasTestId(tree, "workspace-task-handoff-error")).toBe(true);
   expect(hasTestId(tree, "recover-created-workspace-task")).toBe(false);
-  expect(byTestId(tree, "create-workspace")?.props.disabled).toBe(true);
-  byTestId(tree, "create-workspace")?.props.onPress?.();
+  expect(byTestId(tree, "new-task-draft")?.props.ready).toBe(false);
+  byTestId(tree, "new-task-draft")?.props.submit?.();
   await settle();
   expect(fixture.prepareCalls).toEqual([]);
   expect(fixture.reserveCalls).toEqual([]);
@@ -307,13 +428,13 @@ it("rechecks the verified source immediately before Create and blocks dispatch i
   fixture.lookup = async () => null;
   let tree = await settle();
   expect(hasTestId(tree, "recover-created-workspace-task")).toBe(false);
-  byTestId(tree, "new-workspace-prompt")?.props.onChangeText?.("a new task");
+  byTestId(tree, "new-task-draft")?.props.setInput?.("a new task");
   tree = await settle();
-  expect(byTestId(tree, "create-workspace")?.props.disabled).toBe(false);
+  expect(byTestId(tree, "new-task-draft")?.props.ready).toBe(true);
 
   fixture.lookup = async query => query.receiptId === openReceipt.id ? null
     : query.kind === "worktree" && query.sourcePath === "/workspace/source" ? fixture.handoff : null;
-  byTestId(tree, "create-workspace")?.props.onPress?.();
+  byTestId(tree, "new-task-draft")?.props.submit?.();
   tree = await settle();
   expect(hasTestId(tree, "recover-created-workspace-task")).toBe(true);
   expect(fixture.handoffQueries.slice(-2)).toEqual([

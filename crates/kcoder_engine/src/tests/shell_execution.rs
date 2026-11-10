@@ -62,7 +62,7 @@ async fn dont_ask_stops_after_two_consecutive_denials_in_one_capability() {
     ]);
     let settings = Settings {
         permission_mode: PermissionMode::DontAsk,
-        ..Settings::default()
+        ..crate::test_support::engine_builder::fixture_settings()
     };
     let engine = QueryEngine::new(
         Arc::new(provider),
@@ -120,7 +120,7 @@ async fn dont_ask_groups_different_tool_names_by_capability() {
     ]);
     let settings = Settings {
         permission_mode: PermissionMode::DontAsk,
-        ..Settings::default()
+        ..crate::test_support::engine_builder::fixture_settings()
     };
     let engine = QueryEngine::new(
         Arc::new(provider),
@@ -183,7 +183,7 @@ async fn shell_sandbox_denial_retries_without_sandbox_after_approval() {
             allow_shell_escalation: true,
             ..kcoder_types::SandboxConfig::default()
         },
-        ..Settings::default()
+        ..crate::test_support::engine_builder::fixture_settings()
     };
     let mut engine = QueryEngine::new_with_folder_trust(
         Arc::new(EmptyProvider),
@@ -258,7 +258,7 @@ async fn user_shell_command_runs_through_tool_events() {
     let tmp = tempfile::tempdir().unwrap();
     let settings = Settings {
         permission_mode: PermissionMode::Bypass,
-        ..Settings::default()
+        ..crate::test_support::engine_builder::fixture_settings()
     };
     let engine = QueryEngine::new(
         Arc::new(EmptyProvider),
@@ -304,7 +304,7 @@ async fn user_shell_command_cancel_emits_abort_and_result() {
     let tmp = tempfile::tempdir().unwrap();
     let settings = Settings {
         permission_mode: PermissionMode::Bypass,
-        ..Settings::default()
+        ..crate::test_support::engine_builder::fixture_settings()
     };
     let engine = QueryEngine::new(
         Arc::new(EmptyProvider),
@@ -351,7 +351,7 @@ async fn shell_sandbox_escalation_denial_returns_permission_denied() {
             allow_shell_escalation: true,
             ..kcoder_types::SandboxConfig::default()
         },
-        ..Settings::default()
+        ..crate::test_support::engine_builder::fixture_settings()
     };
     let engine = QueryEngine::new(
         Arc::new(EmptyProvider),
@@ -392,7 +392,7 @@ async fn yolo_shell_sandbox_escalation_skips_approval_prompt() {
             require_shell_escalation_approval: true,
             ..kcoder_types::SandboxConfig::default()
         },
-        ..Settings::default()
+        ..crate::test_support::engine_builder::fixture_settings()
     };
     let engine = QueryEngine::new(
         Arc::new(EmptyProvider),
@@ -442,7 +442,7 @@ async fn shell_sandbox_escalation_chain_exhaustion_is_reported() {
             shell_escalation_max_attempts: 0,
             ..kcoder_types::SandboxConfig::default()
         },
-        ..Settings::default()
+        ..crate::test_support::engine_builder::fixture_settings()
     };
     let engine = QueryEngine::new(
         Arc::new(EmptyProvider),
@@ -480,7 +480,7 @@ async fn normal_shell_error_does_not_trigger_sandbox_escalation() {
             allow_shell_escalation: true,
             ..kcoder_types::SandboxConfig::default()
         },
-        ..Settings::default()
+        ..crate::test_support::engine_builder::fixture_settings()
     };
     let engine = QueryEngine::new(
         Arc::new(EmptyProvider),

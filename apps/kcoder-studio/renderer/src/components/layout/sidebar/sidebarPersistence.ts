@@ -1,6 +1,7 @@
 import type { ProjectWithTasks, User as UserProfile } from '@/types/api'
 
-export const DESKTOP_SIDEBAR_STORAGE_PREFIX = 'wework.desktop.sidebar'
+const DESKTOP_SIDEBAR_STORAGE_PREFIX = 'kcoder.desktop.sidebar'
+const LEGACY_DESKTOP_SIDEBAR_STORAGE_PREFIX = 'wework.desktop.sidebar'
 
 export function getDesktopSidebarStorageScope(user: UserProfile | null): string {
   return user?.id ? String(user.id) : 'anonymous'
@@ -10,9 +11,15 @@ export function getDesktopSidebarStorageKey(scope: string, key: string): string 
   return `${DESKTOP_SIDEBAR_STORAGE_PREFIX}.${key}.${scope}`
 }
 
+function readStoredSidebarValue(key: string): string | null {
+  const legacyKey =
+    LEGACY_DESKTOP_SIDEBAR_STORAGE_PREFIX + key.slice(DESKTOP_SIDEBAR_STORAGE_PREFIX.length)
+  return window.localStorage.getItem(key) ?? window.localStorage.getItem(legacyKey)
+}
+
 export function readStoredBoolean(key: string, fallback: boolean): boolean {
   try {
-    const value = window.localStorage.getItem(key)
+    const value = readStoredSidebarValue(key)
     if (value === null) return fallback
     return value === 'true'
   } catch {
@@ -30,7 +37,7 @@ export function writeStoredBoolean(key: string, value: boolean) {
 
 export function readStoredNumberSet(key: string): Set<number> {
   try {
-    const value = window.localStorage.getItem(key)
+    const value = readStoredSidebarValue(key)
     if (!value) return new Set()
     const parsed = JSON.parse(value)
     if (!Array.isArray(parsed)) return new Set()

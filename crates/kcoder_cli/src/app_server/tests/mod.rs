@@ -35,8 +35,12 @@ fn test_permission_prompt(
     let (outbound_tx, outbound_rx) = mpsc::channel(4);
     let pending = Arc::new(StdMutex::new(HashMap::new()));
     let prompt = AppServerPermissionPrompt {
+        tool_call_id: None,
+        tool_call_identity_enabled: false,
         mode,
-        receipts: Arc::new(StdMutex::new(InteractionReceipts::default())),
+        receipts: Arc::new(StdMutex::new(InteractionReceipts::new(
+            "test-app-server-epoch".into(),
+        ))),
         outbound_tx,
         pending: Arc::clone(&pending),
         next_id: Arc::new(AtomicU64::new(2_000_000)),
@@ -56,6 +60,8 @@ include!("approvals_questions.rs");
 include!("projection_background.rs");
 include!("provider_failure.rs");
 include!("git_file_changes.rs");
+include!("turn_file_capture.rs");
+include!("turn_review_evidence.rs");
 include!("workspace_revision.rs");
 include!("thread_history.rs");
 include!("agent_artifacts.rs");
@@ -63,6 +69,7 @@ include!("thread_metadata_journal.rs");
 include!("transcript_artifact_journal.rs");
 include!("resume_checkpoint.rs");
 include!("goal_lifecycle.rs");
+include!("goal_scheduler_backpressure.rs");
 include!("worktree_registry.rs");
 include!("run_projection.rs");
 include!("turn_submission.rs");

@@ -2,7 +2,7 @@ import type { GatewayProfile, KCoderServer } from "@/gateway/types";
 import { parseRetentionAdmission, parseRetentionStageRef, retentionGenerationId, verifyRetentionGenerationId, isRetentionSha256, RETENTION_LOCAL_FILE_BYTES, type RetentionUploadAdmissionV1, type RetentionOwnerRequestV1, type RetentionStageRefV1, type RetentionUploadMethod, type RetentionUploadParamsV1, normalizedRetentionStageRefs, retentionStageRefsEqual, retentionReserveParams, retentionReadParams, parseScopedRetentionResult, isReadyRetentionReserveProof, type RetentionConsumerMethod, type RetentionConsumerExpectation, type RetentionReserveParamsV1, type RetentionReadParamsV1, type ScopedAttachmentRetentionResultV1 } from "@/protocol/attachment-retention";
 import { hashBoundedSource } from "@/protocol/sha256-stream";
 import { createAttachmentBytesBackend, type AttachmentBytesBackend, type AttachmentStoreChange, type DurableByteSource } from "./staged-attachment-bytes";
-import { captureWorkspaceProfileIdentity, withWorkspaceProfileWrite, type WorkspaceProfileIdentity } from "./workspace-profile-fence";
+import { captureWorkspaceProfileIdentity, withWorkspaceProfileMetadata, type WorkspaceProfileIdentity } from "./workspace-profile-fence";
 
 export const STAGED_ATTACHMENT_LIMIT = 128;
 export const STAGED_ATTACHMENT_TOTAL_BYTES = 100 * 1024 * 1024;
@@ -13,11 +13,12 @@ export interface StagedAttachmentScope { profile: WorkspaceProfileIdentity; targ
 export interface RetentionConsumerBatchHandle { leaderId: string; reserveId: string; threadId: string; clientMessageId: string }
 export interface RetentionConsumerBatch extends RetentionConsumerBatchHandle {
   version: 1; revision: number; admission: RetentionUploadAdmissionV1; scopeId: string;
+  draftId?: string;
   members: { localAttachmentId: string; stageRef: RetentionStageRefV1 }[];
   phase: "prepared" | "reserveSent" | "checking" | "ready" | "unknown" | "capacityRejected" | "prepaidSlotUnavailable";
   observation?: ScopedAttachmentRetentionResultV1;
 }
-export interface RetainedAttachmentComposer { threadId: string; mimeType: string }
+export interface RetainedAttachmentComposer { threadId?: string; draftId?: string; mimeType: string }
 export interface StagedAttachmentRecord {
   version: 1; id: string; revision: number; scope: StagedAttachmentScope;
   admission: RetentionUploadAdmissionV1; ownerRequest: RetentionOwnerRequestV1; clientUploadId: string;
@@ -68,7 +69,7 @@ function record(value: unknown): StagedAttachmentRecord {
   verifyRetentionGenerationId(row.clientUploadId, "u1", row.admission);
   if (JSON.stringify(row.ownerRequest.immutableParameters) !== JSON.stringify({ purpose: "mobile-attachment", localAttachmentId: row.id })) throw new AttachmentStoreConflict();
   if (typeof row.filename !== "string" || row.filename.length < 1 || row.filename.length > 255 || /[\u0000-\u001f\u007f/\\]/.test(row.filename) || !Number.isSafeInteger(row.size) || row.size < 0 || row.size > RETENTION_LOCAL_FILE_BYTES || !Number.isSafeInteger(row.confirmedBytes) || row.confirmedBytes < 0 || row.confirmedBytes > row.size) throw new AttachmentStoreConflict();
-  if (row.composer && (Object.keys(row.composer).some(key => !["threadId", "mimeType"].includes(key)) || !messageAtom(row.composer.threadId) || typeof row.composer.mimeType !== "string" || !/^[a-zA-Z0-9!#$&^_.+-]+\/[a-zA-Z0-9!#$&^_.+-]+$/.test(row.composer.mimeType) || row.composer.mimeType.length > 255)) throw new AttachmentStoreConflict();
+  if (row.composer && (Object.keys(row.composer).some(key => !["threadId", "draftId", "mimeType"].includes(key)) || (!messageAtom(row.composer.threadId) && !messageAtom(row.composer.draftId) || row.composer.threadId !== undefined && row.composer.draftId !== undefined) || typeof row.composer.mimeType !== "string" || !/^[a-zA-Z0-9!#$&^_.+-]+\/[a-zA-Z0-9!#$&^_.+-]+$/.test(row.composer.mimeType) || row.composer.mimeType.length > 255)) throw new AttachmentStoreConflict();
   if (!["copying", "prepared", "uploading", "sealed", "cancelled", "epochRetired", "sourceRemovalPending", "sourceRemoved"].includes(row.phase) || !["none", "requested", "finished"].includes(row.cleanup)) throw new AttachmentStoreConflict();
   if ((row.phase !== "copying" || row.contentSha256 !== undefined) && !isRetentionSha256(row.contentSha256)) throw new AttachmentStoreConflict();
   if (row.scopeId !== undefined && !isRetentionSha256(row.scopeId)) throw new AttachmentStoreConflict();
@@ -95,10 +96,11 @@ export function consumerExpectation(batch: RetentionConsumerBatch): RetentionCon
   return { admission: batch.admission, scopeId: batch.scopeId, reserveId: batch.reserveId, threadId: batch.threadId, stageRefs: batch.members.map(member => member.stageRef) };
 }
 function immutableBatch(batch: RetentionConsumerBatch): string {
-  return JSON.stringify([batch.version, batch.leaderId, batch.reserveId, batch.threadId, batch.clientMessageId, batch.admission, batch.scopeId, batch.members]);
+  return JSON.stringify([batch.version, batch.leaderId, batch.reserveId, batch.threadId, batch.clientMessageId, batch.admission, batch.scopeId, batch.members, batch.draftId]);
 }
 function validateBatch(batch: RetentionConsumerBatch, leader: StagedAttachmentRecord): void {
-  if (Object.keys(batch).some(key => !["version", "revision", "leaderId", "reserveId", "threadId", "clientMessageId", "admission", "scopeId", "members", "phase", "observation"].includes(key)) || batch.version !== 1 || batch.leaderId !== leader.id || !messageAtom(batch.clientMessageId) || !Number.isSafeInteger(batch.revision) || batch.revision < 1 || batch.scopeId !== leader.scopeId || !Array.isArray(batch.members) || !["prepared", "reserveSent", "checking", "ready", "unknown", "capacityRejected", "prepaidSlotUnavailable"].includes(batch.phase)) throw new AttachmentStoreConflict();
+  if (Object.keys(batch).some(key => !["version", "revision", "leaderId", "reserveId", "threadId", "clientMessageId", "admission", "scopeId", "members", "phase", "observation", "draftId"].includes(key)) || batch.version !== 1 || batch.leaderId !== leader.id || !messageAtom(batch.clientMessageId) || !Number.isSafeInteger(batch.revision) || batch.revision < 1 || batch.scopeId !== leader.scopeId || !Array.isArray(batch.members) || !["prepared", "reserveSent", "checking", "ready", "unknown", "capacityRejected", "prepaidSlotUnavailable"].includes(batch.phase)) throw new AttachmentStoreConflict();
+  if (batch.draftId !== undefined && !messageAtom(batch.draftId)) throw new AttachmentStoreConflict();
   if (batch.members.some(member => Object.keys(member).some(key => !["localAttachmentId", "stageRef"].includes(key)))) throw new AttachmentStoreConflict();
   if (batch.phase === "prepared" && batch.observation !== undefined) throw new AttachmentStoreConflict();
   retentionReserveParams(consumerExpectation(batch));
@@ -113,7 +115,7 @@ function selectBatch(rows: StagedAttachmentRecord[], handle: RetentionConsumerBa
   validateBatch(batch, leader);
   const members = batch.members.map(member => {
     const row = rows.find(row => row.id === member.localAttachmentId);
-    if (!row || (row.composer && row.composer.threadId !== batch.threadId) || !sameScope(row.scope, scope) || row.scopeId !== batch.scopeId || !row.stageRef || !retentionStageRefsEqual([row.stageRef], [member.stageRef]) || row.consumers.length !== 1 || row.consumers[0]!.reserveId !== batch.reserveId || row.consumers[0]!.leaderId !== batch.leaderId || row.consumers[0]!.clientMessageId !== batch.clientMessageId || !["sealed", "sourceRemovalPending", "sourceRemoved"].includes(row.phase) || row.wire || (row.id !== batch.leaderId && row.consumerBatch)) throw new AttachmentStoreConflict();
+    if (!row || (row.composer && (row.composer.draftId ? row.composer.draftId !== batch.draftId : row.composer.threadId !== batch.threadId)) || !sameScope(row.scope, scope) || row.scopeId !== batch.scopeId || !row.stageRef || !retentionStageRefsEqual([row.stageRef], [member.stageRef]) || row.consumers.length !== 1 || row.consumers[0]!.reserveId !== batch.reserveId || row.consumers[0]!.leaderId !== batch.leaderId || row.consumers[0]!.clientMessageId !== batch.clientMessageId || !["sealed", "sourceRemovalPending", "sourceRemoved"].includes(row.phase) || row.wire || (row.id !== batch.leaderId && row.consumerBatch)) throw new AttachmentStoreConflict();
     return row;
   });
   if (rows.some(row => row.consumers.some(link => link.reserveId === batch.reserveId) && !members.includes(row))) throw new AttachmentStoreConflict();
@@ -138,9 +140,9 @@ export class StagedAttachmentStore {
   constructor(private readonly backend: AttachmentBytesBackend = createAttachmentBytesBackend()) {}
   private async transaction<T>(context: AttachmentStoreContext, operation: (rows: StagedAttachmentRecord[]) => AttachmentStoreChange<T>): Promise<T> {
     const scope = scopeOf(context); checkContext(context, scope);
-    return withWorkspaceProfileWrite(scope.profile, async () => this.backend.transaction(values => {
+    return withWorkspaceProfileMetadata(scope.profile, async authority => this.backend.transaction(values => {
       checkContext(context, scope); return operation(records(values));
-    }));
+    }, authority));
   }
   async load(context: AttachmentStoreContext, id: string): Promise<StagedAttachmentRecord | undefined> {
     return this.transaction(context, rows => { const row = rows.find(x => x.id === id); if (row && !sameScope(row.scope, scopeOf(context))) throw new AttachmentStoreConflict(); return { value: row }; });
@@ -218,20 +220,20 @@ export class StagedAttachmentStore {
   /** Persist a wire intent, then synchronously send while the profile gate is held. Await remotely outside it. */
   async dispatch<T>(context: AttachmentStoreContext, expected: StagedAttachmentRecord, method: RetentionUploadMethod, params: RetentionUploadParamsV1, send: () => Promise<T>): Promise<{ row: StagedAttachmentRecord; response: Promise<T> }> {
     const scope = scopeOf(context); checkContext(context, scope);
-    return withWorkspaceProfileWrite(scope.profile, async () => {
+    return withWorkspaceProfileMetadata(scope.profile, async authority => {
       const row = await this.backend.transaction(values => {
         const current = records(values).find(x => x.id === expected.id);
         if (!current || !sameScope(current.scope, scope) || current.revision !== expected.revision || immutable(current) !== immutable(expected) || current.consumers.length !== 0) throw new AttachmentStoreConflict();
         const durableParams = clone(params); delete durableParams.contentBase64;
         const next = { ...current, revision: current.revision + 1, wire: { method, params: durableParams, revision: current.revision + 1 } }; record(next);
         checkContext(context, scope); return { value: next, putRow: { id: next.id, value: next } };
-      });
-      checkContext(context, scope); return { row, response: send() };
+      }, authority);
+      checkContext(context, scope); return authority ? authority.effect(() => ({ row, response: send() })) : { row, response: send() };
     });
   }
   /** Atomic binding of one submission to its exact local rows and normalized sealed refs. */
-  async prepareConsumerBatch(context: AttachmentStoreContext, expected: readonly StagedAttachmentRecord[], threadId: string, clientMessageId: string): Promise<RetentionConsumerBatch> {
-    if (expected.some(row => row.composer && row.composer.threadId !== threadId)) throw new AttachmentStoreConflict();
+  async prepareConsumerBatch(context: AttachmentStoreContext, expected: readonly StagedAttachmentRecord[], threadId: string, clientMessageId: string, draftId?: string): Promise<RetentionConsumerBatch> {
+    if (expected.some(row => row.composer && (row.composer.draftId ? !messageAtom(draftId) || row.composer.draftId !== draftId : row.composer.threadId !== threadId))) throw new AttachmentStoreConflict();
     if (!messageAtom(threadId) || !messageAtom(clientMessageId) || expected.length < 1 || expected.length > 32 || new Set(expected.map(row => row.id)).size !== expected.length) throw new AttachmentStoreConflict();
     return this.transaction(context, rows => {
       const captured = expected.map(item => {
@@ -255,7 +257,7 @@ export class StagedAttachmentStore {
       if (captured.some(row => row.consumers.length !== 0 || row.consumerBatch || row.phase !== "sealed")) throw new AttachmentStoreConflict();
       const admission: RetentionUploadAdmissionV1 = { version: 1, rootNamespace: stageRefs[0]!.rootNamespace, admissionEpoch: Math.min(...stageRefs.map(ref => ref.epoch)) };
       const batch: RetentionConsumerBatch = { version: 1, revision: 1, leaderId: captured[0]!.id, reserveId: retentionGenerationId("r1", admission, nonce()), threadId, clientMessageId, admission, scopeId,
-        members: captured.map(row => ({ localAttachmentId: row.id, stageRef: normalizedRetentionStageRefs([row.stageRef!])[0]! })), phase: "prepared" };
+        members: captured.map(row => ({ localAttachmentId: row.id, stageRef: normalizedRetentionStageRefs([row.stageRef!])[0]! })), phase: "prepared", ...(draftId ? { draftId } : {}) };
       const next = captured.map(row => ({ ...row, revision: row.revision + 1, consumers: [{ clientMessageId, reserveId: batch.reserveId, leaderId: batch.leaderId }], ...(row.id === batch.leaderId ? { consumerBatch: batch } : {}) }));
       // Preflight the largest exact receipt projection now, before any reserve
       // RPC: a full local index must still have room to persist its ACK journal.
@@ -277,7 +279,7 @@ export class StagedAttachmentStore {
   /** CAS all members before sync send; network response is awaited outside the profile gate. */
   async dispatchConsumerBatch<T>(context: AttachmentStoreContext, expected: RetentionConsumerBatch, send: (method: RetentionConsumerMethod, params: RetentionReserveParamsV1 | RetentionReadParamsV1) => Promise<T>): Promise<{ batch: RetentionConsumerBatch; response: Promise<T> }> {
     const scope = scopeOf(context); checkContext(context, scope);
-    return withWorkspaceProfileWrite(scope.profile, async () => {
+    return withWorkspaceProfileMetadata(scope.profile, async authority => {
       const batch = await this.backend.transaction(values => {
         checkContext(context, scope); const rows = records(values); const selected = selectBatch(rows, expected, scope);
         if (selected.batch.revision !== expected.revision || immutableBatch(selected.batch) !== immutableBatch(expected)) throw new AttachmentStoreConflict();
@@ -286,11 +288,11 @@ export class StagedAttachmentStore {
         if (selected.batch.phase === "prepaidSlotUnavailable") throw new AttachmentStoreConflict();
         const next: RetentionConsumerBatch = { ...selected.batch, revision: selected.batch.revision + 1, phase: selected.batch.phase === "prepared" ? "reserveSent" : "checking" };
         return commitBatchRows(rows, selected.rows.map(row => ({ ...row, revision: row.revision + 1, ...(row.id === next.leaderId ? { consumerBatch: next } : {}) })), clone(next));
-      });
+      }, authority);
       checkContext(context, scope);
       const method: RetentionConsumerMethod = batch.phase === "reserveSent" ? "attachment/retention/reserve" : "attachment/retention/read";
       const params = method === "attachment/retention/reserve" ? retentionReserveParams(consumerExpectation(batch)) : retentionReadParams(consumerExpectation(batch));
-      return { batch, response: send(method, params) };
+      return authority ? authority.effect(() => ({ batch, response: send(method, params) })) : { batch, response: send(method, params) };
     });
   }
   /** Only reserve's dedicated pre-commit code may mark this exact batch blocked. */

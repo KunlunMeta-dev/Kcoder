@@ -3,7 +3,7 @@ import { openLocalWorkspace } from '@/lib/local-terminal'
 import { act, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
-import { enableTauri, renderSidebar } from './sidebar/DesktopSidebar.test-support'
+import { enableGateway, renderSidebar } from './sidebar/DesktopSidebar.test-support'
 const experimentalFeatures = vi.hoisted(() => ({ enabled: true }))
 vi.mock('@/features/experimental-features/useExperimentalFeaturesEnabled', () => ({
   useExperimentalFeaturesEnabled: () => experimentalFeatures.enabled,
@@ -15,7 +15,7 @@ describe('DesktopSidebar responsive', () => {
   beforeEach(() => {
     experimentalFeatures.enabled = true
     localStorage.clear()
-    enableTauri()
+    enableGateway()
     Element.prototype.scrollIntoView = vi.fn()
     vi.mocked(openLocalWorkspace).mockReset()
   })
@@ -33,7 +33,6 @@ describe('DesktopSidebar responsive', () => {
   })
 
   test('switches sidebar focus tokens with browser focus events', () => {
-    Reflect.deleteProperty(window, '__TAURI_INTERNALS__')
     renderSidebar()
     const sidebar = screen.getByTestId('desktop-sidebar')
 

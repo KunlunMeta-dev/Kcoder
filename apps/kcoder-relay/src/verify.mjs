@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { existsSync } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import WebSocket from 'ws';
+import { fetchGatewayPairing } from './pair.mjs';
 import { loadEnv, relayServerConfig } from './config.mjs';
 import { readRegisteredClientId, resolveIdentityFile } from './client-identity.mjs';
 import { createRelayUrls, resolveRelayRouteMode } from '../deploy/config.mjs';
@@ -24,14 +25,14 @@ const identityMode = Boolean(
 );
 let relayConfig;
 if (identityMode) {
-  const pairingToken = process.env.KCODER_RELAY_GATEWAY_TOKEN || '';
-  if (!pairingToken) throw new Error('Set KCODER_RELAY_GATEWAY_TOKEN for this local Gateway before verification');
+  const gatewaySecret = process.env.KCODER_RELAY_GATEWAY_SECRET || '';
+  if (!gatewaySecret) throw new Error('Set KCODER_RELAY_GATEWAY_SECRET for this local Gateway before verification');
   const id = await readRegisteredClientId({
     identityFile,
     relayUrl: process.env.KCODER_RELAY_PUBLIC_URL,
-    pairingToken,
+    gatewaySecret,
   });
-  selectedGateway = { id, pairingToken };
+  selectedGateway = { id, gatewaySecret };
 } else {
   relayConfig = relayServerConfig();
   if (configuredId) selectedGateway = relayConfig.gateways.find(gateway => gateway.id === configuredId);
@@ -63,10 +64,14 @@ const denied = await fetch(sessionUrl, {
   method: 'POST', headers: { 'content-type': 'application/json' }, body: '{"token":"invalid"}',
 });
 assert.equal(denied.status, 401);
+const internalDenied = await fetch(sessionUrl, { method: 'POST', headers: { 'content-type': 'application/json' },
+  body: JSON.stringify({ token: selectedGateway.gatewaySecret, durableDeviceAuthorization: true }) });
+assert.equal(internalDenied.status, 401, 'Relay internal credentials cannot pair a phone');
+const pairing = await fetchGatewayPairing({ localGateway: process.env.KCODER_RELAY_LOCAL_GATEWAY || 'http://127.0.0.1:4186', gatewaySecret: selectedGateway.gatewaySecret, publicGateway: gatewayUrl });
 const response = await fetch(sessionUrl, {
   method: 'POST',
   headers: { 'content-type': 'application/json' },
-  body: JSON.stringify({ token: selectedGateway.pairingToken }),
+  body: JSON.stringify({ token: pairing.token, durableDeviceAuthorization: true }),
 });
 assert.equal(response.status, 200);
 const session = await response.json();
@@ -109,7 +114,7 @@ try {
       healthUrl: healthUrl.toString(),
       gatewayId: selectedGateway.id,
       scope: 'HTTPS/WSS, pairing rejection, mobile session, server list, app-server initialize, thread/list',
-      https: 'PASS', invalidPairingToken: 'PASS', mobileSession: 'PASS', serverList: 'PASS',
+      https: 'PASS', invalidPairingToken: 'PASS', internalCredentialRejected: 'PASS', mobileSession: 'PASS', serverList: 'PASS',
       wss: 'PASS', appServerInitialize: 'PASS', threadList: 'PASS',
       protocolVersion: init.protocolVersion,
       threadResultKeys: Object.keys(threads || {}),

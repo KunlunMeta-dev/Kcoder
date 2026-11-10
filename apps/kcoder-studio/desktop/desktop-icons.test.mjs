@@ -72,7 +72,7 @@ test('Shell relaunch uses the final userData override and quotes source applicat
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
-const asset = name => fileURLToPath(new URL(`../renderer/src-tauri/icons/${name}`, import.meta.url));
+const asset = name => fileURLToPath(new URL(`./icons/${name}`, import.meta.url));
 
 for (const host of ['main.mjs', 'remote-main.mjs']) {
   test(`${host} explicitly gives the native window and tray their canonical application icons`, async () => {
@@ -105,10 +105,10 @@ test('both desktop packages include icon policy and window resources while disab
   const local = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8')).build;
   const remote = JSON.parse(await readFile(new URL('../electron-builder.remote.json', import.meta.url), 'utf8'));
   for (const config of [local, remote]) {
-    for (const name of ['desktop/desktop-icons.mjs', 'desktop/taskbar-badge.mjs', 'renderer/src-tauri/icons/128x128.png', 'renderer/src-tauri/icons/32x32.png', 'renderer/src-tauri/icons/icon.ico']) {
+    for (const name of ['desktop/desktop-icons.mjs', 'desktop/taskbar-badge.mjs', 'desktop/icons/128x128.png', 'desktop/icons/32x32.png', 'desktop/icons/icon.ico']) {
       assert.ok(config.files.includes(name), `packaged app is missing ${name}`);
     }
-    assert.equal(config.win.icon, 'renderer/src-tauri/icons/icon.ico');
+    assert.equal(config.win.icon, 'desktop/icons/icon.ico');
     assert.equal(config.win.signAndEditExecutable, true);
     assert.equal(config.win.signExecutable, false);
     assert.notEqual(config.forceCodeSigning, true);
@@ -132,8 +132,8 @@ test('both builder configs explicitly select Linux and macOS icons without addin
   const local = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8')).build;
   const remote = JSON.parse(await readFile(new URL('../electron-builder.remote.json', import.meta.url), 'utf8'));
   for (const config of [local, remote]) {
-    assert.equal(config.linux?.icon, 'renderer/src-tauri/icons/icon.png');
-    assert.equal(config.mac?.icon, 'renderer/src-tauri/icons/icon.icns');
+    assert.equal(config.linux?.icon, 'desktop/icons/icon.png');
+    assert.equal(config.mac?.icon, 'desktop/icons/icon.icns');
     assert.equal(config.mac.target, undefined);
   }
   assert.deepEqual(local.linux.target, ['AppImage']);

@@ -18,6 +18,22 @@ function fixture(beforeMenu = () => {}) {
   return { handlers, window, event, menu, popups, visibility, dispose };
 }
 
+test('window overlay theme uses the renderer background without changing native geometry', () => {
+  const overlays = [];
+  const f = fixture(window => { window.setTitleBarOverlay = options => overlays.push(options); });
+  const setTheme = f.handlers.get('kcoder:menu:theme');
+  setTheme(f.event, true, 'rgb(28, 31, 36)');
+  setTheme(f.event, false);
+  assert.deepEqual(overlays, [
+    { color: 'rgb(28, 31, 36)', symbolColor: '#ffffff' },
+    { color: '#ffffff', symbolColor: '#1a1c1f' },
+  ]);
+  assert.throws(() => setTheme(f.event, true, 'url(untrusted)'), /Invalid title bar background color/);
+  assert.throws(() => setTheme({ ...f.event, senderFrame: {} }, true, 'rgb(28, 31, 36)'), /restricted/);
+  assert.equal(overlays.length, 2);
+  f.dispose();
+});
+
 test('custom bar preserves existing top-level menu labels and only hides native bar when ready', () => {
   const f = fixture();
   assert.deepEqual(f.visibility, []);

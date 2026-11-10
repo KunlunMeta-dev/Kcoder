@@ -1,0 +1,2009 @@
+{
+  "IntegrationModelHealthObservation": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationModelHealthState": {
+        "enum": [
+          "unknown",
+          "healthy",
+          "cooling_down",
+          "needs_configuration",
+          "probing",
+          "interrupted"
+        ],
+        "type": "string"
+      },
+      "ProviderFailureCategory": {
+        "enum": [
+          "authentication_error",
+          "forbidden",
+          "model_or_route",
+          "invalid_parameter",
+          "context_length_exceeded",
+          "rate_limit",
+          "quota_exceeded",
+          "network_error",
+          "timeout_error",
+          "model_protocol_error",
+          "provider_error"
+        ],
+        "type": "string"
+      },
+      "ProviderFailureDetails": {
+        "description": "Allowlisted terminal facts, independent of the provider's diagnostic text.\n\nThree different questions are answered here, and a consumer must not collapse them into one \"can I retry?\" flag:\n\n- [`Self::retryable`] — repeating the *request* is allowed. It says nothing about whether the failed attempt already produced visible output. - [`Self::resume_safe`] — repeating it cannot duplicate a response that had already started streaming, so the conversation can be resumed as it stands. - [`Self::recovery_action`] — whether a human has to act at all.\n\nNone of them means \"this failed turn can be continued from its committed boundary\": that is a separate server capability (`kcoder_app_protocol::CAPABILITY_FAILED_TURN_CONTINUATION_V1`, requested with `turn/start.retryFromTurnId`), and a client must gate on the capability rather than infer it from these booleans.",
+        "properties": {
+          "category": {
+            "$ref": "#/definitions/ProviderFailureCategory"
+          },
+          "http_status": {
+            "format": "uint16",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "recovery_action": {
+            "$ref": "#/definitions/ProviderFailureRecoveryAction"
+          },
+          "resume_safe": {
+            "type": "boolean"
+          },
+          "retry_after_ms": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "retryable": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "category",
+          "recovery_action",
+          "resume_safe",
+          "retryable"
+        ],
+        "type": "object"
+      },
+      "ProviderFailureRecoveryAction": {
+        "description": "Terminal instructions never schedule another invocation or approval request.",
+        "enum": [
+          "needs_human",
+          "diagnose_only"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "configurationRevision": {
+        "type": "string"
+      },
+      "consecutiveFailures": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "cooldownUntil": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "failure": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/ProviderFailureDetails"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "lastObservedAt": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "model": {
+        "type": "string"
+      },
+      "provider": {
+        "type": "string"
+      },
+      "responseStarted": {
+        "type": "boolean"
+      },
+      "state": {
+        "$ref": "#/definitions/IntegrationModelHealthState"
+      }
+    },
+    "required": [
+      "configurationRevision",
+      "consecutiveFailures",
+      "model",
+      "provider",
+      "responseStarted",
+      "state"
+    ],
+    "title": "IntegrationModelHealthObservation",
+    "type": "object"
+  },
+  "IntegrationModelHealthReadParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "id": {
+        "type": "string"
+      },
+      "version": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "id",
+      "version"
+    ],
+    "title": "IntegrationModelHealthReadParams",
+    "type": "object"
+  },
+  "IntegrationModelHealthReport": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationModelHealthObservation": {
+        "additionalProperties": false,
+        "properties": {
+          "configurationRevision": {
+            "type": "string"
+          },
+          "consecutiveFailures": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "cooldownUntil": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "failure": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/ProviderFailureDetails"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "lastObservedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "model": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "responseStarted": {
+            "type": "boolean"
+          },
+          "state": {
+            "$ref": "#/definitions/IntegrationModelHealthState"
+          }
+        },
+        "required": [
+          "configurationRevision",
+          "consecutiveFailures",
+          "model",
+          "provider",
+          "responseStarted",
+          "state"
+        ],
+        "type": "object"
+      },
+      "IntegrationModelHealthState": {
+        "enum": [
+          "unknown",
+          "healthy",
+          "cooling_down",
+          "needs_configuration",
+          "probing",
+          "interrupted"
+        ],
+        "type": "string"
+      },
+      "IntegrationModelPolicyRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "version"
+        ],
+        "type": "object"
+      },
+      "ProviderFailureCategory": {
+        "enum": [
+          "authentication_error",
+          "forbidden",
+          "model_or_route",
+          "invalid_parameter",
+          "context_length_exceeded",
+          "rate_limit",
+          "quota_exceeded",
+          "network_error",
+          "timeout_error",
+          "model_protocol_error",
+          "provider_error"
+        ],
+        "type": "string"
+      },
+      "ProviderFailureDetails": {
+        "description": "Allowlisted terminal facts, independent of the provider's diagnostic text.\n\nThree different questions are answered here, and a consumer must not collapse them into one \"can I retry?\" flag:\n\n- [`Self::retryable`] — repeating the *request* is allowed. It says nothing about whether the failed attempt already produced visible output. - [`Self::resume_safe`] — repeating it cannot duplicate a response that had already started streaming, so the conversation can be resumed as it stands. - [`Self::recovery_action`] — whether a human has to act at all.\n\nNone of them means \"this failed turn can be continued from its committed boundary\": that is a separate server capability (`kcoder_app_protocol::CAPABILITY_FAILED_TURN_CONTINUATION_V1`, requested with `turn/start.retryFromTurnId`), and a client must gate on the capability rather than infer it from these booleans.",
+        "properties": {
+          "category": {
+            "$ref": "#/definitions/ProviderFailureCategory"
+          },
+          "http_status": {
+            "format": "uint16",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "recovery_action": {
+            "$ref": "#/definitions/ProviderFailureRecoveryAction"
+          },
+          "resume_safe": {
+            "type": "boolean"
+          },
+          "retry_after_ms": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "retryable": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "category",
+          "recovery_action",
+          "resume_safe",
+          "retryable"
+        ],
+        "type": "object"
+      },
+      "ProviderFailureRecoveryAction": {
+        "description": "Terminal instructions never schedule another invocation or approval request.",
+        "enum": [
+          "needs_human",
+          "diagnose_only"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "observations": {
+        "items": {
+          "$ref": "#/definitions/IntegrationModelHealthObservation"
+        },
+        "type": "array"
+      },
+      "policyRef": {
+        "$ref": "#/definitions/IntegrationModelPolicyRef"
+      }
+    },
+    "required": [
+      "observations",
+      "policyRef"
+    ],
+    "title": "IntegrationModelHealthReport",
+    "type": "object"
+  },
+  "IntegrationModelHealthState": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "unknown",
+      "healthy",
+      "cooling_down",
+      "needs_configuration",
+      "probing",
+      "interrupted"
+    ],
+    "title": "IntegrationModelHealthState",
+    "type": "string"
+  },
+  "IntegrationModelPolicyAvailableModel": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "available": {
+        "description": "Actual configuration/credential metadata; execution still needs its native policy and budget.",
+        "type": "boolean"
+      },
+      "configurationRevision": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "model": {
+        "type": "string"
+      },
+      "provider": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "available",
+      "model",
+      "provider"
+    ],
+    "title": "IntegrationModelPolicyAvailableModel",
+    "type": "object"
+  },
+  "IntegrationModelPolicyCandidate": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "configurationRevision": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "enabled": {
+        "type": "boolean"
+      },
+      "model": {
+        "type": "string"
+      },
+      "provider": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "enabled",
+      "model",
+      "provider"
+    ],
+    "title": "IntegrationModelPolicyCandidate",
+    "type": "object"
+  },
+  "IntegrationModelPolicyCatalog": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationModelPolicyCandidate": {
+        "additionalProperties": false,
+        "properties": {
+          "configurationRevision": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "model": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "enabled",
+          "model",
+          "provider"
+        ],
+        "type": "object"
+      },
+      "IntegrationModelPolicyDescriptor": {
+        "additionalProperties": false,
+        "properties": {
+          "candidates": {
+            "description": "Exact configuration order. No latency, quality, price or current readiness is implied.",
+            "items": {
+              "$ref": "#/definitions/IntegrationModelPolicyCandidate"
+            },
+            "type": "array"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "reference": {
+            "$ref": "#/definitions/IntegrationModelPolicyRef"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "candidates",
+          "enabled",
+          "reference",
+          "title"
+        ],
+        "type": "object"
+      },
+      "IntegrationModelPolicyRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "version"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "policies": {
+        "items": {
+          "$ref": "#/definitions/IntegrationModelPolicyDescriptor"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "policies"
+    ],
+    "title": "IntegrationModelPolicyCatalog",
+    "type": "object"
+  },
+  "IntegrationModelPolicyDefinition": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationModelPolicyCandidate": {
+        "additionalProperties": false,
+        "properties": {
+          "configurationRevision": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "model": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "enabled",
+          "model",
+          "provider"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "candidates": {
+        "items": {
+          "$ref": "#/definitions/IntegrationModelPolicyCandidate"
+        },
+        "type": "array"
+      },
+      "enabled": {
+        "type": "boolean"
+      },
+      "id": {
+        "type": "string"
+      },
+      "title": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "candidates",
+      "enabled",
+      "id",
+      "title"
+    ],
+    "title": "IntegrationModelPolicyDefinition",
+    "type": "object"
+  },
+  "IntegrationModelPolicyDescriptor": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationModelPolicyCandidate": {
+        "additionalProperties": false,
+        "properties": {
+          "configurationRevision": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "model": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "enabled",
+          "model",
+          "provider"
+        ],
+        "type": "object"
+      },
+      "IntegrationModelPolicyRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "version"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "candidates": {
+        "description": "Exact configuration order. No latency, quality, price or current readiness is implied.",
+        "items": {
+          "$ref": "#/definitions/IntegrationModelPolicyCandidate"
+        },
+        "type": "array"
+      },
+      "enabled": {
+        "type": "boolean"
+      },
+      "reference": {
+        "$ref": "#/definitions/IntegrationModelPolicyRef"
+      },
+      "title": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "candidates",
+      "enabled",
+      "reference",
+      "title"
+    ],
+    "title": "IntegrationModelPolicyDescriptor",
+    "type": "object"
+  },
+  "IntegrationModelPolicySettingsOperationParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "operationId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "operationId"
+    ],
+    "title": "IntegrationModelPolicySettingsOperationParams",
+    "type": "object"
+  },
+  "IntegrationModelPolicySettingsSaveParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationModelPolicyCandidate": {
+        "additionalProperties": false,
+        "properties": {
+          "configurationRevision": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "model": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "enabled",
+          "model",
+          "provider"
+        ],
+        "type": "object"
+      },
+      "IntegrationModelPolicyDefinition": {
+        "additionalProperties": false,
+        "properties": {
+          "candidates": {
+            "items": {
+              "$ref": "#/definitions/IntegrationModelPolicyCandidate"
+            },
+            "type": "array"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "candidates",
+          "enabled",
+          "id",
+          "title"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "policies": {
+        "items": {
+          "$ref": "#/definitions/IntegrationModelPolicyDefinition"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "policies"
+    ],
+    "title": "IntegrationModelPolicySettingsSaveParams",
+    "type": "object"
+  },
+  "IntegrationModelPolicySettingsSaveResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationEntityKind": {
+        "enum": [
+          "model_policy_configuration",
+          "input",
+          "workspace",
+          "workflow",
+          "assistant",
+          "delegation",
+          "destination",
+          "thread",
+          "turn",
+          "task",
+          "artifact",
+          "dataset",
+          "subscription",
+          "publication",
+          "connection",
+          "delivery"
+        ],
+        "type": "string"
+      },
+      "IntegrationEntityRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/definitions/IntegrationEntityKind"
+          },
+          "revision": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "kind"
+        ],
+        "type": "object"
+      },
+      "IntegrationError": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "messageKey": {
+            "type": "string"
+          },
+          "recovery": {
+            "$ref": "#/definitions/IntegrationRecovery"
+          }
+        },
+        "required": [
+          "code",
+          "messageKey",
+          "recovery"
+        ],
+        "type": "object"
+      },
+      "IntegrationModelPolicyAvailableModel": {
+        "additionalProperties": false,
+        "properties": {
+          "available": {
+            "description": "Actual configuration/credential metadata; execution still needs its native policy and budget.",
+            "type": "boolean"
+          },
+          "configurationRevision": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "model": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "available",
+          "model",
+          "provider"
+        ],
+        "type": "object"
+      },
+      "IntegrationModelPolicyCandidate": {
+        "additionalProperties": false,
+        "properties": {
+          "configurationRevision": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "model": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "enabled",
+          "model",
+          "provider"
+        ],
+        "type": "object"
+      },
+      "IntegrationModelPolicyDefinition": {
+        "additionalProperties": false,
+        "properties": {
+          "candidates": {
+            "items": {
+              "$ref": "#/definitions/IntegrationModelPolicyCandidate"
+            },
+            "type": "array"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "candidates",
+          "enabled",
+          "id",
+          "title"
+        ],
+        "type": "object"
+      },
+      "IntegrationModelPolicySettingsSnapshot": {
+        "additionalProperties": false,
+        "properties": {
+          "models": {
+            "items": {
+              "$ref": "#/definitions/IntegrationModelPolicyAvailableModel"
+            },
+            "type": "array"
+          },
+          "modelsTruncated": {
+            "type": "boolean"
+          },
+          "policies": {
+            "items": {
+              "$ref": "#/definitions/IntegrationModelPolicyDefinition"
+            },
+            "type": "array"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "models",
+          "modelsTruncated",
+          "policies",
+          "revision"
+        ],
+        "type": "object"
+      },
+      "IntegrationNullable_for_String": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationOperationPhase": {
+        "enum": [
+          "pending",
+          "executing",
+          "accepted",
+          "completed",
+          "rejected",
+          "unknown",
+          "cancel_requested",
+          "cancelled"
+        ],
+        "type": "string"
+      },
+      "IntegrationOperationReceipt": {
+        "additionalProperties": false,
+        "properties": {
+          "createdAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "entityRef": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationEntityRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationError"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "method": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string"
+          },
+          "phase": {
+            "$ref": "#/definitions/IntegrationOperationPhase"
+          },
+          "port": {
+            "type": "string"
+          },
+          "revision": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "runtimeAcceptance": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationRuntimeAcceptance"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Immutable observation at native acceptance, not the task's current state."
+          },
+          "scope": {
+            "$ref": "#/definitions/IntegrationScope"
+          },
+          "updatedAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "createdAtMs",
+          "method",
+          "operationId",
+          "phase",
+          "port",
+          "revision",
+          "scope",
+          "updatedAtMs"
+        ],
+        "type": "object"
+      },
+      "IntegrationRecovery": {
+        "enum": [
+          "none",
+          "retry_read",
+          "reconcile_original",
+          "repair_configuration",
+          "request_authorization",
+          "explicit_user_decision"
+        ],
+        "type": "string"
+      },
+      "IntegrationRuntimeAcceptance": {
+        "additionalProperties": false,
+        "properties": {
+          "state": {
+            "$ref": "#/definitions/IntegrationTaskState"
+          },
+          "taskId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "turnId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "state",
+          "threadId"
+        ],
+        "type": "object"
+      },
+      "IntegrationScope": {
+        "additionalProperties": false,
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "identityGeneration": {
+            "type": "string"
+          },
+          "organizationId": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationNullable_for_String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "targetRevision": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "$ref": "#/definitions/IntegrationNullable_for_String"
+          }
+        },
+        "required": [
+          "accountId",
+          "identityGeneration",
+          "targetId",
+          "targetRevision",
+          "workspaceId"
+        ],
+        "type": "object"
+      },
+      "IntegrationTaskState": {
+        "enum": [
+          "queued",
+          "running",
+          "waiting_for_user",
+          "completed",
+          "failed",
+          "cancelled",
+          "outcome_unknown"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "current": {
+        "allOf": [
+          {
+            "$ref": "#/definitions/IntegrationModelPolicySettingsSnapshot"
+          }
+        ],
+        "description": "A fresh observation, which may differ from the original written revision."
+      },
+      "operation": {
+        "$ref": "#/definitions/IntegrationOperationReceipt"
+      }
+    },
+    "required": [
+      "current",
+      "operation"
+    ],
+    "title": "IntegrationModelPolicySettingsSaveResult",
+    "type": "object"
+  },
+  "IntegrationModelPolicySettingsSnapshot": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationModelPolicyAvailableModel": {
+        "additionalProperties": false,
+        "properties": {
+          "available": {
+            "description": "Actual configuration/credential metadata; execution still needs its native policy and budget.",
+            "type": "boolean"
+          },
+          "configurationRevision": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "model": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "available",
+          "model",
+          "provider"
+        ],
+        "type": "object"
+      },
+      "IntegrationModelPolicyCandidate": {
+        "additionalProperties": false,
+        "properties": {
+          "configurationRevision": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "model": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "enabled",
+          "model",
+          "provider"
+        ],
+        "type": "object"
+      },
+      "IntegrationModelPolicyDefinition": {
+        "additionalProperties": false,
+        "properties": {
+          "candidates": {
+            "items": {
+              "$ref": "#/definitions/IntegrationModelPolicyCandidate"
+            },
+            "type": "array"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "candidates",
+          "enabled",
+          "id",
+          "title"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "models": {
+        "items": {
+          "$ref": "#/definitions/IntegrationModelPolicyAvailableModel"
+        },
+        "type": "array"
+      },
+      "modelsTruncated": {
+        "type": "boolean"
+      },
+      "policies": {
+        "items": {
+          "$ref": "#/definitions/IntegrationModelPolicyDefinition"
+        },
+        "type": "array"
+      },
+      "revision": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "models",
+      "modelsTruncated",
+      "policies",
+      "revision"
+    ],
+    "title": "IntegrationModelPolicySettingsSnapshot",
+    "type": "object"
+  },
+  "IntegrationModelRequirements": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "inputTokens": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "outputTokens": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "structuredOutput": {
+        "default": false,
+        "type": "boolean"
+      },
+      "tools": {
+        "default": false,
+        "type": "boolean"
+      },
+      "vision": {
+        "default": false,
+        "type": "boolean"
+      }
+    },
+    "title": "IntegrationModelRequirements",
+    "type": "object"
+  },
+  "IntegrationModelResolutionRequest": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationModelRequirements": {
+        "additionalProperties": false,
+        "properties": {
+          "inputTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "outputTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "structuredOutput": {
+            "default": false,
+            "type": "boolean"
+          },
+          "tools": {
+            "default": false,
+            "type": "boolean"
+          },
+          "vision": {
+            "default": false,
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "IntegrationModelSelectionIntent": {
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "inherit_current"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "explicit"
+                ],
+                "type": "string"
+              },
+              "model": {
+                "type": "string"
+              },
+              "provider": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "model",
+              "provider"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "auto_policy"
+                ],
+                "type": "string"
+              },
+              "version": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "kind",
+              "version"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "configurationRevision": {
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "verifier_locked"
+                ],
+                "type": "string"
+              },
+              "model": {
+                "type": "string"
+              },
+              "provider": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "configurationRevision",
+              "kind",
+              "model",
+              "provider"
+            ],
+            "type": "object"
+          }
+        ]
+      }
+    },
+    "properties": {
+      "requirements": {
+        "allOf": [
+          {
+            "$ref": "#/definitions/IntegrationModelRequirements"
+          }
+        ],
+        "default": {
+          "structuredOutput": false,
+          "tools": false,
+          "vision": false
+        }
+      },
+      "selection": {
+        "$ref": "#/definitions/IntegrationModelSelectionIntent"
+      }
+    },
+    "required": [
+      "selection"
+    ],
+    "title": "IntegrationModelResolutionRequest",
+    "type": "object"
+  },
+  "IntegrationModelResolutionResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationBudgetReservationState": {
+        "enum": [
+          "not_reserved",
+          "reserved",
+          "denied"
+        ],
+        "type": "string"
+      },
+      "IntegrationModelBudget": {
+        "additionalProperties": false,
+        "properties": {
+          "costKnown": {
+            "type": "boolean"
+          },
+          "reservationState": {
+            "$ref": "#/definitions/IntegrationBudgetReservationState"
+          }
+        },
+        "required": [
+          "costKnown",
+          "reservationState"
+        ],
+        "type": "object"
+      },
+      "IntegrationModelPolicyRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "version"
+        ],
+        "type": "object"
+      },
+      "IntegrationModelSelectionKind": {
+        "enum": [
+          "inherit_current",
+          "explicit",
+          "auto_policy",
+          "verifier_locked"
+        ],
+        "type": "string"
+      },
+      "IntegrationNullable_for_IntegrationModelPolicyRef": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "$ref": "#/definitions/IntegrationModelPolicyRef"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "ModelConfigurationBoundary": {
+        "enum": [
+          "next_turn",
+          "session_snapshot"
+        ],
+        "type": "string"
+      },
+      "ModelConfigurationSummary": {
+        "additionalProperties": false,
+        "description": "Public effective model metadata. Deliberately excludes URLs, credentials, arbitrary extra-body keys/values and filesystem paths.",
+        "properties": {
+          "apiFormat": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "boundary": {
+            "allOf": [
+              {
+                "$ref": "#/definitions/ModelConfigurationBoundary"
+              }
+            ],
+            "description": "Whether this describes newly resolved settings or a pinned running snapshot."
+          },
+          "chatProtocol": {
+            "type": "string"
+          },
+          "contextWindowTokens": {
+            "format": "uint",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "extraBodyConfigured": {
+            "type": "boolean"
+          },
+          "maxOutputTokens": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "modelId": {
+            "type": "string"
+          },
+          "outputHeadroomTokens": {
+            "format": "uint",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "providerId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "reasoning": {
+            "type": "boolean"
+          },
+          "reasoningEffort": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "reasoningPolicy": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/ModelReasoningPolicy"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "requestOutputLimits": {
+            "additionalProperties": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "type": "object"
+          },
+          "requestOverrideFields": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "revision": {
+            "description": "Opaque revision of the private semantics; never an encoding of their value.",
+            "type": "string"
+          },
+          "sources": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "description": "Predefined field names and authority labels only.",
+            "type": "object"
+          },
+          "structuredOutput": {
+            "type": "boolean"
+          },
+          "text": {
+            "type": "boolean"
+          },
+          "toolSet": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/ModelToolSetSummary"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Actual host composition; missing in older records, never inferred from capability."
+          },
+          "tools": {
+            "type": "boolean"
+          },
+          "vision": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "boundary",
+          "chatProtocol",
+          "extraBodyConfigured",
+          "modelId",
+          "reasoning",
+          "requestOutputLimits",
+          "requestOverrideFields",
+          "revision",
+          "sources",
+          "structuredOutput",
+          "text",
+          "tools",
+          "vision"
+        ],
+        "type": "object"
+      },
+      "ModelReasoningPolicy": {
+        "additionalProperties": false,
+        "description": "User-declared controls, not a claim that an upstream model was verified.",
+        "properties": {
+          "efforts": {
+            "default": [],
+            "items": {
+              "pattern": "[^\\u{9}\\u{a}\\u{b}\\u{c}\\u{d}\\u{20}\\u{85}\\u{a0}\\u{1680}\\u{2000}\\u{2001}\\u{2002}\\u{2003}\\u{2004}\\u{2005}\\u{2006}\\u{2007}\\u{2008}\\u{2009}\\u{200a}\\u{2028}\\u{2029}\\u{202f}\\u{205f}\\u{3000}]",
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "mode": {
+            "$ref": "#/definitions/ReasoningControlMode"
+          }
+        },
+        "required": [
+          "mode"
+        ],
+        "type": "object"
+      },
+      "ModelToolRegistryScope": {
+        "enum": [
+          "profile_configuration",
+          "session_registry",
+          "session_role",
+          "wiki_worker"
+        ],
+        "type": "string"
+      },
+      "ModelToolSetSummary": {
+        "additionalProperties": false,
+        "description": "The count describes registered tools at this scope, before request permissions.",
+        "properties": {
+          "exposedToolCount": {
+            "description": "Only populated when the actual provider request definitions are captured.",
+            "format": "uint",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "profile": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "registeredToolCount": {
+            "format": "uint",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "registryScope": {
+            "$ref": "#/definitions/ModelToolRegistryScope"
+          }
+        },
+        "required": [
+          "registryScope"
+        ],
+        "type": "object"
+      },
+      "ReasoningControlMode": {
+        "enum": [
+          "hidden",
+          "optional",
+          "always_on",
+          "always_off"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "budget": {
+        "$ref": "#/definitions/IntegrationModelBudget"
+      },
+      "model": {
+        "$ref": "#/definitions/ModelConfigurationSummary"
+      },
+      "policyRef": {
+        "$ref": "#/definitions/IntegrationNullable_for_IntegrationModelPolicyRef"
+      },
+      "selectionKind": {
+        "$ref": "#/definitions/IntegrationModelSelectionKind"
+      }
+    },
+    "required": [
+      "budget",
+      "model",
+      "policyRef",
+      "selectionKind"
+    ],
+    "title": "IntegrationModelResolutionResult",
+    "type": "object"
+  },
+  "IntegrationModelSelectionIntent": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "oneOf": [
+      {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "enum": [
+              "inherit_current"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "type": "object"
+      },
+      {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "enum": [
+              "explicit"
+            ],
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "model",
+          "provider"
+        ],
+        "type": "object"
+      },
+      {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "auto_policy"
+            ],
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "version"
+        ],
+        "type": "object"
+      },
+      {
+        "additionalProperties": false,
+        "properties": {
+          "configurationRevision": {
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "verifier_locked"
+            ],
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "configurationRevision",
+          "kind",
+          "model",
+          "provider"
+        ],
+        "type": "object"
+      }
+    ],
+    "title": "IntegrationModelSelectionIntent"
+  },
+  "IntegrationModelUsageObservation": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "complete": {
+        "description": "Completeness requires field-presence-aware evidence; normalized counters alone remain partial.",
+        "type": "boolean"
+      },
+      "configurationRevision": {
+        "type": "string"
+      },
+      "lastObservedAt": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "model": {
+        "type": "string"
+      },
+      "provider": {
+        "type": "string"
+      },
+      "reportedCacheCreationInputTokens": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "reportedCacheReadInputTokens": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "reportedInputTokens": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "reportedOutputTokens": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "reportedTotalTokens": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "complete",
+      "configurationRevision",
+      "model",
+      "provider"
+    ],
+    "title": "IntegrationModelUsageObservation",
+    "type": "object"
+  },
+  "IntegrationModelUsageReport": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationModelPolicyRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "version"
+        ],
+        "type": "object"
+      },
+      "IntegrationModelUsageObservation": {
+        "additionalProperties": false,
+        "properties": {
+          "complete": {
+            "description": "Completeness requires field-presence-aware evidence; normalized counters alone remain partial.",
+            "type": "boolean"
+          },
+          "configurationRevision": {
+            "type": "string"
+          },
+          "lastObservedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "model": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "reportedCacheCreationInputTokens": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "reportedCacheReadInputTokens": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "reportedInputTokens": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "reportedOutputTokens": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "reportedTotalTokens": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "complete",
+          "configurationRevision",
+          "model",
+          "provider"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "observations": {
+        "items": {
+          "$ref": "#/definitions/IntegrationModelUsageObservation"
+        },
+        "type": "array"
+      },
+      "policyRef": {
+        "$ref": "#/definitions/IntegrationModelPolicyRef"
+      }
+    },
+    "required": [
+      "observations",
+      "policyRef"
+    ],
+    "title": "IntegrationModelUsageReport",
+    "type": "object"
+  },
+  "ModelPoliciesMethod": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "integrations/models/readUsage",
+      "integrations/models/readHealth",
+      "integrations/models/readPolicies",
+      "integrations/models/resolveSelection"
+    ],
+    "title": "ModelPoliciesMethod",
+    "type": "string"
+  },
+  "ModelPolicySettingsMethod": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "integrations/models/settings/read",
+      "integrations/models/settings/save",
+      "integrations/models/settings/readOperation"
+    ],
+    "title": "ModelPolicySettingsMethod",
+    "type": "string"
+  }
+}

@@ -1,0 +1,45 @@
+[package]
+name = "kcoder_office_worker"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[features]
+test-oracle = []
+
+[dependencies]
+anyhow.workspace = true
+async-trait.workspace = true
+base64 = "0.22"
+dunce.workspace = true
+kcoder_app_rpc_codec = { path = "../../../kcoder_app_protocol/internal/app_rpc_codec" }
+kcoder_config = { path = "../../../kcoder_config" }
+kcoder_native_scope = { path = "../native_scope" }
+kcoder_engine = { path = "../../../kcoder_engine" }
+kcoder_process_supervisor = { path = "../../../kcoder_process_supervisor" }
+kcoder_state = { path = "../../../kcoder_state" }
+kcoder_tools = { path = "../../../kcoder_tools" }
+kcoder_types = { path = "../../../kcoder_types" }
+ring = "0.17.14"
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+tempfile.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+kcoder_test_harness = { path = "../../../../tests/harness" }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+libc.workspace = true
+
+[target.'cfg(unix)'.dev-dependencies]
+libc.workspace = true
+
+[lib]
+path = "../../src/internal/office_worker/lib.rs"

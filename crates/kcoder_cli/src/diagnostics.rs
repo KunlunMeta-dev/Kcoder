@@ -122,3 +122,20 @@ pub(super) fn hook_startup_notice(events: &[EngineEvent]) -> Option<String> {
         Some(lines.join("\n"))
     }
 }
+
+pub(super) fn print_cli_build_identity() {
+    use kcoder_cli_support::build_identity;
+    println!(
+        "version: {}",
+        kcoder_cli_commands::build_identity::version()
+    );
+    println!("build commit: {}", build_identity::current().commit);
+    println!("build dirty: {}", build_identity::current().dirty);
+    println!("build time (unix): {}", build_identity::current().time_unix);
+    println!(
+        "executable sha256: {}",
+        build_identity::executable_sha256()
+            .as_deref()
+            .unwrap_or("unavailable")
+    );
+}

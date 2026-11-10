@@ -24,6 +24,7 @@ pub(super) fn extend(
                         .entry(id.into())
                         .or_default()
                         .push(TranscriptToolContext {
+                            web_sources: None,
                             entry_index,
                             last_reference_index: entry_index,
                             name: block
@@ -46,6 +47,7 @@ pub(super) fn extend(
                         let calls = contexts.entry(id.into()).or_default();
                         if calls.is_empty() {
                             calls.push(TranscriptToolContext {
+                                web_sources: None,
                                 entry_index,
                                 last_reference_index: entry_index,
                                 name: "tool".to_string(),
@@ -60,6 +62,11 @@ pub(super) fn extend(
                             });
                         }
                         if let Some(context) = calls.last_mut() {
+                            context.web_sources = entry
+                                .web_sources
+                                .iter()
+                                .find(|receipt| receipt.matches(&entry.session_id, id))
+                                .cloned();
                             context.last_reference_index = entry_index;
                             context.completed_at_ms = Some(entry.timestamp_ms);
                             context.output = Some(nested_text_content(block.get("content")));
@@ -68,7 +75,7 @@ pub(super) fn extend(
                             )
                             .unwrap_or_default();
                             (context.output_images, context.images_omitted) =
-                                super::tool_images::observations(&nested);
+                                super::tool_images::observations(&context.name, &nested);
                             context.is_error = block
                                 .get("is_error")
                                 .and_then(Value::as_bool)

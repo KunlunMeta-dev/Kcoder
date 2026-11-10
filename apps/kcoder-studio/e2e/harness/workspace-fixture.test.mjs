@@ -3,21 +3,39 @@ import { execFile } from "node:child_process";
 import { access, readFile, rm, writeFile } from "node:fs/promises";
 import test from "node:test";
 import { promisify } from "node:util";
+import { resolve } from "node:path";
 import { artifactSourceRoot, RunContext } from "./run-context.mjs";
 import { listWorkspaceTemplates, materializeWorkspace } from "./workspace-fixture.mjs";
 
 const execFileAsync = promisify(execFile);
 
-test("模板目录提供五种稳定工作区", async () => {
+test("模板目录提供七种稳定工作区", async () => {
   const templates = await listWorkspaceTemplates();
   assert.deepEqual(templates.map(template => template.id), [
     "broken-project",
     "git-history",
+    "kworker-office",
     "minimal",
+    "native-business",
     "rust-project",
     "typescript-app",
   ]);
-  assert.ok(templates.every(template => template.version === 2));
+  assert.ok(templates.every(template => template.version === (["kworker-office", "native-business"].includes(template.id) ? 1 : 2)));
+});
+
+test("business workspace owns its local guide without copying developer instructions or answers", async () => {
+  const context = await RunContext.create(import.meta.url, { testId: "workspace-native-business-guide" });
+  try {
+    const fixture = await materializeWorkspace(context, "native-business");
+    const guide = await readFile(`${fixture.path}/AGENTS.md`, "utf8");
+    assert.match(guide, /Synthetic business workspace/);
+    assert.ok(Buffer.byteLength(guide) < 1024);
+    assert.doesNotMatch(guide, /kcoder_cli|CARGO_TARGET_DIR|changed_R2|completed_units|200|180/);
+    assert.match(await readFile(`${fixture.path}/README.md`, "utf8"), /no source answers/);
+    assert.match(fixture.sourceDigest, /^sha256:[a-f0-9]{64}$/);
+  } finally {
+    await context.finish("passed", { ok: true });
+  }
 });
 
 test("copy 模板被物化为互不影响的独立可写副本", async () => {
@@ -93,4 +111,18 @@ test("模板与实例 ID 不能路径穿越或覆盖现有工作区", async () =
 
 test.after(async () => {
   await rm(artifactSourceRoot(new URL(import.meta.url).pathname), { recursive: true, force: true });
+});
+
+test("office模板物化本地可核对资料，不包含凭据且不改原始样本", async () => {
+  const context = await RunContext.create(import.meta.url, { testId: "workspace-office-fixture" });
+  try {
+    const fixture = await materializeWorkspace(context, "kworker-office");
+    assert.match(await readFile(resolve(fixture.path, "sources/sales.csv"), "utf8"), /Q4,189,110,33/);
+    assert.match(await readFile(resolve(fixture.path, "sources/pilot-a.md"), "utf8"), /50 minutes to 35 minutes/);
+    // These exact Markdown inputs must also survive the public source snapshot filter.
+    for (const file of ["README.md", "sources/meeting.md", "sources/pilot-a.md", "sources/pilot-b.md", "sources/presentation.md"]) {
+      assert.ok((await readFile(resolve(fixture.path, file), "utf8")).trim().length > 0, file);
+    }
+    await assert.rejects(access(resolve(fixture.path, "credentials.json")), {code:"ENOENT"});
+  } finally { await context.finish("passed", {ok:true}); }
 });

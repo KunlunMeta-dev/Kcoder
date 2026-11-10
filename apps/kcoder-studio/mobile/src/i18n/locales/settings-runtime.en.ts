@@ -1,0 +1,15 @@
+export const SETTINGS_RUNTIME_EN = {
+  "settings_runtime.selector_label": "Runtime target",
+  "settings_runtime.selector_title": "Settings target",
+  "settings_runtime.select_target": "Select a target",
+  "settings_runtime.no_gateway": "Connect a Gateway to configure remote settings.",
+  "settings_runtime.loading_targets": "Loading runtime targets…",
+  "settings_runtime.no_targets": "No runtime targets are available.",
+  "settings_runtime.connecting": "Connecting to the selected target…",
+  "settings_runtime.connected": "Connected to the selected target.",
+  "settings_runtime.connection_error": "Could not connect to the selected target.",
+  "settings_runtime.retry": "Retry",
+  "settings_runtime.default_workspace": "Default workspace",
+  "settings_runtime.workspace_label": "Workspace",
+  "settings_runtime.target_changed": "The selected target changed. Check its current settings before continuing.",
+} as const;

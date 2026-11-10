@@ -1,6 +1,6 @@
 import i18n from '@/i18n'
-import { listen } from '@tauri-apps/api/event'
-import { clearMocks, mockIPC } from '@tauri-apps/api/mocks'
+import { listen } from '@/lib/runtime-events'
+import { clearTestTransports, installTestTransport } from '@/test/runtime-transport'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { FakeGatewayClient } from './gateway/runtime/contractFixture.test-support'
 import { KCoderGatewayRuntime as CoreRuntime } from './gatewayRuntime'
@@ -21,11 +21,11 @@ describe.each([
   afterEach(async () => {
     await Promise.all([...runtimes].map(runtime => runtime.disposeAsync?.() ?? runtime.dispose()))
     runtimes.clear()
-    clearMocks()
+    clearTestTransports()
     vi.restoreAllMocks()
   })
   test('projects app-server questions and returns the selected answer on the same turn', async () => {
-    mockIPC(() => undefined, { shouldMockEvents: true })
+    installTestTransport(() => undefined)
     const received: Array<{ event: string; payload: Record<string, unknown> }> = []
     const unlisten = await listen<{ event: string; payload: Record<string, unknown> }>(
       'local-executor:event',
@@ -188,7 +188,7 @@ describe.each([
   })
 
   test('projects app-server approvals and returns an explicit fail-closed decision', async () => {
-    mockIPC(() => undefined, { shouldMockEvents: true })
+    installTestTransport(() => undefined)
     const received: Array<{ event: string; payload: Record<string, unknown> }> = []
     const unlisten = await listen<{ event: string; payload: Record<string, unknown> }>(
       'local-executor:event',

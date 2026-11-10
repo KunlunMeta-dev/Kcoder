@@ -1,3 +1,4 @@
+import { WorkspacePageHeader } from '@/components/layout/WorkspacePageHeader'
 import { PluginInstallTarget } from './PluginInstallTarget'
 import { PluginActivationPanel } from '@/features/plugins/PluginActivationPanel'
 import {
@@ -40,7 +41,6 @@ import {
 import type { FormEvent, ReactNode } from 'react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from '@/hooks/useTranslation'
-import { DesktopTopBar } from '@/components/layout/DesktopTopBar'
 import { useIsMobile } from '@/hooks/useIsMobile'
 import { createHttpClient } from '@/api/http'
 import { createLocalCodexPluginApi } from '@/api/local/codexPlugins'
@@ -595,7 +595,6 @@ function ScopedPluginsWorkspace({
   isScopeCurrent,
   targetDeviceId,
   targetWorkspacePath,
-  sidebarCollapsed = false,
   compactNavigation = false,
   topBarLeftActions,
   cloudMarketplaceAvailable = true,
@@ -1923,15 +1922,11 @@ function ScopedPluginsWorkspace({
       className="plugin-marketplace-page min-w-0 flex-1 overflow-y-auto bg-background text-text-primary"
     >
       <div className="sticky top-0 z-40 bg-background/95 backdrop-blur-xl">
-        <DesktopTopBar
+        <WorkspacePageHeader
+          title={t('workbench.plugins_tab', '插件')}
           testId="plugins-topbar"
-          className={[
-            'mx-auto h-12 max-w-[1420px] pr-5 md:h-[52px] md:pr-7',
-            sidebarCollapsed ? 'pl-5 md:pl-6' : 'pl-20 md:pl-7',
-          ].join(' ')}
-          left={topBarLeftActions}
-          dragRegionClassName="hidden md:block"
-          right={
+          beforeBack={topBarLeftActions}
+          actions={
             <>
               {(isMobile || compactNavigation) && (
                 <button
@@ -1994,7 +1989,7 @@ function ScopedPluginsWorkspace({
         />
       </div>
 
-      <div className="mx-auto flex w-full max-w-[1040px] flex-col gap-7 px-5 pb-14 pt-5 md:px-8 md:pt-4">
+      <div className="studio-page-column flex flex-col gap-4 pb-14 pt-5">
         {localPluginApi.listTrust && (
           <div className="space-y-3">
             <button
@@ -2236,7 +2231,7 @@ function ScopedPluginsWorkspace({
             <div
               role="status"
               data-testid="plugin-marketplace-diagnostics"
-              className="rounded-xl border border-border bg-surface/40 p-4 text-sm"
+              className="studio-card-spacing rounded-xl border border-border bg-surface/40 text-sm"
             >
               <p className="font-medium">{t('pluginNetwork.diagnostics')}</p>
               {marketplaceDiagnostics.map((message, index) => (
@@ -2254,7 +2249,7 @@ function ScopedPluginsWorkspace({
                   <div
                     role="alert"
                     data-testid="plugin-marketplace-action-error"
-                    className="flex items-start justify-between gap-3 rounded-lg border border-border p-3 text-sm text-text-secondary"
+                    className="studio-card-spacing flex items-start justify-between gap-3 rounded-lg border border-border text-sm text-text-secondary"
                   >
                     <span className="min-w-0 whitespace-pre-wrap [overflow-wrap:anywhere]">
                       {pluginMarketplaceState.error}
@@ -2553,7 +2548,7 @@ function ScopedPluginsWorkspace({
             </div>
             <div className="mt-5 space-y-2">
               {marketplaces.filter(isUserManagedMarketplace).length === 0 ? (
-                <div className="rounded-lg border border-border px-4 py-5 text-sm text-text-secondary">
+                <div className="studio-card-spacing rounded-lg border border-border text-sm text-text-secondary">
                   {t('workbench.plugins_marketplace_no_local_markets', '还没有可管理的市场。')}
                 </div>
               ) : (
@@ -2562,7 +2557,7 @@ function ScopedPluginsWorkspace({
                   .map((marketplace, index, localMarketplaces) => (
                     <div
                       key={marketplace.id}
-                      className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-lg border border-border px-3 py-2"
+                      className="studio-card-spacing grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-lg border border-border px-3 py-2"
                     >
                       <div className="min-w-0">
                         <div className="truncate text-sm font-medium text-text-primary">

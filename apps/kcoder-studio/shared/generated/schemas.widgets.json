@@ -1,0 +1,889 @@
+{
+  "ClientPresentationV1": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "StudioWorkMode": {
+        "enum": [
+          "kcoder",
+          "kworker"
+        ],
+        "type": "string"
+      }
+    },
+    "description": "Validated by the host for every foreground turn and tool-directory request.",
+    "properties": {
+      "inlineWidgets": {
+        "default": false,
+        "type": "boolean"
+      },
+      "isolatedWidgets": {
+        "description": "Current native host has verified isolated script rendering; never restored from history.",
+        "type": "boolean"
+      },
+      "studioWorkMode": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/StudioWorkMode"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "version": {
+        "format": "uint8",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "version"
+    ],
+    "title": "ClientPresentationV1",
+    "type": "object"
+  },
+  "StudioWorkMode": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "kcoder",
+      "kworker"
+    ],
+    "title": "StudioWorkMode",
+    "type": "string"
+  },
+  "ThreadStreamContextV1": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "ThreadStreamActiveTurnV1": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/ThreadStreamTurnV1"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "ThreadStreamTurnV1": {
+        "additionalProperties": false,
+        "properties": {
+          "attemptId": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/definitions/TurnStatus"
+          },
+          "threadId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "attemptId",
+          "id",
+          "status",
+          "threadId"
+        ],
+        "type": "object"
+      },
+      "TurnStatus": {
+        "enum": [
+          "running",
+          "completed",
+          "interrupted",
+          "failed"
+        ],
+        "type": "string"
+      }
+    },
+    "description": "Negotiated live stream boundary; absence means unknown, not idle.",
+    "properties": {
+      "activeTurn": {
+        "allOf": [
+          {
+            "$ref": "#/definitions/ThreadStreamActiveTurnV1"
+          }
+        ],
+        "description": "Explicit null confirms that no main turn is active at this boundary."
+      },
+      "serverId": {
+        "type": "string"
+      },
+      "throughSequence": {
+        "description": "Inclusive notification sequence watermark sampled with the live turn identity.",
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "activeTurn",
+      "serverId",
+      "throughSequence"
+    ],
+    "title": "ThreadStreamContextV1",
+    "type": "object"
+  },
+  "WidgetContentReadParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "offset": {
+        "default": 0,
+        "format": "uint",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "revision": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "threadId": {
+        "type": "string"
+      },
+      "widgetId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "revision",
+      "threadId",
+      "widgetId"
+    ],
+    "title": "WidgetContentReadParams",
+    "type": "object"
+  },
+  "WidgetContentReadResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "properties": {
+      "bytes": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "dataBase64": {
+        "description": "Base64 encodes one bounded raw-byte chunk, not a temporary file URL.",
+        "type": "string"
+      },
+      "nextOffset": {
+        "format": "uint",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "offset": {
+        "format": "uint",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "revision": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "sha256": {
+        "type": "string"
+      },
+      "widgetId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "bytes",
+      "dataBase64",
+      "nextOffset",
+      "offset",
+      "revision",
+      "sha256",
+      "widgetId"
+    ],
+    "title": "WidgetContentReadResult",
+    "type": "object"
+  },
+  "WidgetInputPreview": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "definitions": {
+      "WidgetFormat": {
+        "enum": [
+          "html",
+          "svg"
+        ],
+        "type": "string"
+      }
+    },
+    "description": "Uncommitted, bounded source preview. It never grants executable artifact authority.",
+    "properties": {
+      "bytes": {
+        "format": "uint",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "complete": {
+        "type": "boolean"
+      },
+      "format": {
+        "$ref": "#/definitions/WidgetFormat"
+      },
+      "source": {
+        "type": "string"
+      },
+      "title": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "truncated": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "bytes",
+      "complete",
+      "format",
+      "source",
+      "truncated"
+    ],
+    "title": "WidgetInputPreview",
+    "type": "object"
+  },
+  "WidgetListParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "limit": {
+        "default": 50,
+        "format": "uint",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "offset": {
+        "default": 0,
+        "format": "uint",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "threadId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "threadId"
+    ],
+    "title": "WidgetListParams",
+    "type": "object"
+  },
+  "WidgetListResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "definitions": {
+      "WidgetExecutionMode": {
+        "enum": [
+          "managed",
+          "isolated_html"
+        ],
+        "type": "string"
+      },
+      "WidgetFormat": {
+        "enum": [
+          "html",
+          "svg"
+        ],
+        "type": "string"
+      },
+      "WidgetLibrary": {
+        "enum": [
+          "chart_js",
+          "d3",
+          "topojson"
+        ],
+        "type": "string"
+      },
+      "WidgetMcpSource": {
+        "additionalProperties": false,
+        "description": "Routing identity only. UI datasets and HTML never inflate widget directories.",
+        "properties": {
+          "connectionId": {
+            "type": "string"
+          },
+          "mimeType": {
+            "type": "string"
+          },
+          "pluginId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "resourceUri": {
+            "type": "string"
+          },
+          "serverName": {
+            "type": "string"
+          },
+          "toolName": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "connectionId",
+          "mimeType",
+          "resourceUri",
+          "serverName",
+          "toolName"
+        ],
+        "type": "object"
+      },
+      "WidgetRef": {
+        "properties": {
+          "attemptId": {
+            "type": "string"
+          },
+          "bytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "createdAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "executionMode": {
+            "$ref": "#/definitions/WidgetExecutionMode"
+          },
+          "format": {
+            "$ref": "#/definitions/WidgetFormat"
+          },
+          "libraries": {
+            "items": {
+              "$ref": "#/definitions/WidgetLibrary"
+            },
+            "type": "array"
+          },
+          "mcpApp": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/WidgetMcpSource"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "revision": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sha256": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "toolCallId": {
+            "type": "string"
+          },
+          "turnId": {
+            "type": "string"
+          },
+          "widgetId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "attemptId",
+          "bytes",
+          "createdAtMs",
+          "executionMode",
+          "format",
+          "libraries",
+          "revision",
+          "sha256",
+          "summary",
+          "threadId",
+          "title",
+          "toolCallId",
+          "turnId",
+          "widgetId"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "nextOffset": {
+        "format": "uint",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "widgets": {
+        "items": {
+          "$ref": "#/definitions/WidgetRef"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "widgets"
+    ],
+    "title": "WidgetListResult",
+    "type": "object"
+  },
+  "WidgetReadParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "revision": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "threadId": {
+        "type": "string"
+      },
+      "widgetId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "revision",
+      "threadId",
+      "widgetId"
+    ],
+    "title": "WidgetReadParams",
+    "type": "object"
+  },
+  "WidgetReadResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "definitions": {
+      "WidgetExecutionMode": {
+        "enum": [
+          "managed",
+          "isolated_html"
+        ],
+        "type": "string"
+      },
+      "WidgetFormat": {
+        "enum": [
+          "html",
+          "svg"
+        ],
+        "type": "string"
+      },
+      "WidgetLibrary": {
+        "enum": [
+          "chart_js",
+          "d3",
+          "topojson"
+        ],
+        "type": "string"
+      },
+      "WidgetMcpSource": {
+        "additionalProperties": false,
+        "description": "Routing identity only. UI datasets and HTML never inflate widget directories.",
+        "properties": {
+          "connectionId": {
+            "type": "string"
+          },
+          "mimeType": {
+            "type": "string"
+          },
+          "pluginId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "resourceUri": {
+            "type": "string"
+          },
+          "serverName": {
+            "type": "string"
+          },
+          "toolName": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "connectionId",
+          "mimeType",
+          "resourceUri",
+          "serverName",
+          "toolName"
+        ],
+        "type": "object"
+      },
+      "WidgetRef": {
+        "properties": {
+          "attemptId": {
+            "type": "string"
+          },
+          "bytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "createdAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "executionMode": {
+            "$ref": "#/definitions/WidgetExecutionMode"
+          },
+          "format": {
+            "$ref": "#/definitions/WidgetFormat"
+          },
+          "libraries": {
+            "items": {
+              "$ref": "#/definitions/WidgetLibrary"
+            },
+            "type": "array"
+          },
+          "mcpApp": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/WidgetMcpSource"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "revision": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sha256": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "toolCallId": {
+            "type": "string"
+          },
+          "turnId": {
+            "type": "string"
+          },
+          "widgetId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "attemptId",
+          "bytes",
+          "createdAtMs",
+          "executionMode",
+          "format",
+          "libraries",
+          "revision",
+          "sha256",
+          "summary",
+          "threadId",
+          "title",
+          "toolCallId",
+          "turnId",
+          "widgetId"
+        ],
+        "type": "object"
+      },
+      "WidgetRenderObservation": {
+        "additionalProperties": false,
+        "description": "A client rendering observation, not verification of calculations or external actions.",
+        "properties": {
+          "errorCode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "observedAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "status": {
+            "$ref": "#/definitions/WidgetRenderStatus"
+          }
+        },
+        "required": [
+          "observedAtMs",
+          "status"
+        ],
+        "type": "object"
+      },
+      "WidgetRenderStatus": {
+        "enum": [
+          "rendered",
+          "failed"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "renderObservation": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/WidgetRenderObservation"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "widget": {
+        "$ref": "#/definitions/WidgetRef"
+      }
+    },
+    "required": [
+      "widget"
+    ],
+    "title": "WidgetReadResult",
+    "type": "object"
+  },
+  "WidgetRef": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "definitions": {
+      "WidgetExecutionMode": {
+        "enum": [
+          "managed",
+          "isolated_html"
+        ],
+        "type": "string"
+      },
+      "WidgetFormat": {
+        "enum": [
+          "html",
+          "svg"
+        ],
+        "type": "string"
+      },
+      "WidgetLibrary": {
+        "enum": [
+          "chart_js",
+          "d3",
+          "topojson"
+        ],
+        "type": "string"
+      },
+      "WidgetMcpSource": {
+        "additionalProperties": false,
+        "description": "Routing identity only. UI datasets and HTML never inflate widget directories.",
+        "properties": {
+          "connectionId": {
+            "type": "string"
+          },
+          "mimeType": {
+            "type": "string"
+          },
+          "pluginId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "resourceUri": {
+            "type": "string"
+          },
+          "serverName": {
+            "type": "string"
+          },
+          "toolName": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "connectionId",
+          "mimeType",
+          "resourceUri",
+          "serverName",
+          "toolName"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "attemptId": {
+        "type": "string"
+      },
+      "bytes": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "createdAtMs": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "executionMode": {
+        "$ref": "#/definitions/WidgetExecutionMode"
+      },
+      "format": {
+        "$ref": "#/definitions/WidgetFormat"
+      },
+      "libraries": {
+        "items": {
+          "$ref": "#/definitions/WidgetLibrary"
+        },
+        "type": "array"
+      },
+      "mcpApp": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/WidgetMcpSource"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "revision": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "sha256": {
+        "type": "string"
+      },
+      "summary": {
+        "type": "string"
+      },
+      "threadId": {
+        "type": "string"
+      },
+      "title": {
+        "type": "string"
+      },
+      "toolCallId": {
+        "type": "string"
+      },
+      "turnId": {
+        "type": "string"
+      },
+      "widgetId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "attemptId",
+      "bytes",
+      "createdAtMs",
+      "executionMode",
+      "format",
+      "libraries",
+      "revision",
+      "sha256",
+      "summary",
+      "threadId",
+      "title",
+      "toolCallId",
+      "turnId",
+      "widgetId"
+    ],
+    "title": "WidgetRef",
+    "type": "object"
+  },
+  "WidgetRenderReceiptParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "WidgetReadParams": {
+        "additionalProperties": false,
+        "properties": {
+          "revision": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "widgetId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision",
+          "threadId",
+          "widgetId"
+        ],
+        "type": "object"
+      },
+      "WidgetRenderStatus": {
+        "enum": [
+          "rendered",
+          "failed"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "attemptId": {
+        "type": "string"
+      },
+      "errorCode": {
+        "default": null,
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "status": {
+        "$ref": "#/definitions/WidgetRenderStatus"
+      },
+      "toolCallId": {
+        "type": "string"
+      },
+      "turnId": {
+        "type": "string"
+      },
+      "widget": {
+        "$ref": "#/definitions/WidgetReadParams"
+      }
+    },
+    "required": [
+      "attemptId",
+      "status",
+      "toolCallId",
+      "turnId",
+      "widget"
+    ],
+    "title": "WidgetRenderReceiptParams",
+    "type": "object"
+  },
+  "WidgetRenderReceiptResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "properties": {
+      "accepted": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "accepted"
+    ],
+    "title": "WidgetRenderReceiptResult",
+    "type": "object"
+  }
+}

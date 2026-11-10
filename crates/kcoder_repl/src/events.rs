@@ -24,6 +24,13 @@ impl TuiPermissionPrompt {
 
 #[async_trait::async_trait]
 impl PermissionPrompt for TuiPermissionPrompt {
+    async fn ask_explicit_context_with_edit(
+        &self,
+        context: &PermissionRequestContext,
+    ) -> PermissionDialogResult {
+        self.ask_context_with_edit(context).await
+    }
+
     async fn ask(
         &self,
         tool_name: &str,
@@ -131,6 +138,12 @@ pub enum AppEvent {
     AssistantMessageStarted,
     /// The assistant finished a content block.
     AssistantMessageDone,
+    /// Result of one owned, ordered input-preparation job.
+    InputPreparationFinished {
+        id: u64,
+        result: Result<kcoder_types::Message, String>,
+        hook_messages: Vec<(String, bool)>,
+    },
     /// Assistant requested a tool.
     ToolUseStarted {
         id: String,
@@ -139,10 +152,16 @@ pub enum AppEvent {
     },
     /// Tool produced output.
     ToolResult {
+        web_sources: Vec<kcoder_types::web_sources::WebSourcesV1>,
         id: String,
         name: String,
         text: String,
         is_error: bool,
+    },
+    /// The foreground Engine has yielded a tool result and is waiting for the
+    /// TUI to apply any pending model selection before it requests another model response.
+    TurnToolResultBoundary {
+        resume_tx: tokio::sync::oneshot::Sender<()>,
     },
     /// Permission prompt is required.
     PermissionRequest {
@@ -195,6 +214,10 @@ pub enum AppEvent {
     },
     /// The current turn finished for any reason.
     TurnFinished,
+    /// The current turn finished with receipts for steering inputs never consumed.
+    TurnFinishedWithSteering {
+        unapplied_steers: Vec<u64>,
+    },
     /// Manual context compaction completed successfully.
     ManualCompactionFinished {
         did_compact: bool,
@@ -324,10 +347,12 @@ pub(crate) fn app_event_backpressure(event: &AppEvent) -> AppEventBackpressure {
             AppEventBackpressure::Coalescible
         }
         AppEvent::AssistantMessageStarted
+        | AppEvent::InputPreparationFinished { .. }
         | AppEvent::ToolPathPreview { .. }
         | AppEvent::AssistantMessageDone
         | AppEvent::ToolUseStarted { .. }
         | AppEvent::ToolResult { .. }
+        | AppEvent::TurnToolResultBoundary { .. }
         | AppEvent::PermissionRequest { .. }
         | AppEvent::UserQuestionRequest { .. }
         | AppEvent::Error(_)
@@ -341,6 +366,7 @@ pub(crate) fn app_event_backpressure(event: &AppEvent) -> AppEventBackpressure {
         | AppEvent::TurnStarted
         | AppEvent::TurnSteerApplied { .. }
         | AppEvent::TurnFinished
+        | AppEvent::TurnFinishedWithSteering { .. }
         | AppEvent::ManualCompactionFinished { .. }
         | AppEvent::ManualCompactionFailed { .. }
         | AppEvent::MoaPlanFinished { .. }
@@ -398,9 +424,27 @@ impl AppEventSender {
                 let tx = self.tx.clone();
                 match tokio::runtime::Handle::try_current() {
                     Ok(handle) => {
-                        handle.spawn(async move {
-                            let _ = tx.send(event).await;
-                        });
+                        use std::{
+                            future::Future,
+                            task::{Context, Poll, Waker},
+                        };
+                        let mut reservation = Box::pin(tx.reserve_owned());
+                        // Register in the channel's FIFO before returning. A newly
+                        // started turn must not overtake a dropped turn's terminal event.
+                        let mut context = Context::from_waker(Waker::noop());
+                        match reservation.as_mut().poll(&mut context) {
+                            Poll::Ready(Ok(permit)) => {
+                                permit.send(event);
+                            }
+                            Poll::Ready(Err(_)) => return false,
+                            Poll::Pending => {
+                                handle.spawn(async move {
+                                    if let Ok(permit) = reservation.await {
+                                        permit.send(event);
+                                    }
+                                });
+                            }
+                        }
                         true
                     }
                     Err(_) => false,

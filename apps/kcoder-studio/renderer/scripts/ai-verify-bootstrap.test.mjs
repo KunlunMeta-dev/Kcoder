@@ -8,7 +8,7 @@ const config = {
   controlUrl: 'http://127.0.0.1:1235',
   token: 'a'.repeat(64),
 }
-const script = readFileSync(resolve('src-tauri/src/ai_verify_bootstrap.js'), 'utf8').replace(
+const script = readFileSync(resolve('../e2e/harness/electron-verification-bootstrap.js'), 'utf8').replace(
   '__KCODER_VERIFY_CONFIG__',
   JSON.stringify(config)
 )
@@ -16,7 +16,7 @@ const script = readFileSync(resolve('src-tauri/src/ai_verify_bootstrap.js'), 'ut
 function execute(origin, topLevel = true) {
   const calls = []
   const window = {
-    __TAURI_INTERNALS__: {
+    kcoderDesktopHost: {
       invoke: command => {
         calls.push(command)
         return Promise.reject(new Error('denied'))
@@ -47,9 +47,9 @@ describe('native Gateway bootstrap', () => {
     }
   })
 
-  test('records only read-only native rejection probes and freezes its session config', async () => {
+  test('checks Node isolation without native IPC probes and freezes its session config', async () => {
     const { window, calls } = execute(config.origin)
-    expect(calls).toEqual(['get_app_preferences', 'plugin:window|is_visible'])
+    expect(calls).toEqual([])
     expect(await window.__KCODER_AI_VERIFY__.nativeIsolation).toEqual([true, true])
     expect(Object.isFrozen(window.__KCODER_AI_VERIFY__)).toBe(true)
     expect(Object.getOwnPropertyDescriptor(window, '__KCODER_AI_VERIFY__').writable).toBe(false)

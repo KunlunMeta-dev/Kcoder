@@ -2,8 +2,8 @@ import type { GatewayProfile, KCoderServer, ThreadSummary } from "@/gateway/type
 import type { ThreadListFilter, ThreadListPage } from "./task-runtime";
 import type { ThreadMutationEvent } from "./task-runtime/threadDirectory";
 import type { WorkspaceOption } from "./task-runtime/workspaces";
-import { workspaceThreadScopeIdentity, workspaceThreadScopeServers } from "./task-runtime/workspaces";
-import { threadMutationServerIdentity } from "./task-runtime/threadDirectory";
+import { workspaceThreadScopeIdentity, workspaceThreadScopeServers } from "@/gateway/target-identity";
+import { threadMutationServerIdentity } from "@/gateway/target-identity";
 import { timestampMs } from "@/protocol/normalizers";
 
 export function threadListScopeKey(

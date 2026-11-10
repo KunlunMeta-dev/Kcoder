@@ -192,8 +192,8 @@ async function projectSnapshot(project) {
 
 async function runtimeWorkspaces(page) {
   return page.evaluate(async () => {
-    const invoke = window.__TAURI_INTERNALS__?.invoke;
-    if (typeof invoke !== "function") throw new Error("window.__TAURI_INTERNALS__.invoke 不可用");
+    const invoke = window.__ELECTRON_INTERNALS__?.invoke;
+    if (typeof invoke !== "function") throw new Error("window.__ELECTRON_INTERNALS__.invoke 不可用");
     const value = await invoke("local_executor_request", { method: "runtime.tasks.list", params: {} });
     return Array.isArray(value?.workspaces) ? value.workspaces.map(workspace => ({
       label: typeof workspace?.label === "string" ? workspace.label : "",

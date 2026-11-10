@@ -58,7 +58,7 @@ await runE2E(import.meta.url, {
   await project.hover();
   await project.getByTestId("project-new-conversation-button").click();
   await page.evaluate(() => {
-    const internals = window.__TAURI_INTERNALS__;
+    const internals = window.__ELECTRON_INTERNALS__;
     const invoke = internals.invoke;
     internals.invoke = async (command, args) => {
       const result = await invoke(command, args);

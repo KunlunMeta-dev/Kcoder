@@ -1,9 +1,9 @@
 import { beforeEach, expect, test, vi } from 'vitest'
-import { requestLocalExecutor } from '@/tauri/localExecutor'
+import { requestLocalExecutor } from '@/host/localExecutor'
 import { notifyAccountContextChange } from './accountContextEvents'
 import { uploadWorkspaceFile } from './workspaceFileUpload'
 
-vi.mock('@/tauri/localExecutor', () => ({ requestLocalExecutor: vi.fn() }))
+vi.mock('@/host/localExecutor', () => ({ requestLocalExecutor: vi.fn() }))
 const request = vi.mocked(requestLocalExecutor)
 const hash = 'a'.repeat(64)
 function file(size = 192 * 1024 + 37) {

@@ -4,6 +4,7 @@ import { createLogger, defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { fileViewerRenderers } from '@file-viewer/vite-plugin'
 import { configDefaults } from 'vitest/config'
+import { mountedLazyImports } from './plugins/mounted-lazy-imports'
 
 function normalizeBackendUrl(value: string): string {
   const url = new URL(value)
@@ -14,10 +15,9 @@ function normalizeBackendUrl(value: string): string {
   return url.toString().replace(/\/$/, '')
 }
 
-const backendProxyTarget = normalizeBackendUrl(
-  process.env.VITE_WEGENT_BACKEND_URL || 'http://localhost:8000'
-)
-const socketProxyTarget = process.env.VITE_WEGENT_SOCKET_URL || backendProxyTarget
+const configuredBackendUrl = process.env.VITE_WEGENT_BACKEND_URL?.trim()
+const backendProxyTarget = configuredBackendUrl ? normalizeBackendUrl(configuredBackendUrl) : undefined
+const socketProxyTarget = process.env.VITE_WEGENT_SOCKET_URL?.trim() || backendProxyTarget
 const configuredAppBasePath = process.env.VITE_APP_BASE_PATH || '/'
 const appBasePath = configuredAppBasePath.endsWith('/')
   ? configuredAppBasePath
@@ -42,16 +42,41 @@ logger.warn = (message, options) => {
   if (!isKnownBrowserExternal) defaultWarn(message, options)
 }
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   base: appBasePath,
   customLogger: logger,
+  experimental: {
+    bundledDev: mode !== 'test' && process.env.KCODER_STUDIO_VITE_BUNDLED_DEV === '1',
+  },
   plugins: [
+    {
+      name: 'kcoder-boot-loading-style',
+      transformIndexHtml: {
+        order: 'post',
+        handler(html) {
+          if (!html.includes('id="kcoder-boot-loading"')) return
+          // Bundled dev puts stylesheet links in the app entry. The boot screen
+          // must be styled before that entry finishes loading.
+          const css = fs.readFileSync(path.resolve(__dirname, 'src/styles/page-loading.css'), 'utf-8')
+          return [{ tag: 'style', attrs: { id: 'kcoder-boot-loading-style' }, children: css, injectTo: 'head' }]
+        },
+      },
+    },
+    mountedLazyImports(),
     react(),
     fileViewerRenderers({
       preset: 'auto',
       autoPresets: ['office', 'lite', 'engineering'],
-      copyAssets: true,
-      chunkStrategy: 'renderer',
+      // The workspace viewer passes these presets to its own instance registry
+      // and loads on demand. Global HTML injection would load every renderer
+      // (PDF, 3D, CAD, OFD...) at startup.
+      inject: false,
+      // Unit tests must not rewrite assets watched by a shared development server.
+      copyAssets: mode !== 'test',
+      // Renderer manualChunks placed Vite's preload helper inside the three.js
+      // chunk, forcing the 3D viewer into startup. Dynamic imports already
+      // split each renderer into its own chunk.
+      chunkStrategy: 'none',
     }),
   ],
   define: {
@@ -64,28 +89,20 @@ export default defineConfig({
   },
   server: {
     host: '0.0.0.0',
+    // Middleware mode broadcasts HTML reloads; test fixtures are separate entrypoints.
+    watch: { ignored: ['**/e2e/**', '**/test-results/**', '**/coverage/**'] },
+    fs: {
+      // Expose only the public channel descriptor, never the SDK/credential implementation.
+      allow: [__dirname, path.resolve(__dirname, '../shared'),
+        path.resolve(__dirname, '../../kcoder-channel-host/src/channel-platforms.json')],
+    },
     proxy: {
-      '/wework/api': {
-        target: backendProxyTarget,
-        changeOrigin: true,
-        rewrite: path => path.replace(/^\/wework\/api/, '/api'),
-      },
-      '/wework/socket.io': {
-        target: socketProxyTarget,
-        changeOrigin: true,
-        ws: true,
-        rewrite: path => path.replace(/^\/wework\/socket\.io/, '/socket.io'),
-      },
-      '/api': {
-        target: backendProxyTarget,
-        changeOrigin: true,
-        ws: true,
-      },
-      '/socket.io': {
-        target: socketProxyTarget,
-        changeOrigin: true,
-        ws: true,
-      },
+      ...(backendProxyTarget && {
+        '/api': { target: backendProxyTarget, changeOrigin: true, ws: true },
+      }),
+      ...(socketProxyTarget && {
+        '/socket.io': { target: socketProxyTarget, changeOrigin: true, ws: true },
+      }),
     },
   },
   resolve: {
@@ -110,4 +127,4 @@ export default defineConfig({
       reportsDirectory: './coverage',
     },
   },
-})
+}))

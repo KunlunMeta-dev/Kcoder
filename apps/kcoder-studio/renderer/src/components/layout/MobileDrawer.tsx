@@ -1,3 +1,4 @@
+import { StudioWorkModeSwitcher } from './StudioWorkModeSwitcher'
 import { navigateTo } from '@/lib/navigation'
 import {
   Edit3,
@@ -348,6 +349,7 @@ export function MobileDrawer({
           </button>
         </div>
       </header>
+      <div className="mx-4 mt-4"><StudioWorkModeSwitcher address={currentRuntimeTask} onNewChat={() => closeAfter(onNewChat ?? onStartStandaloneChat)} /></div>
 
       {searchOpen && (
         <div className="relative mx-6 mt-6 shrink-0">

@@ -2,6 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
+import type { WebSourcesV1 } from '../../../../shared/webSources'
 import { decodeProviderFailure, type ProviderFailureDetails } from './provider-failure'
 import {
   decodeToolCallStatus,
@@ -45,6 +46,7 @@ export interface WorkbenchToolBlock extends BaseWorkbenchProcessingBlock {
   toolOutputOriginalBytes?: number
   toolOutputOriginalChars?: number
   toolOutputLoadRef?: WorkbenchContentLoadRef
+  webSources?: WebSourcesV1
   renderPayload?: unknown
   /** Transient argument estimate from this tool's stream, never a file receipt. */
   generatedLineProgress?: WorkbenchGeneratedLineProgress
@@ -125,6 +127,8 @@ export interface WorkbenchMessage<TAttachment = unknown, TFileChanges = unknown>
   attachments?: TAttachment[]
   blocks?: WorkbenchProcessingBlock<TFileChanges>[]
   fileChanges?: TFileChanges
+  fileChangesCapture?: unknown
+  reviewEvidence?: unknown
   source?: MessageSource
   runtimeStatus?: WorkbenchRuntimeMessageStatus | null
   completedAt?: string | number | null
@@ -151,6 +155,7 @@ type ProcessingBlockUpdate = {
   toolOutputDelta?: string
   toolOutputTruncated?: boolean
   toolOutputOriginalBytes?: number
+  webSources?: WebSourcesV1
   renderPayload?: unknown
   fileChanges?: unknown
   status?: WorkbenchToolBlockStatus
@@ -169,6 +174,8 @@ export type WorkbenchMessageAction<TAttachment = unknown, TFileChanges = unknown
       messageId?: string
       taskId?: string
       subtaskId?: string
+      turnId?: string
+      attemptId?: string
       shellType?: string
     }
   | {
@@ -196,6 +203,8 @@ export type WorkbenchMessageAction<TAttachment = unknown, TFileChanges = unknown
       content?: string
       blocks?: WorkbenchProcessingBlock<TFileChanges>[]
       fileChanges?: TFileChanges
+      fileChangesCapture?: unknown
+  reviewEvidence?: unknown
     }
   | {
       type: 'assistant_cancelled'
@@ -208,6 +217,8 @@ export type WorkbenchMessageAction<TAttachment = unknown, TFileChanges = unknown
       subtaskId: string
       fileChanges: TFileChanges
     }
+  | { type: 'file_capture_updated'; subtaskId: string; capture: unknown }
+  | { type: 'review_evidence_updated'; subtaskId: string; evidence: unknown }
   | {
       type: 'assistant_error'
       messageId?: string
@@ -257,8 +268,20 @@ export function reduceWorkbenchMessages<TAttachment = unknown, TFileChanges = un
   switch (action.type) {
     case 'reset':
       return normalizeUniqueWorkbenchMessages(action.messages).map(limitWorkbenchMessage)
-    case 'user_added':
-      return normalizeUniqueWorkbenchMessages([...state, action.message]).map(limitWorkbenchMessage)
+    case 'user_added': {
+      const existing = state.findIndex(m => m.id === action.message.id && m.role === 'user')
+      if (existing >= 0) return state.map((message, index) => index === existing
+        ? limitWorkbenchMessage(mergeDuplicateWorkbenchMessage(message, action.message)) : message)
+      // A subscribed viewer can receive turn/started before the committed input.
+      // Preserve the original turn order without duplicating optimistic input.
+      const beforeAssistant = action.message.turnId && !state.some(m => m.id === action.message.id)
+        ? state.findIndex(m => m.role === 'assistant' && m.turnId === action.message.turnId &&
+            m.taskId === action.message.taskId)
+        : -1
+      const messages = [...state]
+      messages.splice(beforeAssistant < 0 ? messages.length : beforeAssistant, 0, action.message)
+      return normalizeUniqueWorkbenchMessages(messages).map(limitWorkbenchMessage)
+    }
     case 'assistant_started':
       if (state.some(message => isAssistantMessageForAction(message, action))) {
         return state.map(message =>
@@ -266,6 +289,8 @@ export function reduceWorkbenchMessages<TAttachment = unknown, TFileChanges = un
             ? limitWorkbenchMessage({
                 ...clearMessageError(message),
                 taskId: action.taskId ?? message.taskId,
+                turnId: action.turnId ?? message.turnId,
+                attemptId: action.attemptId ?? message.attemptId,
                 shellType: action.shellType ?? message.shellType,
                 status: 'streaming' as const,
               })
@@ -279,6 +304,8 @@ export function reduceWorkbenchMessages<TAttachment = unknown, TFileChanges = un
             messageId: action.messageId,
             taskId: action.taskId,
             subtaskId: action.subtaskId,
+            turnId: action.turnId,
+            attemptId: action.attemptId,
             shellType: action.shellType,
           })
         ),
@@ -364,6 +391,8 @@ export function reduceWorkbenchMessages<TAttachment = unknown, TFileChanges = un
               status: 'done',
               blocks: finalizeProcessingBlocks(action.blocks, 'done'),
               fileChanges: action.fileChanges,
+              fileChangesCapture: action.fileChangesCapture,
+              reviewEvidence: action.reviewEvidence,
             })
           ),
         ]
@@ -384,6 +413,8 @@ export function reduceWorkbenchMessages<TAttachment = unknown, TFileChanges = un
               status: 'done' as const,
               blocks: finalizeProcessingBlocks(action.blocks ?? message.blocks, 'done'),
               fileChanges: action.fileChanges ?? message.fileChanges,
+              fileChangesCapture: action.fileChangesCapture ?? message.fileChangesCapture,
+              reviewEvidence: action.reviewEvidence ?? message.reviewEvidence,
             })
           : message
       )
@@ -433,6 +464,16 @@ export function reduceWorkbenchMessages<TAttachment = unknown, TFileChanges = un
               blocks: finalizeProcessingBlocks(message.blocks, 'done'),
             })
           : message
+      )
+    }
+    case 'review_evidence_updated': {
+      const targetIndex = findTerminalAssistantMessageIndex(state, action)
+      return state.map((message, index) => index === targetIndex ? { ...message, reviewEvidence: action.evidence } : message)
+    }
+    case 'file_capture_updated': {
+      const targetIndex = findTerminalAssistantMessageIndex(state, action)
+      return state.map((message, index) =>
+        index === targetIndex ? { ...message, fileChangesCapture: action.capture } : message
       )
     }
     case 'file_changes_updated':
@@ -533,6 +574,15 @@ function mergeProcessingBlockUpdate<TFileChanges>(
 ): WorkbenchProcessingBlock<TFileChanges> {
   if (!canAcceptToolCallUpdate(block.status, updates.status)) return block
   const { toolOutputDelta, ...directUpdates } = updates
+  if (
+    block.type === 'tool' &&
+    block.status === updates.status &&
+    !isActiveToolCallStatus(block.status) &&
+    isOmittedImageReplay(block.toolOutput, updates.toolOutput)
+  ) {
+    // A compact resume receipt cannot erase the same call's hydrated images.
+    delete directUpdates.toolOutput
+  }
   const nextBlock = withBlockCompletionTime(block, {
     ...block,
     ...directUpdates,
@@ -563,6 +613,20 @@ function mergeProcessingBlockUpdate<TFileChanges>(
     toolOutput: nextToolOutput,
     toolOutputOriginalChars: nextOriginalChars,
   }
+}
+
+function isOmittedImageReplay(previous: unknown, incoming: unknown): boolean {
+  if (!previous || typeof previous !== 'object' || !incoming || typeof incoming !== 'object')
+    return false
+  const before = previous as Record<string, unknown>
+  const after = incoming as Record<string, unknown>
+  return (
+    Array.isArray(before.images) &&
+    before.images.length > 0 &&
+    after.imagesOmitted === true &&
+    Array.isArray(after.images) &&
+    after.images.length === 0
+  )
 }
 
 function limitWorkbenchMessage<TAttachment, TFileChanges>(
@@ -764,6 +828,8 @@ function mergeDuplicateWorkbenchMessage<TAttachment, TFileChanges>(
     attachments: incoming.attachments ?? current.attachments,
     blocks: mergeMessageBlocks(current.blocks, incoming.blocks),
     fileChanges: incoming.fileChanges ?? current.fileChanges,
+    fileChangesCapture: incoming.fileChangesCapture ?? current.fileChangesCapture,
+    reviewEvidence: incoming.reviewEvidence ?? current.reviewEvidence,
     source: incoming.source ?? current.source,
     runtimeStatus: incoming.runtimeStatus ?? current.runtimeStatus,
     completedAt: incoming.completedAt ?? current.completedAt,
@@ -850,11 +916,14 @@ function createAssistantMessage<TAttachment, TFileChanges>({
   taskId,
   subtaskId,
   turnId,
+  attemptId,
   shellType,
   content = '',
   status = 'streaming',
   blocks = [],
   fileChanges,
+  fileChangesCapture,
+  reviewEvidence,
   error,
   errorType,
   providerFailure,
@@ -866,11 +935,14 @@ function createAssistantMessage<TAttachment, TFileChanges>({
   taskId?: string
   subtaskId?: string
   turnId?: string
+  attemptId?: string
   shellType?: string
   content?: string
   status?: WorkbenchMessageStatus
   blocks?: WorkbenchProcessingBlock<TFileChanges>[]
   fileChanges?: TFileChanges
+  fileChangesCapture?: unknown
+  reviewEvidence?: unknown
   error?: string
   errorType?: string
   providerFailure?: ProviderFailureDetails
@@ -883,12 +955,15 @@ function createAssistantMessage<TAttachment, TFileChanges>({
     taskId,
     subtaskId,
     turnId,
+    attemptId,
     shellType,
     role: 'assistant',
     content,
     status,
     blocks,
     fileChanges,
+    fileChangesCapture,
+    reviewEvidence,
     error,
     errorType,
     providerFailure,

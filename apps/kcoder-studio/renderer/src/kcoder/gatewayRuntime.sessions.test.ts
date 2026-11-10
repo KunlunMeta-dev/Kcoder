@@ -515,6 +515,9 @@ describe('KCoder gateway runtime task isolation', () => {
       session_id: 'terminal-command-terminal',
       data: 'shell ready\r\n',
     })
+    // Notifications are projected through an async per-client queue; let it drain
+    // so the output is buffered before the client attaches and replays it.
+    await new Promise(resolve => setTimeout(resolve, 0))
     const remote = runtime.createTerminalClient(session.session_id)
     const output = vi.fn()
     const exit = vi.fn()

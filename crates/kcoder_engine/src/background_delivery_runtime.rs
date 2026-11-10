@@ -242,9 +242,7 @@ impl QueryEngine {
             return self
                 .state
                 .task_for_background_run(&identity.run)
-                .is_some_and(|task| {
-                    task.kind == TaskKind::Subagent && task.notify_parent_on_completion
-                })
+                .is_some_and(|task| self.background_task_wakes_parent(&task))
                 && self
                     .state
                     .background_run_record(&identity.run)

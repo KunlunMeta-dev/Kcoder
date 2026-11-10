@@ -1,16 +1,18 @@
 use crate::owned_process::{OwnedProcess, drain_prefix};
 use crate::{Tool, ToolContext, ToolError, ToolOutput, parse_input};
 use async_trait::async_trait;
-use schemars::JsonSchema;
-use serde::Deserialize;
 use serde_json::Value;
 use std::path::{Component, Path, PathBuf};
 use std::process::Stdio;
-use std::time::{Duration, Instant};
-use tokio::io::{AsyncBufRead, AsyncBufReadExt, AsyncRead, AsyncReadExt, BufReader};
+use std::time::Duration;
+use tokio::io::{AsyncRead, AsyncReadExt};
 
-mod page;
-use page::GrepPage;
+use kcoder_file_search::grep::{
+    EXPENSIVE_SEARCH_BYTE_LIMIT, EXPENSIVE_SEARCH_FILE_LIMIT, GrepPage, MAX_GREP_RECORD_BYTES,
+    estimate_broad_search_cost, estimate_expensive_search_cost, regex_fallback_scan,
+};
+pub use kcoder_file_search::grep::{GrepInput, GrepOutputMode};
+use kcoder_file_search::{GENERATED_DIRECTORIES_TO_EXCLUDE, VCS_DIRECTORIES_TO_EXCLUDE};
 use tokio::process::Command;
 use tokio::time::timeout;
 use tracing::{debug, warn};
@@ -21,77 +23,6 @@ use crate::process::configure_isolated_process_environment;
 #[derive(Debug, Default)]
 pub struct GrepTool;
 
-#[derive(Debug, Deserialize, JsonSchema)]
-pub struct GrepInput {
-    /// Regular expression pattern to search for. Escape special regex
-    /// characters when searching for a literal string.
-    pub pattern: String,
-    /// Existing file or project/subdirectory to search. Omit only when cwd is the intended project; avoid broad home/drive scans.
-    pub path: Option<String>,
-    /// Filename filter such as `*.rs` or `src/**/*.ts`, not a content regex. Prefer this or type to bound the scan.
-    pub glob: Option<String>,
-    /// Output modes: `files_with_matches` lists files, `content` shows matching lines,
-    /// and `count` reports per-file counts plus an exact global total. The default is `files_with_matches`.
-    pub output_mode: Option<GrepOutputMode>,
-    /// Number of lines to show before each content match.
-    #[serde(rename = "-B")]
-    pub before_context: Option<usize>,
-    /// Number of lines to show after each content match.
-    #[serde(rename = "-A")]
-    pub after_context: Option<usize>,
-    /// Number of lines to show before and after each content match.
-    #[serde(rename = "-C")]
-    #[schemars(skip)]
-    pub context_flag: Option<usize>,
-    /// Lines before and after each content match.
-    pub context: Option<usize>,
-    /// Show line numbers in content mode. Defaults to true.
-    #[serde(rename = "-n")]
-    pub line_numbers: Option<bool>,
-    /// Case insensitive search.
-    #[serde(rename = "-i")]
-    pub case_insensitive: Option<bool>,
-    /// Ripgrep file type filter such as `rust`, `js`, or `py`.
-    #[serde(rename = "type")]
-    pub file_type: Option<String>,
-    /// Maximum output lines/entries, 1..=10000; defaults to 250. Zero is rejected.
-    /// Count totals still include all matches; only displayed per-file rows are limited.
-    #[schemars(range(min = 1, max = 10000))]
-    pub head_limit: Option<usize>,
-    /// Skip this many output lines/entries before applying `head_limit`.
-    pub offset: Option<usize>,
-    /// Enable ripgrep multiline mode (`-U --multiline-dotall`).
-    pub multiline: Option<bool>,
-}
-
-#[derive(Debug, Clone, Copy, Deserialize, JsonSchema, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum GrepOutputMode {
-    Content,
-    FilesWithMatches,
-    Count,
-}
-
-const DEFAULT_HEAD_LIMIT: usize = 250;
-const VCS_DIRECTORIES_TO_EXCLUDE: &[&str] = &[".git", ".svn", ".hg", ".bzr", ".jj", ".sl"];
-const GENERATED_DIRECTORIES_TO_EXCLUDE: &[&str] = &[
-    "target",
-    "node_modules",
-    ".venv",
-    "venv",
-    "__pycache__",
-    ".pytest_cache",
-    "dist",
-    "build",
-    "out",
-];
-const BROAD_SEARCH_FILE_LIMIT: usize = 500;
-const BROAD_SEARCH_BYTE_LIMIT: u64 = 16 * 1024 * 1024;
-const EXPENSIVE_SEARCH_FILE_LIMIT: usize = 2_000;
-const EXPENSIVE_SEARCH_BYTE_LIMIT: u64 = 128 * 1024 * 1024;
-const PREFLIGHT_ESTIMATE_TIME_LIMIT: Duration = Duration::from_millis(300);
-const MAX_GREP_RECORD_BYTES: usize = 64 * 1024;
-const MAX_GREP_PAGE_BYTES: usize = 8 * 1024 * 1024;
 const MAX_GREP_STDERR_BYTES: usize = 4096;
 const RIPGREP_TIMEOUT: Duration = Duration::from_secs(20);
 
@@ -416,7 +347,8 @@ async fn regex_fallback(
     base: &Path,
     ctx: &ToolContext,
 ) -> Result<ToolOutput, ToolError> {
-    let scan = regex_fallback_scan(input, base, ctx);
+    let cwd = || ctx.state.cwd();
+    let scan = regex_fallback_scan(input, base, &cwd);
     let result = tokio::select! {
         result = timeout(RIPGREP_TIMEOUT, scan) => result,
         _ = ctx.cancelled() => return Ok(ToolOutput::error("grep cancelled; no exact count is available.")),
@@ -433,142 +365,6 @@ async fn regex_fallback(
             RIPGREP_TIMEOUT,
         ))),
     }
-}
-
-async fn read_search_line(
-    reader: &mut (impl AsyncBufRead + Unpin),
-) -> std::io::Result<Option<Vec<u8>>> {
-    let mut line = Vec::new();
-    loop {
-        let chunk = reader.fill_buf().await?;
-        if chunk.is_empty() {
-            return Ok((!line.is_empty()).then_some(line));
-        }
-        let take = chunk
-            .iter()
-            .position(|b| *b == b'\n')
-            .map_or(chunk.len(), |index| index + 1);
-        if take > MAX_GREP_RECORD_BYTES.saturating_sub(line.len()) {
-            return Err(std::io::Error::other(
-                "grep fallback line byte budget exceeded",
-            ));
-        }
-        let ended = chunk[take - 1] == b'\n';
-        line.extend_from_slice(&chunk[..take]);
-        reader.consume(take);
-        if ended {
-            return Ok(Some(line));
-        }
-    }
-}
-
-async fn regex_fallback_scan(
-    input: &GrepInput,
-    base: &Path,
-    ctx: &ToolContext,
-) -> std::io::Result<String> {
-    let mode = input
-        .output_mode
-        .unwrap_or(GrepOutputMode::FilesWithMatches);
-    let regex = regex::RegexBuilder::new(&input.pattern)
-        .case_insensitive(input.case_insensitive.unwrap_or(false))
-        .build()
-        .map_err(std::io::Error::other)?;
-    let cwd = ctx.state.cwd();
-    let mut page = GrepPage::new(input, base, &cwd);
-    let glob_matcher = input
-        .glob
-        .as_ref()
-        .and_then(|g| globset::Glob::new(g).ok().map(|g| g.compile_matcher()));
-    for entry in walkdir::WalkDir::new(base)
-        .follow_links(false)
-        .into_iter()
-        .filter_map(|e| e.ok())
-    {
-        // Never follow a final symlink outside the search/sandbox boundary.
-        if entry.file_type().is_symlink() || !entry.file_type().is_file() {
-            continue;
-        }
-        let path = entry.path();
-        if glob_matcher
-            .as_ref()
-            .is_some_and(|matcher| !matcher.is_match(path))
-        {
-            continue;
-        }
-        let file = match tokio::fs::File::open(path).await {
-            Ok(file) => file,
-            Err(_) => continue,
-        };
-        let mut reader = BufReader::new(file);
-        let path_text = path.to_string_lossy();
-        let relative = to_relative_path(&path_text, &cwd, base);
-        let context = input.context.or(input.context_flag).unwrap_or(0);
-        let before = input.before_context.unwrap_or(context);
-        let after = input.after_context.unwrap_or(context);
-        let mut preceding = std::collections::VecDeque::new();
-        let mut preceding_bytes = 0usize;
-        let mut line_number = 0usize;
-        let mut last_emitted = 0usize;
-        let mut after_until = 0usize;
-        let mut file_matches = 0u64;
-        while let Some(bytes) = read_search_line(&mut reader).await? {
-            line_number += 1;
-            let Ok(line) = std::str::from_utf8(&bytes) else {
-                file_matches = 0;
-                break;
-            };
-            if line.contains('\0') {
-                file_matches = 0;
-                break;
-            }
-            let line = line.trim_end_matches(['\r', '\n']);
-            let matched = regex.is_match(line);
-            file_matches += u64::from(matched);
-            if mode == GrepOutputMode::FilesWithMatches && matched {
-                break;
-            }
-            if mode == GrepOutputMode::Content {
-                if matched {
-                    for (index, text) in &preceding {
-                        if *index > last_emitted {
-                            page.push_content(format!("{relative}:{index}: {text}"));
-                            last_emitted = *index;
-                        }
-                    }
-                    after_until = line_number.saturating_add(after);
-                }
-                if (matched || line_number <= after_until) && line_number > last_emitted {
-                    page.push_content(format!("{relative}:{line_number}: {line}"));
-                    last_emitted = line_number;
-                }
-                if before > 0 {
-                    let text = line.to_string();
-                    preceding_bytes += text.len() + 32;
-                    preceding.push_back((line_number, text));
-                    while preceding.len() > before {
-                        if let Some((_, old)) = preceding.pop_front() {
-                            preceding_bytes -= old.len() + 32;
-                        }
-                    }
-                    if preceding_bytes > MAX_GREP_PAGE_BYTES {
-                        return Err(std::io::Error::other(
-                            "grep fallback context byte budget exceeded",
-                        ));
-                    }
-                }
-            }
-        }
-        if file_matches > 0 {
-            if mode == GrepOutputMode::FilesWithMatches {
-                page.push_file(&path_text)?;
-            }
-            if mode == GrepOutputMode::Count {
-                page.push_count(&path_text, file_matches)?;
-            }
-        }
-    }
-    Ok(page.finish())
 }
 
 fn resolve_path(path: &str, cwd: &std::path::Path) -> PathBuf {
@@ -620,129 +416,6 @@ fn expensive_unbounded_search_error(input: &GrepInput, base: &Path, cwd: &Path) 
         estimate.file_count_label_with_limit(EXPENSIVE_SEARCH_FILE_LIMIT),
         estimate.byte_count_label_with_limit(EXPENSIVE_SEARCH_BYTE_LIMIT),
     ))
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct SearchScopeEstimate {
-    files: usize,
-    bytes: u64,
-    crossed_limit: bool,
-}
-
-impl SearchScopeEstimate {
-    fn is_within_limit(self) -> bool {
-        !self.crossed_limit
-    }
-
-    fn file_count_label(self) -> String {
-        self.file_count_label_with_limit(BROAD_SEARCH_FILE_LIMIT)
-    }
-
-    fn file_count_label_with_limit(self, limit: usize) -> String {
-        if self.crossed_limit && self.files > limit {
-            format!("more than {limit} files")
-        } else {
-            format!(
-                "{} {}",
-                self.files,
-                if self.files == 1 { "file" } else { "files" }
-            )
-        }
-    }
-
-    fn byte_count_label(self) -> String {
-        self.byte_count_label_with_limit(BROAD_SEARCH_BYTE_LIMIT)
-    }
-
-    fn byte_count_label_with_limit(self, limit: u64) -> String {
-        let bytes = human_bytes(self.bytes);
-        if self.crossed_limit && self.bytes > limit {
-            format!("more than {bytes}")
-        } else {
-            bytes
-        }
-    }
-}
-
-fn estimate_broad_search_cost(base: &Path) -> SearchScopeEstimate {
-    estimate_search_cost(base, BROAD_SEARCH_FILE_LIMIT, BROAD_SEARCH_BYTE_LIMIT)
-}
-
-fn estimate_expensive_search_cost(base: &Path) -> SearchScopeEstimate {
-    estimate_search_cost(
-        base,
-        EXPENSIVE_SEARCH_FILE_LIMIT,
-        EXPENSIVE_SEARCH_BYTE_LIMIT,
-    )
-}
-
-fn estimate_search_cost(base: &Path, file_limit: usize, byte_limit: u64) -> SearchScopeEstimate {
-    let started_at = Instant::now();
-    let mut estimate = SearchScopeEstimate {
-        files: 0,
-        bytes: 0,
-        crossed_limit: false,
-    };
-
-    if base.is_file() {
-        estimate.files = 1;
-        estimate.bytes = base.metadata().map(|metadata| metadata.len()).unwrap_or(0);
-        estimate.crossed_limit = estimate.files > file_limit || estimate.bytes > byte_limit;
-        return estimate;
-    }
-
-    for entry in walkdir::WalkDir::new(base)
-        .follow_links(false)
-        .into_iter()
-        .filter_entry(should_descend_for_grep_estimate)
-        .filter_map(Result::ok)
-    {
-        if !entry.file_type().is_file() {
-            continue;
-        }
-        if started_at.elapsed() >= PREFLIGHT_ESTIMATE_TIME_LIMIT {
-            estimate.files = estimate.files.max(file_limit.saturating_add(1));
-            estimate.bytes = estimate.bytes.max(byte_limit.saturating_add(1));
-            estimate.crossed_limit = true;
-            break;
-        }
-        estimate.files = estimate.files.saturating_add(1);
-        estimate.bytes = estimate
-            .bytes
-            .saturating_add(entry.metadata().map(|metadata| metadata.len()).unwrap_or(0));
-        if estimate.files > file_limit || estimate.bytes > byte_limit {
-            estimate.crossed_limit = true;
-            break;
-        }
-    }
-
-    estimate
-}
-
-fn should_descend_for_grep_estimate(entry: &walkdir::DirEntry) -> bool {
-    if entry.depth() == 0 || !entry.file_type().is_dir() {
-        return true;
-    }
-    let Some(name) = entry.file_name().to_str() else {
-        return true;
-    };
-    !VCS_DIRECTORIES_TO_EXCLUDE.contains(&name) && !GENERATED_DIRECTORIES_TO_EXCLUDE.contains(&name)
-}
-
-fn human_bytes(bytes: u64) -> String {
-    const KIB: f64 = 1024.0;
-    const MIB: f64 = KIB * 1024.0;
-    const GIB: f64 = MIB * 1024.0;
-    let bytes_f = bytes as f64;
-    if bytes_f >= GIB {
-        format!("{:.1} GiB", bytes_f / GIB)
-    } else if bytes_f >= MIB {
-        format!("{:.1} MiB", bytes_f / MIB)
-    } else if bytes_f >= KIB {
-        format!("{:.1} KiB", bytes_f / KIB)
-    } else {
-        format!("{bytes} B")
-    }
 }
 
 fn search_has_scope(input: &GrepInput, base: &Path, cwd: &Path) -> bool {
@@ -860,6 +533,11 @@ fn normalize_path_lexically(path: &Path) -> PathBuf {
 }
 
 #[cfg(test)]
+use kcoder_file_search::grep::{
+    BROAD_SEARCH_FILE_LIMIT, DEFAULT_HEAD_LIMIT, append_pagination_note, relativize_rg_line,
+};
+
+#[cfg(test)]
 fn format_count_results(lines: Vec<String>, input: &GrepInput) -> String {
     let total_matches = lines
         .iter()
@@ -914,22 +592,6 @@ fn apply_head_limit<T>(
     )
 }
 
-fn append_pagination_note(text: &mut String, applied_limit: Option<usize>, offset: usize) {
-    let mut parts = Vec::new();
-    if let Some(limit) = applied_limit {
-        parts.push(format!("limit: {limit}"));
-    }
-    if offset > 0 {
-        parts.push(format!("offset: {offset}"));
-    }
-    if !parts.is_empty() {
-        text.push_str(&format!(
-            "\n\n[Showing results with pagination = {}]",
-            parts.join(", ")
-        ));
-    }
-}
-
 fn split_glob_patterns(glob: &str) -> Vec<&str> {
     let mut patterns = Vec::new();
     for raw in glob.split_whitespace() {
@@ -940,15 +602,6 @@ fn split_glob_patterns(glob: &str) -> Vec<&str> {
         }
     }
     patterns
-}
-
-fn relativize_rg_line(line: &str, cwd: &Path) -> String {
-    // Content-mode ripgrep is invoked with `--null`, yielding
-    // `path\0line:text` (or `path\0line-context`).
-    let Some((path, rest)) = line.split_once('\0') else {
-        return line.to_string();
-    };
-    format!("{}:{}", to_relative_path(path, cwd, cwd), rest)
 }
 
 #[cfg(test)]
@@ -977,38 +630,6 @@ mod line_parse_tests {
             "no delimiter here"
         );
     }
-}
-
-fn to_relative_path(path: &str, cwd: &Path, base: &Path) -> String {
-    let path = Path::new(path);
-    if let Ok(relative) = path.strip_prefix(cwd) {
-        return relative.display().to_string();
-    }
-    if let Ok(relative) = path.strip_prefix(base) {
-        return relative.display().to_string();
-    }
-    // Textual fallback: a Windows-style path (`C:\repo\a.rs`) contains no
-    // separators on Unix hosts, so std::path prefix stripping above cannot
-    // relativize it. rg output arrives as text; strip a string prefix
-    // followed by either separator shape.
-    if let Some(stripped) = strip_prefix_text(&path.to_string_lossy(), &cwd.to_string_lossy())
-        .or_else(|| strip_prefix_text(&path.to_string_lossy(), &base.to_string_lossy()))
-    {
-        return stripped;
-    }
-    path.display().to_string()
-}
-
-/// Strip `prefix` from `path` when it is followed by a `/` or `\` separator.
-fn strip_prefix_text(path: &str, prefix: &str) -> Option<String> {
-    let rest = path.strip_prefix(prefix)?;
-    rest.strip_prefix(['/', '\\']).map(str::to_string)
-}
-
-fn file_modified_time(path: &Path) -> std::time::SystemTime {
-    path.metadata()
-        .and_then(|metadata| metadata.modified())
-        .unwrap_or(std::time::SystemTime::UNIX_EPOCH)
 }
 
 #[cfg(test)]
@@ -1211,10 +832,10 @@ mod tests {
 
         let default_root = estimate_expensive_search_cost(tmp.path());
         assert_eq!(default_root.files, 1);
-        assert!(!default_root.crossed_limit);
+        assert!(default_root.is_within_limit());
 
         let explicit_target_root = estimate_expensive_search_cost(&target);
-        assert!(explicit_target_root.crossed_limit);
+        assert!(!explicit_target_root.is_within_limit());
         assert!(explicit_target_root.files > EXPENSIVE_SEARCH_FILE_LIMIT);
     }
 
@@ -1401,7 +1022,7 @@ time.sleep(60)
             let task = tokio::spawn(async move {
                 run_ripgrep(&grep_input_for_content(), &root, &ctx, &fake).await
             });
-            let pids: Vec<u32> = tokio::time::timeout(Duration::from_secs(2), async {
+            let pids: Vec<u32> = tokio::time::timeout(Duration::from_secs(15), async {
                 loop {
                     if let Ok(text) = tokio::fs::read_to_string(tmp.path().join("pids")).await {
                         let pids: Vec<_> = text

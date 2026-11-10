@@ -66,6 +66,42 @@ fn local_runtime_preflight_error_is_not_a_provider_failure() {
 }
 
 #[test]
+fn widget_tool_result_notification_carries_the_owning_retry_attempt() {
+    let mut projection = StreamProjection::new(
+        "server".into(),
+        "thread".into(),
+        "turn-1".into(),
+        Arc::new(AtomicU64::new(0)),
+    );
+    projection.item_namespace = "turn-1-retry-owned".into();
+    let widget: kcoder_types::widgets::WidgetRef = serde_json::from_value(json!({
+        "widgetId":"owned-widget", "threadId":"thread", "turnId":"turn-1",
+        "attemptId":"turn-1-retry-owned", "toolCallId":"owned-tool", "revision":1,
+        "title":"Owned diagram", "summary":"A deterministic test", "format":"svg",
+        "executionMode":"managed", "libraries":[], "sha256":"a".repeat(64),
+        "bytes":11, "createdAtMs":1
+    }))
+    .unwrap();
+    let mut output = kcoder_tools::ToolOutput::text("committed");
+    output.execution_metadata = vec![kcoder_tools::ToolExecutionMetadata::Widget(widget.clone())];
+    let events = projection.project(EngineEvent::ToolResult {
+        id: "owned-tool".into(),
+        name: "show_widget".into(),
+        output,
+    });
+    let params = &events[0]["params"];
+    assert_eq!(params["threadId"], widget.identity.thread_id);
+    assert_eq!(params["turnId"], widget.identity.turn_id);
+    assert_eq!(params["attemptId"], widget.identity.attempt_id);
+    assert_ne!(params["attemptId"], params["turnId"]);
+    assert_eq!(params["item"]["id"], widget.identity.tool_call_id);
+    assert_eq!(
+        params["item"]["widgetRef"],
+        serde_json::to_value(widget).unwrap()
+    );
+}
+
+#[test]
 fn tool_input_phase_events_preserve_scope_without_synthesizing_execution() {
     let mut projection = StreamProjection::new(
         "server".into(),
@@ -404,5 +440,13 @@ fn scenario_catalog_exposes_only_its_live_noncredentialed_selector() {
     assert_eq!(
         result["providers"][0]["data"][0]["id"],
         "tui-dev-mock::tui-dev-mock"
+    );
+}
+
+#[test]
+fn browser_launch_preflight_matches_server_capability() {
+    assert_eq!(
+        server_capabilities(false).experimental["browserSessions"],
+        browser::browser_preflight_result().available,
     );
 }

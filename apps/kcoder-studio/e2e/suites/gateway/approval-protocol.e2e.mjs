@@ -10,6 +10,8 @@ import { gatewayRpcUrl, initializeRpc, openRpc } from "../../harness/rpc.mjs";
 import { repoRoot, runE2E, waitFor } from "../../harness/run-context.mjs";
 import { materializeWorkspace } from "../../harness/workspace-fixture.mjs";
 
+const nativeBin = process.env.KCODER_E2E_KCODER_BIN || resolve(repoRoot, "target/debug/kcoder");
+
 await runE2E(
   import.meta.url,
   {
@@ -256,7 +258,7 @@ async function serversFile(context, filename, workspace, settingsFile) {
       id: "local",
       label: "Local",
       transport: "local",
-      command: resolve(repoRoot, "target/debug/kcoder"),
+      command: nativeBin,
       workspace,
       settingsFile,
     },
@@ -275,7 +277,7 @@ function localServer(id, label, workspace, settingsFile) {
     id,
     label,
     transport: "local",
-    command: resolve(repoRoot, "target/debug/kcoder"),
+    command: nativeBin,
     workspace,
     settingsFile,
   };

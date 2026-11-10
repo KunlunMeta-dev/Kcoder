@@ -167,7 +167,7 @@ pub(super) async fn process(
 ) -> Value {
     let write = operation == method::HOOK_CONFIGURATION_UPDATE;
     let input = if write {
-        match serde_json::from_value::<HookConfigurationUpdateParams>(params) {
+        match kcoder_app_rpc_codec::decode::<HookConfigurationUpdateParams>(params) {
             Ok(input) => {
                 if input.expected_revision.len() != 64
                     || !input
@@ -195,7 +195,7 @@ pub(super) async fn process(
             }
         }
     } else {
-        if serde_json::from_value::<HookConfigurationReadParams>(params).is_err() {
+        if kcoder_app_rpc_codec::decode::<HookConfigurationReadParams>(params).is_err() {
             return failure(
                 id,
                 -32602,

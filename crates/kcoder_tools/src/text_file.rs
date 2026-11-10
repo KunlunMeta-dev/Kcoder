@@ -76,7 +76,7 @@ pub(crate) async fn read_text_file_with_encoding(
     decode_text_bytes_with_encoding(&bytes, encoding)
 }
 
-fn decode_text_bytes_with_encoding(
+pub(crate) fn decode_text_bytes_with_encoding(
     bytes: &[u8],
     hint: TextEncodingHint,
 ) -> std::io::Result<TextFile> {
@@ -146,9 +146,23 @@ pub(crate) async fn write_text_file(
     encoding: TextEncoding,
     line_endings: LineEndings,
 ) -> std::io::Result<()> {
+    write_text_file_with_digest(path, content, encoding, line_endings)
+        .await
+        .map(|_| ())
+}
+
+pub(crate) async fn write_text_file_with_digest(
+    path: &Path,
+    content: &str,
+    encoding: TextEncoding,
+    line_endings: LineEndings,
+) -> std::io::Result<String> {
+    use sha2::{Digest, Sha256};
     // Encode completely before opening/truncating the destination.
     let bytes = encode_text(content, encoding, line_endings)?;
-    tokio::fs::write(path, bytes).await
+    let sha256 = format!("{:x}", Sha256::digest(&bytes));
+    tokio::fs::write(path, bytes).await?;
+    Ok(sha256)
 }
 
 fn expand_home(path: &str) -> String {

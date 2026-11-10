@@ -6,8 +6,6 @@ type BridgeRuntimeConfig = {
   socketBaseUrl: string
   socketPath: string
   runtimeMode: 'local-first' | 'backend'
-  loginMode: 'password' | 'oidc' | 'all'
-  oidcLoginText: string
   cloudDeviceScalingWikiUrl: string
 }
 
@@ -30,7 +28,7 @@ declare global {
     __KCODER_STUDIO_E2E__?: {
       version: 1
       isEnabled: true
-      isTauri: () => boolean
+      isGateway: () => boolean
       getRuntimeConfig: () => BridgeRuntimeConfig
       getRoute: () => string
       navigate: (path: string) => string

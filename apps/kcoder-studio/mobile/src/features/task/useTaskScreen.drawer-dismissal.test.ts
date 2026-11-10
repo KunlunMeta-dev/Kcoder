@@ -4,6 +4,7 @@ import { GatewayConnectionBudget } from "../../../../shared/gatewayConnectionBud
 import { taskRuntimeTestHelpers } from "@/runtime/task-runtime/connectionFactory";
 import { FakeClient, profile, server } from "@/runtime/task-runtime/fixture.test-support";
 import { useTaskScreen } from "./useTaskScreen";
+import { listWorkspaceThreadScopes } from "@/runtime/task-runtime";
 
 const host = vi.hoisted(() => ({
   states: [] as unknown[], refs: [] as Array<{ current: unknown }>, stateIndex: 0, refIndex: 0,
@@ -13,6 +14,8 @@ const host = vi.hoisted(() => ({
 vi.mock("react", async importOriginal => ({
   ...await importOriginal<typeof import("react")>(),
   useCallback: (callback: unknown) => callback,
+  useMemo: (factory: () => unknown) => factory(),
+  useSyncExternalStore: (_subscribe: () => () => void, getSnapshot: () => unknown) => getSnapshot(),
   useEffect: (effect: () => void | (() => void), deps: unknown[] = []) => host.effects.push({ effect, deps }),
   useRef: (value: unknown) => { const i = host.refIndex++; return host.refs[i] ??= { current: value }; },
   useState: (value: unknown) => {
@@ -22,15 +25,15 @@ vi.mock("react", async importOriginal => ({
   },
 }));
 vi.mock("react-native", () => ({ Alert: {}, Keyboard: { dismiss() {} }, Platform: { OS: "web" } }));
-vi.mock("expo-router", () => ({ useLocalSearchParams: () => ({ profileId: "profile", serverId: "server", threadId: "thread", cwd: "/fixture" }), useRouter: () => ({}) }));
-vi.mock("@react-navigation/native", () => ({ useIsFocused: () => true }));
+vi.mock("expo-router", () => ({ useLocalSearchParams: () => ({ profileId: "profile", serverId: "server", threadId: "thread", cwd: "/fixture" }), useRouter: () => ({}), useIsFocused: () => true }));
 vi.mock("react-native-safe-area-context", () => ({ useSafeAreaInsets: () => ({}) }));
 vi.mock("@/state/AppContext", () => ({ useApp: () => host.app }));
 vi.mock("@/storage/workspace-preferences", () => ({ workspaceStateAuthorizationScope: () => "scope", loadWorkspaceState: async () => ({}), saveWorkspaceState: async () => {} }));
 vi.mock("@/runtime/task-runtime", async () => ({
   ThreadListPager: (await import("@/runtime/task-runtime/threadDirectory")).ThreadListPager,
   TaskRuntime: {}, taskRuntimeRegistry: { get: () => null, remove() {} },
-  listWorkspaceThreadScopes: vi.fn(), mapThreadListScopes: vi.fn(), subscribeThreadMutations: () => () => {},
+  listWorkspaceThreadScopes: vi.fn(async () => ({ options: [], servers: [], error: null })),
+  mapThreadListScopes: (await import("@/runtime/task-runtime/threadDirectory")).mapThreadListScopes, subscribeThreadMutations: () => () => {},
 }));
 function renderHook() {
   host.stateIndex = 0; host.refIndex = 0; host.effects = [];
@@ -43,8 +46,69 @@ function deferred() { let resolve!: () => void; const promise = new Promise<void
 beforeEach(() => {
   host.states = []; host.refs = [];
   host.app = { hydrated: true, activeProfile: { ...profile, id: "profile" }, profiles: [{ id: "profile" }], runtime: { servers: [{ ...server, id: "server" }] }, demo: false };
+  vi.mocked(listWorkspaceThreadScopes).mockReset().mockResolvedValue({ options: [], servers: [], error: null });
 });
 afterEach(() => taskRuntimeTestHelpers.resetConnector());
+
+it("automatically discovers registered project histories on open and waits for the fast workspace job before loading new scopes", async () => {
+  let finishInitial!: (value: unknown) => void;
+  const initial = new Promise(resolve => { finishInitial = resolve; });
+  const calls: string[] = [];
+  const discovered = { ...server, id: "server", workspacePath: "/registered-project" };
+  vi.mocked(listWorkspaceThreadScopes).mockResolvedValue({
+    options: [{ path: discovered.workspacePath, label: "Registered", kind: "workspace" }], servers: [discovered], error: null,
+  });
+  taskRuntimeTestHelpers.setConnector((async (_profile: unknown, _server: unknown, cwd: string) => {
+    const client = new FakeClient([]);
+    client.request = (async () => {
+      calls.push(cwd);
+      if (cwd === "/fixture") return await initial;
+      return { threads: [{ id: "registered-thread", cwd, updatedAt: 2 }] };
+    }) as never;
+    return client;
+  }) as never);
+  let hook = renderHook(); hook.openDrawer(); hook = renderHook(); drawerEffect(hook)();
+  await vi.waitFor(() => expect(listWorkspaceThreadScopes).toHaveBeenCalledOnce());
+  await vi.waitFor(() => expect(calls).toEqual(["/fixture"]));
+  hook = renderHook();
+  expect(hook.drawerWorkspaceOptions.server[0]?.path).toBe("/registered-project");
+  finishInitial({ threads: [{ id: "initial-thread", cwd: "/fixture", updatedAt: 1 }] });
+  await vi.waitFor(() => {
+    hook = renderHook();
+    expect(hook.drawerThreads.server.map(thread => thread.id)).toContain("registered-thread");
+  });
+  expect(calls).toEqual(["/fixture", "/registered-project"]);
+  hook.dismissDrawerWork();
+});
+
+it("aborts automatic discovery on dismissal and rejects a late old directory after a new drawer session opens", async () => {
+  let finishOld!: (value: unknown) => void;
+  const old = new Promise(resolve => { finishOld = resolve; });
+  vi.mocked(listWorkspaceThreadScopes).mockImplementationOnce(() => old as never).mockResolvedValue({
+    options: [{ path: "/current-project", label: "Current", kind: "workspace" }], servers: [], error: null,
+  });
+  taskRuntimeTestHelpers.setConnector((async () => {
+    const client = new FakeClient([]);
+    client.request = vi.fn(async () => ({ threads: [] })) as never;
+    return client;
+  }) as never);
+  let hook = renderHook(); hook.openDrawer(); hook = renderHook(); drawerEffect(hook)();
+  const oldJob = hook.loadDrawerProjects("server");
+  await vi.waitFor(() => expect(listWorkspaceThreadScopes).toHaveBeenCalledOnce());
+  const oldSignal = vi.mocked(listWorkspaceThreadScopes).mock.calls[0]![3]!.signal;
+  hook.dismissDrawerWork();
+  expect(oldSignal?.aborted).toBe(true);
+  hook.setDrawerOpen(false); hook = renderHook(); hook.openDrawer(); hook = renderHook(); drawerEffect(hook)();
+  await vi.waitFor(() => {
+    hook = renderHook();
+    expect(hook.drawerWorkspaceOptions.server[0]?.path).toBe("/current-project");
+  });
+  finishOld({ options: [{ path: "/old-project", label: "Old", kind: "workspace" }], servers: [], error: null });
+  await oldJob;
+  hook = renderHook();
+  expect(hook.drawerWorkspaceOptions.server.map(option => option.path)).toEqual(["/current-project"]);
+  hook.dismissDrawerWork();
+});
 
 it("dismiss hook cancels a real pager queued in admission and blocks restart until new open", async () => {
   const budget = new GatewayConnectionBudget(1); const gate = deferred();

@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 const SHA256_RE = /^[a-f0-9]{64}$/;
 const APPROVED_SOURCE_ROOT_MARKERS = [
   "apps/kcoder-studio/mobile/",
-  "apps/kcoder-studio/studio-shared/",
+  "apps/kcoder-studio/shared/",
 ];
 
 function normalizeServedPath(pathname) {
@@ -38,25 +38,203 @@ export function recordScriptUrlIdentity(scriptUrl, approvedBaseUrl) {
     : { status: "INVALID_SERVED_BUNDLE_PATH", bundlePath: null };
 }
 
-export function resolveScriptMapBinding(scriptUrlIdentity, mapPaths) {
+export function resolveScriptMapBinding(scriptUrlIdentity, mapPaths, { trustedMountPath } = {}) {
   if (scriptUrlIdentity?.status !== "APPROVED_SERVED_ORIGIN"
     || typeof scriptUrlIdentity.bundlePath !== "string") {
     return { status: "SCRIPT_URL_IDENTITY_UNVERIFIED", mapPath: null, generatedPath: null };
   }
+  if (!normalizeBundleInventoryPath(scriptUrlIdentity.bundlePath)) {
+    return { status: "INVALID_SERVED_BUNDLE_PATH", mapPath: null, generatedPath: null };
+  }
+  let bundlePath = scriptUrlIdentity.bundlePath;
+  let mountNormalization = null;
+  if (trustedMountPath !== undefined) {
+    const normalizedMountPath = normalizeServedPath(trustedMountPath);
+    if (!normalizedMountPath || trustedMountPath !== `/${normalizedMountPath}`) {
+      return { status: "INVALID_TRUSTED_MOUNT_PATH", mapPath: null, generatedPath: null };
+    }
+    const exactPrefix = `${normalizedMountPath}/`;
+    if (!bundlePath.startsWith(exactPrefix)) {
+      return { status: "SERVED_PATH_OUTSIDE_TRUSTED_MOUNT", mapPath: null, generatedPath: null };
+    }
+    bundlePath = bundlePath.slice(exactPrefix.length);
+    if (!normalizeBundleInventoryPath(bundlePath)) {
+      return { status: "INVALID_MOUNT_RELATIVE_BUNDLE_PATH", mapPath: null, generatedPath: null };
+    }
+    mountNormalization = "EXACT_TRUSTED_MOUNT_PREFIX_STRIPPED";
+  }
   const matches = (Array.isArray(mapPaths) ? mapPaths : []).filter((mapPath) => {
     if (typeof mapPath !== "string" || !mapPath.endsWith(".map")) return false;
     const generatedPath = mapPath.slice(0, -4);
-    return normalizeBundleInventoryPath(generatedPath) === scriptUrlIdentity.bundlePath;
+    return normalizeBundleInventoryPath(generatedPath) === bundlePath;
   });
-  if (matches.length === 0) return { status: "NO_EXACT_BUNDLE_PATH_MAP", mapPath: null, generatedPath: null };
-  if (matches.length !== 1) return { status: "AMBIGUOUS_BUNDLE_PATH_MAP", mapPath: null, generatedPath: null };
-  return { status: "EXACT_BUNDLE_PATH_MATCH", mapPath: matches[0], generatedPath: matches[0].slice(0, -4) };
+  if (matches.length === 0) return { status: "NO_EXACT_BUNDLE_PATH_MAP", mapPath: null, generatedPath: null, ...(mountNormalization ? { mountNormalization } : {}) };
+  if (matches.length !== 1) return { status: "AMBIGUOUS_BUNDLE_PATH_MAP", mapPath: null, generatedPath: null, ...(mountNormalization ? { mountNormalization } : {}) };
+  return {
+    status: "EXACT_BUNDLE_PATH_MATCH",
+    mapPath: matches[0],
+    generatedPath: matches[0].slice(0, -4),
+    ...(mountNormalization ? { mountNormalization, servedBundlePath: scriptUrlIdentity.bundlePath } : {}),
+  };
 }
 
 function normalizeBundleInventoryPath(value) {
   if (typeof value !== "string" || value.startsWith("/") || value.includes("\\")) return null;
   const parts = value.split("/");
   return parts.length > 0 && parts.every((part) => part && part !== "." && part !== "..") ? value : null;
+}
+
+function comparableSourceRoots(roots) {
+  if (!Array.isArray(roots)) return null;
+  const mapped = roots.map((root) => {
+    if (!root || typeof root !== "object") return null;
+    return {
+      name: root.name,
+      sourceRoot: root.sourceRoot,
+      destination: root.destination,
+      sha256: root.sha256,
+      fileCount: root.fileCount,
+    };
+  });
+  if (mapped.some((root) => !root)) return null;
+  mapped.sort((left, right) => String(left.name).localeCompare(String(right.name)));
+  return mapped;
+}
+
+function validateCandidateSourceRelativePath(value) {
+  if (typeof value !== "string" || value.length === 0 || value.length > 4096 || value.includes("\\") || value.includes("\0")) return false;
+  const parts = value.split("/");
+  return !value.startsWith("/") && parts.every((part) => part && part !== "." && part !== "..");
+}
+
+export function verifyPinnedSourceInventoryBytes({
+  inventoryBytes,
+  candidateDigest,
+  candidateFiles,
+  sourceTreeSha256,
+  sourceRoots,
+  inputRoots,
+}) {
+  assert.ok(Buffer.isBuffer(inventoryBytes) || inventoryBytes instanceof Uint8Array, "candidate source inventory bytes are required");
+  assert.match(candidateDigest, SHA256_RE, "candidate source inventory digest must be a lowercase SHA-256 digest");
+  const observedDigest = createHash("sha256").update(inventoryBytes).digest("hex");
+  assert.equal(observedDigest, candidateDigest, "candidate source inventory bytes differ from their pinned digest");
+
+  const inventory = JSON.parse(Buffer.from(inventoryBytes).toString("utf8"));
+  assert.equal(inventory.schemaVersion, 1, "candidate source inventory schema is unsupported");
+  assert.equal(inventory.status, "derived-post-export-exact-source-inventory", "candidate source inventory must identify its exact-source derivation");
+  assert.equal(inventory.sourceTreeSha256, sourceTreeSha256, "candidate source inventory source-tree digest differs from the export input");
+  assert.equal(inventory.fileCount, candidateFiles, "candidate source inventory file count differs from the pinned provenance");
+  assert.ok(Array.isArray(inventory.files), "candidate source inventory file list is required");
+  assert.equal(inventory.files.length, candidateFiles, "candidate source inventory file list is incomplete");
+
+  const provenanceRoots = comparableSourceRoots(sourceRoots);
+  const manifestRoots = comparableSourceRoots(inputRoots);
+  const inventoryRoots = comparableSourceRoots(inventory.sourceRoots);
+  assert.ok(provenanceRoots && manifestRoots && inventoryRoots, "candidate source roots are required");
+  assert.deepEqual(provenanceRoots, manifestRoots, "candidate source roots differ from the actual export input roots");
+  assert.deepEqual(inventoryRoots, manifestRoots, "candidate inventory roots differ from the actual export input roots");
+  assert.match(sourceTreeSha256, SHA256_RE, "candidate source tree digest must be a lowercase SHA-256 digest");
+  assert.ok(Number.isSafeInteger(candidateFiles) && candidateFiles > 0, "candidate source inventory file count must be positive");
+  for (const root of manifestRoots) {
+    assert.ok(typeof root.sourceRoot === "string" && root.sourceRoot.startsWith("/"), "candidate source root must be an absolute pinned path");
+    assert.ok(!root.sourceRoot.split("/").some((part) => part === ".."), "candidate source root cannot contain traversal");
+    assert.match(root.sha256, SHA256_RE, "candidate source root digest must be a lowercase SHA-256 digest");
+    assert.ok(Number.isSafeInteger(root.fileCount) && root.fileCount > 0, "candidate source root file count must be positive");
+  }
+  assert.deepEqual(
+    manifestRoots.map(({ name, destination }) => ({ name, destination })),
+    [
+      { name: "mobile", destination: "apps/kcoder-studio/mobile" },
+      { name: "studio-shared", destination: "apps/kcoder-studio/shared" },
+    ],
+    "candidate source roots must be exactly the approved Mobile and Studio shared roots",
+  );
+
+  const rootsByName = new Map(manifestRoots.map((root) => [root.name, root]));
+  const fileKeys = new Set();
+  const countsByRoot = new Map([...rootsByName.keys()].map((name) => [name, 0]));
+  for (const entry of inventory.files) {
+    assert.ok(entry && typeof entry === "object", "candidate source inventory entries must be objects");
+    assert.ok(rootsByName.has(entry.root), "candidate source inventory contains an unapproved source root");
+    assert.ok(validateCandidateSourceRelativePath(entry.path), "candidate source inventory contains a noncanonical path");
+    assert.ok(Number.isSafeInteger(entry.size) && entry.size >= 0, "candidate source inventory contains an invalid file size");
+    assert.match(entry.sha256, SHA256_RE, "candidate source inventory contains an invalid file digest");
+    const key = `${entry.root}\0${entry.path}`;
+    assert.ok(!fileKeys.has(key), "candidate source inventory contains a duplicate file path");
+    fileKeys.add(key);
+    countsByRoot.set(entry.root, countsByRoot.get(entry.root) + 1);
+  }
+  for (const root of manifestRoots) {
+    assert.equal(countsByRoot.get(root.name), root.fileCount, `candidate source inventory count differs for ${root.name}`);
+  }
+  return {
+    status: "PINNED_CANDIDATE_SOURCE_INVENTORY",
+    candidateDigest: observedDigest,
+    sourceTreeSha256,
+    fileCount: candidateFiles,
+    sourceRoots: manifestRoots,
+    files: inventory.files,
+  };
+}
+
+export function resolvePinnedMetroSourcePath(source, {
+  sourceRoots,
+  candidateSourceFiles,
+  sourceMapSources,
+  sourcesContent,
+} = {}) {
+  if (typeof source !== "string") return { status: "INVALID_METRO_SOURCE_ALIAS", source: null };
+  let rootName;
+  let candidatePath;
+  let destination;
+  if (source.startsWith("/src/")) {
+    rootName = "mobile";
+    destination = "apps/kcoder-studio/mobile";
+    candidatePath = `src/${source.slice("/src/".length)}`;
+  } else if (source.startsWith("/../shared/")) {
+    rootName = "studio-shared";
+    destination = "apps/kcoder-studio/shared";
+    candidatePath = source.slice("/../shared/".length);
+  } else if (source.startsWith("/src") || source.startsWith("/../shared")) {
+    return { status: "INVALID_METRO_SOURCE_ALIAS", source: null };
+  } else {
+    return { status: "NOT_PINNED_METRO_ALIAS", source: null };
+  }
+
+  const suffix = rootName === "mobile" ? source.slice("/src/".length) : source.slice("/../shared/".length);
+  if (!validateCandidateSourceRelativePath(suffix) || /[%?#]/.test(suffix)) {
+    return { status: "INVALID_METRO_SOURCE_ALIAS", source: null };
+  }
+  if (!Array.isArray(sourceRoots) || !Array.isArray(candidateSourceFiles)) {
+    return { status: "PINNED_SOURCE_INVENTORY_MISSING", source: null };
+  }
+  const roots = sourceRoots.filter((root) => root?.name === rootName && root?.destination === destination
+    && SHA256_RE.test(root?.sha256 ?? "") && Number.isSafeInteger(root?.fileCount) && root.fileCount > 0);
+  if (roots.length !== 1) return { status: "PINNED_SOURCE_ROOT_MISSING_OR_AMBIGUOUS", source: null };
+
+  const fileMatches = candidateSourceFiles.filter((entry) => entry?.root === rootName && entry?.path === candidatePath);
+  if (fileMatches.length !== 1 || !SHA256_RE.test(fileMatches[0]?.sha256 ?? "")) {
+    return { status: "PINNED_SOURCE_FILE_MISSING_OR_AMBIGUOUS", source: null };
+  }
+  if (!Array.isArray(sourceMapSources) || !Array.isArray(sourcesContent)) {
+    return { status: "SOURCE_MAP_CONTENT_UNAVAILABLE", source: null };
+  }
+  const sourceIndices = [];
+  for (let index = 0; index < sourceMapSources.length; index += 1) {
+    if (sourceMapSources[index] === source) sourceIndices.push(index);
+  }
+  if (sourceIndices.length !== 1) return { status: "SOURCE_MAP_SOURCE_MISSING_OR_AMBIGUOUS", source: null };
+  const sourceContent = sourcesContent[sourceIndices[0]];
+  if (typeof sourceContent !== "string") return { status: "SOURCE_CONTENT_MISSING", source: null };
+  const observedContentSha256 = createHash("sha256").update(sourceContent, "utf8").digest("hex");
+  if (observedContentSha256 !== fileMatches[0].sha256) return { status: "SOURCE_CONTENT_SHA256_MISMATCH", source: null };
+  return {
+    status: "PINNED_METRO_SOURCE",
+    source: `${destination}/${candidatePath}`,
+    root: rootName,
+    sourceSha256: observedContentSha256,
+  };
 }
 
 export function sanitizeMappedSourcePath(source) {
@@ -86,9 +264,10 @@ export function sanitizeMappedSourcePath(source) {
   return { status: "RELATIVE_SOURCE", source: parts.join("/") };
 }
 
-export function buildExpoExportArguments(expoCliPath, outputPath, sourceMaps) {
+export function buildExpoExportArguments(expoCliPath, outputPath, sourceMaps, platform = "web") {
   assert.equal(typeof sourceMaps, "boolean", "source map option must be explicit boolean");
-  const args = [expoCliPath, "export", "--platform", "web", "--output-dir", outputPath];
+  assert.ok(["android", "ios", "web"].includes(platform), "Expo export platform must be android, ios, or web");
+  const args = [expoCliPath, "export", "--platform", platform, "--output-dir", outputPath];
   if (sourceMaps) args.push("--source-maps");
   return args;
 }
@@ -182,7 +361,7 @@ export function makeCoreAttributionRecord({ source, requestedMessages, panelStat
   };
 }
 
-export function mapGeneratedProfilePosition(traceMap, frame, traceMapping) {
+export function mapGeneratedProfilePosition(traceMap, frame, traceMapping, sourceEvidence = undefined) {
   if (!Number.isInteger(frame?.lineNumber) || frame.lineNumber < 0
     || !Number.isInteger(frame?.columnNumber) || frame.columnNumber < 0) {
     return { status: "MISSING_GENERATED_POSITION", source: null, line: null, column: null, name: null };
@@ -195,7 +374,12 @@ export function mapGeneratedProfilePosition(traceMap, frame, traceMapping) {
   if (!original?.source || !Number.isInteger(original.line)) {
     return { status: "NO_ORIGINAL_POSITION", source: null, line: null, column: null, name: null };
   }
-  const sanitizedSource = sanitizeMappedSourcePath(original.source);
+  const metroResolution = resolvePinnedMetroSourcePath(original.source, sourceEvidence);
+  const sanitizedSource = metroResolution.status === "PINNED_METRO_SOURCE"
+    ? { status: metroResolution.status, source: metroResolution.source }
+    : metroResolution.status !== "NOT_PINNED_METRO_ALIAS"
+      ? { status: metroResolution.status, source: null }
+      : sanitizeMappedSourcePath(original.source);
   if (!sanitizedSource.source) {
     return { status: sanitizedSource.status, source: null, line: null, column: null, name: null };
   }

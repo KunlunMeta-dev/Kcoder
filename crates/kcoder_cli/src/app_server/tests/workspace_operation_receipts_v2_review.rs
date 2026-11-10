@@ -30,11 +30,12 @@ fn workspace_operation_receipts_v2_review_authority(
     account_root: &std::path::Path,
     parent: kcoder_app_protocol::RetentionParentLaunchV1,
 ) -> super::retention_context::VerifiedRetentionAuthority {
-    super::retention_context::VerifiedRetentionAuthority::capture(
+    super::retention_context::capture(
         super::retention_context::RetentionLaunchConfiguration {
             parent,
             account_root: account_root.to_path_buf(),
             optional: false,
+            revocation_verifier: None,
         },
         engine,
     )
@@ -90,10 +91,9 @@ async fn workspace_operation_receipts_v2_review_assert_known_id_conflict(
     context: &kcoder_app_protocol::TrustedRetentionContextV1,
     target_id: &str,
     account: Option<kcoder_app_protocol::WorkspaceParentAccountV2>,
-    request_id: &str,
-    scope_id: &str,
-    ready_path: &std::path::Path,
+    probe: (&str, &str, &std::path::Path),
 ) {
+    let (request_id, scope_id, ready_path) = probe;
     let ledger = account_root.join("workspace-operations-v2");
     let before = workspace_operation_receipts_v2_review_file_snapshot(&ledger);
     let request = workspace_operation_receipts_v2_review_request(
@@ -296,9 +296,9 @@ async fn workspace_operation_receipts_v2_review_account_scope_binds_principal_ro
         Some(workspace_operation_receipts_v2_review_workspace_account(
             "member", "17",
         )),
-        request_id,
+        (request_id,
         changed_role["scopeId"].as_str().unwrap(),
-        &ready_path,
+        &ready_path),
     )
     .await;
 
@@ -326,9 +326,9 @@ async fn workspace_operation_receipts_v2_review_account_scope_binds_principal_ro
         Some(workspace_operation_receipts_v2_review_workspace_account(
             "owner", "18",
         )),
-        request_id,
+        (request_id,
         changed_account_generation["scopeId"].as_str().unwrap(),
-        &ready_path,
+        &ready_path),
     )
     .await;
 
@@ -351,11 +351,11 @@ async fn workspace_operation_receipts_v2_review_account_scope_binds_principal_ro
         &changed_context_generation_context,
         "stored-server-target",
         Some(account.clone()),
-        request_id,
+        (request_id,
         changed_context_generation_scope["scopeId"]
             .as_str()
             .unwrap(),
-        &ready_path,
+        &ready_path),
     )
     .await;
 
@@ -378,9 +378,9 @@ async fn workspace_operation_receipts_v2_review_account_scope_binds_principal_ro
         &changed_device_context,
         "stored-server-target",
         Some(account.clone()),
-        request_id,
+        (request_id,
         changed_device_scope["scopeId"].as_str().unwrap(),
-        &ready_path,
+        &ready_path),
     )
     .await;
 
@@ -399,9 +399,9 @@ async fn workspace_operation_receipts_v2_review_account_scope_binds_principal_ro
         &context,
         "different-stored-target",
         Some(account.clone()),
-        request_id,
+        (request_id,
         changed_target["scopeId"].as_str().unwrap(),
-        &ready_path,
+        &ready_path),
     )
     .await;
 
@@ -431,9 +431,9 @@ async fn workspace_operation_receipts_v2_review_account_scope_binds_principal_ro
         &other_principal_context,
         "stored-server-target",
         Some(account.clone()),
-        request_id,
+        (request_id,
         other_principal["scopeId"].as_str().unwrap(),
-        &ready_path,
+        &ready_path),
     )
     .await;
 
@@ -463,9 +463,9 @@ async fn workspace_operation_receipts_v2_review_account_scope_binds_principal_ro
         Some(workspace_operation_receipts_v2_review_workspace_account(
             "owner", "17",
         )),
-        request_id,
+        (request_id,
         other_root_scope["scopeId"].as_str().unwrap(),
-        &ready_path,
+        &ready_path),
     )
     .await;
 }

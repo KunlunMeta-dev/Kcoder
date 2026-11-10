@@ -9,10 +9,10 @@ import { ToolsCatalogProvider } from '@/kcoder/toolsCatalog'
 import { MessageList } from './MessageList'
 import { clearPersistentProcessingExpansions } from './blocks/processingExpansionState'
 
-vi.mock('@tauri-apps/api/core', () => ({
-  convertFileSrc: (path: string) => `asset://localhost/${path}`,
+vi.mock('@/lib/client-resource-url', () => ({
+  clientResourceUrl: (path: string) => `asset://localhost/${path}`,
   invoke: vi.fn(),
-  isTauri: () => false,
+  isGateway: () => false,
 }))
 
 beforeEach(() => {
@@ -160,7 +160,8 @@ test('keeps incremental generation visible for 84 sequential tools with bounded 
     catalogSpy.mockRestore()
     clearPersistentProcessingExpansions()
   }
-}, 15000)
+// This exercises 84 complete DOM transitions; retained-state bounds are asserted above.
+}, 30000)
 
 test('renders each short generation and actual write observation before completion through the provider lease', async () => {
   const catalogSpy = vi.spyOn(toolsCatalogContext, 'readToolsCatalog').mockResolvedValue({

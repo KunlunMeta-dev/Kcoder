@@ -37,7 +37,7 @@ use tracing::debug;
 #[derive(Debug, Default)]
 pub struct BashTool;
 
-const DEFAULT_TIMEOUT_MS: u64 = 300_000;
+const DEFAULT_TIMEOUT_MS: u64 = kcoder_config::DEFAULT_SHELL_TIMEOUT_MS;
 #[cfg(target_os = "linux")]
 const PROCESS_SCOPE_ENV: &str = "KCODER_PROCESS_SCOPE";
 #[cfg(target_os = "linux")]
@@ -56,7 +56,7 @@ pub struct BashInput {
     /// logs and background task summaries. Omit only when the command is
     /// already self-explanatory.
     pub description: Option<String>,
-    /// Total command lifetime in milliseconds. Use a JSON integer. Defaults to 300 seconds
+    /// Total command lifetime in milliseconds. Use a JSON integer. Defaults to 30 minutes
     /// unless the engine injects a session-specific default.
     #[serde(default = "default_timeout_ms")]
     pub timeout: u64,
@@ -398,6 +398,7 @@ impl Tool for BashTool {
                 isolation_root: ctx.shell_isolation_root.as_deref(),
                 isolation_workspace_root: authenticated_workspace_root,
                 os_sandbox,
+                owned_command_program: ctx.owned_command_program.as_deref(),
             },
         )?;
         let live_output = running.live_output_capture();
@@ -499,28 +500,36 @@ use invocation::*;
 mod isolation_environment;
 pub(crate) use isolation_environment::verifier_isolation_environment;
 use isolation_environment::*;
-mod verification_policy;
 // Preserve the original crate-visible helper path, also used by Bash test groups.
+pub(crate) use kcoder_tool_input::syntax::shell::shell_words;
+use kcoder_tool_input::syntax::shell::*;
+pub use kcoder_tool_input::syntax::shell::{
+    scoped_shell_command_matches_allowed_prefixes, shell_command_is_read_only,
+};
 #[allow(unused_imports)]
-pub(crate) use verification_policy::behavior_probe_command;
-use verification_policy::*;
-pub(crate) use verification_policy::{
+pub(crate) use kcoder_tool_input::syntax::verification::behavior_probe_command;
+pub(crate) use kcoder_tool_input::syntax::verification::dependency_mutation_command;
+#[cfg(test)]
+pub(crate) use kcoder_tool_input::syntax::verification::workspace_mutation_command;
+use kcoder_tool_input::syntax::verification::*;
+pub(crate) use kcoder_tool_input::syntax::verification::{
     behavior_probe_command_signature, read_only_search_no_match_command,
     test_command_has_narrow_scope, test_command_preserves_raw_exit, test_command_signature,
     test_command_skips_execution, test_like_command, verification_like_command,
-    verifier_native_build_command_signature, verifier_test_command_rejection,
+    verifier_native_build_command_signature,
 };
-mod command_classification;
-pub(crate) use command_classification::dependency_mutation_command;
-#[cfg(test)]
-pub(crate) use command_classification::workspace_mutation_command;
-use command_classification::*;
-mod command_syntax;
-mod read_only;
-pub use command_syntax::scoped_shell_command_matches_allowed_prefixes;
-pub(crate) use command_syntax::shell_words;
-use command_syntax::*;
-pub use read_only::shell_command_is_read_only;
+
+pub(crate) fn verifier_test_command_rejection(
+    command: &str,
+    minimum_scope: Option<GoalProTestScope>,
+    require_raw_exit_code: bool,
+) -> Option<String> {
+    kcoder_tool_input::syntax::verification::test_command_rejection(
+        command,
+        minimum_scope == Some(GoalProTestScope::TargetSuite),
+        require_raw_exit_code,
+    )
+}
 
 #[cfg(test)]
 mod tests;

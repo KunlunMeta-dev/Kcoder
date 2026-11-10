@@ -1,7 +1,11 @@
+#[cfg(test)]
+mod expert_resource_tests;
+mod tool_selection;
 use anyhow::{Context, Result};
 use globset::{Glob, GlobSet};
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
+pub use tool_selection::skill_tool_selection;
 use tracing::warn;
 
 pub mod activation;
@@ -12,6 +16,7 @@ pub use entries::skill_entry_paths;
 pub mod import;
 mod references;
 mod registry;
+mod runtime_context;
 pub mod store;
 
 pub use builtin::ensure_builtin_skills;
@@ -31,6 +36,7 @@ pub use store::{
 /// A loaded skill with parsed frontmatter metadata.
 #[derive(Debug, Clone)]
 pub struct Skill {
+    pub activation: Option<SkillActivation>,
     pub name: String,
     pub description: String,
     pub content: String,
@@ -70,6 +76,16 @@ pub struct Skill {
     pub tags: Vec<String>,
 }
 
+#[derive(Debug, Clone, Deserialize, serde::Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct SkillActivation {
+    pub token: String,
+    #[serde(default)]
+    pub default_enabled: bool,
+    #[serde(default)]
+    pub workspace: Option<PathBuf>,
+}
+
 /// Environment variable declaration embedded in skill frontmatter.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct RequiredEnvVar {
@@ -80,6 +96,12 @@ pub struct RequiredEnvVar {
 }
 
 impl Skill {
+    /// Inline-only workflows must not be advertised by text-only clients.
+    pub fn requires_inline_widgets(&self) -> bool {
+        self.name.rsplit(':').next() == Some("kworker-visualization")
+            || self.requires_tools.iter().any(|name| name == "show_widget")
+    }
+
     pub fn prompt_text(&self) -> String {
         let mut parts = vec![format!("# Skill: {}\n\n{}", self.name, self.content)];
         if !self.references.is_empty() {
@@ -153,8 +175,9 @@ impl Skill {
             })
             .unwrap_or_default();
         let body = self.with_arguments(args);
+        let resources = self.resource_context();
         format!(
-            "<skill_content name=\"{}\">\n{runtime_note}{body}\n</skill_content>",
+            "<skill_content name=\"{}\">\n{runtime_note}{resources}\n{body}\n</skill_content>",
             self.name
         )
     }
@@ -182,6 +205,7 @@ fn current_cli_entrypoint() -> Option<String> {
 /// Raw frontmatter as parsed from YAML.
 #[derive(Debug, Default, Deserialize)]
 struct SkillFrontmatter {
+    activation: Option<SkillActivation>,
     name: Option<String>,
     description: Option<String>,
     version: Option<String>,
@@ -233,6 +257,23 @@ struct KCoderSkillMetadata {
 
 /// Read one skill package entry without loading user or project skill layers.
 pub fn parse_skill_file(path: &Path) -> Result<Skill> {
+    parse_skill_entry(path, true, None)
+}
+
+/// Expert snapshots expose reference paths for explicit reads instead of eager prompt injection.
+pub fn parse_skill_file_lazy(path: &Path) -> Result<Skill> {
+    parse_skill_entry(path, false, None)
+}
+
+pub fn parse_pinned_skill_file(path: &Path, sha256: &str) -> Result<Skill> {
+    parse_skill_entry(path, false, Some(sha256))
+}
+
+fn parse_skill_entry(
+    path: &Path,
+    eager_references: bool,
+    expected_sha256: Option<&str>,
+) -> Result<Skill> {
     use std::io::Read;
     const MAX_SKILL_BYTES: u64 = 1024 * 1024;
     let parent = path
@@ -253,6 +294,13 @@ pub fn parse_skill_file(path: &Path) -> Result<Skill> {
         .with_context(|| format!("failed to read skill file {:?}", path))?;
     if content.len() as u64 > MAX_SKILL_BYTES {
         anyhow::bail!("skill entry exceeds 1 MiB limit: {:?}", path);
+    }
+    if let Some(expected) = expected_sha256 {
+        use sha2::{Digest, Sha256};
+        anyhow::ensure!(
+            format!("{:x}", Sha256::digest(&content)) == expected,
+            "skill resource entry hash changed"
+        );
     }
     let content = String::from_utf8(content)
         .with_context(|| format!("skill entry must be UTF-8: {:?}", path))?;
@@ -276,6 +324,24 @@ pub fn parse_skill_file(path: &Path) -> Result<Skill> {
         .metadata
         .as_ref()
         .and_then(|metadata| metadata.kcoder.as_ref());
+    if let Some(activation) = &fm.activation {
+        anyhow::ensure!(
+            !activation.token.is_empty()
+                && activation.token.len() <= 128
+                && activation
+                    .token
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b == b'-'),
+            "invalid skill activation identity"
+        );
+        anyhow::ensure!(
+            activation
+                .workspace
+                .as_ref()
+                .is_none_or(|path| path.is_absolute()),
+            "skill workspace scope must be absolute"
+        );
+    }
     let globset = fm.paths.as_ref().and_then(|patterns| {
         let mut builder = GlobSet::builder();
         for pat in patterns {
@@ -294,9 +360,14 @@ pub fn parse_skill_file(path: &Path) -> Result<Skill> {
         builder.build().ok()
     });
 
-    let references = references::load(&directory, parent)?;
+    let references = if eager_references {
+        references::load(&directory, parent)?
+    } else {
+        Vec::new()
+    };
 
     Ok(Skill {
+        activation: fm.activation,
         name,
         description: fm.description.unwrap_or_default(),
         content: body.trim().to_string(),
@@ -424,6 +495,7 @@ mod tests {
     #[test]
     fn skill_argument_substitution() {
         let skill = Skill {
+            activation: None,
             name: "demo".into(),
             description: "test".into(),
             content: "Run: $1 with $ARGUMENTS".into(),
@@ -475,6 +547,7 @@ mod tests {
         let mut builder = GlobSet::builder();
         builder.add(Glob::new("**/*.rs").unwrap());
         let skill = Skill {
+            activation: None,
             name: "rust".into(),
             description: "rust skill".into(),
             content: "...".into(),

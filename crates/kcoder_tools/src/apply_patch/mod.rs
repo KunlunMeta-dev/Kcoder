@@ -6,7 +6,7 @@
 //! exposure is a separate follow-up.
 
 mod apply;
-mod parser;
+use kcoder_tool_input::syntax::patch as parser;
 mod seek;
 mod tool;
 

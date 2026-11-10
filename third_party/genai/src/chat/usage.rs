@@ -72,7 +72,7 @@ pub struct PromptTokensDetails {
 	/// Only populated when the provider returns TTL-specific breakdown.
 	pub cache_creation_details: Option<CacheCreationDetails>,
 	/// Anthropic: `cache_read_input_tokens`.
-	#[serde(default, deserialize_with = "crate::support::zero_as_none")]
+	#[serde(default)]
 	pub cached_tokens: Option<i32>,
 	#[serde(default, deserialize_with = "crate::support::zero_as_none")]
 	pub audio_tokens: Option<i32>,
@@ -109,5 +109,21 @@ impl CompletionTokensDetails {
 			&& self.rejected_prediction_tokens.is_none()
 			&& self.reasoning_tokens.is_none()
 			&& self.audio_tokens.is_none()
+	}
+}
+
+#[cfg(test)]
+mod usage_presence_tests {
+	use super::*;
+	#[test]
+	fn explicit_cached_zero_survives_serde_and_details_compaction() {
+		let mut actual: Usage = serde_json::from_value(serde_json::json!({"prompt_tokens_details":{"cached_tokens":0}})).unwrap();
+		actual.compact_details();
+		assert_eq!(actual.prompt_tokens_details.as_ref().and_then(|details|details.cached_tokens), Some(0));
+		for value in [serde_json::json!({}), serde_json::json!({"prompt_tokens_details":null}), serde_json::json!({"prompt_tokens_details":{}}), serde_json::json!({"prompt_tokens_details":{"cached_tokens":null}})] {
+			let mut missing: Usage = serde_json::from_value(value).unwrap();
+			missing.compact_details();
+			assert!(missing.prompt_tokens_details.is_none());
+		}
 	}
 }

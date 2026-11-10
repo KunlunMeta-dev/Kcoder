@@ -77,6 +77,7 @@ pub(crate) enum FooterHint<'a> {
     HistorySearch { query: &'a str, has_match: bool },
     Activity,
     Interrupt,
+    InterruptWithCtrlC,
     QueueMessage,
     ShellMode,
     QuitReminder(KeyBinding),
@@ -97,6 +98,7 @@ impl FooterHint<'_> {
             | Self::HistorySearch { .. }
             | Self::Activity
             | Self::Interrupt
+            | Self::InterruptWithCtrlC
             | Self::QueueMessage
             | Self::ShellMode
             | Self::QuitReminder(_) => 1,
@@ -299,7 +301,7 @@ impl<'a> FooterWidget<'a> {
                 }
                 spans
             }
-            FooterHint::Activity | FooterHint::Interrupt => {
+            FooterHint::Activity | FooterHint::Interrupt | FooterHint::InterruptWithCtrlC => {
                 let mut spans = Vec::new();
                 if !self.data.activity_label.is_empty() {
                     let color = if self.data.activity_attention {
@@ -322,8 +324,12 @@ impl<'a> FooterWidget<'a> {
                     ));
                     spans.push(UI_SEPARATOR.dim());
                 }
-                if matches!(hint, FooterHint::Interrupt) {
-                    spans.push(key_hint::plain(KeyCode::Esc).into());
+                if matches!(hint, FooterHint::Interrupt | FooterHint::InterruptWithCtrlC) {
+                    spans.push(if matches!(hint, FooterHint::InterruptWithCtrlC) {
+                        key_hint::ctrl(KeyCode::Char('c')).into()
+                    } else {
+                        key_hint::plain(KeyCode::Esc).into()
+                    });
                     spans.push(" interrupt".dim());
                 }
                 spans
@@ -388,6 +394,7 @@ impl<'a> FooterWidget<'a> {
                 | FooterHint::QueueMessage
                 | FooterHint::Activity
                 | FooterHint::Interrupt
+                | FooterHint::InterruptWithCtrlC
         )
     }
 
@@ -456,7 +463,10 @@ impl<'a> FooterWidget<'a> {
         };
         push_segment(&model_context, Style::default().fg(Color::Cyan), false);
         if self.data.is_streaming
-            && !matches!(self.data.hint, FooterHint::Activity | FooterHint::Interrupt)
+            && !matches!(
+                self.data.hint,
+                FooterHint::Activity | FooterHint::Interrupt | FooterHint::InterruptWithCtrlC
+            )
         {
             let working = if self.data.activity_label.is_empty() {
                 "Working".to_string()

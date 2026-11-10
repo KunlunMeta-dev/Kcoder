@@ -2,7 +2,7 @@ import i18n from '@/i18n'
 import { createRandomUuid } from '@/lib/random-id'
 import type { PluginActivationSnapshot } from '@/features/plugins/pluginLifecycle'
 import { GatewayRpcError } from './gatewayRpc'
-import { requestLocalExecutor } from '@/tauri/localExecutor'
+import { requestLocalExecutor } from '@/host/localExecutor'
 import type {
   LocalCodexPluginApi,
   LocalCodexPluginsState,
@@ -22,8 +22,10 @@ export const PLUGIN_RPC_METHODS = new Set([
   'skills/remove',
   'mcp/list',
   'mcp/install',
+  'mcp/setEnabled',
   'mcp/remove',
   'mcp/logout',
+  'mcp/providerRevocation',
   'mcp/login',
   'gateway/mcp/login',
   'mcp/callback',
@@ -55,6 +57,8 @@ export function requiredPluginCapabilities(
   params: Record<string, unknown>
 ): string[] {
   const capabilities: string[] = []
+  if (method === 'mcp/providerRevocation') capabilities.push('mcpProviderRevocationV1')
+  if (method === 'mcp/setEnabled') capabilities.push('mcpActivationV1')
   if (method === 'skills/list' || method === 'skills/setEnabled')
     capabilities.push('skillActivationV1')
   if (method === 'plugin/revalidate') capabilities.push('pluginRevalidationV1')

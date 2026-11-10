@@ -1,8 +1,7 @@
 use crate::custom_terminal::Frame;
+use ratatui::{buffer::Buffer, layout::Rect};
+#[cfg(test)]
 use ratatui::{
-    buffer::Buffer,
-    layout::Rect,
-    style::Style,
     text::{Line, Text},
     widgets::{Paragraph, Widget, Wrap},
 };
@@ -63,6 +62,7 @@ impl TranscriptSelection {
     }
 }
 
+#[cfg(test)]
 pub(super) fn transcript_visible_rows_for_selection(
     lines: &[Line<'static>],
     width: u16,
@@ -72,6 +72,7 @@ pub(super) fn transcript_visible_rows_for_selection(
     selection_rows_with_layout(lines, width, height, scroll_top, false)
 }
 
+#[cfg(test)]
 pub(super) fn navigation_visible_rows_for_selection(
     lines: &[Line<'static>],
     width: u16,
@@ -81,6 +82,7 @@ pub(super) fn navigation_visible_rows_for_selection(
     selection_rows_with_layout(lines, width, height, scroll_top, true)
 }
 
+#[cfg(test)]
 fn selection_rows_with_layout(
     lines: &[Line<'static>],
     width: u16,
@@ -110,15 +112,38 @@ fn selection_rows_with_layout(
         Widget::render(paragraph, area, &mut buffer);
     }
 
-    (0..height)
+    visible_rows_from_buffer(&buffer, area)
+}
+
+pub(super) fn visible_rows_from_buffer(buffer: &Buffer, area: Rect) -> Vec<String> {
+    (area.y..area.bottom())
         .map(|y| {
             let mut row = String::new();
-            for x in 0..width {
-                row.push_str(buffer[(x, y)].symbol());
+            let mut x = area.x;
+            while x < area.right() {
+                let symbol = buffer[(x, y)].symbol();
+                row.push_str(symbol);
+                // Wide glyph continuation cells are padding, not additional text.
+                x = x.saturating_add(unicode_width::UnicodeWidthStr::width(symbol).max(1) as u16);
             }
             row.trim_end_matches(' ').to_string()
         })
         .collect()
+}
+
+pub(super) fn capture_transcript_buffer(buffer: &Buffer, area: Rect) -> Buffer {
+    let mut snapshot = Buffer::empty(area);
+    restore_transcript_buffer(buffer, &mut snapshot);
+    snapshot
+}
+
+pub(super) fn restore_transcript_buffer(snapshot: &Buffer, target: &mut Buffer) {
+    let area = snapshot.area.intersection(target.area);
+    for y in area.y..area.bottom() {
+        for x in area.x..area.right() {
+            target[(x, y)] = snapshot[(x, y)].clone();
+        }
+    }
 }
 
 fn text_slice_by_display_columns(text: &str, start_column: usize, end_column: usize) -> String {
@@ -193,7 +218,7 @@ pub(super) fn render_transcript_selection_highlight(
     let Some(selection) = selection else {
         return;
     };
-    let selection_style = Style::default().bg(crate::theme::selection_surface_bg());
+    let selection_style = crate::theme::text_selection_style();
     let max_rows = usize::from(area.height).min(visible_rows.len());
     for (row_index, row) in visible_rows.iter().enumerate().take(max_rows) {
         let line_width = crate::render::wrapping::display_width(row);
@@ -216,6 +241,21 @@ pub(super) fn render_transcript_selection_highlight(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn wide_glyph_continuations_do_not_shift_mouse_selection_columns() {
+        let rows =
+            transcript_visible_rows_for_selection(&[Line::from("甲乙🙂e\u{301} tail")], 20, 1, 0);
+        assert_eq!(rows, vec!["甲乙🙂e\u{301} tail"]);
+        let selection = TranscriptSelection {
+            anchor: TranscriptSelectionPoint { row: 0, column: 4 },
+            head: TranscriptSelectionPoint { row: 0, column: 7 },
+        };
+        assert_eq!(
+            selected_text_from_visible_rows(&rows, selection).as_deref(),
+            Some("🙂e\u{301}")
+        );
+    }
 
     #[test]
     fn navigation_selection_uses_the_painted_visual_rows_without_rewrapping() {

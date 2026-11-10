@@ -727,3 +727,93 @@ async fn update_goal_allows_expected_tool_error_without_failure_pattern() {
     assert!(!output.is_error);
     assert_eq!(ctx.state.goal().unwrap().status, GoalStatus::Complete);
 }
+
+fn background_task(id: &str, status: kcoder_state::TaskStatus) -> kcoder_state::Task {
+    let mut task = kcoder_state::Task::new(id, "Bash: run the test suite");
+    task.status = status;
+    task
+}
+
+fn completion_text(output: &ToolOutput) -> String {
+    match &output.content[0] {
+        kcoder_types::ContentBlock::Text { text } => text.clone(),
+        _ => panic!("expected text response"),
+    }
+}
+
+#[tokio::test]
+async fn update_goal_rejects_completion_while_background_work_is_running() {
+    let ctx = ToolContext::new(AppState::new("/"));
+    ctx.state.set_goal("finish", None);
+    ctx.state.upsert_task(background_task(
+        "job-test",
+        kcoder_state::TaskStatus::Running,
+    ));
+
+    let output = UpdateGoalTool
+        .call(serde_json::json!({"status": "complete"}), &ctx)
+        .await
+        .unwrap();
+
+    assert!(output.is_error);
+    let text = completion_text(&output);
+    assert!(
+        text.contains("background work still running (job-test)"),
+        "{text}"
+    );
+    assert_eq!(ctx.state.goal().unwrap().status, GoalStatus::Active);
+
+    // Once the job settled, the same verdict is accepted.
+    ctx.state.upsert_task(background_task(
+        "job-test",
+        kcoder_state::TaskStatus::Completed,
+    ));
+    let output = UpdateGoalTool
+        .call(serde_json::json!({"status": "complete"}), &ctx)
+        .await
+        .unwrap();
+    assert!(!output.is_error, "{}", completion_text(&output));
+    assert_eq!(ctx.state.goal().unwrap().status, GoalStatus::Complete);
+}
+
+#[tokio::test]
+async fn foreground_and_internal_jobs_do_not_block_goal_completion() {
+    let ctx = ToolContext::new(AppState::new("/"));
+    ctx.state.set_goal("finish", None);
+    let mut foreground = background_task("job-inline", kcoder_state::TaskStatus::Running);
+    foreground.delivery = kcoder_state::TaskDelivery::Foreground;
+    foreground.notify_parent_on_completion = false;
+    ctx.state.upsert_task(foreground);
+    let mut internal = background_task("job-review", kcoder_state::TaskStatus::Running);
+    internal.description = "[internal:skill-review] after 10 tool call(s)".into();
+    ctx.state.upsert_task(internal);
+
+    let output = UpdateGoalTool
+        .call(serde_json::json!({"status": "complete"}), &ctx)
+        .await
+        .unwrap();
+
+    assert!(!output.is_error, "{}", completion_text(&output));
+    assert_eq!(ctx.state.goal().unwrap().status, GoalStatus::Complete);
+}
+
+#[tokio::test]
+async fn blocked_verdict_is_not_gated_by_running_background_work() {
+    let ctx = ToolContext::new(AppState::new("/"));
+    ctx.state.set_goal("finish", None);
+    ctx.state.upsert_task(background_task(
+        "job-test",
+        kcoder_state::TaskStatus::Running,
+    ));
+
+    let output = UpdateGoalTool
+        .call(
+            serde_json::json!({"status": "blocked", "reason": "needs the deploy key"}),
+            &ctx,
+        )
+        .await
+        .unwrap();
+
+    // The blocked audit runs as before; only completion waits for settled work.
+    assert!(!completion_text(&output).contains("has not settled"));
+}

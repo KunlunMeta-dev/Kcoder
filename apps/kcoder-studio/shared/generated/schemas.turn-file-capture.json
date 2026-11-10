@@ -1,0 +1,117 @@
+{
+  "TurnFileChangesCapture": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "TurnFileCaptureLimitation": {
+        "enum": [
+          "policyExclusions",
+          "incompleteWriters",
+          "overlappingWrites",
+          "captureFailed",
+          "captureIncomplete",
+          "storageUnavailable"
+        ],
+        "type": "string"
+      },
+      "TurnFileCaptureState": {
+        "enum": [
+          "capturing",
+          "changed",
+          "unchanged",
+          "disabled",
+          "partial",
+          "failed",
+          "cancelled",
+          "unknown"
+        ],
+        "type": "string"
+      },
+      "TurnFileCaptureWindow": {
+        "additionalProperties": false,
+        "properties": {
+          "completedAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "startedAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "completedAtMs",
+          "startedAtMs"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "artifactId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "attemptId": {
+        "type": "string"
+      },
+      "base": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/TurnFileCaptureWindow"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "captureId": {
+        "type": "string"
+      },
+      "head": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/TurnFileCaptureWindow"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "limitations": {
+        "items": {
+          "$ref": "#/definitions/TurnFileCaptureLimitation"
+        },
+        "type": "array"
+      },
+      "state": {
+        "$ref": "#/definitions/TurnFileCaptureState"
+      },
+      "threadId": {
+        "type": "string"
+      },
+      "turnId": {
+        "type": "string"
+      },
+      "version": {
+        "format": "uint8",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "attemptId",
+      "captureId",
+      "limitations",
+      "state",
+      "threadId",
+      "turnId",
+      "version"
+    ],
+    "title": "TurnFileChangesCapture",
+    "type": "object"
+  }
+}

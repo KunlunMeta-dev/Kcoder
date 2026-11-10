@@ -61,6 +61,13 @@ impl DesktopBindings {
             active,
         })
     }
+    pub(crate) fn authorizes(&self, owner: &DesktopOwner) -> bool {
+        self.0.lock().is_ok_and(|current| {
+            current.as_ref().is_some_and(|binding| {
+                binding.owner == *owner && binding.active.load(Ordering::Acquire)
+            })
+        })
+    }
     pub(super) fn apply(&self, context: ToolContext) -> ToolContext {
         let Ok(current) = self.0.lock() else {
             return context;

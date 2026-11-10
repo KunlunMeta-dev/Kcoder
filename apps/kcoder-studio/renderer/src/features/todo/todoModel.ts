@@ -1,5 +1,5 @@
-import { invoke } from '@tauri-apps/api/core'
-import { isTauriRuntime } from '@/lib/runtime-environment'
+import { invoke } from '@/lib/runtime-commands'
+import { isGatewayRuntime } from '@/lib/runtime-environment'
 import type { Attachment, RuntimeTaskAddress } from '@/types/api'
 import type { TodoViewState } from './TodoDetailPanel'
 
@@ -128,8 +128,10 @@ export const TODO_WORKFLOW_TEMPLATES: Array<{
   },
 ]
 
-const STORE_PREFIX = 'wework:todo:work-items'
-const WORKFLOW_PREFIX = 'wework:todo:workflow'
+const STORE_PREFIX = 'kcoder:todo:work-items'
+const LEGACY_STORE_PREFIX = 'wework:todo:work-items'
+const WORKFLOW_PREFIX = 'kcoder:todo:workflow'
+const LEGACY_WORKFLOW_PREFIX = 'wework:todo:workflow'
 
 function scope(userId: number | undefined): string {
   return String(userId ?? 'local').replace(/[^a-zA-Z0-9_-]/g, '_')
@@ -187,7 +189,6 @@ function migrateLegacyDrafts(userId: number | undefined): LocalWorkItem[] {
       })
     )
     window.localStorage.setItem(storageKey(userId), JSON.stringify(items))
-    window.localStorage.removeItem(legacyKey)
     return items
   } catch {
     return []
@@ -196,8 +197,10 @@ function migrateLegacyDrafts(userId: number | undefined): LocalWorkItem[] {
 
 export function loadLocalWorkItems(userId: number | undefined): LocalWorkItem[] {
   try {
-    const raw = window.localStorage.getItem(storageKey(userId))
-    if (!raw) return migrateLegacyDrafts(userId)
+    const raw =
+      window.localStorage.getItem(storageKey(userId)) ??
+      window.localStorage.getItem(`${LEGACY_STORE_PREFIX}:${scope(userId)}`)
+    if (raw === null) return migrateLegacyDrafts(userId)
     const value = JSON.parse(raw)
     return Array.isArray(value) ? value.map(normalizeWorkItem) : []
   } catch {
@@ -206,7 +209,7 @@ export function loadLocalWorkItems(userId: number | undefined): LocalWorkItem[] 
 }
 
 export async function hydrateLocalWorkItems(userId: number | undefined): Promise<LocalWorkItem[]> {
-  if (!isTauriRuntime()) return loadLocalWorkItems(userId)
+  if (!isGatewayRuntime()) return loadLocalWorkItems(userId)
   try {
     const raw = await invoke<string | null>('load_todo_store', { scope: scope(userId) })
     if (!raw) return loadLocalWorkItems(userId)
@@ -221,7 +224,7 @@ export async function hydrateLocalWorkItems(userId: number | undefined): Promise
 export function saveLocalWorkItems(userId: number | undefined, items: LocalWorkItem[]): void {
   const contents = JSON.stringify(items)
   window.localStorage.setItem(storageKey(userId), contents)
-  if (isTauriRuntime()) {
+  if (isGatewayRuntime()) {
     void invoke('save_todo_store', { scope: scope(userId), contents }).catch(error => {
       console.error('Failed to persist local TODO store', error)
     })
@@ -229,7 +232,7 @@ export function saveLocalWorkItems(userId: number | undefined, items: LocalWorkI
 }
 
 export async function ensureTodoWorkspace(item: LocalWorkItem): Promise<string | null> {
-  if (!isTauriRuntime()) return null
+  if (!isGatewayRuntime()) return null
   try {
     return await invoke<string>('ensure_todo_workspace', {
       itemId: item.id,
@@ -245,7 +248,7 @@ export async function ensureTodoWorkDirectory(
   rootItemId: string,
   workType: string
 ): Promise<string | null> {
-  if (!isTauriRuntime()) return null
+  if (!isGatewayRuntime()) return null
   try {
     return await invoke<string>('ensure_todo_work_directory', { itemId: rootItemId, workType })
   } catch {
@@ -254,7 +257,7 @@ export async function ensureTodoWorkDirectory(
 }
 
 export async function listTodoWorkspace(itemId: string): Promise<TodoWorkspaceEntry[]> {
-  if (!isTauriRuntime()) return []
+  if (!isGatewayRuntime()) return []
   try {
     return await invoke<TodoWorkspaceEntry[]>('list_todo_workspace', { itemId })
   } catch {
@@ -267,7 +270,7 @@ export async function writeTodoWorkspaceFile(
   relativePath: string,
   file: File
 ): Promise<string | null> {
-  if (!isTauriRuntime()) return null
+  if (!isGatewayRuntime()) return null
   try {
     return await invoke<string>('write_todo_workspace_file', {
       itemId,
@@ -284,7 +287,7 @@ export async function renameTodoWorkspaceEntry(
   fromPath: string,
   toPath: string
 ): Promise<void> {
-  if (!isTauriRuntime()) return
+  if (!isGatewayRuntime()) return
   await invoke('rename_todo_workspace_entry', { itemId, fromPath, toPath })
 }
 
@@ -292,12 +295,12 @@ export async function deleteTodoWorkspaceEntry(
   itemId: string,
   relativePath: string
 ): Promise<void> {
-  if (!isTauriRuntime()) return
+  if (!isGatewayRuntime()) return
   await invoke('delete_todo_workspace_entry', { itemId, relativePath })
 }
 
 export async function getTodoWorkspacePath(itemId: string): Promise<string | null> {
-  if (!isTauriRuntime()) return null
+  if (!isGatewayRuntime()) return null
   try {
     return await invoke<string>('get_todo_workspace_path', { itemId })
   } catch {
@@ -315,7 +318,9 @@ export function loadTodoWorkflow(projectId: number | null): TodoWorkflowConfig {
   if (projectId == null) return DEFAULT_TODO_WORKFLOW
   try {
     const value = JSON.parse(
-      window.localStorage.getItem(`${WORKFLOW_PREFIX}:${projectId}`) ?? 'null'
+      window.localStorage.getItem(`${WORKFLOW_PREFIX}:${projectId}`) ??
+        window.localStorage.getItem(`${LEGACY_WORKFLOW_PREFIX}:${projectId}`) ??
+        'null'
     ) as TodoWorkflowConfig | null
     return value?.version === 1
       ? {

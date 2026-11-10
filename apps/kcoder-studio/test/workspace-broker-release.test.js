@@ -1,11 +1,27 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { pendingWorkIdleDelay, releaseIdleBrokers } from '../src/workspace-broker-release.js';
+import { pendingWorkIdleDelay, releaseIdleBrokers, workspaceIdleDelay } from '../src/workspace-broker-release.js';
 
 test('pending timer retry has a positive floor even when initial idle is zero', () => {
   assert.equal(pendingWorkIdleDelay(0), 1_000);
   assert.equal(pendingWorkIdleDelay(25), 1_000);
   assert.equal(pendingWorkIdleDelay(300_000), 300_000);
+});
+
+test('duplicate workspace brokers release idle peers promptly without crossing owners', () => {
+  const owner = { targetId: 'local', loginOwner: 'alice' };
+  const duplicate = { targetId: 'local', loginOwner: 'alice' };
+  assert.equal(workspaceIdleDelay([owner], owner, 300_000), 300_000);
+  assert.equal(workspaceIdleDelay([owner, duplicate], owner, 300_000), 250);
+  assert.equal(workspaceIdleDelay([owner, duplicate], owner, 100), 100);
+  assert.equal(workspaceIdleDelay([owner, duplicate], owner, 300_000, false), 300_000);
+  for (const peer of [
+    { targetId: 'other', loginOwner: 'alice' },
+    { targetId: 'local', loginOwner: 'bob' },
+    { ...duplicate, closed: true },
+    { ...duplicate, idleShutdown: { closing: true } },
+    { ...duplicate, restartAdmissionRetired: true },
+  ]) assert.equal(workspaceIdleDelay([owner, peer], owner, 300_000), 300_000);
 });
 
 function fixture() {

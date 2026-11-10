@@ -1,6 +1,7 @@
 import type { Attachment } from '@/types/api'
 import { getRuntimeConfig } from '@/config/runtime'
-import { createHttpClient, shouldUseTauriFetch } from './http'
+import { getToken } from './auth'
+import { createHttpClient } from './http'
 
 export const MAX_FILE_SIZE = 100 * 1024 * 1024
 
@@ -58,30 +59,28 @@ export function uploadAttachment(
   if (signal?.aborted) return Promise.reject(new Error('Upload cancelled'))
 
   const { apiBaseUrl } = getRuntimeConfig()
-  const token = localStorage.getItem('auth_token')
+  const token = getToken()
   const formData = new FormData()
   formData.append('file', file)
 
-  if (shouldUseTauriFetch()) {
-    onProgress?.(0)
-    const client = createHttpClient({ baseUrl: apiBaseUrl })
-    return client.post<UploadAttachmentResponse>('/attachments/upload', formData).then(response => {
-      onProgress?.(100)
-      return toAttachmentResponse(response, file)
-    })
-  }
-
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest()
+    let settled = false
     const abortUpload = () => xhr.abort()
+    const settle = (complete: () => void) => {
+      if (settled) return
+      settled = true
+      signal?.removeEventListener('abort', abortUpload)
+      complete()
+    }
 
     xhr.upload.addEventListener('progress', event => {
-      if (event.lengthComputable && onProgress) {
+      if (!settled && event.lengthComputable && onProgress) {
         onProgress(Math.round((event.loaded / event.total) * 100))
       }
     })
 
-    xhr.addEventListener('load', () => {
+    xhr.addEventListener('load', () => settle(() => {
       if (xhr.status >= 200 && xhr.status < 300) {
         try {
           const response = JSON.parse(xhr.responseText)
@@ -98,17 +97,18 @@ export function uploadAttachment(
       } catch {
         reject(new Error(`Upload failed: ${xhr.status}`))
       }
-    })
+    }))
 
-    xhr.addEventListener('error', () => reject(new Error('Network error during upload')))
-    xhr.addEventListener('abort', () => reject(new Error('Upload cancelled')))
+    xhr.addEventListener('error', () => settle(() => reject(new Error('Network error during upload'))))
+    xhr.addEventListener('abort', () => settle(() => reject(new DOMException('Upload cancelled', 'AbortError'))))
     signal?.addEventListener('abort', abortUpload, { once: true })
 
     xhr.open('POST', `${apiBaseUrl}/attachments/upload`)
     if (token) {
       xhr.setRequestHeader('Authorization', `Bearer ${token}`)
     }
-    xhr.send(formData)
+    if (signal?.aborted) abortUpload()
+    else xhr.send(formData)
   })
 }
 

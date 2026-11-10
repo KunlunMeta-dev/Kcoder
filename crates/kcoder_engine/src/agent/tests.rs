@@ -13,7 +13,8 @@ mod verification_io_tests;
 #[test]
 fn configured_engine_agent_ids_use_parent_registry() {
     let root = tempfile::tempdir().unwrap();
-    let engine = crate::test_support::engine_builder::TestEngineBuilder::new(root.path()).build();
+    let engine = crate::test_support::engine_builder::TestEngineBuilder::new(root.path())
+        .build_with_profile_directory();
     engine.state.set_short_id_registry(&root.path().join("ids"));
     let first = generate_agent_id(&engine).unwrap();
     let second = generate_agent_id(&engine).unwrap();
@@ -769,6 +770,7 @@ fn initial_context_modes_append_delegated_prompt_once() {
         active_skills: Vec::new(),
         snapshot_provider: "test-provider".to_string(),
         snapshot_model: "test-model".to_string(),
+        context_history_anchor: None,
         full_context_compatible: true,
     };
 
@@ -1523,7 +1525,7 @@ mod artifact_validation_tests {
         let engine = crate::test_support::engine_builder::TestEngineBuilder::new(root)
             .provider(provider)
             .tool_registry(ToolRegistry::new().register(kcoder_tools::FileReadTool))
-            .build();
+            .build_with_profile_directory();
         engine.state.with_history_path(root.join("session.jsonl"));
         engine
             .permissions
@@ -1536,6 +1538,7 @@ mod artifact_validation_tests {
                 active_skills: Vec::new(),
                 snapshot_provider: engine.provider_name(),
                 snapshot_model: engine.model_name(),
+                context_history_anchor: None,
                 full_context_compatible: true,
             }
             .into(),
@@ -2751,7 +2754,7 @@ fn agent_model_selection_preserves_the_host_credential_factory() {
         let source = Arc::new(Source(std::sync::Mutex::new(Vec::new())));
         let engine = crate::test_support::engine_builder::TestEngineBuilder::new(temp.path())
             .settings(settings)
-            .build()
+            .build_with_profile_directory()
             .with_client_model_configuration(source.clone());
         let runner = QueryEngineAgentRunner::new(engine);
         let runtime = runner

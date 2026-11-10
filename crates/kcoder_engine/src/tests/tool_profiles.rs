@@ -3,6 +3,71 @@ struct CountingSchemaTool {
     schema_calls: Arc<AtomicUsize>,
 }
 
+#[derive(Clone)]
+struct AsyncQuestionBackend {
+    calls: Arc<AtomicUsize>,
+}
+
+#[async_trait::async_trait]
+impl kcoder_tools::UserQuestioner for AsyncQuestionBackend {
+    fn supports_async_user_questions(&self) -> bool {
+        true
+    }
+
+    async fn register_async_user_question(
+        &self,
+        state: &kcoder_state::AppState,
+        owner: &kcoder_state::AppStateLifecycleIdentity,
+        request: kcoder_types::async_user_questions::AsyncQuestionRequest,
+    ) -> Result<kcoder_types::async_user_questions::AsyncQuestionAccepted, String> {
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        state
+            .register_async_question(owner, request)
+            .map_err(|error| error.to_string())
+    }
+
+    async fn ask(
+        &self,
+        _request: kcoder_tools::UserQuestionRequest,
+    ) -> Result<kcoder_tools::UserQuestionResponse, String> {
+        Err("synchronous question prompts are disabled for this test".into())
+    }
+}
+
+fn async_question_input() -> Value {
+    serde_json::json!({
+        "questions": [{
+            "question": "Which implementation should be used?",
+            "header": "Approach",
+            "options": [
+                {"label": "A", "description": "Use the first implementation."},
+                {"label": "B", "description": "Use the second implementation."}
+            ],
+            "multi_select": false
+        }]
+    })
+}
+
+fn async_question_engine(
+    root: &std::path::Path,
+    settings: Settings,
+    questioner: Arc<dyn kcoder_tools::UserQuestioner>,
+) -> QueryEngine {
+    let state = AppState::new(root);
+    state.with_history_path(root.join("async-question-history.jsonl"));
+    QueryEngine::new(
+        Arc::new(EmptyProvider),
+        state,
+        kcoder_tools::default_registry(),
+        PermissionEngine::from_settings(&settings),
+        settings,
+        MemoryManager::global_only(MemoryStore::empty()),
+        SkillRegistry::load_project_only(root).unwrap(),
+        questioner,
+        root.to_path_buf(),
+    )
+}
+
 #[async_trait::async_trait]
 impl kcoder_tools::Tool for CountingSchemaTool {
     fn input_schema_is_stable(&self) -> bool {
@@ -45,7 +110,7 @@ impl kcoder_tools::Tool for CountingSchemaTool {
 async fn engine_reuses_cached_tool_schemas_for_requests_and_execution() {
     let tmp = tempfile::tempdir().unwrap();
     let schema_calls = Arc::new(AtomicUsize::new(0));
-    let settings = Settings::default();
+    let settings = crate::test_support::engine_builder::fixture_settings();
     let engine = QueryEngine::new(
         Arc::new(EmptyProvider),
         AppState::new(tmp.path()),
@@ -136,7 +201,7 @@ async fn yolo_mode_hides_user_elicitation_tools_from_model() {
     let tmp = tempfile::tempdir().unwrap();
     let settings = Settings {
         permission_mode: PermissionMode::Yolo,
-        ..Settings::default()
+        ..crate::test_support::engine_builder::fixture_settings()
     };
     let engine = QueryEngine::new(
         Arc::new(EmptyProvider),
@@ -164,6 +229,222 @@ async fn yolo_mode_hides_user_elicitation_tools_from_model() {
 }
 
 #[tokio::test]
+async fn async_question_is_available_and_nonblocking_for_yolo_main_task() {
+    let tmp = tempfile::tempdir().unwrap();
+    let settings = Settings {
+        permission_mode: PermissionMode::Yolo,
+        ..crate::test_support::engine_builder::fixture_settings()
+    };
+    let calls = Arc::new(AtomicUsize::new(0));
+    let questioner = Arc::new(AsyncQuestionBackend {
+        calls: Arc::clone(&calls),
+    });
+    let mut engine = async_question_engine(tmp.path(), settings, questioner)
+        .with_client_questions_supported(false)
+        .with_async_user_questions_supported(true);
+
+    let names = engine
+        .tool_definitions_for_model()
+        .await
+        .into_iter()
+        .map(|definition| definition.name)
+        .collect::<Vec<_>>();
+    assert!(names.iter().any(|name| name == "AskUserQuestionAsync"));
+    assert!(!names.iter().any(|name| name == "AskUserQuestion"));
+
+    engine.native_web_source_identity = Some(kcoder_types::TurnAttemptIdentity {
+        thread_id: engine.state.session_id(),
+        turn_id: "yolo-main-turn".into(),
+        attempt_id: "yolo-main-attempt".into(),
+    });
+    let (output, decision, _, _) = engine
+        .execute_tool(
+            "async-question-call-1",
+            "AskUserQuestionAsync",
+            async_question_input(),
+            &kcoder_permissions::AutoAllowPrompt,
+        )
+        .await
+        .unwrap();
+    assert_eq!(decision, PermissionDecision::Allow);
+    assert!(!output.is_error, "{}", tool_output_text(&output));
+    let response: Value = serde_json::from_str(&tool_output_text(&output)).unwrap();
+    assert_eq!(response["accepted"], true);
+    assert!(response["questionId"].as_str().is_some());
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
+async fn async_question_is_hidden_without_negotiated_capability_or_host_support() {
+    let tmp = tempfile::tempdir().unwrap();
+    let settings = crate::test_support::engine_builder::fixture_settings();
+    let questioner = Arc::new(AsyncQuestionBackend {
+        calls: Arc::new(AtomicUsize::new(0)),
+    });
+    let engine = async_question_engine(tmp.path(), settings.clone(), questioner)
+        .with_async_user_questions_supported(false);
+    let names = engine
+        .tool_definitions_for_model()
+        .await
+        .into_iter()
+        .map(|definition| definition.name)
+        .collect::<Vec<_>>();
+    assert!(!names.iter().any(|name| name == "AskUserQuestionAsync"));
+    assert!(
+        engine
+            .effective_tool_catalog()
+            .await
+            .iter()
+            .all(|tool| tool.name != "AskUserQuestionAsync")
+    );
+
+    let engine = async_question_engine(
+        tmp.path(),
+        settings,
+        Arc::new(kcoder_tools::DenyAllUserQuestioner),
+    )
+    .with_async_user_questions_supported(true);
+    let names = engine
+        .tool_definitions_for_model()
+        .await
+        .into_iter()
+        .map(|definition| definition.name)
+        .collect::<Vec<_>>();
+    assert!(!names.iter().any(|name| name == "AskUserQuestionAsync"));
+}
+
+#[tokio::test]
+async fn async_question_is_hidden_and_rejected_in_subagent() {
+    let tmp = tempfile::tempdir().unwrap();
+    let settings = crate::test_support::engine_builder::fixture_settings();
+    let calls = Arc::new(AtomicUsize::new(0));
+    let engine = async_question_engine(
+        tmp.path(),
+        settings,
+        Arc::new(AsyncQuestionBackend {
+            calls: Arc::clone(&calls),
+        }),
+    )
+    .with_async_user_questions_supported(true)
+    .with_agent_depth(1);
+
+    let names = engine
+        .tool_definitions_for_model()
+        .await
+        .into_iter()
+        .map(|definition| definition.name)
+        .collect::<Vec<_>>();
+    assert!(!names.iter().any(|name| name == "AskUserQuestionAsync"));
+
+    let (output, decision, _, _) = engine
+        .execute_tool(
+            "async-question-child-call",
+            "AskUserQuestionAsync",
+            async_question_input(),
+            &kcoder_permissions::AutoAllowPrompt,
+        )
+        .await
+        .unwrap();
+    assert_eq!(decision, PermissionDecision::Deny);
+    assert!(output.is_error);
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
+async fn channel_configuration_denies_questions_without_hiding_the_original_tools() {
+    let tmp = tempfile::tempdir().unwrap();
+    let settings = Settings {
+        permission_mode: PermissionMode::Yolo,
+        ..crate::test_support::engine_builder::fixture_settings()
+    };
+    let calls = Arc::new(AtomicUsize::new(0));
+    let mut web = async_question_engine(
+        tmp.path(),
+        settings,
+        Arc::new(AsyncQuestionBackend {
+            calls: Arc::clone(&calls),
+        }),
+    )
+    .with_client_questions_supported(true)
+    .with_async_user_questions_supported(true);
+    web.state
+        .bind_channel_task_source(kcoder_types::agent_definition::ChannelTaskSource {
+            owner: kcoder_types::integrations::core::IntegrationOwner {
+                account_id: "test-account".into(),
+                target_id: "test-target".into(),
+                workspace_id: kcoder_types::integrations::core::IntegrationNullable::Null,
+                organization_id: None,
+            },
+            channel_id: "persisted-channel-source".into(),
+        })
+        .unwrap();
+    web.native_web_source_identity = Some(kcoder_types::TurnAttemptIdentity {
+        thread_id: web.state.session_id(),
+        turn_id: "web-turn-after-channel-task".into(),
+        attempt_id: "web-attempt".into(),
+    });
+
+    // Channel restrictions do not alter the original tool schemas or mode filters.
+    let channel = web
+        .clone()
+        .with_unattended_input()
+        .with_channel_tool_restrictions(kcoder_types::channel_tool_restrictions::ChannelToolRestrictions {
+            enabled: true,
+            disabled_tools: vec!["AskUserQuestion".into(), "AskUserQuestionAsync".into()],
+        })
+        .with_client_questions_supported(true)
+        .with_async_user_questions_supported(true);
+    let names = channel
+        .tool_definitions_for_model()
+        .await
+        .into_iter()
+        .map(|definition| definition.name)
+        .collect::<Vec<_>>();
+    assert!(names.iter().any(|name| name == "AskUserQuestionAsync"));
+    // The original yolo mode still suppresses synchronous elicitation.
+    assert!(!names.iter().any(|name| name == "AskUserQuestion"));
+
+    for (id, name) in [
+        ("channel-async-call", "AskUserQuestionAsync"),
+        ("channel-sync-call", "AskUserQuestion"),
+    ] {
+        let (output, decision, _, _) = channel
+            .execute_tool(
+                id,
+                name,
+                async_question_input(),
+                &kcoder_permissions::AutoAllowPrompt,
+            )
+            .await
+            .unwrap();
+        assert_eq!(decision, PermissionDecision::Deny);
+        assert!(output.is_error);
+    }
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+
+    // The persistent source marker does not impose a permanent UI restriction.
+    let names = web
+        .tool_definitions_for_model()
+        .await
+        .into_iter()
+        .map(|definition| definition.name)
+        .collect::<Vec<_>>();
+    assert!(names.iter().any(|name| name == "AskUserQuestionAsync"));
+    let (output, decision, _, _) = web
+        .execute_tool(
+            "web-call-after-channel-task",
+            "AskUserQuestionAsync",
+            async_question_input(),
+            &kcoder_permissions::AutoAllowPrompt,
+        )
+        .await
+        .unwrap();
+    assert_eq!(decision, PermissionDecision::Allow);
+    assert!(!output.is_error, "{}", tool_output_text(&output));
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
 async fn luna_mode_filters_model_definitions_and_execution_registry_from_settings() {
     let tmp = tempfile::tempdir().unwrap();
     let settings = Settings {
@@ -173,7 +454,7 @@ async fn luna_mode_filters_model_definitions_and_execution_registry_from_setting
             },
             ..kcoder_config::ToolsSettings::default()
         },
-        ..Settings::default()
+        ..crate::test_support::engine_builder::fixture_settings()
     };
     let engine = QueryEngine::new(
         Arc::new(EmptyProvider),
@@ -237,7 +518,7 @@ async fn luna_mode_removes_spec_context_and_normal_mode_restores_it() {
         .unwrap();
 
     let requests = Arc::new(Mutex::new(Vec::new()));
-    let settings = Settings::default();
+    let settings = crate::test_support::engine_builder::fixture_settings();
     let engine = QueryEngine::new(
         Arc::new(RequestRecordingProvider {
             requests: Arc::clone(&requests),
@@ -296,11 +577,12 @@ async fn luna_mode_removes_spec_context_and_normal_mode_restores_it() {
     assert!(luna_context.contains("SUPERPOWER_SKILL_SENTINEL"));
     assert!(!luna_context.contains("USING_SPECS_SKILL_SENTINEL"));
     assert!(!luna.tools.iter().any(|tool| tool.name.starts_with("Spec")));
-    assert!(luna.tools.iter().any(|tool| tool.name == "ocr"));
+    assert!(!luna.tools.iter().any(|tool| tool.name == "ocr"));
+    assert!(luna.tools.iter().any(|tool| tool.name == "TodoWrite"));
     assert!(luna.tools.iter().any(|tool| tool.name == "Workflow"));
     let luna_system = luna.system.as_deref().unwrap_or_default();
     assert!(!luna_system.contains("remember tool"));
-    assert!(luna_system.contains("OCR"));
+    assert!(!luna_system.contains("OCR"));
     assert!(luna_system.contains("Workflow"));
 
     let normal = &requests[1];
@@ -334,7 +616,7 @@ async fn luna_mode_removes_spec_context_and_normal_mode_restores_it() {
 #[tokio::test]
 async fn default_luna_allowlist_matches_registered_model_tools() {
     let tmp = tempfile::tempdir().unwrap();
-    let settings = Settings::default();
+    let settings = crate::test_support::engine_builder::fixture_settings();
     let mut expected = settings.tools.luna.allowed.clone();
     let engine = QueryEngine::new(
         Arc::new(EmptyProvider),
@@ -366,7 +648,7 @@ async fn yolo_mode_rejects_hard_called_user_question_without_prompting() {
     let tmp = tempfile::tempdir().unwrap();
     let settings = Settings {
         permission_mode: PermissionMode::Yolo,
-        ..Settings::default()
+        ..crate::test_support::engine_builder::fixture_settings()
     };
     let engine = QueryEngine::new(
         Arc::new(EmptyProvider),

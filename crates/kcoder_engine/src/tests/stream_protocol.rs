@@ -160,7 +160,7 @@ async fn submit_message_stream_yields_deltas_before_provider_finishes() {
     let engine = test_engine_with_settings(
         Arc::new(DelayedTextProvider),
         tmp.path(),
-        settings_using_main_summary_runtime(Settings::default()),
+        settings_using_main_summary_runtime(crate::test_support::engine_builder::fixture_settings()),
     );
     let prompt = kcoder_permissions::AutoAllowPrompt;
     let mut stream = engine.submit_message_stream("hello", &prompt);
@@ -188,7 +188,7 @@ async fn submit_message_content_stream_preserves_image_blocks_for_provider() {
             requests: Arc::clone(&requests),
         }),
         tmp.path(),
-        settings_using_main_summary_runtime(Settings::default()),
+        settings_using_main_summary_runtime(crate::test_support::engine_builder::fixture_settings()),
     );
     let prompt = kcoder_permissions::AutoAllowPrompt;
     let message = Message::user_content(vec![
@@ -221,7 +221,7 @@ async fn provider_response_emits_one_started_and_one_done() {
     let engine = test_engine_with_settings(
         Arc::new(DelayedTextProvider),
         tmp.path(),
-        settings_using_main_summary_runtime(Settings::default()),
+        settings_using_main_summary_runtime(crate::test_support::engine_builder::fixture_settings()),
     );
     engine.state.add_message(Message::user_text("hello"));
 
@@ -256,7 +256,7 @@ async fn provider_without_message_start_still_emits_one_started() {
             delay: None,
         }),
         tmp.path(),
-        settings_using_main_summary_runtime(Settings::default()),
+        settings_using_main_summary_runtime(crate::test_support::engine_builder::fixture_settings()),
     );
     engine.state.add_message(Message::user_text("hello"));
 
@@ -277,7 +277,7 @@ async fn provider_without_message_start_still_emits_one_started() {
 #[tokio::test]
 async fn truncated_tool_use_is_neither_persisted_nor_emitted_as_an_orphan() {
     let tmp = tempfile::tempdir().unwrap();
-    let mut settings = settings_using_main_summary_runtime(Settings::default());
+    let mut settings = settings_using_main_summary_runtime(crate::test_support::engine_builder::fixture_settings());
     settings.max_retries = 0;
     let engine =
         test_engine_with_settings(Arc::new(TruncatedToolUseProvider), tmp.path(), settings);
@@ -309,7 +309,7 @@ async fn truncated_tool_use_is_neither_persisted_nor_emitted_as_an_orphan() {
 #[tokio::test]
 async fn message_stop_with_open_tool_block_is_rejected_without_persistence() {
     let tmp = tempfile::tempdir().unwrap();
-    let mut settings = settings_using_main_summary_runtime(Settings::default());
+    let mut settings = settings_using_main_summary_runtime(crate::test_support::engine_builder::fixture_settings());
     settings.max_retries = 0;
     let engine = test_engine_with_settings(
         Arc::new(ToolUseMissingBlockStopProvider),
@@ -349,7 +349,7 @@ async fn message_stop_with_open_tool_block_is_rejected_without_persistence() {
 #[tokio::test]
 async fn duplicate_message_start_after_tool_block_is_protocol_error() {
     let tmp = tempfile::tempdir().unwrap();
-    let mut settings = settings_using_main_summary_runtime(Settings::default());
+    let mut settings = settings_using_main_summary_runtime(crate::test_support::engine_builder::fixture_settings());
     settings.max_retries = 0;
     let engine = test_engine_with_settings(
         Arc::new(DuplicateMessageStartAfterToolProvider),
@@ -417,6 +417,32 @@ fn protocol_input_start(index: usize) -> StreamEvent {
     }
 }
 
+#[tokio::test]
+async fn provider_stop_semantics_are_bounded_and_precede_message_completion() {
+    for (raw, expected) in [("length", "max_tokens"), ("MAX_TOKENS", "max_tokens"), ("content_filter", "refusal"), ("pause_turn", "pause_turn"), ("private-provider-diagnostic", "unknown")] {
+        let root = tempfile::tempdir().unwrap();
+        let engine = test_engine_with_settings(
+            Arc::new(ProtocolInputProvider {
+                events: vec![
+                    StreamEvent::ContentBlockStart { index: 0, content_block: ContentBlock::Text { text: "partial response".into() } },
+                    StreamEvent::ContentBlockStop { index: 0 },
+                    StreamEvent::MessageDelta { delta: kcoder_types::MessageDeltaFields { stop_reason: Some(raw.into()), stop_sequence: None, usage: None } },
+                    StreamEvent::MessageStop,
+                ],
+                polled: Arc::new(AtomicUsize::new(0)),
+                requests: Arc::new(AtomicUsize::new(0)),
+            }),
+            root.path(),
+            settings_using_main_summary_runtime(crate::test_support::engine_builder::fixture_settings()),
+        );
+        let events = engine.submit_message_stream("run", &kcoder_permissions::AutoAllowPrompt).collect::<Vec<_>>().await;
+        let stopped = events.iter().position(|event| matches!(event, EngineEvent::AssistantStopReason { reason } if *reason == expected)).expect("normalized stop semantics must reach the host");
+        let done = events.iter().position(|event| matches!(event, EngineEvent::AssistantMessageDone)).unwrap();
+        assert!(stopped < done);
+        assert!(engine.state.messages().iter().any(|message| matches!(message, Message::Assistant {content,..} if content.iter().any(|block| matches!(block, ContentBlock::Text{text} if text == "partial response")))));
+    }
+}
+
 fn protocol_input_delta(index: usize, partial_json: &str) -> StreamEvent {
     StreamEvent::ContentBlockDelta {
         index,
@@ -437,7 +463,7 @@ async fn assert_protocol_input_rejected(
     let settings = Settings {
         permission_mode: PermissionMode::Bypass,
         max_retries: 2,
-        ..settings_using_main_summary_runtime(Settings::default())
+        ..settings_using_main_summary_runtime(crate::test_support::engine_builder::fixture_settings())
     };
     let engine = TestEngineBuilder::new(tmp.path())
         .provider(Arc::new(ProtocolInputProvider {
@@ -449,7 +475,7 @@ async fn assert_protocol_input_rejected(
         .tool_registry(ToolRegistry::new().register(InputEchoTool {
             seen: Arc::clone(&seen),
         }))
-        .build();
+        .build_with_profile_directory();
     engine.state.add_message(Message::user_text("run the tool"));
     let events = engine
         .run_turn_stream_with_max_turns(&kcoder_permissions::AutoAllowPrompt, 1)
@@ -557,6 +583,248 @@ async fn tool_input_protocol_rejects_malformed_json_instead_of_executing_empty_i
 }
 
 #[derive(Debug)]
+struct ToolArgumentRecoveryProvider {
+    responses: Vec<Vec<StreamEvent>>,
+    requests: Arc<Mutex<Vec<MessagesRequest>>>,
+}
+
+impl Provider for ToolArgumentRecoveryProvider {
+    fn name(&self) -> &'static str {
+        "tool-argument-recovery-fixture"
+    }
+
+    fn stream_messages(
+        &self,
+        request: MessagesRequest,
+    ) -> Result<kcoder_api::ProviderStream, kcoder_api::ApiErrorKind> {
+        let index = {
+            let mut requests = self.requests.lock().unwrap();
+            let index = requests.len();
+            requests.push(request);
+            index
+        };
+        let events = self.responses.get(index).cloned().unwrap_or_else(|| {
+            panic!("unexpected extra provider request {index}")
+        });
+        Ok(Box::pin(futures::stream::iter(events.into_iter().map(Ok))))
+    }
+}
+
+fn recoverable_tool_response(partial: &str, include_complete_call: bool) -> Vec<StreamEvent> {
+    let mut events = vec![StreamEvent::ContentBlockStart {
+        index: 0,
+        content_block: ContentBlock::Text { text: "Checking the task.".into() },
+    }, StreamEvent::ContentBlockStop { index: 0 },
+        StreamEvent::ContentBlockStart { index: 1, content_block: ContentBlock::Text { text: String::new() } },
+        StreamEvent::ContentBlockStop { index: 1 },
+    ];
+    if include_complete_call {
+        events.extend([
+            protocol_input_start(2),
+            protocol_input_delta(2, r#"{"label":"queued-but-not-executed"}"#),
+            StreamEvent::ContentBlockStop { index: 2 },
+        ]);
+    } else {
+        events.extend([
+            StreamEvent::ContentBlockStart { index: 2, content_block: ContentBlock::Text { text: String::new() } },
+            StreamEvent::ContentBlockStop { index: 2 },
+        ]);
+    }
+    events.extend([
+        protocol_input_start(3),
+        protocol_input_delta(3, partial),
+        StreamEvent::ContentBlockStop { index: 3 },
+        StreamEvent::MessageStop,
+    ]);
+    events
+}
+
+type ToolArgumentRecoveryFixture = (
+    QueryEngine,
+    Arc<Mutex<Vec<Value>>>,
+    Arc<Mutex<Vec<MessagesRequest>>>,
+);
+
+fn argument_recovery_engine(
+    root: &Path,
+    responses: Vec<Vec<StreamEvent>>,
+    retries: usize,
+) -> ToolArgumentRecoveryFixture {
+    let seen = Arc::new(Mutex::new(Vec::new()));
+    let requests = Arc::new(Mutex::new(Vec::new()));
+    let engine = TestEngineBuilder::new(root)
+        .provider(Arc::new(ToolArgumentRecoveryProvider {
+            responses,
+            requests: Arc::clone(&requests),
+        }))
+        .settings(Settings {
+            permission_mode: PermissionMode::Bypass,
+            max_retries: retries,
+            ..settings_using_main_summary_runtime(crate::test_support::engine_builder::fixture_settings())
+        })
+        .tool_registry(ToolRegistry::new().register(InputEchoTool { seen: Arc::clone(&seen) }))
+        .build_with_profile_directory();
+    engine.state.add_message(Message::user_text("run the tool"));
+    (engine, seen, requests)
+}
+
+#[tokio::test]
+async fn truncated_tool_arguments_regenerate_without_executing_the_rejected_batch() {
+    let root = tempfile::tempdir().unwrap();
+    let corrected = serde_json::json!({"label":"corrected","nested":{"count":2,"enabled":false,"items":[1,2]}});
+    let (engine, seen, requests) = argument_recovery_engine(root.path(), vec![
+        recoverable_tool_response(r#"{"label":"SENTINEL_PRIVATE""#, true),
+        vec![
+            protocol_input_start(0),
+            protocol_input_delta(0, &corrected.to_string()),
+            StreamEvent::ContentBlockStop { index: 0 },
+            StreamEvent::MessageStop,
+        ],
+        simple_text_events("finished"),
+    ], 2);
+    let events = engine.run_turn_stream_with_max_turns(&kcoder_permissions::AutoAllowPrompt, 3)
+        .collect::<Vec<_>>().await;
+    assert_eq!(*seen.lock().unwrap(), [corrected]);
+    assert!(!events.iter().any(|event| matches!(event, EngineEvent::ProviderFailed { .. })));
+    assert!(events.iter().any(|event| matches!(event,
+        EngineEvent::ToolResult { id, output, .. }
+            if id == "input-2" && output.is_error
+    )));
+    assert!(!events.iter().any(|event| matches!(event,
+        EngineEvent::ToolExecutionStarted { id, .. } if id == "input-2" || id == "input-3"
+    )));
+    let requests = requests.lock().unwrap();
+    assert_eq!(requests.len(), 3);
+    let repair_context = &requests[1].messages;
+    assert!(repair_context.iter().any(|message| matches!(message,
+        Message::User { content, .. } if content.iter().any(|block| matches!(block,
+            ContentBlock::Text { text } if text.contains("No tools in that response were executed")
+        ))
+    )));
+    assert!(!serde_json::to_string(repair_context).unwrap().contains("SENTINEL_PRIVATE"));
+    assert!(repair_context.iter().any(|message| matches!(message,
+        Message::User { content, .. } if content.iter().any(|block| matches!(block,
+            ContentBlock::ToolResult { tool_use_id, is_error: Some(true), .. } if tool_use_id == "input-2"
+        ))
+    )));
+}
+
+#[tokio::test]
+async fn truncated_tool_arguments_have_one_regeneration_per_turn() {
+    let root = tempfile::tempdir().unwrap();
+    let malformed = recoverable_tool_response(r#"{"label":"SENTINEL_PRIVATE""#, false);
+    let (engine, seen, requests) = argument_recovery_engine(
+        root.path(), vec![malformed.clone(), malformed], 8,
+    );
+    let events = engine.run_turn_stream_with_max_turns(&kcoder_permissions::AutoAllowPrompt, 8)
+        .collect::<Vec<_>>().await;
+    assert!(seen.lock().unwrap().is_empty());
+    assert_eq!(requests.lock().unwrap().len(), 2);
+    assert_eq!(events.iter().filter(|event| matches!(event, EngineEvent::ProviderFailed { .. })).count(), 1);
+    assert!(!serde_json::to_string(&engine.state.messages()).unwrap().contains("SENTINEL_PRIVATE"));
+}
+
+#[tokio::test]
+async fn truncated_tool_arguments_do_not_regenerate_when_retries_are_disabled() {
+    let root = tempfile::tempdir().unwrap();
+    let (engine, seen, requests) = argument_recovery_engine(root.path(), vec![
+        recoverable_tool_response(r#"{"label":"SENTINEL_PRIVATE""#, false),
+    ], 0);
+    let events = engine.run_turn_stream_with_max_turns(&kcoder_permissions::AutoAllowPrompt, 3)
+        .collect::<Vec<_>>().await;
+    assert!(seen.lock().unwrap().is_empty());
+    assert_eq!(requests.lock().unwrap().len(), 1);
+    assert!(events.iter().any(|event| matches!(event, EngineEvent::ProviderFailed { .. })));
+}
+
+#[tokio::test]
+async fn malformed_nontruncated_tool_arguments_remain_permanent_protocol_errors() {
+    let root = tempfile::tempdir().unwrap();
+    let (engine, seen, requests) = argument_recovery_engine(root.path(), vec![
+        recoverable_tool_response(r#"{"label":not_json}"#, false),
+    ], 2);
+    let events = engine.run_turn_stream_with_max_turns(&kcoder_permissions::AutoAllowPrompt, 3)
+        .collect::<Vec<_>>().await;
+    assert!(seen.lock().unwrap().is_empty());
+    assert_eq!(requests.lock().unwrap().len(), 1);
+    assert!(events.iter().any(|event| matches!(event, EngineEvent::ProviderFailed { .. })));
+}
+
+#[tokio::test]
+async fn cancelling_tool_argument_regeneration_does_not_start_another_request() {
+    let root = tempfile::tempdir().unwrap();
+    let (engine, seen, requests) = argument_recovery_engine(root.path(), vec![
+        recoverable_tool_response(r#"{"label":"SENTINEL_PRIVATE""#, false),
+    ], 2);
+    let cancel = CancellationToken::new();
+    let prompt = kcoder_permissions::AutoAllowPrompt;
+    let mut stream = engine.run_turn_stream_with_cancel_and_max_turns(
+        &prompt, cancel.clone(), 3, None, None,
+    );
+    let mut saw_regeneration = false;
+    while let Some(event) = stream.next().await {
+        if matches!(event, EngineEvent::SystemNotice(ref text) if text.contains("regenerating")) {
+            saw_regeneration = true;
+            cancel.cancel();
+        }
+    }
+    assert!(saw_regeneration);
+    assert!(seen.lock().unwrap().is_empty());
+    assert_eq!(requests.lock().unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn tool_argument_regeneration_preserves_previously_executed_results() {
+    let root = tempfile::tempdir().unwrap();
+    let called = |label: &str| vec![
+        protocol_input_start(0),
+        protocol_input_delta(0, &serde_json::json!({"label":label}).to_string()),
+        StreamEvent::ContentBlockStop { index: 0 },
+        StreamEvent::MessageStop,
+    ];
+    let (engine, seen, requests) = argument_recovery_engine(root.path(), vec![
+        called("earlier-executed-call"),
+        recoverable_tool_response(r#"{"label":"SENTINEL_PRIVATE""#, false),
+        called("new-corrected-call"),
+        simple_text_events("finished"),
+    ], 2);
+    let events = engine.run_turn_stream_with_max_turns(&kcoder_permissions::AutoAllowPrompt, 4)
+        .collect::<Vec<_>>().await;
+    assert_eq!(*seen.lock().unwrap(), [
+        serde_json::json!({"label":"earlier-executed-call"}),
+        serde_json::json!({"label":"new-corrected-call"}),
+    ]);
+    assert!(!events.iter().any(|event| matches!(event, EngineEvent::ProviderFailed { .. })));
+    let requests = requests.lock().unwrap();
+    assert_eq!(requests.len(), 4);
+    assert!(requests[2].messages.iter().any(|message| matches!(message,
+        Message::User { content, .. } if content.iter().any(|block| matches!(block,
+            ContentBlock::ToolResult { content, is_error: Some(false), .. }
+                if serde_json::to_string(content).unwrap().contains("earlier-executed-call")
+        ))
+    )));
+}
+
+#[tokio::test]
+async fn tool_argument_regeneration_does_not_replay_a_widget_preview() {
+    let root = tempfile::tempdir().unwrap();
+    let mut malformed = recoverable_tool_response(r#"{"label":"SENTINEL_PRIVATE""#, false);
+    malformed[0] = StreamEvent::ContentBlockStart {
+        index: 0,
+        content_block: ContentBlock::ToolUse {
+            id: "live-widget".into(), name: "show_widget".into(),
+            input: serde_json::json!({}),
+        },
+    };
+    let (engine, seen, requests) = argument_recovery_engine(root.path(), vec![malformed], 2);
+    let events = engine.run_turn_stream_with_max_turns(&kcoder_permissions::AutoAllowPrompt, 3)
+        .collect::<Vec<_>>().await;
+    assert!(seen.lock().unwrap().is_empty());
+    assert_eq!(requests.lock().unwrap().len(), 1);
+    assert!(events.iter().any(|event| matches!(event, EngineEvent::ProviderFailed { .. })));
+}
+
+#[derive(Debug)]
 struct ToolThenTextRecordingProvider {
     calls: AtomicUsize,
     requests: Arc<Mutex<Vec<MessagesRequest>>>,
@@ -637,7 +905,7 @@ async fn steer_is_injected_after_complete_tool_batch_within_same_turn() {
     let release = Arc::new(Notify::new());
     let settings = Settings {
         permission_mode: PermissionMode::Bypass,
-        ..settings_using_main_summary_runtime(Settings::default())
+        ..settings_using_main_summary_runtime(crate::test_support::engine_builder::fixture_settings())
     };
     let engine = QueryEngine::new(
         Arc::new(ToolThenTextRecordingProvider {
@@ -773,7 +1041,7 @@ async fn steer_during_text_stream_forces_same_turn_follow_up() {
             release_first: Arc::clone(&release_first),
         }),
         tmp.path(),
-        settings_using_main_summary_runtime(Settings::default()),
+        settings_using_main_summary_runtime(crate::test_support::engine_builder::fixture_settings()),
     );
     engine.state.add_message(Message::user_text("start"));
 
@@ -821,7 +1089,7 @@ fn steer_rejects_when_no_regular_turn_is_active() {
     let engine = test_engine_with_settings(
         Arc::new(EmptyProvider),
         tmp.path(),
-        settings_using_main_summary_runtime(Settings::default()),
+        settings_using_main_summary_runtime(crate::test_support::engine_builder::fixture_settings()),
     );
 
     assert_eq!(

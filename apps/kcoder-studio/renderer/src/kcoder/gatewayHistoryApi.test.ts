@@ -6,7 +6,7 @@ import {
   type HistoryRefreshResult,
 } from './gatewayHistoryRefresh'
 
-vi.mock('@/tauri/localExecutor', () => ({ requestLocalExecutor: vi.fn() }))
+vi.mock('@/host/localExecutor', () => ({ requestLocalExecutor: vi.fn() }))
 const progress = (nextCursor: string): HistoryRefreshResult => ({
   status: 'building',
   nextCursor,

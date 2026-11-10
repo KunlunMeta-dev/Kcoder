@@ -382,3 +382,6 @@ pub(crate) fn finish(
     connection.execute("UPDATE knowledge_image_imports SET status='completed',phase='commit',lease_token=NULL,lease_until_ms=0,result_source_id=?4,result_revision_id=?5,updated_at_ms=?6 WHERE library_id=?1 AND id=?2 AND lease_token=?3",params![library,lease.id,lease.token,source.source_id,source.revision_id,now()])?;
     Ok(())
 }
+
+mod claim_facts;
+pub use claim_facts::ImageImportClaimFacts;

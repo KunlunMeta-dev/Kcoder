@@ -41,12 +41,11 @@
     "native": {
       "registrySet": "manualLiveSuites",
       "pathIncludes": [
-        "/tauri-",
-        "/tui-",
-        "/legacy-tauri-"
+        "/electron-",
+        "/tui-"
       ],
       "environment": [
-        "KCODER_E2E_TAURI_BIN"
+        "KCODER_E2E_ELECTRON_BIN"
       ]
     },
     "windows": {

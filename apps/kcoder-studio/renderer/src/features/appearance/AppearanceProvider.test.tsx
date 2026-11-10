@@ -98,7 +98,7 @@ describe('AppearanceProvider', () => {
     installMatchMedia()
   })
 
-  test('motion defaults on and explicit reduced motion persists and resets', async () => {
+  test('motion stays enabled when a legacy profile tries to disable it and after reset', async () => {
     mediaQueryMatches = true
     const first = render(
       <AppearanceProvider>
@@ -107,14 +107,14 @@ describe('AppearanceProvider', () => {
     )
     expect(document.documentElement.dataset.reduceMotion).toBe('false')
     await userEvent.click(screen.getByTestId('reduce-motion'))
-    expect(document.documentElement.dataset.reduceMotion).toBe('true')
+    expect(document.documentElement.dataset.reduceMotion).toBe('false')
     first.unmount()
     render(
       <AppearanceProvider>
         <Harness />
       </AppearanceProvider>
     )
-    expect(document.documentElement.dataset.reduceMotion).toBe('true')
+    expect(document.documentElement.dataset.reduceMotion).toBe('false')
     await userEvent.click(screen.getByTestId('reset'))
     expect(document.documentElement.dataset.reduceMotion).toBe('false')
   })
@@ -135,7 +135,7 @@ describe('AppearanceProvider', () => {
       await waitFor(() =>
         expect(screen.getByTestId('persistence-error')).toHaveTextContent('false')
       )
-      expect(JSON.parse(localStorage.getItem('wework.appearance') ?? '{}').mode).toBe('dark')
+      expect(JSON.parse(localStorage.getItem('kcoder.appearance') ?? '{}').mode).toBe('dark')
     } finally {
       failure.mockRestore()
     }
@@ -153,7 +153,7 @@ describe('AppearanceProvider', () => {
     expect(screen.getByTestId('resolved-mode')).toHaveTextContent('dark')
     expect(document.documentElement.dataset.theme).toBe('dark')
     expect(document.documentElement.classList.contains('dark')).toBe(true)
-    expect(localStorage.getItem('wework.appearance')).toContain('"mode":"dark"')
+    expect(localStorage.getItem('kcoder.appearance')).toContain('"mode":"dark"')
   })
 
   test('updates system mode when system preference changes', async () => {
@@ -207,8 +207,8 @@ describe('AppearanceProvider', () => {
     expect(document.documentElement.style.getPropertyValue('--text-base')).toBe('16px')
     expect(document.documentElement.style.getPropertyValue('--text-sm')).toBe('15px')
     expect(document.documentElement.style.getPropertyValue('--text-code')).toBe('15px')
-    expect(localStorage.getItem('wework.appearance')).toContain('"uiFontSize":16')
-    expect(localStorage.getItem('wework.appearance')).toContain('"codeFontSize":15')
+    expect(localStorage.getItem('kcoder.appearance')).toContain('"uiFontSize":16')
+    expect(localStorage.getItem('kcoder.appearance')).toContain('"codeFontSize":15')
   })
 
   test('steps UI and code font sizes together within their own bounds', async () => {
@@ -281,7 +281,7 @@ describe('AppearanceProvider', () => {
     expect(document.documentElement.style.getPropertyValue('--color-mobile-drawer')).toBe(
       darkPalette.mobileDrawer
     )
-    expect(localStorage.getItem('wework.appearance')).toContain(
+    expect(localStorage.getItem('kcoder.appearance')).toContain(
       `"mobileDrawer":"${darkPalette.mobileDrawer}"`
     )
   })

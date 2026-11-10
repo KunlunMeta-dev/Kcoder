@@ -28,6 +28,11 @@ import {
 import path from "node:path";
 
 export async function runResizeVisualScenario(options) {
+  const agentColumns = options.scenario === "subagent-trace"
+    && options.message.includes("tui-lab-targeted-subagent-");
+  const resizeSequence = agentColumns
+    ? [{ width: 980, height: 800 }, { width: 1380, height: 800 }, { width: 640, height: 900 }, { width: 980, height: 800 }]
+    : VISUAL_RESIZE_SEQUENCE;
   const artifacts = await createRunContext(
     options,
     "resize-visual",
@@ -76,16 +81,20 @@ export async function runResizeVisualScenario(options) {
     await page.keyboard.press("Enter");
     await waitForTerminalText(
       page,
-      "tui-lab-final-sentinel",
+      agentColumns ? "Agent Swarm" : "tui-lab-final-sentinel",
       options.timeoutMs,
     );
+    if (agentColumns) {
+      await waitForTerminalText(page, "002", options.timeoutMs);
+    }
     await page.waitForTimeout(250);
     await page.evaluate(() => window.tuiLab.scrollToBottom());
     await page.waitForTimeout(250);
 
     const resizeCaptures = [];
     const resizeChecks = [];
-    for (const [index, size] of VISUAL_RESIZE_SEQUENCE.entries()) {
+    const summaryOffsetsByCols = new Map();
+    for (const [index, size] of resizeSequence.entries()) {
       await page.setViewportSize(size);
       await page.waitForTimeout(450);
       await page.evaluate(() => window.tuiLab.scrollToBottom());
@@ -99,12 +108,45 @@ export async function runResizeVisualScenario(options) {
       const dimensions = await page.evaluate(() => window.tuiLab.dimensions());
       const check = visualResizeChromeCheck(text, `resize-visual-${index + 1}`);
       resizeChecks.push(check);
+      let memberCells;
+      let summaryCells;
+      if (agentColumns) {
+        memberCells = await page.evaluate(() => ["001", "002"].map(id => ({
+          id,
+          hits: window.tuiLab.textHitCells(id).filter(hit => /^\s*00[12]\s/.test(hit.text)),
+        })));
+        const [first, second] = memberCells.map(member => member.hits[0]);
+        const visible = memberCells.every(member => member.hits.length === 1);
+        const aligned = visible && (dimensions.cols >= 74
+          ? first.row === second.row && Math.abs(second.column - first.column - dimensions.cols / 2) <= 2
+          : first.row !== second.row && first.column === second.column);
+        resizeChecks.push({ ok: aligned, failed: aligned ? [] : [`subagent column geometry at resize ${index + 1}`], memberCells });
+        summaryCells = await page.evaluate((members) => {
+          const candidates = ["tui", "Sub"].flatMap(needle => window.tuiLab.textHitCells(needle));
+          return members.map((member, index) => {
+            const start = member.hits[0];
+            const end = members[index + 1]?.hits[0];
+            const hits = start ? candidates.filter(hit => hit.row === start.row
+              && hit.column > start.column
+              && (!end || end.row !== start.row || hit.column < end.column)) : [];
+            return { id: member.id, hits, offset: hits.length === 1 ? hits[0].column - start.column : null };
+          });
+        }, memberCells);
+        const offsets = summaryCells.map(member => member.offset);
+        const previousOffsets = summaryOffsetsByCols.get(dimensions.cols);
+        const summariesAligned = offsets.every(offset => offset !== null && offset === offsets[0])
+          && (!previousOffsets || offsets.every((offset, i) => offset === previousOffsets[i]));
+        summaryOffsetsByCols.set(dimensions.cols, offsets);
+        resizeChecks.push({ ok: summariesAligned, failed: summariesAligned ? [] : [`subagent summary field geometry at resize ${index + 1}`], summaryCells });
+      }
       resizeCaptures.push({
         step: index + 1,
         ...size,
         screenshot,
         dimensions,
         check,
+        memberCells,
+        summaryCells,
       });
     }
 
@@ -149,7 +191,7 @@ export async function runResizeVisualScenario(options) {
       workspaceTemplate: artifacts.workspaceTemplate,
       message: options.message,
       scenario: options.scenario,
-      resizeSequence: VISUAL_RESIZE_SEQUENCE,
+      resizeSequence,
       resizeCaptures,
       text: artifacts.text,
       ptyLog: artifacts.ptyLog,

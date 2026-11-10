@@ -1,0 +1,1288 @@
+{
+  "WorkflowAgentModelSelection": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "oneOf": [
+      {
+        "additionalProperties": false,
+        "properties": {
+          "mode": {
+            "enum": [
+              "inherit_current"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "mode"
+        ],
+        "type": "object"
+      },
+      {
+        "additionalProperties": false,
+        "properties": {
+          "expectedRevision": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "mode": {
+            "enum": [
+              "explicit"
+            ],
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "profile": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "provider": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "mode",
+          "model"
+        ],
+        "type": "object"
+      }
+    ],
+    "title": "WorkflowAgentModelSelection"
+  },
+  "WorkflowArtifactRequirement": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "forbiddenLiterals": {
+        "default": [],
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "minBytes": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "path": {
+        "type": "string"
+      },
+      "requireChanged": {
+        "type": "boolean"
+      },
+      "required": {
+        "type": "boolean"
+      },
+      "uniqueContent": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "minBytes",
+      "path",
+      "requireChanged",
+      "required",
+      "uniqueContent"
+    ],
+    "title": "WorkflowArtifactRequirement",
+    "type": "object"
+  },
+  "WorkflowCollaborationApplyParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "WorkflowAgentModelSelection": {
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "mode": {
+                "enum": [
+                  "inherit_current"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "mode"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "expectedRevision": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "mode": {
+                "enum": [
+                  "explicit"
+                ],
+                "type": "string"
+              },
+              "model": {
+                "type": "string"
+              },
+              "profile": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "provider": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "mode",
+              "model"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "WorkflowArtifactRequirement": {
+        "additionalProperties": false,
+        "properties": {
+          "forbiddenLiterals": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "minBytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "path": {
+            "type": "string"
+          },
+          "requireChanged": {
+            "type": "boolean"
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "uniqueContent": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "minBytes",
+          "path",
+          "requireChanged",
+          "required",
+          "uniqueContent"
+        ],
+        "type": "object"
+      },
+      "WorkflowCodeConfig": {
+        "additionalProperties": false,
+        "properties": {
+          "source": {
+            "description": "JavaScript function BODY, not an uncalled function declaration. Use a top-level return. Code receives input/nodes and declared bindings; resultCheck also receives result and must return true.",
+            "type": "string"
+          },
+          "timeoutMs": {
+            "default": 1000,
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "source"
+        ],
+        "type": "object"
+      },
+      "WorkflowCollaborationMember": {
+        "additionalProperties": false,
+        "properties": {
+          "acceptanceCriteria": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "allowedWritePaths": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "artifactRequirements": {
+            "default": [],
+            "items": {
+              "$ref": "#/definitions/WorkflowArtifactRequirement"
+            },
+            "type": "array"
+          },
+          "dependsOn": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "id": {
+            "type": "string"
+          },
+          "inputBindings": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "instructions": {
+            "type": "string"
+          },
+          "maxTurns": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "modelSelection": {
+            "$ref": "#/definitions/WorkflowAgentModelSelection"
+          },
+          "outputSchema": true,
+          "resultCheck": {
+            "$ref": "#/definitions/WorkflowCodeConfig"
+          },
+          "role": {
+            "$ref": "#/definitions/WorkflowCollaborationRole"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "acceptanceCriteria",
+          "id",
+          "inputBindings",
+          "instructions",
+          "maxTurns",
+          "modelSelection",
+          "outputSchema",
+          "resultCheck",
+          "role",
+          "title"
+        ],
+        "type": "object"
+      },
+      "WorkflowCollaborationPlan": {
+        "additionalProperties": false,
+        "properties": {
+          "inputSchema": true,
+          "members": {
+            "items": {
+              "$ref": "#/definitions/WorkflowCollaborationMember"
+            },
+            "type": "array"
+          },
+          "version": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "inputSchema",
+          "members",
+          "version"
+        ],
+        "type": "object"
+      },
+      "WorkflowCollaborationRole": {
+        "enum": [
+          "researcher",
+          "planner",
+          "writer",
+          "reviewer",
+          "verifier"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "expectedRevision": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "id": {
+        "type": "string"
+      },
+      "plan": {
+        "$ref": "#/definitions/WorkflowCollaborationPlan"
+      }
+    },
+    "required": [
+      "expectedRevision",
+      "id",
+      "plan"
+    ],
+    "title": "WorkflowCollaborationApplyParams",
+    "type": "object"
+  },
+  "WorkflowCollaborationCatalogParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "threadId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "title": "WorkflowCollaborationCatalogParams",
+    "type": "object"
+  },
+  "WorkflowCollaborationCatalogResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "ModelConfigurationBoundary": {
+        "enum": [
+          "next_turn",
+          "session_snapshot"
+        ],
+        "type": "string"
+      },
+      "ModelConfigurationSummary": {
+        "additionalProperties": false,
+        "description": "Public effective model metadata. Deliberately excludes URLs, credentials, arbitrary extra-body keys/values and filesystem paths.",
+        "properties": {
+          "apiFormat": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "boundary": {
+            "allOf": [
+              {
+                "$ref": "#/definitions/ModelConfigurationBoundary"
+              }
+            ],
+            "description": "Whether this describes newly resolved settings or a pinned running snapshot."
+          },
+          "chatProtocol": {
+            "type": "string"
+          },
+          "contextWindowTokens": {
+            "format": "uint",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "extraBodyConfigured": {
+            "type": "boolean"
+          },
+          "maxOutputTokens": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "modelId": {
+            "type": "string"
+          },
+          "outputHeadroomTokens": {
+            "format": "uint",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "providerId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "reasoning": {
+            "type": "boolean"
+          },
+          "reasoningEffort": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "reasoningPolicy": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/ModelReasoningPolicy"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "requestOutputLimits": {
+            "additionalProperties": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "type": "object"
+          },
+          "requestOverrideFields": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "revision": {
+            "description": "Opaque revision of the private semantics; never an encoding of their value.",
+            "type": "string"
+          },
+          "sources": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "description": "Predefined field names and authority labels only.",
+            "type": "object"
+          },
+          "structuredOutput": {
+            "type": "boolean"
+          },
+          "text": {
+            "type": "boolean"
+          },
+          "toolSet": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/ModelToolSetSummary"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Actual host composition; missing in older records, never inferred from capability."
+          },
+          "tools": {
+            "type": "boolean"
+          },
+          "vision": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "boundary",
+          "chatProtocol",
+          "extraBodyConfigured",
+          "modelId",
+          "reasoning",
+          "requestOutputLimits",
+          "requestOverrideFields",
+          "revision",
+          "sources",
+          "structuredOutput",
+          "text",
+          "tools",
+          "vision"
+        ],
+        "type": "object"
+      },
+      "ModelReasoningPolicy": {
+        "additionalProperties": false,
+        "description": "User-declared controls, not a claim that an upstream model was verified.",
+        "properties": {
+          "efforts": {
+            "default": [],
+            "items": {
+              "pattern": "[^\\u{9}\\u{a}\\u{b}\\u{c}\\u{d}\\u{20}\\u{85}\\u{a0}\\u{1680}\\u{2000}\\u{2001}\\u{2002}\\u{2003}\\u{2004}\\u{2005}\\u{2006}\\u{2007}\\u{2008}\\u{2009}\\u{200a}\\u{2028}\\u{2029}\\u{202f}\\u{205f}\\u{3000}]",
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "mode": {
+            "$ref": "#/definitions/ReasoningControlMode"
+          }
+        },
+        "required": [
+          "mode"
+        ],
+        "type": "object"
+      },
+      "ModelToolRegistryScope": {
+        "enum": [
+          "profile_configuration",
+          "session_registry",
+          "session_role",
+          "wiki_worker"
+        ],
+        "type": "string"
+      },
+      "ModelToolSetSummary": {
+        "additionalProperties": false,
+        "description": "The count describes registered tools at this scope, before request permissions.",
+        "properties": {
+          "exposedToolCount": {
+            "description": "Only populated when the actual provider request definitions are captured.",
+            "format": "uint",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "profile": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "registeredToolCount": {
+            "format": "uint",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "registryScope": {
+            "$ref": "#/definitions/ModelToolRegistryScope"
+          }
+        },
+        "required": [
+          "registryScope"
+        ],
+        "type": "object"
+      },
+      "ReasoningControlMode": {
+        "enum": [
+          "hidden",
+          "optional",
+          "always_on",
+          "always_off"
+        ],
+        "type": "string"
+      },
+      "WorkflowCodeConfig": {
+        "additionalProperties": false,
+        "properties": {
+          "source": {
+            "description": "JavaScript function BODY, not an uncalled function declaration. Use a top-level return. Code receives input/nodes and declared bindings; resultCheck also receives result and must return true.",
+            "type": "string"
+          },
+          "timeoutMs": {
+            "default": 1000,
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "source"
+        ],
+        "type": "object"
+      },
+      "WorkflowCollaborationModelOrigin": {
+        "enum": [
+          "execution_parent",
+          "thread_snapshot",
+          "thread_unobserved"
+        ],
+        "type": "string"
+      },
+      "WorkflowCollaborationRole": {
+        "enum": [
+          "researcher",
+          "planner",
+          "writer",
+          "reviewer",
+          "verifier"
+        ],
+        "type": "string"
+      },
+      "WorkflowCollaborationRolePreset": {
+        "additionalProperties": false,
+        "properties": {
+          "agentType": {
+            "type": "string"
+          },
+          "instructions": {
+            "type": "string"
+          },
+          "outputSchema": true,
+          "resultCheck": {
+            "$ref": "#/definitions/WorkflowCodeConfig"
+          },
+          "role": {
+            "$ref": "#/definitions/WorkflowCollaborationRole"
+          }
+        },
+        "required": [
+          "agentType",
+          "instructions",
+          "outputSchema",
+          "resultCheck",
+          "role"
+        ],
+        "type": "object"
+      },
+      "WorkflowCollaborationToolFact": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "readOnly": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "registered": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "registered"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "modelOrigin": {
+        "$ref": "#/definitions/WorkflowCollaborationModelOrigin"
+      },
+      "modelSnapshot": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/ModelConfigurationSummary"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "roles": {
+        "items": {
+          "$ref": "#/definitions/WorkflowCollaborationRolePreset"
+        },
+        "type": "array"
+      },
+      "schemaVersion": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "threadId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "tools": {
+        "items": {
+          "$ref": "#/definitions/WorkflowCollaborationToolFact"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "modelOrigin",
+      "roles",
+      "schemaVersion",
+      "tools"
+    ],
+    "title": "WorkflowCollaborationCatalogResult",
+    "type": "object"
+  },
+  "WorkflowCollaborationMember": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "WorkflowAgentModelSelection": {
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "mode": {
+                "enum": [
+                  "inherit_current"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "mode"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "expectedRevision": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "mode": {
+                "enum": [
+                  "explicit"
+                ],
+                "type": "string"
+              },
+              "model": {
+                "type": "string"
+              },
+              "profile": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "provider": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "mode",
+              "model"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "WorkflowArtifactRequirement": {
+        "additionalProperties": false,
+        "properties": {
+          "forbiddenLiterals": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "minBytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "path": {
+            "type": "string"
+          },
+          "requireChanged": {
+            "type": "boolean"
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "uniqueContent": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "minBytes",
+          "path",
+          "requireChanged",
+          "required",
+          "uniqueContent"
+        ],
+        "type": "object"
+      },
+      "WorkflowCodeConfig": {
+        "additionalProperties": false,
+        "properties": {
+          "source": {
+            "description": "JavaScript function BODY, not an uncalled function declaration. Use a top-level return. Code receives input/nodes and declared bindings; resultCheck also receives result and must return true.",
+            "type": "string"
+          },
+          "timeoutMs": {
+            "default": 1000,
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "source"
+        ],
+        "type": "object"
+      },
+      "WorkflowCollaborationRole": {
+        "enum": [
+          "researcher",
+          "planner",
+          "writer",
+          "reviewer",
+          "verifier"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "acceptanceCriteria": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "allowedWritePaths": {
+        "default": [],
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "artifactRequirements": {
+        "default": [],
+        "items": {
+          "$ref": "#/definitions/WorkflowArtifactRequirement"
+        },
+        "type": "array"
+      },
+      "dependsOn": {
+        "default": [],
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "id": {
+        "type": "string"
+      },
+      "inputBindings": {
+        "additionalProperties": {
+          "type": "string"
+        },
+        "type": "object"
+      },
+      "instructions": {
+        "type": "string"
+      },
+      "maxTurns": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "modelSelection": {
+        "$ref": "#/definitions/WorkflowAgentModelSelection"
+      },
+      "outputSchema": true,
+      "resultCheck": {
+        "$ref": "#/definitions/WorkflowCodeConfig"
+      },
+      "role": {
+        "$ref": "#/definitions/WorkflowCollaborationRole"
+      },
+      "title": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "acceptanceCriteria",
+      "id",
+      "inputBindings",
+      "instructions",
+      "maxTurns",
+      "modelSelection",
+      "outputSchema",
+      "resultCheck",
+      "role",
+      "title"
+    ],
+    "title": "WorkflowCollaborationMember",
+    "type": "object"
+  },
+  "WorkflowCollaborationModelOrigin": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "execution_parent",
+      "thread_snapshot",
+      "thread_unobserved"
+    ],
+    "title": "WorkflowCollaborationModelOrigin",
+    "type": "string"
+  },
+  "WorkflowCollaborationPlan": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "WorkflowAgentModelSelection": {
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "mode": {
+                "enum": [
+                  "inherit_current"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "mode"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "expectedRevision": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "mode": {
+                "enum": [
+                  "explicit"
+                ],
+                "type": "string"
+              },
+              "model": {
+                "type": "string"
+              },
+              "profile": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "provider": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "mode",
+              "model"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "WorkflowArtifactRequirement": {
+        "additionalProperties": false,
+        "properties": {
+          "forbiddenLiterals": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "minBytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "path": {
+            "type": "string"
+          },
+          "requireChanged": {
+            "type": "boolean"
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "uniqueContent": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "minBytes",
+          "path",
+          "requireChanged",
+          "required",
+          "uniqueContent"
+        ],
+        "type": "object"
+      },
+      "WorkflowCodeConfig": {
+        "additionalProperties": false,
+        "properties": {
+          "source": {
+            "description": "JavaScript function BODY, not an uncalled function declaration. Use a top-level return. Code receives input/nodes and declared bindings; resultCheck also receives result and must return true.",
+            "type": "string"
+          },
+          "timeoutMs": {
+            "default": 1000,
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "source"
+        ],
+        "type": "object"
+      },
+      "WorkflowCollaborationMember": {
+        "additionalProperties": false,
+        "properties": {
+          "acceptanceCriteria": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "allowedWritePaths": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "artifactRequirements": {
+            "default": [],
+            "items": {
+              "$ref": "#/definitions/WorkflowArtifactRequirement"
+            },
+            "type": "array"
+          },
+          "dependsOn": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "id": {
+            "type": "string"
+          },
+          "inputBindings": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "instructions": {
+            "type": "string"
+          },
+          "maxTurns": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "modelSelection": {
+            "$ref": "#/definitions/WorkflowAgentModelSelection"
+          },
+          "outputSchema": true,
+          "resultCheck": {
+            "$ref": "#/definitions/WorkflowCodeConfig"
+          },
+          "role": {
+            "$ref": "#/definitions/WorkflowCollaborationRole"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "acceptanceCriteria",
+          "id",
+          "inputBindings",
+          "instructions",
+          "maxTurns",
+          "modelSelection",
+          "outputSchema",
+          "resultCheck",
+          "role",
+          "title"
+        ],
+        "type": "object"
+      },
+      "WorkflowCollaborationRole": {
+        "enum": [
+          "researcher",
+          "planner",
+          "writer",
+          "reviewer",
+          "verifier"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "inputSchema": true,
+      "members": {
+        "items": {
+          "$ref": "#/definitions/WorkflowCollaborationMember"
+        },
+        "type": "array"
+      },
+      "version": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "inputSchema",
+      "members",
+      "version"
+    ],
+    "title": "WorkflowCollaborationPlan",
+    "type": "object"
+  },
+  "WorkflowCollaborationRole": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "researcher",
+      "planner",
+      "writer",
+      "reviewer",
+      "verifier"
+    ],
+    "title": "WorkflowCollaborationRole",
+    "type": "string"
+  },
+  "WorkflowCollaborationRoleContract": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "WorkflowCollaborationRole": {
+        "enum": [
+          "researcher",
+          "planner",
+          "writer",
+          "reviewer",
+          "verifier"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "role": {
+        "$ref": "#/definitions/WorkflowCollaborationRole"
+      },
+      "version": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "role",
+      "version"
+    ],
+    "title": "WorkflowCollaborationRoleContract",
+    "type": "object"
+  },
+  "WorkflowCollaborationRolePreset": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "WorkflowCodeConfig": {
+        "additionalProperties": false,
+        "properties": {
+          "source": {
+            "description": "JavaScript function BODY, not an uncalled function declaration. Use a top-level return. Code receives input/nodes and declared bindings; resultCheck also receives result and must return true.",
+            "type": "string"
+          },
+          "timeoutMs": {
+            "default": 1000,
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "source"
+        ],
+        "type": "object"
+      },
+      "WorkflowCollaborationRole": {
+        "enum": [
+          "researcher",
+          "planner",
+          "writer",
+          "reviewer",
+          "verifier"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "agentType": {
+        "type": "string"
+      },
+      "instructions": {
+        "type": "string"
+      },
+      "outputSchema": true,
+      "resultCheck": {
+        "$ref": "#/definitions/WorkflowCodeConfig"
+      },
+      "role": {
+        "$ref": "#/definitions/WorkflowCollaborationRole"
+      }
+    },
+    "required": [
+      "agentType",
+      "instructions",
+      "outputSchema",
+      "resultCheck",
+      "role"
+    ],
+    "title": "WorkflowCollaborationRolePreset",
+    "type": "object"
+  },
+  "WorkflowCollaborationToolFact": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "name": {
+        "type": "string"
+      },
+      "readOnly": {
+        "type": [
+          "boolean",
+          "null"
+        ]
+      },
+      "registered": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "name",
+      "registered"
+    ],
+    "title": "WorkflowCollaborationToolFact",
+    "type": "object"
+  }
+}

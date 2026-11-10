@@ -1,3 +1,4 @@
+import { currentHostServer } from '@/features/runtime-target/currentHostTarget'
 import { Checkbox } from '@/components/ui/checkbox'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
@@ -34,6 +35,7 @@ import {
   IconSelect,
   InputWithIcon,
   SectionHeader,
+  SettingsIcon,
   SettingsPage,
   SettingsPageHeader,
   StatusChip,
@@ -114,7 +116,7 @@ export function StorageSettingsPage() {
         setTargets(items)
         setScopeReady(true)
         setServerId(previous =>
-          items.some(server => server.id === previous) ? previous : (items[0]?.id ?? '')
+          items.some(server => server.id === previous) ? previous : (currentHostServer(items)?.id ?? '')
         )
         if (changed) setScopeVersion(value => value + 1)
       } catch {
@@ -375,12 +377,12 @@ export function StorageSettingsPage() {
         <div
           aria-busy="true"
           aria-label={label('refresh')}
-          className="h-44 animate-pulse rounded-2xl bg-surface motion-reduce:animate-none"
+          className="h-44 animate-pulse rounded-2xl bg-surface"
         />
       )}
       {report && (
         <section
-          className="rounded-2xl border border-border/60 bg-surface/30 p-5"
+          className="studio-card-spacing rounded-2xl border border-border/60 bg-surface/30"
           aria-label={label('overview')}
         >
           {/* U5: the totals are meaningless without saying which target and
@@ -481,7 +483,7 @@ export function StorageSettingsPage() {
         <div
           data-testid="storage-error"
           role="alert"
-          className="rounded-xl border border-red-500/15 bg-red-500/5 px-4 py-3 text-sm text-red-600 dark:text-red-400"
+          className="studio-card-spacing rounded-xl border border-red-500/15 bg-red-500/5 px-4 py-3 text-sm text-red-600 dark:text-red-400"
         >
           {error}
         </div>
@@ -490,7 +492,7 @@ export function StorageSettingsPage() {
         <div
           data-testid="storage-notice"
           role="status"
-          className="rounded-xl border border-border/60 bg-surface/50 px-4 py-3 text-sm text-text-secondary"
+          className="studio-card-spacing rounded-xl border border-border/60 bg-surface/50 px-4 py-3 text-sm text-text-secondary"
         >
           {notice}
         </div>
@@ -498,7 +500,7 @@ export function StorageSettingsPage() {
 
       {report && (
         <>
-          <section className="space-y-4 rounded-2xl border border-border/60 bg-surface/20 p-5">
+          <section className="studio-card-spacing space-y-4 rounded-2xl border border-border/60 bg-surface/20">
             <SectionHeader
               icon={<HardDrive />}
               title={label('bucketsTitle')}
@@ -509,12 +511,10 @@ export function StorageSettingsPage() {
                 <li
                   key={bucket.id}
                   data-testid={`storage-bucket-${bucket.id}`}
-                  className={`flex flex-wrap items-center justify-between gap-3 rounded-xl px-3 py-4 transition-colors ${selectedBucket === bucket.id ? 'bg-surface ring-1 ring-focus/30' : 'hover:bg-surface/50'}`}
+                  className={`flex flex-wrap items-center justify-between gap-3 rounded-xl py-4 transition-colors ${selectedBucket === bucket.id ? 'bg-surface ring-1 ring-focus/30' : 'hover:bg-surface/50'}`}
                 >
                   <div className="flex min-w-0 items-center gap-3">
-                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-border/60 bg-background text-text-secondary">
-                      <Database className="h-4 w-4" aria-hidden="true" />
-                    </span>
+                    <SettingsIcon><Database aria-hidden="true" /></SettingsIcon>
                     <div>
                       <p className="text-sm font-medium">{bucketLabel(bucket.id)}</p>
                       <p className="mt-1 text-xs text-text-secondary">
@@ -555,7 +555,7 @@ export function StorageSettingsPage() {
           </section>
 
           {policy && (
-            <section className="space-y-5 rounded-2xl border border-border/60 bg-surface/20 p-5">
+            <section className="studio-card-spacing space-y-5 rounded-2xl border border-border/60 bg-surface/20">
               <SectionHeader
                 icon={<Archive />}
                 title={label('policyTitle')}
@@ -643,7 +643,7 @@ export function StorageSettingsPage() {
             </section>
           )}
 
-          <section className="space-y-4 rounded-2xl border border-border/60 bg-surface/20 p-5">
+          <section className="studio-card-spacing space-y-4 rounded-2xl border border-border/60 bg-surface/20">
             <SectionHeader icon={<KeyRound />} title={label('credentialsTitle')} />
             <p className="text-xs text-text-secondary" data-testid="credentials-keyring">
               {report.credentials.keyringAvailable
@@ -693,7 +693,7 @@ export function StorageSettingsPage() {
             <p className="text-xs text-text-secondary">{label('credentialsGuidance')}</p>
           </section>
 
-          <section className="space-y-4 rounded-2xl border border-border/60 bg-surface/20 p-5">
+          <section className="studio-card-spacing space-y-4 rounded-2xl border border-border/60 bg-surface/20">
             <SectionHeader icon={<FileText />} title={label('devDebugTitle')} />
             <p
               data-testid="storage-dev-debug"

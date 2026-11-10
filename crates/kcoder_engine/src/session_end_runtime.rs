@@ -22,6 +22,12 @@ impl QueryEngine {
     /// Run teardown hooks. This is best-effort and intended for plugin cleanup
     /// or telemetry; blocking errors are surfaced as hook messages.
     pub async fn run_session_end_hooks(&self, exit_reason: &str) -> Vec<EngineEvent> {
+        let Ok(_input_gate) = Arc::clone(&self.input_session_end_gate).try_write_owned() else {
+            return Vec::new();
+        };
+        if self.input_persistence_failed.load(Ordering::Acquire) {
+            return Vec::new();
+        }
         self.record_session_end_summary(exit_reason).await;
         self.finish_memory_session(exit_reason);
         self.persist_tool_repair_examples_on_session_end().await;

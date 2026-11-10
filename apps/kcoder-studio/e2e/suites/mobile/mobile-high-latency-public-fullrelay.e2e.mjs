@@ -469,7 +469,7 @@ await runE2E(import.meta.url, {
     const client = await clientModule.startRegisteredClient({
       url: publicOrigin,
       registrationKey,
-      pairingToken: pairing[name],
+      gatewaySecret: pairing[name],
       identityFile,
       gateway: `http://127.0.0.1:${gateways[name].port}`,
       retryMs: 500,
@@ -513,7 +513,7 @@ await runE2E(import.meta.url, {
     identities[name] = await identityModule.readRegisteredClientIdentity({
       identityFile,
       relayUrl: publicOrigin,
-      pairingToken: pairing[name],
+      gatewaySecret: pairing[name],
     });
     context.registerSecret(identities[name].secret);
     context.registerSecret(identities[name].id);

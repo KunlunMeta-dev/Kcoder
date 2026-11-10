@@ -1,0 +1,17 @@
+.root {
+  container-type: inline-size;
+}
+.row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 8rem 9rem 8rem;
+  align-items: center;
+  gap: 1rem;
+}
+@container (max-width: 760px) {
+  .row {
+    grid-template-columns: minmax(0, 1fr) 7rem;
+  }
+  .secondary {
+    display: none;
+  }
+}

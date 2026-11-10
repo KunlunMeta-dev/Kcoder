@@ -1,3 +1,4 @@
+import { currentHostDeviceId } from '@/features/runtime-target/currentHostTarget'
 import { ArrowUpCircle, Folder, FolderPlus, Loader2, X } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
@@ -118,8 +119,7 @@ function getDefaultDeviceId(devices: DeviceInfo[], preferredDeviceId?: string | 
     : undefined
   return (
     preferredDevice?.device_id ??
-    devices.find(device => canUseForProjectCreation(device))?.device_id ??
-    devices[0]?.device_id ??
+    currentHostDeviceId(devices.filter(canUseForProjectCreation)) ??
     ''
   )
 }
@@ -376,7 +376,7 @@ function ProjectCreateDialogContent({
     )
 
     return (
-      <section className="mt-4 rounded-lg border border-[#e5e5e5] bg-[#fafafa] p-3">
+      <section className="studio-card-spacing mt-4 rounded-lg border border-[#e5e5e5] bg-[#fafafa]">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <p className="text-sm font-medium text-[#202124]">{getDeviceLabel(activeDevice)}</p>

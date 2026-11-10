@@ -1,0 +1,148 @@
+{
+  "MigrationBatchControlCancelParams": [
+    {
+      "decoded": {
+        "admissionSequence": 3,
+        "commandId": "40000000-0000-4000-8000-000000000001",
+        "jobId": "mig-original",
+        "planId": "plan-original",
+        "runRequestId": "run-original"
+      },
+      "name": "original_generation",
+      "value": {
+        "admissionSequence": 3,
+        "commandId": "40000000-0000-4000-8000-000000000001",
+        "jobId": "mig-original",
+        "planId": "plan-original",
+        "runRequestId": "run-original"
+      }
+    }
+  ],
+  "MigrationBatchControlReadParams": [
+    {
+      "decoded": {
+        "jobId": "mig-original"
+      },
+      "name": "observe_original",
+      "value": {
+        "jobId": "mig-original"
+      }
+    },
+    {
+      "decoded": {
+        "commandId": "40000000-0000-4000-8000-000000000001",
+        "jobId": "mig-original"
+      },
+      "name": "reconcile_command",
+      "value": {
+        "commandId": "40000000-0000-4000-8000-000000000001",
+        "jobId": "mig-original"
+      }
+    }
+  ],
+  "MigrationBatchControlResult": [
+    {
+      "decoded": {
+        "cancelRequested": true,
+        "currentSequence": 15,
+        "generation": {
+          "admissionSequence": 3,
+          "mode": "apply",
+          "planId": "plan-original",
+          "runRequestId": "run-original"
+        },
+        "jobId": "mig-original",
+        "lastCancellation": {
+          "acceptedSequence": 14,
+          "admissionSequence": 3,
+          "commandId": "40000000-0000-4000-8000-000000000001",
+          "planId": "plan-original",
+          "runRequestId": "run-original"
+        },
+        "phase": "tracked",
+        "planId": "plan-original",
+        "requestedReceipt": {
+          "acceptedSequence": 14,
+          "admissionSequence": 3,
+          "commandId": "40000000-0000-4000-8000-000000000001",
+          "planId": "plan-original",
+          "runRequestId": "run-original"
+        }
+      },
+      "name": "requested_is_not_stopped",
+      "value": {
+        "cancelRequested": true,
+        "currentSequence": 15,
+        "generation": {
+          "admissionSequence": 3,
+          "mode": "apply",
+          "planId": "plan-original",
+          "runRequestId": "run-original"
+        },
+        "jobId": "mig-original",
+        "lastCancellation": {
+          "acceptedSequence": 14,
+          "admissionSequence": 3,
+          "commandId": "40000000-0000-4000-8000-000000000001",
+          "planId": "plan-original",
+          "runRequestId": "run-original"
+        },
+        "phase": "tracked",
+        "planId": "plan-original",
+        "requestedReceipt": {
+          "acceptedSequence": 14,
+          "admissionSequence": 3,
+          "commandId": "40000000-0000-4000-8000-000000000001",
+          "planId": "plan-original",
+          "runRequestId": "run-original"
+        }
+      }
+    },
+    {
+      "decoded": {
+        "cancelRequested": false,
+        "currentSequence": 1,
+        "generation": null,
+        "jobId": "mig-original",
+        "lastCancellation": null,
+        "phase": "unadmitted",
+        "planId": null,
+        "requestedReceipt": null
+      },
+      "name": "unadmitted",
+      "value": {
+        "cancelRequested": false,
+        "currentSequence": 1,
+        "generation": null,
+        "jobId": "mig-original",
+        "lastCancellation": null,
+        "phase": "unadmitted",
+        "planId": null,
+        "requestedReceipt": null
+      }
+    },
+    {
+      "decoded": {
+        "cancelRequested": false,
+        "currentSequence": 1,
+        "generation": null,
+        "jobId": "mig-original",
+        "lastCancellation": null,
+        "phase": "legacy_unknown",
+        "planId": null,
+        "requestedReceipt": null
+      },
+      "name": "old_unknown",
+      "value": {
+        "cancelRequested": false,
+        "currentSequence": 1,
+        "generation": null,
+        "jobId": "mig-original",
+        "lastCancellation": null,
+        "phase": "legacy_unknown",
+        "planId": null,
+        "requestedReceipt": null
+      }
+    }
+  ]
+}

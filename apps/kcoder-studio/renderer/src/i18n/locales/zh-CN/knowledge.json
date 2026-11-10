@@ -1,5 +1,9 @@
 {
+  "organizationDescription": "允许将选中的原始资料整理为知识条目。",
+  "retrievalDescription": "允许在对话中查找、引用资料，不会改动原文。",
   "title": "Wiki",
+  "workspaceTabs": "Wiki 内容",
+  "workspaceSections": {"library": "知识库", "memory": "记忆"},
   "imageFormat": "图片",
   "contentActions": "管理 {{title}}",
   "openPage": "打开知识页面",
@@ -77,6 +81,8 @@
   "applyChanges": "应用修改",
   "closeReview": "关闭建议",
   "jobErrors": {
+    "authorization_unavailable": "资料授权暂不可用。请确认权限及连接后继续。",
+    "authorization_changed": "资料授权需要重新核验。请确认资料权限后继续。",
     "invalid_model_output": "模型返回的整理格式无效，资料已保留，可重试。",
     "model_output_truncated": "模型输出被截断，建议内容尚未完整生成。",
     "context_budget_exceeded": "本批资料超出当前上下文预算，进度已保留。",
@@ -138,7 +144,10 @@
   "errorEncoding": "请将文档保存为 UTF-8 或带 BOM 的 UTF-16 后重新导入。",
   "errorSize": "文件或操作超出大小限制，请缩小文件或分批处理。",
   "errorUnavailable": "此条目不可用或已归档，请刷新 Wiki 查看最新状态。",
-  "errorRequest": "操作未完成，请检查当前目标连接后重试。",
+  "errorRequest": "操作未完成，请查看详细原因。",
+  "errorBusy": "知识服务当前繁忙，请稍后重试。",
+  "errorConnection": "暂时无法与当前目标通信，请检查连接后重试。",
+  "reload": "重新加载",
   "errorDetails": "查看详细原因",
   "invalidMarkdownBundle": "Markdown 编辑包无效。请使用 Wiki 导出的文件，并保留清单和文件名。",
   "exportMarkdown": "导出 Markdown 编辑包",
@@ -252,7 +261,7 @@
   "pdfRuntimeUnavailable": "目标缺少可用的 PDF 文本读取器。请重新安装完整 Studio 包，或在该目标安装 Poppler pdftotext；不会使用 OCR 替代。",
   "archiveImported": "已导入“{{name}}”。保留原有默认 Wiki；在列表中选择新导入的 Wiki，即可设为当前库。",
   "supportedFormats": "支持的格式与文件大小",
-  "spaceHint": "收好资料，让知识逐渐连接。",
+  "spaceHint": "把资料放在一起，需要时让对话查找和引用。",
   "organizedPage": "已整理的知识",
   "close": "关闭",
   "jobModelSection": "模型配置",
@@ -329,7 +338,7 @@
       "organization_disabled": "整理已关闭，重新开启后请明确恢复。"
     }
   },
-  "dropFiles": "拖拽文件到此处，或点击",
+  "dropFiles": "拖拽文件到此处，或点击左侧图标上传",
   "upload": "上传",
   "supportedExtensions": "支持 {{extensions}}",
   "documentSize": "文档最大 {{size}} MiB",

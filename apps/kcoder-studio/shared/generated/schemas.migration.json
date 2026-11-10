@@ -1,0 +1,2411 @@
+{
+  "MigrationApplyParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "planId": {
+        "type": "string"
+      },
+      "requestId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "planId",
+      "requestId"
+    ],
+    "title": "MigrationApplyParams",
+    "type": "object"
+  },
+  "MigrationAssetPlanParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "ImportedMemoryMapping": {
+        "enum": [
+          "global",
+          "current_workspace"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "enableAfterImport": {
+        "default": false,
+        "type": "boolean"
+      },
+      "expectedSequence": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "itemId": {
+        "type": "string"
+      },
+      "jobId": {
+        "type": "string"
+      },
+      "memoryMapping": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/ImportedMemoryMapping"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "targetName": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "expectedSequence",
+      "itemId",
+      "jobId",
+      "targetName"
+    ],
+    "title": "MigrationAssetPlanParams",
+    "type": "object"
+  },
+  "MigrationAssetPreviewParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "itemId": {
+        "type": "string"
+      },
+      "jobId": {
+        "type": "string"
+      },
+      "offset": {
+        "default": 0,
+        "format": "uint",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "itemId",
+      "jobId"
+    ],
+    "title": "MigrationAssetPreviewParams",
+    "type": "object"
+  },
+  "MigrationAssetPreviewResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "itemId": {
+        "type": "string"
+      },
+      "nextOffset": {
+        "format": "uint",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "text": {
+        "type": "string"
+      },
+      "totalBytes": {
+        "format": "uint",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "itemId",
+      "text",
+      "totalBytes"
+    ],
+    "title": "MigrationAssetPreviewResult",
+    "type": "object"
+  },
+  "MigrationCancelParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "expectedSequence": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "jobId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "expectedSequence",
+      "jobId"
+    ],
+    "title": "MigrationCancelParams",
+    "type": "object"
+  },
+  "MigrationCodexLayersReadResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "CodexConfigurationLayerKind": {
+        "enum": [
+          "user",
+          "profile",
+          "project"
+        ],
+        "type": "string"
+      },
+      "CodexConfigurationLayerState": {
+        "additionalProperties": false,
+        "properties": {
+          "index": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "kind": {
+            "$ref": "#/definitions/CodexConfigurationLayerKind"
+          },
+          "present": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "index",
+          "kind",
+          "present"
+        ],
+        "type": "object"
+      },
+      "CodexFieldOrigin": {
+        "additionalProperties": false,
+        "properties": {
+          "field": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "ignored": {
+            "type": "boolean"
+          },
+          "layer": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "private": {
+            "type": "boolean"
+          },
+          "providerIndex": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "supported": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ignored",
+          "layer",
+          "private",
+          "supported"
+        ],
+        "type": "object"
+      },
+      "MigrationConfigurationLayersStatus": {
+        "enum": [
+          "available",
+          "not_applicable",
+          "unavailable"
+        ],
+        "type": "string"
+      },
+      "MigrationConfigurationLayersTarget": {
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "source"
+                ],
+                "type": "string"
+              },
+              "sourceId": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "sourceId"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "itemId": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "jobId": {
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "job"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "jobId",
+              "kind"
+            ],
+            "type": "object"
+          }
+        ]
+      }
+    },
+    "properties": {
+      "adapterRevision": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "fields": {
+        "items": {
+          "$ref": "#/definitions/CodexFieldOrigin"
+        },
+        "type": "array"
+      },
+      "layers": {
+        "items": {
+          "$ref": "#/definitions/CodexConfigurationLayerState"
+        },
+        "type": "array"
+      },
+      "nextPage": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "pageIndex": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "status": {
+        "$ref": "#/definitions/MigrationConfigurationLayersStatus"
+      },
+      "target": {
+        "$ref": "#/definitions/MigrationConfigurationLayersTarget"
+      },
+      "totalFields": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "unobserved": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "fields",
+      "layers",
+      "pageIndex",
+      "status",
+      "target",
+      "totalFields",
+      "unobserved"
+    ],
+    "title": "MigrationCodexLayersReadResult",
+    "type": "object"
+  },
+  "MigrationCodexLayersSelectParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "includeProject": {
+        "type": "boolean"
+      },
+      "sourceId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "includeProject",
+      "sourceId"
+    ],
+    "title": "MigrationCodexLayersSelectParams",
+    "type": "object"
+  },
+  "MigrationCodexLayersSelectResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "MigrationCategory": {
+        "enum": [
+          "provider",
+          "mcp",
+          "skill",
+          "command",
+          "instructions",
+          "memory",
+          "plugin",
+          "project",
+          "history",
+          "agent",
+          "hook",
+          "workflow"
+        ],
+        "type": "string"
+      },
+      "MigrationSourceKind": {
+        "enum": [
+          "claude-code",
+          "codex"
+        ],
+        "type": "string"
+      },
+      "MigrationSourceSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "availableCategories": {
+            "items": {
+              "$ref": "#/definitions/MigrationCategory"
+            },
+            "type": "array"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "formatRevision": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/definitions/MigrationSourceKind"
+          },
+          "scope": {
+            "type": "string"
+          },
+          "sourceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "availableCategories",
+          "displayName",
+          "formatRevision",
+          "kind",
+          "scope",
+          "sourceId"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "replacesSourceIds": {
+        "description": "Only opaque references from this account's existing discovery; never source paths.",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "source": {
+        "$ref": "#/definitions/MigrationSourceSummary"
+      }
+    },
+    "required": [
+      "replacesSourceIds",
+      "source"
+    ],
+    "title": "MigrationCodexLayersSelectResult",
+    "type": "object"
+  },
+  "MigrationConfigurationLayersParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "MigrationConfigurationLayersTarget": {
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "source"
+                ],
+                "type": "string"
+              },
+              "sourceId": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "sourceId"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "itemId": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "jobId": {
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "job"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "jobId",
+              "kind"
+            ],
+            "type": "object"
+          }
+        ]
+      }
+    },
+    "properties": {
+      "pageIndex": {
+        "default": 0,
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "target": {
+        "$ref": "#/definitions/MigrationConfigurationLayersTarget"
+      }
+    },
+    "required": [
+      "target"
+    ],
+    "title": "MigrationConfigurationLayersParams",
+    "type": "object"
+  },
+  "MigrationConfigurationLayersResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "ConfigurationFieldOrigin": {
+        "additionalProperties": false,
+        "properties": {
+          "field": {
+            "description": "Unknown names may contain credentials; only predefined schema paths are public.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "ordinal": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "private": {
+            "type": "boolean"
+          },
+          "scopes": {
+            "items": {
+              "$ref": "#/definitions/ConfigurationLayerScope"
+            },
+            "type": "array"
+          },
+          "supported": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ordinal",
+          "private",
+          "scopes",
+          "supported"
+        ],
+        "type": "object"
+      },
+      "ConfigurationLayerScope": {
+        "enum": [
+          "user",
+          "project",
+          "local"
+        ],
+        "type": "string"
+      },
+      "ConfigurationLayerState": {
+        "additionalProperties": false,
+        "properties": {
+          "present": {
+            "type": "boolean"
+          },
+          "scope": {
+            "$ref": "#/definitions/ConfigurationLayerScope"
+          }
+        },
+        "required": [
+          "present",
+          "scope"
+        ],
+        "type": "object"
+      },
+      "MigrationConfigurationLayersStatus": {
+        "enum": [
+          "available",
+          "not_applicable",
+          "unavailable"
+        ],
+        "type": "string"
+      },
+      "MigrationConfigurationLayersTarget": {
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "source"
+                ],
+                "type": "string"
+              },
+              "sourceId": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "sourceId"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "itemId": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "jobId": {
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "job"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "jobId",
+              "kind"
+            ],
+            "type": "object"
+          }
+        ]
+      }
+    },
+    "properties": {
+      "adapterRevision": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "fields": {
+        "items": {
+          "$ref": "#/definitions/ConfigurationFieldOrigin"
+        },
+        "type": "array"
+      },
+      "layers": {
+        "items": {
+          "$ref": "#/definitions/ConfigurationLayerState"
+        },
+        "type": "array"
+      },
+      "nextPage": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "pageIndex": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "status": {
+        "$ref": "#/definitions/MigrationConfigurationLayersStatus"
+      },
+      "target": {
+        "$ref": "#/definitions/MigrationConfigurationLayersTarget"
+      },
+      "totalFields": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "unobserved": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "fields",
+      "layers",
+      "pageIndex",
+      "status",
+      "target",
+      "totalFields",
+      "unobserved"
+    ],
+    "title": "MigrationConfigurationLayersResult",
+    "type": "object"
+  },
+  "MigrationDiscoverParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "MigrationSourceKind": {
+        "enum": [
+          "claude-code",
+          "codex"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "includeProject": {
+        "default": false,
+        "type": "boolean"
+      },
+      "sources": {
+        "default": [],
+        "items": {
+          "$ref": "#/definitions/MigrationSourceKind"
+        },
+        "type": "array"
+      }
+    },
+    "title": "MigrationDiscoverParams",
+    "type": "object"
+  },
+  "MigrationDiscoverResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "MigrationCategory": {
+        "enum": [
+          "provider",
+          "mcp",
+          "skill",
+          "command",
+          "instructions",
+          "memory",
+          "plugin",
+          "project",
+          "history",
+          "agent",
+          "hook",
+          "workflow"
+        ],
+        "type": "string"
+      },
+      "MigrationDiscoveryProblem": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/definitions/MigrationSourceKind"
+          },
+          "scope": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "kind",
+          "scope"
+        ],
+        "type": "object"
+      },
+      "MigrationSourceKind": {
+        "enum": [
+          "claude-code",
+          "codex"
+        ],
+        "type": "string"
+      },
+      "MigrationSourceSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "availableCategories": {
+            "items": {
+              "$ref": "#/definitions/MigrationCategory"
+            },
+            "type": "array"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "formatRevision": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/definitions/MigrationSourceKind"
+          },
+          "scope": {
+            "type": "string"
+          },
+          "sourceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "availableCategories",
+          "displayName",
+          "formatRevision",
+          "kind",
+          "scope",
+          "sourceId"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "problems": {
+        "default": [],
+        "items": {
+          "$ref": "#/definitions/MigrationDiscoveryProblem"
+        },
+        "type": "array"
+      },
+      "sources": {
+        "items": {
+          "$ref": "#/definitions/MigrationSourceSummary"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "sources"
+    ],
+    "title": "MigrationDiscoverResult",
+    "type": "object"
+  },
+  "MigrationJobReadResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "McpApplicationAction": {
+        "enum": [
+          "document.read",
+          "document.create",
+          "document.lookup",
+          "mail.list",
+          "mail.read",
+          "mail.attachment",
+          "mail.send",
+          "mail.lookup",
+          "table.query",
+          "table.export",
+          "table.lookup"
+        ],
+        "type": "string"
+      },
+      "McpApplicationActionRule": {
+        "additionalProperties": false,
+        "description": "Only local reviewed configuration supplies this rule; server annotations cannot.",
+        "properties": {
+          "action": {
+            "$ref": "#/definitions/McpApplicationAction"
+          },
+          "fields": {
+            "additionalProperties": {
+              "$ref": "#/definitions/McpApplicationInputField"
+            },
+            "default": {},
+            "type": "object"
+          },
+          "input_template": true,
+          "operation_id_input_pointer": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "resource_uri_input_pointer": {
+            "type": "string"
+          },
+          "schema_sha256": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "action",
+          "input_template",
+          "resource_uri_input_pointer",
+          "schema_sha256"
+        ],
+        "type": "object"
+      },
+      "McpApplicationInputField": {
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "allowed_values": {
+                "default": [],
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "max_bytes": {
+                "format": "uint",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": {
+                "enum": [
+                  "string"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "max_bytes",
+              "type"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "maximum": {
+                "format": "int64",
+                "type": "integer"
+              },
+              "minimum": {
+                "format": "int64",
+                "type": "integer"
+              },
+              "type": {
+                "enum": [
+                  "integer"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "maximum",
+              "minimum",
+              "type"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "McpCredentialRef": {
+        "additionalProperties": false,
+        "description": "Opaque reference to credentials owned by the selected execution profile.",
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
+      "McpServerConfig": {
+        "description": "Configuration for a single MCP server.\n\nThe type lives in `kcoder_types` so config loading, CLI setup, and MCP connection code can share the same contract without depending on each other's implementation crates.",
+        "properties": {
+          "args": {
+            "default": [],
+            "description": "Arguments for the command.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "command": {
+            "default": "",
+            "description": "Command to execute for stdio transport.",
+            "type": "string"
+          },
+          "env": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "default": {},
+            "description": "Additional environment variables.",
+            "type": "object"
+          },
+          "headers": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "default": {},
+            "description": "Additional request headers for `http` or an external `searxng` instance. Values are literal plaintext from settings without environment expansion; protect configuration-file permissions when they contain secrets.",
+            "type": "object"
+          },
+          "name": {
+            "description": "Display name for this server.",
+            "type": "string"
+          },
+          "policy": {
+            "$ref": "#/definitions/McpServerPolicy"
+          },
+          "transport": {
+            "default": "stdio",
+            "description": "Transport type: `\"stdio\"`, `\"sse\"` for legacy dual-endpoint HTTP+SSE, `\"http\"` for single-endpoint Streamable HTTP, or `\"searxng\"` for bundled search.",
+            "type": "string"
+          },
+          "url": {
+            "default": "",
+            "description": "Endpoint URL for `sse` or `http` transport, such as `http://localhost:3001/sse` or `https://example.com/mcp`. For `searxng`, leave empty to start the bundled service; an explicit URL uses that instance.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "McpServerPolicy": {
+        "additionalProperties": false,
+        "description": "Launch, visibility and credential-reference controls. These never contain secret values.",
+        "properties": {
+          "application_actions": {
+            "additionalProperties": {
+              "$ref": "#/definitions/McpApplicationActionRule"
+            },
+            "description": "Reviewed business semantics; effects still need final normal user approval.",
+            "type": "object"
+          },
+          "bearer_token_env_var": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "credential_ref": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/McpCredentialRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "cwd": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "disabled_tools": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "enabled_tools": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "env_aliases": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "env_http_headers": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "env_vars": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "oauth_account": {
+            "description": "Explicit local credential slot, independent of the external subject's display name.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "required_env": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "required_headers": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "startup_timeout_secs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "task_resource_reads": {
+            "additionalProperties": {
+              "$ref": "#/definitions/McpTaskResourceReadRule"
+            },
+            "description": "Administrator-approved exact input semantics for resource-bound tasks. Server annotations never populate this map.",
+            "type": "object"
+          },
+          "tool_timeout_secs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "workspace": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "McpTaskResourceReadRule": {
+        "additionalProperties": false,
+        "description": "The actual tool schema and complete input shape are pinned by the owner. Only the URI slot varies; an extra operation/write/send field is rejected.",
+        "properties": {
+          "input_template": true,
+          "schema_sha256": {
+            "type": "string"
+          },
+          "uri_input_pointer": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input_template",
+          "schema_sha256",
+          "uri_input_pointer"
+        ],
+        "type": "object"
+      },
+      "MigrationApiKeySource": {
+        "enum": [
+          "configuration",
+          "environment"
+        ],
+        "type": "string"
+      },
+      "MigrationAssetPlanSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "enableAfterImport": {
+            "type": "boolean"
+          },
+          "itemId": {
+            "type": "string"
+          },
+          "nativeReference": {
+            "type": "boolean"
+          },
+          "planId": {
+            "type": "string"
+          },
+          "projectScoped": {
+            "type": "boolean"
+          },
+          "targetName": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "enableAfterImport",
+          "itemId",
+          "nativeReference",
+          "planId",
+          "projectScoped",
+          "targetName"
+        ],
+        "type": "object"
+      },
+      "MigrationBatchSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "atomicCredentials": {
+            "type": "boolean"
+          },
+          "committedActions": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "credentialActions": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "defaultItemIds": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "planId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "publishedCredentials": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "reusedItems": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "selectedItems": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "totalActions": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "unresolvedActions": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "committedActions",
+          "selectedItems",
+          "totalActions",
+          "unresolvedActions"
+        ],
+        "type": "object"
+      },
+      "MigrationCredentialPhase": {
+        "enum": [
+          "ready",
+          "applying",
+          "published",
+          "undoing",
+          "undone",
+          "unknown",
+          "conflict"
+        ],
+        "type": "string"
+      },
+      "MigrationCredentialPlanSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "endpoint": {
+            "type": "string"
+          },
+          "errorCode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "grouped": {
+            "type": "boolean"
+          },
+          "itemId": {
+            "type": "string"
+          },
+          "phase": {
+            "$ref": "#/definitions/MigrationCredentialPhase"
+          },
+          "planId": {
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/definitions/MigrationApiKeySource"
+          },
+          "sourceField": {
+            "type": "string"
+          },
+          "storage": {
+            "$ref": "#/definitions/MigrationCredentialStorage"
+          },
+          "targetName": {
+            "type": "string"
+          },
+          "undoRequested": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "endpoint",
+          "itemId",
+          "phase",
+          "planId",
+          "source",
+          "sourceField",
+          "storage",
+          "targetName"
+        ],
+        "type": "object"
+      },
+      "MigrationCredentialStorage": {
+        "enum": [
+          "file",
+          "keyring"
+        ],
+        "type": "string"
+      },
+      "MigrationIssue": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "$ref": "#/definitions/MigrationIssueCode"
+          },
+          "field": {
+            "description": "A reviewed schema field name, not an input value or diagnostic excerpt.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "phase": {
+            "allOf": [
+              {
+                "$ref": "#/definitions/MigrationIssuePhase"
+              }
+            ],
+            "default": "import"
+          },
+          "severity": {
+            "$ref": "#/definitions/MigrationIssueSeverity"
+          }
+        },
+        "required": [
+          "code",
+          "severity"
+        ],
+        "type": "object"
+      },
+      "MigrationIssueCode": {
+        "enum": [
+          "unsupported_source_format",
+          "unsupported_field",
+          "requires_reauthentication",
+          "credential_resolution_required",
+          "secret_excluded",
+          "unsupported_authentication",
+          "missing_model_limits",
+          "missing_model",
+          "invalid_endpoint",
+          "invalid_arguments",
+          "unsafe_path",
+          "source_unavailable",
+          "source_changed",
+          "target_changed",
+          "target_conflict",
+          "missing_dependency",
+          "requires_review",
+          "budget_exceeded"
+        ],
+        "type": "string"
+      },
+      "MigrationIssuePhase": {
+        "description": "Import blockers prevent publication; activation blockers prevent claiming readiness.",
+        "enum": [
+          "import",
+          "activation"
+        ],
+        "type": "string"
+      },
+      "MigrationIssueSeverity": {
+        "enum": [
+          "notice",
+          "warning",
+          "blocking"
+        ],
+        "type": "string"
+      },
+      "MigrationJobStatus": {
+        "enum": [
+          "scanning",
+          "ready",
+          "applying",
+          "cancel_requested",
+          "cancelled",
+          "completed",
+          "completed_with_issues",
+          "failed",
+          "rolling_back",
+          "rolled_back",
+          "rollback_conflict"
+        ],
+        "type": "string"
+      },
+      "MigrationJobSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "committedItems": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "hasUnconfirmedOutcomes": {
+            "default": false,
+            "type": "boolean"
+          },
+          "jobId": {
+            "type": "string"
+          },
+          "requiresActionItems": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sequence": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sourceId": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/definitions/MigrationJobStatus"
+          },
+          "totalItems": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "committedItems",
+          "jobId",
+          "requiresActionItems",
+          "sequence",
+          "sourceId",
+          "status",
+          "totalItems"
+        ],
+        "type": "object"
+      },
+      "MigrationMcpPlanSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "config": {
+            "$ref": "#/definitions/McpServerConfig"
+          },
+          "enableAfterImport": {
+            "type": "boolean"
+          },
+          "itemId": {
+            "type": "string"
+          },
+          "planId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "config",
+          "enableAfterImport",
+          "itemId",
+          "planId"
+        ],
+        "type": "object"
+      },
+      "MigrationProviderCandidate": {
+        "additionalProperties": false,
+        "properties": {
+          "apiFormat": {
+            "type": "string"
+          },
+          "contextWindowTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "endpoint": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "itemId": {
+            "type": "string"
+          },
+          "maxOutputTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "model": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "outputHeadroomTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "apiFormat",
+          "itemId"
+        ],
+        "type": "object"
+      },
+      "MigrationProviderPlanSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "itemId": {
+            "type": "string"
+          },
+          "planId": {
+            "type": "string"
+          },
+          "provider": {
+            "$ref": "#/definitions/MigrationProviderCandidate"
+          },
+          "targetName": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "itemId",
+          "planId",
+          "provider",
+          "targetName"
+        ],
+        "type": "object"
+      },
+      "MigrationSourceKind": {
+        "enum": [
+          "claude-code",
+          "codex"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "assetPlans": {
+        "default": [],
+        "items": {
+          "$ref": "#/definitions/MigrationAssetPlanSummary"
+        },
+        "type": "array"
+      },
+      "batch": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/MigrationBatchSummary"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "credentialPlans": {
+        "items": {
+          "$ref": "#/definitions/MigrationCredentialPlanSummary"
+        },
+        "type": "array"
+      },
+      "issues": {
+        "items": {
+          "$ref": "#/definitions/MigrationIssue"
+        },
+        "type": "array"
+      },
+      "job": {
+        "$ref": "#/definitions/MigrationJobSummary"
+      },
+      "mcpPlans": {
+        "default": [],
+        "items": {
+          "$ref": "#/definitions/MigrationMcpPlanSummary"
+        },
+        "type": "array"
+      },
+      "plans": {
+        "items": {
+          "$ref": "#/definitions/MigrationProviderPlanSummary"
+        },
+        "type": "array"
+      },
+      "source": {
+        "$ref": "#/definitions/MigrationSourceKind"
+      }
+    },
+    "required": [
+      "issues",
+      "job",
+      "plans",
+      "source"
+    ],
+    "title": "MigrationJobReadResult",
+    "type": "object"
+  },
+  "MigrationJobSummary": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "MigrationJobStatus": {
+        "enum": [
+          "scanning",
+          "ready",
+          "applying",
+          "cancel_requested",
+          "cancelled",
+          "completed",
+          "completed_with_issues",
+          "failed",
+          "rolling_back",
+          "rolled_back",
+          "rollback_conflict"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "committedItems": {
+        "format": "uint",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "hasUnconfirmedOutcomes": {
+        "default": false,
+        "type": "boolean"
+      },
+      "jobId": {
+        "type": "string"
+      },
+      "requiresActionItems": {
+        "format": "uint",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "sequence": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "sourceId": {
+        "type": "string"
+      },
+      "status": {
+        "$ref": "#/definitions/MigrationJobStatus"
+      },
+      "totalItems": {
+        "format": "uint",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "committedItems",
+      "jobId",
+      "requiresActionItems",
+      "sequence",
+      "sourceId",
+      "status",
+      "totalItems"
+    ],
+    "title": "MigrationJobSummary",
+    "type": "object"
+  },
+  "MigrationMcpPlanParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "cwd": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "enableAfterImport": {
+        "default": false,
+        "type": "boolean"
+      },
+      "expectedSequence": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "itemId": {
+        "type": "string"
+      },
+      "jobId": {
+        "type": "string"
+      },
+      "targetName": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "expectedSequence",
+      "itemId",
+      "jobId",
+      "targetName"
+    ],
+    "title": "MigrationMcpPlanParams",
+    "type": "object"
+  },
+  "MigrationOperationParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "jobId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "jobId"
+    ],
+    "title": "MigrationOperationParams",
+    "type": "object"
+  },
+  "MigrationPlanParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "jobId": {
+        "type": "string"
+      },
+      "selectedItemIds": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "jobId",
+      "selectedItemIds"
+    ],
+    "title": "MigrationPlanParams",
+    "type": "object"
+  },
+  "MigrationPluginDiscoverParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "MigrationSourceKind": {
+        "enum": [
+          "claude-code",
+          "codex"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "cursor": {
+        "default": null,
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "includeProject": {
+        "type": "boolean"
+      },
+      "includeUploaded": {
+        "type": "boolean"
+      },
+      "sources": {
+        "default": [],
+        "items": {
+          "$ref": "#/definitions/MigrationSourceKind"
+        },
+        "type": "array"
+      }
+    },
+    "title": "MigrationPluginDiscoverParams",
+    "type": "object"
+  },
+  "MigrationPluginDiscoverResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "MigrationDiscoveryProblem": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/definitions/MigrationSourceKind"
+          },
+          "scope": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "kind",
+          "scope"
+        ],
+        "type": "object"
+      },
+      "MigrationPluginCandidate": {
+        "additionalProperties": false,
+        "properties": {
+          "candidateId": {
+            "type": "string"
+          },
+          "installedVersion": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "pending": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "scope": {
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/definitions/MigrationSourceKind"
+          },
+          "sourceEnabled": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "candidateId",
+          "name",
+          "pending",
+          "scope",
+          "source"
+        ],
+        "type": "object"
+      },
+      "MigrationSourceKind": {
+        "enum": [
+          "claude-code",
+          "codex"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "candidates": {
+        "items": {
+          "$ref": "#/definitions/MigrationPluginCandidate"
+        },
+        "type": "array"
+      },
+      "nextCursor": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "problems": {
+        "items": {
+          "$ref": "#/definitions/MigrationDiscoveryProblem"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "candidates",
+      "problems"
+    ],
+    "title": "MigrationPluginDiscoverResult",
+    "type": "object"
+  },
+  "MigrationPluginListParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "cursor": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "title": "MigrationPluginListParams",
+    "type": "object"
+  },
+  "MigrationPluginListResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "MigrationPluginJob": {
+        "additionalProperties": false,
+        "properties": {
+          "batchJobId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "cancelRequested": {
+            "type": "boolean"
+          },
+          "cancelRevision": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "capabilities": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "failureCode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "imported": {
+            "type": "boolean"
+          },
+          "installedVersion": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string"
+          },
+          "packageBytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "packageFiles": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "pending": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "readiness": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "scope": {
+            "type": "string"
+          },
+          "sequence": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "source": {
+            "$ref": "#/definitions/MigrationSourceKind"
+          },
+          "sourceEnabled": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "stage": {
+            "$ref": "#/definitions/MigrationPluginStage"
+          },
+          "targetId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "cancelRequested",
+          "cancelRevision",
+          "capabilities",
+          "imported",
+          "name",
+          "operationId",
+          "pending",
+          "readiness",
+          "scope",
+          "sequence",
+          "source",
+          "stage"
+        ],
+        "type": "object"
+      },
+      "MigrationPluginStage": {
+        "enum": [
+          "prepared",
+          "capturing",
+          "pending",
+          "ready",
+          "applying",
+          "imported",
+          "undoing",
+          "undone",
+          "cancelled",
+          "outcome_unknown"
+        ],
+        "type": "string"
+      },
+      "MigrationSourceKind": {
+        "enum": [
+          "claude-code",
+          "codex"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "items": {
+        "items": {
+          "$ref": "#/definitions/MigrationPluginJob"
+        },
+        "type": "array"
+      },
+      "nextCursor": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "items"
+    ],
+    "title": "MigrationPluginListResult",
+    "type": "object"
+  },
+  "MigrationPluginOperationParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "expectedSequence": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "operationId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "expectedSequence",
+      "operationId"
+    ],
+    "title": "MigrationPluginOperationParams",
+    "type": "object"
+  },
+  "MigrationPluginPlanParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "MigrationPluginProjectMapping": {
+        "enum": [
+          "current_workspace"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "candidateId": {
+        "type": "string"
+      },
+      "projectMapping": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/MigrationPluginProjectMapping"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "requestId": {
+        "type": "string"
+      },
+      "targetName": {
+        "default": null,
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "candidateId",
+      "requestId"
+    ],
+    "title": "MigrationPluginPlanParams",
+    "type": "object"
+  },
+  "MigrationPluginReadParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "operationId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "operationId"
+    ],
+    "title": "MigrationPluginReadParams",
+    "type": "object"
+  },
+  "MigrationPluginStateResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "MigrationPluginJob": {
+        "additionalProperties": false,
+        "properties": {
+          "batchJobId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "cancelRequested": {
+            "type": "boolean"
+          },
+          "cancelRevision": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "capabilities": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "failureCode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "imported": {
+            "type": "boolean"
+          },
+          "installedVersion": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string"
+          },
+          "packageBytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "packageFiles": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "pending": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "readiness": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "scope": {
+            "type": "string"
+          },
+          "sequence": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "source": {
+            "$ref": "#/definitions/MigrationSourceKind"
+          },
+          "sourceEnabled": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "stage": {
+            "$ref": "#/definitions/MigrationPluginStage"
+          },
+          "targetId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "cancelRequested",
+          "cancelRevision",
+          "capabilities",
+          "imported",
+          "name",
+          "operationId",
+          "pending",
+          "readiness",
+          "scope",
+          "sequence",
+          "source",
+          "stage"
+        ],
+        "type": "object"
+      },
+      "MigrationPluginStage": {
+        "enum": [
+          "prepared",
+          "capturing",
+          "pending",
+          "ready",
+          "applying",
+          "imported",
+          "undoing",
+          "undone",
+          "cancelled",
+          "outcome_unknown"
+        ],
+        "type": "string"
+      },
+      "MigrationSourceKind": {
+        "enum": [
+          "claude-code",
+          "codex"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "job": {
+        "$ref": "#/definitions/MigrationPluginJob"
+      },
+      "workerError": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "workerRunning": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "job",
+      "workerRunning"
+    ],
+    "title": "MigrationPluginStateResult",
+    "type": "object"
+  },
+  "MigrationProviderOperationParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "description": "The durable plan ID is also the operation identity for safe retries.",
+    "properties": {
+      "expectedSequence": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "jobId": {
+        "type": "string"
+      },
+      "planId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "expectedSequence",
+      "jobId",
+      "planId"
+    ],
+    "title": "MigrationProviderOperationParams",
+    "type": "object"
+  },
+  "MigrationProviderPlanParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "contextWindowTokens": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "endpoint": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "expectedSequence": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "itemId": {
+        "type": "string"
+      },
+      "jobId": {
+        "type": "string"
+      },
+      "maxOutputTokens": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "model": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "outputHeadroomTokens": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "targetName": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "contextWindowTokens",
+      "expectedSequence",
+      "itemId",
+      "jobId",
+      "maxOutputTokens",
+      "outputHeadroomTokens",
+      "targetName"
+    ],
+    "title": "MigrationProviderPlanParams",
+    "type": "object"
+  },
+  "MigrationScanParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "sourceId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "sourceId"
+    ],
+    "title": "MigrationScanParams",
+    "type": "object"
+  }
+}

@@ -25,38 +25,24 @@ fn provider_environment_child(test: &str, marker: &str, endpoint: Option<&str>) 
 }
 
 #[test]
-fn settings_default_is_derived_from_the_default_provider_profile() {
+fn settings_default_has_no_provider_or_model() {
     if provider_environment_child(
-        "tests::provider::settings_default_is_derived_from_the_default_provider_profile",
+        "tests::provider::settings_default_has_no_provider_or_model",
         "KCODER_CONFIG_DEFAULT_PROVIDER_CHILD",
         None,
     ) {
         return;
     }
     let settings = Settings::default();
-    let profile = &settings.providers[DEFAULT_ACTIVE_PROVIDER];
-
-    assert_eq!(
-        settings.active_provider.as_deref(),
-        Some(DEFAULT_ACTIVE_PROVIDER)
-    );
-    assert_eq!(settings.provider.as_deref(), Some(DEFAULT_ACTIVE_PROVIDER));
-    assert_eq!(settings.api_format, Some(profile.api_format));
-    assert_eq!(
-        settings.base_url.as_deref(),
-        Some(profile.endpoint.as_str())
-    );
-    assert_eq!(settings.model, profile.default_model);
-    assert_eq!(settings.model_reasoning_effort, profile.reasoning_effort);
-    assert_eq!(
-        settings.context_window_tokens,
-        Some(profile.context_window_tokens)
-    );
-    assert_eq!(
-        settings.context_output_headroom,
-        Some(profile.output_headroom_tokens)
-    );
-    assert_eq!(settings.max_tokens, Some(profile.max_output_tokens));
+    assert!(settings.providers.is_empty());
+    assert!(settings.active_provider.is_none());
+    assert!(settings.provider.is_none());
+    assert!(settings.api_format.is_none());
+    assert!(settings.base_url.is_none());
+    assert!(settings.model.is_empty());
+    assert!(settings.model_reasoning_effort.is_none());
+    assert!(settings.context_window_tokens.is_none());
+    assert!(settings.context_output_headroom.is_none());
     assert!(settings.time_based_micro_compact.enabled);
     assert_eq!(settings.time_based_micro_compact.gap_threshold_minutes, 60);
     assert_eq!(settings.time_based_micro_compact.keep_recent, 5);
@@ -84,16 +70,24 @@ fn settings_default_is_derived_from_the_default_provider_profile() {
 }
 
 #[test]
-fn default_provider_environment_override_is_isolated_and_preserved() {
+fn provider_environment_does_not_create_an_unconfigured_deployment() {
     const ENDPOINT: &str = "https://provider-fixture.invalid/v1";
     if provider_environment_child(
-        "tests::provider::default_provider_environment_override_is_isolated_and_preserved",
+        "tests::provider::provider_environment_does_not_create_an_unconfigured_deployment",
         "KCODER_CONFIG_PROVIDER_OVERRIDE_CHILD",
         Some(ENDPOINT),
     ) {
         return;
     }
-    assert_eq!(Settings::default().base_url.as_deref(), Some(ENDPOINT));
+    let mut settings = Settings::default();
+    assert!(settings.providers.is_empty());
+    assert!(settings.base_url.is_none());
+    assert!(settings.model.is_empty());
+    settings
+        .providers
+        .insert("kunlunmeta".into(), default_active_provider_config());
+    settings.apply_provider(Some("kunlunmeta")).unwrap();
+    assert_eq!(settings.base_url.as_deref(), Some(ENDPOINT));
 }
 
 #[test]
@@ -110,6 +104,9 @@ fn model_discovery_defaults_control_only_provider_catalog_queries() {
 #[test]
 fn discovered_model_inherits_complete_provider_configuration() {
     let mut settings = Settings::default();
+    settings
+        .providers
+        .insert("kunlunmeta".into(), default_active_provider_config());
     settings
         .apply_discovered_model("kunlunmeta", "Kimi-2.7")
         .unwrap();
@@ -199,7 +196,7 @@ fn save_drops_default_identical_profiles_but_keeps_custom_ones() {
     let path = tmp.path().join("settings.json");
     let mut settings = Settings::default();
     // A profile that differs from every embedded default must survive.
-    let mut custom = crate::deployment::default_providers()["kunlunmeta"].clone();
+    let mut custom = default_active_provider_config();
     custom.default_model = "custom-x-model".to_string();
     custom.endpoint = "https://example.invalid".to_string();
     settings.providers.insert("custom-x".to_string(), custom);
@@ -219,19 +216,19 @@ fn save_drops_default_identical_profiles_but_keeps_custom_ones() {
 }
 
 #[test]
-fn save_keeps_embedded_profiles_that_are_declared_in_the_current_file() {
+fn save_keeps_explicitly_configured_legacy_profiles() {
     let tmp = TempDir::new().unwrap();
     let path = tmp.path().join("settings.json");
-    // The user explicitly declared kunlunmeta with the same value as the embedded default; saving must retain it.
+    // A saved legacy deployment remains user-owned after product defaults become empty.
     let declared = serde_json::json!({
         "active_provider": "kunlunmeta",
         "providers": {
-            "kunlunmeta": crate::deployment::default_providers()["kunlunmeta"]
+            "kunlunmeta": default_active_provider_config()
         }
     });
     std::fs::write(&path, serde_json::to_string_pretty(&declared).unwrap()).unwrap();
 
-    let settings = Settings::default();
+    let settings = validate_and_resolve_settings_document(&declared).unwrap();
     settings.save_to(&path).unwrap();
 
     let persisted: serde_json::Value =
@@ -362,4 +359,28 @@ fn persisted_settings_omit_plaintext_secret_fields() {
         assert!(!serialized.contains(forbidden), "{forbidden}");
         assert!(!direct_serialized.contains(forbidden), "{forbidden}");
     }
+}
+
+#[test]
+fn saving_and_reopening_clean_settings_does_not_materialize_a_model() {
+    let tmp = TempDir::new().unwrap();
+    let path = tmp.path().join("settings.json");
+    Settings::default().save_to(&path).unwrap();
+    let document: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    let settings = validate_and_resolve_settings_document(&document).unwrap();
+    assert!(settings.providers.is_empty());
+    assert!(settings.active_provider.is_none());
+    assert!(settings.provider.is_none());
+    assert!(settings.model.is_empty());
+    let mut migrated = document;
+    migrate_deployment_settings(&mut migrated);
+    assert_eq!(migrated["providers"], serde_json::json!({}));
+    assert!(migrated["active_provider"].is_null());
+    assert!(
+        validate_and_resolve_settings_document(&migrated)
+            .unwrap()
+            .model
+            .is_empty()
+    );
 }

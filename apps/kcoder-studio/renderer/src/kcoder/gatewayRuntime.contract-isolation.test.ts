@@ -1,5 +1,5 @@
-import { listen } from '@tauri-apps/api/event'
-import { clearMocks, mockIPC } from '@tauri-apps/api/mocks'
+import { listen } from '@/lib/runtime-events'
+import { clearTestTransports, installTestTransport } from '@/test/runtime-transport'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { FakeGatewayClient } from './gateway/runtime/contractFixture.test-support'
 import { KCoderGatewayRuntime as CoreRuntime } from './gatewayRuntime'
@@ -21,7 +21,7 @@ describe.each([
   afterEach(async () => {
     await Promise.all([...runtimes].map(runtime => runtime.disposeAsync?.() ?? runtime.dispose()))
     runtimes.clear()
-    clearMocks()
+    clearTestTransports()
     vi.restoreAllMocks()
   })
   test('migrates the legacy Wework runtime config key without keeping ambiguous storage', () => {
@@ -218,7 +218,7 @@ describe.each([
   })
 
   test('opens a task on the server represented by its Wework project', async () => {
-    mockIPC(() => undefined, { shouldMockEvents: true })
+    installTestTransport(() => undefined)
     const connectedServerIds: string[] = []
     const received: Array<{ event: string; payload: Record<string, unknown> }> = []
     const unlisten = await listen<{ event: string; payload: Record<string, unknown> }>(
@@ -459,7 +459,7 @@ describe.each([
   })
 
   test('keeps same-named turn buffers isolated across task processes', async () => {
-    mockIPC(() => undefined, { shouldMockEvents: true })
+    installTestTransport(() => undefined)
     const clients: FakeGatewayClient[] = []
     const received: Array<{ event: string; payload: Record<string, unknown> }> = []
     const unlisten = await listen<{ event: string; payload: Record<string, unknown> }>(
@@ -548,6 +548,8 @@ describe.each([
       payload: {
         taskId: 'kcoder:local:thread-1',
         subtaskId: 'turn-1',
+        turnId: 'turn-1',
+        attemptId: 'turn-1',
         deviceId: 'local',
         data: { delta: 'checking-a' },
       },

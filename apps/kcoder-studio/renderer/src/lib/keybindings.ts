@@ -1,5 +1,5 @@
 import { requestDesktopSidebarToggle } from '@/components/layout/useDesktopSidebarCollapsed'
-import { isTauriRuntime } from './runtime-environment'
+import { isGatewayRuntime } from './runtime-environment'
 import { navigateTo } from './navigation'
 import { getKeyboardPlatform } from './keyboard-platform'
 
@@ -13,11 +13,11 @@ export const TOGGLE_MODEL_SELECTOR_COMMAND = 'toggleModelSelector'
 export const INCREASE_FONT_SIZE_COMMAND = 'increaseFontSize'
 export const DECREASE_FONT_SIZE_COMMAND = 'decreaseFontSize'
 export const RESET_FONT_SIZE_COMMAND = 'resetFontSize'
-export const KCODER_STUDIO_OPEN_TERMINAL_EVENT = 'wework:open-terminal'
-export const KCODER_STUDIO_STEP_FONT_SIZE_EVENT = 'wework:step-font-size'
-export const KCODER_STUDIO_RESET_FONT_SIZE_EVENT = 'wework:reset-font-size'
-export const KEYBINDINGS_CHANGED_EVENT = 'wework:keybindings-changed'
-export const ACTIVE_KEYBINDINGS_CHANGED_EVENT = 'wework:active-keybindings-changed'
+export const KCODER_STUDIO_OPEN_TERMINAL_EVENT = 'kcoder:open-terminal'
+export const KCODER_STUDIO_STEP_FONT_SIZE_EVENT = 'kcoder:step-font-size'
+export const KCODER_STUDIO_RESET_FONT_SIZE_EVENT = 'kcoder:reset-font-size'
+export const KEYBINDINGS_CHANGED_EVENT = 'kcoder:keybindings-changed'
+export const ACTIVE_KEYBINDINGS_CHANGED_EVENT = 'kcoder:active-keybindings-changed'
 export const TOGGLE_BOTTOM_WORKSPACE_PANEL_BUTTON_TEST_ID = 'toggle-bottom-workspace-panel-button'
 export const TOGGLE_RIGHT_WORKSPACE_PANEL_BUTTON_TEST_ID = 'toggle-right-workspace-panel-button'
 export const MODEL_SELECTOR_BUTTON_TEST_ID = 'model-selector-button'
@@ -220,7 +220,7 @@ export function dispatchResetFontSizeShortcut() {
 }
 
 export function shortcutsAvailable(): boolean {
-  return isTauriRuntime()
+  return isGatewayRuntime()
 }
 
 function normalizeKeyPart(value: string): string {

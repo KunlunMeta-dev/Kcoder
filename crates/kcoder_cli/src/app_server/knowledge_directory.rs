@@ -188,6 +188,7 @@ pub(super) fn stage_selected(
                 }
                 attachment_upload_finish(
                     &AttachmentUploadFinishParams {
+                        office_input: None,
                         retention: None,
                         upload_id: upload.upload_id.clone(),
                     },

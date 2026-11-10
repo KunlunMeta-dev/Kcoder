@@ -56,6 +56,7 @@ impl BudgetedModel<'_> {
         first_page: Option<u32>,
         last_page: Option<u32>,
     ) -> Result<()> {
+        self.check_resource()?;
         if !self.pipeline_enabled {
             return Ok(());
         }
@@ -116,6 +117,7 @@ impl BudgetedModel<'_> {
         &self,
         request: &WikiModelRequest,
     ) -> Result<Option<WikiStageInput>> {
+        self.check_resource()?;
         let Some(input) = self.stage_input(request)? else {
             return Ok(None);
         };
@@ -140,6 +142,7 @@ impl BudgetedModel<'_> {
     }
 
     pub(super) fn stage_input(&self, request: &WikiModelRequest) -> Result<Option<WikiStageInput>> {
+        self.check_resource()?;
         if !self.pipeline_enabled {
             return Ok(None);
         }
@@ -314,6 +317,13 @@ impl BudgetedModel<'_> {
 
 impl Drop for BudgetedModel<'_> {
     fn drop(&mut self) {
+        if let (Some(authority), Some(budget)) = (&self.authority, &self.organization_budget) {
+            // Only an original durable terminal and closed model calls can
+            // release this slot; unknown accounting retains its capacity hold.
+            if let Err(error) = budget.reconcile_terminal(authority) {
+                authority.record_diagnostic(&error);
+            }
+        }
         let Some(lease) = self
             .merge
             .get_mut()

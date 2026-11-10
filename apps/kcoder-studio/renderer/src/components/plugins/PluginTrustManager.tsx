@@ -68,7 +68,7 @@ export function PluginTrustManager({
     <section
       data-testid="plugin-trust-manager"
       aria-labelledby="plugin-trust-title"
-      className="space-y-4 rounded-xl border border-border bg-background p-4"
+      className="studio-card-spacing space-y-4 rounded-xl border border-border bg-background"
     >
       <div className="flex items-center justify-between gap-3">
         <h2 id="plugin-trust-title" className="flex items-center gap-2 text-sm font-semibold">

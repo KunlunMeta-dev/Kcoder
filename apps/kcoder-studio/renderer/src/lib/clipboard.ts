@@ -1,6 +1,3 @@
-import { isNativeTauriHost } from '@/lib/runtime-environment'
-import { copyLocalExecutorDebugInfo } from '@/tauri/localExecutor'
-
 export async function copyTextToClipboard(text: string): Promise<void> {
   try {
     if (navigator.clipboard?.writeText) {
@@ -8,12 +5,7 @@ export async function copyTextToClipboard(text: string): Promise<void> {
       return
     }
   } catch {
-    // The macOS WebView may reject the browser clipboard API; use the native command below.
-  }
-
-  if (isNativeTauriHost()) {
-    await copyLocalExecutorDebugInfo(text)
-    return
+    // Clipboard access may be unavailable without a secure context or user gesture.
   }
 
   const textarea = document.createElement('textarea')

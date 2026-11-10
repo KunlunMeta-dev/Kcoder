@@ -1,6 +1,6 @@
-// Exact symlink layout observed in the pinned official Chrome for Testing mac-x64 archive.
+// Exact framework link layout in the pinned official Chrome for Testing macOS archives.
 export function isMacChromeFrameworkLink(path, target, release) {
-  if (release.platform !== 'mac-x64') return false;
+  if (!['mac-x64', 'mac-arm64'].includes(release.platform)) return false;
   const prefix = `${release.directory}/Google Chrome for Testing.app/Contents/Frameworks/Google Chrome for Testing Framework.framework/`;
   if (!path.startsWith(prefix)) return false;
   const member = path.slice(prefix.length);

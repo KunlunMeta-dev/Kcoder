@@ -26,6 +26,7 @@ pub(super) async fn import(
     input: KnowledgeImportAttachmentParams,
     path: PathBuf,
     ctx: ToolContext,
+    native: Option<super::integrations::core::NativeIntegrationContext>,
 ) -> Result<serde_json::Value> {
     ensure!(
         knowledge_requests::organization_enabled(settings)?,
@@ -51,7 +52,7 @@ pub(super) async fn import(
     if name == "image" {
         let original = tokio::fs::read(&path).await?;
         return super::knowledge_image_imports::accept_and_run(
-            settings, &input, &original, &extension, &ctx,
+            settings, &input, &original, &extension, &ctx, native,
         )
         .await;
     }
@@ -149,6 +150,7 @@ mod tests {
                 serde_json::from_value(input)?,
                 path.clone(),
                 ctx.clone(),
+                None,
             )
             .await
             .unwrap_err();

@@ -48,8 +48,13 @@ def supervise_knowledge(store, identity, binding, runtime, interval=1.0):
             return
         profile = str(Path(binding["home"]) / ".config/kcoder/settings.json")
 
+        channel = None
         def start_worker():
             environment = drop_to_worker(binding, identity)
+            if channel is not None:
+                from studio_organization_channel import CHANNEL_ENV
+                descriptor=channel.child_fd()
+                if descriptor is not None:environment[CHANNEL_ENV]=str(descriptor)
             os.execve(runtime, [runtime, "--internal-wiki-worker", profile], environment)
 
         # Reuse the existing group ownership/revocation supervisor. Unlike its
@@ -62,8 +67,10 @@ def supervise_knowledge(store, identity, binding, runtime, interval=1.0):
 
         stop_requested = []
         while current() and not stop_requested:
+            from studio_organization_channel import OrganizationChannel
+            channel=OrganizationChannel(store,identity,runtime=runtime,purpose="wiki_worker",worker_binding=binding)
             supervise(store, identity, start_worker, interval=interval,
-                      stop_requested=stop_requested)
+                      stop_requested=stop_requested,policy_channel=channel)
             if current() and not stop_requested:
                 time.sleep(interval)
         # SIGTERM normally pauses the worker itself. Also pause after a crash or

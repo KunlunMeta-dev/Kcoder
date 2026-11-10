@@ -7,10 +7,16 @@ impl QueryEngine {
     /// reference contents.
     pub fn client_skill_catalog(&self) -> Vec<ClientSkillSummary> {
         let cwd = self.state.cwd();
+        let blocked = self.blocked_skill_names_for_request();
         let registry = recover_read_lock(&self.skill_registry, "skill_registry");
         let mut skills = registry
             .list()
             .into_iter()
+            .filter(|skill| {
+                !blocked.iter().any(|name| {
+                    crate::skill_visibility_runtime::skill_name_matches(name, &skill.name)
+                })
+            })
             .map(|skill| ClientSkillSummary {
                 name: skill.name.clone(),
                 description: skill.description.clone(),

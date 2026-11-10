@@ -36,6 +36,32 @@ describe('parseThreadRunSummary', () => {
     expect(parseThreadRunSummary(json({ ...idleSummary, mainTurn: 'paused' }))).toBeUndefined()
     expect(parseThreadRunSummary(json({ ...idleSummary, tasksRunning: '2' }))).toBeUndefined()
   })
+
+  test('rejects fractional, unsafe, and negative Option<u32> counters', () => {
+    const counterKeys = [
+      'pendingApprovals',
+      'pendingQuestions',
+      'activeJobs',
+      'tasksPending',
+      'tasksRunning',
+      'pendingFollowups',
+      'pendingGoals',
+    ] as const
+    for (const key of counterKeys) {
+      for (const value of [1.5, Number.MAX_SAFE_INTEGER + 1, -1]) {
+        expect(parseThreadRunSummary({ ...idleSummary, [key]: value })).toBeUndefined()
+      }
+    }
+  })
+
+  test('accepts the maximum Option<u32> count and rejects values above it', () => {
+    expect(
+      parseThreadRunSummary(json({ ...idleSummary, activeJobs: 0xffff_ffff }))?.activeJobs
+    ).toBe(0xffff_ffff)
+    expect(
+      parseThreadRunSummary(json({ ...idleSummary, activeJobs: 0x1_0000_0000 }))
+    ).toBeUndefined()
+  })
 })
 
 describe('threadRunActivity', () => {
@@ -107,6 +133,13 @@ describe('threadRunActivity', () => {
     expect(threadRunActivity('unknown', undefined)).toBe('unknown')
     expect(threadRunActivity('idle', undefined)).toBe('idle')
     expect(threadRunActivity(undefined, undefined)).toBe('unknown')
+  })
+
+  test('falls back to coarse status when a summary contains a fractional counter', () => {
+    const malformedSummary = parseThreadRunSummary(json({ ...idleSummary, activeJobs: 0.5 }))
+    expect(malformedSummary).toBeUndefined()
+    expect(threadRunActivity('background', malformedSummary)).toBe('background')
+    expect(threadRunActivity('unknown', malformedSummary)).toBe('unknown')
   })
 })
 

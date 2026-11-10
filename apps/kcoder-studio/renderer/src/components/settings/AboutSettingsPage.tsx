@@ -1,3 +1,4 @@
+import { conversationFontLicenseUrl } from '@/features/appearance/conversationFonts'
 import { Bot, Download, ExternalLink, Loader2 } from 'lucide-react'
 import { useEffect, type ComponentType } from 'react'
 import { useOptionalAppUpdate } from '@/features/app-update/app-update-context'
@@ -204,6 +205,8 @@ export function AboutSettingsPage() {
         <AboutLink label="GitHub" url={PROJECT_URL} />
         <span className="text-text-muted">·</span>
         <AboutLink label="Apache-2.0" url={LICENSE_URL} />
+        <span className="text-text-muted">·</span>
+        <a href={conversationFontLicenseUrl} target="_blank" rel="noreferrer" className="rounded-md px-2 text-xs text-text-secondary hover:bg-muted">Noto Sans SC · OFL 1.1</a>
       </div>
     </SettingsPage>
   )

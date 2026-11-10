@@ -8,6 +8,7 @@ repository.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+kcoder_tui_render = { path = "internal/tui_render" }
 kcoder_types = { path = "../kcoder_types" }
 kcoder_api = { path = "../kcoder_api" }
 kcoder_engine = { path = "../kcoder_engine" }
@@ -31,11 +32,10 @@ unicode-width = { workspace = true }
 unicode-segmentation = { workspace = true }
 url = { workspace = true }
 pulldown-cmark = { workspace = true }
-syntect = { workspace = true }
-two-face = { workspace = true }
 serde_json = { workspace = true }
 serde = { workspace = true }
 sha2 = { workspace = true }
+uuid = { workspace = true }
 chrono = { workspace = true }
 libc = { workspace = true }
 base64 = "0.22"
@@ -53,4 +53,5 @@ windows-sys = { version = "0.61.2", features = [
 ] }
 
 [dev-dependencies]
+kcoder_tui_render = { path = "internal/tui_render", features = ["deterministic-test-probes"] }
 kcoder_skills = { path = "../kcoder_skills" }

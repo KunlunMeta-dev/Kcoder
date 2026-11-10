@@ -192,6 +192,16 @@ impl SkillStore {
         load_package(&path, name).map(Some)
     }
 
+    /// Reconcile a lost caller receipt without submitting another mutation.
+    pub fn receipt(
+        &self,
+        operation_id: &str,
+    ) -> Result<Option<SkillCommitReceipt>, SkillStoreError> {
+        validate_operation_id(operation_id)?;
+        let _snapshot = self.snapshot()?;
+        find_operation(&self.layout, operation_id)
+    }
+
     pub fn commit(
         &self,
         request: SkillCommitRequest,
@@ -246,6 +256,7 @@ impl SkillStore {
         let transaction_id = format!("skill-txn-{}", Uuid::new_v4());
         let transaction_dir = self.layout.transaction(&transaction_id);
         create_private_dir(&transaction_dir)?;
+        let _staging = UnjournaledTransactionGuard(transaction_dir.clone());
         self.hit("transaction_directory_created")?;
 
         let mut journal_moves = Vec::new();
@@ -1008,6 +1019,19 @@ pub(crate) fn file_hash(path: &Path) -> Result<Option<String>, SkillStoreError> 
     let bytes = fs::read(path)
         .map_err(|error| SkillStoreError::io(format!("reading {}", path.display()), error))?;
     Ok(Some(sha256(&bytes)))
+}
+
+/// Only the creating transaction may clean staging before a durable journal exists.
+struct UnjournaledTransactionGuard(PathBuf);
+
+impl Drop for UnjournaledTransactionGuard {
+    fn drop(&mut self) {
+        if !self.0.join("journal.json").exists()
+            && let Err(error) = remove_tree(&self.0)
+        {
+            tracing::warn!(%error, "failed to clean unjournaled skill staging");
+        }
+    }
 }
 
 #[cfg(test)]
@@ -1842,6 +1866,54 @@ mod tests {
                 .join(receipt.transaction_id)
                 .exists()
         );
+    }
+
+    #[test]
+    fn failed_preparation_removes_only_its_unjournaled_staging() {
+        let temp = TempDir::new().unwrap();
+        let root = temp.path().join("skills");
+        let store = failing_store(&root, "before_staging_package");
+        assert!(
+            store
+                .commit(request(
+                    "prepare-cleanup",
+                    SkillMutation::PutPackage {
+                        package: package("demo", "value"),
+                        expected: ExpectedSkillRevision::Absent,
+                    }
+                ))
+                .is_err()
+        );
+        assert!(
+            SkillStore::open(&root)
+                .unwrap()
+                .inspect()
+                .unwrap()
+                .orphan_paths
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn committed_cleanup_failure_is_returned_instead_of_snapshot_retry_loop() {
+        let temp = TempDir::new().unwrap();
+        let root = temp.path().join("skills");
+        let store = failing_store(&root, "journal_committed");
+        assert!(
+            store
+                .commit(request(
+                    "cleanup-recovery",
+                    SkillMutation::PutPackage {
+                        package: package("demo", "value"),
+                        expected: ExpectedSkillRevision::Absent,
+                    }
+                ))
+                .is_err()
+        );
+        let recovery = failing_store(&root, "before_recovery_cleanup");
+        assert!(recovery.snapshot().is_err());
+        assert!(SkillStore::open(&root).unwrap().snapshot().is_ok());
+        assert!(root.join("demo/SKILL.md").is_file());
     }
 
     #[test]

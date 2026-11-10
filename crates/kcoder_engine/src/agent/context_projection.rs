@@ -12,6 +12,7 @@ use kcoder_types::{ContentBlock, Message};
 /// safely replayed after a provider or model switch.
 #[derive(Debug, Clone)]
 pub struct CacheSafeParams {
+    pub context_history_anchor: Option<kcoder_state::context_archive::ContextHistoryAnchor>,
     pub fork_context_messages: kcoder_types::SharedMessages,
     pub active_skills: Vec<String>,
     pub snapshot_provider: String,

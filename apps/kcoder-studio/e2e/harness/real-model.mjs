@@ -38,10 +38,15 @@ export async function prepareIsolatedRealModelConfig(
   const env = options.env || process.env;
   const availableEnv = model.credentialEnv.filter((name) => env[name]?.trim());
   for (const name of availableEnv) context.registerSecret(env[name]);
+  const environmentOnly = options.credentialSource === "environment-only";
+  if (options.credentialSource !== undefined && !environmentOnly)
+    throw new Error("UNMET_PREREQUISITE: unsupported real-model credential source");
+  if (environmentOnly && availableEnv.length === 0)
+    throw new Error("UNMET_PREREQUISITE: this suite requires a declared protected credential environment variable");
   const source = resolve(model.configDir, "credentials.json");
   let sourceStat;
   try {
-    sourceStat = await lstat(source);
+    if (!environmentOnly) sourceStat = await lstat(source);
   } catch (error) {
     if (error.code !== "ENOENT") {
       throw new Error(

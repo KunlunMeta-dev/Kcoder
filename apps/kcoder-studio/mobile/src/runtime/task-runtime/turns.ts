@@ -1,3 +1,7 @@
+import { permissionParams } from "./turn-permissions";
+export { permissionParams } from "./turn-permissions";
+import { reconcileInitialLegacyAcceptance } from "./initialLegacyCleanup";
+import { legacyAttachmentPrompt } from "@/protocol/attachment-prompt";
 import {
   GatewayRpcClient,
   MobileRpcError,
@@ -13,14 +17,23 @@ import {
   nextOutgoingMessageSequence,
   outgoingMessageNamespace,
 } from "./connectionFactory";
-import { TaskRuntime } from "./core";
-import { mergeReconciledMessages, readHistoryPage } from "./history";
+import type { TaskRuntime } from "./core";
+import { assertNoTranscriptAction } from "./transcriptActions";
+import { historyResetTail, transcriptReadIdentityKey, transcriptReadIdentityMatches,
+  mergeReconciledMessages, publishConfirmedHistoryPage, readHistoryPage } from "./history";
+import { t } from "@/i18n";
+import { decodeProviderFailure } from "../../../../shared/providerFailure";
+import type { PermissionMode } from "@/protocol/task-permission-mode";
 import {
   type AgentSteerResult,
   type ChatMessage,
   type StagedAttachment,
   type TaskSendOptions,
 } from "./types";
+
+export function supportsTurnPermissions(this: TaskRuntime): boolean {
+  return this.client?.supportsExperimental?.("turnPermissions") === true;
+}
 
 export function continuationState(
   this: TaskRuntime,
@@ -58,6 +71,8 @@ export function continuationState(
     };
   if (this.snapshot.archivedAt)
     return { allowed: false, unknown, reason: "请先恢复已归档的任务。" };
+  if (!unknown && !decodeProviderFailure(message.providerFailure))
+    return { allowed: false, unknown, reason: t("task.runtime_failure_not_continuable") };
   if (
     !this.client ||
     !this.client.supportsExperimental?.("failedTurnContinuationV1") ||
@@ -94,6 +109,21 @@ export async function continueFailed(
   if (useSelectedModel === undefined) useSelectedModel = false;
   const state = this.continuationState(messageId);
   if (!state.allowed) throw new Error(state.reason);
+  const useCurrentConfiguration = useSelectedModel && !state.unknown;
+  const applyCurrentPermission = !state.unknown;
+  const threadId = this.snapshot.threadId;
+  const client = this.client!;
+  const clientGeneration = this.clientGeneration;
+  // Unknown acceptance must only read the original receipt. Every known
+  // continuation uses the current per-turn permission choice, while the model
+  // selector changes only for an explicitly current-config continuation.
+  const permissionMode = applyCurrentPermission
+    ? this.snapshot.permissionMode ?? "default"
+    : "default";
+  const modelSelector = useCurrentConfiguration ? this.snapshot.model : undefined;
+  const reasoningEffort = useCurrentConfiguration
+    ? this.snapshot.reasoningEffort
+    : undefined;
   if (
     useSelectedModel &&
     !state.unknown &&
@@ -107,24 +137,31 @@ export async function continueFailed(
     (!message.attemptId || !this.snapshot.model)
   )
     throw new Error("此记录缺少恢复身份或尚未选择模型，请刷新任务并选择模型。");
-  const client = this.client!;
   const params: JsonRecord = {
-    threadId: this.snapshot.threadId,
+    threadId,
     input: [],
     retryFromTurnId: message.turnId,
     retryFromAttemptId: message.attemptId ?? message.turnId,
-    retryOperationId: `retry:${this.snapshot.threadId}:${message.attemptId || message.turnId}`,
+    retryOperationId: `retry:${threadId}:${message.attemptId || message.turnId}`,
   };
+  if (useCurrentConfiguration) params.retryModelConfiguration = "current";
+  if (applyCurrentPermission) {
+    Object.assign(params, permissionParams(permissionMode, client));
+  }
   this.patch({ continuationPending: messageId, error: null });
   try {
-    if (useSelectedModel && !state.unknown) {
-      params.retryModelConfiguration = "current";
-      const model = await negotiateModelSelector(client, this.snapshot.model);
+    if (useCurrentConfiguration) {
+      const model = await negotiateModelSelector(client, modelSelector);
       if (!model) throw new Error("请选择可用模型后再使用当前配置继续。");
       params.model = model;
-      if (this.snapshot.reasoningEffort)
-        params.reasoningEffort = this.snapshot.reasoningEffort;
+      if (reasoningEffort) params.reasoningEffort = reasoningEffort;
     }
+    if (
+      this.disposed ||
+      this.snapshot.threadId !== threadId ||
+      this.clientGeneration !== clientGeneration
+    )
+      throw new Error("任务连接已变化，请重新发起恢复操作。");
     const recoverClient = async () => {
       if (this.disposed) throw new Error("会话已关闭");
       if (this.client && this.snapshot.connected) return this.client;
@@ -179,6 +216,8 @@ export async function continueFailed(
     // attempts instead of synthesizing success or copying the user's input.
     if (submitted.recovered && finished) {
       const generation = this.clientGeneration;
+      const identity = transcriptReadIdentityKey(this.snapshot);
+      const completedRevision = this.completedTranscriptRevision;
       const history = await readHistoryPage(
         submitted.client,
         this.snapshot.threadId,
@@ -186,16 +225,25 @@ export async function continueFailed(
       if (
         !this.disposed &&
         this.clientGeneration === generation &&
+        this.client === submitted.client && transcriptReadIdentityKey(this.snapshot) === identity &&
         !this.snapshot.running
-      )
+      ) {
+        publishConfirmedHistoryPage(this, history.sourcePage, completedRevision, () =>
+          !this.disposed && this.clientGeneration === generation && this.client === submitted.client &&
+          transcriptReadIdentityKey(this.snapshot) === identity);
         this.patch({
           messages: mergeReconciledMessages(
             history.messages,
-            this.snapshot.messages,
+            !transcriptReadIdentityMatches(this.snapshot, history)
+              ? historyResetTail(this.snapshot, history.messages) : this.snapshot.messages,
           ),
+          transcriptSnapshotV1: history.transcriptSnapshotV1,
+          transcriptObservationV1: history.transcriptObservationV1,
           hasMoreBefore: history.hasMoreBefore,
           beforeCursor: history.beforeCursor,
+          loadingOlder: false,
         });
+      }
     }
   } catch (error) {
     if (!this.disposed)
@@ -224,14 +272,25 @@ export async function acceptanceClient(
   return this.client;
 }
 
+/** The original authoritative read, never the merged/optimistic snapshot. */
+export interface AcceptanceHistoryRead {
+  readonly client: GatewayRpcClient;
+  readonly clientGeneration: number;
+  readonly threadId: string;
+  readonly turnId: string;
+  readonly page: Awaited<ReturnType<typeof readHistoryPage>> | null;
+}
+
 export async function acceptOrdinaryResult(
   this: TaskRuntime,
   result: TurnStartResult,
   client: GatewayRpcClient,
   recovered: boolean,
   optimisticMessageId?: string,
-): Promise<void> {
-  if (this.disposed) return;
+  isCurrentOwner?: () => boolean,
+): Promise<AcceptanceHistoryRead | undefined> {
+  const isCurrent = isCurrentOwner === undefined ? () => true : isCurrentOwner;
+  if (this.disposed || !isCurrent()) return;
   const turn = result.turn!;
   const finished =
     this.finishedAttempts.has(turn.attemptId ?? turn.id!) ||
@@ -255,26 +314,44 @@ export async function acceptOrdinaryResult(
   });
   if (recovered && finished) {
     const generation = this.clientGeneration;
+    const threadId = this.snapshot.threadId;
+    const identity = transcriptReadIdentityKey(this.snapshot);
+    const completedRevision = this.completedTranscriptRevision;
+    const evidence = (page: AcceptanceHistoryRead["page"]): AcceptanceHistoryRead => ({
+      client, clientGeneration: generation, threadId, turnId: turn.id!, page,
+    });
+    const current = () => !this.disposed && isCurrent() &&
+      this.clientGeneration === generation && this.client === client && this.snapshot.threadId === threadId;
     try {
-      const history = await readHistoryPage(client, this.snapshot.threadId);
-      if (
-        !this.disposed &&
-        this.clientGeneration === generation &&
-        !this.snapshot.running
-      )
+      const history = await readHistoryPage(client, threadId);
+      if (history.thread && history.thread.id !== threadId)
+        throw new MobileRpcError("History returned another thread", -1, "protocol");
+      if (!current()) return;
+      if (transcriptReadIdentityKey(this.snapshot) !== identity) return evidence(null);
+      publishConfirmedHistoryPage(this, history.sourcePage, completedRevision, () =>
+        current() && transcriptReadIdentityKey(this.snapshot) === identity);
+      if (!this.snapshot.running)
         this.patch({
           messages: mergeReconciledMessages(
             history.messages,
-            this.snapshot.messages,
+            !transcriptReadIdentityMatches(this.snapshot, history)
+              ? historyResetTail(this.snapshot, history.messages) : this.snapshot.messages,
           ),
+          transcriptSnapshotV1: history.transcriptSnapshotV1,
+          transcriptObservationV1: history.transcriptObservationV1,
           hasMoreBefore: history.hasMoreBefore,
           beforeCursor: history.beforeCursor,
+          loadingOlder: false,
         });
+      return evidence(history);
     } catch {
-      if (!this.disposed && this.clientGeneration === generation)
-        this.patch({
-          error: "执行已确认，但完整记录读取失败，请重新连接以刷新记录。",
-        });
+      if (!current()) return;
+      this.patch({
+        error: "执行已确认，但完整记录读取失败，请重新连接以刷新记录。",
+      });
+      // An attempted but failed read is distinct from no read. Its caller
+      // retains recovery instead of immediately repeating the same request.
+      return evidence(null);
     }
   }
 }
@@ -300,6 +377,8 @@ export async function startOrdinaryTurn(
   params: JsonRecord,
   optimisticMessageId?: string,
 ): Promise<TurnStartResult> {
+  if (this.snapshot.transcriptActionPending && this.transcriptActionSendId !== params.clientMessageId)
+    throw new MobileRpcError(t("task.transcript_action_unsettled"), -1, "transport", "not-sent");
   const clientMessageId =
     typeof params.clientMessageId === "string" &&
     params.clientMessageId.trim().length > 0
@@ -396,11 +475,33 @@ export async function startOrdinaryTurn(
   }
 }
 
+interface VerifiedAcceptanceReceipt {
+  client: GatewayRpcClient;
+  clientGeneration: number;
+  result: TurnStartResult;
+  threadId: string;
+  clientMessageId: string;
+  isCurrent: () => boolean;
+}
+
+export function reconcileSendAcceptance(this: TaskRuntime): Promise<void>;
+export function reconcileSendAcceptance(
+  this: TaskRuntime,
+  verifiedReceipt: VerifiedAcceptanceReceipt,
+): Promise<AcceptanceHistoryRead | undefined>;
 export async function reconcileSendAcceptance(
   this: TaskRuntime,
-): Promise<void> {
+  verifiedReceipt?: VerifiedAcceptanceReceipt,
+): Promise<AcceptanceHistoryRead | void> {
   if (!this.uncertainSend || this.snapshot.acceptanceChecking) return;
   const uncertainSend = this.uncertainSend;
+  if (verifiedReceipt && (!verifiedReceipt.isCurrent() ||
+      verifiedReceipt.client !== this.client ||
+      verifiedReceipt.clientGeneration !== this.clientGeneration ||
+      verifiedReceipt.threadId !== this.snapshot.threadId ||
+      verifiedReceipt.threadId !== uncertainSend.threadId ||
+      verifiedReceipt.clientMessageId !== uncertainSend.clientMessageId))
+    throw new MobileRpcError("Acceptance recovery owner changed", -1, "transport", "not-sent");
   const clientMessageId = uncertainSend.clientMessageId;
   const optimisticMessageId =
     typeof clientMessageId === "string"
@@ -412,14 +513,17 @@ export async function reconcileSendAcceptance(
       : undefined;
   this.patch({ acceptanceChecking: true });
   try {
-    const client = await this.acceptanceClient();
-    const result = await readTurnReceipt(client, uncertainSend);
-    await this.acceptOrdinaryResult(
+    const client = verifiedReceipt?.client ?? await this.acceptanceClient();
+    const result = verifiedReceipt?.result ?? await readTurnReceipt(client, uncertainSend);
+    const accepted = await this.acceptOrdinaryResult(
       result,
       client,
       true,
       optimisticMessageId,
+      verifiedReceipt?.isCurrent,
     );
+    if (!this.disposed && !this.snapshot.sendAcceptanceUnknown && (!verifiedReceipt || verifiedReceipt.isCurrent())) await reconcileInitialLegacyAcceptance(this, uncertainSend, result).catch(() => {});
+    return accepted;
   } catch (error) {
     if (!this.disposed)
       this.patch({
@@ -429,6 +533,60 @@ export async function reconcileSendAcceptance(
   } finally {
     if (!this.disposed) this.patch({ acceptanceChecking: false });
   }
+}
+
+/** A receipt proves acceptance, not transcript visibility. Keep the durable
+ * recovery row until one bounded authoritative page covers this exact input. */
+export async function reconcileSubmissionHistory(
+  this: TaskRuntime,
+  client: GatewayRpcClient,
+  receipt: TurnStartResult,
+  expected: { threadId: string; clientMessageId: string; content: string; attachments: StagedAttachment[] },
+  isCurrent: () => boolean,
+  priorRead?: AcceptanceHistoryRead,
+): Promise<boolean> {
+  const generation = this.clientGeneration;
+  const identity = transcriptReadIdentityKey(this.snapshot);
+  const completedRevision = this.completedTranscriptRevision;
+  const current = () => !this.disposed && isCurrent() &&
+    this.clientGeneration === generation && this.client === client &&
+    this.snapshot.threadId === expected.threadId;
+  if (!current() || !receipt.turn?.id) return false;
+  if (priorRead && (priorRead.client !== client || priorRead.clientGeneration !== generation ||
+      priorRead.threadId !== expected.threadId || priorRead.turnId !== receipt.turn.id)) return false;
+  const history = priorRead ? priorRead.page : await readHistoryPage(client, expected.threadId);
+  if (!current() || !history || transcriptReadIdentityKey(this.snapshot) !== identity) return false;
+  if (priorRead && transcriptReadIdentityKey(history) !== null && identity !== null &&
+      !transcriptReadIdentityMatches(this.snapshot, history)) return false;
+  if (history.thread && history.thread.id !== expected.threadId)
+    throw new MobileRpcError("History returned another thread", -1, "protocol");
+  const matches = history.messages.filter(message => {
+    if (message.role !== "user" || message.content !== expected.content) return false;
+    const clientMessageId = messageClientMessageId(message);
+    if (clientMessageId && clientMessageId !== expected.clientMessageId) return false;
+    if (message.turnId && message.turnId !== receipt.turn!.id) return false;
+    if (clientMessageId !== expected.clientMessageId && message.turnId !== receipt.turn!.id) return false;
+    const paths = message.attachments?.map(attachment => attachment.path) ?? [];
+    return paths.length === expected.attachments.length &&
+      paths.every((path, index) => path === expected.attachments[index].path);
+  });
+  if (matches.length !== 1) return false;
+  if (!priorRead) publishConfirmedHistoryPage(this, history.sourcePage, completedRevision, () =>
+    current() && transcriptReadIdentityKey(this.snapshot) === identity);
+  // Preserve expanded coverage only while the page identity remains compatible.
+  // Acceptance itself never synthesizes a user row or orders live events.
+  const changed = !transcriptReadIdentityMatches(this.snapshot, history);
+  // OR-compatible pages may still replace the exact owner of a pending read.
+  const readOwnerChanged = transcriptReadIdentityKey(history) !== identity;
+  this.patch({
+    messages: mergeReconciledMessages(history.messages,
+      changed ? historyResetTail(this.snapshot, history.messages) : this.snapshot.messages),
+    transcriptSnapshotV1: history.transcriptSnapshotV1,
+    transcriptObservationV1: history.transcriptObservationV1,
+    ...(changed ? { hasMoreBefore: history.hasMoreBefore, beforeCursor: history.beforeCursor } : {}),
+    ...(changed || readOwnerChanged ? { loadingOlder: false } : {}),
+  });
+  return true;
 }
 
 function messageClientMessageId(message: ChatMessage): string | undefined {
@@ -446,6 +604,10 @@ export async function send(
 ): Promise<void> {
   if (attachments === undefined) attachments = [];
   if (options === undefined) options = {};
+  await assertNoTranscriptAction(this);
+  const permissionMode = Object.prototype.hasOwnProperty.call(options, "permissionMode")
+    ? options.permissionMode
+    : this.snapshot.permissionMode ?? "default";
   const command = /^\/(moa-plan|moa)\s+([\s\S]+)$/.exec(content.trim());
   if (command) {
     turnMode = command[1] as "moa" | "moa-plan";
@@ -479,6 +641,7 @@ export async function send(
     throw new Error("当前回合仍在运行，请将消息加入发送队列");
   if (this.snapshot.archivedAt)
     throw new Error("任务已归档，请先恢复后再发送消息");
+  const turnPermission = permissionParams(permissionMode, this.client);
   if (!this.client) {
     const user: ChatMessage = {
       id: `demo-user-${Date.now()}`,
@@ -513,21 +676,14 @@ export async function send(
     timestampMs: Date.now(),
     attachments,
   };
-  this.pendingInteractions = [];
   this.patch({
     messages: [...this.snapshot.messages, user],
     running: true,
-    interaction: null,
     error: null,
   });
   let enteredTurnStart = false;
   try {
-    const wirePrompt =
-      attachments.length > 0
-        ? `${prompt}\n\n<kcoder_attachments version="1">\n${attachments
-            .map((attachment) => JSON.stringify(attachment))
-            .join("\n")}\n</kcoder_attachments>`
-        : prompt;
+    const wirePrompt = legacyAttachmentPrompt(prompt, attachments);
     const wireModel = await negotiateModelSelector(
       this.client,
       this.snapshot.model,
@@ -544,6 +700,7 @@ export async function send(
       {
         threadId: this.snapshot.threadId,
         input: [{ type: "text", text: wirePrompt }],
+        ...turnPermission,
         ...(turnMode ? { turnMode } : {}),
         ...(wireModel ? { model: wireModel } : {}),
         ...(this.snapshot.reasoningEffort

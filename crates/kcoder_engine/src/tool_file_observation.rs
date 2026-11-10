@@ -43,11 +43,14 @@ pub(super) fn should_track_shell_file_changes(tool_name: &str, input: &Value) ->
             .get("run_in_background")
             .and_then(Value::as_bool)
             .unwrap_or(false)
-        && !(tool_name == "bash"
-            && input
-                .get("command")
-                .and_then(Value::as_str)
-                .is_some_and(classify_bash_read_only))
+        && !input
+            .get("command")
+            .and_then(Value::as_str)
+            .is_some_and(|command| match tool_name {
+                "bash" => classify_bash_read_only(command),
+                "PowerShell" => kcoder_permissions::classify_powershell_read_only(command),
+                _ => false,
+            })
 }
 
 pub(super) fn is_shell_tool_name(tool_name: &str) -> bool {

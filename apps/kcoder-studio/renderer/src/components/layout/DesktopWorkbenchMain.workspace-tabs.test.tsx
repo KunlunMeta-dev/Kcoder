@@ -1,8 +1,12 @@
+// Preload the actual deferred panel so this fixture measures behavior, not transform latency.
+import './workspace-panels/FileWorkspacePanel'
+import { installTestDesktopHost, clearTestTransports } from '@/test/runtime-transport'
 import { getDesktopWorkbenchHoistedMocks } from './DesktopWorkbenchLayout.test-mocks'
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, test, vi } from 'vitest'
 import type { RuntimeTaskAddress } from '@/types/api'
+import { notifyAccountContextChange } from '@/kcoder/accountContextEvents'
 import {
   DesktopWorkbenchLayout,
   baseProps,
@@ -22,9 +26,23 @@ import {
   renderWorkspacePanelLayout,
 } from './DesktopWorkbenchMain.workspace.test-support'
 
-const { tauriMenuMocks } = getDesktopWorkbenchHoistedMocks()
+const { desktopMenuMocks } = getDesktopWorkbenchHoistedMocks()
 
 describe('DesktopWorkbenchLayout', () => {
+  test('invalidates both workspace storage formats for the changed target only', () => {
+    renderWorkspacePanelLayout()
+    const currentKey = 'kcoder.desktop.pane-workspace.v1:runtime:alpha:task'
+    const legacyKey = 'wework.desktop.pane-workspace.v1:runtime:alpha:task'
+    const otherKey = 'wework.desktop.pane-workspace.v1:runtime:alpha-other:task'
+    for (const key of [currentKey, legacyKey, otherKey]) localStorage.setItem(key, '{}')
+
+    act(() => notifyAccountContextChange('alpha'))
+
+    expect(localStorage.getItem(currentKey)).toBeNull()
+    expect(localStorage.getItem(legacyKey)).toBeNull()
+    expect(localStorage.getItem(otherKey)).toBe('{}')
+  })
+
   test('opens and resizes the right workspace panel', async () => {
     renderWorkspacePanelLayout({ mainWidth: 1000 })
 
@@ -143,18 +161,24 @@ describe('DesktopWorkbenchLayout', () => {
     await userEvent.click(screen.getByTestId('settings-button'))
     await userEvent.click(screen.getByTestId('settings-menu-button'))
 
-    expect(screen.getByTestId('studio-settings-page')).toBeInTheDocument()
+    // Settings pages are lazy-loaded; allow the first cold module import to settle.
+    expect(
+      await screen.findByTestId('studio-settings-page', {}, { timeout: 15000 })
+    ).toBeInTheDocument()
     expect(screen.getByTestId('workspace-browser-panel')).toHaveClass('hidden')
 
     await userEvent.click(screen.getByTestId('settings-back-button'))
+    // Leaving settings keeps the page retained but hidden and inert.
     await waitFor(() =>
-      expect(screen.queryByTestId('studio-settings-page')).not.toBeInTheDocument()
+      expect(
+        screen.getByTestId('studio-settings-page').closest('[data-retained-page]')
+      ).toHaveAttribute('data-retained-page', 'hidden')
     )
     await userEvent.click(screen.getByTestId('right-workspace-browser-tab-close-button'))
     await waitFor(() =>
       expect(screen.queryByTestId('right-workspace-browser-tab')).not.toBeInTheDocument()
     )
-  })
+  }, 20000)
 
   test('preserves the browser tab after closing and reopening the right workspace area', async () => {
     renderWorkspacePanelLayout()
@@ -199,14 +223,12 @@ describe('DesktopWorkbenchLayout', () => {
     await userEvent.type(screen.getByTestId('workspace-browser-url-input'), 'example.com{Enter}')
     expect(screen.getByTestId('workspace-browser-url-input')).toHaveValue('https://example.com/')
 
-    await waitFor(() =>
-      expect(
-        [...Array(localStorage.length).keys()]
-          .map(index => localStorage.key(index))
-          .some(key => key?.startsWith('wework.desktop.pane-workspace.v1:'))
-      ).toBe(true)
-    )
+    const currentKey = 'kcoder.desktop.pane-workspace.v1:blank'
+    const legacyKey = 'wework.desktop.pane-workspace.v1:blank:0'
+    await waitFor(() => expect(localStorage.getItem(currentKey)).not.toBeNull())
     first.unmount()
+    localStorage.setItem(legacyKey, localStorage.getItem(currentKey)!)
+    localStorage.removeItem(currentKey)
 
     renderWorkspacePanelLayout({ standaloneChatKey: 0 })
 
@@ -219,6 +241,12 @@ describe('DesktopWorkbenchLayout', () => {
       'true'
     )
     expect(screen.getByTestId('workspace-browser-url-input')).toHaveValue('https://example.com/')
+    await userEvent.click(screen.getByTestId('toggle-right-workspace-panel-button'))
+    expect(JSON.parse(localStorage.getItem(currentKey) ?? '{}')).toMatchObject({
+      rightPanelOpen: false,
+      browserUrl: 'https://example.com/',
+    })
+    expect(localStorage.getItem(legacyKey)).toBeNull()
   })
 
   test('resizes the browser area while dragging and collapses the right panel at the edge', async () => {
@@ -340,14 +368,13 @@ describe('DesktopWorkbenchLayout', () => {
     )
   })
 
-  test('opens the right workspace new tab menu as an anchored popup in Tauri', async () => {
+  test('opens the right workspace new tab menu as an anchored popup in Gateway', async () => {
     renderWorkspacePanelLayout()
 
     await userEvent.click(screen.getByTestId('toggle-right-workspace-panel-button'))
     await userEvent.click(screen.getByTestId('right-workspace-browser-option'))
 
     const newTabButton = screen.getByTestId('right-workspace-new-tab-button')
-    ;(window as typeof window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ = {}
 
     await userEvent.click(newTabButton)
 
@@ -357,10 +384,10 @@ describe('DesktopWorkbenchLayout', () => {
     expect(within(menu).getByTestId('right-workspace-terminal-option')).toHaveTextContent('终端')
     expect(within(menu).queryByTestId('right-workspace-browser-option')).not.toBeInTheDocument()
     expect(within(menu).getByTestId('right-workspace-file-option')).toHaveTextContent('文件')
-    expect(tauriMenuMocks.menuNew).not.toHaveBeenCalled()
-    expect(tauriMenuMocks.menuPopup).not.toHaveBeenCalled()
+    expect(desktopMenuMocks.menuNew).not.toHaveBeenCalled()
+    expect(desktopMenuMocks.menuPopup).not.toHaveBeenCalled()
 
-    delete (window as typeof window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__
+    clearTestTransports()
     await userEvent.click(screen.getByTestId('right-workspace-browser-tab-close-button'))
     await waitFor(() =>
       expect(screen.queryByTestId('right-workspace-browser-tab')).not.toBeInTheDocument()
@@ -464,7 +491,7 @@ describe('DesktopWorkbenchLayout', () => {
     expect(rightPanelShell).toHaveStyle({ width: '0px' })
     expect(screen.queryByTestId('right-workspace-panel')).not.toBeInTheDocument()
     expect(screen.getByTestId('desktop-floating-composer-layer')).toHaveClass(
-      'w-[min(46rem,calc(100%_-_2rem))]',
+      'w-[min(var(--kcoder-chat-column-width,59.8rem),calc(100%_-_2rem))]',
       'min-w-0',
       'max-w-[calc(100%_-_2rem)]'
     )
@@ -501,14 +528,14 @@ describe('DesktopWorkbenchLayout', () => {
       'ease-out'
     )
     expect(screen.getByTestId('desktop-floating-composer-layer')).toHaveClass(
-      'w-[min(46rem,calc(100%_-_2rem))]',
+      'w-[min(var(--kcoder-chat-column-width,59.8rem),calc(100%_-_2rem))]',
       'min-w-0',
       'max-w-[calc(100%_-_2rem)]'
     )
     expect(screen.getByTestId('desktop-chat-scroll-content').firstElementChild).toHaveClass(
-      'w-[min(46rem,calc(100%_-_6rem))]',
+      'w-[min(var(--kcoder-chat-column-width,59.8rem),calc(100%_-_2rem))]',
       'min-w-0',
-      'max-w-[calc(100%_-_6rem)]',
+      'max-w-[calc(100%_-_2rem)]',
       'px-0'
     )
   })
@@ -681,13 +708,8 @@ describe('DesktopWorkbenchLayout', () => {
     await waitFor(() => expect(unsubscribe).toHaveBeenCalledTimes(1))
   })
 
-  test('moves right workspace tabs into the titlebar in Tauri', async () => {
-    const previousTauriInternals = (window as typeof window & { __TAURI_INTERNALS__?: unknown })
-      .__TAURI_INTERNALS__
-    Object.defineProperty(window, '__TAURI_INTERNALS__', {
-      configurable: true,
-      value: {},
-    })
+  test('moves right workspace tabs into the titlebar in Gateway', async () => {
+    installTestDesktopHost()
 
     try {
       renderWorkspacePanelLayout({ mainWidth: 1000 })
@@ -705,7 +727,7 @@ describe('DesktopWorkbenchLayout', () => {
         'h-full'
       )
       expect(screen.getByTestId('titlebar-right-workspace-zone')).toHaveClass('border-l')
-      expect(screen.getByTestId('titlebar-actions')).toHaveClass('min-w-[5rem]')
+      expect(screen.getByTestId('titlebar-actions')).toHaveClass('min-w-[7.5rem]')
       expect(screen.getByTestId('titlebar-actions')).toContainElement(
         screen.getByTestId('toggle-right-workspace-panel-button')
       )
@@ -725,7 +747,7 @@ describe('DesktopWorkbenchLayout', () => {
       expect(titlebarRightPanel).toContainElement(rightTitlebarDragRegion)
       expect(
         within(rightTitlebarDragRegion).getByTestId('macos-titlebar-drag-region')
-      ).toHaveAttribute('data-tauri-drag-region')
+      ).toHaveAttribute('data-kcoder-drag-region')
       expect(screen.getByTestId('right-workspace-file-tab')).not.toContainElement(
         rightTitlebarDragRegion
       )
@@ -736,24 +758,12 @@ describe('DesktopWorkbenchLayout', () => {
       await userEvent.click(screen.getByTestId('right-workspace-new-tab-button'))
       expect(screen.getByTestId('right-workspace-new-tab-menu')).toBeInTheDocument()
     } finally {
-      if (previousTauriInternals === undefined) {
-        delete (window as typeof window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__
-      } else {
-        Object.defineProperty(window, '__TAURI_INTERNALS__', {
-          configurable: true,
-          value: previousTauriInternals,
-        })
-      }
+      clearTestTransports()
     }
   })
 
-  test('removes right workspace tabs from the titlebar when the Tauri panel is closed', async () => {
-    const previousTauriInternals = (window as typeof window & { __TAURI_INTERNALS__?: unknown })
-      .__TAURI_INTERNALS__
-    Object.defineProperty(window, '__TAURI_INTERNALS__', {
-      configurable: true,
-      value: {},
-    })
+  test('removes right workspace tabs from the titlebar when the Gateway panel is closed', async () => {
+    installTestDesktopHost()
 
     try {
       renderWorkspacePanelLayout({ mainWidth: 1000 })
@@ -773,30 +783,29 @@ describe('DesktopWorkbenchLayout', () => {
       expect(rightPanelShell).toContainElement(screen.getByTestId('right-workspace-file-tab'))
       expect(await screen.findByTestId('workspace-file-tree')).toBeInTheDocument()
     } finally {
-      if (previousTauriInternals === undefined) {
-        delete (window as typeof window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__
-      } else {
-        Object.defineProperty(window, '__TAURI_INTERNALS__', {
-          configurable: true,
-          value: previousTauriInternals,
-        })
-      }
+      clearTestTransports()
     }
   })
 
-  test('does not show inactive runtime task right workspace tabs in the Tauri titlebar', async () => {
-    const previousTauriInternals = (window as typeof window & { __TAURI_INTERNALS__?: unknown })
-      .__TAURI_INTERNALS__
-    Object.defineProperty(window, '__TAURI_INTERNALS__', {
-      configurable: true,
-      value: {},
-    })
+  test('does not show inactive runtime task right workspace tabs in the Gateway titlebar', async () => {
+    installTestDesktopHost()
 
     const { propsForTask, taskA, taskB } = createLocalRuntimeTaskPanelFixture()
 
     try {
       mockDesktopWorkbenchMainWidth(1000)
       const { rerender } = render(<DesktopWorkbenchLayout {...propsForTask(taskA)} />)
+
+      // DOM clicks bypass Electron's native hit testing; assert its region contract too.
+      for (const actions of [
+        screen.getByTestId('titlebar-main-actions'),
+        screen.getByTestId('titlebar-actions'),
+      ]) {
+        for (const button of within(actions).getAllByRole('button')) {
+          expect(button).toHaveClass('[-webkit-app-region:no-drag]')
+        }
+      }
+      expect(screen.getAllByTestId('macos-titlebar-drag-region').length).toBeGreaterThan(0)
 
       await userEvent.click(screen.getByTestId('toggle-right-workspace-panel-button'))
       await userEvent.click(screen.getByTestId('right-workspace-file-option'))
@@ -815,14 +824,7 @@ describe('DesktopWorkbenchLayout', () => {
       expect(screen.getByTestId('workbench-pane-task-title')).not.toHaveTextContent('Task A')
       expect(within(titlebarRightPanel).queryByTestId('right-workspace-file-tab')).toBeNull()
     } finally {
-      if (previousTauriInternals === undefined) {
-        delete (window as typeof window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__
-      } else {
-        Object.defineProperty(window, '__TAURI_INTERNALS__', {
-          configurable: true,
-          value: previousTauriInternals,
-        })
-      }
+      clearTestTransports()
     }
   })
 

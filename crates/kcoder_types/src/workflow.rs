@@ -1,5 +1,8 @@
 //! Portable saved-workflow data; execution and persistence belong to kcoder_workflow.
 use serde::{Deserialize, Serialize};
+#[path = "workflow/collaboration.rs"]
+mod collaboration;
+pub use collaboration::*;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "json-schema", derive(schemars::JsonSchema))]
@@ -438,6 +441,15 @@ fn default_failure_attempts() -> u8 {
 #[cfg_attr(feature = "json-schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct WorkflowNodeConfig {
+    /// Explicit per-node model intent; resolved by the existing native Agent runner.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_selection: Option<WorkflowAgentModelSelection>,
+    /// Machine-checked file declarations, separate from expectedArtifacts prose.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub artifact_requirements: Vec<WorkflowArtifactRequirement>,
+    /// Enables additional collaboration invariants; never grants permissions.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub collaboration_role: Option<WorkflowCollaborationRoleContract>,
     /// Required named inputs resolved from /input or /nodes/<direct dependency>.
     /// Missing pointers fail before execution. Agents and Code receive context.bindings.
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]

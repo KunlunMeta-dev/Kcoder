@@ -1,0 +1,20 @@
+{
+  "id": "fixture-weekly-summary",
+  "title": "合成项目周报",
+  "workflowId": "fixture-approved-workflow",
+  "workflowVersion": 1,
+  "inputs": {
+    "project": "synthetic-project"
+  },
+  "schedule": {
+    "kind": "zoned_cron",
+    "expression": "0 9 * * 1",
+    "timezone": "Asia/Shanghai"
+  },
+  "eventSource": null,
+  "maximumTokens": 5000,
+  "maximumRuntimeSeconds": 120,
+  "delivery": {
+    "kind": "studio"
+  }
+}

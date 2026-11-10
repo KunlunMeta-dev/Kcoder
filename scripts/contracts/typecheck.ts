@@ -11,7 +11,63 @@ import {
   type McpServerSummary,
   type WikiPipelineProgress,
   type WikiPipelineStageRecord,
+  type WorkflowCollaborationPlan,
+  type TaskWorkspaceSnapshot,
+  type IntegrationTaskCapabilityScopeSnapshot,
+  type AgentStreamSubscribeParams,
+  type AgentStreamClosedParams,
+  type ContinuousWorkInputSubmitParams,
+  type ContinuousWorkControlParams,
+  type ContinuousWorkControlResult,
+  type ContinuousWorkView,
 } from '../../apps/kcoder-studio/shared/generated/contracts'
+import type { WorkflowCollaborationPlan as LegacyCorePlan } from '../../apps/kcoder-studio/shared/generated/contracts.core.js'
+import type { AgentStreamSubscribeParams as LegacyCoreObserver } from '../../apps/kcoder-studio/shared/generated/contracts.core.js'
+import type {
+  TaskWorkspaceSnapshot as LegacyTaskSnapshot,
+  IntegrationTaskCapabilityScopeSnapshot as LegacyTaskCapabilityScope,
+} from '../../apps/kcoder-studio/shared/generated/contracts.integrations-core.js'
+
+// Domain extraction preserves the established public type import paths.
+const preserveWorkflowImport = (value: WorkflowCollaborationPlan): LegacyCorePlan => value
+const preserveTaskImport = (value: TaskWorkspaceSnapshot): LegacyTaskSnapshot => value
+const preserveSourceImport = (value: IntegrationTaskCapabilityScopeSnapshot): LegacyTaskCapabilityScope => value
+void [preserveWorkflowImport, preserveTaskImport, preserveSourceImport]
+
+const preserveAgentImport = (value: AgentStreamSubscribeParams): LegacyCoreObserver => value
+const oldObserver: AgentStreamSubscribeParams = { threadId: 'parent', agentId: 'child', subscriptionId: 'observer' }
+const originalRun = { parentSessionId: 'parent', agentId: 'child', runId: 'run' }
+const exactObserver: AgentStreamSubscribeParams = { ...oldObserver, expectedBackgroundRun: originalRun }
+const closedObserver: AgentStreamClosedParams = { ...exactObserver, expectedBackgroundRun: originalRun, reasonCode: 'run_changed' }
+// @ts-expect-error The close reason reports observer loss, not worker completion.
+const wrongCloseReason: AgentStreamClosedParams['reasonCode'] = 'completed'
+void [preserveAgentImport, oldObserver, exactObserver, closedObserver, wrongCloseReason]
+
+// Draft continuous work contracts expose no caller-selected authority and keep
+// the original attempt when targeting one run. Status labels remain readable.
+const workInput: ContinuousWorkInputSubmitParams = {
+  threadId: 'thread', workId: 'work', inputId: 'input', requestId: 'request',
+  expectedRevision: 1, text: 'Continue the task',
+}
+const workControl: ContinuousWorkControlParams = {
+  threadId: 'thread', workId: 'work', requestId: 'control', expectedRevision: 2,
+  action: 'cancel_run', target: { kind: 'turn', threadId: 'thread', turnId: 'turn', attemptId: 'attempt' },
+}
+const futureWork: ContinuousWorkView = {
+  threadId: 'thread', workId: 'work', phase: 'future_phase', freshness: 'unknown',
+  revision: 1, requirementsRevision: 1,
+}
+const futureTarget: ContinuousWorkControlResult = {
+  workId: 'work', requestId: 'control', action: 'future_action', state: 'unknown',
+  revision: 3, controlEpoch: 2, target: { kind: 'future_target', opaque: { revision: 1 } },
+}
+// @ts-expect-error An original turn target includes its exact attempt ID.
+const incompleteWorkTarget: ContinuousWorkControlParams['target'] = { kind: 'turn', threadId: 'thread', turnId: 'turn' }
+// @ts-expect-error A client cannot grant itself a different target or account.
+const forgedWorkInput: ContinuousWorkInputSubmitParams = { ...workInput, targetId: 'other-host' }
+// @ts-expect-error A readable future target still requires its original kind.
+const missingTargetKind: ContinuousWorkControlResult['target'] = { opaque: true }
+void [workInput, workControl, futureWork, futureTarget, incompleteWorkTarget, forgedWorkInput, missingTargetKind]
 
 const future: TaskStatus = 'future_review'
 const unicode: TaskStatus = '汉'.repeat(85) + 'a'

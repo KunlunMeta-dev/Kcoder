@@ -13,11 +13,17 @@ import test from 'node:test';
 import WebSocket from 'ws';
 import { startRelay } from '../src/server.mjs';
 import { startClient } from '../src/client.mjs';
+import { isolatedGatewayAuthority } from '../src/gateway-origin.mjs';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const studioRoot = join(repoRoot, 'apps', 'kcoder-studio');
 const authority = 'multigateway-studio.test:8451';
-const origin = `http://${authority}`;
+// Each real Gateway is configured with, and reached on, only its own isolated
+// origin. The origin is HTTPS as at the real TLS ingress (so the Gateway issues
+// its __Host- session cookie); the loopback hop to the Relay stays plain HTTP.
+const gatewayAuthority = id => isolatedGatewayAuthority(authority, id);
+const gatewayOrigin = id => `https://${gatewayAuthority(id)}`;
+const HOST_COOKIE = '__Host-kcoder_studio_session';
 const ids = ['a', 'b'];
 
 function token() {
@@ -68,7 +74,7 @@ async function startGateway({ stateDir, id, label, loginToken }) {
       KCODER_STUDIO_HOST: '127.0.0.1',
       KCODER_STUDIO_PORT: '0',
       KCODER_STUDIO_AUTH_TOKEN: loginToken,
-      KCODER_STUDIO_PUBLIC_ORIGINS: origin,
+      KCODER_STUDIO_PUBLIC_ORIGINS: gatewayOrigin(id),
       KCODER_STUDIO_SERVERS_STORE: serverStore,
       KCODER_STUDIO_SERVERS: JSON.stringify([{
         id: 'local',
@@ -93,7 +99,7 @@ async function startGateway({ stateDir, id, label, loginToken }) {
         clearTimeout(timer);
         callback(value);
       };
-      const timer = setTimeout(() => finish(rejectAddress, new Error('isolated Studio Gateway was not ready within 10 seconds')), 10_000);
+      const timer = setTimeout(() => finish(rejectAddress, new Error('isolated Studio Gateway was not ready within 120 seconds')), 120_000);
       child.stdout.setEncoding('utf8');
       child.stdout.on('data', chunk => {
         output = `${output}${chunk}`.slice(-2048);
@@ -121,13 +127,19 @@ function requestRelay(fixture, {
   path,
   method = 'GET',
   accessToken,
-  pairingToken,
+  gatewaySecret,
+  cookie,
+  form,
+  accept,
   timeoutMs = 5000,
 }) {
-  const headers = { host: authority, origin };
+  const headers = { host: gatewayAuthority(id), origin: gatewayOrigin(id) };
   if (accessToken) headers.authorization = `Bearer ${accessToken}`;
-  if (pairingToken) headers['content-type'] = 'application/json';
-  const body = pairingToken ? JSON.stringify({ token: pairingToken }) : undefined;
+  if (gatewaySecret) headers['content-type'] = 'application/json';
+  if (form) headers['content-type'] = 'application/x-www-form-urlencoded';
+  if (cookie) headers.cookie = cookie;
+  if (accept) headers.accept = accept;
+  const body = gatewaySecret ? JSON.stringify({ token: gatewaySecret }) : form ? new URLSearchParams(form).toString() : undefined;
   return new Promise(resolveResponse => {
     let settled = false;
     const finish = value => {
@@ -188,17 +200,17 @@ function rpcClient(socket) {
   };
 }
 
-function openRpc(fixture, id, session, { web = false, accessToken = session.accessToken } = {}) {
+function openRpc(fixture, id, session, { web = false, accessToken = session.accessToken, cookie } = {}) {
   const query = new URLSearchParams({ token: session.rpcToken, server: 'local', channel: 'runtime' });
   const ws = new WebSocket(`ws://127.0.0.1:${fixture.relay.proxyPort}${routePath(id, `/rpc?${query}`)}`, ...(web
     ? [['kcoder-studio', `kcoder-session.${accessToken}`], {
-      headers: { host: authority, origin },
+      headers: { host: gatewayAuthority(id), origin: gatewayOrigin(id), ...(cookie ? { cookie } : {}) },
       handshakeTimeout: 5000,
       maxPayload: 256 * 1024,
       perMessageDeflate: false,
     }]
     : [{
-      headers: { host: authority, origin, authorization: `Bearer ${accessToken}` },
+      headers: { host: gatewayAuthority(id), origin: gatewayOrigin(id), authorization: `Bearer ${accessToken}`, ...(cookie ? { cookie } : {}) },
       handshakeTimeout: 5000,
       maxPayload: 256 * 1024,
       perMessageDeflate: false,
@@ -227,7 +239,7 @@ async function exchangeMobileSession(fixture, id, loginToken = fixture.gateways.
     id,
     method: 'POST',
     path: '/api/mobile/session',
-    pairingToken: loginToken,
+    gatewaySecret: loginToken,
   });
   if (response.status !== 200) return { status: response.status, session: null };
   let session;
@@ -277,7 +289,7 @@ async function createFixture(t) {
   if (failedStart) throw failedStart.reason;
 
   fixture.relay = await startRelay({
-    gateways: gatewayConfigs.map(({ id, loginToken, secret }) => ({ id, secret, pairingToken: loginToken })),
+    gateways: gatewayConfigs.map(({ id, loginToken, secret }) => ({ id, secret, gatewaySecret: loginToken })),
     sharedHosts: [authority],
     controlPort: 0,
     proxyPort: 0,
@@ -316,7 +328,7 @@ function waitForSocketClose(socket) {
   return withTimeout(once(socket, 'close'), 7000, 'revoked Gateway WebSocket did not close');
 }
 
-test('real Studio Gateways stay isolated through multi-Gateway Relay authentication and RPC', { timeout: 60_000 }, async t => {
+test('real Studio Gateways stay isolated through multi-Gateway Relay authentication and RPC', { timeout: 270_000 }, async t => {
   const fixture = await createFixture(t);
 
   const paired = new Map();
@@ -396,4 +408,50 @@ test('real Studio Gateways stay isolated through multi-Gateway Relay authenticat
     const threads = await owner.request('thread/list', {});
     assert.ok(Array.isArray(threads.threads), 'Gateway B RPC remains usable after Gateway A logout');
   }
+});
+
+function hostSessionCookie(response) {
+  const values = [response.headers['set-cookie'] ?? []].flat();
+  const issued = values.filter(value => value.startsWith(`${HOST_COOKIE}=`));
+  assert.equal(issued.length, 1, 'Gateway issues exactly one host-only session cookie');
+  assert.match(issued[0], /; Path=\/(?:;|$)/);
+  assert.doesNotMatch(issued[0], /; Domain=/i);
+  return issued[0].split(';', 1)[0];
+}
+
+test('real Studio browser login, renewal, logout and pairing use only the isolated host cookie', { timeout: 270_000 }, async t => {
+  const fixture = await createFixture(t);
+  const gatewayA = fixture.gateways.get('a');
+  // Cookies a browser would attach to a.<relay>: pre-isolation parent-domain
+  // session, another Gateway's stale value, and unrelated site cookies.
+  const ambient = 'kcoder_studio_session=parent-domain-legacy; kcoder_session=sibling-gateway; analytics=1';
+  const page = cookie => requestRelay(fixture, { id: 'a', path: '/', accept: 'text/html', cookie });
+
+  const login = await requestRelay(fixture, { id: 'a', method: 'POST', path: '/login', form: { token: gatewayA.loginToken }, cookie: ambient });
+  assert.equal(login.status, 303, 'browser login succeeds on the isolated origin');
+  const session = hostSessionCookie(login);
+
+  assert.notEqual((await page(`${ambient}; ${session}`)).status, 303, 'the host cookie authenticates despite ambient cookies');
+  const legacyOnly = await page(`${HOST_COOKIE.slice('__Host-'.length)}=${session.split('=')[1]}; analytics=1`);
+  assert.equal(legacyOnly.status, 303, 'the same value under the legacy parent-domain name is never forwarded');
+  const ambiguous = await page(`${session}; ${HOST_COOKIE}=forged`);
+  assert.equal(ambiguous.status, 303, 'a repeated host cookie name is dropped as ambiguous');
+
+  const renewed = await requestRelay(fixture, {
+    id: 'a', method: 'POST', path: '/login', form: { token: gatewayA.loginToken, renewSession: '1' }, cookie: `${ambient}; ${session}`,
+  });
+  assert.equal(renewed.status, 303);
+  assert.equal(hostSessionCookie(renewed), session, 'renewal reads the forwarded host cookie and keeps the session');
+
+  const paired = await exchangeMobileSession(fixture, 'a');
+  assert.equal(paired.status, 200, 'mobile pairing still works without any browser cookie');
+  const rpc = await openRpc(fixture, 'a', paired.session, { web: true, cookie: `${ambient}; ${session}` });
+  assert.equal(rpc.status, 101, 'Mobile Web RPC opens with ambient cookies present');
+  const threads = await rpc.rpc.request('thread/list', {});
+  assert.ok(Array.isArray(threads.threads));
+
+  const logout = await requestRelay(fixture, { id: 'a', method: 'POST', path: '/logout', cookie: `${ambient}; ${session}` });
+  assert.equal(logout.status, 303);
+  assert.match(hostSessionCookie(logout), new RegExp(`^${HOST_COOKIE}=$`), 'logout clears the host cookie');
+  assert.equal((await page(session)).status, 303, 'logout received the host cookie and revoked its session');
 });

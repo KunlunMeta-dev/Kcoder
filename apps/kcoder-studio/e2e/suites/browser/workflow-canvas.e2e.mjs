@@ -70,6 +70,29 @@ await runE2E(import.meta.url, {
     await page.getByTestId('workflow-conversation-canvas').waitFor();
     await page.getByTestId('message-user').filter({hasText:'Build A, then B depending on A.'}).waitFor();
     assert.equal(await page.getByTestId('workflow-node-B').count(), 0);
+    phase = 'generation-view-recovery';
+    const originalTaskUrl = page.url();
+    const originalTaskId = new URL(originalTaskUrl).searchParams.get('taskId');
+    assert.ok(originalTaskId, 'Generation must have an original persistent task');
+    const peer = await browser.newPage({ viewport: { width: 1560, height: 1000 } });
+    try {
+      await peer.goto(originalTaskUrl);
+      await peer.getByTestId('workflow-node-A').waitFor({ timeout: 20000 });
+      await page.goto(`${gateway.baseUrl}/workflows`);
+      await page.waitForTimeout(4200);
+      await page.goto(originalTaskUrl);
+      await page.getByTestId('workflow-node-A').waitFor({ timeout: 20000 });
+      assert.equal(new URL(page.url()).searchParams.get('taskId'), originalTaskId);
+      assert.equal(fixture.observations.filter(item => item.kind === 'agent').length, 0);
+      await page.screenshot({ path: context.pathInArtifacts('generation-after-view-handoff.png') });
+      // Let the restored view establish its existing attachment before the peer leaves.
+      await waitFor(() => page.evaluate(async taskId => {
+        const value = await window.__KCODER_STUDIO_E2E__.invokeRuntimeCommand('local_executor_request', {
+          method: 'runtime.tasks.lifetime.read', params: { taskId },
+        });
+        return value.attachedClients >= 2;
+      }, originalTaskId), 10000, 'both real conversation views attached');
+    } finally { await peer.close(); }
     await page.screenshot({ path: context.pathInArtifacts('first-node-before-second.png') });
     fixture.releaseSecondNode();
     phase = 'second-node';
@@ -109,12 +132,7 @@ await runE2E(import.meta.url, {
     await page.goto(`${gateway.baseUrl}/settings`);
     await page.getByTestId('settings-nav-appearance').click();
     await page.getByTestId('appearance-mode-dark').click();
-    const motionToggle = page.getByTestId('appearance-reduce-motion-toggle');
-    assert.equal(await motionToggle.getAttribute('aria-checked'),'false');
-    await motionToggle.click();
-    await waitFor(()=>page.locator('html').getAttribute('data-reduce-motion').then(value=>value==='true'),5000,'explicit motion preference');
-    await motionToggle.click();
-    await waitFor(()=>page.locator('html').getAttribute('data-reduce-motion').then(value=>value==='false'),5000,'restore default full motion');
+    assert.equal(await page.getByTestId('appearance-reduce-motion-toggle').count(), 0);
     await page.goto(generatedConversationUrl);
     await page.getByTestId('workflow-conversation-canvas').waitFor();
     await page.getByTestId('workflow-node-B').waitFor();
@@ -122,6 +140,7 @@ await runE2E(import.meta.url, {
     await page.screenshot({path:context.pathInArtifacts('conversation-canvas-dark.png')});
 
     phase = 'reuse-from-conversation-card';
+    await page.locator('[data-status-item="workflows"] > button[aria-expanded="false"]').click();
     await page.getByTestId('workflow-card-use').click();
     await waitFor(async () => (await page.getByTestId('chat-message-input').innerText()).includes('definition_id'), 10000, 'saved reference prefilled');
     assert.equal(fixture.observations.filter(item => item.kind === 'agent').length, 0, 'opening a reusable workflow cannot execute it');
@@ -142,6 +161,8 @@ await runE2E(import.meta.url, {
     await waitFor(async()=>await page.getByTestId('workflow-node-B').getAttribute('aria-pressed')==='true',5000,'follow B');
     assert.equal(await page.getByTestId('workflow-node-A').getAttribute('data-run-status'),'completed');
     const runId = await waitFor(()=>fixture.observations.find(item=>item.kind==='run-reference')?.runId,10000,'run reference');
+    await waitFor(() => fixture.observations.filter(item => item.kind === 'agent' && item.node === 'B').length === 1,
+      15000, 'first B request reached the provider before interruption');
     await page.getByTestId('pause-response-button').click();
     await waitFor(async()=>await page.getByTestId('workflow-node-B').getAttribute('data-run-status')==='cancelled',15000,'interrupted node persisted');
     await page.reload();
@@ -154,7 +175,11 @@ await runE2E(import.meta.url, {
     await waitFor(async()=>await page.getByTestId('workflow-node-B').getAttribute('aria-pressed')==='true',5000,'resume follows interrupted B');
     assert.equal(await page.getByTestId('workflow-node-A').getAttribute('data-run-status'),'completed');
     await page.screenshot({path:context.pathInArtifacts('resumed-current-node.png')});
+    await waitFor(() => fixture.observations.filter(item => item.kind === 'agent' && item.node === 'B').length === 2,
+      15000, 'resumed B request reached the provider');
     releaseB();
+    await waitFor(async () => await page.getByTestId('workflow-node-B').getAttribute('data-run-status') === 'completed',
+      30000, 'resumed original run completed');
     await page.getByTestId('message-assistant').filter({ hasText: 'WORKFLOW_REUSE_DONE' }).waitFor({ timeout: 45000 });
     await waitFor(() => fixture.observations.filter(item => item.kind === 'agent').length >= 2, 10000, 'actual node agents');
     assert.equal(fixture.observations.filter(item => item.kind === 'error').length, 0, JSON.stringify(fixture.observations));
@@ -169,12 +194,13 @@ await runE2E(import.meta.url, {
     await executionCanvas.getByTestId('workflow-node-output').click();
     await executionCanvas.locator('pre').filter({hasText:'WF_NODE_A_RESULT'}).waitFor();
     assert.equal(await executionCanvas.getByTestId('workflow-conversation-publish').count(),0);
-    await executionCanvas.getByRole('status').filter({hasText:'已完成'}).waitFor({timeout:10000});
+    await executionCanvas.getByRole('status').filter({hasText:'执行完成'}).waitFor({timeout:10000});
     await page.screenshot({path:context.pathInArtifacts('conversation-run-canvas.png')});
     phase = 'narrow-conversation-canvas';
     await page.setViewportSize({width:820,height:900});
     await page.getByTestId('chat-message-input').click();
     await page.keyboard.insertText('Keep narrow draft.');
+    await page.locator('[data-status-item="workflows"] > button[aria-expanded="false"]').click();
     await page.getByTestId('workflow-card-open').click();
     await executionCanvas.waitFor({state:'visible'});
     await page.screenshot({path:context.pathInArtifacts('narrow-run-canvas.png')});
@@ -206,22 +232,27 @@ await runE2E(import.meta.url, {
     await page.getByTestId('workflows-button').click();
     await page.locator('button[data-testid^="workflow-library-"]').filter({hasText:'Build A, then B depending on A.'}).click();
     await page.getByTestId('workflow-run-history-toggle').click();
-    await page.getByTestId('workflow-run-history').getByText('已完成', {exact:true}).first().waitFor({timeout:15000});
+    await page.getByTestId('workflow-run-history').getByText('执行完成', {exact:true}).first().waitFor({timeout:15000});
     await page.getByTestId('workflow-run-history').getByRole('button', {name:'查看输出'}).first().click();
-    await page.getByTestId('workflow-run-history').locator('pre').filter({hasText:'WF_NODE_A_RESULT'}).waitFor();
+    await page.getByTestId('workflow-run-history').getByText('WF_NODE_A_RESULT', {exact:true}).waitFor();
+    await page.getByTestId('workflow-history-dialog-close').click();
     phase = 'immutable-version-and-portability';
     await page.getByTestId('workflow-advanced-toggle').click();
     await page.getByTestId('workflow-management-toggle').click();
     const actions = page.getByTestId('workflow-library-actions');
     await actions.getByRole('combobox').selectOption('1');
+    await page.getByTestId('workflow-settings-dialog-close').click();
     await page.getByTestId('workflow-workspace').getByTestId('workflow-node-A').waitFor();
     assert.equal(await page.getByTestId('workflow-add-node').isDisabled(), true);
     await page.getByTestId('workflow-workspace').getByTestId('workflow-node-A').click();
     assert.equal(await page.getByTestId('workflow-workspace').getByTestId('workflow-node-editor').count(), 0);
+    await page.getByTestId('workflow-advanced-toggle').click();
+    await page.getByTestId('workflow-management-toggle').click();
     await actions.getByRole('button', {name:'导出', exact:true}).waitFor({state:'visible'});
     const [download] = await Promise.all([page.waitForEvent('download'), actions.getByRole('button', {name:'导出', exact:true}).click()]);
     const exported = context.pathInState('exported-workflow.json');
     await download.saveAs(exported);
+    await page.getByTestId('workflow-settings-dialog-close').click();
     await page.getByTestId('workflow-import-file').setInputFiles(exported);
     await page.getByTestId('workflow-workspace').getByTestId('workflow-node-A').waitFor();
     await waitFor(async () => (await page.getByTestId('workflow-revision').getAttribute('title')) === 'r1',10000,'imported independent draft');
@@ -237,6 +268,8 @@ await runE2E(import.meta.url, {
     }
     assert.equal(await canvas.isVisible(), true);
     const beforeDelete = await page.locator('button[data-testid^="workflow-library-"]').count();
+    await page.getByTestId('workflow-advanced-toggle').click();
+    await page.getByTestId('workflow-management-toggle').click();
     await page.getByTestId('workflow-delete').click();
     await page.getByTestId('workflow-delete-cancel').click();
     assert.equal(await page.locator('button[data-testid^="workflow-library-"]').count(), beforeDelete);

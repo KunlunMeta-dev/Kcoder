@@ -1,7 +1,9 @@
 mod code_runtime;
+pub mod collaboration;
 pub mod graph;
 mod graph_data;
 mod graph_runtime;
+pub mod native_parent_facts;
 mod node_contract;
 mod schema_defaults;
 pub mod store;
@@ -28,6 +30,10 @@ use tokio_util::sync::CancellationToken;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AgentRequest {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_selection: Option<Box<kcoder_types::workflow::WorkflowAgentModelSelection>>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub artifact_requirements: Vec<kcoder_types::workflow::WorkflowArtifactRequirement>,
     #[serde(default, skip_serializing_if = "is_false")]
     pub output_repair_only: bool,
     pub prompt: String,
@@ -56,6 +62,19 @@ pub trait AgentExecutor: Send + Sync {
         _fingerprint: &str,
     ) -> Result<Option<Value>, String> {
         Ok(None)
+    }
+    /// Native-only checkpoint revalidation. The original output alone cannot
+    /// attest that declared external artifacts still exist or have equal bytes.
+    async fn recheck_node_checkpoint(
+        &self,
+        node: &kcoder_types::workflow::WorkflowNode,
+        _fingerprint: &str,
+        output: Value,
+    ) -> Result<Value, String> {
+        if node.config.collaboration_role.is_some() {
+            return Err("workflow_collaboration: native checkpoint recheck is unavailable".into());
+        }
+        Ok(output)
     }
     async fn save_node_checkpoint(
         &self,
@@ -184,6 +203,8 @@ pub struct WorkflowRuntimeConfig {
     /// Preserve pre-checkpoint receipt identities when resuming older saved runs.
     pub legacy_node_identities: bool,
     pub agent_id_prefix: String,
+    /// Distinguish new Agent sessions on graph resume without changing checkpoint/effect identity.
+    pub agent_resume_attempt: usize,
     pub max_concurrency: usize,
     pub default_agent_max_turns: usize,
     pub max_agent_max_turns: usize,
@@ -202,6 +223,7 @@ impl Default for WorkflowRuntimeConfig {
             checkpoint_context: Value::Null,
             legacy_node_identities: false,
             agent_id_prefix: "workflow".to_string(),
+            agent_resume_attempt: 0,
             max_concurrency: 4,
             default_agent_max_turns: 60,
             max_agent_max_turns: 100,
@@ -324,6 +346,8 @@ impl WorkflowRuntime {
                         ));
                     }
                     let request = AgentRequest {
+                        model_selection: None,
+                        artifact_requirements: vec![],
                         output_repair_only: wire.output_repair_only,
                         prompt,
                         agent_type: normalized_agent_type(wire.agent_type.as_deref()),

@@ -1,4 +1,7 @@
+import { normalizeWebSources } from "../../../../shared/webSources";
+import { normalizeReviewEvidence } from "../../../../shared/reviewEvidence";
 import { decodeTurnMessageStatus } from "../../../../shared/turnMessageStatus";
+import { normalizeTurnFileCapture } from "../../../../shared/turnFileCapture";
 import { decodeToolCallStatus } from "../../../../shared/toolCallStatus";
 import { type JsonRecord, type RpcMessage } from "@/gateway/rpc";
 import type { ThreadMessage } from "@/gateway/types";
@@ -99,7 +102,27 @@ export function attachmentFromValue(
   };
 }
 
-export function structuredBlocks(blocks: unknown[] | undefined): {
+/** Older history projections reused a content ID across distinct commentary segments. */
+function disambiguateHistoricalContentBlocks(blocks: AssistantTranscriptBlock[]): AssistantTranscriptBlock[] {
+  const reserved = new Set(blocks.map(block => `${block.kind}:${block.id}`));
+  const used = new Set<string>();
+  const occurrences = new Map<string, number>();
+  return blocks.map(block => {
+    if (block.kind !== "text" && block.kind !== "thinking") return block;
+    const key = `${block.kind}:${block.id}`;
+    if (!used.has(key)) { used.add(key); return block; }
+    let occurrence = occurrences.get(key) ?? 2;
+    let id: string;
+    do { id = `${block.id}:history-occurrence-${occurrence++}`; }
+    while (reserved.has(`${block.kind}:${id}`) || used.has(`${block.kind}:${id}`));
+    occurrences.set(key, occurrence);
+    used.add(`${block.kind}:${id}`);
+    // Preserve equal text at different positions; tool IDs remain protocol identities.
+    return { ...block, id };
+  });
+}
+
+export function structuredBlocks(blocks: unknown[] | undefined, binding?: { threadId?: string; turnId?: string; attemptId?: string }): {
   orderedBlocks: AssistantTranscriptBlock[];
   thinking?: string;
   tools?: ToolCallView[];
@@ -171,6 +194,7 @@ export function structuredBlocks(blocks: unknown[] | undefined): {
             status: "completed",
             input: block.tool_input ?? block.input,
             output: block.tool_output ?? block.output,
+        webSources: normalizeWebSources(block.webSources, { ...binding, toolCallId: id }),
             interactionSummaries: blockInteractionSummaries,
           });
           continue;
@@ -198,6 +222,7 @@ export function structuredBlocks(blocks: unknown[] | undefined): {
         ...(decoded.status === "unknown" && { rawStatus: decoded.rawStatus }),
         input: block.tool_input ?? block.input,
         output: block.tool_output ?? block.output,
+        webSources: normalizeWebSources(block.webSources, { ...binding, toolCallId: id }),
       });
       orderedBlocks.push({
         kind: "tool",
@@ -206,6 +231,7 @@ export function structuredBlocks(blocks: unknown[] | undefined): {
         status,
         input: block.tool_input ?? block.input,
         output: block.tool_output ?? block.output,
+        webSources: normalizeWebSources(block.webSources, { ...binding, toolCallId: id }),
         ...(blockInteractionSummaries.length > 0
           ? { interactionSummaries: blockInteractionSummaries }
           : {}),
@@ -224,7 +250,7 @@ export function structuredBlocks(blocks: unknown[] | undefined): {
     }
   }
   return {
-    orderedBlocks,
+    orderedBlocks: disambiguateHistoricalContentBlocks(orderedBlocks),
     thinking: thinking.length > 0 ? thinking.join("\n\n") : undefined,
     tools: tools.length > 0 ? tools : undefined,
     todos,
@@ -235,7 +261,9 @@ export function structuredBlocks(blocks: unknown[] | undefined): {
   };
 }
 
-export function normalizeMessage(message: ThreadMessage): ChatMessage | null {
+export function normalizeMessage(message: ThreadMessage, threadId?: string): ChatMessage | null {
+  const fileChangesCapture = normalizeTurnFileCapture(message.fileChangesCapture, { turnId: message.turnId, attemptId: message.attemptId });
+  const reviewEvidence = normalizeReviewEvidence(message.reviewEvidence, { turnId: message.turnId, attemptId: message.attemptId });
   const decodedStatus = decodeTurnMessageStatus(message.status);
   const content =
     message.role === "user"
@@ -251,10 +279,10 @@ export function normalizeMessage(message: ThreadMessage): ChatMessage | null {
         ]
           .filter(Boolean)
           .join("\n\n");
-  const blocks = structuredBlocks(message.blocks);
+  const blocks = structuredBlocks(message.blocks, { threadId, turnId: message.turnId, attemptId: message.attemptId });
   const orderedBlocks =
     message.role === "assistant"
-      ? [
+      ? disambiguateHistoricalContentBlocks([
           ...blocks.orderedBlocks,
           ...(message.content
             ? [
@@ -265,7 +293,7 @@ export function normalizeMessage(message: ThreadMessage): ChatMessage | null {
                 },
               ]
             : []),
-        ]
+        ])
       : undefined;
   const attachments =
     blocks.attachments ??
@@ -278,6 +306,8 @@ export function normalizeMessage(message: ThreadMessage): ChatMessage | null {
     !blocks.tools &&
     !blocks.todos &&
     !blocks.fileChanges &&
+    !fileChangesCapture &&
+    !reviewEvidence &&
     !blocks.interactionSummaries &&
     !attachments &&
     message.status !== "cancelled" &&
@@ -292,6 +322,8 @@ export function normalizeMessage(message: ThreadMessage): ChatMessage | null {
       rawStatus: decodedStatus.rawStatus,
     }),
     content,
+    fileChangesCapture,
+    reviewEvidence,
     ...blocks,
     ...(orderedBlocks ? { orderedBlocks } : {}),
     attachments,
@@ -326,5 +358,8 @@ export function fileChangesFromValue(
 
 export function turnIdFrom(message: RpcMessage): string {
   const params = record(message.params);
-  return text(params.turnId) ?? text(record(params.turn).id) ?? "current-turn";
+  const turn = record(params.turn);
+  // Match Gateway routing so compatibility events settle the original turn's interactions.
+  return text(params.turnId) ?? text(params.turn_id) ??
+    text(turn.turnId) ?? text(turn.id) ?? "current-turn";
 }

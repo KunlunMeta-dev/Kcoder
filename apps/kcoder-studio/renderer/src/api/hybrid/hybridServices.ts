@@ -1,6 +1,5 @@
 import type { ModelCatalogTarget } from '@/api/models'
 import { createBackendWorkbenchServices } from '@/api/backend/backendServices'
-import { info as writeInfoLog } from '@tauri-apps/plugin-log'
 import { createCloudRuntimeIpcClient } from '@/api/backend/runtimeIpc'
 import { createExecutorClientFromApis } from '@/api/executorAccess'
 import { createLocalAppServices, createRuntimeWorkApiFromIpc } from '@/api/local/localServices'
@@ -36,6 +35,7 @@ import type {
   RuntimeLocalProjectUpsertRequest,
   RuntimeSendRequest,
   RuntimeTaskAddress,
+  RuntimeTaskCancelRequest,
   RuntimeTaskCreateRequest,
   RuntimeTaskForkRequest,
   RuntimeTaskIMNotificationSubscriptionRequest,
@@ -281,7 +281,6 @@ export function createHybridWorkbenchServices(
     socketBaseUrl: options.socketBaseUrl,
     socketPath: options.socketPath,
     getToken: () => options.token,
-    redirectOnUnauthorized: false,
     transportKind: 'backend-relay',
   })
   const cloudModelGateway = {
@@ -330,9 +329,6 @@ export function createHybridWorkbenchServices(
           models: response.data.map(modelIdentityForLog),
         }
         console.info('[KCoder Studio] Cloud model catalog loaded', modelCatalogLog)
-        void writeInfoLog(
-          `[KCoder Studio] Cloud model catalog loaded ${JSON.stringify(modelCatalogLog)}`
-        ).catch(() => undefined)
         rememberedCloudModels = annotateCloudModels(response.data)
         cloudModelsLoaded = true
         notifyWorkbenchModelsChanged()
@@ -681,6 +677,13 @@ export function createHybridWorkbenchServices(
     sendRuntimeMessage(data: RuntimeSendRequest) {
       return routeByAddress(data.address).sendRuntimeMessage(data)
     },
+    queueRuntimeModelSelection(data) {
+      const runtime = routeByAddress(data.address)
+      if (!runtime.queueRuntimeModelSelection) {
+        throw new Error('In-turn model switching is not supported by this runtime')
+      }
+      return runtime.queueRuntimeModelSelection(data)
+    },
     interruptAndSendRuntimeMessage(data) {
       return routeByAddress(data.address).interruptAndSendRuntimeMessage(data)
     },
@@ -915,7 +918,7 @@ export function createHybridWorkbenchServices(
         ? localServices.runtimeWorkApi!.cleanupArchivedConversations({ items: localItems })
         : emptyCleanupResponse()
     },
-    cancelRuntimeTask(address: RuntimeTaskAddress) {
+    cancelRuntimeTask(address: RuntimeTaskCancelRequest) {
       return routeByAddress(address).cancelRuntimeTask(address)
     },
     shortenWaitRuntimeTask(address: RuntimeTaskAddress) {

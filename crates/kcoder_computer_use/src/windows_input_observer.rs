@@ -87,10 +87,10 @@ impl InputObserver {
     }
     pub fn shutdown(&self) {
         self.shared.exit.store(true, Ordering::Release);
-        if let Ok(mut thread) = self.thread.lock() {
-            if let Some(thread) = thread.take() {
-                let _ = thread.join();
-            }
+        if let Ok(mut thread) = self.thread.lock()
+            && let Some(thread) = thread.take()
+        {
+            let _ = thread.join();
         }
     }
 }

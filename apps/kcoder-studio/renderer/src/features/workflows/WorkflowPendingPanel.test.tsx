@@ -23,3 +23,17 @@ test('human reply is submitted to the selected run and refreshed after acceptanc
   await waitFor(() => expect(screen.queryByTestId('workflow-pending-approval')).not.toBeInTheDocument())
   view.unmount()
 })
+
+
+test('a non-default workspace response stays on the same original request target', async () => {
+  vi.clearAllMocks()
+  vi.mocked(workflowApi.requests).mockResolvedValue({ supported: true, requests: [{ runId: 'original-run', requestId: 'original-human', nodeId: 'approval', status: 'pending', deadlineUnixMs: 1,
+    request: { kind: 'human', prompt: 'Explicit original decision', schema: { type: 'boolean' } } }] })
+  vi.mocked(workflowApi.respond).mockResolvedValue({ accepted: true })
+  const view = render(<WorkflowPendingPanel serverId="original-ssh" workspacePath="/ssh/non-default" runId="original-run" isCurrent={() => true} />)
+  fireEvent.change(await screen.findByTestId('workflow-reuse-args'), { target: { value: 'true' } })
+  fireEvent.click(screen.getByTestId('workflow-submit-response'))
+  await waitFor(() => expect(workflowApi.respond).toHaveBeenCalledWith('original-ssh', 'original-run', 'original-human', true, { workspacePath: '/ssh/non-default' }))
+  expect(workflowApi.requests).toHaveBeenCalledWith('original-ssh', 'original-run', { signal: expect.any(AbortSignal), workspacePath: '/ssh/non-default' })
+  view.unmount()
+})

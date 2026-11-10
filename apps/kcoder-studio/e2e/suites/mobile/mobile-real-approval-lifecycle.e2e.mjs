@@ -627,7 +627,8 @@ async function createApprovalTask(page, prompt) {
 }
 
 async function selectPanel(page, id) {
-  await page.locator('[data-testid="workspace-tab-switcher"]:visible').click();
+  await page.getByTestId("task-more").click();
+  await page.getByTestId("task-menu-workspace").click();
   await page.locator(`[data-testid="workspace-tab-${id}"]:visible`).click();
 }
 

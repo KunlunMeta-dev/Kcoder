@@ -147,6 +147,30 @@ it("cold New catalog uses one actual GatewayRpcClient and issues all three reads
   expect(socket.closeCount).toBe(1);
 });
 
+it("keeps the target directory on its root while reading and caching models at the selected workspace", async () => {
+  const cwd = "/workspace/project-B";
+  const source = createNewCatalogReadSource(profile, server, () => true, { modelsWorkspacePath: cwd });
+  const workspaces = source.run("workspace", () => listWorkspaceOptions(profile, server, {}, source));
+  const models = source.run("models", () => listModels(profile, server, { source, workspacePath: cwd }));
+  const root = await waitForMethods(0, ["runtime.workspaces.list", "runtime.worktrees.list"]);
+  const scoped = await waitForMethods(1, ["runtime.models.list"]);
+  expect(new URL(root.url).searchParams.get("workspace")).toBe(server.workspacePath);
+  expect(new URL(scoped.url).searchParams.get("workspace")).toBe(cwd);
+  expect(root.sent.some(item => item.method === "runtime.models.list")).toBe(false);
+  expect(scoped.sent.some(item => item.method === "runtime.workspaces.list")).toBe(false);
+  respondWorkspace(root, server.workspacePath!);
+  respondModels(scoped, "Workspace model");
+  await Promise.all([workspaces, models]);
+  expect(root.closeCount).toBe(1); expect(scoped.closeCount).toBe(1);
+  await expect(listModels(profile, server, { workspacePath: cwd })).resolves.toMatchObject([{ model: "Workspace model" }]);
+  expect(ControlledRpcSocket.instances).toHaveLength(2);
+  const rootModels = listModels(profile, server);
+  const rootModelSocket = await waitForMethods(2, ["runtime.models.list"]);
+  expect(new URL(rootModelSocket.url).searchParams.get("workspace")).toBe(server.workspacePath);
+  respondModels(rootModelSocket, "Root model");
+  await expect(rootModels).resolves.toMatchObject([{ model: "Root model" }]);
+});
+
 it("keeps the workspace result when the model branch fails, even if final close throws", async () => {
   const reads = startBoth();
   const socket = await waitForMethods(0, ["runtime.workspaces.list", "runtime.worktrees.list", "runtime.models.list"]);
@@ -209,8 +233,9 @@ it("cancels the final waiters, closes a held connect, and sends nothing after a 
   workspaceController.abort();
   modelController.abort();
   await Promise.all([rejectedWorkspaces, rejectedModels]);
-  await vi.waitFor(() => expect(socket.closeCount).toBeGreaterThan(0));
+  // Browser WebSockets still connecting during cancellation are closed on their late open.
   socket.open();
+  await vi.waitFor(() => expect(socket.closeCount).toBeGreaterThan(0));
   await Promise.resolve();
   await Promise.resolve();
   expect(socket.sent.some((item) => item.method === "initialize" || item.method?.startsWith("runtime."))).toBe(false);

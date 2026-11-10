@@ -3,7 +3,7 @@ pub mod budget;
 pub mod compact;
 pub mod micro_compact;
 pub mod session_memory;
-pub mod tokens;
+pub use kcoder_api::token_counter as tokens;
 pub mod tool_storage;
 
 pub use attachments::{PostCompactAttachments, collect_recent_file_attachments};

@@ -23,7 +23,7 @@ kcoder_launch_init() {
   KCODER_REPO_DIR="$(kcoder_find_repo_dir "$launch_dir")"
   KCODER_LAUNCH_CWD="$(pwd)"
 
-  local default_home="${HOME:?HOME must be set}/.config/kcoder-dev"
+  local default_home="$KCODER_REPO_DIR/target/home"
   case "$profile" in
     dev)
       default_home="${KCODER_DEV_HOME:-$default_home}"
@@ -36,8 +36,9 @@ kcoder_launch_init() {
       return 2
       ;;
   esac
-  # A source launcher shares state with its matching installation profile; tests and temporary sandboxes may still override the directory explicitly.
+  # Source development stays inside its checkout; explicit caller overrides remain visible.
   export KCODER_HOME="${KCODER_HOME:-$default_home}"
+  printf 'KCoder %s Home: %s\n' "$profile" "${KCODER_CONFIG_DIR:-$KCODER_HOME}" >&2
 
   unset KCODER_PROVIDER
   unset KCODER_USE_ANTHROPIC KCODER_USE_OPENAI

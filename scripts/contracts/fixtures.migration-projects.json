@@ -1,0 +1,876 @@
+{
+  "MigrationProjectsDiscoverParams": {
+    "valid": [
+      {
+        "name": "known_metadata_only",
+        "value": {
+          "source": "codex"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "no_path_authority_or_arbitrary_fields",
+        "value": {
+          "source": "codex",
+          "sourceDirectory": "/must-not-authorize"
+        }
+      }
+    ]
+  },
+  "MigrationProjectsSourcesParams": {
+    "valid": [
+      {
+        "name": "known_metadata_only",
+        "value": {
+          "catalogId": "projects-fixture",
+          "pageIndex": 0
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "no_path_authority_or_arbitrary_fields",
+        "value": {
+          "catalogId": "projects-fixture",
+          "pageIndex": 0,
+          "sourceDirectory": "/must-not-authorize"
+        }
+      }
+    ]
+  },
+  "MigrationProjectSourceRootsParams": {
+    "valid": [
+      {
+        "name": "known_metadata_only",
+        "value": {
+          "catalogId": "projects-fixture",
+          "sourceHandle": "project-source-fixture",
+          "pageIndex": 0
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "no_path_authority_or_arbitrary_fields",
+        "value": {
+          "catalogId": "projects-fixture",
+          "sourceHandle": "project-source-fixture",
+          "pageIndex": 0,
+          "sourceDirectory": "/must-not-authorize"
+        }
+      }
+    ]
+  },
+  "MigrationProjectTargetsParams": {
+    "valid": [
+      {
+        "name": "known_metadata_only",
+        "value": {
+          "pageIndex": 0
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "no_path_authority_or_arbitrary_fields",
+        "value": {
+          "pageIndex": 0,
+          "sourceDirectory": "/must-not-authorize"
+        }
+      }
+    ]
+  },
+  "MigrationProjectTargetRootsParams": {
+    "valid": [
+      {
+        "name": "known_metadata_only",
+        "value": {
+          "targetCatalogId": "targets-fixture",
+          "targetHandle": "target-fixture",
+          "pageIndex": 0
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "no_path_authority_or_arbitrary_fields",
+        "value": {
+          "targetCatalogId": "targets-fixture",
+          "targetHandle": "target-fixture",
+          "pageIndex": 0,
+          "sourceDirectory": "/must-not-authorize"
+        }
+      }
+    ]
+  },
+  "MigrationProjectReportParams": {
+    "valid": [
+      {
+        "name": "known_metadata_only",
+        "value": {
+          "jobId": "job-fixture",
+          "itemId": "item-fixture",
+          "pageIndex": 0
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "no_path_authority_or_arbitrary_fields",
+        "value": {
+          "jobId": "job-fixture",
+          "itemId": "item-fixture",
+          "pageIndex": 0,
+          "sourceDirectory": "/must-not-authorize"
+        }
+      }
+    ]
+  },
+  "MigrationProjectSourcesResult": {
+    "valid": [
+      {
+        "name": "known_metadata_only",
+        "value": {
+          "catalogId": "projects-fixture",
+          "source": "codex",
+          "pageIndex": 0,
+          "items": [
+            {
+              "sourceHandle": "project-source-fixture",
+              "displayName": "Example",
+              "labelOrigin": "registry_name",
+              "originalProjectId": "original-id",
+              "roots": 1,
+              "position": 2,
+              "sourceCreatedAtMs": null,
+              "sourceUpdatedAtMs": null
+            }
+          ],
+          "totalItems": 1,
+          "nextPage": null,
+          "knownRowsComplete": true,
+          "formatRevision": "codex-project-registry/sqlite/1",
+          "unobserved": [
+            "source_trust",
+            "worktree_contents",
+            "vendor_metadata"
+          ],
+          "problems": []
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "no_path_authority_or_arbitrary_fields",
+        "value": {
+          "catalogId": "projects-fixture",
+          "source": "codex",
+          "pageIndex": 0,
+          "items": [
+            {
+              "sourceHandle": "project-source-fixture",
+              "displayName": "Example",
+              "labelOrigin": "registry_name",
+              "originalProjectId": "original-id",
+              "roots": 1,
+              "position": 2,
+              "sourceCreatedAtMs": null,
+              "sourceUpdatedAtMs": null
+            }
+          ],
+          "totalItems": 1,
+          "nextPage": null,
+          "knownRowsComplete": true,
+          "formatRevision": "codex-project-registry/sqlite/1",
+          "unobserved": [
+            "source_trust",
+            "worktree_contents",
+            "vendor_metadata"
+          ],
+          "problems": [],
+          "sourceDirectory": "/must-not-authorize"
+        }
+      },
+      {
+        "name": "ten_items_per_page",
+        "value": {
+          "catalogId": "projects-fixture",
+          "source": "codex",
+          "pageIndex": 0,
+          "items": [
+            {
+              "sourceHandle": "project-source-fixture",
+              "displayName": "Example",
+              "labelOrigin": "registry_name",
+              "originalProjectId": "original-id",
+              "roots": 1,
+              "position": 2,
+              "sourceCreatedAtMs": null,
+              "sourceUpdatedAtMs": null
+            },
+            {
+              "sourceHandle": "project-source-fixture",
+              "displayName": "Example",
+              "labelOrigin": "registry_name",
+              "originalProjectId": "original-id",
+              "roots": 1,
+              "position": 2,
+              "sourceCreatedAtMs": null,
+              "sourceUpdatedAtMs": null
+            },
+            {
+              "sourceHandle": "project-source-fixture",
+              "displayName": "Example",
+              "labelOrigin": "registry_name",
+              "originalProjectId": "original-id",
+              "roots": 1,
+              "position": 2,
+              "sourceCreatedAtMs": null,
+              "sourceUpdatedAtMs": null
+            },
+            {
+              "sourceHandle": "project-source-fixture",
+              "displayName": "Example",
+              "labelOrigin": "registry_name",
+              "originalProjectId": "original-id",
+              "roots": 1,
+              "position": 2,
+              "sourceCreatedAtMs": null,
+              "sourceUpdatedAtMs": null
+            },
+            {
+              "sourceHandle": "project-source-fixture",
+              "displayName": "Example",
+              "labelOrigin": "registry_name",
+              "originalProjectId": "original-id",
+              "roots": 1,
+              "position": 2,
+              "sourceCreatedAtMs": null,
+              "sourceUpdatedAtMs": null
+            },
+            {
+              "sourceHandle": "project-source-fixture",
+              "displayName": "Example",
+              "labelOrigin": "registry_name",
+              "originalProjectId": "original-id",
+              "roots": 1,
+              "position": 2,
+              "sourceCreatedAtMs": null,
+              "sourceUpdatedAtMs": null
+            },
+            {
+              "sourceHandle": "project-source-fixture",
+              "displayName": "Example",
+              "labelOrigin": "registry_name",
+              "originalProjectId": "original-id",
+              "roots": 1,
+              "position": 2,
+              "sourceCreatedAtMs": null,
+              "sourceUpdatedAtMs": null
+            },
+            {
+              "sourceHandle": "project-source-fixture",
+              "displayName": "Example",
+              "labelOrigin": "registry_name",
+              "originalProjectId": "original-id",
+              "roots": 1,
+              "position": 2,
+              "sourceCreatedAtMs": null,
+              "sourceUpdatedAtMs": null
+            },
+            {
+              "sourceHandle": "project-source-fixture",
+              "displayName": "Example",
+              "labelOrigin": "registry_name",
+              "originalProjectId": "original-id",
+              "roots": 1,
+              "position": 2,
+              "sourceCreatedAtMs": null,
+              "sourceUpdatedAtMs": null
+            },
+            {
+              "sourceHandle": "project-source-fixture",
+              "displayName": "Example",
+              "labelOrigin": "registry_name",
+              "originalProjectId": "original-id",
+              "roots": 1,
+              "position": 2,
+              "sourceCreatedAtMs": null,
+              "sourceUpdatedAtMs": null
+            },
+            {
+              "sourceHandle": "project-source-fixture",
+              "displayName": "Example",
+              "labelOrigin": "registry_name",
+              "originalProjectId": "original-id",
+              "roots": 1,
+              "position": 2,
+              "sourceCreatedAtMs": null,
+              "sourceUpdatedAtMs": null
+            }
+          ],
+          "totalItems": 1,
+          "nextPage": null,
+          "knownRowsComplete": true,
+          "formatRevision": "codex-project-registry/sqlite/1",
+          "unobserved": [
+            "source_trust",
+            "worktree_contents",
+            "vendor_metadata"
+          ],
+          "problems": []
+        }
+      }
+    ]
+  },
+  "MigrationProjectSourceRootsResult": {
+    "valid": [
+      {
+        "name": "known_metadata_only",
+        "value": {
+          "catalogId": "projects-fixture",
+          "sourceHandle": "project-source-fixture",
+          "pageIndex": 0,
+          "roots": [
+            {
+              "sourceRootId": "source-root-fixture",
+              "ordinal": 0,
+              "originalPath": "D:\\source-data-not-authority"
+            }
+          ],
+          "totalRoots": 1,
+          "nextPage": null
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "no_path_authority_or_arbitrary_fields",
+        "value": {
+          "catalogId": "projects-fixture",
+          "sourceHandle": "project-source-fixture",
+          "pageIndex": 0,
+          "roots": [
+            {
+              "sourceRootId": "source-root-fixture",
+              "ordinal": 0,
+              "originalPath": "D:\\source-data-not-authority"
+            }
+          ],
+          "totalRoots": 1,
+          "nextPage": null,
+          "sourceDirectory": "/must-not-authorize"
+        }
+      },
+      {
+        "name": "ten_items_per_page",
+        "value": {
+          "catalogId": "projects-fixture",
+          "sourceHandle": "project-source-fixture",
+          "pageIndex": 0,
+          "roots": [
+            {
+              "sourceRootId": "source-root-fixture",
+              "ordinal": 0,
+              "originalPath": "D:\\source-data-not-authority"
+            },
+            {
+              "sourceRootId": "source-root-fixture",
+              "ordinal": 0,
+              "originalPath": "D:\\source-data-not-authority"
+            },
+            {
+              "sourceRootId": "source-root-fixture",
+              "ordinal": 0,
+              "originalPath": "D:\\source-data-not-authority"
+            },
+            {
+              "sourceRootId": "source-root-fixture",
+              "ordinal": 0,
+              "originalPath": "D:\\source-data-not-authority"
+            },
+            {
+              "sourceRootId": "source-root-fixture",
+              "ordinal": 0,
+              "originalPath": "D:\\source-data-not-authority"
+            },
+            {
+              "sourceRootId": "source-root-fixture",
+              "ordinal": 0,
+              "originalPath": "D:\\source-data-not-authority"
+            },
+            {
+              "sourceRootId": "source-root-fixture",
+              "ordinal": 0,
+              "originalPath": "D:\\source-data-not-authority"
+            },
+            {
+              "sourceRootId": "source-root-fixture",
+              "ordinal": 0,
+              "originalPath": "D:\\source-data-not-authority"
+            },
+            {
+              "sourceRootId": "source-root-fixture",
+              "ordinal": 0,
+              "originalPath": "D:\\source-data-not-authority"
+            },
+            {
+              "sourceRootId": "source-root-fixture",
+              "ordinal": 0,
+              "originalPath": "D:\\source-data-not-authority"
+            },
+            {
+              "sourceRootId": "source-root-fixture",
+              "ordinal": 0,
+              "originalPath": "D:\\source-data-not-authority"
+            }
+          ],
+          "totalRoots": 1,
+          "nextPage": null
+        }
+      }
+    ]
+  },
+  "MigrationProjectTargetsResult": {
+    "valid": [
+      {
+        "name": "known_metadata_only",
+        "value": {
+          "registeredWorkspacesObserved": false,
+          "targetCatalogId": "targets-fixture",
+          "pageIndex": 0,
+          "items": [
+            {
+              "targetHandle": "target-fixture",
+              "displayName": "Current workspace",
+              "roots": 1,
+              "currentWorkspace": true
+            }
+          ],
+          "totalItems": 1,
+          "nextPage": null
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "no_path_authority_or_arbitrary_fields",
+        "value": {
+          "registeredWorkspacesObserved": false,
+          "targetCatalogId": "targets-fixture",
+          "pageIndex": 0,
+          "items": [
+            {
+              "targetHandle": "target-fixture",
+              "displayName": "Current workspace",
+              "roots": 1,
+              "currentWorkspace": true
+            }
+          ],
+          "totalItems": 1,
+          "nextPage": null,
+          "sourceDirectory": "/must-not-authorize"
+        }
+      },
+      {
+        "name": "ten_items_per_page",
+        "value": {
+          "registeredWorkspacesObserved": false,
+          "targetCatalogId": "targets-fixture",
+          "pageIndex": 0,
+          "items": [
+            {
+              "targetHandle": "target-fixture",
+              "displayName": "Current workspace",
+              "roots": 1,
+              "currentWorkspace": true
+            },
+            {
+              "targetHandle": "target-fixture",
+              "displayName": "Current workspace",
+              "roots": 1,
+              "currentWorkspace": true
+            },
+            {
+              "targetHandle": "target-fixture",
+              "displayName": "Current workspace",
+              "roots": 1,
+              "currentWorkspace": true
+            },
+            {
+              "targetHandle": "target-fixture",
+              "displayName": "Current workspace",
+              "roots": 1,
+              "currentWorkspace": true
+            },
+            {
+              "targetHandle": "target-fixture",
+              "displayName": "Current workspace",
+              "roots": 1,
+              "currentWorkspace": true
+            },
+            {
+              "targetHandle": "target-fixture",
+              "displayName": "Current workspace",
+              "roots": 1,
+              "currentWorkspace": true
+            },
+            {
+              "targetHandle": "target-fixture",
+              "displayName": "Current workspace",
+              "roots": 1,
+              "currentWorkspace": true
+            },
+            {
+              "targetHandle": "target-fixture",
+              "displayName": "Current workspace",
+              "roots": 1,
+              "currentWorkspace": true
+            },
+            {
+              "targetHandle": "target-fixture",
+              "displayName": "Current workspace",
+              "roots": 1,
+              "currentWorkspace": true
+            },
+            {
+              "targetHandle": "target-fixture",
+              "displayName": "Current workspace",
+              "roots": 1,
+              "currentWorkspace": true
+            },
+            {
+              "targetHandle": "target-fixture",
+              "displayName": "Current workspace",
+              "roots": 1,
+              "currentWorkspace": true
+            }
+          ],
+          "totalItems": 1,
+          "nextPage": null
+        }
+      }
+    ]
+  },
+  "MigrationProjectTargetRootsResult": {
+    "valid": [
+      {
+        "name": "known_metadata_only",
+        "value": {
+          "targetCatalogId": "targets-fixture",
+          "targetHandle": "target-fixture",
+          "pageIndex": 0,
+          "roots": [
+            {
+              "targetRootHandle": "target-root-fixture",
+              "ordinal": 0,
+              "path": "/owned/example",
+              "trusted": true,
+              "available": true
+            }
+          ],
+          "totalRoots": 1,
+          "nextPage": null
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "no_path_authority_or_arbitrary_fields",
+        "value": {
+          "targetCatalogId": "targets-fixture",
+          "targetHandle": "target-fixture",
+          "pageIndex": 0,
+          "roots": [
+            {
+              "targetRootHandle": "target-root-fixture",
+              "ordinal": 0,
+              "path": "/owned/example",
+              "trusted": true,
+              "available": true
+            }
+          ],
+          "totalRoots": 1,
+          "nextPage": null,
+          "sourceDirectory": "/must-not-authorize"
+        }
+      },
+      {
+        "name": "ten_items_per_page",
+        "value": {
+          "targetCatalogId": "targets-fixture",
+          "targetHandle": "target-fixture",
+          "pageIndex": 0,
+          "roots": [
+            {
+              "targetRootHandle": "target-root-fixture",
+              "ordinal": 0,
+              "path": "/owned/example",
+              "trusted": true,
+              "available": true
+            },
+            {
+              "targetRootHandle": "target-root-fixture",
+              "ordinal": 0,
+              "path": "/owned/example",
+              "trusted": true,
+              "available": true
+            },
+            {
+              "targetRootHandle": "target-root-fixture",
+              "ordinal": 0,
+              "path": "/owned/example",
+              "trusted": true,
+              "available": true
+            },
+            {
+              "targetRootHandle": "target-root-fixture",
+              "ordinal": 0,
+              "path": "/owned/example",
+              "trusted": true,
+              "available": true
+            },
+            {
+              "targetRootHandle": "target-root-fixture",
+              "ordinal": 0,
+              "path": "/owned/example",
+              "trusted": true,
+              "available": true
+            },
+            {
+              "targetRootHandle": "target-root-fixture",
+              "ordinal": 0,
+              "path": "/owned/example",
+              "trusted": true,
+              "available": true
+            },
+            {
+              "targetRootHandle": "target-root-fixture",
+              "ordinal": 0,
+              "path": "/owned/example",
+              "trusted": true,
+              "available": true
+            },
+            {
+              "targetRootHandle": "target-root-fixture",
+              "ordinal": 0,
+              "path": "/owned/example",
+              "trusted": true,
+              "available": true
+            },
+            {
+              "targetRootHandle": "target-root-fixture",
+              "ordinal": 0,
+              "path": "/owned/example",
+              "trusted": true,
+              "available": true
+            },
+            {
+              "targetRootHandle": "target-root-fixture",
+              "ordinal": 0,
+              "path": "/owned/example",
+              "trusted": true,
+              "available": true
+            },
+            {
+              "targetRootHandle": "target-root-fixture",
+              "ordinal": 0,
+              "path": "/owned/example",
+              "trusted": true,
+              "available": true
+            }
+          ],
+          "totalRoots": 1,
+          "nextPage": null
+        }
+      }
+    ]
+  },
+  "MigrationProjectReportResult": {
+    "valid": [
+      {
+        "name": "known_metadata_only",
+        "value": {
+          "jobId": "job-fixture",
+          "itemId": "item-fixture",
+          "pageIndex": 0,
+          "fields": [
+            {
+              "field": "mapping_status",
+              "ordinal": null,
+              "value": "explicit_native_workspace"
+            }
+          ],
+          "totalFields": 1,
+          "nextPage": null,
+          "unobserved": [
+            "source_trust"
+          ]
+        }
+      },
+      {
+        "name": "frozen_root_identity_for_explicit_mapping",
+        "value": {
+          "jobId": "job-fixture",
+          "itemId": "item-fixture",
+          "pageIndex": 0,
+          "fields": [
+            {
+              "field": "source_root",
+              "ordinal": 0,
+              "value": "D:\\foreign-path-not-authority",
+              "sourceRootId": "opaque-original-root"
+            }
+          ],
+          "totalFields": 1,
+          "nextPage": null,
+          "unobserved": [
+            "source_trust"
+          ]
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "no_path_authority_or_arbitrary_fields",
+        "value": {
+          "jobId": "job-fixture",
+          "itemId": "item-fixture",
+          "pageIndex": 0,
+          "fields": [
+            {
+              "field": "mapping_status",
+              "ordinal": null,
+              "value": "explicit_native_workspace"
+            }
+          ],
+          "totalFields": 1,
+          "nextPage": null,
+          "unobserved": [
+            "source_trust"
+          ],
+          "sourceDirectory": "/must-not-authorize"
+        }
+      },
+      {
+        "name": "ten_items_per_page",
+        "value": {
+          "jobId": "job-fixture",
+          "itemId": "item-fixture",
+          "pageIndex": 0,
+          "fields": [
+            {
+              "field": "mapping_status",
+              "ordinal": null,
+              "value": "explicit_native_workspace"
+            },
+            {
+              "field": "mapping_status",
+              "ordinal": null,
+              "value": "explicit_native_workspace"
+            },
+            {
+              "field": "mapping_status",
+              "ordinal": null,
+              "value": "explicit_native_workspace"
+            },
+            {
+              "field": "mapping_status",
+              "ordinal": null,
+              "value": "explicit_native_workspace"
+            },
+            {
+              "field": "mapping_status",
+              "ordinal": null,
+              "value": "explicit_native_workspace"
+            },
+            {
+              "field": "mapping_status",
+              "ordinal": null,
+              "value": "explicit_native_workspace"
+            },
+            {
+              "field": "mapping_status",
+              "ordinal": null,
+              "value": "explicit_native_workspace"
+            },
+            {
+              "field": "mapping_status",
+              "ordinal": null,
+              "value": "explicit_native_workspace"
+            },
+            {
+              "field": "mapping_status",
+              "ordinal": null,
+              "value": "explicit_native_workspace"
+            },
+            {
+              "field": "mapping_status",
+              "ordinal": null,
+              "value": "explicit_native_workspace"
+            },
+            {
+              "field": "mapping_status",
+              "ordinal": null,
+              "value": "explicit_native_workspace"
+            }
+          ],
+          "totalFields": 1,
+          "nextPage": null,
+          "unobserved": [
+            "source_trust"
+          ]
+        }
+      }
+    ]
+  },
+  "MigrationBatchProjectSource": {
+    "valid": [
+      {
+        "name": "known_metadata_only",
+        "value": {
+          "catalogId": "projects-fixture",
+          "sourceHandle": "project-source-fixture"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "no_path_authority_or_arbitrary_fields",
+        "value": {
+          "catalogId": "projects-fixture",
+          "sourceHandle": "project-source-fixture",
+          "sourceDirectory": "/must-not-authorize"
+        }
+      }
+    ]
+  },
+  "MigrationProjectReceivedMetadata": {
+    "valid": [
+      {
+        "name": "known_projection_not_directory_grant",
+        "value": {
+          "displayName": "Owned project",
+          "labelOrigin": "registry_name",
+          "originalProjectId": "project-original",
+          "roots": 1,
+          "formatRevision": "codex-project-registry/sqlite/1"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "no_private_or_target_authority",
+        "value": {
+          "displayName": "Owned project",
+          "labelOrigin": "registry_name",
+          "originalProjectId": "project-original",
+          "roots": 1,
+          "formatRevision": "codex-project-registry/sqlite/1",
+          "targetDirectory": "/must-not-authorize"
+        }
+      }
+    ]
+  }
+}

@@ -1,3 +1,4 @@
+import { taskConnectionStatus } from '../../taskConnectionStatus'
 import { sameWorkspacePath } from '@/lib/workspace-path-identity'
 import type { GatewayClient } from '../../gatewayRuntimeTypes'
 import {
@@ -44,7 +45,7 @@ export async function updateTaskMetadata(
     const activeClient = this.clientByTask.get(task.taskId)
     if (activeClient) await update(activeClient)
     else {
-      await this.withTransientClient(server, update, task.workspacePath)
+      await this.withTransientClient(server, update, task.workspacePath, false)
     }
   }
   this.persistLocalTaskMetadata(this.threadKey(task.serverId, task.threadId), metadata)
@@ -112,6 +113,7 @@ export async function archiveTask(this: GatewayRuntimeCore, params: Record<strin
         }
       )
       const taskClient = this.clientByTask.get(taskId)
+      taskConnectionStatus.clear(this, task.serverId, taskId)
       this.clientByTask.delete(taskId)
       taskClient?.close()
       this.tasks.delete(taskId)
@@ -233,7 +235,8 @@ export async function deleteArchivedTask(
         client.request<{ deleted?: boolean }>('thread/delete', {
           threadId: task.threadId,
         }),
-      task.workspacePath
+      task.workspacePath,
+      false
     )
     if (result.deleted !== true) throw new Error('KCoder app-server 未确认删除历史会话')
     const key = this.threadKey(task.serverId, task.threadId)

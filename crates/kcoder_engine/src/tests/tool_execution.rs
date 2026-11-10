@@ -201,12 +201,12 @@ async fn short_fragmented_tool_input_reports_each_observed_line_before_execution
         .provider(Arc::new(provider))
         .settings(Settings {
             permission_mode: PermissionMode::Bypass,
-            ..Settings::default()
+            ..crate::test_support::engine_builder::fixture_settings()
         })
         .tool_registry(ToolRegistry::new().register(InputEchoTool {
             seen: Arc::clone(&seen),
         }))
-        .build();
+        .build_with_profile_directory();
     engine
         .state
         .add_message(Message::user_text("record the streamed input"));
@@ -277,7 +277,7 @@ async fn indexed_tool_use_deltas_survive_delayed_content_block_stops() {
     let seen = Arc::new(Mutex::new(Vec::new()));
     let settings = Settings {
         permission_mode: PermissionMode::Bypass,
-        ..Settings::default()
+        ..crate::test_support::engine_builder::fixture_settings()
     };
     let engine = QueryEngine::new(
         Arc::new(DelayedStopToolUseProvider {
@@ -409,7 +409,7 @@ async fn tool_execution_groups_safe_tools_and_serializes_unsafe_tools() {
     let timeline = Arc::new(Mutex::new(Vec::new()));
     let settings = Settings {
         permission_mode: PermissionMode::Bypass,
-        ..Settings::default()
+        ..crate::test_support::engine_builder::fixture_settings()
     };
     let engine = QueryEngine::new(
         Arc::new(ToolUseOnceProvider {
@@ -620,7 +620,7 @@ async fn model_tool_execution_uses_request_allowset_even_when_capability_changes
         });
         let mut settings = Settings {
             permission_mode: PermissionMode::Bypass,
-            ..Settings::default()
+            ..crate::test_support::engine_builder::fixture_settings()
         };
         settings.model_capabilities.tools = originally_attached;
         let engine = TestEngineBuilder::new(root.path())
@@ -630,7 +630,7 @@ async fn model_tool_execution_uses_request_allowset_even_when_capability_changes
                 target: target.clone(),
                 calls: calls.clone(),
             }))
-            .build();
+            .build_with_profile_directory();
         *provider.live_settings.lock().unwrap() = Some(engine.settings.clone());
         engine
             .state
@@ -671,7 +671,7 @@ async fn workflow_generation_mode_rejects_forged_execution_tools() {
     });
     let settings = Settings {
         permission_mode: PermissionMode::Bypass,
-        ..Settings::default()
+        ..crate::test_support::engine_builder::fixture_settings()
     };
     let engine = TestEngineBuilder::new(root.path())
         .settings(settings)
@@ -682,7 +682,7 @@ async fn workflow_generation_mode_rejects_forged_execution_tools() {
                 calls: calls.clone(),
             }),
         )
-        .build();
+        .build_with_profile_directory();
     engine
         .state
         .enter_workflow_draft_before_first_message()

@@ -5,7 +5,7 @@ const options = {target:'fixture@127.0.0.1', windowsBinary:'/fixture/kcoder.exe'
 test('remote Windows fixture rejects unbounded transport or shell paths before spawning', async()=>{
   const context = { spawnOwned(){throw new Error('must not spawn');} };
   for(const invalid of [
-    {target:'fixture@host;command'}, {installation:"C:\\bad'path"}, {node:''},
+    {target:'fixture@host;command'}, {installation:"C:\\bad'path"}, {node:''}, {parent:"D:\\bad'path"},
     {ssh:{port:0}}, {extraPorts:[65536]}, {windowsBinary:''},
   ]) await assert.rejects(startWindowsRemoteStudio(context,{...options,...invalid}),/Invalid explicit|Invalid SSH/);
 });

@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { Platform, type View } from "react-native";
+import { Platform, type ViewInstance } from "react-native";
 
 const FOCUSABLE = [
   "button:not([disabled])",
@@ -10,8 +10,8 @@ const FOCUSABLE = [
   '[tabindex]:not([tabindex="-1"])',
 ].join(",");
 
-export function useModalFocusTrap(visible: boolean, onClose: () => void, initialFocusSelector?: string) {
-  const surfaceRef = useRef<View>(null);
+export function useModalFocusTrap(visible: boolean, onClose: () => void, initialFocusSelector?: string, escapeOnKeyUp = false) {
+  const surfaceRef = useRef<ViewInstance>(null);
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
 
@@ -30,7 +30,8 @@ export function useModalFocusTrap(visible: boolean, onClose: () => void, initial
     const keydown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.preventDefault();
-        closeRef.current();
+        if (escapeOnKeyUp) event.stopPropagation();
+        else closeRef.current();
         return;
       }
       if (event.key !== "Tab") return;
@@ -48,12 +49,21 @@ export function useModalFocusTrap(visible: boolean, onClose: () => void, initial
       event.preventDefault();
       next.focus();
     };
+    // React Native Web Modal also closes on keyup; consume that event when Escape navigates back.
+    const keyup = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      event.stopPropagation();
+      closeRef.current();
+    };
     document.addEventListener("keydown", keydown, true);
+    if (escapeOnKeyUp) document.addEventListener("keyup", keyup, true);
     return () => {
       document.removeEventListener("keydown", keydown, true);
-      if (previous?.isConnected) previous.focus();
+      if (escapeOnKeyUp) document.removeEventListener("keyup", keyup, true);
+      if (previous?.isConnected && !previous.closest('[inert], [hidden], [aria-hidden="true"]')) previous.focus();
     };
-  }, [initialFocusSelector, visible]);
+  }, [escapeOnKeyUp, initialFocusSelector, visible]);
 
   return surfaceRef;
 }

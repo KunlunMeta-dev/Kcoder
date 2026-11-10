@@ -94,6 +94,11 @@ pub(crate) fn validate_settings_schema(value: &Value) -> Result<()> {
         .map(format_schema_error)
         .collect::<Vec<_>>();
     if errors.is_empty() {
+        // JSON Schema lengths count Unicode characters; tool identifiers are bounded in bytes.
+        if let Some(studio) = value.pointer("/tools/studio") {
+            let selections = serde_json::from_value::<crate::StudioToolSelections>(studio.clone())?;
+            crate::validate_studio_tool_selections(&selections)?;
+        }
         return Ok(());
     }
 
@@ -155,6 +160,172 @@ fn schema_hint(kind: &ValidationErrorKind) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn real_loader_preserves_explicit_oauth_slots_and_legacy_omission() {
+        let document = serde_json::json!({"providers":{},"mcp_servers":[
+            {"name":"account-a","transport":"http","url":"https://mcp.example.test/mcp","policy":{"oauth_account":"work"}},
+            {"name":"account-b","transport":"http","url":"https://mcp.example.test/mcp","policy":{"oauth_account":"personal"}},
+            {"name":"legacy","transport":"http","url":"https://mcp.example.test/mcp"}]});
+        validate_settings_schema(&document).unwrap();
+        let temp = tempfile::tempdir().unwrap();
+        let cwd = temp.path().join("workspace");
+        let profile = temp.path().join("profile");
+        std::fs::create_dir_all(&cwd).unwrap();
+        std::fs::create_dir_all(&profile).unwrap();
+        std::fs::write(
+            profile.join("settings.json"),
+            serde_json::to_vec(&document).unwrap(),
+        )
+        .unwrap();
+        let loaded = crate::SettingsLoader::new(&cwd)
+            .with_config_dir(&profile)
+            .load()
+            .unwrap();
+        let servers = loaded.settings.mcp_servers;
+        assert_eq!(servers[0].policy.oauth_account.as_deref(), Some("work"));
+        assert_eq!(servers[1].policy.oauth_account.as_deref(), Some("personal"));
+        assert_eq!(servers[2].policy.oauth_account, None);
+        let mut invalid = document;
+        invalid["mcp_servers"][0]["policy"]["oauth_account"] = "../other".into();
+        assert!(validate_settings_schema(&invalid).is_err());
+    }
+
+    #[test]
+    fn embedded_schema_and_real_loader_accept_only_reviewed_application_actions() {
+        let document = serde_json::json!({"providers":{},"mcp_servers":[{"name":"owned-business","command":"owned-fixture","policy":{"application_actions":{"mail_send":{"action":"mail.send","schema_sha256":"a".repeat(64),"resource_uri_input_pointer":"/uri","operation_id_input_pointer":"/operationId","input_template":{"uri":null,"operationId":null,"to":null},"fields":{"/to":{"type":"string","max_bytes":100,"allowed_values":["owned@example.invalid"]}}}}}}]});
+        validate_settings_schema(&document).unwrap();
+        let temp = tempfile::tempdir().unwrap();
+        let cwd = temp.path().join("workspace");
+        let config = temp.path().join("profile");
+        std::fs::create_dir_all(&cwd).unwrap();
+        std::fs::create_dir_all(&config).unwrap();
+        std::fs::write(
+            config.join("settings.json"),
+            serde_json::to_vec(&document).unwrap(),
+        )
+        .unwrap();
+        let loaded = crate::SettingsLoader::new(&cwd)
+            .with_config_dir(&config)
+            .load()
+            .unwrap();
+        let rule = &loaded.settings.mcp_servers[0].policy.application_actions["mail_send"];
+        assert!(rule.action.is_effect());
+        let mut invalid = document.clone();
+        invalid["mcp_servers"][0]["policy"]["application_actions"]["mail_send"]["fields"]["/to"]
+            ["type"] = serde_json::json!("object");
+        assert!(validate_settings_schema(&invalid).is_err());
+        let mut annotation = document;
+        annotation["mcp_servers"][0]["policy"]["application_actions"]["mail_send"]["readOnly"] =
+            serde_json::json!(true);
+        assert!(validate_settings_schema(&annotation).is_err());
+    }
+
+    #[test]
+    fn reviewed_original_lookup_actions_pass_both_embedded_schema_and_real_settings_loader() {
+        let actions = [
+            "document.read",
+            "document.create",
+            "document.lookup",
+            "mail.list",
+            "mail.read",
+            "mail.attachment",
+            "mail.send",
+            "mail.lookup",
+            "table.query",
+            "table.export",
+            "table.lookup",
+        ];
+        let mut rules = serde_json::Map::new();
+        for (index, action) in actions.iter().enumerate() {
+            let typed: kcoder_types::McpApplicationAction =
+                serde_json::from_value(serde_json::json!(action)).unwrap();
+            rules.insert(
+                format!("reviewed_{index}"),
+                serde_json::json!({"action":typed,"schema_sha256":"a".repeat(64),
+                "resource_uri_input_pointer":"/uri","operation_id_input_pointer":"/operationId",
+                "input_template":{"uri":null,"operationId":null}}),
+            );
+        }
+        let document = serde_json::json!({"providers":{},"mcp_servers":[{"name":"owned-original-lookup","command":"owned-fixture",
+            "policy":{"application_actions":rules}}]});
+        validate_settings_schema(&document).unwrap();
+        let temp = tempfile::tempdir().unwrap();
+        let cwd = temp.path().join("workspace");
+        let profile = temp.path().join("profile");
+        std::fs::create_dir_all(&cwd).unwrap();
+        std::fs::create_dir_all(&profile).unwrap();
+        std::fs::write(
+            profile.join("settings.json"),
+            serde_json::to_vec(&document).unwrap(),
+        )
+        .unwrap();
+        let loaded = crate::SettingsLoader::new(&cwd)
+            .with_config_dir(&profile)
+            .load()
+            .unwrap();
+        assert_eq!(
+            loaded.settings.mcp_servers[0]
+                .policy
+                .application_actions
+                .len(),
+            actions.len()
+        );
+        for index in [2, 7, 10] {
+            let action = loaded.settings.mcp_servers[0].policy.application_actions
+                [&format!("reviewed_{index}")]
+                .action;
+            assert!(
+                !action.is_effect()
+                    && action.requires_operation_id()
+                    && action.reconciles_effect().is_some()
+            );
+        }
+        let mut invalid = document;
+        invalid["mcp_servers"][0]["policy"]["application_actions"]["reviewed_2"]["action"] =
+            serde_json::json!("document.unreviewed");
+        assert!(validate_settings_schema(&invalid).is_err());
+    }
+
+    #[test]
+    fn embedded_schema_and_real_loader_accept_only_explicit_resource_read_policy() {
+        let document = serde_json::json!({"providers":{},"mcp_servers":[{"name":"owned-resource","command":"owned-fixture",
+            "policy":{"task_resource_reads":{"read_document":{"schema_sha256":"a".repeat(64),
+                "uri_input_pointer":"/uri","input_template":{"uri":null,"operation":"read"}}}}}]});
+        validate_settings_schema(&document).unwrap();
+        let temp = tempfile::tempdir().unwrap();
+        let cwd = temp.path().join("workspace");
+        let config = temp.path().join("profile");
+        std::fs::create_dir_all(&cwd).unwrap();
+        std::fs::create_dir_all(&config).unwrap();
+        std::fs::write(
+            config.join("settings.json"),
+            serde_json::to_vec(&document).unwrap(),
+        )
+        .unwrap();
+        let loaded = crate::SettingsLoader::new(&cwd)
+            .with_config_dir(&config)
+            .load()
+            .unwrap();
+        let rule = &loaded.settings.mcp_servers[0].policy.task_resource_reads["read_document"];
+        assert_eq!(
+            rule.resource_uri(
+                &"a".repeat(64),
+                &serde_json::json!({"uri":"resource://one","operation":"read"})
+            ),
+            Some("resource://one")
+        );
+        let mut annotation = document.clone();
+        annotation["mcp_servers"][0]["policy"]["task_resource_reads"]["read_document"]["readOnly"] =
+            true.into();
+        assert!(validate_settings_schema(&annotation).is_err());
+        let mut missing = document.clone();
+        missing["mcp_servers"][0]["policy"]["task_resource_reads"]["read_document"]
+            .as_object_mut()
+            .unwrap()
+            .remove("schema_sha256");
+        assert!(validate_settings_schema(&missing).is_err());
+    }
 
     #[test]
     fn embedded_schema_accepts_default_document() {

@@ -1,0 +1,25 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { createResourceBudgetController } from './migrationResourceBudgetController.mjs';
+const limits = { maxTotalBytes: 8388608, maxPayloadFiles: 6, minFreeBytes: 1048576, minFreeFileNodes: 0 };
+const view = { phase: 'active', jobId: 'mig-owned', policyRevision: 0, limits, usage: { committedBytes: 1000, reservedBytes: 0, committedFiles: 5, reservedFiles: 0 } };
+const validIntent = value => value?.jobId === view.jobId && value.confirm === true && !!value.limits;
+test('two mounted clients cannot overwrite an in-flight peer selector or dispatch a second new intent', async () => {
+  const data = new Map(), storage = { getItem: key => data.get(key) ?? null, setItem: (key, value) => data.set(key, value) };
+  let tail = Promise.resolve();
+  const withLock = (_key, action) => { const next = tail.then(action); tail = next.then(() => {}, () => {}); return next; };
+  const calls = [], finish = [];
+  const api = { read: async () => view, increase: intent => { calls.push(structuredClone(intent)); return new Promise(resolve => { finish.push(() => resolve({ jobId: intent.jobId, requestId: intent.requestId, previousRevision: 0, revision: 1, limits: intent.limits })); }); } };
+  storage.refresh = async () => {}; storage.withTransaction = (key, operation) => withLock(key, () => operation(storage));
+  const options = { api, storage, scope: 'same-account-target-mount', jobId: view.jobId, planId: 'plan-owned', isCurrent: () => true, validIntent, validView: () => true };
+  const first = createResourceBudgetController({ ...options, createRequestId: () => 'first-original' });
+  const second = createResourceBudgetController({ ...options, createRequestId: () => 'second-original' });
+  await Promise.all([first.read(), second.read()]);
+  const firstRun = first.increase({ ...limits, maxPayloadFiles: 12 }, 0, true), secondRun = second.increase({ ...limits, maxPayloadFiles: 16 }, 0, true);
+  for (let i = 0; i < 12; i++) await Promise.resolve();
+  const observedCalls = calls.length, stored = JSON.parse([...data.values()][0]);
+  for (const resolve of finish) resolve(); await Promise.allSettled([firstRun, secondRun]);
+  assert.equal(observedCalls, 1, 'Native CAS cannot compensate for a lost original local locator');
+  assert.equal(stored.pending.requestId, 'first-original');
+  assert.equal(second.getSnapshot().pending.requestId, 'first-original');
+});

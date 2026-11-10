@@ -93,6 +93,7 @@ fn transcript_artifact_journal_tracks_approval_decisions() {
     let mut mark = artifact_journal_begin(&engine);
     prompt
         .persist_decision(ApprovalDecisionArtifact {
+            tool_call_id: None,
             version: 1,
             artifact_id: hex_sha256(b"approval"),
             thread_id: id.clone(),

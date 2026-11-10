@@ -1,0 +1,32 @@
+[package]
+name = "kcoder_plugin_rpc"
+description = "KCoder plugin RPC processing and runtime observations."
+publish = false
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+kcoder_app_protocol = { path = "../../../kcoder_app_protocol" }
+kcoder_config = { path = "../../../kcoder_config" }
+kcoder_hooks = { path = "../../../kcoder_hooks" }
+kcoder_mcp = { path = "../../../kcoder_mcp" }
+kcoder_plugins = { path = "../../../kcoder_plugins" }
+kcoder_skills = { path = "../../../kcoder_skills" }
+kcoder_types = { path = "../../../kcoder_types" }
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lib]
+path = "../../src/internal/plugin_rpc/lib.rs"

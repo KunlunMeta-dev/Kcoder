@@ -1,4 +1,5 @@
 import { useContext, useMemo } from 'react'
+import { getToken } from '@/api/auth'
 import { getRuntimeConfig } from '@/config/runtime'
 import { CloudConnectionContext, type CloudConnectionContextValue } from './CloudConnectionContext'
 
@@ -13,7 +14,7 @@ export function useCloudConnection(): CloudConnectionContextValue {
 export function useOptionalCloudConnection(): CloudConnectionContextValue {
   const context = useContext(CloudConnectionContext)
   const runtimeConfig = getRuntimeConfig()
-  const fallbackToken = localStorage.getItem('auth_token') ?? 'fallback-token'
+  const fallbackToken = getToken() ?? 'fallback-token'
   const fallback = useMemo<CloudConnectionContextValue>(() => {
     const fallbackUser = { id: 0, user_name: 'backend', email: '' }
     return {

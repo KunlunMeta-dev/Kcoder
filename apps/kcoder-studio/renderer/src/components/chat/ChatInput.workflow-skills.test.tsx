@@ -45,7 +45,6 @@ describe('ChatInput workflow-skills', () => {
       configurable: true,
       value: originalInnerWidth,
     })
-    delete (window as typeof window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__
   })
   test('does not expose compact slash when the current chat cannot compact context', async () => {
     const onSubmit = vi.fn()

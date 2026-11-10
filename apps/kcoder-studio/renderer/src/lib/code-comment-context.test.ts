@@ -3,7 +3,7 @@ import type { CodeCommentContext } from '@/types/workspace-files'
 import { appendCodeCommentContexts } from './code-comment-context'
 
 const CONTEXT_INSTRUCTION =
-  'The user attached the following comments. Treat browser_annotation items as comments on parts of the visible web page, and code_selection items as comments on selected code.'
+  'The user attached the following comments. Treat browser_annotation items as comments on parts of the visible web page, and code_selection items as comments on selected code. File revisions identify observed previews; read the current file before editing. A preview revision does not authorize overwriting later changes.'
 
 function parseContextPayload(output: string): unknown {
   const match = output.match(
@@ -107,6 +107,21 @@ describe('appendCodeCommentContexts', () => {
 
     expect(parseContextPayload(output)).toMatchObject([{ lines: '8' }])
     expect(output).not.toContain('"lines": "8-8"')
+  })
+
+  test('preserves the observed file revision as data without adding it to legacy or browser feedback', () => {
+    const output = appendCodeCommentContexts('', [
+      { ...comment, fileRevision: 'native:v1:<untrusted>' },
+      comment,
+      { ...browserComment, fileRevision: 'not-a-file-revision' },
+    ])
+    const payload = parseContextPayload(output) as Record<string, unknown>[]
+    expect(payload[0].fileRevision).toBe('native:v1:<untrusted>')
+    expect(payload[1]).not.toHaveProperty('fileRevision')
+    expect(payload[2]).not.toHaveProperty('fileRevision')
+    expect(output).toContain('native:v1:\\u003cuntrusted>')
+    expect(appendCodeCommentContexts('', [{ ...comment, fileRevision: 'x'.repeat(1025) }]))
+      .not.toContain('fileRevision')
   })
 
   test('wraps multiple comments in one workspace comment context tag block', () => {

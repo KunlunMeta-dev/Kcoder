@@ -119,8 +119,8 @@ function assertDiagnostics(evidence) {
 }
 
 function assertWorkspaceContract(state, expected) {
-  assert.equal(state.tauri.exists, true, "Gateway Web shim 未安装 __TAURI_INTERNALS__");
-  assert.equal(state.tauri.invokeType, "function", "Gateway Web shim 未提供 invoke");
+  assert.equal(state.electron.exists, true, "Gateway Web shim 未安装 __ELECTRON_INTERNALS__");
+  assert.equal(state.electron.invokeType, "function", "Gateway Web shim 未提供 invoke");
   assert.equal(state.ipcError, null, `runtime.tasks.list 调用失败：${state.ipcError}`);
   assert.ok(state.runtime, "runtime.tasks.list 缺失新建项目 workspace");
   assert.equal(state.runtime.label, expected.projectName);
@@ -138,7 +138,7 @@ function assertWorkspaceContract(state, expected) {
 
 async function workspaceState(page, projectName) {
   return page.evaluate(async name => {
-    const internals = window.__TAURI_INTERNALS__;
+    const internals = window.__ELECTRON_INTERNALS__;
     const project = [...document.querySelectorAll('[data-testid="project-item"]')]
       .find(node => node.querySelector('[data-testid^="project-title-"]')?.textContent?.trim() === name);
     const row = project?.querySelector('[data-testid^="project-row-"]');
@@ -157,7 +157,7 @@ async function workspaceState(page, projectName) {
       ? value.workspaces.find(candidate => candidate?.label === name)
       : null;
     return {
-      tauri: { exists: Boolean(internals), invokeType: typeof internals?.invoke },
+      electron: { exists: Boolean(internals), invokeType: typeof internals?.invoke },
       ipcError,
       runtime: workspace ? {
         label: typeof workspace.label === "string" ? workspace.label : null,

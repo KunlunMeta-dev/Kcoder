@@ -16,6 +16,7 @@ const hashes = {
   linux64: '0704631fb3e4f741092e08f55272f90abc3e307f991f05f332924364415b02e0',
   win64: '460016c1ddba882bf253445175ab240dd947fa349bd720daeb0e311c17e74540',
   'mac-x64': '468498b1b95e6114bae4880ef0f9c884c7653d120ecbde37885e1ba923c31526',
+  'mac-arm64': '6a12c6e76fcd0dc44accc8d28e93caa44ead57b71b8e0cac891bc3152a709790',
 };
 const marker = '.kcoder-chrome.json';
 
@@ -23,7 +24,7 @@ export function chromeRelease(platform) {
   if (!Object.hasOwn(hashes, platform)) throw new Error(`Unsupported Chrome platform: ${platform}`);
   return {
     platform, version: CHROME_VERSION, sha256: hashes[platform], directory: `chrome-${platform}`,
-    executable: platform === 'win64' ? 'chrome.exe' : platform === 'mac-x64' ? 'Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing' : 'chrome',
+    executable: platform === 'win64' ? 'chrome.exe' : platform.startsWith('mac-') ? 'Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing' : 'chrome',
     metadataUrl: `https://googlechromelabs.github.io/chrome-for-testing/${CHROME_VERSION}.json`,
     url: `https://storage.googleapis.com/chrome-for-testing-public/${CHROME_VERSION}/${platform}/chrome-${platform}.zip`,
   };
@@ -185,11 +186,12 @@ export async function prepareChrome({ platform = process.platform === 'win32' ? 
     await extract(verified, fresh);
     await verifyExtracted(fresh, release, entries);
     let macSignature;
-    if (release.platform === 'mac-x64') {
+    if (release.platform.startsWith('mac-')) {
       if (process.platform !== 'darwin') throw new Error('macOS Chrome signatures must be verified on a native macOS build host');
-      const executableMetadata = await macExecutableMetadata(join(fresh, release.directory, release.executable));
-      if (executableMetadata.signed) await run('/usr/bin/codesign', ['--verify', '--deep', '--strict', join(fresh, release.directory, 'Google Chrome for Testing.app')], { timeout: 60000, maxBuffer: 1024 * 1024 });
-      macSignature = { ...executableMetadata, status: executableMetadata.signed ? 'verified' : 'unsigned-upstream', provenance: 'pinned official Google archive SHA-256; unsigned is not a signing attestation' };
+      const executableMetadata = await macExecutableMetadata(join(fresh, release.directory, release.executable), release.platform === 'mac-arm64' ? 'arm64' : 'x64');
+      // Apple Silicon linker signatures cover code pages, not a publisher identity or app resource seal.
+      if (executableMetadata.signatureKind === 'embedded') await run('/usr/bin/codesign', ['--verify', '--deep', '--strict', join(fresh, release.directory, 'Google Chrome for Testing.app')], { timeout: 60000, maxBuffer: 1024 * 1024 });
+      macSignature = { ...executableMetadata, status: executableMetadata.signatureKind === 'embedded' ? 'verified' : executableMetadata.signatureKind === 'ad-hoc' ? 'ad-hoc-upstream' : 'unsigned-upstream', provenance: 'pinned official Google archive SHA-256; ad-hoc or unsigned code is not a publisher signing attestation' };
     }
     await writeFile(join(fresh, marker), JSON.stringify({ version: release.version, platform: release.platform, sha256: release.sha256, source: release.url, ...(macSignature ? { signature: macSignature } : {}) }, null, 2) + '\n', { mode: 0o644 });
     const backup = join(staging, 'previous');
@@ -215,7 +217,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   try {
     for (let i = 2; i < process.argv.length; i += 2) {
       const name = { '--platform': 'platform', '--dest': 'destination', '--cache': 'cache', '--archive': 'archive' }[process.argv[i]];
-      if (!name || !process.argv[i + 1] || process.argv[i + 1].startsWith('--')) throw new Error('Usage: prepare-chrome.mjs --platform linux64|win64|mac-x64 --dest PATH [--cache PATH] [--archive ZIP]');
+      if (!name || !process.argv[i + 1] || process.argv[i + 1].startsWith('--')) throw new Error('Usage: prepare-chrome.mjs --platform linux64|win64|mac-x64|mac-arm64 --dest PATH [--cache PATH] [--archive ZIP]');
       options[name] = process.argv[i + 1];
     }
     console.log(JSON.stringify(await prepareChrome(options)));

@@ -27,6 +27,10 @@ function serializedCodeCommentContexts(contexts: CodeCommentContext[]): string {
       filePath: context.filePath,
       fileName: context.fileName,
       lines: source === 'code_selection' ? lineRangeLabel(context) : null,
+      ...(source === 'code_selection' && context.sourceRevision && context.sourceRevision.length <= 1024 ? { sourceRevision: context.sourceRevision } : {}),
+      ...(source === 'code_selection' && context.fileRevision && context.fileRevision.length <= 1024
+        ? { fileRevision: context.fileRevision }
+        : {}),
       selectedText: context.selectedText,
       userComment: context.comment,
       createdAt: context.createdAt,
@@ -42,7 +46,7 @@ export function appendCodeCommentContexts(message: string, contexts: CodeComment
 
   const contextBlock = [
     '<workspace_comment_context>',
-    'The user attached the following comments. Treat browser_annotation items as comments on parts of the visible web page, and code_selection items as comments on selected code.',
+    'The user attached the following comments. Treat browser_annotation items as comments on parts of the visible web page, and code_selection items as comments on selected code. File revisions identify observed previews; read the current file before editing. A preview revision does not authorize overwriting later changes.',
     serializedCodeCommentContexts(contexts),
     '</workspace_comment_context>',
   ].join('\n')

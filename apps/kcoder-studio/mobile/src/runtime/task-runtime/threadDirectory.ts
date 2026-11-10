@@ -1,4 +1,7 @@
-import { prepareThreadDeletionCleanup, confirmThreadDeletionCleanup, retryThreadDeletionCleanup } from "@/storage/thread-deletion-cleanup";
+import { threadMutationServerIdentity, type ThreadMutationServer } from "@/gateway/target-identity";
+export { threadMutationServerIdentity, interactionServerIdentity } from "@/gateway/target-identity";
+import { prepareThreadDeletionCleanup, confirmThreadDeletionCleanup, retryThreadDeletionCleanup, ThreadDeletionCleanupConfirmationPendingError } from "@/storage/thread-deletion-cleanup";
+import { t } from "@/i18n";
 import { GatewayRpcClient, MobileRpcError } from "@/gateway/rpc";
 import type {
   GatewayProfile,
@@ -7,7 +10,8 @@ import type {
 } from "@/gateway/types";
 import { timestampMs } from "@/protocol/normalizers";
 import { taskClientConnector } from "./connectionFactory";
-import { captureWorkspaceProfileIdentity, startWorkspaceProfileRpc, withWorkspaceProfileWrite } from "@/storage/workspace-profile-fence";
+import { taskRuntimeRegistry } from "./registry";
+import { captureWorkspaceProfileIdentity, startWorkspaceProfileRpc, withWorkspaceProfileMetadata } from "@/storage/workspace-profile-fence";
 
 export interface ThreadListPage {
   threads: ThreadSummary[];
@@ -39,38 +43,8 @@ export interface ThreadMutationEvent {
 }
 
 type ThreadMutationListener = (event: ThreadMutationEvent) => void;
-type ThreadMutationServer = Pick<KCoderServer, "id"> &
-  Partial<
-    Pick<
-      KCoderServer,
-      | "transport"
-      | "host"
-      | "user"
-      | "port"
-      | "command"
-      | "profile"
-      | "settingsFile"
-      | "accountIdentity"
-    >
-  >;
 
 const threadMutationListeners = new Set<ThreadMutationListener>();
-
-export function threadMutationServerIdentity(
-  server: ThreadMutationServer,
-): string {
-  return JSON.stringify([
-    server.id,
-    server.transport,
-    server.host,
-    server.user,
-    server.port,
-    server.command,
-    server.profile,
-    server.settingsFile,
-    ...(server.accountIdentity ? [server.accountIdentity.principalId, server.accountIdentity.role] : []),
-  ]);
-}
 
 export function subscribeThreadMutations(
   listener: ThreadMutationListener,
@@ -287,7 +261,7 @@ export class ThreadListPager {
       : client.request<Partial<ThreadListPage>>("thread/list", params);
     const result = await response;
     this.assertCurrent();
-    if (authorization) await withWorkspaceProfileWrite(authorization, async () => this.assertCurrent());
+    if (authorization) await withWorkspaceProfileMetadata(authorization, async () => this.assertCurrent());
     this.assertCurrent();
     const { completeness, issueCount, nextCursor } = readThreadListPage(
       result,
@@ -450,6 +424,11 @@ export async function deleteStoredThread(
   cwd?: string,
   attachmentPaths: readonly string[] = [],
 ): Promise<void> {
+  const owner = taskRuntimeRegistry.getForTarget(profile, server, threadId, cwd);
+  if (owner) {
+    await owner.deleteThread();
+    return;
+  }
   const client = await taskClientConnector(
     profile,
     server,
@@ -459,8 +438,12 @@ export async function deleteStoredThread(
     const cleanupId = await prepareThreadDeletionCleanup(profile, server, threadId, cwd, attachmentPaths);
     await client.request("thread/delete", { threadId });
     publishThreadMutation(profile, server, threadId, cwd, { kind: "delete" });
-    // Remote deletion remains authoritative even if local storage is unavailable.
-    await confirmThreadDeletionCleanup(profile.id, cleanupId).catch(() => {});
+    // Remote deletion is authoritative; surface a pending local record instead
+    // of reporting full cleanup completion when its ACK cannot be persisted.
+    try { await confirmThreadDeletionCleanup(profile.id, cleanupId); }
+    catch {
+      throw new ThreadDeletionCleanupConfirmationPendingError(t("task.remote_delete_ack_cleanup_pending"));
+    }
     void retryThreadDeletionCleanup(profile, [server]).catch(() => {});
   } finally {
     client.close();

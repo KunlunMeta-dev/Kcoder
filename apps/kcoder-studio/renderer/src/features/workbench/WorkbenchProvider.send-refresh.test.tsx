@@ -7,13 +7,13 @@ import {
   createRuntimeWork,
   createRuntimeWorkApiMock,
   createWorkbenchServices,
-  clearTauriRuntime,
+  clearGatewayRuntime,
 } from './WorkbenchProvider.test-support'
 import { clearRuntimeConversationCacheForTests } from './runtimeConversationCache'
 import type { ChatStreamHandlers } from '@/stream/chatStream'
 import type { RuntimeWorkListResponse } from '@/types/api'
 
-vi.mock('@/tauri/localExecutor', () => ({
+vi.mock('@/host/localExecutor', () => ({
   ensureLocalExecutorStarted: vi
     .fn()
     .mockResolvedValue({ running: true, ready: true, deviceId: 'local-device' }),
@@ -29,7 +29,7 @@ const address = {
   workspacePath: '/workspace/project-alpha',
 }
 beforeEach(() => {
-  clearTauriRuntime()
+  clearGatewayRuntime()
   localStorage.clear()
   sessionStorage.clear()
   window.history.replaceState({}, '', '/')

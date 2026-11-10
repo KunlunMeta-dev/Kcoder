@@ -135,6 +135,10 @@ pub(super) fn is_user_elicitation_tool_name(name: &str) -> bool {
     )
 }
 
+pub(super) fn is_async_user_question_tool_name(name: &str) -> bool {
+    name == "AskUserQuestionAsync"
+}
+
 /// True when `name` is an edit-surface tool that the current configuration
 /// hides from the model. Hidden tools stay registered so restored sessions
 /// keep replaying; execution is rejected by `execute_tool_with_registry`.
@@ -167,13 +171,76 @@ pub(super) fn partition_tool_uses(
     groups
 }
 
+#[derive(Clone, Copy)]
+enum ToolInvocationOrigin {
+    Model,
+    App,
+}
+fn visible_at_origin(tool: &dyn kcoder_tools::Tool, origin: ToolInvocationOrigin) -> bool {
+    match origin {
+        ToolInvocationOrigin::Model => tool.is_model_visible(),
+        ToolInvocationOrigin::App => {
+            tool.is_app_visible()
+                && matches!(
+                    tool.source(),
+                    kcoder_tools::ToolSource::Mcp { .. } | kcoder_tools::ToolSource::Plugin { .. }
+                )
+        }
+    }
+}
+
+struct ToolExecutionScope<'a> {
+    active_tools: &'a ToolRegistry,
+    arrangement_mode: bool,
+    origin: ToolInvocationOrigin,
+}
+
 impl QueryEngine {
-    pub(super) async fn execute_tool<P: PermissionPrompt>(
+    /// Trusted host entrypoint. Tool policy, permissions, Hooks and the execution
+    /// gate are shared with model calls; the UI never supplies this origin flag.
+    pub async fn execute_app_tool<P: PermissionPrompt>(
+        &self,
+        id: &str,
+        name: &str,
+        input: Value,
+        prompt: &P,
+    ) -> Result<(
+        ToolOutput,
+        PermissionDecision,
+        Option<Value>,
+        Vec<EngineEvent>,
+    )> {
+        anyhow::ensure!(
+            self.inline_widgets_enabled(),
+            "Application tools require an authorized kworker presentation"
+        );
+        let arrangement_mode = self.is_arrangement_mode_active();
+        let mut active_tools = self.active_tool_registry_for_mode(arrangement_mode);
+        for tool in self.deferred_tools_snapshot().tools.all() {
+            if active_tools.get(&tool.name()).is_none() {
+                active_tools = active_tools.register_arc(tool);
+            }
+        }
+        self.execute_tool_in_scope(
+            id,
+            name,
+            input,
+            prompt,
+            ToolExecutionScope {
+                active_tools: &active_tools,
+                arrangement_mode,
+                origin: ToolInvocationOrigin::App,
+            },
+        )
+        .await
+    }
+
+    pub(super) async fn execute_tool(
         &self,
         id: &str,
         name: &str,
         input: serde_json::Value,
-        prompt: &P,
+        prompt: &dyn PermissionPrompt,
     ) -> Result<(
         ToolOutput,
         PermissionDecision,
@@ -182,16 +249,27 @@ impl QueryEngine {
     )> {
         let arrangement_mode = self.is_arrangement_mode_active();
         let active_tools = self.active_tool_registry_for_mode(arrangement_mode);
-        self.execute_tool_with_registry(id, name, input, prompt, &active_tools, arrangement_mode)
-            .await
+        let deferred = self.deferred_tools_snapshot();
+        self.execute_model_request_tool(
+            id,
+            name,
+            input,
+            prompt,
+            crate::deferred_tool_dispatch::ModelToolRegistry {
+                native: &active_tools,
+                deferred: &deferred,
+                arrangement_mode,
+            },
+        )
+        .await
     }
 
-    pub(super) async fn execute_tool_with_registry<P: PermissionPrompt>(
+    pub(super) async fn execute_tool_with_registry(
         &self,
         id: &str,
         name: &str,
         input: serde_json::Value,
-        prompt: &P,
+        prompt: &dyn PermissionPrompt,
         active_tools: &ToolRegistry,
         arrangement_mode: bool,
     ) -> Result<(
@@ -200,7 +278,57 @@ impl QueryEngine {
         Option<Value>,
         Vec<EngineEvent>,
     )> {
+        self.execute_tool_in_scope(
+            id,
+            name,
+            input,
+            prompt,
+            ToolExecutionScope {
+                active_tools,
+                arrangement_mode,
+                origin: ToolInvocationOrigin::Model,
+            },
+        )
+        .await
+    }
+
+    async fn execute_tool_in_scope(
+        &self,
+        id: &str,
+        name: &str,
+        input: Value,
+        prompt: &dyn PermissionPrompt,
+        scope: ToolExecutionScope<'_>,
+    ) -> Result<(
+        ToolOutput,
+        PermissionDecision,
+        Option<Value>,
+        Vec<EngineEvent>,
+    )> {
+        let denied_prompt = kcoder_permissions::AutoDenyPrompt;
+        let prompt: &dyn PermissionPrompt = if self.unattended_input {
+            &denied_prompt
+        } else {
+            prompt
+        };
+        let bound_prompt = prompt.bind_tool_call(id);
+        let prompt: &dyn PermissionPrompt = bound_prompt.as_deref().unwrap_or(prompt);
+        let ToolExecutionScope {
+            active_tools,
+            arrangement_mode,
+            origin,
+        } = scope;
         let mut events: Vec<EngineEvent> = Vec::new();
+        if self.channel_tool_is_disabled(name) {
+            return Ok((
+                ToolOutput::error(format!(
+                    "CHANNEL_TOOL_DISABLED: {name} is disabled by the channel tool restrictions; the tool was not executed"
+                )),
+                PermissionDecision::Deny,
+                None,
+                events,
+            ));
+        }
         let Some(tool) = active_tools.get(name) else {
             debug!("model requested unavailable tool `{}`", name);
             return Ok((
@@ -210,6 +338,35 @@ impl QueryEngine {
                 events,
             ));
         };
+        let visible = visible_at_origin(tool.as_ref(), origin);
+        if !visible {
+            return Ok((
+                ToolOutput::error("This tool is not available to the current request origin"),
+                PermissionDecision::Deny,
+                None,
+                events,
+            ));
+        }
+        if !self.client_questions_supported && is_user_elicitation_tool_name(name) {
+            return Ok((
+                ToolOutput::error(
+                    "This client does not support user elicitation; the tool was not executed",
+                ),
+                PermissionDecision::Deny,
+                None,
+                events,
+            ));
+        }
+        if is_async_user_question_tool_name(name) && !self.async_user_questions_available() {
+            return Ok((
+                ToolOutput::error(
+                    "Asynchronous user questions are unavailable for this host or task; the tool was not executed",
+                ),
+                PermissionDecision::Deny,
+                None,
+                events,
+            ));
+        }
         if self.permission_mode_suppresses_user_elicitation() && is_user_elicitation_tool_name(name)
         {
             return Ok((
@@ -240,6 +397,31 @@ impl QueryEngine {
                     "Tool {name} was not executed: the configured file-edit surface is \
                      `{active}`. Use that tool instead."
                 )),
+                PermissionDecision::Deny,
+                None,
+                events,
+            ));
+        }
+
+        if let Err(error) = self
+            .authorize_native_tool(
+                active_tools,
+                &tool,
+                name,
+                &input,
+                false,
+                crate::integrations::core::NativeToolAuthorizationPhase::Admission,
+            )
+            .await
+        {
+            let reason = error.to_string();
+            events.push(EngineEvent::ToolDenied {
+                id: id.into(),
+                name: name.into(),
+                reason: reason.clone(),
+            });
+            return Ok((
+                ToolOutput::error(reason),
                 PermissionDecision::Deny,
                 None,
                 events,
@@ -375,18 +557,35 @@ impl QueryEngine {
 
         // Hook permission decision overrides the engine when explicit.
         let hook_decision = pre_effects.permission_decision;
+        let explicit_approval = tool.requires_explicit_approval();
+        let hook_decision = if explicit_approval
+            && !matches!(
+                hook_decision,
+                Some(kcoder_hooks::HookPermissionBehavior::Deny)
+            ) {
+            let denied = recover_read_lock(&self.permissions, "permissions")
+                .decide(tool.as_ref(), &effective_input)
+                == PermissionDecision::Deny;
+            Some(if denied {
+                kcoder_hooks::HookPermissionBehavior::Deny
+            } else {
+                kcoder_hooks::HookPermissionBehavior::Ask
+            })
+        } else {
+            hook_decision
+        };
 
         // --- Permission engine ---
-        let (decision, mut effective_input) = match hook_decision {
+        let (decision, mut effective_input, invocation_approved) = match hook_decision {
             Some(kcoder_hooks::HookPermissionBehavior::Deny) => {
-                (PermissionDecision::Deny, effective_input)
+                (PermissionDecision::Deny, effective_input, false)
             }
             Some(kcoder_hooks::HookPermissionBehavior::Allow) => {
-                (PermissionDecision::Allow, effective_input)
+                (PermissionDecision::Allow, effective_input, true)
             }
             Some(kcoder_hooks::HookPermissionBehavior::Ask) => {
-                if self.permission_mode_bypasses_prompts() {
-                    (PermissionDecision::Allow, effective_input)
+                if self.permission_mode_bypasses_prompts() && !explicit_approval {
+                    (PermissionDecision::Allow, effective_input, false)
                 } else {
                     let (mut request_events, _effects, _blocking_error) = self
                         .run_simple_hooks(
@@ -401,7 +600,11 @@ impl QueryEngine {
                         .await;
                     events.append(&mut request_events);
                     let context = request_context_for(tool.as_ref(), &effective_input);
-                    let result = prompt.ask_context_with_edit(&context).await;
+                    let result = if explicit_approval {
+                        prompt.ask_explicit_context_with_edit(&context).await
+                    } else {
+                        prompt.ask_context_with_edit(&context).await
+                    };
                     let decision = permission_response_to_decision(
                         result.response,
                         name,
@@ -410,7 +613,7 @@ impl QueryEngine {
                     )
                     .await;
                     let effective_input = apply_edited_input(result, effective_input);
-                    (decision, effective_input)
+                    (decision, effective_input, true)
                 }
             }
             None => {
@@ -441,9 +644,9 @@ impl QueryEngine {
                     )
                     .await;
                     let effective_input = apply_edited_input(result, effective_input);
-                    (decision, effective_input)
+                    (decision, effective_input, true)
                 } else {
-                    (engine_decision, effective_input)
+                    (engine_decision, effective_input, false)
                 }
             }
         };
@@ -533,6 +736,20 @@ impl QueryEngine {
                     events.append(&mut failure_events);
                     return Ok((output, PermissionDecision::Deny, None, events));
                 }
+                let web_origin_approval = match self
+                    .approve_private_web_origin(&tool, &effective_input, prompt)
+                    .await
+                {
+                    Ok(approval) => approval,
+                    Err(error) => {
+                        return Ok((
+                            ToolOutput::error(error.to_string()),
+                            PermissionDecision::Deny,
+                            None,
+                            events,
+                        ));
+                    }
+                };
                 let track_shell_file_changes =
                     should_track_shell_file_changes(name, &effective_input);
                 let shell_snapshot_before = if track_shell_file_changes {
@@ -575,6 +792,122 @@ impl QueryEngine {
                         } else {
                             (None, Some(self.tool_execution_gate.write().await))
                         };
+                    // Invocation-local approvals (prompt/Hook) survive Ask mode, never explicit revocation.
+                    // All origins recheck current permissions after waiting for the execution gate.
+                    let permission_revoked = {
+                        let permissions = recover_read_lock(&self.permissions, "permissions");
+                        permissions.is_explicitly_denied(name, &effective_input)
+                            || (!invocation_approved
+                                && permissions.decide(tool.as_ref(), &effective_input)
+                                    != PermissionDecision::Allow)
+                    };
+                    if permission_revoked {
+                        let reason =
+                            "Tool was not executed: permission revoked or changed before dispatch";
+                        events.push(EngineEvent::ToolDenied {
+                            id: id.into(),
+                            name: name.into(),
+                            reason: reason.into(),
+                        });
+                        return Ok((
+                            ToolOutput::error(reason),
+                            PermissionDecision::Deny,
+                            None,
+                            events,
+                        ));
+                    }
+                    if let Err(error) = self
+                        .authorize_native_tool(
+                            active_tools,
+                            &tool,
+                            name,
+                            &effective_input,
+                            !use_sandbox,
+                            crate::integrations::core::NativeToolAuthorizationPhase::Dispatch,
+                        )
+                        .await
+                    {
+                        let reason = error.to_string();
+                        events.push(EngineEvent::ToolDenied {
+                            id: id.into(),
+                            name: name.into(),
+                            reason: reason.clone(),
+                        });
+                        return Ok((
+                            ToolOutput::error(reason),
+                            PermissionDecision::Deny,
+                            None,
+                            events,
+                        ));
+                    }
+                    if !visible_at_origin(tool.as_ref(), origin) {
+                        let reason = "NATIVE_TOOL_EXPOSURE_REVOKED".to_owned();
+                        events.push(EngineEvent::ToolDenied {
+                            id: id.into(),
+                            name: name.into(),
+                            reason: reason.clone(),
+                        });
+                        return Ok((
+                            ToolOutput::error(reason),
+                            PermissionDecision::Deny,
+                            None,
+                            events,
+                        ));
+                    }
+                    if matches!(
+                        tool.source(),
+                        kcoder_tools::ToolSource::NativeFeature { .. }
+                    ) || crate::web_local_access::native_page_reader(tool.as_ref())
+                        || tool.as_ref().type_id()
+                            == std::any::TypeId::of::<kcoder_tools::wiki::WikiTool>()
+                        || tool.as_ref().type_id()
+                            == std::any::TypeId::of::<kcoder_tools::wiki_manage::WikiManageTool>()
+                        || crate::web_source_runtime::is_native_web_tool(tool.as_ref())
+                        || explicit_approval
+                    {
+                        ctx = match ctx.with_native_tool_invocation(&tool, &effective_input) {
+                            Ok(context) => context,
+                            Err(error) => {
+                                return Ok((
+                                    ToolOutput::error(error.to_string()),
+                                    PermissionDecision::Deny,
+                                    None,
+                                    events,
+                                ));
+                            }
+                        };
+                    }
+                    if let Some(approval) = &web_origin_approval {
+                        ctx = match approval.apply(ctx, &tool, &effective_input) {
+                            Ok(context) => context,
+                            Err(error) => {
+                                return Ok((
+                                    ToolOutput::error(error.to_string()),
+                                    PermissionDecision::Deny,
+                                    None,
+                                    events,
+                                ));
+                            }
+                        };
+                    }
+                    ctx = match self.with_native_transport_recheck(
+                        ctx,
+                        active_tools,
+                        &tool,
+                        name,
+                        &effective_input,
+                        !use_sandbox,
+                    ) {
+                        Ok(context) => context,
+                        Err(error) => {
+                            return Ok((
+                                ToolOutput::error(error.to_string()),
+                                PermissionDecision::Deny,
+                                None,
+                                events,
+                            ));
+                        }
+                    };
                     let call_result = if invocation_timeout_ms == 0 {
                         Ok(tool.call(effective_input.clone(), &ctx).await)
                     } else {
@@ -585,7 +918,14 @@ impl QueryEngine {
                         .await
                     };
                     match call_result {
-                        Ok(Ok(output)) => break output,
+                        Ok(Ok(mut output)) => {
+                            if let Err(error) =
+                                self.validate_agent_resource_read(name, &effective_input, &output)
+                            {
+                                break ToolOutput::error(error.to_string());
+                            }
+                            break output;
+                        }
                         Ok(Err(ToolError::SandboxDenied { reason, output }))
                             if should_retry_shell_without_sandbox(
                                 name,
@@ -872,6 +1212,7 @@ impl QueryEngine {
                     });
                 }
 
+                self.attach_imported_instruction_context(&mut output);
                 Ok((output, decision, None, events))
             }
             PermissionDecision::Deny => {

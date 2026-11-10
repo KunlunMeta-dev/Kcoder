@@ -7,6 +7,8 @@ import type {
 
 export interface WorkbenchPaneSessionOptions {
   currentRuntimeTask: RuntimeTaskAddress | null
+  feedbackOwnerScope?: string
+  feedbackDeviceId?: string
 }
 
 export interface SendRequestUserInputResponseOptions {

@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 const fixture = vi.hoisted(() => ({
+  attachmentBackend: null as any, permissionSupported: false,
   asyncValues: new Map<string, string>(),
   secureValues: new Map<string, string>(),
   setItemOverride: undefined as ((key: string, value: string) => Promise<void>) | undefined,
@@ -21,6 +22,7 @@ const fixture = vi.hoisted(() => ({
   refuseNextWorktreeLink: false,
 }));
 
+vi.mock("@/storage/staged-attachment-bytes", () => ({ createAttachmentBytesBackend: () => fixture.attachmentBackend }));
 vi.mock("@react-native-async-storage/async-storage", () => ({ default: {
   getAllKeys: async () => [...fixture.asyncValues.keys()],
   getItem: async (key: string) => fixture.asyncValues.get(key) ?? null,
@@ -48,6 +50,9 @@ vi.mock("@/gateway/http", () => ({
   gatewaySessionExpired: vi.fn(async () => false),
 }));
 
+import { AttachmentManifestFixture } from "@/test/attachment-manifest-fixture";
+import { DraftAttachmentStore } from "@/storage/draft-attachment-store";
+import { legacyAttachmentPrompt } from "@/protocol/attachment-prompt";
 import type { GatewayProfile, KCoderServer } from "@/gateway/types";
 import { WORKSPACE_READ_V2, WORKSPACE_SCOPE_V2, workspaceParamsDigestV2, type WorkspaceMutationMethodV2 } from "@/protocol/workspace-operation-receipts-v2";
 import { TaskRuntime } from "./core";
@@ -62,8 +67,13 @@ import {
 } from "@/storage/pending-workspace-operation-v2";
 import { persistProfiles } from "@/storage/profile-store";
 import { openWorkspaceWithReceipt, prepareManagedWorktreeWithReceipt } from "./workspaces";
-import { readWorkspaceTaskHandoff, type WorkspaceTaskHandoff } from "@/storage/pending-thread-creation";
+import { linkedCreationIntent, readWorkspaceTaskHandoff, type WorkspaceTaskHandoff } from "@/storage/pending-thread-creation";
 import { retryCreationCleanup } from "./factories";
+import { confirmedSessionAnchor } from "@/features/task/session-cache-anchor";
+import { sessionTranscriptCache } from "@/storage/session-transcript-cache";
+import { captureSessionTranscriptScope } from "@/storage/session-transcript-scope";
+import { captureRuntimeTranscriptLease } from "./cache-publication";
+import { createSessionTranscriptStore } from "@/storage/session-transcript-store";
 
 const profile: GatewayProfile = {
   ...fixtureProfile,
@@ -115,6 +125,16 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
+function publicationStore() {
+  let manifest: string | null = null;
+  return createSessionTranscriptStore({
+    readManifest: async () => manifest,
+    readEntry: async () => null,
+    reset: async raw => { manifest = raw; },
+    commit: async change => { manifest = change.manifest; },
+  }, async (_identity, operation) => operation());
+}
+
 function associationKey(params: Record<string, unknown>): string {
   const conversation = (params.conversation ?? {}) as Record<string, unknown>;
   return JSON.stringify([params.deviceId, params.path, conversation.taskId, conversation.threadId]);
@@ -122,16 +142,20 @@ function associationKey(params: Record<string, unknown>): string {
 
 function makeClient(cwd: string): FakeClient {
   const client = new FakeClient([]);
+  Object.assign(client, { matchesRetainedAttachmentOwner: () => !client.closed });
   client.supportsExperimental = capability => [
     "workspaceOperationReceiptsV2",
     "threadCreationReceiptsV1",
     "turnReceiptsV1",
-  ].includes(capability);
+    "agentDefinitionsV1",
+  ].includes(capability) || capability === "turnPermissions" && fixture.permissionSupported;
   client.request = vi.fn(async (method: string, rawParams: Record<string, unknown> = {}) => {
     const params = { ...rawParams };
     const scope = scopeFor(cwd);
     fixture.rpcCalls.push({ cwd, method, params });
 
+    if (method === "attachment/save") return { path: "/owned/handoff-first.png" };
+    if (method === "gateway/attachments/retain") return { retained: true, paths: params.paths };
     if (method === WORKSPACE_SCOPE_V2) return scope;
     if (method === WORKSPACE_READ_V2) {
       const prior = fixture.remoteReceipts.get(String(params.clientRequestId ?? ""));
@@ -239,7 +263,7 @@ function makeClient(cwd: string): FakeClient {
 }
 
 type TaskCreationInput = Parameters<typeof TaskRuntime.create>[0];
-type TaskInputOptions = { worktree?: boolean; prompt?: string; worktreeResultPath?: string };
+type TaskInputOptions = { permissionMode?: "ask"; worktree?: boolean; prompt?: string; worktreeResultPath?: string; agentDefinition?: NonNullable<TaskCreationInput["agentDefinition"]> };
 
 async function createHandoff(options: TaskInputOptions = {}): Promise<{
   handoff: WorkspaceTaskHandoff;
@@ -256,6 +280,8 @@ async function createHandoff(options: TaskInputOptions = {}): Promise<{
     cwd: confirmed.path,
     prompt,
     model: "review-model",
+    ...(options.permissionMode ? { permissionMode: options.permissionMode } : {}),
+    ...(options.agentDefinition ? { agentDefinition: options.agentDefinition } : {}),
     ...(options.worktree ? { managedWorktreeSourcePath: serverWorkspacePath } : {}),
   };
   const handoff = await reserveWorkspaceTaskHandoff(profile, server, confirmed.receipt, linkedInput);
@@ -272,6 +298,7 @@ function calls(method: string) {
 }
 
 beforeEach(async () => {
+  fixture.attachmentBackend = new AttachmentManifestFixture(); fixture.permissionSupported = false;
   fixture.asyncValues.clear();
   fixture.secureValues.clear();
   fixture.setItemOverride = undefined;
@@ -301,10 +328,53 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+it.each(["ordinary", "linked"] as const)("%s creation sends thread/start without waiting for its single cache preflight", async kind => {
+  const cache = publicationStore();
+  const held = deferred<Awaited<ReturnType<typeof sessionTranscriptCache.captureWorkspacePublisherFence>>>();
+  const capture = vi.spyOn(sessionTranscriptCache, "captureWorkspacePublisherFence").mockReturnValue(held.promise);
+  const input = kind === "linked" ? (await createHandoff()).input
+    : { profile, server, cwd: "/workspace/task", prompt: "cache-independent create", model: "review-model" };
+  const runtime = await TaskRuntime.create(input);
+  try {
+    expect(calls("thread/start")).toHaveLength(1);
+    expect(calls("thread/resume")).toHaveLength(kind === "linked" ? 1 : 0);
+    expect(capture).toHaveBeenCalledTimes(1);
+    const snapshot = runtime.getSnapshot();
+    const actual = captureSessionTranscriptScope(profile, server, snapshot.cwd, snapshot.threadId);
+    capture.mockRestore();
+    held.resolve(await cache.captureWorkspacePublisherFence(actual, () => true));
+    await Promise.resolve(); await Promise.resolve();
+    expect(await captureRuntimeTranscriptLease(runtime, actual, () => true)).toBeNull();
+  } finally { runtime.close(); }
+});
+
+it.each(["missing", "confirmed"] as const)("ordinary creation requires actual thread/start cwd for publishing (%s)", async mode => {
+  const cache = publicationStore();
+  const candidate = captureSessionTranscriptScope(profile, server, "/workspace/task", "candidate");
+  const fence = await cache.captureWorkspacePublisherFence(candidate, () => true);
+  vi.spyOn(sessionTranscriptCache, "captureWorkspacePublisherFence").mockResolvedValueOnce(fence);
+  vi.spyOn(sessionTranscriptCache, "capturePublisherLease").mockImplementation(cache.capturePublisherLease);
+  const gate = deferred<{ thread: { id: string; cwd: string; createdAt: number; updatedAt: number } }>();
+  fixture.threadStartGate = gate.promise;
+  const runtimePromise = TaskRuntime.create({ profile, server, cwd: "/workspace/task", prompt: "missing cwd", model: "review-model" });
+  await vi.waitFor(() => expect(calls("thread/start")).toHaveLength(1));
+  gate.resolve({ thread: { id: "cwd-proof-thread", ...(mode === "confirmed" ? { cwd: "/workspace/task" } : {}),
+    createdAt: threadTimestamp, updatedAt: threadTimestamp } } as never);
+  const runtime = await runtimePromise;
+  try {
+    expect(runtime.getSnapshot().cwd).toBe("/workspace/task");
+    const lease = await captureRuntimeTranscriptLease(runtime,
+      captureSessionTranscriptScope(profile, server, "/workspace/task", "cwd-proof-thread"), () => true);
+    if (mode === "confirmed") expect(lease).not.toBeNull();
+    else expect(lease).toBeNull();
+  } finally { runtime.close(); }
+});
+
 it("reloads the linked locator after an unknown start reply and recovers without another thread/start", async () => {
   fixture.dropNextThreadStartAck = true;
   fixture.hideNextCreationRead = true;
-  const { handoff, sourceReceiptId } = await createHandoff();
+  const agentDefinition = { id: "expert-review", version: "v3", definitionSha256: "d".repeat(64) };
+  const { handoff, sourceReceiptId } = await createHandoff({ agentDefinition });
 
   await expect(TaskRuntime.create({
     ...(await readWorkspaceTaskHandoff(handoff)).linked!.input,
@@ -315,8 +385,11 @@ it("reloads the linked locator after an unknown start reply and recovers without
   const afterUnknown = await readWorkspaceTaskHandoff(handoff);
   expect(afterUnknown.dispatched).toBe(true);
   expect(afterUnknown.linked?.threadPhase).toBe("unknown");
+  expect(afterUnknown.linked?.input.agentDefinition).toEqual(agentDefinition);
+  expect(afterUnknown.linked?.startParams?.agentDefinition).toEqual(agentDefinition);
   expect(calls("thread/start")).toHaveLength(1);
   expect(calls("thread/start")[0].params.clientRequestId).toBe(handoff.clientRequestId);
+  expect(calls("thread/start")[0].params.agentDefinition).toEqual(agentDefinition);
   expect(calls("thread/creation/read")).toHaveLength(1);
   expect(calls("thread/creation/read")[0].params.clientRequestId).toBe(handoff.clientRequestId);
 
@@ -329,6 +402,8 @@ it("reloads the linked locator after an unknown start reply and recovers without
     server,
     workspaceHandoff: loaded!.handle,
   };
+  await expect(TaskRuntime.create({ ...recoveredInput, agentDefinition: { ...agentDefinition, version: "v4", definitionSha256: "e".repeat(64) } })).rejects.toThrow("原任务内容");
+  expect(calls("thread/start")).toHaveLength(1);
   const runtime = await TaskRuntime.create(recoveredInput);
   try {
     expect(runtime.getSnapshot().threadId).toBe(`thread-${handoff.clientRequestId}`);
@@ -338,6 +413,7 @@ it("reloads the linked locator after an unknown start reply and recovers without
     expect(calls("turn/start")).toHaveLength(1);
     expect(calls("turn/start")[0].params.clientMessageId).toBe(`${handoff.clientRequestId}-initial-turn`);
     expect(calls("turn/start")[0].params.input).toEqual([{ type: "text", text: "continue the original task" }]);
+    expect((await readWorkspaceTaskHandoff(handoff)).linked?.input.agentDefinition).toEqual(agentDefinition);
   } finally {
     runtime.close();
   }
@@ -371,6 +447,35 @@ it("leaves a prepared initial turn unsent when its sent checkpoint fails, then r
     expect(calls("thread/start")).toHaveLength(1);
     expect(calls("turn/start")).toHaveLength(1);
     expect(calls("turn/start")[0].params.clientMessageId).toBe(`${handoff.clientRequestId}-initial-turn`);
+  } finally {
+    runtime.close();
+  }
+});
+
+it("keeps the initial turn client ID on its seed user row for canonical cache-anchor mapping", async () => {
+  const input = { cwd: "/workspace/task", prompt: "create the initial task", model: "review-model", profile, server };
+  const runtime = await TaskRuntime.create(input);
+  try {
+    const sentClientMessageId = calls("turn/start")[0]?.params.clientMessageId;
+    const creationClientRequestId = calls("thread/start")[0]?.params.clientRequestId;
+    expect(sentClientMessageId).toBe(`${String(creationClientRequestId)}-initial-turn`);
+    const displayRows = runtime.getSnapshot().messages;
+    const seedUser = displayRows.find(message => message.role === "user" && message.id.startsWith("local-user-"));
+    expect(seedUser?.clientMessageId).toBe(sentClientMessageId);
+
+    const canonical = {
+      id: "history-user-row",
+      role: "user" as const,
+      turnId: runtime.getSnapshot().activeTurnId!,
+      clientMessageId: String(sentClientMessageId),
+    };
+    const marker = seedUser && confirmedSessionAnchor(
+      { messageId: seedUser.id, offset: 37, followsLatest: false },
+      displayRows,
+      [canonical],
+      [{ id: canonical.id, role: canonical.role, turnId: canonical.turnId }],
+    );
+    expect(marker).toEqual({ messageId: canonical.id, offset: 37, followsLatest: false });
   } finally {
     runtime.close();
   }
@@ -626,4 +731,51 @@ it("lets a successor adopt the same linked creation after its owner releases, wh
     fixture.threadStartGate = undefined;
     registry.removeProfile(profile.id);
   }
+});
+
+it("strictly rejects linked legacy metadata loss or corruption before dispatch", async () => {
+  const prepared = await createHandoff();
+  const raw = JSON.parse(fixture.asyncValues.get(prepared.handoff.key)!);
+  raw.linked.input.localAttachmentIds = ["a".repeat(32)]; raw.linked.input.attachmentDraftId = "legacy-draft"; raw.linked.input.attachmentTransport = "legacy";
+  raw.linked.creationIntent = linkedCreationIntent(raw.linked.input); raw.intent = raw.linked.creationIntent;
+  raw.threadId = "thread-1";
+  raw.linked.turn.params = { threadId: "thread-1", clientMessageId: raw.linked.turn.clientMessageId, input: [{ type: "text", text: raw.linked.input.prompt }] };
+  fixture.asyncValues.set(prepared.handoff.key, JSON.stringify(raw));
+  await expect(readWorkspaceTaskHandoff(prepared.handoff)).rejects.toThrow();
+  raw.legacyAttachments = [{ filename: "first.png", mimeType: "image/png", fileSize: -1, path: "/owned/file" }];
+  raw.linked.turn.params.input[0].text = legacyAttachmentPrompt(raw.linked.input.prompt, raw.legacyAttachments);
+  fixture.asyncValues.set(prepared.handoff.key, JSON.stringify(raw));
+  await expect(readWorkspaceTaskHandoff(prepared.handoff)).rejects.toThrow();
+  expect(calls("thread/start")).toHaveLength(0);
+});
+it("recovers a linked legacy first turn by original receipts without uploading or sending twice", async () => {
+  const confirmed = await openWorkspaceWithReceipt(profile, server, "/workspace/task");
+  const blob = new Blob([new Uint8Array([1, 2, 3])]); const store = new DraftAttachmentStore();
+  const row = await store.prepare({ profile, server, workspacePath: confirmed.path, isCurrent: () => true }, "linked-legacy-draft", "first.png", "image/png", { blob, size: blob.size, async read(offset, length) { return new Uint8Array(await blob.slice(offset, offset + length).arrayBuffer()); } });
+  const linkedInput = { cwd: confirmed.path, prompt: "linked first file", model: "review-model", localAttachmentIds: [row.id], attachmentDraftId: "linked-legacy-draft", attachmentTransport: "legacy" as const };
+  const handoff = await reserveWorkspaceTaskHandoff(profile, server, confirmed.receipt, linkedInput);
+  fixture.dropNextTurnStartAck = true;
+  const input = { ...linkedInput, profile, server, workspaceHandoff: handoff };
+  const first = await TaskRuntime.create(input); expect(first.getSnapshot().sendAcceptanceUnknown).toBe(true); first.close();
+  expect((await readWorkspaceTaskHandoff(handoff)).legacyAttachments).toHaveLength(1);
+  const task = await TaskRuntime.create(input);
+  expect(task.getSnapshot().sendAcceptanceUnknown).toBe(false);
+  for (const method of ["thread/start", "attachment/save", "gateway/attachments/retain", "turn/start"]) expect(calls(method)).toHaveLength(1);
+  expect(calls("thread/creation/read").length).toBeGreaterThan(0); expect(calls("turn/receipt/read").length).toBeGreaterThan(0);
+  expect(fixture.attachmentBackend.bytes.size).toBe(0); task.close();
+});
+
+it("checks withdrawn permission capability before a prepared linked turn can be marked sent", async () => {
+  fixture.permissionSupported = true;
+  const { handoff, input } = await createHandoff({ permissionMode: "ask" });
+  fixture.setItemOverride = async (key, raw) => {
+    if (key === handoff.key && JSON.parse(raw).linked?.turn.phase === "sent") throw new Error("hold prepared turn");
+    fixture.asyncValues.set(key, raw);
+  };
+  await expect(TaskRuntime.create(input)).rejects.toThrow("hold prepared turn");
+  const before = await readWorkspaceTaskHandoff(handoff); expect(before.linked?.turn.phase).toBe("prepared");
+  fixture.setItemOverride = undefined; fixture.permissionSupported = false;
+  await expect(TaskRuntime.create(input)).rejects.toThrow();
+  const after = await readWorkspaceTaskHandoff(handoff); expect(after.linked?.turn.phase).toBe("prepared"); expect(after.linked?.turn.params).toEqual(before.linked?.turn.params);
+  expect(calls("thread/start")).toHaveLength(1); expect(calls("turn/start")).toHaveLength(0);
 });

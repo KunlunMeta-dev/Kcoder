@@ -1,10 +1,11 @@
-use super::{protocol_io::notification, workspace_fs};
+use super::workspace_fs;
 use anyhow::{Context, Result};
 use kcoder_app_protocol::{
     TerminalAttachParams, TerminalAttachResult, TerminalCloseParams, TerminalCloseResult,
     TerminalExitParams, TerminalListResult, TerminalOutputParams, TerminalResizeParams,
     TerminalSessionInfo, TerminalStartParams, TerminalStartResult, TerminalWriteParams, method,
 };
+use kcoder_host_transport::protocol_io::notification;
 use portable_pty::{CommandBuilder, MasterPty, PtySize, native_pty_system};
 use serde_json::{Value, json};
 use std::collections::{HashMap, VecDeque};
@@ -13,6 +14,9 @@ use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc;
+#[path = "terminal/lifecycle.rs"]
+mod lifecycle;
+use lifecycle::ChildOwner;
 
 const MAX_TERMINAL_INPUT_BYTES: usize = 64 * 1024;
 const MAX_TERMINAL_SESSIONS: usize = 16;
@@ -60,25 +64,30 @@ struct TerminalState {
 }
 
 struct TerminalSession {
-    master: Mutex<Box<dyn MasterPty + Send>>,
+    master: Mutex<Option<Box<dyn MasterPty + Send>>>,
     input_tx: Mutex<Option<std::sync::mpsc::SyncSender<Vec<u8>>>>,
-    child: Mutex<Box<dyn portable_pty::Child + Send + Sync>>,
+    child: Mutex<ChildOwner>,
     state: Mutex<TerminalState>,
     #[cfg(unix)]
     process_id: Option<u32>,
     closed: AtomicBool,
     process_exited: AtomicBool,
+    exit_notified: AtomicBool,
+    #[cfg(windows)]
+    console_closed: AtomicBool,
+    #[cfg(windows)]
+    output_drained: AtomicBool,
 }
 
 #[derive(Clone, Default)]
-pub(super) struct TerminalRegistry(Arc<Mutex<HashMap<String, Arc<TerminalSession>>>>);
+pub struct TerminalRegistry(Arc<Mutex<HashMap<String, Arc<TerminalSession>>>>);
 
 impl TerminalRegistry {
-    pub(super) fn resource_count(&self) -> Option<usize> {
+    pub fn resource_count(&self) -> Option<usize> {
         // Observation must not wait for a terminal worker or treat contention as zero.
         self.0.try_lock().ok().map(|sessions| sessions.len())
     }
-    pub(super) fn shutdown_all(&self) {
+    pub fn shutdown_all(&self) {
         let sessions = self
             .0
             .lock()
@@ -100,11 +109,11 @@ impl TerminalRegistry {
         self.0
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .retain(|_, session| !session.process_exited.load(Ordering::Acquire));
+            .retain(|_, session| !cleanup_complete(session));
     }
 }
 
-pub(super) struct TerminalRegistryGuard(pub(super) TerminalRegistry);
+pub struct TerminalRegistryGuard(pub TerminalRegistry);
 
 impl Drop for TerminalRegistryGuard {
     fn drop(&mut self) {
@@ -112,7 +121,7 @@ impl Drop for TerminalRegistryGuard {
     }
 }
 
-pub(super) async fn start(
+pub async fn start(
     workspace_root: &Path,
     engine_session_id: &str,
     terminal_number: u64,
@@ -152,13 +161,14 @@ pub(super) async fn start(
     command.cwd(&cwd);
     command.env("TERM", "xterm-256color");
     command.env("COLORTERM", "truecolor");
-    let mut child = pair
-        .slave
-        .spawn_command(command)
-        .context("failed to start interactive terminal shell")?;
-    drop(pair.slave);
     let mut reader = pair.master.try_clone_reader()?;
     let mut writer = pair.master.take_writer()?;
+    let mut child = ChildOwner::new(
+        pair.slave
+            .spawn_command(command)
+            .context("failed to start interactive terminal shell")?,
+    );
+    drop(pair.slave);
     let (input_tx, input_rx) = std::sync::mpsc::sync_channel::<Vec<u8>>(TERMINAL_INPUT_QUEUE_DEPTH);
     if let Err(error) = std::thread::Builder::new()
         .name(format!("kcoder-terminal-input-{terminal_number}"))
@@ -184,7 +194,7 @@ pub(super) async fn start(
     #[cfg(unix)]
     let process_id = child.process_id();
     let session = Arc::new(TerminalSession {
-        master: Mutex::new(pair.master),
+        master: Mutex::new(Some(pair.master)),
         input_tx: Mutex::new(Some(input_tx)),
         child: Mutex::new(child),
         state: Mutex::new(TerminalState {
@@ -200,6 +210,11 @@ pub(super) async fn start(
         process_id,
         closed: AtomicBool::new(false),
         process_exited: AtomicBool::new(false),
+        exit_notified: AtomicBool::new(false),
+        #[cfg(windows)]
+        console_closed: AtomicBool::new(false),
+        #[cfg(windows)]
+        output_drained: AtomicBool::new(false),
     });
     terminals
         .0
@@ -215,6 +230,8 @@ pub(super) async fn start(
         .spawn(move || {
             let mut buffer = [0_u8; 8192];
             let mut pending_utf8 = Vec::with_capacity(4);
+            #[cfg(windows)]
+            let mut delivery_closed = false;
             loop {
                 match reader.read(&mut buffer) {
                     Ok(0) => break,
@@ -229,6 +246,10 @@ pub(super) async fn start(
                             data,
                             sequence,
                         };
+                        #[cfg(windows)]
+                        if delivery_closed {
+                            continue;
+                        }
                         if outbound_tx
                             .blocking_send(notification(
                                 method::TERMINAL_OUTPUT,
@@ -236,7 +257,18 @@ pub(super) async fn start(
                             ))
                             .is_err()
                         {
+                            #[cfg(not(windows))]
                             break;
+                            #[cfg(windows)]
+                            {
+                                // Keep draining while the child watcher closes HPCON.
+                                delivery_closed = true;
+                                mark_closed(&reader_session);
+                                reader_session.input_tx.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).take();
+                                if let Err(error) = terminate(&reader_session) {
+                                    tracing::warn!(%error, "terminal delivery cleanup remains owned");
+                                }
+                            }
                         }
                     }
                     Err(_) => break,
@@ -256,40 +288,37 @@ pub(super) async fn start(
                 ));
             }
             mark_closed(&reader_session);
+            #[cfg(not(windows))]
             reader_session
                 .input_tx
                 .lock()
                 .unwrap_or_else(|poisoned| poisoned.into_inner())
                 .take();
-            let exit_code = match terminate(&reader_session) {
+            #[cfg(windows)]
+            reader_session.output_drained.store(true, Ordering::Release);
+            #[cfg(windows)]
+            let completion = lifecycle::finish_output(&reader_session);
+            #[cfg(not(windows))]
+            let completion = terminate(&reader_session);
+            let exit_code = match completion {
                 Ok(exit_code) => Some(exit_code),
                 Err(error) => {
-                    // Keep the registry owner available for close/disconnect retry.
                     tracing::warn!(%error, "terminal EOF cleanup did not finish within its bound");
-                    return;
+                    None
                 }
             };
-            let mut registry = reader_terminals
-                .0
+            #[cfg(windows)]
+            reader_session
+                .input_tx
                 .lock()
-                .unwrap_or_else(|poisoned| poisoned.into_inner());
-            if registry
-                .get(&reader_session_id)
-                .is_some_and(|registered| Arc::ptr_eq(registered, &reader_session))
-            {
-                registry.remove(&reader_session_id);
-            }
-            drop(registry);
-            let sequence = next_sequence(&reader_session);
-            let params = TerminalExitParams {
-                session_id: reader_session_id,
-                sequence,
-                exit_code,
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .take();
+            #[cfg(windows)]
+            let exit_code = match lifecycle::wait_console_closed(&reader_session) {
+                Ok(()) => exit_code,
+                Err(error) => { tracing::warn!(%error, "terminal console cleanup remains owned"); None }
             };
-            let _ = outbound_tx.blocking_send(notification(
-                method::TERMINAL_EXIT,
-                serde_json::to_value(params).expect("terminal exit serializes"),
-            ));
+            notify_exit(&reader_terminals, &reader_session_id, &reader_session, &outbound_tx, exit_code);
         })
     {
         if let Some(session) = terminals
@@ -309,13 +338,31 @@ pub(super) async fn start(
         return Err(error).context("failed to start terminal output reader");
     }
 
+    #[cfg(windows)]
+    if let Err(error) = lifecycle::watch_child(
+        Arc::clone(&session),
+        terminal_number,
+        terminals.clone(),
+        session_id.clone(),
+    ) {
+        mark_closed(&session);
+        session
+            .input_tx
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .take();
+        let _ = terminate(&session);
+        lifecycle::close_console(&session);
+        return Err(error).context("failed to start terminal child watcher");
+    }
+
     Ok(TerminalStartResult {
         session_id,
         cwd: cwd.to_string_lossy().into_owned(),
     })
 }
 
-pub(super) fn list(terminals: &TerminalRegistry) -> TerminalListResult {
+pub fn list(terminals: &TerminalRegistry) -> TerminalListResult {
     let registry = terminals
         .0
         .lock()
@@ -342,7 +389,7 @@ pub(super) fn list(terminals: &TerminalRegistry) -> TerminalListResult {
     TerminalListResult { sessions }
 }
 
-pub(super) fn attach(
+pub fn attach(
     terminals: &TerminalRegistry,
     params: TerminalAttachParams,
 ) -> Result<TerminalAttachResult> {
@@ -369,6 +416,8 @@ pub(super) fn attach(
         .master
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .as_ref()
+        .context("terminal session is closed")?
         .resize(PtySize {
             rows,
             cols,
@@ -388,7 +437,7 @@ pub(super) fn attach(
     })
 }
 
-pub(super) fn write(terminals: &TerminalRegistry, params: TerminalWriteParams) -> Result<Value> {
+pub fn write(terminals: &TerminalRegistry, params: TerminalWriteParams) -> Result<Value> {
     if params.data.len() > MAX_TERMINAL_INPUT_BYTES {
         anyhow::bail!("terminal input exceeds the 64 KiB request limit")
     }
@@ -420,7 +469,7 @@ pub(super) fn write(terminals: &TerminalRegistry, params: TerminalWriteParams) -
     Ok(json!({"written": true}))
 }
 
-pub(super) fn resize(terminals: &TerminalRegistry, params: TerminalResizeParams) -> Result<Value> {
+pub fn resize(terminals: &TerminalRegistry, params: TerminalResizeParams) -> Result<Value> {
     let rows = params.rows.clamp(2, 500);
     let cols = params.cols.clamp(2, 500);
     let session = terminals
@@ -441,6 +490,8 @@ pub(super) fn resize(terminals: &TerminalRegistry, params: TerminalResizeParams)
         .master
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .as_ref()
+        .context("terminal session is closed")?
         .resize(PtySize {
             rows,
             cols,
@@ -452,7 +503,7 @@ pub(super) fn resize(terminals: &TerminalRegistry, params: TerminalResizeParams)
     Ok(json!({"resized": true}))
 }
 
-pub(super) fn close(
+pub fn close(
     terminals: &TerminalRegistry,
     params: TerminalCloseParams,
 ) -> Result<TerminalCloseResult> {
@@ -470,16 +521,9 @@ pub(super) fn close(
             .unwrap_or_else(|poisoned| poisoned.into_inner())
             .take();
         terminate(&session)?;
-        let mut registry = terminals
-            .0
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        if registry
-            .get(&params.session_id)
-            .is_some_and(|registered| Arc::ptr_eq(registered, &session))
-        {
-            registry.remove(&params.session_id);
-        }
+        #[cfg(windows)]
+        lifecycle::wait_cleanup(&session)?;
+        remove_if_complete(terminals, &params.session_id, &session);
         Ok(TerminalCloseResult { closed: true })
     } else {
         Ok(TerminalCloseResult { closed: false })
@@ -556,7 +600,8 @@ fn signal_terminal_processes(
         .master
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner())
-        .process_group_leader()
+        .as_ref()
+        .and_then(|master| master.process_group_leader())
         && group > 0
         && group != process_id as libc::pid_t
     {
@@ -599,6 +644,58 @@ fn mark_closed(session: &TerminalSession) {
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
     session.closed.store(true, Ordering::Release);
+}
+
+fn cleanup_complete(session: &TerminalSession) -> bool {
+    let complete = session.process_exited.load(Ordering::Acquire);
+    #[cfg(windows)]
+    let complete = complete
+        && session.console_closed.load(Ordering::Acquire)
+        && session.output_drained.load(Ordering::Acquire);
+    complete
+}
+
+fn remove_if_complete(
+    terminals: &TerminalRegistry,
+    session_id: &str,
+    session: &Arc<TerminalSession>,
+) -> bool {
+    if !cleanup_complete(session) {
+        return false;
+    }
+    let mut registry = terminals
+        .0
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    if registry
+        .get(session_id)
+        .is_some_and(|registered| Arc::ptr_eq(registered, session))
+    {
+        registry.remove(session_id);
+    }
+    true
+}
+
+fn notify_exit(
+    terminals: &TerminalRegistry,
+    session_id: &str,
+    session: &Arc<TerminalSession>,
+    outbound_tx: &mpsc::Sender<Value>,
+    exit_code: Option<u32>,
+) {
+    let complete = remove_if_complete(terminals, session_id, session);
+    if session.exit_notified.swap(true, Ordering::AcqRel) {
+        return;
+    }
+    let params = TerminalExitParams {
+        session_id: session_id.to_owned(),
+        sequence: next_sequence(session),
+        exit_code: if complete { exit_code } else { None },
+    };
+    let _ = outbound_tx.blocking_send(notification(
+        method::TERMINAL_EXIT,
+        serde_json::to_value(params).expect("terminal exit serializes"),
+    ));
 }
 
 #[cfg(unix)]

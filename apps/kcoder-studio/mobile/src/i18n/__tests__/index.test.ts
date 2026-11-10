@@ -72,7 +72,7 @@ describe("mobile i18n", () => {
     const { initLocale, setLocale, t } = await import("../index");
     initLocale();
     setLocale("zh-CN");
-    expect(t("welcome.version_line")).toBe("KCoder Studio Mobile v0.1.0");
+    expect(t("welcome.version_line", { version: "2.4.0" })).toBe("KCoder Studio Mobile 2.4.0");
   });
 
   test("returns the key itself when it is missing from every locale", { timeout: 20000 }, async () => {

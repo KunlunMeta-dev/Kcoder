@@ -1,12 +1,16 @@
 import type { RuntimePaneQueuedMessage } from '@/types/workbench'
 import type { CodeCommentContext } from '@/types/workspace-files'
-import { useCallback } from 'react'
+import { useCallback, useMemo } from 'react'
+import { captureAccountContextRevision } from '@/kcoder/accountContextEvents'
 import { isInterruptedGuidance } from './sessionIdentity'
 import { type RuntimePaneSendOptions } from './sessionTypes'
 import type { usePaneComposer } from './usePaneComposer'
 
 export function usePaneQueueControls(context: ReturnType<typeof usePaneComposer>) {
   const {
+    currentRuntimeTask,
+    currentRuntimeTaskRef,
+    accountScopeInvalidatedRef,
     projectChat,
     queuedMessages,
     setQueuedMessages,
@@ -20,14 +24,23 @@ export function usePaneQueueControls(context: ReturnType<typeof usePaneComposer>
     sendQueuedMessageAsGuidance,
     send,
   } = context
+  const commentOwner = useMemo(() => ({
+    deviceId: currentRuntimeTask?.deviceId,
+    taskId: currentRuntimeTask?.taskId,
+    accountCurrent: captureAccountContextRevision(),
+  }), [currentRuntimeTask?.deviceId, currentRuntimeTask?.taskId])
   const addCodeComment = useCallback(
     (context: CodeCommentContext) => {
+      if (accountScopeInvalidatedRef.current ||
+          commentOwner.deviceId !== currentRuntimeTaskRef.current?.deviceId ||
+          commentOwner.taskId !== currentRuntimeTaskRef.current?.taskId ||
+          (commentOwner.deviceId && !commentOwner.accountCurrent(commentOwner.deviceId))) return
       setCodeCommentContexts(current => [
         ...current.filter(item => item.id !== context.id),
         context,
       ])
     },
-    [setCodeCommentContexts]
+    [commentOwner, accountScopeInvalidatedRef, currentRuntimeTaskRef, setCodeCommentContexts]
   )
 
   const clearCodeComments = useCallback(() => {

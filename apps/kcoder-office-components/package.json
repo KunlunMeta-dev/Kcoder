@@ -1,0 +1,29 @@
+{
+  "name": "@kcoder/office-components",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test --test-concurrency=1 test/*.test.mjs",
+    "test:reader": "node ../kcoder-studio/e2e/suites/office/office-reader-acceptance.e2e.mjs",
+    "check": "node --check src/index.mjs"
+  },
+  "dependencies": {
+    "docx": "9.5.1",
+    "exceljs": "4.4.0",
+    "fflate": "0.8.3",
+    "pptxgenjs": "4.0.1",
+    "saxes": "6.0.0"
+  },
+  "overrides": {
+    "exceljs": {
+      "uuid": "11.1.1"
+    },
+    "pptxgenjs": {
+      "image-size": "2.0.4"
+    }
+  }
+}

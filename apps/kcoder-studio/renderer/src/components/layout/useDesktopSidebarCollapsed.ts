@@ -1,14 +1,18 @@
 import { useEffect, useState } from 'react'
 
-const SIDEBAR_COLLAPSED_STORAGE_KEY = 'wework.desktop.sidebar.collapsed'
-const SIDEBAR_COLLAPSED_EVENT = 'wework:desktop-sidebar-collapsed-change'
-const SIDEBAR_TOGGLE_REQUEST_EVENT = 'wework:desktop-sidebar-toggle-request'
+const SIDEBAR_COLLAPSED_STORAGE_KEY = 'kcoder.desktop.sidebar.collapsed'
+const LEGACY_SIDEBAR_COLLAPSED_STORAGE_KEY = 'wework.desktop.sidebar.collapsed'
+const SIDEBAR_COLLAPSED_EVENT = 'kcoder:desktop-sidebar-collapsed-change'
+const SIDEBAR_TOGGLE_REQUEST_EVENT = 'kcoder:desktop-sidebar-toggle-request'
 
 function readStoredSidebarCollapsed(): boolean {
   if (typeof window === 'undefined') return false
 
   try {
-    return window.localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) === 'true'
+    const stored =
+      window.localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) ??
+      window.localStorage.getItem(LEGACY_SIDEBAR_COLLAPSED_STORAGE_KEY)
+    return stored === 'true'
   } catch {
     return false
   }

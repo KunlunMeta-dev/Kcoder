@@ -1,0 +1,26 @@
+[package]
+name = "kcoder_mcp_app_storage"
+description = "KCoder MCP App operation receipts and resource storage."
+publish = false
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+base64 = "0.22"
+kcoder_app_protocol = { path = "../../../kcoder_app_protocol" }
+kcoder_fs = { path = "../../../kcoder_config/internal/fs" }
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lib]
+path = "../../src/internal/mcp_app_storage/lib.rs"

@@ -49,7 +49,9 @@ function loadExpoTransformedRequest(): RequestFunction {
     throw new Error("TaskRuntime resources.request declaration was not found");
   }
 
-  const metro = getDefaultConfig(projectRoot);
+  const metro = getDefaultConfig(projectRoot) as {
+    transformer: { babelTransformerPath: string };
+  };
   const transformer = require(metro.transformer.babelTransformerPath) as {
     transform(input: {
       filename: string;

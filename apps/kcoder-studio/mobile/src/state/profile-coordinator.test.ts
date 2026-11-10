@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { GatewayProfile } from "@/gateway/types";
 import { ProfileCoordinator, ProfileOperationGate, profileAuthorizationScopeKey } from "./profile-coordinator";
 
@@ -212,4 +212,29 @@ it("starts a new authorization refresh while old same-id refresh is still pendin
   const same = gate.run(profileAuthorizationScopeKey({ ...old, expiresAt: 100, accessToken: "rotated" }), async () => {});
   expect(same).toBe(oldRefresh);
   finish(); await oldRefresh;
+});
+
+
+it.each([{ deviceId: "new-device" }, { authMode: "legacy" as const }])("shared identity replacement does not mutate old runtime profile references: %j", async changed => {
+  const original = { ...profile("stable"), authMode: "device" as const, deviceId: "old-device", authorizationGeneration: "g1", refreshToken: "refresh" };
+  const stored = { ...original, ...changed };
+  const coordinator = new ProfileCoordinator({ reload: async () => ({ profiles: [stored], activeId: original.id }), serialize: async operation => operation() });
+  coordinator.hydrate({ profiles: [original], activeId: original.id });
+  const expected = { ...original };
+  const next = await coordinator.synchronize();
+  expect(next.profiles[0]).not.toBe(original);
+  expect(original).toEqual(expected);
+  const persist = vi.fn(async () => {});
+  await expect(coordinator.updateCredentials(expected, { ...expected, accessToken: "late-refresh" }, persist)).resolves.toBeNull();
+  expect(persist).not.toHaveBeenCalled();
+});
+
+it("shared token-only rotation retains the reconnect context object", async () => {
+  const original = { ...profile("stable"), authMode: "device" as const, deviceId: "d", authorizationGeneration: "g", refreshToken: "old" };
+  const stored = { ...original, accessToken: "rotated", refreshToken: "new", expiresAt: original.expiresAt + 1000 };
+  const coordinator = new ProfileCoordinator({ reload: async () => ({ profiles: [stored], activeId: original.id }), serialize: async operation => operation() });
+  coordinator.hydrate({ profiles: [original], activeId: original.id });
+  const next = await coordinator.synchronize();
+  expect(next.profiles[0]).toBe(original);
+  expect(original.accessToken).toBe("rotated");
 });

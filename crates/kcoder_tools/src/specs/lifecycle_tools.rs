@@ -205,7 +205,7 @@ impl Tool for SpecNewChangeTool {
          review.md/plan.md, and a starter delta spec at specs/<capability>/spec.md. \
          Requires the `using-superpowers` and `using-specs` skills to be active \
          first; activate them via the `skill` tool if this fails with a \
-         workflow-locked error."
+         workflow-locked error. For a project knowledge candidate, pass its returned change_base as knowledge_base to retain its exact source revisions through preflight/sync/archive; a stale candidate cannot create a new base or overwrite newer specs."
             .to_string()
     }
 
@@ -235,7 +235,11 @@ impl Tool for SpecNewChangeTool {
             ));
         }
 
-        match kcoder_specs::new_change(&ctx.state.cwd(), &input.name, input.title) {
+        let created = match input.knowledge_base {
+            Some(base) => project_knowledge::new_change(ctx, &input.name, input.title, base),
+            None => kcoder_specs::new_change(&ctx.state.cwd(), &input.name, input.title),
+        };
+        match created {
             Ok(path) => Ok(ToolOutput::text(format!(
                 "Created change at {}",
                 path.display()

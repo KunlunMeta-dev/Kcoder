@@ -1,5 +1,124 @@
 use super::*;
 
+#[tokio::test]
+async fn prepared_growth_compacts_only_new_history_below_soft_limit_in_normal_turn() {
+    let root = tempfile::tempdir().unwrap();
+    let prompts = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let settings = Settings {
+        context_window_tokens: Some(1_000_000),
+        context_output_headroom: Some(16_000),
+        ..settings_using_main_summary_runtime(Settings::default())
+    };
+    let engine = test_engine_with_settings(
+        Arc::new(SummaryInputRecordingProvider {
+            prompts: prompts.clone(),
+        }),
+        root.path(),
+        settings,
+    );
+    engine.state.set_messages(vec![
+        Message::compaction_text("Earlier conversation summary:\nPRIOR_FACTS"),
+        Message::user_text("consumed_delta ".repeat(26_000)),
+        Message::assistant_text("old completed work"),
+        Message::user_text("recent question"),
+        Message::assistant_text("recent answer"),
+        Message::user_text("current question"),
+    ]);
+    let budget = engine.context_budget();
+    assert!(crate::context::compact::incremental::growth_is_ready(
+        &engine.state.messages(),
+        &budget,
+    ));
+    assert!(TokenCounter::count(&engine.state.messages()) < budget.auto_compact_threshold());
+
+    let events = engine
+        .run_turn_stream(&kcoder_permissions::AutoAllowPrompt)
+        .collect::<Vec<_>>()
+        .await;
+    assert_eq!(
+        prompts.lock().unwrap().len(),
+        2,
+        "one summary and one main request"
+    );
+    assert!(!prompts.lock().unwrap()[0].contains("PRIOR_FACTS"));
+    assert!(prompts.lock().unwrap()[0].contains("consumed_delta"));
+    assert!(prompts.lock().unwrap()[1].contains("PRIOR_FACTS"));
+    assert!(events.iter().any(|event| matches!(event,
+        EngineEvent::SystemNotice(text) if text.starts_with("Context auto-compacted:"))));
+    assert!(
+        engine.state.messages()[0]
+            .preview(usize::MAX)
+            .contains("PRIOR_FACTS")
+    );
+    engine
+        .state
+        .add_message(Message::user_text("next question"));
+    let _ = engine
+        .run_turn_stream(&kcoder_permissions::AutoAllowPrompt)
+        .collect::<Vec<_>>()
+        .await;
+    assert_eq!(
+        prompts.lock().unwrap().len(),
+        3,
+        "no repeated summary without new growth"
+    );
+}
+
+#[tokio::test]
+async fn native_full_compaction_publishes_searchable_original_history() {
+    let root = tempfile::tempdir().unwrap();
+    let mut settings = settings_using_main_summary_runtime(Settings::default());
+    settings.session_memory.enabled = false;
+    let engine = TestEngineBuilder::new(root.path())
+        .provider(Arc::new(SummaryCountingProvider {
+            requests: Arc::new(AtomicUsize::new(0)),
+        }))
+        .settings(settings)
+        .tool_registry(kcoder_tools::default_registry())
+        .build_with_profile_directory();
+    engine
+        .state
+        .with_history_path(root.path().join("history.jsonl"));
+    for index in 0..5 {
+        engine.state.add_message(Message::user_text(format!(
+            "EVIDENCE_{index} {}",
+            "original detail ".repeat(300)
+        )));
+        engine
+            .state
+            .add_message(Message::assistant_text("recorded result"));
+    }
+    engine.state.flush_history().await.unwrap();
+    let result = engine.compact_conversation().await.unwrap();
+    assert!(result.did_compact);
+    assert!(
+        engine.state.messages()[0]
+            .preview(usize::MAX)
+            .contains("ContextHistory")
+    );
+    let page = engine
+        .state
+        .context_history(
+            &kcoder_types::context_archive::ContextHistoryQuery::default(),
+            || false,
+        )
+        .unwrap();
+    assert_eq!(page.blocks.len(), 1);
+    assert!(page.blocks[0].complete);
+    let restored = engine
+        .state
+        .context_history(
+            &kcoder_types::context_archive::ContextHistoryQuery {
+                block_id: Some(page.blocks[0].block_id.clone()),
+                full: true,
+                ..Default::default()
+            },
+            || false,
+        )
+        .unwrap();
+    assert!(restored.text.contains("EVIDENCE_0"));
+}
+
 #[derive(Debug)]
 struct ExpandingCompactionProvider;
 

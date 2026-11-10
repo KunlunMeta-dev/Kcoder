@@ -1,0 +1,47 @@
+[package]
+name = "kcoder_fs"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[features]
+private-file-test-hooks = []
+
+[dependencies]
+kcoder_types = { path = "../../../kcoder_types" }
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+zeroize = "1"
+cap-primitives = "3.4"
+fs2 = "0.4"
+
+[target.'cfg(unix)'.dependencies]
+libc.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61.2", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_Security_Authorization",
+    "Win32_Storage_FileSystem",
+    "Win32_System_IO",
+    "Win32_System_SystemServices",
+    "Win32_System_Threading",
+    "Wdk_Foundation",
+    "Wdk_Storage_FileSystem",
+] }
+
+[dev-dependencies]
+tempfile.workspace = true
+rusqlite.workspace = true
+
+[target.'cfg(windows)'.dev-dependencies]
+kcoder_process_supervisor = { path = "../../../kcoder_process_supervisor" }
+
+[lib]
+path = "../../src/internal/fs/lib.rs"

@@ -41,7 +41,7 @@ impl WebLinkDisplay {
     }
 }
 
-pub(super) fn hide_web_link_destinations() -> bool {
+pub fn hide_web_link_destinations() -> bool {
     static DISPLAY: LazyLock<WebLinkDisplay> = LazyLock::new(|| {
         let multiplexer = std::env::var_os("TMUX").is_some()
             || std::env::var_os("STY").is_some()

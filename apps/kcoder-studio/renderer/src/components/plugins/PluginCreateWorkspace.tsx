@@ -1,6 +1,7 @@
+import { WorkspacePageHeader } from '@/components/layout/WorkspacePageHeader'
 import { ArrowUp, Boxes, Plus } from 'lucide-react'
 import { type ChangeEvent, type FormEvent, type ReactNode, useRef, useState } from 'react'
-import { DESKTOP_TOP_BAR_BUTTON_CLASS, DesktopTopBar } from '@/components/layout/DesktopTopBar'
+import { DESKTOP_TOP_BAR_BUTTON_CLASS } from '@/components/layout/DesktopTopBar'
 import { AttachmentBadges } from '@/components/chat/composer/AttachmentBadges'
 import { useWorkbench } from '@/features/workbench/useWorkbench'
 import { useTranslation } from '@/hooks/useTranslation'
@@ -11,10 +12,7 @@ interface PluginCreateWorkspaceProps {
   topBarLeftActions?: ReactNode
 }
 
-export function PluginCreateWorkspace({
-  sidebarCollapsed = false,
-  topBarLeftActions,
-}: PluginCreateWorkspaceProps) {
+export function PluginCreateWorkspace({ topBarLeftActions }: PluginCreateWorkspaceProps) {
   const { t } = useTranslation('common')
   const { projectChat, sendCurrentInput } = useWorkbench()
   const imageInputRef = useRef<HTMLInputElement>(null)
@@ -70,25 +68,11 @@ export function PluginCreateWorkspace({
       data-testid="plugin-create-workspace"
       className="min-w-0 flex-1 overflow-y-auto bg-background text-text-primary"
     >
-      <DesktopTopBar
+      <WorkspacePageHeader
+        title={t('workbench.plugins_create', '创建插件')}
         testId="plugin-create-topbar"
-        className={[
-          'sticky top-0 z-30 h-12 bg-background/95 pr-4 backdrop-blur-xl md:h-[52px] md:pr-7',
-          sidebarCollapsed ? 'pl-5 md:pl-6' : 'pl-20 md:pl-7',
-        ].join(' ')}
-        left={
-          <>
-            {topBarLeftActions}
-            <button
-              type="button"
-              className="text-sm font-semibold text-text-muted transition-colors hover:text-text-primary"
-              onClick={() => navigateTo('/plugins')}
-            >
-              {t('workbench.plugins_tab', '插件')}
-            </button>
-          </>
-        }
-        right={
+        beforeBack={topBarLeftActions}
+        actions={
           <button
             type="button"
             aria-label={t('workbench.plugins_create', '创建')}

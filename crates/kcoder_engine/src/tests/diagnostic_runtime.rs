@@ -22,7 +22,7 @@ fn diagnostic_engine(cwd: &Path, events: Vec<StreamEvent>) -> QueryEngine {
     let engine = TestEngineBuilder::new(cwd)
         .provider(Arc::new(provider))
         .settings(settings)
-        .build();
+        .build_with_profile_directory();
     engine
         .state
         .set_usage_history_root(Some(&cwd.join("usage")));
@@ -225,7 +225,7 @@ async fn diagnostic_session_end_waits_for_existing_capture_without_extra_provide
             requests: requests.clone(),
             text: "unused".into(),
         }))
-        .build();
+        .build_with_profile_directory();
     engine
         .state
         .with_history_path(tmp.path().join("session.jsonl"));
@@ -284,7 +284,7 @@ async fn diagnostic_main_retry_finishes_each_attempt_once() {
     let engine = TestEngineBuilder::new(tmp.path())
         .provider(Arc::new(provider))
         .settings(settings)
-        .build();
+        .build_with_profile_directory();
     engine
         .state
         .with_history_path(tmp.path().join("session.jsonl"));
@@ -393,7 +393,7 @@ async fn diagnostic_workspace_flush_snapshot_excludes_later_other_state_capture(
     for no_target in [false, true] {
         let tmp = tempfile::tempdir().unwrap();
         let engine = if no_target {
-            TestEngineBuilder::new(tmp.path()).build()
+            TestEngineBuilder::new(tmp.path()).build_with_profile_directory()
         } else {
             diagnostic_engine(tmp.path(), Vec::new())
         };
@@ -435,7 +435,7 @@ async fn diagnostic_workspace_flush_snapshot_excludes_later_other_state_capture(
 #[tokio::test]
 async fn diagnostic_workspace_flush_waits_for_current_usage_scope_without_payload() {
     let tmp = tempfile::tempdir().unwrap();
-    let engine = TestEngineBuilder::new(tmp.path()).build();
+    let engine = TestEngineBuilder::new(tmp.path()).build_with_profile_directory();
     assert!(engine.state.llm_request_history_dir().is_none());
     let held = engine
         .state
@@ -498,7 +498,7 @@ async fn diagnostic_start_and_transport_failures_record_attempt_counts_once() {
         let engine = TestEngineBuilder::new(tmp.path())
             .provider(provider)
             .settings(settings)
-            .build();
+            .build_with_profile_directory();
         engine
             .state
             .with_history_path(tmp.path().join("session.jsonl"));

@@ -1,0 +1,113 @@
+{
+  "tools": [
+    {
+      "filter": "web_fetch::tests::",
+      "names": [
+        "web_fetch::tests::cache_freshness_revocation_and_peer_isolation",
+        "web_fetch::tests::cancellation_drops_only_the_owning_request",
+        "web_fetch::tests::decoded_compression_is_also_bounded",
+        "web_fetch::tests::follows_same_origin_but_does_not_send_cross_origin",
+        "web_fetch::tests::private_destination_requires_real_host_authority",
+        "web_fetch::tests::revoked_host_dispatch_check_sends_no_request_after_preparation",
+        "web_fetch::tests::source_receipt_marks_partial_when_the_model_output_is_truncated"
+      ]
+    },
+    {
+      "filter": "web_content::tests::",
+      "names": [
+        "web_content::tests::distinguishes_shells_login_and_partial_content",
+        "web_content::tests::preserves_structure_links_tables_and_code",
+        "web_content::tests::strictly_decodes_gb18030_bom_and_header_precedence"
+      ]
+    },
+    {
+      "filter": "web_browser::tests::",
+      "names": [
+        "web_browser::tests::advertises_text_snapshot_and_accepts_legacy_spelling",
+        "web_browser::tests::failures_are_error_outputs"
+      ]
+    },
+    {
+      "filter": "web_network::tests::",
+      "names": [
+        "web_network::tests::an_inflight_public_policy_cannot_survive_restoring_the_same_session_id",
+        "web_network::tests::private_grants_are_exact_revocable_and_bound_to_the_session",
+        "web_network::tests::rejects_reserved_addresses_and_mixed_resolution",
+        "web_network::tests::replacing_ca_bytes_at_the_same_path_changes_the_network_identity"
+      ]
+    },
+    {
+      "filter": "web_network::proxy::tests::",
+      "names": [
+        "web_network::proxy::tests::no_proxy_matches_label_boundaries_ports_and_cidr"
+      ]
+    },
+    {
+      "filter": "web_network::proxy::tunnel_tests::",
+      "names": [
+        "web_network::proxy::tunnel_tests::http_proxy_receives_only_the_pinned_ip_and_origin_host_is_preserved"
+      ]
+    },
+    {
+      "filter": "web_network::system_proxy::tests::",
+      "names": [
+        "web_network::system_proxy::tests::explicit_environment_including_empty_values_prevents_native_fallback",
+        "web_network::system_proxy::tests::unsupported_automatic_modes_and_invalid_static_values_fail_explicitly",
+        "web_network::system_proxy::tests::windows_static_mapping_is_scheme_correct_and_preserves_explicit_bypass",
+        "web_network::system_proxy::tests::windows_unversioned_socks_preserves_the_platform_socks4_default"
+      ]
+    },
+    {
+      "filter": "web_resources::tests::",
+      "names": [
+        "web_resources::tests::binary_files_are_private_and_cleaned_only_with_their_owner",
+        "web_resources::tests::owner_isolated_bounded_lru_and_expiring"
+      ]
+    },
+    {
+      "filter": "web_resources::lifecycle_tests::",
+      "names": [
+        "web_resources::lifecycle_tests::switching_the_state_session_rotates_resources_without_deleting_a_live_previous_owner"
+      ]
+    }
+  ],
+  "engine": [
+    {
+      "filter": "web_local_access::tests::",
+      "names": [
+        "web_local_access::tests::actual_explicit_dispatch_reads_and_retains_owner_cache_between_calls",
+        "web_local_access::tests::approval_cannot_be_edited_into_another_origin_or_reused_on_a_peer_tool",
+        "web_local_access::tests::private_grant_does_not_follow_a_cross_origin_redirect",
+        "web_local_access::tests::yolo_and_automatic_allow_do_not_grant_private_origin"
+      ]
+    }
+  ],
+  "mcp": [
+    {
+      "filter": "web_search::cancellation_tests::",
+      "names": [
+        "web_search::cancellation_tests::cancelling_a_queued_waiter_does_not_stop_the_active_peer",
+        "web_search::cancellation_tests::cancelling_the_active_request_releases_only_its_backend_service"
+      ]
+    },
+    {
+      "filter": "searxng::network_revision_tests::",
+      "names": [
+        "searxng::network_revision_tests::changing_the_effective_network_generation_prevents_query_dispatch",
+        "searxng::network_revision_tests::revocation_after_the_response_keeps_the_sent_fact_and_hides_source_content"
+      ]
+    }
+  ],
+  "pac": [
+    {
+      "filter": "web_network::windows_auto_proxy::owned_pac_tests::owned_pac_",
+      "names": [
+        "web_network::windows_auto_proxy::owned_pac_tests::owned_pac_resolves_original_url_direct_and_proxy",
+        "web_network::windows_auto_proxy::owned_pac_tests::owned_pac_errors_do_not_fall_back_to_direct",
+        "web_network::windows_auto_proxy::owned_pac_tests::owned_pac_cancel_closes_only_owner_and_late_callbacks_settle",
+        "web_network::windows_auto_proxy::owned_pac_tests::owned_pac_deadline_closes_resolver",
+        "web_network::windows_auto_proxy::owned_pac_tests::owned_pac_snapshot_is_lazy_and_private"
+      ]
+    }
+  ]
+}

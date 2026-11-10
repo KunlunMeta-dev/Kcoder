@@ -5,7 +5,7 @@ use std::fs::File;
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
 
 const ARM: &str = "KCODER_TEST_NAMESPACE_LOCK_HELPER";
-const HELPER: &str = "app_server::attachment_retention::tests::namespace_lock_review::retention_namespace_lock_inherited_fd_helper";
+const HELPER: &str = "tests::namespace_lock_review::retention_namespace_lock_inherited_fd_helper";
 const DEADLINE: Duration = Duration::from_secs(5);
 
 fn readable(fd: &OwnedFd, timeout: Duration) -> Result<bool> {

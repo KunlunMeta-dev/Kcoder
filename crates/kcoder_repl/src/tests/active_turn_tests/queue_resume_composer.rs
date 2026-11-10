@@ -78,7 +78,7 @@ fn unapplied_turn_steer_becomes_priority_next_turn_input() {
     );
     assert!(app.enqueue_user_message_for_turn(Message::user_text("ordinary queued")));
 
-    assert_eq!(app.defer_unapplied_turn_steers(), 1);
+    assert_eq!(app.defer_unapplied_turn_steers(&[]), 1);
     let pending = lines_to_text(&app.render_queued_user_message_lines(96));
     assert!(pending.contains("Messages to be submitted at end of turn"));
     assert!(pending.contains("retry after turn"));
@@ -255,11 +255,19 @@ impl kcoder_api::Provider for GatedTuiSteerProvider {
 
 #[tokio::test]
 async fn submitted_input_steers_live_tui_turn_instead_of_starting_new_turn() {
+    if crate::isolated_test_profile::run_or_reexec(concat!(
+        module_path!(),
+        "::submitted_input_steers_live_tui_turn_instead_of_starting_new_turn"
+    )) {
+        return;
+    }
+    crate::test_support::require_isolated_profile()
+        .expect("an explicitly isolated test profile is required");
     let tmp = tempfile::tempdir().unwrap();
     let requests = Arc::new(Mutex::new(Vec::new()));
     let first_started = Arc::new(tokio::sync::Notify::new());
     let release_first = Arc::new(tokio::sync::Notify::new());
-    let engine = test_engine_with_provider(
+    let engine = crate::test_support::test_engine_with_isolated_provider(
         tmp.path(),
         Arc::new(GatedTuiSteerProvider {
             calls: AtomicUsize::new(0),
@@ -268,7 +276,10 @@ async fn submitted_input_steers_live_tui_turn_instead_of_starting_new_turn() {
             release_first: Arc::clone(&release_first),
         }),
     );
-    let mut app = ReplApp::default();
+    let mut app = ReplApp {
+        input_session_owner: Some(engine.state.inspection_lifecycle_identity()),
+        ..ReplApp::default()
+    };
     let (raw_tx, mut rx) = mpsc::channel(APP_EVENT_CHANNEL_CAPACITY);
     let tx = AppEventSender::new(raw_tx);
     let prompt = TuiPermissionPrompt::new(tx.clone());
@@ -284,6 +295,21 @@ async fn submitted_input_steers_live_tui_turn_instead_of_starting_new_turn() {
         .await
         .unwrap()
     );
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            tokio::select! {
+                _ = first_started.notified() => break,
+                event = rx.recv() => {
+                    let handled = handle_app_event(event.expect("event channel"), &mut app, &engine, &tx, &prompt).await;
+                    if let Some(action) = handled.action { assert!(!handle_user_action(action, &engine, &mut app, &tx, &prompt).await.unwrap()); }
+                }
+                _ = tokio::time::sleep(Duration::from_millis(20)) => {
+                    let handled = handle_app_event(AppEvent::FrameTick, &mut app, &engine, &tx, &prompt).await;
+                    if let Some(action) = handled.action { assert!(!handle_user_action(action, &engine, &mut app, &tx, &prompt).await.unwrap()); }
+                }
+            }
+        }
+    }).await.expect("first provider request should start");
     assert!(
         !handle_submitted_message(
             SubmittedMessage::text("steer this turn".to_string()),
@@ -295,11 +321,22 @@ async fn submitted_input_steers_live_tui_turn_instead_of_starting_new_turn() {
         .await
         .unwrap()
     );
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while app.pending_turn_steers.is_empty() {
+            tokio::select! {
+                event = rx.recv() => {
+                    let handled = handle_app_event(event.expect("event channel"), &mut app, &engine, &tx, &prompt).await;
+                    if let Some(action) = handled.action { assert!(!handle_user_action(action, &engine, &mut app, &tx, &prompt).await.unwrap()); }
+                }
+                _ = tokio::time::sleep(Duration::from_millis(20)) => {
+                    let handled = handle_app_event(AppEvent::FrameTick, &mut app, &engine, &tx, &prompt).await;
+                    if let Some(action) = handled.action { assert!(!handle_user_action(action, &engine, &mut app, &tx, &prompt).await.unwrap()); }
+                }
+            }
+        }
+    }).await.expect("prepared input should reach the active turn");
     assert_eq!(app.pending_turn_steers.len(), 1);
     assert_eq!(app.queued_user_message_count(), 0);
-    tokio::time::timeout(Duration::from_secs(2), first_started.notified())
-        .await
-        .expect("first provider request should start");
     release_first.notify_one();
 
     loop {
@@ -307,7 +344,7 @@ async fn submitted_input_steers_live_tui_turn_instead_of_starting_new_turn() {
             .await
             .expect("live turn should continue")
             .expect("event channel should remain open");
-        let finished = matches!(event, AppEvent::TurnFinished);
+        let finished = matches!(event, AppEvent::TurnFinished | AppEvent::TurnFinishedWithSteering { .. });
         let handled = handle_app_event(event, &mut app, &engine, &tx, &prompt).await;
         assert!(handled.action.is_none());
         if finished {
@@ -545,11 +582,11 @@ async fn fatal_event_writes_exit_diagnostic_sidecar() {
     );
     assert_eq!(
         entry["model"].as_str(),
-        Some(Settings::default().model.as_str())
+        Some(engine.settings.read().unwrap().model.as_str())
     );
     assert_eq!(
         entry["provider"].as_str(),
-        Settings::default().provider.as_deref()
+        engine.settings.read().unwrap().provider.as_deref()
     );
     assert_eq!(entry["active_tasks"][0]["id"], "job-1");
     assert_eq!(entry["active_tasks"][0]["status"], "running");
@@ -1335,11 +1372,11 @@ async fn background_followups_wait_for_all_agents_and_start_one_aggregate_turn()
         .messages()
         .iter()
         .map(|message| message.preview(1_000))
-        .find(|text| text.contains("background sub-agent"))
+        .find(|text| text.contains("All tracked background work has finished"))
         .expect("aggregate follow-up context");
     assert_eq!(nudge.matches("[completed: agent-a]").count(), 1);
     assert_eq!(nudge.matches("[completed: agent-b]").count(), 1);
-    assert!(nudge.contains("All tracked background sub-agents have finished"));
+    assert!(nudge.contains("All tracked background work has finished"));
     assert!(!nudge.contains("do not block waiting for additional sub-agents"));
 
     if let Some(handle) = app.abort_turn_for_shutdown() {
@@ -1384,7 +1421,7 @@ async fn paused_subagent_does_not_block_the_aggregate_turn() {
     assert!(engine.state.messages().iter().any(|message| {
         message
             .preview(1_000)
-            .contains("All tracked background sub-agents have finished")
+            .contains("All tracked background work has finished")
     }));
 
     if let Some(handle) = app.abort_turn_for_shutdown() {
@@ -1573,6 +1610,7 @@ async fn tool_phase_transitions_flush_before_queued_completion() {
             input: r#"{"file_path":"story.txt","content":"hello"}"#.to_string(),
         },
         AppEvent::ToolResult {
+            web_sources: Vec::new(),
             id: "write-1".to_string(),
             name: "write".to_string(),
             text: "File created successfully".to_string(),
@@ -1681,6 +1719,8 @@ fn write_test_history(path: &Path, session_id: &str, text: &str) {
         std::fs::create_dir_all(parent).unwrap();
     }
     let entry = kcoder_state::HistoryEntry {
+        web_sources: Vec::new(),
+        history_attempt: None,
         session_id: session_id.to_string(),
         timestamp_ms: 1,
         uuid: None,

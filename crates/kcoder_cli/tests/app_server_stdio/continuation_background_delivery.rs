@@ -5,7 +5,7 @@ fn background_bash_call(socket: &mut std::net::TcpStream) {
     // The command text deliberately differs from the string it prints, so the
     // sentinel below counts deliveries of the *result*, not mentions of the
     // command inside the tool call.
-    background_bash_tool_call(socket, "printf 'bg-%s\\n' out-sentinel")
+    background_bash_tool_call(socket, "n=0; while [ ! -e .background-ready ] && [ $n -lt 600 ]; do sleep 0.05; n=$((n + 1)); done; test -e .background-ready && printf 'bg-%s\\n' out-sentinel")
 }
 
 #[test]
@@ -17,6 +17,10 @@ fn a_recovery_does_not_redeliver_a_finished_background_job() {
         serving_fixture_scripted(vec![background_bash_call, outage_first_call]);
     let settings = temp.path().join("settings.json");
     write_fixture_provider_settings(&settings, &endpoint);
+    let mut fixture_settings: Value =
+        serde_json::from_slice(&std::fs::read(&settings).unwrap()).unwrap();
+    fixture_settings["permission_mode"] = json!("bypass");
+    std::fs::write(&settings, serde_json::to_vec(&fixture_settings).unwrap()).unwrap();
     let mut server = TestAppServer::builder(&workspace, &settings)
         .without_scenario()
         .spawn();
@@ -47,7 +51,58 @@ fn a_recovery_does_not_redeliver_a_finished_background_job() {
             break;
         }
     }
-    std::thread::sleep(Duration::from_secs(2));
+    // Make completion happen after the failed snapshot, instead of racing a
+    // fast printf against the second Provider request.
+    std::fs::write(workspace.join(".background-ready"), b"ready").unwrap();
+    let delivery_deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        let delivered = find_named_file(temp.path(), &format!("{thread_id}.jsonl"))
+            .and_then(|path| std::fs::read_to_string(path).ok())
+            .is_some_and(|history| history.lines().any(|line| {
+                serde_json::from_str::<Value>(line).ok().is_some_and(|entry| {
+                    entry["content"].as_array().into_iter().flatten().any(|block| {
+                        block["text"].as_str().is_some_and(|text| {
+                            text.starts_with("<task_notification ") && text.contains("status=\"completed\"")
+                        })
+                    })
+                })
+            }));
+        if delivered {
+            break;
+        }
+        if Instant::now() >= delivery_deadline {
+            let requests = calls.lock().unwrap();
+            let results = requests.iter().flat_map(|request| {
+                request["messages"].as_array().into_iter().flatten()
+                    .filter(|message| message["role"] == "tool")
+            }).collect::<Vec<_>>();
+            panic!("background result was not committed; tool receipts: {results:?}");
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    }
+
+    // A delivered background result wakes the thread once (lean plan M1-1). Let
+    // that follow-up settle so the recovery below meets an idle thread.
+    let followup_deadline = Instant::now() + Duration::from_secs(30);
+    let mut followup_turn = None::<String>;
+    loop {
+        let event = server.next_value(followup_deadline);
+        if event["method"] == "turn/started" {
+            followup_turn = event["params"]["turn"]["id"].as_str().map(str::to_string);
+            assert!(
+                followup_turn
+                    .as_deref()
+                    .is_some_and(|id| id.starts_with("background-followup-")),
+                "{event}"
+            );
+        }
+        if event["method"] == "turn/completed"
+            && followup_turn.is_some()
+            && event["params"]["turn"]["id"].as_str() == followup_turn.as_deref()
+        {
+            break;
+        }
+    }
 
     // The finished background job was delivered into the conversation between the
     // failure and this request, so the recorded recovery boundary no longer

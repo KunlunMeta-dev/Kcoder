@@ -38,9 +38,11 @@
     "markdown-rendering": "node bin/tui-lab.mjs markdown-rendering",
     "copy-view": "node bin/tui-lab.mjs copy-view",
     "tail-menu": "node bin/tui-lab.mjs tail-menu",
+    "work-observation": "node bin/tui-lab.mjs work-observation",
     "screenshot": "node bin/tui-lab.mjs screenshot",
     "tmux:startup": "node bin/tui-lab.mjs tmux-startup",
-    "tmux:smoke": "node bin/tui-lab.mjs tmux-smoke"
+    "tmux:smoke": "node bin/tui-lab.mjs tmux-smoke",
+    "native-web-sources": "node bin/tui-lab.mjs native-web-sources"
   },
   "dependencies": {
     "@playwright/test": "^1.53.0",

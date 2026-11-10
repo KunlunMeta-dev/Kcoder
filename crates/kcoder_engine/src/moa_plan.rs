@@ -364,10 +364,11 @@ impl QueryEngine {
         let provider = if index == 0 {
             self.current_provider()
         } else {
-            match super::build_moa_provider(
+            match self.build_moa_provider_observed(
                 settings,
                 &model,
                 self.client_model_configuration.as_deref(),
+                crate::native_model_requests::NativeModelRequestPurpose::MoaReference,
             ) {
                 Ok(provider) => provider,
                 Err(error) => {
@@ -563,6 +564,7 @@ fn portable_cache_safe(engine: &QueryEngine, messages: Vec<Message>) -> CacheSaf
         active_skills: Vec::new(),
         snapshot_provider: engine.provider_name(),
         snapshot_model: engine.model_name(),
+        context_history_anchor: None,
         full_context_compatible: false,
     }
 }

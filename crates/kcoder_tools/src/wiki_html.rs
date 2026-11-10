@@ -1,6 +1,6 @@
 //! Offline HTML text extraction. Never renders markup, executes JS or follows URLs.
 use super::{MAX_EXTRACTED_BYTES, decode_text, error};
-use crate::ToolError;
+use crate::DocumentParseError;
 use html5ever::{
     tendril::StrTendril,
     tokenizer::{
@@ -282,7 +282,7 @@ impl TokenSink for CharsetSink {
         TokenSinkResult::Continue
     }
 }
-fn decode(bytes: &[u8]) -> Result<String, ToolError> {
+fn decode(bytes: &[u8]) -> Result<String, DocumentParseError> {
     if bytes.starts_with(&[0xff, 0xfe]) || bytes.starts_with(&[0xfe, 0xff]) {
         return decode_text(bytes);
     }
@@ -308,7 +308,7 @@ fn decode(bytes: &[u8]) -> Result<String, ToolError> {
     decode_text(bytes)
 }
 
-pub(super) fn extract(bytes: &[u8]) -> Result<String, ToolError> {
+pub fn extract(bytes: &[u8]) -> Result<String, DocumentParseError> {
     let text = decode(bytes)?;
     let tokenizer = Tokenizer::new(Sink::default(), TokenizerOpts::default());
     let queue = BufferQueue::default();

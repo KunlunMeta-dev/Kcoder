@@ -150,6 +150,8 @@ pub struct ListToolsResult {
 /// MCP tool definition returned by a server.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct McpToolDefinition {
+    #[serde(default, rename = "_meta", skip_serializing_if = "Option::is_none")]
+    pub meta: Option<Value>,
     pub name: String,
     #[serde(default)]
     pub description: String,
@@ -169,6 +171,8 @@ pub struct CallToolParams {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CallToolResult {
+    #[serde(default, rename = "_meta", skip_serializing_if = "Option::is_none")]
+    pub meta: Option<Value>,
     #[serde(default)]
     pub content: Vec<McpContent>,
     #[serde(default)]
@@ -179,6 +183,9 @@ pub struct CallToolResult {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct McpContent {
+    /// Preserve extension/resource blocks for the UI without treating them as model instructions.
+    #[serde(flatten)]
+    pub extra: serde_json::Map<String, Value>,
     #[serde(rename = "type")]
     pub kind: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]

@@ -96,7 +96,8 @@ mod tests {
             crate::test_support::providers::SequentialEventsProvider::new(vec![events]);
         let engine = TestEngineBuilder::new(tmp.path())
             .provider(Arc::new(provider))
-            .build();
+            .build_with_profile_directory();
+        crate::test_support::engine_builder::initialize_owned_native_profile(&engine).unwrap();
         engine
             .state
             .set_usage_history_root(Some(&tmp.path().join("usage")));
@@ -146,7 +147,8 @@ mod tests {
         let provider: Arc<dyn Provider> = Arc::new(CountingPendingProvider(calls.clone()));
         let engine = TestEngineBuilder::new(tmp.path())
             .provider(provider.clone())
-            .build();
+            .build_with_profile_directory();
+        crate::test_support::engine_builder::initialize_owned_native_profile(&engine).unwrap();
         engine
             .state
             .add_message(kcoder_types::Message::user_text("hello"));
@@ -178,13 +180,15 @@ mod tests {
         let provider: Arc<dyn Provider> = Arc::new(CountingPendingProvider(calls.clone()));
         let engine = TestEngineBuilder::new(tmp.path())
             .provider(provider.clone())
-            .build();
+            .build_with_profile_directory();
+        crate::test_support::engine_builder::initialize_owned_native_profile(&engine).unwrap();
         let foreground = acquire(&provider, RequestClass::Foreground).await.unwrap();
         let cache_safe = crate::agent::CacheSafeParams {
             fork_context_messages: vec![kcoder_types::Message::user_text("prior message")].into(),
             active_skills: vec![],
             snapshot_provider: engine.provider_name(),
             snapshot_model: engine.model_name(),
+            context_history_anchor: None,
             full_context_compatible: true,
         };
         let worker = engine.clone();
@@ -460,7 +464,7 @@ mod tests {
         let provider: Arc<dyn Provider> = Arc::new(CountingPendingProvider(calls.clone()));
         let engine = TestEngineBuilder::new(tmp.path())
             .provider(provider.clone())
-            .build();
+            .build_with_profile_directory();
         let _background = acquire(&provider, RequestClass::SkillReview).await.unwrap();
         let compactor =
             crate::ConversationCompactor::new(provider.clone(), engine.context_budget());
@@ -539,6 +543,7 @@ struct RegistryEntry {
 }
 
 fn gate_for(provider: &Arc<dyn Provider>) -> Arc<Gate> {
+    let provider = &crate::native_model_requests::admission_identity(provider);
     static REGISTRY: OnceLock<Mutex<Vec<RegistryEntry>>> = OnceLock::new();
     let mut registry = REGISTRY.get_or_init(Mutex::default).lock().unwrap();
     registry.retain(|entry| entry.provider.strong_count() != 0);

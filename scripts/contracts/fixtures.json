@@ -1,4 +1,482 @@
 {
+  "ApprovalRequestParams": {
+    "valid": [
+      {
+        "name": "legacy_without_tool_identity",
+        "value": {
+          "serverId": "server",
+          "threadId": "thread",
+          "turnId": "turn",
+          "approvalId": "approval",
+          "action": {
+            "type": "command",
+            "command": "echo fixture"
+          },
+          "reason": "Run command"
+        }
+      },
+      {
+        "name": "bound_tool_identity",
+        "value": {
+          "serverId": "server",
+          "threadId": "thread",
+          "turnId": "turn",
+          "approvalId": "approval",
+          "toolCallId": "tool-1",
+          "action": {
+            "type": "tool",
+            "name": "mcp__host__echo",
+            "input": {
+              "numbers": [
+                1,
+                2
+              ]
+            }
+          },
+          "reason": "Run external tool"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing_binding",
+        "value": {
+          "action": {
+            "type": "file_change",
+            "path": "file.txt"
+          },
+          "reason": "Write"
+        }
+      },
+      {
+        "name": "numeric_tool_identity",
+        "value": {
+          "serverId": "server",
+          "threadId": "thread",
+          "turnId": "turn",
+          "approvalId": "approval",
+          "toolCallId": 3,
+          "action": {
+            "type": "command",
+            "command": "echo fixture"
+          },
+          "reason": "Run"
+        }
+      },
+      {
+        "name": "unsupported_action",
+        "value": {
+          "serverId": "server",
+          "threadId": "thread",
+          "turnId": "turn",
+          "approvalId": "approval",
+          "action": {
+            "type": "unknown"
+          },
+          "reason": "Run"
+        }
+      }
+    ]
+  },
+  "ApprovalResponse": {
+    "valid": [
+      {
+        "name": "legacy_reply",
+        "value": {
+          "decision": "accept"
+        }
+      },
+      {
+        "name": "bound_reply",
+        "value": {
+          "decision": "decline",
+          "approvalId": "approval",
+          "threadId": "thread",
+          "turnId": "turn"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing_decision",
+        "value": {}
+      },
+      {
+        "name": "invalid_decision",
+        "value": {
+          "decision": "anything"
+        }
+      },
+      {
+        "name": "invalid_binding",
+        "value": {
+          "decision": "accept",
+          "threadId": 3
+        }
+      }
+    ]
+  },
+  "ExecutionDefaultsReadResult": {
+    "valid": [
+      {
+        "name": "unset-user-value-with-cli-override",
+        "value": {
+          "persistedPermissionMode": null,
+          "effectivePermissionMode": "ask",
+          "cliPermissionModeOverride": "bypass"
+        }
+      },
+      {
+        "name": "persisted-value-without-cli-override",
+        "value": {
+          "persistedPermissionMode": "accept_edits",
+          "effectivePermissionMode": "accept_edits",
+          "cliPermissionModeOverride": null
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "default-is-not-a-mode",
+        "value": {
+          "persistedPermissionMode": "default",
+          "effectivePermissionMode": "ask",
+          "cliPermissionModeOverride": null
+        }
+      }
+    ]
+  },
+  "ExecutionDefaultsSaveParams": {
+    "valid": [
+      {
+        "name": "clear-user-value",
+        "value": {
+          "permissionMode": null
+        }
+      },
+      {
+        "name": "save-mode",
+        "value": {
+          "permissionMode": "yolo"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "permission-mode-is-required",
+        "value": {}
+      },
+      {
+        "name": "default-is-not-a-mode",
+        "value": {
+          "permissionMode": "default"
+        }
+      },
+      {
+        "name": "no-arbitrary-target-path",
+        "value": {
+          "permissionMode": "ask",
+          "workspacePath": "/tmp"
+        }
+      }
+    ]
+  },
+  "ExecutionPermissionMode": {
+    "valid": [
+      {
+        "name": "ask",
+        "value": "ask"
+      },
+      {
+        "name": "auto",
+        "value": "auto"
+      },
+      {
+        "name": "accept_edits",
+        "value": "accept_edits"
+      },
+      {
+        "name": "dont_ask",
+        "value": "dont_ask"
+      },
+      {
+        "name": "bypass",
+        "value": "bypass"
+      },
+      {
+        "name": "yolo",
+        "value": "yolo"
+      }
+    ],
+    "invalid": [
+      {
+        "name": "default-is-not-a-permission-mode",
+        "value": "default"
+      }
+    ]
+  },
+  "InitializeParams": {
+    "valid": [
+      {
+        "name": "default_capabilities",
+        "value": {
+          "protocolVersion": "2026-07-27",
+          "clientInfo": {
+            "name": "contract-client",
+            "version": "1"
+          }
+        }
+      },
+      {
+        "name": "default_experimental_map",
+        "value": {
+          "protocolVersion": "2026-07-27",
+          "clientInfo": {
+            "name": "contract-client",
+            "version": "1"
+          },
+          "capabilities": {}
+        }
+      },
+      {
+        "name": "bool_map",
+        "value": {
+          "protocolVersion": "2026-07-27",
+          "clientInfo": {
+            "name": "contract-client",
+            "version": "1"
+          },
+          "capabilities": {
+            "experimental": {
+              "threadTranscriptSnapshotV1": true,
+              "futureFlag": false
+            }
+          }
+        }
+      },
+      {
+        "name": "unknown_fields_compatible",
+        "value": {
+          "protocolVersion": "2026-07-27",
+          "clientInfo": {
+            "name": "contract-client",
+            "version": "1",
+            "futureDetail": "ignored"
+          },
+          "futureDetail": {
+            "ignored": true
+          },
+          "capabilities": {
+            "futureDetail": true
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing_protocol_version",
+        "value": {
+          "clientInfo": {
+            "name": "contract-client",
+            "version": "1"
+          }
+        }
+      },
+      {
+        "name": "missing_client_info",
+        "value": {
+          "protocolVersion": "2026-07-27"
+        }
+      },
+      {
+        "name": "missing_client_version",
+        "value": {
+          "protocolVersion": "2026-07-27",
+          "clientInfo": {
+            "name": "incomplete"
+          }
+        }
+      },
+      {
+        "name": "null_capabilities",
+        "value": {
+          "protocolVersion": "2026-07-27",
+          "clientInfo": {
+            "name": "contract-client",
+            "version": "1"
+          },
+          "capabilities": null
+        }
+      },
+      {
+        "name": "non_bool_map",
+        "value": {
+          "protocolVersion": "2026-07-27",
+          "clientInfo": {
+            "name": "contract-client",
+            "version": "1"
+          },
+          "capabilities": {
+            "experimental": {
+              "threadTranscriptSnapshotV1": "true"
+            }
+          }
+        }
+      },
+      {
+        "name": "null_map",
+        "value": {
+          "protocolVersion": "2026-07-27",
+          "clientInfo": {
+            "name": "contract-client",
+            "version": "1"
+          },
+          "capabilities": {
+            "experimental": null
+          }
+        }
+      },
+      {
+        "name": "wrong_client_shape",
+        "value": {
+          "protocolVersion": "2026-07-27",
+          "clientInfo": []
+        }
+      }
+    ]
+  },
+  "InteractionStatusReadParamsV1": {
+    "valid": [
+      {
+        "name": "approval-request",
+        "value": {
+          "serverId": "server-1",
+          "threadId": "thread-1",
+          "turnId": "turn-1",
+          "requestId": 2000001,
+          "appServerEpoch": "epoch-1",
+          "kind": "approval",
+          "approvalId": "approval-2000001"
+        }
+      },
+      {
+        "name": "question-request",
+        "value": {
+          "serverId": "server-1",
+          "threadId": "thread-1",
+          "turnId": "turn-2",
+          "requestId": 1000002,
+          "appServerEpoch": "epoch-1",
+          "kind": "question",
+          "questionId": "question-1000002"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown-kind",
+        "value": {
+          "serverId": "server-1",
+          "threadId": "thread-1",
+          "turnId": "turn-1",
+          "requestId": 2000001,
+          "appServerEpoch": "epoch-1",
+          "kind": "submission",
+          "approvalId": "approval-2000001"
+        }
+      },
+      {
+        "name": "answer-field-not-accepted",
+        "value": {
+          "serverId": "server-1",
+          "threadId": "thread-1",
+          "turnId": "turn-1",
+          "requestId": 2000001,
+          "appServerEpoch": "epoch-1",
+          "kind": "approval",
+          "approvalId": "approval-2000001",
+          "answer": "not part of status lookup"
+        }
+      }
+    ]
+  },
+  "InteractionStatusReadResultV1": {
+    "valid": [
+      {
+        "name": "pending-approval",
+        "value": {
+          "serverId": "server-1",
+          "threadId": "thread-1",
+          "turnId": "turn-1",
+          "requestId": 2000001,
+          "appServerEpoch": "epoch-1",
+          "kind": "approval",
+          "approvalId": "approval-2000001",
+          "status": "pending"
+        }
+      },
+      {
+        "name": "resolved-question",
+        "value": {
+          "serverId": "server-1",
+          "threadId": "thread-1",
+          "turnId": "turn-2",
+          "requestId": 1000002,
+          "appServerEpoch": "epoch-1",
+          "kind": "question",
+          "questionId": "question-1000002",
+          "status": "resolved"
+        }
+      },
+      {
+        "name": "unknown-evicted-receipt",
+        "value": {
+          "serverId": "server-1",
+          "threadId": "thread-1",
+          "turnId": "turn-3",
+          "requestId": 1000003,
+          "appServerEpoch": "epoch-1",
+          "kind": "question",
+          "questionId": "question-1000003",
+          "status": "unknown"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "answer-field-not-returned",
+        "value": {
+          "serverId": "server-1",
+          "threadId": "thread-1",
+          "turnId": "turn-1",
+          "requestId": 2000001,
+          "appServerEpoch": "epoch-1",
+          "kind": "approval",
+          "approvalId": "approval-2000001",
+          "status": "resolved",
+          "decision": "accept"
+        }
+      }
+    ]
+  },
+  "ModelConfigurationBoundary": {
+    "valid": [
+      {
+        "name": "next_turn",
+        "value": "next_turn"
+      },
+      {
+        "name": "session_snapshot",
+        "value": "session_snapshot"
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown",
+        "value": "future"
+      }
+    ]
+  },
   "ModelConfigurationSummary": {
     "valid": [
       {
@@ -353,24 +831,6 @@
       }
     ]
   },
-  "ModelConfigurationBoundary": {
-    "valid": [
-      {
-        "name": "next_turn",
-        "value": "next_turn"
-      },
-      {
-        "name": "session_snapshot",
-        "value": "session_snapshot"
-      }
-    ],
-    "invalid": [
-      {
-        "name": "unknown",
-        "value": "future"
-      }
-    ]
-  },
   "ModelReasoningPolicy": {
     "valid": [
       {
@@ -424,511 +884,52 @@
       }
     ]
   },
-  "WikiJobProgress": {
+  "QuestionResponse": {
     "valid": [
       {
-        "name": "omitted_nullable_fields",
+        "name": "legacy_reply",
         "value": {
-          "phase": "analysis",
-          "startedAtMs": 1,
-          "phaseStartedAtMs": 1,
-          "heartbeatAtMs": 2,
-          "model": "model",
-          "textBytes": 0,
-          "reasoningBytes": 0,
-          "reservedCalls": 1,
-          "repairCalls": 0,
-          "usageReportedCalls": 0
-        }
-      },
-      {
-        "name": "current",
-        "value": {
-          "phase": "generation",
-          "startedAtMs": 1,
-          "phaseStartedAtMs": 1,
-          "heartbeatAtMs": 2,
-          "model": "model",
-          "textBytes": 0,
-          "reasoningBytes": 0,
-          "reservedCalls": 1,
-          "repairCalls": 0,
-          "usageReportedCalls": 0,
-          "modelProgressAtMs": 3,
-          "reasoningEffort": "high",
-          "throughChunk": 2,
-          "totalChunks": 4,
-          "firstPage": 1,
-          "lastPage": 2,
-          "callLimit": 20,
-          "requestedOutputTokens": 2048,
-          "estimatedInputTokens": 100,
-          "inputTokens": 98,
-          "outputTokens": 202
-        }
-      },
-      {
-        "name": "future_phase",
-        "value": {
-          "phase": "future_host_phase",
-          "startedAtMs": 1,
-          "phaseStartedAtMs": 1,
-          "heartbeatAtMs": 2,
-          "model": "model",
-          "textBytes": 0,
-          "reasoningBytes": 0,
-          "reservedCalls": 1,
-          "repairCalls": 0,
-          "usageReportedCalls": 0
-        }
-      },
-      {
-        "name": "frozen-worker-model-configuration",
-        "value": {
-          "phase": "analysis",
-          "startedAtMs": 1,
-          "phaseStartedAtMs": 1,
-          "heartbeatAtMs": 2,
-          "model": "model",
-          "textBytes": 0,
-          "reasoningBytes": 0,
-          "reservedCalls": 1,
-          "repairCalls": 0,
-          "usageReportedCalls": 0,
-          "modelConfiguration": {
-            "providerId": "provider",
-            "modelId": "model",
-            "apiFormat": null,
-            "chatProtocol": "auto",
-            "contextWindowTokens": 64000,
-            "maxOutputTokens": 2048,
-            "requestOutputLimits": {
-              "max_tokens": 2048
-            },
-            "outputHeadroomTokens": 2048,
-            "text": true,
-            "tools": true,
-            "vision": false,
-            "reasoning": true,
-            "structuredOutput": false,
-            "reasoningEffort": "high",
-            "extraBodyConfigured": false,
-            "requestOverrideFields": [],
-            "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-            "boundary": "next_turn",
-            "sources": {
-              "max_output_tokens": [
-                "user"
+          "answers": {
+            "q": {
+              "answers": [
+                "yes"
               ]
-            },
-            "toolSet": {
-              "profile": null,
-              "registryScope": "wiki_worker",
-              "registeredToolCount": 0,
-              "exposedToolCount": 0
             }
           }
         }
-      }
-    ],
-    "invalid": [
-      {
-        "name": "sensitive_unknown",
-        "value": {
-          "phase": "analysis",
-          "startedAtMs": 1,
-          "phaseStartedAtMs": 1,
-          "heartbeatAtMs": 2,
-          "model": "model",
-          "textBytes": 0,
-          "reasoningBytes": 0,
-          "reservedCalls": 1,
-          "repairCalls": 0,
-          "usageReportedCalls": 0,
-          "response": "fixture-secret"
-        }
       },
       {
-        "name": "wrong_timestamp",
+        "name": "bound_reply",
         "value": {
-          "phase": "analysis",
-          "startedAtMs": 1,
-          "phaseStartedAtMs": 1,
-          "heartbeatAtMs": "2",
-          "model": "model",
-          "textBytes": 0,
-          "reasoningBytes": 0,
-          "reservedCalls": 1,
-          "repairCalls": 0,
-          "usageReportedCalls": 0
-        }
-      },
-      {
-        "name": "negative_bytes",
-        "value": {
-          "phase": "analysis",
-          "startedAtMs": 1,
-          "phaseStartedAtMs": 1,
-          "heartbeatAtMs": 2,
-          "model": "model",
-          "textBytes": -1,
-          "reasoningBytes": 0,
-          "reservedCalls": 1,
-          "repairCalls": 0,
-          "usageReportedCalls": 0
-        }
-      }
-    ]
-  },
-  "KnowledgeFileCapability": {
-    "valid": [
-      {
-        "name": "legacy_no_availability",
-        "value": {
-          "format": "pdf",
-          "extensions": [
-            "pdf"
-          ],
-          "mimeTypes": [
-            "application/pdf"
-          ],
-          "maxFileBytes": 33554432,
-          "maxExtractedBytes": 8388608,
-          "requiresVision": false,
-          "warnings": [
-            "pdf_text_only"
-          ]
-        }
-      },
-      {
-        "name": "current_unavailable",
-        "value": {
-          "format": "pdf",
-          "extensions": [
-            "pdf"
-          ],
-          "mimeTypes": [
-            "application/pdf"
-          ],
-          "maxFileBytes": 33554432,
-          "maxExtractedBytes": 8388608,
-          "requiresVision": false,
-          "warnings": [
-            "pdf_text_only"
-          ],
-          "available": false,
-          "unavailableReason": "runtime_missing"
-        }
-      },
-      {
-        "name": "nullable_availability",
-        "value": {
-          "format": "pdf",
-          "extensions": [
-            "pdf"
-          ],
-          "mimeTypes": [
-            "application/pdf"
-          ],
-          "maxFileBytes": 33554432,
-          "maxExtractedBytes": 8388608,
-          "requiresVision": false,
-          "warnings": [
-            "pdf_text_only"
-          ],
-          "available": null,
-          "unavailableReason": null
+          "answers": {},
+          "questionId": "question",
+          "threadId": "thread",
+          "turnId": "turn"
         }
       }
     ],
     "invalid": [
       {
-        "name": "sensitive_unknown",
-        "value": {
-          "format": "pdf",
-          "extensions": [
-            "pdf"
-          ],
-          "mimeTypes": [
-            "application/pdf"
-          ],
-          "maxFileBytes": 33554432,
-          "maxExtractedBytes": 8388608,
-          "requiresVision": false,
-          "warnings": [
-            "pdf_text_only"
-          ],
-          "providerUrl": "fixture-secret"
-        }
+        "name": "missing_answers",
+        "value": {}
       },
       {
-        "name": "invalid_boolean",
+        "name": "invalid_answers",
         "value": {
-          "format": "pdf",
-          "extensions": [
-            "pdf"
-          ],
-          "mimeTypes": [
-            "application/pdf"
-          ],
-          "maxFileBytes": 33554432,
-          "maxExtractedBytes": 8388608,
-          "requiresVision": "false",
-          "warnings": [
-            "pdf_text_only"
-          ]
-        }
-      }
-    ]
-  },
-  "KnowledgeFileCapabilitiesResult": {
-    "valid": [
-      {
-        "name": "current",
-        "value": {
-          "supported": true,
-          "items": [
-            {
-              "format": "pdf",
-              "extensions": [
-                "pdf"
-              ],
-              "mimeTypes": [
-                "application/pdf"
-              ],
-              "maxFileBytes": 33554432,
-              "maxExtractedBytes": 8388608,
-              "requiresVision": false,
-              "warnings": [
-                "pdf_text_only"
+          "answers": {
+            "q": {
+              "answers": [
+                42
               ]
             }
-          ],
-          "batchMaxFiles": 10,
-          "batchMaxBytes": 134217728
+          }
         }
       },
       {
-        "name": "empty",
+        "name": "invalid_binding",
         "value": {
-          "supported": true,
-          "items": [],
-          "batchMaxFiles": 10,
-          "batchMaxBytes": 134217728
-        }
-      }
-    ],
-    "invalid": [
-      {
-        "name": "nested_sensitive_unknown",
-        "value": {
-          "supported": true,
-          "items": [
-            {
-              "format": "pdf",
-              "extensions": [
-                "pdf"
-              ],
-              "mimeTypes": [
-                "application/pdf"
-              ],
-              "maxFileBytes": 33554432,
-              "maxExtractedBytes": 8388608,
-              "requiresVision": false,
-              "warnings": [
-                "pdf_text_only"
-              ],
-              "apiKey": "fixture-secret"
-            }
-          ],
-          "batchMaxFiles": 10,
-          "batchMaxBytes": 134217728
-        }
-      }
-    ]
-  },
-  "McpFailureReason": {
-    "valid": [
-      {
-        "name": "connectionFailed",
-        "value": "connectionFailed"
-      },
-      {
-        "name": "protocolFailed",
-        "value": "protocolFailed"
-      },
-      {
-        "name": "authorizationRequired",
-        "value": "authorizationRequired"
-      },
-      {
-        "name": "timedOut",
-        "value": "timedOut"
-      },
-      {
-        "name": "unavailable",
-        "value": "unavailable"
-      }
-    ],
-    "invalid": [
-      {
-        "name": "unknown_failure_label",
-        "value": "futureReason"
-      },
-      {
-        "name": "raw_sensitive_details",
-        "value": "fixture-secret"
-      },
-      {
-        "name": "numeric",
-        "value": 1
-      },
-      {
-        "name": "null",
-        "value": null
-      }
-    ]
-  },
-  "McpConnectionAttempt": {
-    "valid": [
-      {
-        "name": "legacy_missing_reason",
-        "value": {
-          "status": "unavailable"
-        }
-      },
-      {
-        "name": "explicit_null_reason",
-        "value": {
-          "status": "timedOut",
-          "failureReason": null
-        }
-      },
-      {
-        "name": "connectionFailed",
-        "value": {
-          "status": "unavailable",
-          "failureReason": "connectionFailed"
-        }
-      },
-      {
-        "name": "protocolFailed",
-        "value": {
-          "status": "unavailable",
-          "failureReason": "protocolFailed"
-        }
-      },
-      {
-        "name": "authorizationRequired",
-        "value": {
-          "status": "unavailable",
-          "failureReason": "authorizationRequired"
-        }
-      },
-      {
-        "name": "timedOut",
-        "value": {
-          "status": "unavailable",
-          "failureReason": "timedOut"
-        }
-      },
-      {
-        "name": "unavailable",
-        "value": {
-          "status": "unavailable",
-          "failureReason": "unavailable"
-        }
-      }
-    ],
-    "invalid": [
-      {
-        "name": "unknown_reason",
-        "value": {
-          "status": "unavailable",
-          "failureReason": "futureReason"
-        }
-      },
-      {
-        "name": "unknown_status",
-        "value": {
-          "status": "future"
-        }
-      },
-      {
-        "name": "non_string_reason",
-        "value": {
-          "status": "unavailable",
-          "failureReason": 42
-        }
-      }
-    ]
-  },
-  "McpServerSummary": {
-    "valid": [
-      {
-        "name": "legacy_without_failure_fields",
-        "value": {
-          "name": "fixture",
-          "transport": "stdio",
-          "authorization": "notApplicable"
-        }
-      },
-      {
-        "name": "explicit_null_failure",
-        "value": {
-          "name": "fixture",
-          "transport": "stdio",
-          "authorization": "notApplicable",
-          "lastConnectionAttempt": null,
-          "lastConnectionFailure": null
-        }
-      },
-      {
-        "name": "protocol_failure",
-        "value": {
-          "name": "fixture",
-          "transport": "stdio",
-          "authorization": "notApplicable",
-          "lastConnectionAttempt": "unavailable",
-          "lastConnectionFailure": "protocolFailed"
-        }
-      },
-      {
-        "name": "authorization_required",
-        "value": {
-          "name": "fixture",
-          "transport": "stdio",
-          "authorization": "reauthorizationRequired",
-          "lastConnectionAttempt": "unavailable",
-          "lastConnectionFailure": "authorizationRequired"
-        }
-      }
-    ],
-    "invalid": [
-      {
-        "name": "unknown_failure_label",
-        "value": {
-          "name": "fixture",
-          "transport": "stdio",
-          "authorization": "notApplicable",
-          "lastConnectionFailure": "futureReason"
-        }
-      },
-      {
-        "name": "raw_authorization_text",
-        "value": {
-          "name": "fixture",
-          "transport": "stdio",
-          "authorization": "fixture-secret"
-        }
-      },
-      {
-        "name": "wrong_attempt_type",
-        "value": {
-          "name": "fixture",
-          "transport": "stdio",
-          "authorization": "notApplicable",
-          "lastConnectionAttempt": 3
+          "answers": {},
+          "questionId": 3
         }
       }
     ]
@@ -968,6 +969,424 @@
       {
         "name": "null",
         "value": null
+      },
+      {
+        "name": "ascii_257_bytes",
+        "value": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      },
+      {
+        "name": "utf8_257_bytes",
+        "value": "汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉ab"
+      },
+      {
+        "name": "emoji_260_bytes",
+        "value": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀"
+      }
+    ]
+  },
+  "ThreadLifetimeReadParams": {
+    "valid": [
+      {
+        "name": "original-task",
+        "value": {
+          "threadId": "task"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing-task",
+        "value": {}
+      }
+    ]
+  },
+  "ThreadLifetimeSetParams": {
+    "valid": [
+      {
+        "name": "revisioned-background",
+        "value": {
+          "threadId": "task",
+          "expectedRevision": 2,
+          "mode": "background"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing-revision",
+        "value": {
+          "threadId": "task",
+          "mode": "background"
+        }
+      }
+    ]
+  },
+  "ThreadAttachParams": {
+    "valid": [
+      {
+        "name": "real-client-slot",
+        "value": {
+          "threadId": "task",
+          "clientId": "00000000-0000-4000-8000-000000000001",
+          "generation": "00000000-0000-4000-8000-000000000002"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "no-generation",
+        "value": {
+          "threadId": "task",
+          "clientId": "client"
+        }
+      }
+    ]
+  },
+  "ThreadLifetimeResult": {
+    "valid": [
+      {
+        "name": "ungranted-background",
+        "value": {
+          "threadId": "task",
+          "setting": {
+            "revision": 1,
+            "mode": "background"
+          },
+          "attachedClients": 0,
+          "reconnectGraceMs": 3000,
+          "backgroundAuthorized": false,
+          "pausedReason": "background_authorization_required"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "no-policy",
+        "value": {
+          "threadId": "task"
+        }
+      }
+    ]
+  },
+  "ThreadModelSelectionParams": {
+    "valid": [
+      {
+        "name": "qualified-selection",
+        "value": {
+          "threadId": "thread-1",
+          "model": "provider::model"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing-thread",
+        "value": {
+          "model": "provider::model"
+        }
+      }
+    ]
+  },
+  "ThreadModelSelectionResult": {
+    "valid": [
+      {
+        "name": "queued-at-safe-boundary",
+        "value": {
+          "accepted": true,
+          "model": "provider::model",
+          "appliesAt": "next_tool_result_or_response_boundary"
+        }
+      },
+      {
+        "name": "next-turn-fallback",
+        "value": {
+          "accepted": false,
+          "model": "provider::model",
+          "appliesAt": "next_turn"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing-model",
+        "value": {
+          "accepted": true,
+          "appliesAt": "next_turn"
+        }
+      }
+    ]
+  },
+  "ThreadPresenceReadParams": {
+    "valid": [
+      {
+        "name": "thread-id-only",
+        "value": {
+          "threadId": "thread-1"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "private-path-field",
+        "value": {
+          "threadId": "thread-1",
+          "path": "/private/history.jsonl"
+        }
+      },
+      {
+        "name": "missing-thread-id",
+        "value": {}
+      }
+    ]
+  },
+  "ThreadPresenceReadResultV1": {
+    "valid": [
+      {
+        "name": "resident-present",
+        "value": {
+          "status": "present",
+          "threadId": "thread-1",
+          "reason": "residentRuntime"
+        }
+      },
+      {
+        "name": "bound-deleted-absent",
+        "value": {
+          "status": "absent",
+          "threadId": "thread-1",
+          "reason": "boundDeletedPrimarySource"
+        }
+      },
+      {
+        "name": "cold-source-unknown",
+        "value": {
+          "status": "unknown",
+          "threadId": "thread-1",
+          "reason": "coldSourceNotAuthorized"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "snake-case-thread-id-rejected",
+        "value": {
+          "status": "present",
+          "thread_id": "thread-1",
+          "reason": "residentRuntime"
+        }
+      },
+      {
+        "name": "unknown-reason",
+        "value": {
+          "status": "unknown",
+          "threadId": "thread-1",
+          "reason": "privateDiagnostic"
+        }
+      },
+      {
+        "name": "path-leak",
+        "value": {
+          "status": "unknown",
+          "threadId": "thread-1",
+          "reason": "observationFailed",
+          "path": "/private/history.jsonl"
+        }
+      }
+    ]
+  },
+  "ThreadTranscriptObservationV1": {
+    "valid": [
+      {
+        "name": "request-local-observation",
+        "value": {
+          "observationId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "viewKey": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing-view",
+        "value": {
+          "observationId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      {
+        "name": "short-observation",
+        "value": {
+          "observationId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "viewKey": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        }
+      },
+      {
+        "name": "uppercase-view",
+        "value": {
+          "observationId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "viewKey": "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
+        }
+      },
+      {
+        "name": "cannot-claim-committed",
+        "value": {
+          "status": "available",
+          "observationId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "viewKey": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        }
+      }
+    ]
+  },
+  "ThreadTranscriptSnapshotV1": {
+    "valid": [
+      {
+        "name": "committed-projection",
+        "value": {
+          "status": "available",
+          "snapshotId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "viewKey": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        }
+      },
+      {
+        "name": "legacy-reader",
+        "value": {
+          "status": "unavailable",
+          "code": "legacyReader"
+        }
+      },
+      {
+        "name": "unproven-source",
+        "value": {
+          "status": "unavailable",
+          "code": "unprovenSource"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "snapshot-not-string",
+        "value": {
+          "status": "available",
+          "snapshotId": 1,
+          "viewKey": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        }
+      },
+      {
+        "name": "short-snapshot",
+        "value": {
+          "status": "available",
+          "snapshotId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "viewKey": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        }
+      },
+      {
+        "name": "long-view",
+        "value": {
+          "status": "available",
+          "snapshotId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "viewKey": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        }
+      },
+      {
+        "name": "non-lowercase-hex",
+        "value": {
+          "status": "available",
+          "snapshotId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "viewKey": "GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG"
+        }
+      },
+      {
+        "name": "missing-view",
+        "value": {
+          "status": "available",
+          "snapshotId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      {
+        "name": "wrong-status",
+        "value": {
+          "status": "ready",
+          "snapshotId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "viewKey": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        }
+      },
+      {
+        "name": "history-error-is-not-snapshot-error",
+        "value": {
+          "status": "unavailable",
+          "code": "readFailed"
+        }
+      },
+      {
+        "name": "unavailable-with-invented-identity",
+        "value": {
+          "status": "unavailable",
+          "code": "unprovenSource",
+          "snapshotId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      {
+        "name": "unknown-sensitive-field",
+        "value": {
+          "status": "available",
+          "snapshotId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "viewKey": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "token": "fixture-must-be-rejected"
+        }
+      }
+    ]
+  },
+  "TurnAttemptStatus": {
+    "valid": [
+      {
+        "name": "known_accepted",
+        "value": "accepted"
+      },
+      {
+        "name": "known_completed",
+        "value": "completed"
+      },
+      {
+        "name": "known_failed",
+        "value": "failed"
+      },
+      {
+        "name": "known_interrupted",
+        "value": "interrupted"
+      },
+      {
+        "name": "future",
+        "value": "waiting_for_remote_cleanup"
+      },
+      {
+        "name": "case_sensitive_unknown",
+        "value": "Failed"
+      },
+      {
+        "name": "empty_unknown",
+        "value": ""
+      },
+      {
+        "name": "utf8_256_bytes",
+        "value": "汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉a"
+      },
+      {
+        "name": "emoji_256_bytes",
+        "value": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀"
+      }
+    ],
+    "invalid": [
+      {
+        "name": "numeric",
+        "value": 7
+      },
+      {
+        "name": "null",
+        "value": null
+      },
+      {
+        "name": "object",
+        "value": {
+          "unknown": "x"
+        }
       },
       {
         "name": "ascii_257_bytes",
@@ -1134,982 +1553,959 @@
       }
     ]
   },
-  "TurnAttemptStatus": {
+  "ThreadGoalStatusBatchParams": {
     "valid": [
       {
-        "name": "known_accepted",
-        "value": "accepted"
-      },
-      {
-        "name": "known_completed",
-        "value": "completed"
-      },
-      {
-        "name": "known_failed",
-        "value": "failed"
-      },
-      {
-        "name": "known_interrupted",
-        "value": "interrupted"
-      },
-      {
-        "name": "future",
-        "value": "waiting_for_remote_cleanup"
-      },
-      {
-        "name": "case_sensitive_unknown",
-        "value": "Failed"
-      },
-      {
-        "name": "empty_unknown",
-        "value": ""
-      },
-      {
-        "name": "utf8_256_bytes",
-        "value": "汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉a"
-      },
-      {
-        "name": "emoji_256_bytes",
-        "value": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀"
+        "name": "thread-ids",
+        "value": {
+          "threadIds": [
+            "thread-1",
+            "thread-2"
+          ]
+        }
       }
     ],
     "invalid": [
       {
-        "name": "numeric",
-        "value": 7
-      },
-      {
-        "name": "null",
-        "value": null
-      },
-      {
-        "name": "object",
+        "name": "private-path",
         "value": {
-          "unknown": "x"
+          "threadIds": [
+            "thread-1"
+          ],
+          "path": "/private"
         }
       },
       {
-        "name": "ascii_257_bytes",
-        "value": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        "name": "missing-ids",
+        "value": {}
       },
       {
-        "name": "utf8_257_bytes",
-        "value": "汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉ab"
-      },
-      {
-        "name": "emoji_260_bytes",
-        "value": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀"
-      }
-    ]
-  },
-  "WikiJobStatus": {
-    "valid": [
-      {
-        "name": "known_queued",
-        "value": "queued"
-      },
-      {
-        "name": "known_running",
-        "value": "running"
-      },
-      {
-        "name": "known_paused",
-        "value": "paused"
-      },
-      {
-        "name": "known_awaiting_review",
-        "value": "awaiting_review"
-      },
-      {
-        "name": "known_failed",
-        "value": "failed"
-      },
-      {
-        "name": "known_completed",
-        "value": "completed"
-      },
-      {
-        "name": "known_cancelled",
-        "value": "cancelled"
-      },
-      {
-        "name": "future",
-        "value": "waiting_for_external_review"
-      },
-      {
-        "name": "case_unknown",
-        "value": "Completed"
-      },
-      {
-        "name": "empty_unknown",
-        "value": ""
-      },
-      {
-        "name": "utf8_exact_limit",
-        "value": "汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉a"
-      }
-    ],
-    "invalid": [
-      {
-        "name": "over_byte_limit",
-        "value": "汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉ab"
-      },
-      {
-        "name": "numeric",
-        "value": 3
-      },
-      {
-        "name": "object",
+        "name": "empty-ids",
         "value": {
-          "unknown": "x"
+          "threadIds": []
+        }
+      },
+      {
+        "name": "duplicate-ids",
+        "value": {
+          "threadIds": [
+            "thread-1",
+            "thread-1"
+          ]
         }
       }
     ]
   },
-  "WikiJobPhase": {
+  "ThreadGoalStatusBatchResult": {
     "valid": [
       {
-        "name": "known_analysis",
-        "value": "analysis"
-      },
-      {
-        "name": "known_generation",
-        "value": "generation"
-      },
-      {
-        "name": "known_citation_repair",
-        "value": "citation_repair"
-      },
-      {
-        "name": "known_source_support",
-        "value": "source_support"
-      },
-      {
-        "name": "known_format_repair",
-        "value": "format_repair"
-      },
-      {
-        "name": "known_truncation_retry",
-        "value": "truncation_retry"
-      },
-      {
-        "name": "known_commit",
-        "value": "commit"
-      },
-      {
-        "name": "future",
-        "value": "waiting_for_external_review"
-      },
-      {
-        "name": "case_unknown",
-        "value": "Completed"
-      },
-      {
-        "name": "empty_unknown",
-        "value": ""
-      },
-      {
-        "name": "utf8_exact_limit",
-        "value": "汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉a"
-      },
-      {
-        "name": "known_organization_repair",
-        "value": "organization_repair"
-      }
-    ],
-    "invalid": [
-      {
-        "name": "over_byte_limit",
-        "value": "汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉ab"
-      },
-      {
-        "name": "numeric",
-        "value": 3
-      },
-      {
-        "name": "object",
+        "name": "available-and-unavailable",
         "value": {
-          "unknown": "x"
-        }
-      }
-    ]
-  },
-  "WikiPipelineProgress": {
-    "valid": [
-      {
-        "name": "omitted_optional_stage_fields",
-        "value": {
-          "version": 1,
-          "batch": 0,
-          "sourceRevision": "source-v1",
-          "records": []
-        }
-      },
-      {
-        "name": "planned_units_and_resume_address",
-        "value": {
-          "version": 1,
-          "batch": 8,
-          "sourceRevision": "source-v1",
-          "records": [
+          "observations": [
             {
-              "batch": 8,
-              "sourceRevision": "source-v1",
-              "stageKey": "topic-plan",
-              "stage": "analyze",
-              "unitKey": "topic-1",
-              "status": "completed",
-              "attempt": 1,
-              "reused": true,
-              "updatedAtMs": 1000,
-              "unitLabel": "安装步骤",
-              "unitIndex": 0,
-              "completedUnits": 1,
-              "totalUnits": 2,
-              "startedAtMs": 900,
-              "completedAtMs": 1000,
-              "artifactHash": "opaque-artifact-id"
+              "threadId": "thread-1",
+              "availability": "available",
+              "status": "active"
             },
             {
-              "batch": 8,
-              "sourceRevision": "source-v1",
-              "stageKey": "page-draft",
-              "stage": "generate",
-              "unitKey": "topic-2",
-              "status": "running",
-              "attempt": 2,
-              "reused": false,
-              "updatedAtMs": 1100,
-              "unitLabel": "维护步骤",
-              "unitIndex": 1,
-              "completedUnits": 1,
-              "totalUnits": 2
+              "threadId": "thread-2",
+              "availability": "available",
+              "status": null
+            },
+            {
+              "threadId": "thread-3",
+              "availability": "unavailable"
             }
-          ],
-          "currentStage": "generate",
-          "resumeStage": {
-            "batch": 8,
-            "sourceRevision": "source-v1",
-            "stageKey": "page-draft",
-            "stage": "generate",
-            "unitKey": "topic-1"
+          ]
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing-status",
+        "value": {
+          "observations": [
+            {
+              "threadId": "thread-1",
+              "availability": "available"
+            }
+          ]
+        }
+      },
+      {
+        "name": "unavailable-with-status",
+        "value": {
+          "observations": [
+            {
+              "threadId": "thread-1",
+              "availability": "unavailable",
+              "status": null
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "ProviderDiscoverModelsParams": {
+    "valid": [
+      {
+        "name": "url-key-without-model-or-id",
+        "value": {
+          "endpoint": "https://example.invalid/v1",
+          "apiFormat": "openai_chat_completions",
+          "apiKey": "fixture"
+        }
+      },
+      {
+        "name": "saved-connection-key",
+        "value": {
+          "id": "owned",
+          "endpoint": "https://example.invalid/v1",
+          "apiFormat": "anthropic_messages"
+        }
+      },
+      {
+        "name": "keyless-local",
+        "value": {
+          "endpoint": "http://127.0.0.1:8080/v1",
+          "apiFormat": "openai_chat_completions",
+          "authentication": {
+            "mode": "none"
           }
         }
-      },
-      {
-        "name": "explicit_null_optional_fields",
-        "value": {
-          "version": 1,
-          "batch": 0,
-          "sourceRevision": "source-v1",
-          "records": [
-            {
-              "batch": 8,
-              "sourceRevision": "source-v1",
-              "stageKey": "topic-plan",
-              "stage": "analyze",
-              "unitKey": "topic-1",
-              "status": "completed",
-              "attempt": 1,
-              "reused": true,
-              "updatedAtMs": 1000,
-              "unitLabel": null,
-              "unitIndex": null,
-              "completedUnits": null,
-              "totalUnits": null,
-              "startedAtMs": null,
-              "completedAtMs": null,
-              "artifactHash": null,
-              "errorCode": null,
-              "errorDetail": null
-            }
-          ],
-          "currentStage": null,
-          "resumeStage": null
-        }
-      },
-      {
-        "name": "paused_safe_failure",
-        "value": {
-          "version": 1,
-          "batch": 0,
-          "sourceRevision": "source-v1",
-          "records": [
-            {
-              "batch": 8,
-              "sourceRevision": "source-v1",
-              "stageKey": "topic-plan",
-              "stage": "verify",
-              "unitKey": "topic-1",
-              "status": "paused",
-              "attempt": 1,
-              "reused": false,
-              "updatedAtMs": 1000,
-              "unitLabel": "安装步骤",
-              "unitIndex": 0,
-              "completedUnits": 1,
-              "totalUnits": 2,
-              "startedAtMs": 900,
-              "completedAtMs": 1000,
-              "artifactHash": "opaque-artifact-id",
-              "errorCode": "budget_exceeded",
-              "errorDetail": "已达到调用预算"
-            }
-          ],
-          "currentStage": "verify"
-        }
-      },
-      {
-        "name": "u8_decode_upper_boundary",
-        "value": {
-          "version": 255,
-          "batch": 0,
-          "sourceRevision": "source-v1",
-          "records": []
-        }
-      },
-      {
-        "name": "stage_extract",
-        "value": {
-          "version": 1,
-          "batch": 0,
-          "sourceRevision": "source-v1",
-          "records": [
-            {
-              "batch": 8,
-              "sourceRevision": "source-v1",
-              "stageKey": "topic-plan",
-              "stage": "extract",
-              "unitKey": "topic-1",
-              "status": "validated",
-              "attempt": 0,
-              "reused": false,
-              "updatedAtMs": 1
-            }
-          ],
-          "currentStage": "extract"
-        }
-      },
-      {
-        "name": "stage_analyze",
-        "value": {
-          "version": 1,
-          "batch": 0,
-          "sourceRevision": "source-v1",
-          "records": [
-            {
-              "batch": 8,
-              "sourceRevision": "source-v1",
-              "stageKey": "topic-plan",
-              "stage": "analyze",
-              "unitKey": "topic-1",
-              "status": "validated",
-              "attempt": 0,
-              "reused": false,
-              "updatedAtMs": 1
-            }
-          ],
-          "currentStage": "analyze"
-        }
-      },
-      {
-        "name": "stage_retrieve",
-        "value": {
-          "version": 1,
-          "batch": 0,
-          "sourceRevision": "source-v1",
-          "records": [
-            {
-              "batch": 8,
-              "sourceRevision": "source-v1",
-              "stageKey": "topic-plan",
-              "stage": "retrieve",
-              "unitKey": "topic-1",
-              "status": "validated",
-              "attempt": 0,
-              "reused": false,
-              "updatedAtMs": 1
-            }
-          ],
-          "currentStage": "retrieve"
-        }
-      },
-      {
-        "name": "stage_generate",
-        "value": {
-          "version": 1,
-          "batch": 0,
-          "sourceRevision": "source-v1",
-          "records": [
-            {
-              "batch": 8,
-              "sourceRevision": "source-v1",
-              "stageKey": "topic-plan",
-              "stage": "generate",
-              "unitKey": "topic-1",
-              "status": "validated",
-              "attempt": 0,
-              "reused": false,
-              "updatedAtMs": 1
-            }
-          ],
-          "currentStage": "generate"
-        }
-      },
-      {
-        "name": "stage_verify",
-        "value": {
-          "version": 1,
-          "batch": 0,
-          "sourceRevision": "source-v1",
-          "records": [
-            {
-              "batch": 8,
-              "sourceRevision": "source-v1",
-              "stageKey": "topic-plan",
-              "stage": "verify",
-              "unitKey": "topic-1",
-              "status": "validated",
-              "attempt": 0,
-              "reused": false,
-              "updatedAtMs": 1
-            }
-          ],
-          "currentStage": "verify"
-        }
-      },
-      {
-        "name": "stage_coverage",
-        "value": {
-          "version": 1,
-          "batch": 0,
-          "sourceRevision": "source-v1",
-          "records": [
-            {
-              "batch": 8,
-              "sourceRevision": "source-v1",
-              "stageKey": "topic-plan",
-              "stage": "coverage",
-              "unitKey": "topic-1",
-              "status": "validated",
-              "attempt": 0,
-              "reused": false,
-              "updatedAtMs": 1
-            }
-          ],
-          "currentStage": "coverage"
-        }
-      },
-      {
-        "name": "stage_commit",
-        "value": {
-          "version": 1,
-          "batch": 0,
-          "sourceRevision": "source-v1",
-          "records": [
-            {
-              "batch": 8,
-              "sourceRevision": "source-v1",
-              "stageKey": "topic-plan",
-              "stage": "commit",
-              "unitKey": "topic-1",
-              "status": "validated",
-              "attempt": 0,
-              "reused": false,
-              "updatedAtMs": 1
-            }
-          ],
-          "currentStage": "commit"
-        }
-      },
-      {
-        "name": "status_waiting",
-        "value": {
-          "version": 1,
-          "batch": 0,
-          "sourceRevision": "source-v1",
-          "records": [
-            {
-              "batch": 8,
-              "sourceRevision": "source-v1",
-              "stageKey": "topic-plan",
-              "stage": "analyze",
-              "unitKey": "topic-1",
-              "status": "waiting",
-              "attempt": 1,
-              "reused": false,
-              "updatedAtMs": 1
-            }
-          ]
-        }
-      },
-      {
-        "name": "status_running",
-        "value": {
-          "version": 1,
-          "batch": 0,
-          "sourceRevision": "source-v1",
-          "records": [
-            {
-              "batch": 8,
-              "sourceRevision": "source-v1",
-              "stageKey": "topic-plan",
-              "stage": "analyze",
-              "unitKey": "topic-1",
-              "status": "running",
-              "attempt": 1,
-              "reused": false,
-              "updatedAtMs": 1
-            }
-          ]
-        }
-      },
-      {
-        "name": "status_received",
-        "value": {
-          "version": 1,
-          "batch": 0,
-          "sourceRevision": "source-v1",
-          "records": [
-            {
-              "batch": 8,
-              "sourceRevision": "source-v1",
-              "stageKey": "topic-plan",
-              "stage": "analyze",
-              "unitKey": "topic-1",
-              "status": "received",
-              "attempt": 1,
-              "reused": false,
-              "updatedAtMs": 1
-            }
-          ]
-        }
-      },
-      {
-        "name": "status_validated",
-        "value": {
-          "version": 1,
-          "batch": 0,
-          "sourceRevision": "source-v1",
-          "records": [
-            {
-              "batch": 8,
-              "sourceRevision": "source-v1",
-              "stageKey": "topic-plan",
-              "stage": "analyze",
-              "unitKey": "topic-1",
-              "status": "validated",
-              "attempt": 1,
-              "reused": false,
-              "updatedAtMs": 1
-            }
-          ]
-        }
-      },
-      {
-        "name": "status_completed",
-        "value": {
-          "version": 1,
-          "batch": 0,
-          "sourceRevision": "source-v1",
-          "records": [
-            {
-              "batch": 8,
-              "sourceRevision": "source-v1",
-              "stageKey": "topic-plan",
-              "stage": "analyze",
-              "unitKey": "topic-1",
-              "status": "completed",
-              "attempt": 1,
-              "reused": false,
-              "updatedAtMs": 1
-            }
-          ]
-        }
-      },
-      {
-        "name": "status_failed",
-        "value": {
-          "version": 1,
-          "batch": 0,
-          "sourceRevision": "source-v1",
-          "records": [
-            {
-              "batch": 8,
-              "sourceRevision": "source-v1",
-              "stageKey": "topic-plan",
-              "stage": "analyze",
-              "unitKey": "topic-1",
-              "status": "failed",
-              "attempt": 1,
-              "reused": false,
-              "updatedAtMs": 1
-            }
-          ]
-        }
-      },
-      {
-        "name": "status_paused",
-        "value": {
-          "version": 1,
-          "batch": 0,
-          "sourceRevision": "source-v1",
-          "records": [
-            {
-              "batch": 8,
-              "sourceRevision": "source-v1",
-              "stageKey": "topic-plan",
-              "stage": "analyze",
-              "unitKey": "topic-1",
-              "status": "paused",
-              "attempt": 1,
-              "reused": false,
-              "updatedAtMs": 1
-            }
-          ]
-        }
-      },
-      {
-        "name": "status_needs_review",
-        "value": {
-          "version": 1,
-          "batch": 0,
-          "sourceRevision": "source-v1",
-          "records": [
-            {
-              "batch": 8,
-              "sourceRevision": "source-v1",
-              "stageKey": "topic-plan",
-              "stage": "analyze",
-              "unitKey": "topic-1",
-              "status": "needs_review",
-              "attempt": 1,
-              "reused": false,
-              "updatedAtMs": 1
-            }
-          ]
-        }
       }
     ],
     "invalid": [
       {
-        "name": "u8_overflow",
+        "name": "no-endpoint",
         "value": {
-          "version": 256,
-          "batch": 0,
-          "sourceRevision": "source-v1",
-          "records": []
+          "apiFormat": "openai_chat_completions"
         }
       },
       {
-        "name": "negative_batch_cursor",
+        "name": "model-not-needed",
         "value": {
-          "version": 1,
-          "batch": -1,
-          "sourceRevision": "source-v1",
-          "records": []
+          "endpoint": "https://example.invalid",
+          "apiFormat": "openai_chat_completions",
+          "model": "not-a-field"
         }
       },
       {
-        "name": "missing_source_revision",
+        "name": "bad-auth",
         "value": {
-          "version": 1,
-          "batch": 0,
-          "records": []
-        }
-      },
-      {
-        "name": "wrong_records_type",
-        "value": {
-          "version": 1,
-          "batch": 0,
-          "sourceRevision": "source-v1",
-          "records": {}
-        }
-      },
-      {
-        "name": "unknown_current_stage",
-        "value": {
-          "version": 1,
-          "batch": 0,
-          "sourceRevision": "source-v1",
-          "records": [],
-          "currentStage": "future"
-        }
-      },
-      {
-        "name": "unknown_record_status",
-        "value": {
-          "version": 1,
-          "batch": 0,
-          "sourceRevision": "source-v1",
-          "records": [
-            {
-              "batch": 8,
-              "sourceRevision": "source-v1",
-              "stageKey": "topic-plan",
-              "stage": "analyze",
-              "unitKey": "topic-1",
-              "status": "future",
-              "attempt": 1,
-              "reused": true,
-              "updatedAtMs": 1000,
-              "unitLabel": "安装步骤",
-              "unitIndex": 0,
-              "completedUnits": 1,
-              "totalUnits": 2,
-              "startedAtMs": 900,
-              "completedAtMs": 1000,
-              "artifactHash": "opaque-artifact-id"
-            }
-          ]
-        }
-      },
-      {
-        "name": "negative_unit_count",
-        "value": {
-          "version": 1,
-          "batch": 0,
-          "sourceRevision": "source-v1",
-          "records": [
-            {
-              "batch": 8,
-              "sourceRevision": "source-v1",
-              "stageKey": "topic-plan",
-              "stage": "analyze",
-              "unitKey": "topic-1",
-              "status": "completed",
-              "attempt": 1,
-              "reused": true,
-              "updatedAtMs": 1000,
-              "unitLabel": "安装步骤",
-              "unitIndex": 0,
-              "completedUnits": -1,
-              "totalUnits": 2,
-              "startedAtMs": 900,
-              "completedAtMs": 1000,
-              "artifactHash": "opaque-artifact-id"
-            }
-          ]
-        }
-      },
-      {
-        "name": "attempt_u32_overflow",
-        "value": {
-          "version": 1,
-          "batch": 0,
-          "sourceRevision": "source-v1",
-          "records": [
-            {
-              "batch": 8,
-              "sourceRevision": "source-v1",
-              "stageKey": "topic-plan",
-              "stage": "analyze",
-              "unitKey": "topic-1",
-              "status": "completed",
-              "attempt": 4294967296,
-              "reused": true,
-              "updatedAtMs": 1000,
-              "unitLabel": "安装步骤",
-              "unitIndex": 0,
-              "completedUnits": 1,
-              "totalUnits": 2,
-              "startedAtMs": 900,
-              "completedAtMs": 1000,
-              "artifactHash": "opaque-artifact-id"
-            }
-          ]
-        }
-      },
-      {
-        "name": "invalid_resume_address",
-        "value": {
-          "version": 1,
-          "batch": 0,
-          "sourceRevision": "source-v1",
-          "records": [],
-          "resumeStage": {
-            "stage": "generate"
+          "endpoint": "https://example.invalid",
+          "apiFormat": "openai_chat_completions",
+          "authentication": {
+            "mode": "unknown"
           }
         }
+      }
+    ]
+  },
+  "ProviderDiscoveredModels": {
+    "valid": [
+      {
+        "name": "models",
+        "value": {
+          "models": [
+            "Model-A",
+            "Model-B"
+          ]
+        }
       },
       {
-        "name": "negative_timestamp",
+        "name": "empty",
         "value": {
-          "version": 1,
-          "batch": 0,
-          "sourceRevision": "source-v1",
-          "records": [
+          "models": []
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing",
+        "value": {}
+      },
+      {
+        "name": "invalid-id",
+        "value": {
+          "models": [
+            123
+          ]
+        }
+      }
+    ]
+  },
+  "ToolSelectionsReadParams": {
+    "valid": [
+      {
+        "name": "target_owned_tool_selection",
+        "value": {}
+      },
+      {
+        "name": "explicit_luna_baseline_read",
+        "value": {
+          "includeLunaBaseline": true
+        }
+      },
+      {
+        "name": "explicit_resolution_preview",
+        "value": {
+          "includeResolution": true
+        }
+      },
+      {
+        "name": "independent_expert_selection_opt_in",
+        "value": {
+          "includeExpertToolSelection": true
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "invalid_type_or_unknown_field",
+        "value": {
+          "path": "other"
+        }
+      },
+      {
+        "name": "invalid_luna_read_flag",
+        "value": {
+          "includeLunaBaseline": "true"
+        }
+      },
+      {
+        "name": "invalid_resolution_flag",
+        "value": {
+          "includeResolution": "true"
+        }
+      }
+    ]
+  },
+  "ToolSelectionsSaveParams": {
+    "valid": [
+      {
+        "name": "target_owned_tool_selection",
+        "value": {
+          "mode": "kcoder",
+          "allowedTools": [
+            "read"
+          ],
+          "expectedRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "invalid_type_or_unknown_field",
+        "value": {
+          "mode": "luna",
+          "allowedTools": [],
+          "expectedRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      }
+    ]
+  },
+  "SelectableStudioTool": {
+    "valid": [
+      {
+        "name": "target_owned_tool_selection",
+        "value": {
+          "name": "read",
+          "ui": {
+            "displayName": "Read file",
+            "group": "files",
+            "icon": "file",
+            "description": "Reads a file from the selected target."
+          },
+          "available": true,
+          "supportedModes": [
+            "kcoder",
+            "kworker"
+          ],
+          "unavailableReason": null
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "invalid_type_or_unknown_field",
+        "value": {
+          "name": "read",
+          "ui": {
+            "displayName": "Read file",
+            "group": "files",
+            "icon": "file",
+            "description": "Reads a file from the selected target."
+          },
+          "available": "yes",
+          "supportedModes": [
+            "kcoder",
+            "kworker"
+          ],
+          "unavailableReason": null
+        }
+      }
+    ]
+  },
+  "StudioModeToolSelection": {
+    "valid": [
+      {
+        "name": "target_owned_tool_selection",
+        "value": {
+          "mode": "kcoder",
+          "editable": true,
+          "allowedTools": [
+            "read"
+          ]
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "invalid_type_or_unknown_field",
+        "value": {
+          "mode": "luna",
+          "editable": true,
+          "allowedTools": [
+            "read"
+          ]
+        }
+      }
+    ]
+  },
+  "ToolSelectionsResult": {
+    "valid": [
+      {
+        "name": "target_owned_tool_selection",
+        "value": {
+          "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "modes": [
             {
-              "batch": 8,
-              "sourceRevision": "source-v1",
-              "stageKey": "topic-plan",
-              "stage": "analyze",
-              "unitKey": "topic-1",
-              "status": "completed",
-              "attempt": 1,
-              "reused": true,
-              "updatedAtMs": -1,
-              "unitLabel": "安装步骤",
-              "unitIndex": 0,
-              "completedUnits": 1,
-              "totalUnits": 2,
-              "startedAtMs": 900,
-              "completedAtMs": 1000,
-              "artifactHash": "opaque-artifact-id"
+              "mode": "kcoder",
+              "editable": true,
+              "allowedTools": [
+                "read"
+              ]
+            },
+            {
+              "mode": "kworker",
+              "editable": true,
+              "allowedTools": [
+                "read"
+              ]
+            }
+          ],
+          "tools": [
+            {
+              "name": "read",
+              "ui": {
+                "displayName": "Read file",
+                "group": "files",
+                "icon": "file",
+                "description": "Reads a file from the selected target."
+              },
+              "available": true,
+              "supportedModes": [
+                "kcoder",
+                "kworker"
+              ],
+              "unavailableReason": null
+            }
+          ],
+          "total": 1,
+          "truncated": false
+        }
+      },
+      {
+        "name": "luna_baseline_distinct_from_studio_defaults",
+        "value": {
+          "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "modes": [
+            {
+              "mode": "kcoder",
+              "editable": true,
+              "allowedTools": [
+                "read"
+              ]
+            },
+            {
+              "mode": "kworker",
+              "editable": true,
+              "allowedTools": [
+                "read"
+              ]
+            }
+          ],
+          "tools": [
+            {
+              "name": "read",
+              "ui": {
+                "displayName": "Read file",
+                "group": "files",
+                "icon": "file",
+                "description": "Reads a file from the selected target."
+              },
+              "available": true,
+              "supportedModes": [
+                "kcoder",
+                "kworker"
+              ],
+              "unavailableReason": null
+            }
+          ],
+          "total": 1,
+          "truncated": false,
+          "lunaAllowedTools": [
+            "bash",
+            "UnlistedTool"
+          ]
+        }
+      },
+      {
+        "name": "explicit_empty_luna_baseline",
+        "value": {
+          "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "modes": [
+            {
+              "mode": "kcoder",
+              "editable": true,
+              "allowedTools": [
+                "read"
+              ]
+            },
+            {
+              "mode": "kworker",
+              "editable": true,
+              "allowedTools": [
+                "read"
+              ]
+            }
+          ],
+          "tools": [
+            {
+              "name": "read",
+              "ui": {
+                "displayName": "Read file",
+                "group": "files",
+                "icon": "file",
+                "description": "Reads a file from the selected target."
+              },
+              "available": true,
+              "supportedModes": [
+                "kcoder",
+                "kworker"
+              ],
+              "unavailableReason": null
+            }
+          ],
+          "total": 1,
+          "truncated": false,
+          "lunaAllowedTools": []
+        }
+      },
+      {
+        "name": "resolved_tool_restrictions",
+        "value": {
+          "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "modes": [
+            {
+              "mode": "kcoder",
+              "editable": true,
+              "allowedTools": [
+                "read"
+              ]
+            },
+            {
+              "mode": "kworker",
+              "editable": true,
+              "allowedTools": [
+                "read"
+              ]
+            }
+          ],
+          "tools": [
+            {
+              "name": "read",
+              "ui": {
+                "displayName": "Read file",
+                "group": "files",
+                "icon": "file",
+                "description": "Reads a file from the selected target."
+              },
+              "available": true,
+              "supportedModes": [
+                "kcoder",
+                "kworker"
+              ],
+              "unavailableReason": null
+            }
+          ],
+          "total": 1,
+          "truncated": false,
+          "resolution": [
+            {
+              "mode": "kcoder",
+              "tools": [
+                {
+                  "name": "read",
+                  "effective": false,
+                  "restrictions": [
+                    {
+                      "source": "skill_selection",
+                      "skill": "read-only"
+                    },
+                    {
+                      "source": "mode_selection"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "name": "independent_expert_selection",
+        "value": {
+          "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "modes": [
+            {
+              "mode": "kcoder",
+              "editable": true,
+              "allowedTools": [
+                "read"
+              ]
+            },
+            {
+              "mode": "kworker",
+              "editable": true,
+              "allowedTools": [
+                "read"
+              ]
+            }
+          ],
+          "tools": [
+            {
+              "name": "read",
+              "ui": {
+                "displayName": "Read file",
+                "group": "files",
+                "icon": "file",
+                "description": "Reads a file from the selected target."
+              },
+              "available": true,
+              "supportedModes": [
+                "kcoder",
+                "kworker"
+              ],
+              "unavailableReason": null
+            }
+          ],
+          "total": 1,
+          "truncated": false,
+          "resolution": [
+            {
+              "mode": "kcoder",
+              "tools": [
+                {
+                  "name": "read",
+                  "effective": false,
+                  "restrictions": [
+                    {
+                      "source": "skill_selection",
+                      "skill": "read-only"
+                    },
+                    {
+                      "source": "mode_selection"
+                    }
+                  ]
+                }
+              ]
+            }
+          ],
+          "expertToolsIndependent": true
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "invalid_type_or_unknown_field",
+        "value": {
+          "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "modes": [],
+          "tools": [],
+          "total": "many",
+          "truncated": false
+        }
+      },
+      {
+        "name": "invalid_luna_baseline_type",
+        "value": {
+          "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "modes": [
+            {
+              "mode": "kcoder",
+              "editable": true,
+              "allowedTools": [
+                "read"
+              ]
+            },
+            {
+              "mode": "kworker",
+              "editable": true,
+              "allowedTools": [
+                "read"
+              ]
+            }
+          ],
+          "tools": [
+            {
+              "name": "read",
+              "ui": {
+                "displayName": "Read file",
+                "group": "files",
+                "icon": "file",
+                "description": "Reads a file from the selected target."
+              },
+              "available": true,
+              "supportedModes": [
+                "kcoder",
+                "kworker"
+              ],
+              "unavailableReason": null
+            }
+          ],
+          "total": 1,
+          "truncated": false,
+          "lunaAllowedTools": "read"
+        }
+      },
+      {
+        "name": "unknown_restriction_source",
+        "value": {
+          "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "modes": [
+            {
+              "mode": "kcoder",
+              "editable": true,
+              "allowedTools": [
+                "read"
+              ]
+            },
+            {
+              "mode": "kworker",
+              "editable": true,
+              "allowedTools": [
+                "read"
+              ]
+            }
+          ],
+          "tools": [
+            {
+              "name": "read",
+              "ui": {
+                "displayName": "Read file",
+                "group": "files",
+                "icon": "file",
+                "description": "Reads a file from the selected target."
+              },
+              "available": true,
+              "supportedModes": [
+                "kcoder",
+                "kworker"
+              ],
+              "unavailableReason": null
+            }
+          ],
+          "total": 1,
+          "truncated": false,
+          "resolution": [
+            {
+              "mode": "kcoder",
+              "tools": [
+                {
+                  "name": "read",
+                  "effective": false,
+                  "restrictions": [
+                    {
+                      "source": "guessed_permission",
+                      "skill": "read-only"
+                    },
+                    {
+                      "source": "mode_selection"
+                    }
+                  ]
+                }
+              ]
             }
           ]
         }
       }
     ]
   },
-  "WikiImageImport": {
+  "ThreadRuntimeHandoffReadParams": {
     "valid": [
       {
-        "name": "saved-response-recovery",
+        "name": "original_runtime_owner",
         "value": {
-          "id": "import",
-          "idempotencyKey": "file:digest",
-          "title": "image.png",
-          "status": "failed",
-          "phase": "validation",
-          "model": "vision",
-          "sourceId": null,
-          "revisionId": null,
-          "errorCode": "validation_failed",
-          "reservedCalls": 1,
-          "callLimit": 1,
-          "usageReportedCalls": 1,
-          "unknownUsageCalls": 0,
-          "inputTokens": 12,
-          "outputTokens": 7,
-          "textBytes": 100,
-          "reasoningBytes": 0,
-          "updatedAtMs": 1
+          "threadId": "thread",
+          "operationId": "release-operation"
         }
       }
     ],
     "invalid": [
       {
-        "name": "private-response-never-public",
+        "name": "missing_required_field",
         "value": {
-          "id": "import",
-          "idempotencyKey": "file:digest",
-          "title": "image.png",
-          "status": "failed",
-          "phase": "validation",
-          "model": "vision",
-          "sourceId": null,
-          "revisionId": null,
-          "errorCode": "validation_failed",
-          "reservedCalls": 1,
-          "callLimit": 1,
-          "usageReportedCalls": 1,
-          "unknownUsageCalls": 0,
-          "inputTokens": 12,
-          "outputTokens": 7,
-          "textBytes": 100,
-          "reasoningBytes": 0,
-          "updatedAtMs": 1,
-          "response": "private"
-        }
-      }
-    ]
-  },
-  "KnowledgeImageImportListResult": {
-    "valid": [
-      {
-        "name": "durable-import-page",
-        "value": {
-          "supported": true,
-          "items": [
-            {
-              "id": "import",
-              "idempotencyKey": "file:digest",
-              "title": "image.png",
-              "status": "failed",
-              "phase": "validation",
-              "model": "vision",
-              "sourceId": null,
-              "revisionId": null,
-              "errorCode": "validation_failed",
-              "reservedCalls": 1,
-              "callLimit": 1,
-              "usageReportedCalls": 1,
-              "unknownUsageCalls": 0,
-              "inputTokens": 12,
-              "outputTokens": 7,
-              "textBytes": 100,
-              "reasoningBytes": 0,
-              "updatedAtMs": 1
-            }
-          ],
-          "nextAfterId": null
-        }
-      }
-    ],
-    "invalid": [
-      {
-        "name": "unknown-private-field",
-        "value": {
-          "supported": true,
-          "items": [],
-          "nextAfterId": null,
-          "original": "private"
-        }
-      }
-    ]
-  },
-  "ThreadStreamContextV1": {
-    "valid": [
-      {
-        "name": "idle",
-        "value": {
-          "serverId": "server",
-          "throughSequence": 5,
-          "activeTurn": null
+          "operationId": "release-operation"
         }
       },
       {
-        "name": "running",
+        "name": "untrusted_authority",
+        "value": {
+          "threadId": "thread",
+          "operationId": "release-operation",
+          "approved": true
+        }
+      }
+    ]
+  },
+  "ThreadRuntimeHandoffReleaseParams": {
+    "valid": [
+      {
+        "name": "original_runtime_owner",
+        "value": {
+          "threadId": "thread",
+          "operationId": "release-operation",
+          "expectedServerId": "server",
+          "expectedOwnerRef": "runtime-owner",
+          "expectedClientTurnCount": 2
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing_required_field",
+        "value": {
+          "operationId": "release-operation",
+          "expectedServerId": "server",
+          "expectedOwnerRef": "runtime-owner",
+          "expectedClientTurnCount": 2
+        }
+      },
+      {
+        "name": "untrusted_authority",
+        "value": {
+          "threadId": "thread",
+          "operationId": "release-operation",
+          "expectedServerId": "server",
+          "expectedOwnerRef": "runtime-owner",
+          "expectedClientTurnCount": 2,
+          "approved": true
+        }
+      }
+    ]
+  },
+  "ThreadRuntimeHandoffSnapshot": {
+    "valid": [
+      {
+        "name": "original_runtime_owner",
         "value": {
           "serverId": "server",
-          "throughSequence": 7,
-          "activeTurn": {
-            "id": "turn",
+          "threadId": "thread",
+          "ownerRef": "runtime-owner",
+          "clientTurnCount": 2,
+          "releasable": true
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing_required_field",
+        "value": {
+          "threadId": "thread",
+          "ownerRef": "runtime-owner",
+          "clientTurnCount": 2,
+          "releasable": true
+        }
+      },
+      {
+        "name": "untrusted_authority",
+        "value": {
+          "serverId": "server",
+          "threadId": "thread",
+          "ownerRef": "runtime-owner",
+          "clientTurnCount": 2,
+          "releasable": true,
+          "approved": true
+        }
+      }
+    ]
+  },
+  "ThreadRuntimeHandoffStatus": {
+    "valid": [
+      {
+        "name": "original_runtime_owner",
+        "value": "released"
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown_outcome",
+        "value": "completed"
+      },
+      {
+        "name": "wrong_type",
+        "value": false
+      }
+    ]
+  },
+  "ThreadRuntimeHandoffReceipt": {
+    "valid": [
+      {
+        "name": "original_runtime_owner",
+        "value": {
+          "serverId": "server",
+          "threadId": "thread",
+          "operationId": "release-operation",
+          "ownerRef": "runtime-owner",
+          "status": "released"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing_required_field",
+        "value": {
+          "threadId": "thread",
+          "operationId": "release-operation",
+          "ownerRef": "runtime-owner",
+          "status": "released"
+        }
+      },
+      {
+        "name": "untrusted_authority",
+        "value": {
+          "serverId": "server",
+          "threadId": "thread",
+          "operationId": "release-operation",
+          "ownerRef": "runtime-owner",
+          "status": "released",
+          "approved": true
+        }
+      }
+    ]
+  },
+  "ThreadRuntimeHandoffReadResult": {
+    "valid": [
+      {
+        "name": "original_runtime_owner",
+        "value": {
+          "snapshot": {
+            "serverId": "server",
             "threadId": "thread",
-            "status": "running",
-            "attemptId": "attempt"
+            "ownerRef": "runtime-owner",
+            "clientTurnCount": 2,
+            "releasable": true
+          },
+          "operation": {
+            "serverId": "server",
+            "threadId": "thread",
+            "operationId": "release-operation",
+            "ownerRef": "runtime-owner",
+            "status": "released"
           }
         }
       }
     ],
     "invalid": [
       {
-        "name": "missing_active_identity",
+        "name": "missing_required_field",
         "value": {
-          "serverId": "server",
-          "throughSequence": 1
-        }
-      },
-      {
-        "name": "negative_watermark",
-        "value": {
-          "serverId": "server",
-          "throughSequence": -1,
-          "activeTurn": null
-        }
-      },
-      {
-        "name": "missing_attempt",
-        "value": {
-          "serverId": "server",
-          "throughSequence": 7,
-          "activeTurn": {
-            "id": "turn",
+          "operation": {
+            "serverId": "server",
             "threadId": "thread",
-            "status": "running"
+            "operationId": "release-operation",
+            "ownerRef": "runtime-owner",
+            "status": "released"
           }
+        }
+      },
+      {
+        "name": "untrusted_authority",
+        "value": {
+          "snapshot": {
+            "serverId": "server",
+            "threadId": "thread",
+            "ownerRef": "runtime-owner",
+            "clientTurnCount": 2,
+            "releasable": true
+          },
+          "operation": {
+            "serverId": "server",
+            "threadId": "thread",
+            "operationId": "release-operation",
+            "ownerRef": "runtime-owner",
+            "status": "released"
+          },
+          "approved": true
+        }
+      }
+    ]
+  },
+  "ThreadRuntimeHandoffReleaseResult": {
+    "valid": [
+      {
+        "name": "original_runtime_owner",
+        "value": {
+          "snapshot": {
+            "serverId": "server",
+            "threadId": "thread",
+            "ownerRef": null,
+            "clientTurnCount": null,
+            "releasable": false
+          },
+          "receipt": {
+            "serverId": "server",
+            "threadId": "thread",
+            "operationId": "release-operation",
+            "ownerRef": "runtime-owner",
+            "status": "released"
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing_required_field",
+        "value": {
+          "receipt": {
+            "serverId": "server",
+            "threadId": "thread",
+            "operationId": "release-operation",
+            "ownerRef": "runtime-owner",
+            "status": "released"
+          }
+        }
+      },
+      {
+        "name": "untrusted_authority",
+        "value": {
+          "snapshot": {
+            "serverId": "server",
+            "threadId": "thread",
+            "ownerRef": null,
+            "clientTurnCount": null,
+            "releasable": false
+          },
+          "receipt": {
+            "serverId": "server",
+            "threadId": "thread",
+            "operationId": "release-operation",
+            "ownerRef": "runtime-owner",
+            "status": "released"
+          },
+          "approved": true
         }
       }
     ]

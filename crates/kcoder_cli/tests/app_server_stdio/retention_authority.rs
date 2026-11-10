@@ -1,5 +1,5 @@
-// S2-A1 only establishes the trusted stdio boundary. Retention RPCs remain
-// unadvertised and unconnected to RetentionService in this batch.
+// The trusted private stdio lane dispatches retention reads, while the public
+// capability remains disabled. Authority failures must not mutate owner state.
 
 #[cfg(target_os = "linux")]
 struct RetentionAuthorityFixture {
@@ -17,6 +17,9 @@ fn retention_authority_fixture(
 
     let workspace = temp.path().join(workspace_name);
     std::fs::create_dir_all(&workspace).unwrap();
+    let home = temp.path().join("home");
+    std::fs::create_dir_all(&home).unwrap();
+    std::fs::set_permissions(&home, std::fs::Permissions::from_mode(0o700)).unwrap();
     let config = temp.path().join("account-config");
     std::fs::create_dir_all(&config).unwrap();
     std::fs::set_permissions(&config, std::fs::Permissions::from_mode(0o700)).unwrap();
@@ -48,6 +51,11 @@ impl RetentionAuthorityServer {
         parent_args: &[String],
         parent_environment: Option<&str>,
     ) -> Self {
+        let home = fixture
+            .config
+            .parent()
+            .expect("retention fixture config has a temp root")
+            .join("home");
         let mut command = Command::new(env!("CARGO_BIN_EXE_kcoder"));
         command
             .args([
@@ -59,8 +67,14 @@ impl RetentionAuthorityServer {
             ])
             .args(parent_args)
             .env("XDG_CONFIG_HOME", &fixture.config)
+            .env("XDG_DATA_HOME", home.join(".local/share"))
+            .env("XDG_STATE_HOME", home.join(".local/state"))
+            .env("XDG_CACHE_HOME", home.join(".cache"))
             .env("KCODER_CONFIG_DIR", &fixture.config)
+            .env("HOME", &home)
             .env_remove("KCODER_HOME")
+            .env_remove("KCODER_HISTORY_DIR")
+            .env_remove("KCODER_MEMORY_DIR")
             .env_remove("SSH_CONNECTION")
             .env_remove("SSH_TTY")
             .env_remove("KCODER_ACCOUNT_PRINCIPAL_ID")
@@ -363,18 +377,52 @@ fn retention_authority_account_context(principal_id: &str) -> Value {
 
 #[cfg(target_os = "linux")]
 fn retention_authority_extension(context: &Value) -> Value {
-    json!({"version": 1, "context": context})
+    let mut extension = json!({
+        "version": 1,
+        "context": context,
+        "workspaceTargetId": "retention-authority-review-target",
+    });
+    if context["principal"]["kind"] == "verifiedAccount" {
+        extension["workspaceAccount"] = json!({
+            "role": "user",
+            "authorizationGeneration": "1",
+        });
+    }
+    extension
 }
 
 #[cfg(target_os = "linux")]
-fn retention_authority_read_params(context: &Value) -> Value {
+fn retention_authority_read_params(context: &Value, initialized: &Value) -> Value {
+    // Ordinary stdio has no admission namespace; its otherwise valid private
+    // request must be rejected by authority before any service lookup.
+    let admission = &initialized["result"]["attachmentUploadAdmission"];
+    let namespace = admission["rootNamespace"].as_str().unwrap_or("review");
+    let epoch = admission["admissionEpoch"].as_u64().unwrap_or(1);
     json!({
         "trustedContext": context,
         "selector": {
             "by": "clientRequestId",
-            "clientRequestId": "review-read-probe",
+            "clientRequestId": format!("r1.{namespace}.{epoch}.0123456789abcdef0123456789abcdef"),
         },
     })
+}
+
+#[cfg(target_os = "linux")]
+fn retention_authority_assert_absent(response: &Value) {
+    assert!(response.get("error").is_none(), "{response}");
+    let scoped = &response["result"];
+    assert!(
+        scoped["scopeId"].as_str().is_some_and(|scope| {
+            scope.len() == 64 && scope.bytes().all(|byte| byte.is_ascii_hexdigit())
+        }),
+        "{response}"
+    );
+    assert_eq!(
+        scoped["result"].get("receipt"),
+        Some(&Value::Null),
+        "{response}"
+    );
+    assert!(scoped["result"].get("epochRetired").is_none(), "{response}");
 }
 
 #[cfg(target_os = "linux")]
@@ -567,7 +615,7 @@ fn retention_authority_ordinary_stdio_keeps_legacy_operations_but_cannot_self_en
         3,
         "attachment/retention/read",
         &forged_context,
-        retention_authority_read_params(&forged_context),
+        retention_authority_read_params(&forged_context, &initialized),
     ));
     retention_authority_assert_error(&server.response(3), -32001);
 
@@ -575,9 +623,9 @@ fn retention_authority_ordinary_stdio_keeps_legacy_operations_but_cannot_self_en
         "jsonrpc": "2.0",
         "id": 4,
         "method": "attachment/retention/read",
-        "params": retention_authority_read_params(&forged_context),
+        "params": retention_authority_read_params(&forged_context, &initialized),
     }));
-    retention_authority_assert_error(&server.response(4), -32001);
+    retention_authority_assert_error(&server.response(4), -32602);
 
     server.send(json!({
         "jsonrpc": "2.0",
@@ -695,19 +743,12 @@ fn retention_authority_local_os_frames_validate_exact_envelope_without_writing_o
         2,
         "attachment/retention/read",
         &context,
-        retention_authority_read_params(&context),
+        retention_authority_read_params(&context, &initialized),
     ));
-    let authorized_but_unwired = server.response(2);
-    retention_authority_assert_error(&authorized_but_unwired, -32601);
-    assert!(
-        !authorized_but_unwired["error"]["message"]
-            .as_str()
-            .unwrap_or_default()
-            .contains("review-device-id"),
-        "errors must not echo private authority data: {authorized_but_unwired}"
-    );
+    let authorized_read = server.response(2);
+    retention_authority_assert_absent(&authorized_read);
 
-    let mut mismatched_params = retention_authority_read_params(&context);
+    let mut mismatched_params = retention_authority_read_params(&context, &initialized);
     mismatched_params["trustedContext"]["deviceId"] = json!("different-device");
     server.send(retention_authority_request(
         3,
@@ -722,15 +763,23 @@ fn retention_authority_local_os_frames_validate_exact_envelope_without_writing_o
         4,
         "attachment/retention/read",
         &wrong_principal,
-        retention_authority_read_params(&wrong_principal),
+        retention_authority_read_params(&wrong_principal, &initialized),
     ));
-    retention_authority_assert_error(&server.response(4), -32001);
+    let wrong_principal_response = server.response(4);
+    retention_authority_assert_error(&wrong_principal_response, -32001);
+    assert!(
+        !wrong_principal_response["error"]["message"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("review-device-id"),
+        "errors must not echo private authority data: {wrong_principal_response}"
+    );
 
     let mut wrong_version = retention_authority_request(
         5,
         "attachment/retention/read",
         &context,
-        retention_authority_read_params(&context),
+        retention_authority_read_params(&context, &initialized),
     );
     wrong_version["kcoderPrivateRetention"]["version"] = json!(2);
     server.send(wrong_version);
@@ -740,7 +789,7 @@ fn retention_authority_local_os_frames_validate_exact_envelope_without_writing_o
         6,
         "attachment/retention/read",
         &context,
-        retention_authority_read_params(&context),
+        retention_authority_read_params(&context, &initialized),
     );
     unknown_field["kcoderPrivateRetention"]["unexpectedAuthority"] = json!("must-not-be-accepted");
     server.send(unknown_field);
@@ -767,7 +816,7 @@ fn retention_authority_local_os_frames_validate_exact_envelope_without_writing_o
         &context,
         json!({
             "trustedContext": context,
-            "clientRequestId": "review-reserve-probe",
+            "clientRequestId": retention_authority_read_params(&context, &initialized)["selector"]["clientRequestId"],
             "threadId": "abcde",
             "stageRefs": stage_refs,
         }),
@@ -778,7 +827,7 @@ fn retention_authority_local_os_frames_validate_exact_envelope_without_writing_o
         9,
         "attachment/retention/read",
         &context,
-        retention_authority_read_params(&context),
+        retention_authority_read_params(&context, &initialized),
     ))
     .unwrap();
     let extension_start = duplicated
@@ -822,7 +871,7 @@ fn retention_authority_local_os_frames_validate_exact_envelope_without_writing_o
     assert_eq!(
         retention_authority_snapshot(&retention_root).unwrap(),
         baseline,
-        "authorized-but-unwired, rejected, duplicate-key, and no-id requests must not mutate retention files"
+        "absent reads, rejected, duplicate-key, and no-id requests must not mutate retention files"
     );
     retention_authority_assert_no_owner_records(&retention_root);
     server.shutdown_successfully();
@@ -861,16 +910,16 @@ fn retention_authority_account_parent_binds_actual_uid_and_fixed_config_root() {
         2,
         "attachment/retention/read",
         &context,
-        retention_authority_read_params(&context),
+        retention_authority_read_params(&context, &initialized),
     ));
-    retention_authority_assert_error(&server.response(2), -32601);
+    retention_authority_assert_absent(&server.response(2));
 
     let wrong_principal = retention_authority_account_context("different-account");
     server.send(retention_authority_request(
         3,
         "attachment/retention/read",
         &wrong_principal,
-        retention_authority_read_params(&wrong_principal),
+        retention_authority_read_params(&wrong_principal, &initialized),
     ));
     retention_authority_assert_error(&server.response(3), -32001);
     assert_eq!(
@@ -908,9 +957,9 @@ fn retention_authority_account_parent_binds_actual_uid_and_fixed_config_root() {
         2,
         "attachment/retention/read",
         &context,
-        retention_authority_read_params(&context),
+        retention_authority_read_params(&context, &initialized),
     ));
-    retention_authority_assert_error(&second_workspace.response(2), -32601);
+    retention_authority_assert_absent(&second_workspace.response(2));
     assert_eq!(
         retention_authority_snapshot(&retention_root).unwrap(),
         baseline,

@@ -47,6 +47,29 @@ describe('reconcileRuntimeConversationMessages', () => {
 })
 
 describe('filterBufferedTranscriptActions', () => {
+  test('keeps the accepted live identity when an active transcript already contains a completed body', () => {
+    const transcript = [
+      {
+        id: 'history-body',
+        role: 'assistant' as const,
+        content: 'Tool phase',
+        status: 'done' as const,
+        turnId: 'turn-1',
+        createdAt: '2026-10-12',
+      },
+    ]
+    const buffered = [
+      {
+        type: 'assistant_started' as const,
+        subtaskId: 'turn-1',
+        turnId: 'turn-1',
+        attemptId: 'turn-1',
+      },
+      { type: 'assistant_chunk' as const, subtaskId: 'turn-1', content: 'Still running' },
+    ]
+    expect(filterBufferedTranscriptActions(transcript, buffered, true)).toEqual(buffered)
+    expect(filterBufferedTranscriptActions(transcript, buffered, false)).toEqual([])
+  })
   test('does not replay a completed turn text stream already present in the transcript', () => {
     const transcript = [
       message({

@@ -3,6 +3,16 @@ import type { RuntimeTaskAddress, RuntimeTaskSummary, RuntimeWorkListResponse } 
 import type { RuntimePaneTranscript } from '@/types/workbench'
 import { RuntimeTaskLifecycleStore } from './RuntimeTaskLifecycleStore'
 import { getRuntimeTaskLifecycleKey } from './RuntimeTaskMachine'
+import { projectRuntimeAcceptanceActivity } from './workListProjection'
+
+test('accepted native activity preserves active, terminal and unknown observations', () => {
+  for (const state of ['queued', 'running', 'waiting_for_user'] as const)
+    expect(projectRuntimeAcceptanceActivity({ running: false }, state)).toEqual({ running: true })
+  for (const state of ['completed', 'failed', 'cancelled'] as const)
+    expect(projectRuntimeAcceptanceActivity({ running: true }, state)).toEqual({ running: false })
+  const previous = { running: true }
+  expect(projectRuntimeAcceptanceActivity(previous, 'outcome_unknown')).toBe(previous)
+})
 
 const address: RuntimeTaskAddress = {
   deviceId: 'local-device',
@@ -52,6 +62,30 @@ function transcript(overrides: Partial<RuntimePaneTranscript> = {}): RuntimePane
 
 describe('RuntimeTaskLifecycleStore', () => {
   beforeEach(() => localStorage.clear())
+
+  test('restores unread tasks after an earlier partial work list', () => {
+    const first = { ...address, taskId: 'not-yet-loaded' }
+    const second = { ...address, taskId: 'also-not-loaded' }
+    const peer = { ...address, deviceId: 'peer-target' }
+    const key = 'kcoder.runtimeTaskLifecycle.test.unread.v1'
+    const legacyKey = 'wework.runtimeTaskLifecycle.test.unread.v1'
+    const legacyUnread = JSON.stringify([first, second, peer].map(getRuntimeTaskLifecycleKey))
+    localStorage.setItem(legacyKey, legacyUnread)
+    const store = new RuntimeTaskLifecycleStore('test')
+    store.syncRuntimeWork(runtimeWork(task({ taskId: 'already-loaded' })))
+    expect(localStorage.getItem(key)).toBeNull()
+    store.syncRuntimeWork(runtimeWork(task({ taskId: first.taskId })))
+    expect(store.getTask(first)?.derived.shouldShowUnread).toBe(true)
+    store.removeTarget(address.deviceId)
+    expect(localStorage.getItem(key)).toBe(JSON.stringify([getRuntimeTaskLifecycleKey(peer)]))
+    expect(localStorage.getItem(legacyKey)).toBe(legacyUnread)
+
+    const reopened = new RuntimeTaskLifecycleStore('test')
+    reopened.syncRuntimeWork(runtimeWork(task({ taskId: first.taskId })))
+    expect(reopened.getTask(first)?.derived.shouldShowUnread).toBe(false)
+    reopened.removeTarget(peer.deviceId)
+    expect(localStorage.getItem(key)).toBe('[]')
+  })
 
   test('routes executor snapshots to the matching task machine', () => {
     const store = new RuntimeTaskLifecycleStore('test')

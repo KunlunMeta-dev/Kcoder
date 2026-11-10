@@ -4,7 +4,7 @@ set -euo pipefail
 
 repo_dir="$(cd -P "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 source "$repo_dir/scripts/install/lib/ripgrep.sh"
-version="${1:-$(sed -n 's/^version = "\([^"]*\)"/\1/p' "$repo_dir/Cargo.toml" | head -1)}"
+version="${1:-$(sed -n 's/^version = "\([^"]*\)"/\1/p' "$repo_dir/crates/kcoder_cli/Cargo.toml" | head -1)}"
 target="${2:-$(rustc -vV | sed -n 's/^host: //p')}"
 binary="${KCODER_RELEASE_BIN:-$repo_dir/target/$target/release/kcoder}"
 out_dir="${KCODER_RELEASE_OUT:-$repo_dir/target/dist}"

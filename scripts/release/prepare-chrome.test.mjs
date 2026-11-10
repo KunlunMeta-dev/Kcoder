@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdtemp, mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, readdir, realpath, rename, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -36,7 +36,7 @@ function fixtureRelease(archive, platform = 'linux64') {
 }
 
 test('pins supported official platforms and rejects metadata URL redirection', () => {
-  for (const platform of ['linux64', 'win64', 'mac-x64']) {
+  for (const platform of ['linux64', 'win64', 'mac-x64', 'mac-arm64']) {
     const release = chromeRelease(platform);
     assert.match(release.sha256, /^[0-9a-f]{64}$/);
     assert.equal(release.version, '152.0.7977.82');
@@ -60,7 +60,7 @@ test('rejects archive traversal, symlinks, alternate local paths, and wrong plat
 });
 
 test('stages full resources from an explicit archive, verifies cached SHA, and preserves old install on failure', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'kcoder-chrome-'));
+  const directory = await mkdtemp(join(await realpath(tmpdir()), 'kcoder-chrome-'));
   try {
     const archive = zip([{ name: 'chrome-linux64/chrome', content: 'new executable', mode: 0o100755 }, { name: 'chrome-linux64/LICENSE', content: 'retain license' }]);
     const release = fixtureRelease(archive), source = join(directory, 'source.zip');
@@ -93,7 +93,7 @@ test('stages full resources from an explicit archive, verifies cached SHA, and p
 });
 
 test('validates official metadata and SHA before accepting a download', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'kcoder-chrome-download-'));
+  const directory = await mkdtemp(join(await realpath(tmpdir()), 'kcoder-chrome-download-'));
   try {
     const archive = zip([{ name: 'chrome-win64/chrome.exe' }, { name: 'chrome-win64/ABOUT', content: 'retain notice' }]);
     const release = fixtureRelease(archive, 'win64'), calls = [];
@@ -109,7 +109,7 @@ test('validates official metadata and SHA before accepting a download', async ()
 });
 
 test('refuses broad or unowned destination directories', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'kcoder-chrome-unowned-'));
+  const directory = await mkdtemp(join(await realpath(tmpdir()), 'kcoder-chrome-unowned-'));
   try {
     const destination = join(directory, 'chrome');
     await mkdir(destination);
@@ -121,8 +121,8 @@ test('refuses broad or unowned destination directories', async () => {
 });
 
 
-test('mac-x64 Chrome allows only the pinned framework link graph without relaxing Linux or Windows archives', () => {
-  const release = chromeRelease('mac-x64');
+for (const platform of ['mac-x64', 'mac-arm64']) test(`${platform} Chrome allows only the pinned framework link graph`, () => {
+  const release = chromeRelease(platform);
   const framework = `${release.directory}/Google Chrome for Testing.app/Contents/Frameworks/Google Chrome for Testing Framework.framework/`;
   const executable = { name: `${release.directory}/${release.executable}`, content: 'fixture executable' };
   const current = { name: framework + 'Versions/Current', content: release.version, mode: 0o120777 };

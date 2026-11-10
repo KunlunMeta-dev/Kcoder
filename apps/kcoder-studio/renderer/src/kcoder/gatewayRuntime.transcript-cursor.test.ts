@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test, vi } from 'vitest'
 import { GatewayRpcError } from './gatewayRpc'
+import { runtimeMessagesToWorkbenchMessages } from '@/features/workbench/runtimePaneMessages'
 import { KCoderGatewayRuntime as InstalledGatewayRuntime } from './installGatewayRuntime'
 import {
   createTestGatewayRuntime,
@@ -92,11 +93,13 @@ describe.each(['modular', 'installed'] as const)(
       const runtime = createRuntime(client)
       const result = (await runtime.request('runtime.tasks.transcript', {
         taskId: 'kcoder:local:cursor-thread',
-      })) as { messages: Array<{ blocks: Array<Record<string, unknown>> }> }
+      })) as { messages: Array<{ id: string; role: 'assistant'; content: string; blocks: Array<Record<string, unknown>> }> }
       const block = result.messages[0].blocks[0]
-      expect(block.status).toBe('error')
+      expect(block.status).toBe('result_unrecorded')
       expect(typeof block.tool_output).toBe('string')
       expect(block.tool_output).not.toBe('')
+      const [message] = runtimeMessagesToWorkbenchMessages(result.messages)
+      expect(message.blocks?.[0]).toMatchObject({ status: 'unknown', rawStatus: 'result_unrecorded' })
     })
 
     test('uses the read snapshot execution state instead of the older cached thread list', async () => {

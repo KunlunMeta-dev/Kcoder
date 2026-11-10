@@ -1,7 +1,7 @@
-import { invoke } from '@tauri-apps/api/core'
-import { listen, type UnlistenFn } from '@tauri-apps/api/event'
+import { invoke } from '@/lib/runtime-commands'
+import { listen, type UnlistenFn } from '@/lib/runtime-events'
 import type { LocalWorkspaceOpenerId } from './local-workspace-openers'
-import { isTauriRuntime } from './runtime-environment'
+import { isGatewayRuntime } from './runtime-environment'
 
 const localFileOpenerIconCache = new Map<string, string>()
 const localFileOpenerIconRequests = new Map<string, Promise<string>>()
@@ -15,7 +15,7 @@ export function isLocalTerminalAvailable(): boolean {
     /iPad|iPhone|iPod/.test(userAgent) || (platform === 'MacIntel' && navigator.maxTouchPoints > 1)
   const isMacOs = platform.startsWith('Mac') || userAgent.includes('Mac OS X')
 
-  return isTauriRuntime() && isMacOs && !isIosLike
+  return isGatewayRuntime() && isMacOs && !isIosLike
 }
 
 export async function getLocalExecutorDeviceId(
@@ -72,7 +72,7 @@ export async function startLocalTerminal({
   env,
 }: StartLocalTerminalOptions = {}): Promise<string> {
   if (!isLocalTerminalAvailable()) {
-    throw new Error('Local terminal is unavailable outside the macOS Tauri app')
+    throw new Error('Local terminal is unavailable without an active Gateway connection')
   }
 
   const trimmedCwd = cwd?.trim()
@@ -117,7 +117,7 @@ export async function openLocalWorkspace({
   path,
 }: OpenLocalWorkspaceOptions): Promise<void> {
   if (!isLocalTerminalAvailable()) {
-    throw new Error('Local workspace opening is unavailable outside the macOS Tauri app')
+    throw new Error('Local workspace opening is unavailable without an active Gateway connection')
   }
 
   const trimmedPath = path?.trim()
@@ -133,7 +133,7 @@ export async function openLocalWorkspace({
 
 export async function openLocalFile(path?: string): Promise<void> {
   if (!isLocalTerminalAvailable()) {
-    throw new Error('Local file opening is unavailable outside the macOS Tauri app')
+    throw new Error('Local file opening is unavailable without an active Gateway connection')
   }
 
   const trimmedPath = path?.trim()
@@ -148,7 +148,7 @@ export async function openLocalFile(path?: string): Promise<void> {
 
 export async function revealLocalFile(path?: string): Promise<void> {
   if (!isLocalTerminalAvailable()) {
-    throw new Error('Local file revealing is unavailable outside the macOS Tauri app')
+    throw new Error('Local file revealing is unavailable without an active Gateway connection')
   }
 
   const trimmedPath = path?.trim()
@@ -172,7 +172,7 @@ export interface LocalFileOpeners {
 
 export async function listLocalFileOpeners(path?: string): Promise<LocalFileOpeners> {
   if (!isLocalTerminalAvailable()) {
-    throw new Error('Local file opening is unavailable outside the macOS Tauri app')
+    throw new Error('Local file opening is unavailable without an active Gateway connection')
   }
 
   const trimmedPath = path?.trim()
@@ -185,7 +185,7 @@ export async function listLocalFileOpeners(path?: string): Promise<LocalFileOpen
 
 export async function getLocalFileOpenerIcon(iconPath?: string): Promise<string> {
   if (!isLocalTerminalAvailable()) {
-    throw new Error('Local application icons are unavailable outside the macOS Tauri app')
+    throw new Error('Local application icons are unavailable without an active Gateway connection')
   }
 
   const trimmedIconPath = iconPath?.trim()
@@ -221,7 +221,7 @@ export async function openLocalFileWithApplication(
   path?: string
 ): Promise<void> {
   if (!isLocalTerminalAvailable()) {
-    throw new Error('Local file opening is unavailable outside the macOS Tauri app')
+    throw new Error('Local file opening is unavailable without an active Gateway connection')
   }
 
   const trimmedPath = path?.trim()

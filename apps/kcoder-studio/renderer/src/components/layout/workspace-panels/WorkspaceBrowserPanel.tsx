@@ -20,6 +20,8 @@ import { cloudDesktopExtension } from '@extensions/cloud-desktop'
 import {
   canUseEmbeddedBrowser,
   closeEmbeddedBrowser,
+  closeEmbeddedBrowserForAccountSwitch,
+  setEmbeddedBrowserHandoff,
   consumeEmbeddedBrowserLabelTransfer,
   deleteEmbeddedBrowserDownload,
   EMBEDDED_BROWSER_DEBUG_PANEL_VISIBILITY_EVENT,
@@ -56,6 +58,12 @@ import { useTranslation } from '@/hooks/useTranslation'
 import { isKCoderGatewayPage } from '@/kcoder/gatewayRpc'
 import type { CodeCommentContext } from '@/types/workspace-files'
 import { defaultAppearance, useOptionalAppearance } from '@/features/appearance'
+import { BrowserAccountControls, type BrowserAccountChoice } from './BrowserAccountControls'
+import {
+  captureAccountContextRevision,
+  listenAccountContextChanges,
+} from '@/kcoder/accountContextEvents'
+import { invoke } from '@/lib/runtime-commands'
 import {
   DEFAULT_UI_FONT_SIZE,
   resolveUiTypographyVariables,
@@ -599,12 +607,102 @@ export function WorkspaceBrowserPanel({
   const [pageUrl, setPageUrl] = useState<string | null>(null)
   const [status, setStatus] = useState<BrowserStatus>('idle')
   const [error, setError] = useState<string | null>(null)
+  const [accountState, setAccountState] = useState<{
+    label: string
+    choice: BrowserAccountChoice | null
+  }>(() => ({ label, choice: null }))
+  if (accountState.label !== label) setAccountState({ label, choice: null })
+  const browserAccount = accountState.label === label ? accountState.choice : null
+  const setBrowserAccount = useCallback((choice: BrowserAccountChoice | null) => {
+    setAccountState({ label, choice })
+  }, [label])
+  const [humanControl, setHumanControl] = useState(false)
+  const [handoffPending, setHandoffPending] = useState(false)
+  const [handoffUnknown, setHandoffUnknown] = useState(false)
+  const accountSwitchEpoch = useRef(0)
   const [annotationMode, setAnnotationMode] = useState(false)
   const [annotations, setAnnotations] = useState<BrowserAnnotation[]>([])
   const [downloads, setDownloads] = useState<BrowserDownload[]>([])
   const [downloadsOpen, setDownloadsOpen] = useState(false)
   const downloadManagementAvailable = !isKCoderGatewayPage()
   const embeddedBrowserAvailable = canUseEmbeddedBrowser()
+  useEffect(() => {
+    accountSwitchEpoch.current += 1
+  }, [label])
+  useEffect(
+    () =>
+      listenAccountContextChanges(() => {
+        accountSwitchEpoch.current += 1
+        nativeBrowserOpenRef.current = false
+        nativeLabelRef.current = null
+        setBrowserAccount(null)
+        setCurrentUrl(null)
+        setPageUrl(null)
+      }),
+    [setBrowserAccount]
+  )
+  const selectBrowserAccount = useCallback(
+    async (next: BrowserAccountChoice | null) => {
+      const owner = captureAccountContextRevision()
+      const revision = ++accountSwitchEpoch.current
+      const openingLabel = label
+      const reopenUrl = activePageUrlRef.current ?? currentUrlRef.current
+      if (nativeBrowserOpenRef.current) {
+        await closeEmbeddedBrowserForAccountSwitch(openingLabel)
+        nativeBrowserOpenRef.current = false
+        nativeLabelRef.current = null
+        setCurrentUrl(null)
+        setPageUrl(null)
+      }
+      if (next)
+        await invoke('embedded_browser_profiles', {
+          label: openingLabel,
+          action: 'list',
+          scope: next.selection.scope,
+          payload: {},
+        })
+      if (
+        !mountedRef.current ||
+        currentLabelRef.current !== openingLabel ||
+        revision !== accountSwitchEpoch.current ||
+        (next && !owner(next.gatewayTargetId))
+      )
+        throw new Error('BROWSER_PROFILE_OWNER_CHANGED')
+      nativeBrowserOpenRef.current = false
+      nativeLabelRef.current = null
+      setBrowserAccount(next)
+      setHumanControl(false)
+      setHandoffUnknown(false)
+      setError(null)
+      setCurrentUrl(reopenUrl)
+      setOpenAttempt(value => value + 1)
+    },
+    [label, setBrowserAccount]
+  )
+  const changeBrowserControl = async () => {
+    const originalLabel = label
+    const revision = accountSwitchEpoch.current
+    setHandoffPending(true)
+    try {
+      const observed = await setEmbeddedBrowserHandoff(
+        originalLabel,
+        handoffUnknown ? 'read' : humanControl ? 'automation' : 'human'
+      )
+      if (currentLabelRef.current !== originalLabel || revision !== accountSwitchEpoch.current)
+        return
+      setHumanControl(observed.mode === 'human')
+      setHandoffUnknown(false)
+      setPageUrl(observed.observedUrl)
+      setError(null)
+    } catch {
+      if (revision === accountSwitchEpoch.current) {
+        setHandoffUnknown(true)
+        setError(t('workbench.browser_control_unknown'))
+      }
+    } finally {
+      if (revision === accountSwitchEpoch.current) setHandoffPending(false)
+    }
+  }
   const activePageUrl = pageUrl ?? currentUrl
   const internalDesktopPage = Boolean(
     activePageUrl && cloudDesktopExtension.isInternalPageUrl(activePageUrl)
@@ -914,6 +1012,11 @@ export function WorkspaceBrowserPanel({
     [active, scheduleEmbeddedBrowserBoundsSync]
   )
 
+  const postOpenBoundsSyncRef = useRef(schedulePostOpenBoundsSync)
+  useLayoutEffect(() => {
+    postOpenBoundsSyncRef.current = schedulePostOpenBoundsSync
+  }, [schedulePostOpenBoundsSync])
+
   useEffect(() => clearScheduledBoundsSync, [clearScheduledBoundsSync])
 
   const refreshPageState = useCallback(async (): Promise<boolean> => {
@@ -965,7 +1068,7 @@ export function WorkspaceBrowserPanel({
   useEffect(() => {
     if (!active || !embeddedBrowserAvailable || !currentUrl) return
     if (nativeBrowserOpenRef.current) {
-      schedulePostOpenBoundsSync(active)
+      postOpenBoundsSyncRef.current(active)
       return
     }
 
@@ -988,7 +1091,12 @@ export function WorkspaceBrowserPanel({
           isKCoderGatewayPage() ? 30_000 : EMBEDDED_BROWSER_READY_TIMEOUT_MS
         )
 
-        const pageState = await openEmbeddedBrowser(currentUrl, bounds, label)
+        const pageState = await openEmbeddedBrowser(
+          currentUrl,
+          bounds,
+          label,
+          browserAccount?.selection
+        )
         if (disposed) {
           await closeEmbeddedBrowser(label).catch(() => undefined)
           return
@@ -996,7 +1104,7 @@ export function WorkspaceBrowserPanel({
         adoptNativeLabel(pageState.nativeLabel, label)
         nativeBrowserOpenRef.current = true
         updatePageUrl(pageState.url || currentUrl)
-        schedulePostOpenBoundsSync(active)
+        postOpenBoundsSyncRef.current(active)
         if (readyTimer !== null) window.clearTimeout(readyTimer)
         setStatus('ready')
       } catch (error) {
@@ -1022,9 +1130,9 @@ export function WorkspaceBrowserPanel({
     adoptNativeLabel,
     currentUrl,
     openAttempt,
+    browserAccount,
     embeddedBrowserAvailable,
     label,
-    schedulePostOpenBoundsSync,
     t,
     updatePageUrl,
   ])
@@ -1041,13 +1149,21 @@ export function WorkspaceBrowserPanel({
         adoptNativeLabel(pageState.nativeLabel, label)
         if (!pageState.url) return
         nativeBrowserOpenRef.current = true
+        if (pageState.profile && pageState.profileSelection && pageState.gatewayTargetId) {
+          setBrowserAccount({
+            profile: pageState.profile,
+            selection: pageState.profileSelection,
+            gatewayTargetId: pageState.gatewayTargetId,
+          })
+          setHumanControl(pageState.handoff?.mode === 'human')
+        }
         setCurrentUrl(pageState.url)
         updatePageUrl(pageState.url)
         if (pageState.title) {
           onTitleChange?.(pageState.title)
         }
         setStatus('ready')
-        schedulePostOpenBoundsSync(active)
+        postOpenBoundsSyncRef.current(active)
       } catch {
         // No existing native browser for this label.
       }
@@ -1065,7 +1181,7 @@ export function WorkspaceBrowserPanel({
     embeddedBrowserAvailable,
     label,
     onTitleChange,
-    schedulePostOpenBoundsSync,
+    setBrowserAccount,
     updatePageUrl,
   ])
 
@@ -1567,6 +1683,51 @@ export function WorkspaceBrowserPanel({
               className="h-8 w-full rounded-md border border-border bg-surface px-3 text-sm text-text-primary outline-none transition-colors placeholder:text-text-muted focus:border-primary focus:bg-background"
             />
           </form>
+          {isKCoderGatewayPage() && (
+            <BrowserAccountControls
+              label={label}
+              choice={browserAccount}
+              onSelect={selectBrowserAccount}
+            />
+          )}
+          {browserAccount && (
+            <>
+              <span
+                className="max-w-28 truncate text-xs text-text-secondary"
+                data-testid="workspace-browser-control-status"
+              >
+                {t(
+                  handoffUnknown
+                    ? 'workbench.browser_control_pending'
+                    : humanControl
+                      ? 'workbench.browser_control_human'
+                      : 'workbench.browser_control_automation'
+                )}
+              </span>
+              <BrowserToolbarButton
+                label={t(
+                  handoffUnknown
+                    ? 'workbench.browser_refresh_control'
+                    : humanControl
+                      ? 'workbench.browser_return_control'
+                      : 'workbench.browser_take_control'
+                )}
+                testId="workspace-browser-handoff"
+                disabled={handoffPending || status !== 'ready'}
+                onClick={() => void changeBrowserControl()}
+              >
+                {handoffPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : handoffUnknown ? (
+                  <RotateCw className="h-4 w-4" />
+                ) : humanControl ? (
+                  <Play className="h-4 w-4" />
+                ) : (
+                  <Pause className="h-4 w-4" />
+                )}
+              </BrowserToolbarButton>
+            </>
+          )}
           {downloadManagementAvailable ? (
             <BrowserToolbarButton
               testId="workspace-browser-downloads-button"

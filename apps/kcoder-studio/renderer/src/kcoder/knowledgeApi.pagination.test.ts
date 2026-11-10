@@ -1,8 +1,8 @@
 import { beforeEach, expect, test, vi } from 'vitest'
-import { requestLocalExecutor } from '@/tauri/localExecutor'
+import { requestLocalExecutor } from '@/host/localExecutor'
 import { knowledgeApi } from './knowledgeApi'
 
-vi.mock('@/tauri/localExecutor', () => ({ requestLocalExecutor: vi.fn() }))
+vi.mock('@/host/localExecutor', () => ({ requestLocalExecutor: vi.fn() }))
 
 beforeEach(() => {
   vi.mocked(requestLocalExecutor).mockReset().mockResolvedValue({ items: [] })

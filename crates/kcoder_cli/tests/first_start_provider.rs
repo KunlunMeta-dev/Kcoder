@@ -6,6 +6,41 @@ use std::{
     time::{Duration, Instant},
 };
 
+#[test]
+fn unknown_internal_entries_are_rejected_before_profile_bootstrap() {
+    let temp = tempfile::tempdir().unwrap();
+    let config = temp.path().join("uninitialized-config");
+    for flag in [
+        "--internal-native-channel-service-v1",
+        "--internal-native-channel-scope-owner-v1",
+        "--internal-native-channel-scope-core-v1",
+        "--internal-app-server-host-migrate-v1",
+        "--internal-app-server-host-rollback-v1",
+        "--internal-app-server-carrier-retire-v1",
+        "--internal-unknown-worker",
+    ] {
+        let output = Command::new(env!("CARGO_BIN_EXE_kcoder"))
+            .env_clear()
+            .env("KCODER_CONFIG_DIR", &config)
+            .env("HOME", temp.path())
+            .env("USERPROFILE", temp.path())
+            .env("APPDATA", temp.path())
+            .env("LOCALAPPDATA", temp.path())
+            .current_dir(temp.path())
+            .arg(flag)
+            .output()
+            .unwrap();
+        assert!(!output.status.success(), "{flag}");
+        assert!(
+            String::from_utf8_lossy(&output.stderr).contains("UNKNOWN_INTERNAL_ENTRY"),
+            "{flag}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(output.stdout.is_empty(), "{flag}");
+        assert!(!config.exists(), "{flag} created a configuration directory");
+    }
+}
+
 fn model_server() -> (String, std::thread::JoinHandle<String>) {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let endpoint = format!("http://{}", listener.local_addr().unwrap());

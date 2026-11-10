@@ -18,6 +18,7 @@ const fixture = vi.hoisted(() => ({
   params: {} as Record<string, string>, app: {} as Record<string, unknown>,
   pushes: [] as unknown[], values: new Map<string, string>(),
 }));
+vi.mock("@/storage/interface-version", () => ({ useInterfaceVersion: () => "modern" }));
 vi.mock("react", async importOriginal => {
   const actual = await importOriginal<typeof import("react")>();
   const memo = (factory: () => unknown, deps: unknown[]) => {
@@ -26,6 +27,7 @@ vi.mock("react", async importOriginal => {
     const value = factory(); fixture.memos[index] = { value, deps }; return value;
   };
   return { ...actual,
+    useSyncExternalStore: (_subscribe: unknown, getSnapshot: () => unknown) => getSnapshot(),
     useState: (initial: unknown) => {
       const index = fixture.stateIndex++;
       if (!(index in fixture.states)) fixture.states[index] = typeof initial === "function" ? (initial as () => unknown)() : initial;
@@ -44,11 +46,10 @@ vi.mock("react", async importOriginal => {
     },
   };
 });
-vi.mock("expo-router", () => ({ useLocalSearchParams: () => fixture.params, useRouter: () => ({ push: (value: unknown) => fixture.pushes.push(value), replace: vi.fn(), back: vi.fn() }) }));
-vi.mock("@react-navigation/native", () => ({ useIsFocused: () => true }));
+vi.mock("expo-router", () => ({ useLocalSearchParams: () => fixture.params, useRouter: () => ({ push: (value: unknown) => fixture.pushes.push(value), replace: vi.fn(), back: vi.fn() }), useIsFocused: () => true }));
 vi.mock("react-native-safe-area-context", () => ({ useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) }));
-vi.mock("react-native", () => ({ Platform: { OS: "web" }, ActivityIndicator: "ActivityIndicator", FlatList: "FlatList", Pressable: "Pressable", RefreshControl: "RefreshControl", ScrollView: "ScrollView", Text: "Text", TextInput: "TextInput", View: "View", StyleSheet: { create: (value: unknown) => value, hairlineWidth: 1, absoluteFillObject: {} } }));
-vi.mock("lucide-react-native", () => Object.fromEntries(["Archive", "ChevronDown", "ChevronLeft", "ChevronRight", "ChevronUp", "Clock3", "GitBranch", "History", "Laptop", "Menu", "MoreHorizontal", "Plus", "Search", "Server", "Settings", "SquareTerminal"].map(name => [name, name])));
+vi.mock("react-native", () => ({ Platform: { OS: "web" }, ActivityIndicator: "ActivityIndicator", FlatList: "FlatList", Pressable: "Pressable", RefreshControl: "RefreshControl", ScrollView: "ScrollView", Text: "Text", TextInput: "TextInput", View: "View", StyleSheet: { create: (value: unknown) => value, hairlineWidth: 1, absoluteFill: {} } }));
+vi.mock("lucide-react-native", () => Object.fromEntries(["Archive", "Check", "Filter", "Monitor", "SlidersHorizontal", "ChevronDown", "ChevronLeft", "ChevronRight", "ChevronUp", "Clock3", "Folder", "GitBranch", "History", "Inbox", "Laptop", "Menu", "MoreHorizontal", "Plus", "Search", "Server", "Settings", "SquareTerminal"].map(name => [name, name])));
 vi.mock("@/components/ui", () => ({ EmptyState: "EmptyState", StatusDot: "StatusDot" }));
 vi.mock("@/components/mobile-drawer", () => ({ MobileDrawer: "MobileDrawer" }));
 vi.mock("@/components/history-refresh-modal", () => ({ HistoryRefreshModal: "HistoryRefreshModal" }));
@@ -79,6 +80,7 @@ vi.mock("@react-native-async-storage/async-storage", () => ({ default: {
 // Import the actual page/scope implementations, without unrelated TaskRuntime
 // composition. None of the scheduling, pager or publication methods is faked.
 vi.mock("@/runtime/task-runtime", async () => ({
+  taskRuntimeRegistry: { subscribe: () => () => {}, interactionInboxRows: () => [] },
   ...await import("@/runtime/task-runtime/threadDirectory"),
   ...await import("@/runtime/task-runtime/workspaces"),
 }));
@@ -195,7 +197,7 @@ function sessionRows(tree: unknown): Array<{ thread: ThreadSummary; workspacePat
 }
 function pressSession(tree: unknown, id: string): void {
   const flat = list(tree)!; const item = sessionRows(tree).find(row => row.thread.id === id)!;
-  const element = (flat.props.renderItem as (arg: { item: typeof item }) => unknown)({ item });
+  const element = (flat.props.renderItem as (arg: { item: typeof item; index: number }) => unknown)({ item, index: 0 });
   press(byId(element, "session-" + id));
 }
 async function until(route: () => unknown, check: (tree: unknown) => void): Promise<unknown> {
@@ -225,6 +227,27 @@ afterEach(() => {
 // Actual GatewayRpcClient connect/initialize/request/close with a controlled
 // WebSocket; actual Sessions/scheduler/cache/pager. Hook-host simulation only.
 describe("Sessions default source lease actual consumer", () => {
+  it("offers the existing active-profile reauthorization route instead of a permanent spinner", () => {
+    app(profile, [a]);
+    const runtime = fixture.app.runtime as Record<string, unknown>;
+    runtime.reauthorizationRequired = true;
+    runtime.error = "authorization expired";
+    const refresh = fixture.app.refresh as ReturnType<typeof vi.fn>;
+
+    const tree = render(Sessions);
+    expect(text(byId(tree, "sessions-reauthorization-error"))).toBe("settings.session_expired_reauth");
+    expect(text(byId(tree, "sessions-reauthorize-active-profile"))).toBe("home.reauthorize");
+    expect(byId(tree, "sessions-list")).toBeUndefined();
+    expect(leaf(tree, "ActivityIndicator")).toBeUndefined();
+
+    press(byId(tree, "sessions-reauthorize-active-profile"));
+    expect(fixture.pushes).toEqual([{
+      pathname: "/welcome",
+      params: { gateway: profile.baseUrl, reauth: profile.id },
+    }]);
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
   it("one cold initialize owns first page and the exact lazy cursor, while its row is clickable", async () => {
     app(profile, [a]); const later = deferred<ThreadListPage>();
     read = async call => call.method === "runtime.workspaces.list" ? registered(["/A"]) :
@@ -241,6 +264,40 @@ describe("Sessions default source lease actual consumer", () => {
     later.resolve(page([thread("old", "/A", 1)]));
     await until(Sessions, tree => expect(sessionRows(tree).map(row => row.thread.id)).toEqual(["first", "old"]));
     expect(source.closeCount).toBe(1); expect(initializeCount(source)).toBe(1);
+  });
+  it("omits the recent failure hint while retaining the session's current activity", async () => {
+    app(profile, [a]);
+    const recent: ThreadSummary = {
+      ...thread("recent-session"),
+      runSummary: {
+        mainTurn: "running",
+        pendingApprovals: 0,
+        pendingQuestions: 0,
+        activeJobs: 0,
+        tasksPending: 0,
+        tasksRunning: 0,
+        pendingFollowups: 0,
+        pendingGoals: 0,
+        recentError: {
+          turnId: "turn-1",
+          kind: "failed",
+          source: "execution",
+          category: "execution",
+          atMs: 1,
+        },
+      },
+    };
+    read = async call => call.method === "runtime.workspaces.list" ? registered(["/A"]) :
+      call.method === "runtime.worktrees.list" ? { items: [] } : page([recent]);
+
+    render(Sessions);
+    const tree = await until(Sessions, current => expect(sessionRows(current).map(row => row.thread.id)).toEqual(["recent-session"]));
+    const row = sessionRows(tree)[0]!;
+    const rowTree = (list(tree)!.props.renderItem as (arg: { item: typeof row; index: number }) => unknown)({ item: row, index: 0 });
+
+    expect(byId(rowTree, "session-recent-error-recent-session")).toBeUndefined();
+    expect(byId(rowTree, "session-recent-session")!.props.accessibilityLabel).not.toContain("task.recent_failed");
+    expect(text(byId(rowTree, "session-recent-session"))).toContain("task.running");
   });
   it("ready extras start while the default first page is held without a second default initialize", async () => {
     app(profile, [a]); const first = deferred<ThreadListPage>();
@@ -305,5 +362,61 @@ describe("Sessions default source lease actual consumer", () => {
     await until(Sessions, tree => expect(sessionRows(tree).map(row => row.thread.id)).toEqual(["accepted-page"]));
     expect(clients).toHaveLength(1); expect(clients[0]!.closeCount).toBe(1);
     expect(calls.filter(call => call.method === "thread/list")).toHaveLength(1);
+  });
+
+  it("a failed refresh retains loaded sessions without adding disconnect diagnostics", async () => {
+    app(profile, [a]);
+    read = async call => call.method === "runtime.workspaces.list" ? registered(["/A"]) : call.method === "runtime.worktrees.list" ? { items: [] } : page([thread("retained-offline")]);
+    const ready = await until(Sessions, tree => {
+      expect(sessionRows(tree).map(row => row.thread.id)).toEqual(["retained-offline"]);
+      expect(byId(tree, "sessions-page-loading")).toBeUndefined();
+    });
+    read = async call => {
+      if (call.method === "thread/list") throw new Error("controlled connection lost");
+      return call.method === "runtime.workspaces.list" ? registered(["/A"]) : { items: [] };
+    };
+    refreshSessions(ready);
+    await until(Sessions, tree => {
+      expect(calls.filter(call => call.method === "thread/list")).toHaveLength(2);
+      expect(leaf(tree, "RefreshControl")?.props.refreshing).toBe(false);
+      expect(sessionRows(tree).map(row => row.thread.id)).toEqual(["retained-offline"]);
+      for (const id of ["sessions-load-error", "sessions-load-notice", "sessions-partial-indicator"]) expect(byId(tree, id)).toBeUndefined();
+      expect(byId(tree, "sessions-open-filters")?.props.accessibilityHint).toBeUndefined();
+      expect(text(tree)).not.toContain("controlled connection lost");
+    });
+  });
+});
+
+describe("Home actual thread row projection", () => {
+  it("renders a recent interruption separately while the active run remains running", async () => {
+    app(profile, [a]);
+    const recent: ThreadSummary = {
+      ...thread("home-recent", "/A"),
+      runSummary: {
+        mainTurn: "running",
+        pendingApprovals: 0,
+        pendingQuestions: 0,
+        activeJobs: 0,
+        tasksPending: 0,
+        tasksRunning: 0,
+        pendingFollowups: 0,
+        pendingGoals: 0,
+        recentError: {
+          turnId: "turn-1",
+          kind: "interrupted",
+          source: "execution",
+          category: "execution",
+          atMs: 1,
+        },
+      },
+    };
+    read = async call => call.method === "runtime.workspaces.list" ? registered(["/A"]) :
+      call.method === "runtime.worktrees.list" ? { items: [] } : page([recent]);
+
+    render(Home);
+    const tree = await until(Home, current => expect(byId(current, "thread-recent-error-home-recent")).toBeDefined());
+
+    expect(text(byId(tree, "thread-recent-error-home-recent"))).toBe("task.recent_interrupted");
+    expect(text(byId(tree, "thread-home-recent"))).toContain("task.running");
   });
 });

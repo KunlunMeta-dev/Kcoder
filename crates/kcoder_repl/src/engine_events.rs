@@ -20,7 +20,10 @@ pub(super) fn engine_event_to_app_event_for_generation(
         EngineEvent::TurnSteerApplied { id } => AppEvent::TurnSteerApplied { id },
         EngineEvent::AssistantTextDelta(text) => AppEvent::AssistantDelta(text),
         EngineEvent::AssistantThinkingDelta(text) => AppEvent::AssistantThinkingDelta(text),
-        EngineEvent::ToolInputReset | EngineEvent::ToolExecutionStarted { .. } => return None,
+        EngineEvent::AssistantStopReason { .. }
+        | EngineEvent::WidgetInputPreview { .. }
+        | EngineEvent::ToolInputReset
+        | EngineEvent::ToolExecutionStarted { .. } => return None,
         EngineEvent::ToolInputProgress { name, chars, .. } => {
             AppEvent::ToolInputProgress { name, chars }
         }
@@ -42,6 +45,18 @@ pub(super) fn engine_event_to_app_event_for_generation(
             input: input.to_string(),
         },
         EngineEvent::ToolResult { id, name, output } => {
+            let web_sources = output
+                .execution_metadata
+                .iter()
+                .filter_map(|metadata| match metadata {
+                    kcoder_tools::ToolExecutionMetadata::WebSources(receipt)
+                        if receipt.tool_call_id == id =>
+                    {
+                        Some(receipt.clone())
+                    }
+                    _ => None,
+                })
+                .collect();
             let text = output
                 .content
                 .into_iter()
@@ -51,6 +66,7 @@ pub(super) fn engine_event_to_app_event_for_generation(
                 })
                 .collect::<String>();
             AppEvent::ToolResult {
+                web_sources,
                 id,
                 name,
                 text,
@@ -58,6 +74,7 @@ pub(super) fn engine_event_to_app_event_for_generation(
             }
         }
         EngineEvent::ToolDenied { id, name, reason } => AppEvent::ToolResult {
+            web_sources: Vec::new(),
             id,
             name,
             text: reason,

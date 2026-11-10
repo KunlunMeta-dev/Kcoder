@@ -62,12 +62,12 @@ fn test_engine(provider: Arc<dyn Provider>, cwd: &std::path::Path) -> QueryEngin
     TestEngineBuilder::new(cwd)
         .provider(provider)
         .skill_registry(SkillRegistry::empty())
-        .build()
+        .build_with_profile_directory()
 }
 #[test]
 fn artifact_validation_notification_adds_only_one_summary_to_existing_event() {
     let tmp = tempfile::tempdir().unwrap();
-    let engine = TestEngineBuilder::new(tmp.path()).build();
+    let engine = TestEngineBuilder::new(tmp.path()).build_with_profile_directory();
     let mut task = Task::new("artifact-job", "observe");
     task.kind = TaskKind::Subagent;
     task.status = TaskStatus::Completed;
@@ -382,7 +382,8 @@ fn workflow_completion_uses_workflow_notification() {
             .preview(300)
             .contains("<subagent_notification id=\"workflow-1\"")
     }));
-    assert!(!engine.background_job_triggers_followup("workflow-1"));
+    // A background workflow result wakes the original task like a sub-agent.
+    assert!(engine.background_job_triggers_followup("workflow-1"));
 }
 
 #[test]
@@ -404,6 +405,7 @@ fn cancelled_workflow_notification_is_not_reported_as_failed() {
         BackgroundJobEvent::Failed {
             id: "workflow-cancelled".to_string(),
             error: "cancelled by user".to_string(),
+            execution_metadata: Vec::new(),
         },
     );
 
@@ -415,7 +417,9 @@ fn cancelled_workflow_notification_is_not_reported_as_failed() {
         .collect::<String>();
     assert!(transcript.contains("status=\"cancelled\""));
     assert!(!transcript.contains("status=\"failed\""));
-    assert!(!engine.background_job_triggers_followup("workflow-cancelled"));
+    // Cancellation is still a terminal result the original task must see; user
+    // stop/pause is enforced by the dispatch gate, not by hiding the event.
+    assert!(engine.background_job_triggers_followup("workflow-cancelled"));
 }
 
 #[test]
@@ -588,7 +592,7 @@ async fn task_output_terminal_delivery_suppresses_later_task_notification() {
 }
 
 #[test]
-fn followup_trigger_only_applies_to_subagent_background_jobs() {
+fn followup_trigger_applies_to_every_background_delivered_job_except_internal_ones() {
     let tmp = tempfile::tempdir().unwrap();
     let request = Arc::new(Mutex::new(None));
     let provider = Arc::new(RecordingProvider {
@@ -619,9 +623,21 @@ fn followup_trigger_only_applies_to_subagent_background_jobs() {
     internal.status = TaskStatus::Completed;
     engine.state.upsert_task(internal);
 
+    let mut foreground_tool = Task::new(
+        "job-foreground-tool",
+        kcoder_tools::background::tool_background_description("bash", "cargo build"),
+    );
+    foreground_tool.status = TaskStatus::Completed;
+    foreground_tool.delivery = kcoder_state::TaskDelivery::Foreground;
+    foreground_tool.notify_parent_on_completion = false;
+    engine.state.upsert_task(foreground_tool);
+
     assert!(engine.background_job_triggers_followup("job-agent"));
-    assert!(!engine.background_job_triggers_followup("job-tool"));
+    // A background test command must reach the original task when it ends.
+    assert!(engine.background_job_triggers_followup("job-tool"));
     assert!(!engine.background_job_triggers_followup("job-internal"));
+    // The caller already consumed a foreground-delivered result inline.
+    assert!(!engine.background_job_triggers_followup("job-foreground-tool"));
 }
 
 #[test]
@@ -685,7 +701,7 @@ fn completion_notification_is_suppressed_after_wait_reported_the_run() {
 #[tokio::test]
 async fn old_run_terminal_delivers_only_its_own_receipt() {
     let root = tempfile::tempdir().unwrap();
-    let engine = TestEngineBuilder::new(root.path()).build();
+    let engine = TestEngineBuilder::new(root.path()).build_with_profile_directory();
     let mut task = Task::new("reused", "fixture");
     task.kind = TaskKind::Subagent;
     task.notify_parent_on_completion = true;
@@ -771,7 +787,7 @@ async fn old_run_terminal_delivers_only_its_own_receipt() {
 #[tokio::test]
 async fn running_run_rejects_uncommitted_scoped_terminal() {
     let root = tempfile::tempdir().unwrap();
-    let engine = TestEngineBuilder::new(root.path()).build();
+    let engine = TestEngineBuilder::new(root.path()).build_with_profile_directory();
     let mut task = Task::new("running", "fixture");
     task.kind = TaskKind::Subagent;
     engine.state.upsert_task(task);
@@ -830,6 +846,7 @@ impl Provider for DuplicateCompletionProvider {
 async fn duplicate_deferred_completion_does_not_sample_the_parent_again() {
     use futures::StreamExt;
     let root = tempfile::tempdir().unwrap();
+    kcoder_config::PrivateDirectory::open_or_create(&root.path().join("test-config")).unwrap();
     let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
     let duplicate = Arc::new(Mutex::new(None));
     let (sender, receiver) = tokio::sync::broadcast::channel(8);
@@ -842,6 +859,12 @@ async fn duplicate_deferred_completion_does_not_sample_the_parent_again() {
         root.path(),
     );
     engine.background_job_rx = Arc::new(tokio::sync::Mutex::new(receiver));
+    {
+        // Turn admission requires known model context limits.
+        let mut settings = engine.settings.write().unwrap();
+        settings.context_window_tokens = Some(100_000);
+        settings.context_output_headroom = Some(12_000);
+    }
     let mut task = Task::new("already-delivered", "fixture");
     task.kind = TaskKind::Subagent;
     task.delivery = kcoder_state::TaskDelivery::Background;
@@ -871,19 +894,23 @@ async fn duplicate_deferred_completion_does_not_sample_the_parent_again() {
         .state
         .add_message(Message::user_text("Summarize the completed result."));
     let prompt = kcoder_permissions::AutoAllowPrompt;
-    let _ = tokio::time::timeout(
+    let events = tokio::time::timeout(
         Duration::from_secs(5),
         engine.run_turn_stream(&prompt).collect::<Vec<_>>(),
     )
     .await
     .unwrap();
-    assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 1);
+    assert_eq!(
+        calls.load(std::sync::atomic::Ordering::SeqCst),
+        1,
+        "events: {events:?}"
+    );
 }
 
 #[test]
 fn modern_run_rejects_legacy_terminal_without_run_identity() {
     let root = tempfile::tempdir().unwrap();
-    let engine = TestEngineBuilder::new(root.path()).build();
+    let engine = TestEngineBuilder::new(root.path()).build_with_profile_directory();
     let mut task = Task::new("scoped-only", "fixture");
     task.kind = TaskKind::Subagent;
     engine.state.upsert_task(task);

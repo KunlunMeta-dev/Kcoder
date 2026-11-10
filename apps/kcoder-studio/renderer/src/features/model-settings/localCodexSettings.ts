@@ -1,4 +1,4 @@
-import { ensureLocalExecutorStarted, requestLocalExecutor } from '@/tauri/localExecutor'
+import { ensureLocalExecutorStarted, requestLocalExecutor } from '@/host/localExecutor'
 import { runtimeMethodForCurrentHost } from '@/kcoder/legacyRuntimeAbi'
 
 export type CodexPersonality = 'friendly' | 'pragmatic'

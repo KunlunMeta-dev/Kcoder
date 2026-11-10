@@ -1,3 +1,4 @@
+import { installTestTransport, clearTestTransports } from '@/test/runtime-transport'
 import { getKeyboardPlatform } from '@/lib/keyboard-platform'
 import type { UnifiedModel } from '@/types/api'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
@@ -46,7 +47,7 @@ describe('ChatInput models', () => {
       configurable: true,
       value: originalInnerWidth,
     })
-    delete (window as typeof window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__
+    clearTestTransports()
   })
   test('distinguishes the active model from the next-turn model while streaming', async () => {
     const activeModel: UnifiedModel = {
@@ -157,6 +158,97 @@ describe('ChatInput models', () => {
 
     expect(setSelectedModel).toHaveBeenCalledWith(targetModel)
     expect(screen.queryByTestId('model-switch-warning-dialog')).not.toBeInTheDocument()
+  })
+
+  test('queues a supported in-turn model switch before applying local selection', async () => {
+    const activeModel: UnifiedModel = {
+      name: 'first::first-model',
+      type: 'runtime',
+      displayName: 'First Model',
+      isActive: true,
+      config: { supportsTurnModelSwitch: true, ui: { family: 'local' } },
+    }
+    const targetModel: UnifiedModel = {
+      name: 'second::second-model',
+      type: 'runtime',
+      displayName: 'Second Model',
+      isActive: true,
+      config: { supportsTurnModelSwitch: true, ui: { family: 'local' } },
+    }
+    const setSelectedModel = vi.fn()
+    const queueActiveTurnModelSelection = vi.fn().mockResolvedValue(true)
+    render(
+      <ChatInput
+        value=""
+        onChange={vi.fn()}
+        onSubmit={vi.fn()}
+        disabled={false}
+        variant="desktop"
+        projectChat={projectChatControls({
+          models: [activeModel, targetModel],
+          activeModel,
+          selectedModel: activeModel,
+          setSelectedModel,
+          queueActiveTurnModelSelection,
+        })}
+      />
+    )
+
+    await userEvent.click(screen.getByTestId('model-selector-button'))
+    await userEvent.hover(screen.getByTestId('model-control-menu-model'))
+    await userEvent.click(screen.getByTestId('model-option-second::second-model'))
+    await userEvent.click(screen.getByTestId('model-switch-warning-confirm-button'))
+
+    await waitFor(() => {
+      expect(queueActiveTurnModelSelection).toHaveBeenCalledWith(targetModel)
+      expect(setSelectedModel).toHaveBeenCalledWith(targetModel)
+    })
+  })
+
+  test('queues an active KCoder model change before updating the selected model', async () => {
+    const activeModel: UnifiedModel = {
+      name: 'first::first-model',
+      type: 'runtime',
+      displayName: 'First Model',
+      isActive: true,
+      config: { supportsTurnModelSwitch: true, ui: { family: 'local' } },
+    }
+    const targetModel: UnifiedModel = {
+      name: 'second::second-model',
+      type: 'runtime',
+      displayName: 'Second Model',
+      isActive: true,
+      config: { supportsTurnModelSwitch: true, ui: { family: 'local' } },
+    }
+    const setSelectedModel = vi.fn()
+    const queueActiveTurnModelSelection = vi.fn().mockResolvedValue(true)
+
+    render(
+      <ChatInput
+        value=""
+        onChange={vi.fn()}
+        onSubmit={vi.fn()}
+        disabled={false}
+        variant="desktop"
+        projectChat={projectChatControls({
+          models: [activeModel, targetModel],
+          activeModel,
+          selectedModel: activeModel,
+          setSelectedModel,
+          queueActiveTurnModelSelection,
+        })}
+      />
+    )
+
+    await userEvent.click(screen.getByTestId('model-selector-button'))
+    await userEvent.hover(screen.getByTestId('model-control-menu-model'))
+    await userEvent.click(screen.getByTestId('model-option-second::second-model'))
+    await userEvent.click(screen.getByTestId('model-switch-warning-confirm-button'))
+
+    await waitFor(() => {
+      expect(queueActiveTurnModelSelection).toHaveBeenCalledWith(targetModel)
+      expect(setSelectedModel).toHaveBeenCalledWith(targetModel)
+    })
   })
 
   test('does not warn when selecting a model before a conversation has an active model', async () => {
@@ -453,51 +545,6 @@ describe('ChatInput models', () => {
     expect(screen.getByTestId('model-selector-submenu')).toBeInTheDocument()
   })
 
-  test('keeps the desktop model menu in narrow Tauri windows', async () => {
-    Object.defineProperty(window, 'innerWidth', {
-      configurable: true,
-      value: 500,
-    })
-    Object.defineProperty(window, '__TAURI_INTERNALS__', {
-      configurable: true,
-      value: {},
-    })
-    const model: UnifiedModel = {
-      name: 'codex-gpt-5.5',
-      type: 'user',
-      displayName: '5.5',
-      config: {
-        ui: {
-          family: 'gpt',
-          modelLabel: '5.5',
-          sortOrder: 10,
-        },
-      },
-    }
-
-    render(
-      <ChatInput
-        value=""
-        onChange={vi.fn()}
-        onSubmit={vi.fn()}
-        disabled={false}
-        variant="desktop"
-        projectChat={projectChatControls({
-          models: [model],
-          selectedModel: model,
-        })}
-      />
-    )
-
-    await userEvent.click(screen.getByTestId('model-selector-button'))
-
-    expect(screen.getByTestId('model-selector-menu')).toBeInTheDocument()
-    expect(screen.getByTestId('model-selector-menu')).not.toHaveAttribute('data-mobile')
-    expect(screen.getByTestId('model-selector-menu')).not.toHaveAttribute('aria-modal')
-    expect(screen.queryByTestId('model-selector-submenu')).not.toBeInTheDocument()
-    await userEvent.hover(screen.getByTestId('model-control-menu-model'))
-    expect(screen.getByTestId('model-selector-submenu')).toBeInTheDocument()
-  })
 
   test('opens the desktop model menu when the external open signal changes', async () => {
     const model: UnifiedModel = {

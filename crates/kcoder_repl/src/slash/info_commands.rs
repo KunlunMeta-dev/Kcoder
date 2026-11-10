@@ -1406,7 +1406,7 @@ mod tests {
 
     #[test]
     fn model_picker_prioritizes_configured_model_and_suppresses_auto_duplicate() {
-        let mut settings = Settings::default();
+        let mut settings = crate::test_support::fixture_settings();
         settings.providers.retain(|name, _| name == "kunlunmeta");
         let mut deepseek = settings.providers["kunlunmeta"].clone();
         deepseek.default_model = "deepseek-v4-flash".to_string();

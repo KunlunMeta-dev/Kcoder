@@ -1,0 +1,4 @@
+model = "root-model"
+model_provider = "ignored-project-provider"
+[model_providers.ignored-project-provider]
+base_url = "https://must-not-use.invalid/v1"

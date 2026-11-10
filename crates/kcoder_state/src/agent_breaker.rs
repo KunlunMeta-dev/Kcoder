@@ -2,6 +2,78 @@ use super::*;
 use kcoder_config::OrchestrateBreakerSettings;
 
 impl AppState {
+    /// The manager must first prove that this paused run has no live cleanup owner.
+    pub fn cancel_paused_subagent_run(
+        &self,
+        expected: &kcoder_types::BackgroundRunKey,
+    ) -> anyhow::Result<bool> {
+        anyhow::ensure!(
+            expected.parent_session_id == self.session_id(),
+            "agent_stop_identity_conflict"
+        );
+        Ok(self
+            .transact_task(&expected.agent_id, |task| {
+                anyhow::ensure!(
+                    task.managed
+                        && task.kind == TaskKind::Subagent
+                        && task.parent_session_id.as_deref()
+                            == Some(expected.parent_session_id.as_str())
+                        && task.background_run.as_ref() == Some(expected),
+                    "agent_stop_identity_conflict"
+                );
+                if task.status != TaskStatus::Paused {
+                    return Ok(false);
+                }
+                let record = task
+                    .background_runs
+                    .iter()
+                    .find(|record| &record.key == expected)
+                    .context("agent_stop_original_run_missing")?;
+                anyhow::ensure!(
+                    !record.imported_history && record.terminal.is_none(),
+                    "agent_stop_original_run_unavailable"
+                );
+                task.migrate_legacy_pending_messages();
+                anyhow::ensure!(
+                    !task.has_delivery_queue_migration_conflict(),
+                    "agent_stop_queue_conflict"
+                );
+                let now = now_millis();
+                for mut message in task.message_queue.drain(..) {
+                    message.status = AgentMessageStatus::DeadLetter;
+                    message.lease = None;
+                    message.last_error = Some("paused member cancelled by user".into());
+                    message.updated_at_ms = now;
+                    for receipt in task
+                        .command_receipts
+                        .iter_mut()
+                        .filter(|receipt| receipt.message_id == message.message_id)
+                    {
+                        receipt.status = AgentMessageStatus::DeadLetter;
+                    }
+                    task.dead_letter_messages.push(message);
+                }
+                task.status = TaskStatus::Cancelled;
+                task.accepting_subagent_messages = false;
+                task.output = Some("cancelled by user".into());
+                task.updated_at_ms = now;
+                let record = task
+                    .background_runs
+                    .iter_mut()
+                    .find(|record| &record.key == expected)
+                    .context("agent_stop_original_run_missing")?;
+                record.status = TaskStatus::Cancelled;
+                record.terminal = Some(kcoder_types::BackgroundEventIdentity::terminal(
+                    expected.clone(),
+                ));
+                record.output_snapshot = task.output.clone();
+                record.output_path = None;
+                record.delivery = task.delivery;
+                Ok(true)
+            })?
+            .unwrap_or(false))
+    }
+
     /// Confirm a joined stop through the reliable atomic task writer. A cached
     /// Cancelled status alone cannot prove that cleanup survived persistence.
     pub fn confirm_stopped_subagent_run(
@@ -278,6 +350,59 @@ fn breaker_safe_tool_gate(task: &Task) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn exact_paused_stop_retains_queue_evidence_and_original_terminal_in_one_transaction() {
+        let root = tempfile::tempdir().unwrap();
+        let state = AppState::new(root.path());
+        state.with_history_path(root.path().join("parent.jsonl"));
+        let mut task = Task::new("paused-member", "Owned paused member");
+        task.kind = TaskKind::Subagent;
+        task.managed = true;
+        task.parent_session_id = Some(state.session_id());
+        let run = state.start_background_task_run(task).unwrap();
+        let queued = state
+            .enqueue_subagent_delivery_for_run(
+                &run.agent_id,
+                "pending instruction",
+                Some("cmd:0:paused"),
+                Some(&run),
+            )
+            .unwrap()
+            .unwrap();
+        state.update_task(&run.agent_id, |task| task.status = TaskStatus::Paused);
+        let before = serde_json::to_value(state.task(&run.agent_id).unwrap()).unwrap();
+        let mut foreign = run.clone();
+        foreign.run_id = "another-run".into();
+        assert!(state.cancel_paused_subagent_run(&foreign).is_err());
+        assert_eq!(
+            serde_json::to_value(state.task(&run.agent_id).unwrap()).unwrap(),
+            before
+        );
+        assert!(state.cancel_paused_subagent_run(&run).unwrap());
+        state.confirm_stopped_subagent_run(&run).unwrap();
+        let stopped = state.task(&run.agent_id).unwrap();
+        assert_eq!(stopped.background_run.as_ref(), Some(&run));
+        assert_eq!(
+            stopped.dead_letter_messages[0].message_id,
+            queued.message_id
+        );
+        assert_eq!(
+            state
+                .subagent_command_receipt(&run.agent_id, "cmd:0:paused")
+                .unwrap()
+                .unwrap()
+                .status,
+            AgentMessageStatus::DeadLetter
+        );
+        let terminal = state.background_run_record(&run).unwrap();
+        assert_eq!(terminal.status, TaskStatus::Cancelled);
+        assert_eq!(
+            terminal.terminal,
+            Some(kcoder_types::BackgroundEventIdentity::terminal(run.clone()))
+        );
+        assert!(!state.cancel_paused_subagent_run(&run).unwrap());
+    }
 
     #[test]
     fn stopped_run_confirmation_requires_matching_identity_and_retained_queue_cleanup() {

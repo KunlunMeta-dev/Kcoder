@@ -1,5 +1,5 @@
 import { cn } from '@/lib/utils'
-import { isTauriRuntime } from '@/lib/runtime-environment'
+import { isGatewayRuntime } from '@/lib/runtime-environment'
 import type { AppTab } from '@/config/apps'
 import {
   TITLEBAR_ACTIONS_PORTAL_ID,
@@ -39,7 +39,7 @@ export function ChromeTitlebar({
   className,
   iconOnlyTabs = false,
 }: ChromeTitlebarProps) {
-  const isTauri = isTauriRuntime()
+  const isGateway = isGatewayRuntime()
   const platform = getPlatform()
 
   return (
@@ -51,11 +51,11 @@ export function ChromeTitlebar({
       )}
     >
       {/* macOS: traffic light spacer (left) */}
-      {isTauri && platform === 'mac' && (
+      {isGateway && platform === 'mac' && (
         <div
           className="w-[92px] shrink-0 self-stretch"
           data-testid="macos-traffic-light-spacer"
-          data-tauri-drag-region
+          data-kcoder-drag-region
         >
           <MacOSTitleBarDragRegion />
         </div>
@@ -113,11 +113,11 @@ export function ChromeTitlebar({
         id={TITLEBAR_CENTER_PORTAL_ID}
         data-testid="titlebar-center"
         className="pointer-events-none relative z-chrome flex h-full min-w-6 flex-1 items-center overflow-hidden"
-        {...(isTauri ? { 'data-tauri-drag-region': '' } : {})}
+        {...(isGateway ? { 'data-kcoder-drag-region': '' } : {})}
       >
-        {isTauri && <MacOSTitleBarDragRegion className="absolute inset-0 z-0 h-full w-full" />}
+        {isGateway && <MacOSTitleBarDragRegion className="absolute inset-0 z-0 h-full w-full" />}
       </div>
-      {isTauri && <TitlebarExtensionSlot />}
+      {isGateway && <TitlebarExtensionSlot />}
       <div
         data-testid="titlebar-right-workspace-zone"
         className="pointer-events-none absolute right-0 top-0 z-chrome flex h-full items-center"
@@ -130,7 +130,7 @@ export function ChromeTitlebar({
           data-testid="titlebar-right-panel"
           className="pointer-events-auto relative flex min-w-0 flex-1 self-stretch items-center"
         >
-          {isTauri ? (
+          {isGateway ? (
             <div data-testid="titlebar-right-panel-drag-region" className="absolute inset-0 z-0">
               <MacOSTitleBarDragRegion className="h-full w-full" />
             </div>
@@ -144,8 +144,8 @@ export function ChromeTitlebar({
       </div>
 
       {/* Windows/Linux: right spacer for native window controls */}
-      {isTauri && platform !== 'mac' && (
-        <div className="w-[138px] shrink-0 self-stretch" data-tauri-drag-region>
+      {isGateway && platform !== 'mac' && (
+        <div className="w-[138px] shrink-0 self-stretch" data-kcoder-drag-region>
           <MacOSTitleBarDragRegion />
         </div>
       )}

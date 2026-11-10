@@ -1,5 +1,6 @@
 import type { ComposerStagedAttachment } from "./types";
-import type { WorkspaceFailedSubmission } from "@/storage/workspace-preferences";
+import type { WorkspaceFailedSubmission, WorkspaceSubmissionAcceptedTurn } from "@/storage/workspace-preferences";
+import type { PermissionMode } from "@/protocol/task-permission-mode";
 
 export interface FailedTaskSubmission {
   id: string;
@@ -7,9 +8,12 @@ export interface FailedTaskSubmission {
   attachments: ComposerStagedAttachment[];
   createdAt: number;
   outcome: "failed" | "unknown";
+  acceptedTurn?: WorkspaceSubmissionAcceptedTurn;
   retrying: boolean;
   phase?: "preparing" | "retaining" | "sending";
   error?: string;
+  /** The permission parameter used by this stable clientMessageId, if dispatched. */
+  permissionMode?: PermissionMode;
 }
 
 export interface FailedTaskSubmissionStore {

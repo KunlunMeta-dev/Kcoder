@@ -1,10 +1,14 @@
-import { prepareThreadDeletionCleanup, confirmThreadDeletionCleanup, retryThreadDeletionCleanup } from "@/storage/thread-deletion-cleanup";
+import { prepareThreadDeletionCleanup, confirmThreadDeletionCleanup, retryThreadDeletionCleanup, ThreadDeletionCleanupConfirmationPendingError } from "@/storage/thread-deletion-cleanup";
 import { MobileRpcError } from "@/gateway/rpc";
+import { t } from "@/i18n";
+import { isPermissionMode, type PermissionMode } from "@/protocol/task-permission-mode";
 import type { ThreadSummary } from "@/gateway/types";
 import { threadModelSelector, restoreReasoningEffortForThread } from "./modelCatalog";
 import { negotiateModelSelector } from "../../../../shared/modelSelection";
 import { taskClientConnector } from "./connectionFactory";
 import { TaskRuntime } from "./core";
+import { captureGoalProjection, goalCanEdit, publishGoal } from "./goalProjection";
+
 import { loadWorkspaceState, workspaceStateAuthorizationScope } from "@/storage/workspace-preferences";
 import { workspaceAttachmentPathsForThreadDeletion } from "@/storage/workspace-attachment-paths";
 import {
@@ -17,6 +21,18 @@ import {
   type ThreadMutation,
 } from "./threadDirectory";
 
+async function requestGoalWrite(runtime: TaskRuntime, method: string, params: Record<string, unknown>): Promise<unknown> {
+  if (runtime.snapshot.goalMutationUnknown) throw new Error(t("task.goal_write_unknown"));
+  const projection = captureGoalProjection(runtime);
+  try { return await runtime.request(method, params); }
+  catch (error) {
+    if (projection.current() && error instanceof MobileRpcError && error.reason !== "remote" && error.delivery !== "not-sent") {
+      runtime.metadataRevisions.set("goalUnknownWrite", (runtime.metadataRevisions.get("goalUnknownWrite") ?? 0) + 1);
+      runtime.patch({ goalMutationUnknown: true, goalError: t("task.goal_write_unknown") });
+    }
+    throw error;
+  }
+}
 function publishCurrentThreadMutation(
   runtime: TaskRuntime,
   mutation: ThreadMutation,
@@ -77,6 +93,26 @@ export function rename(this: TaskRuntime, title: string): Promise<void> {
   const normalized = title.trim();
   if (!normalized) return Promise.reject(new Error("任务标题不能为空"));
   return projectMetadata(this, "title", normalized);
+}
+
+/** Keeps a local selection for future submissions; the server applies it temporarily per turn. */
+export function setPermissionMode(this: TaskRuntime, mode: PermissionMode): void {
+  if (this.disposed) return;
+  if (!isPermissionMode(mode)) throw new Error(t("task.permission_mode_invalid"));
+  if (
+    this.snapshot.running ||
+    this.snapshot.activeTurnId ||
+    this.snapshot.continuationPending ||
+    this.snapshot.sendAcceptanceUnknown ||
+    this.snapshot.continuationUnknown ||
+    this.snapshot.interaction
+  )
+    throw new Error(t("task.permission_mode_wait_for_turn"));
+  if (this.snapshot.archivedAt)
+    throw new Error(t("task.permission_mode_restore_task"));
+  if (mode !== "default" && !this.supportsTurnPermissions())
+    throw new Error(t("task.permission_mode_unavailable"));
+  this.patch({ permissionMode: mode === "default" ? undefined : mode });
 }
 
 export async function setTurnPreferences(
@@ -163,7 +199,8 @@ export async function setGoal(
   if (this.snapshot.archivedAt)
     throw new Error("任务已归档，请先恢复后再设置目标");
   if (!this.client) return null;
-  const result = await this.request<{ goal: ThreadGoal }>("thread/goal/set", {
+  const projection = captureGoalProjection(this);
+  const result = await requestGoalWrite(this, "thread/goal/set", {
     threadId: this.snapshot.threadId,
     objective: normalized,
     mode,
@@ -181,18 +218,28 @@ export async function setGoal(
         }),
     ...(options.requireNoGoal ? { requireNoGoal: true } : {}),
     status: "active",
-  });
+  }) as { goal: ThreadGoal };
+  if (projection.current()) publishGoal(this, result.goal, projection.version);
   return result.goal;
 }
 
-export async function getGoal(this: TaskRuntime): Promise<ThreadGoal | null> {
+export async function getGoal(this: TaskRuntime, acknowledgeUnknown?: boolean): Promise<ThreadGoal | null> {
   if (!this.client) return null;
-  const result = await this.request<{ goal?: ThreadGoal | null }>(
+  const projection = captureGoalProjection(this);
+  const editObservation = this.metadataRevisions.get("goalEditObservation") ?? 0;
+  const unknownWrite = this.metadataRevisions.get("goalUnknownWrite") ?? 0;
+  const result = await this.request<{ threadId: string; goal?: ThreadGoal | null }>(
     "thread/goal/get",
     {
       threadId: this.snapshot.threadId,
     },
   );
+  if (!projection.current()) throw new Error(t("task.goal_connection_changed"));
+  if ((result.threadId !== this.snapshot.threadId) ||
+      (result.goal != null && result.goal.threadId !== this.snapshot.threadId)) throw new Error(t("task.goal_response_wrong_thread"));
+  const published = publishGoal(this, result.goal ?? null, projection.version);
+  if (published && editObservation === (this.metadataRevisions.get("goalEditObservation") ?? 0)) this.patch({ goalEditReadRequired: false });
+  if (acknowledgeUnknown && published && unknownWrite === (this.metadataRevisions.get("goalUnknownWrite") ?? 0)) this.patch({ goalMutationUnknown: false, goalError: null });
   return result.goal ?? null;
 }
 
@@ -210,6 +257,7 @@ export async function getGoalHistory(this: TaskRuntime): Promise<ThreadGoal[]> {
 export async function updateGoalStatus(
   this: TaskRuntime,
   status: "active" | "paused" | "cancelled",
+  expectedGoal?: Pick<ThreadGoal, "goalId" | "revision">,
 ): Promise<ThreadGoal> {
   if (!this.client) throw new Error("当前任务未连接");
   if (
@@ -220,14 +268,20 @@ export async function updateGoalStatus(
       "Goal cancellation is unsupported by this server; update the remote KCoder server first.",
     );
   }
-  const current = await this.getGoal();
+  const projection = captureGoalProjection(this);
+  const current = expectedGoal ?? (await this.getGoal());
+  if (!projection.current()) throw new Error(t("task.goal_connection_changed"));
   if (!current) throw new Error("当前没有目标");
-  const result = await this.request<{ goal: ThreadGoal }>("thread/goal/set", {
+  if (this.snapshot.goal !== undefined && (this.snapshot.goal?.goalId !== current.goalId || this.snapshot.goal?.revision !== current.revision))
+    throw new Error(t("task.goal_changed_refresh"));
+  projection.version = this.goalProjectionVersion;
+  const result = await requestGoalWrite(this, "thread/goal/set", {
     threadId: this.snapshot.threadId,
     status,
     expectedGoalId: current.goalId,
     expectedRevision: current.revision,
-  });
+  }) as { goal: ThreadGoal };
+  if (projection.current()) publishGoal(this, result.goal, projection.version);
   return result.goal;
 }
 
@@ -240,17 +294,38 @@ export async function editGoal(
   const normalized = objective.trim();
   if (!normalized) throw new Error("目标不能为空");
   if (!this.client) throw new Error("当前任务未连接");
-  const current = expectedGoal ?? (await this.getGoal());
+  if (this.snapshot.goalEditReadRequired) throw new Error(t("task.goal_edit_refresh_required"));
+  const projection = captureGoalProjection(this);
+  const observed = this.snapshot.goal ?? (await this.getGoal());
+  const current = expectedGoal ?? observed;
+  if (!projection.current()) throw new Error(t("task.goal_connection_changed"));
   if (!current) throw new Error("当前没有目标");
-  const result = await this.request<{ goal: ThreadGoal }>("thread/goal/set", {
-    threadId: this.snapshot.threadId,
-    objective: normalized,
-    edit: true,
-    expectedGoalId: current.goalId,
-    expectedRevision: current.revision,
-    ...(tokenBudget === undefined ? {} : { tokenBudget }),
-  });
-  return result.goal;
+  if (!goalCanEdit(observed)) throw new Error(t("task.goal_terminal_readonly"));
+  if (this.snapshot.goal !== undefined && (this.snapshot.goal?.goalId !== current.goalId || this.snapshot.goal?.revision !== current.revision))
+    throw new Error(t("task.goal_changed_refresh"));
+  projection.version = this.goalProjectionVersion;
+  try {
+    const result = await requestGoalWrite(this, "thread/goal/set", {
+      threadId: this.snapshot.threadId,
+      objective: normalized,
+      edit: true,
+      expectedGoalId: current.goalId,
+      expectedRevision: current.revision,
+      ...(tokenBudget === undefined ? {} : { tokenBudget }),
+    }) as { goal: ThreadGoal };
+    if (projection.current()) publishGoal(this, result.goal, projection.version);
+    return result.goal;
+  } catch (error) {
+    // A rejected CAS/edit can race a terminal transition. Observe; never replay the write.
+    if (projection.current() && error instanceof MobileRpcError && error.reason === "remote") {
+      this.metadataRevisions.set("goalEditObservation", (this.metadataRevisions.get("goalEditObservation") ?? 0) + 1);
+      this.patch({ goalEditReadRequired: true });
+      await this.getGoal().catch(() => {});
+      if (projection.current() && this.snapshot.goal && !goalCanEdit(this.snapshot.goal))
+        throw new Error(t("task.goal_terminal_readonly"));
+    }
+    throw error;
+  }
 }
 
 export async function clearGoal(
@@ -258,16 +333,22 @@ export async function clearGoal(
   expectedGoal?: Pick<ThreadGoal, "goalId" | "revision">,
 ): Promise<boolean> {
   if (!this.client) return false;
+  const projection = captureGoalProjection(this);
   const current = expectedGoal ?? (await this.getGoal());
+  if (!projection.current()) throw new Error(t("task.goal_connection_changed"));
   if (!current) return false;
-  const result = await this.request<{ cleared?: boolean }>(
+  if (this.snapshot.goal !== undefined && (this.snapshot.goal?.goalId !== current.goalId || this.snapshot.goal?.revision !== current.revision))
+    throw new Error(t("task.goal_changed_refresh"));
+  projection.version = this.goalProjectionVersion;
+  const result = await requestGoalWrite(this,
     "thread/goal/clear",
     {
       threadId: this.snapshot.threadId,
       expectedGoalId: current.goalId,
       expectedRevision: current.revision,
     },
-  );
+  ) as { cleared?: boolean };
+  if (result.cleared === true && projection.current()) publishGoal(this, null, projection.version);
   return result.cleared === true;
 }
 
@@ -286,7 +367,11 @@ export async function deleteThread(this: TaskRuntime): Promise<void> {
   if (context && cleanupId) {
     // Cleanup has its own durable ticket and cannot undo the remote ACK.
     try { await confirmThreadDeletionCleanup(context.profile.id, cleanupId); }
-    catch { this.patch({ error: "任务已删除；本机清理确认未保存，保留清理记录待核对。" }); return; }
+    catch {
+      const pending = new ThreadDeletionCleanupConfirmationPendingError(t("task.remote_delete_ack_cleanup_pending"));
+      this.patch({ error: pending.message });
+      throw pending;
+    }
     void retryThreadDeletionCleanup(context.profile, [context.server]).catch(() => {});
   }
 }

@@ -7,17 +7,23 @@ pub async fn run_repl_with_engine(
     mut engine: QueryEngine,
     startup_notice: Option<String>,
 ) -> Result<()> {
+    migration_terminal::capture_launch(&engine.state.cwd());
     let tui_settings = recover_read_lock(&engine.settings, "engine.settings")
         .tui
         .clone();
     configure_tui_alternate_screen(tui_settings.no_alt_screen, tui_settings.alternate_screen);
     engine = engine.with_tool_path_previews(tui_settings.path_preview.enabled);
 
-    let mut app = ReplApp::default();
+    let defaults = ReplApp::default();
+    // Capture the live owner before projecting any of its conversation.
+    let mut app = ReplApp {
+        input_session_owner: Some(engine.state.inspection_lifecycle_identity()),
+        ..defaults
+    };
     app.refresh_engine_metadata(&engine);
-    let restored_messages = engine.state.messages();
+    let restored_messages = web_sources::messages_for_state(&engine.state);
     if !restored_messages.is_empty() {
-        app.replace_transcript_from_history(&restored_messages);
+        app.replace_web_history(&restored_messages);
         app.reconcile_subagent_panels_from_engine(&engine);
     }
     seed_startup_messages(&mut app, startup_notice);
@@ -346,7 +352,7 @@ pub async fn run_repl_with_engine(
                                 .then(|| truncate_display_text(text.trim(), 2_000)),
                         }
                     }
-                    BackgroundJobEvent::Failed { id, error } => {
+                    BackgroundJobEvent::Failed { id, error, .. } => {
                         append_repl_exit_diagnostic(
                             &bg_diagnostic_engine,
                             "background_job_failed",
@@ -432,9 +438,39 @@ pub async fn run_repl_with_engine(
         prompt,
     )
     .await;
-    match &result {
-        Ok(()) => append_repl_exit_diagnostic(&engine, "exit", "success"),
-        Err(error) => append_repl_exit_diagnostic(&engine, "exit", &format!("error: {error:#}")),
+    // An event-loop failure can bypass the normal Quit action. Any original
+    // input still in flight remains unknown and must not enter teardown work.
+    let admission_owner = app
+        .input_admission
+        .as_ref()
+        .map(|admission| admission.owner.clone());
+    let steer_owner = app.pending_turn_steers.iter().find_map(|pending| {
+        pending
+            .message
+            .owner
+            .as_ref()
+            .filter(|owner| {
+                app.input_session_owner
+                    .as_ref()
+                    .is_none_or(|current| owner.same_lifecycle(current))
+            })
+            .cloned()
+    });
+    if admission_owner.is_some() || steer_owner.is_some() {
+        app.mark_input_uncertain_for(admission_owner.or(steer_owner));
+        if let Some(admission) = app.input_admission.as_mut() {
+            admission.cancel_dispatch();
+        }
+    }
+    // This best-effort synchronous diagnostic could wait on the same
+    // unavailable history source as the original input's pending write.
+    if !app.has_current_input_uncertainty() {
+        match &result {
+            Ok(()) => append_repl_exit_diagnostic(&engine, "exit", "success"),
+            Err(error) => {
+                append_repl_exit_diagnostic(&engine, "exit", &format!("error: {error:#}"))
+            }
+        }
     }
     let exit_reason = if result.is_ok() { "success" } else { "error" };
     let title_cleanup_result = app.clear_managed_terminal_title(terminal.backend_mut());
@@ -450,6 +486,35 @@ pub async fn run_repl_with_engine(
         terminal_guard.restore();
         cleanup_inline_viewport_for_exit(&mut terminal, &mut app)
     };
-    let _ = engine.run_session_end_hooks(exit_reason).await;
-    result.and(title_cleanup_result).and(cleanup_result)
+    let cancelled_confirmed = app.input_admission.as_ref().is_some_and(|admission| {
+        admission.cancelled && admission.observer.is_none() && admission.witness.is_some()
+    });
+    let exit_notice_result = if app.has_current_input_uncertainty() {
+        if cancelled_confirmed {
+            crate::input_admission::write_cancelled_exit_notice(terminal.backend_mut())
+        } else {
+            crate::input_admission::write_unconfirmed_exit_notice(terminal.backend_mut())
+        }
+        .context("failed to show the unconfirmed input notice")
+    } else {
+        Ok(())
+    };
+    // Retain cancelled preparation owners until their hook and read tasks settle,
+    // including when the event loop exited on an error rather than a Quit action.
+    app.cancel_preparing_inputs();
+    if !app
+        .input_preparation
+        .settle_until(tokio::time::Instant::now() + Duration::from_secs(1))
+        .await
+        && !app.has_current_input_uncertainty()
+    {
+        warn!("some cancelled input preparation tasks did not settle before exit");
+    }
+    if !app.has_current_input_uncertainty() {
+        let _ = engine.run_session_end_hooks(exit_reason).await;
+    }
+    result
+        .and(title_cleanup_result)
+        .and(cleanup_result)
+        .and(exit_notice_result)
 }

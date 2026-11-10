@@ -1,0 +1,1170 @@
+{
+  "ChannelDeliveryState": [
+    {
+      "decoded": "unknown",
+      "name": "minimal_valid",
+      "value": "unknown"
+    }
+  ],
+  "ConnectionState": [
+    {
+      "decoded": "authorization_required",
+      "name": "minimal_valid",
+      "value": "authorization_required"
+    }
+  ],
+  "ConnectivityCapabilityReadiness": [
+    {
+      "decoded": {
+        "capabilityId": "document.read",
+        "reasonCode": "RESOURCE_NOT_VERIFIED",
+        "state": "unknown",
+        "toolRefs": []
+      },
+      "name": "minimal_valid",
+      "value": {
+        "capabilityId": "document.read",
+        "reasonCode": "RESOURCE_NOT_VERIFIED",
+        "state": "unknown",
+        "toolRefs": []
+      }
+    }
+  ],
+  "ConnectivityCapabilityState": [
+    {
+      "decoded": "ready",
+      "name": "minimal_valid",
+      "value": "ready"
+    }
+  ],
+  "ConnectivityChatKind": [
+    {
+      "decoded": "group",
+      "name": "minimal_valid",
+      "value": "group"
+    }
+  ],
+  "ConnectivityChatObservationState": [
+    {
+      "decoded": "observed",
+      "name": "minimal_valid",
+      "value": "observed"
+    }
+  ],
+  "ConnectivityChatTaskBinding": [
+    {
+      "decoded": {
+        "boundAfterSequence": 7,
+        "changedAtMs": 100,
+        "changedBy": "native-user",
+        "connection": {
+          "connectionId": "connection",
+          "namespaceId": "native-original-namespace",
+          "scope": {
+            "accountId": "owner",
+            "identityGeneration": "1",
+            "targetId": "target",
+            "targetRevision": "1",
+            "workspaceId": "project"
+          }
+        },
+        "generation": 1,
+        "id": "chat-task-id",
+        "operationId": "original-op",
+        "range": {
+          "chatId": "chat",
+          "chatKind": "group",
+          "connectionId": "connection",
+          "platform": "feishu",
+          "tenantId": "tenant",
+          "topicId": null,
+          "version": 1
+        },
+        "revision": "1",
+        "sourceRevision": "original-source",
+        "state": "active",
+        "task": {
+          "scope": {
+            "accountId": "owner",
+            "identityGeneration": "1",
+            "targetId": "target",
+            "targetRevision": "1",
+            "workspaceId": "project"
+          },
+          "threadId": "original-task"
+        }
+      },
+      "name": "minimal_valid",
+      "value": {
+        "boundAfterSequence": 7,
+        "changedAtMs": 100,
+        "changedBy": "native-user",
+        "connection": {
+          "connectionId": "connection",
+          "namespaceId": "native-original-namespace",
+          "scope": {
+            "accountId": "owner",
+            "identityGeneration": "1",
+            "targetId": "target",
+            "targetRevision": "1",
+            "workspaceId": "project"
+          }
+        },
+        "generation": 1,
+        "id": "chat-task-id",
+        "operationId": "original-op",
+        "range": {
+          "chatId": "chat",
+          "chatKind": "group",
+          "connectionId": "connection",
+          "platform": "feishu",
+          "tenantId": "tenant",
+          "topicId": null,
+          "version": 1
+        },
+        "revision": "1",
+        "sourceRevision": "original-source",
+        "state": "active",
+        "task": {
+          "scope": {
+            "accountId": "owner",
+            "identityGeneration": "1",
+            "targetId": "target",
+            "targetRevision": "1",
+            "workspaceId": "project"
+          },
+          "threadId": "original-task"
+        }
+      }
+    }
+  ],
+  "ConnectivityChatTaskBindingReceipt": [
+    {
+      "decoded": {
+        "binding": {
+          "boundAfterSequence": 7,
+          "changedAtMs": 100,
+          "changedBy": "native-user",
+          "connection": {
+            "connectionId": "connection",
+            "namespaceId": "native-original-namespace",
+            "scope": {
+              "accountId": "owner",
+              "identityGeneration": "1",
+              "targetId": "target",
+              "targetRevision": "1",
+              "workspaceId": "project"
+            }
+          },
+          "generation": 1,
+          "id": "chat-task-id",
+          "operationId": "original-op",
+          "range": {
+            "chatId": "chat",
+            "chatKind": "group",
+            "connectionId": "connection",
+            "platform": "feishu",
+            "tenantId": "tenant",
+            "topicId": null,
+            "version": 1
+          },
+          "revision": "1",
+          "sourceRevision": "original-source",
+          "state": "active",
+          "task": {
+            "scope": {
+              "accountId": "owner",
+              "identityGeneration": "1",
+              "targetId": "target",
+              "targetRevision": "1",
+              "workspaceId": "project"
+            },
+            "threadId": "original-task"
+          }
+        },
+        "operationId": "original-op",
+        "previousTask": null
+      },
+      "name": "minimal_valid",
+      "value": {
+        "binding": {
+          "boundAfterSequence": 7,
+          "changedAtMs": 100,
+          "changedBy": "native-user",
+          "connection": {
+            "connectionId": "connection",
+            "namespaceId": "native-original-namespace",
+            "scope": {
+              "accountId": "owner",
+              "identityGeneration": "1",
+              "targetId": "target",
+              "targetRevision": "1",
+              "workspaceId": "project"
+            }
+          },
+          "generation": 1,
+          "id": "chat-task-id",
+          "operationId": "original-op",
+          "range": {
+            "chatId": "chat",
+            "chatKind": "group",
+            "connectionId": "connection",
+            "platform": "feishu",
+            "tenantId": "tenant",
+            "topicId": null,
+            "version": 1
+          },
+          "revision": "1",
+          "sourceRevision": "original-source",
+          "state": "active",
+          "task": {
+            "scope": {
+              "accountId": "owner",
+              "identityGeneration": "1",
+              "targetId": "target",
+              "targetRevision": "1",
+              "workspaceId": "project"
+            },
+            "threadId": "original-task"
+          }
+        },
+        "operationId": "original-op",
+        "previousTask": null
+      }
+    }
+  ],
+  "ConnectivityChatTaskBindingState": [
+    {
+      "decoded": "active",
+      "name": "minimal_valid",
+      "value": "active"
+    }
+  ],
+  "ConnectivityConnection": [
+    {
+      "decoded": {
+        "configuration": {},
+        "enabled": false,
+        "hasCredential": false,
+        "id": "connection",
+        "kind": "qq",
+        "label": "QQ",
+        "resourceGrants": [],
+        "revision": "1",
+        "state": "configured"
+      },
+      "name": "minimal_valid",
+      "value": {
+        "configuration": {},
+        "enabled": false,
+        "hasCredential": false,
+        "id": "connection",
+        "kind": "qq",
+        "label": "QQ",
+        "resourceGrants": [],
+        "revision": "1",
+        "state": "configured"
+      }
+    }
+  ],
+  "ConnectivityConnectionDirectory": [
+    {
+      "decoded": {
+        "complete": true,
+        "sources": [
+          {
+            "current": true,
+            "namespaceId": "integration-owned-source",
+            "owner": {
+              "accountId": "owner",
+              "organizationId": null,
+              "targetId": "target",
+              "workspaceId": "project"
+            },
+            "state": "available",
+            "workspacePath": "/owned/workspace"
+          }
+        ],
+        "supported": true
+      },
+      "name": "target_source_projection",
+      "value": {
+        "complete": true,
+        "sources": [
+          {
+            "current": true,
+            "namespaceId": "integration-owned-source",
+            "owner": {
+              "accountId": "owner",
+              "targetId": "target",
+              "workspaceId": "project"
+            },
+            "state": "available",
+            "workspacePath": "/owned/workspace"
+          }
+        ],
+        "supported": true
+      }
+    }
+  ],
+  "ConnectivityConnectionLocator": [
+    {
+      "decoded": {
+        "connectionId": "connection",
+        "namespaceId": "native-original-namespace",
+        "scope": {
+          "accountId": "owner",
+          "identityGeneration": "1",
+          "targetId": "target",
+          "targetRevision": "1",
+          "workspaceId": "project"
+        }
+      },
+      "name": "minimal_valid",
+      "value": {
+        "connectionId": "connection",
+        "namespaceId": "native-original-namespace",
+        "scope": {
+          "accountId": "owner",
+          "identityGeneration": "1",
+          "targetId": "target",
+          "targetRevision": "1",
+          "workspaceId": "project"
+        }
+      }
+    }
+  ],
+  "ConnectivityConnectionSource": [
+    {
+      "decoded": {
+        "current": true,
+        "namespaceId": "integration-owned-source",
+        "owner": {
+          "accountId": "owner",
+          "organizationId": null,
+          "targetId": "target",
+          "workspaceId": "project"
+        },
+        "state": "available",
+        "workspacePath": "/owned/workspace"
+      },
+      "name": "original_namespace_locator",
+      "value": {
+        "current": true,
+        "namespaceId": "integration-owned-source",
+        "owner": {
+          "accountId": "owner",
+          "targetId": "target",
+          "workspaceId": "project"
+        },
+        "state": "available",
+        "workspacePath": "/owned/workspace"
+      }
+    },
+    {
+      "decoded": {
+        "current": false,
+        "namespaceId": "integration-owned-source",
+        "owner": {
+          "accountId": "owner",
+          "organizationId": null,
+          "targetId": "target",
+          "workspaceId": "project"
+        },
+        "state": "unregistered",
+        "workspacePath": null
+      },
+      "name": "legacy_unregistered_source",
+      "value": {
+        "current": false,
+        "namespaceId": "integration-owned-source",
+        "owner": {
+          "accountId": "owner",
+          "targetId": "target",
+          "workspaceId": "project"
+        },
+        "state": "unregistered",
+        "workspacePath": null
+      }
+    }
+  ],
+  "ConnectivityConnectionSourceState": [
+    {
+      "decoded": "available",
+      "name": "original_owner_observed",
+      "value": "available"
+    }
+  ],
+  "ConnectivityControlMethod": [
+    {
+      "decoded": "integrations/connectivity/listConnections",
+      "name": "listConnections",
+      "value": "integrations/connectivity/listConnections"
+    },
+    {
+      "decoded": "integrations/connectivity/readConnection",
+      "name": "readConnection",
+      "value": "integrations/connectivity/readConnection"
+    },
+    {
+      "decoded": "integrations/connectivity/resolveCapability",
+      "name": "resolveCapability",
+      "value": "integrations/connectivity/resolveCapability"
+    },
+    {
+      "decoded": "integrations/connectivity/readResourceGrant",
+      "name": "readResourceGrant",
+      "value": "integrations/connectivity/readResourceGrant"
+    },
+    {
+      "decoded": "integrations/connectivity/prepareConnectionAction",
+      "name": "prepareConnectionAction",
+      "value": "integrations/connectivity/prepareConnectionAction"
+    },
+    {
+      "decoded": "integrations/connectivity/inspectReadiness",
+      "name": "inspectReadiness",
+      "value": "integrations/connectivity/inspectReadiness"
+    },
+    {
+      "decoded": "integrations/connectivity/readReadiness",
+      "name": "readReadiness",
+      "value": "integrations/connectivity/readReadiness"
+    },
+    {
+      "decoded": "integrations/connectivity/verifyCapability",
+      "name": "verifyCapability",
+      "value": "integrations/connectivity/verifyCapability"
+    },
+    {
+      "decoded": "integrations/connectivity/submitDelivery",
+      "name": "submitDelivery",
+      "value": "integrations/connectivity/submitDelivery"
+    },
+    {
+      "decoded": "integrations/connectivity/readDelivery",
+      "name": "readDelivery",
+      "value": "integrations/connectivity/readDelivery"
+    },
+    {
+      "decoded": "integrations/connectivity/cancelDelivery",
+      "name": "cancelDelivery",
+      "value": "integrations/connectivity/cancelDelivery"
+    },
+    {
+      "decoded": "integrations/connectivity/reconcileDelivery",
+      "name": "reconcileDelivery",
+      "value": "integrations/connectivity/reconcileDelivery"
+    }
+  ],
+  "ConnectivityDelivery": [
+    {
+      "decoded": {
+        "cancelled": false,
+        "deliveryId": "delivery",
+        "deliveryState": "pending",
+        "receipt": null
+      },
+      "name": "minimal_valid",
+      "value": {
+        "cancelled": false,
+        "deliveryId": "delivery",
+        "deliveryState": "pending",
+        "receipt": null
+      }
+    }
+  ],
+  "ConnectivityDeliveryAccepted": [
+    {
+      "decoded": {
+        "deliveryId": "delivery",
+        "deliveryState": "pending"
+      },
+      "name": "minimal_valid",
+      "value": {
+        "deliveryId": "delivery",
+        "deliveryState": "pending"
+      }
+    }
+  ],
+  "ConnectivityDeliveryContent": [
+    {
+      "decoded": {
+        "artifactRefs": [],
+        "text": "Report ready"
+      },
+      "name": "minimal_valid",
+      "value": {
+        "artifactRefs": [],
+        "text": "Report ready"
+      }
+    }
+  ],
+  "ConnectivityDeliveryLookup": [
+    {
+      "decoded": {
+        "deliveryId": "delivery"
+      },
+      "name": "minimal_valid",
+      "value": {
+        "deliveryId": "delivery"
+      }
+    }
+  ],
+  "ConnectivityDeliverySubmit": [
+    {
+      "decoded": {
+        "content": {
+          "artifactRefs": [],
+          "text": "Report ready"
+        },
+        "deliveryId": "delivery",
+        "destinationRef": {
+          "id": "destination",
+          "revision": "1"
+        },
+        "parentOperationId": "parent"
+      },
+      "name": "minimal_valid",
+      "value": {
+        "content": {
+          "artifactRefs": [],
+          "text": "Report ready"
+        },
+        "deliveryId": "delivery",
+        "destinationRef": {
+          "id": "destination",
+          "revision": "1"
+        },
+        "parentOperationId": "parent"
+      }
+    }
+  ],
+  "ConnectivityDestinationRef": [
+    {
+      "decoded": {
+        "id": "destination",
+        "revision": "1"
+      },
+      "name": "minimal_valid",
+      "value": {
+        "id": "destination",
+        "revision": "1"
+      }
+    }
+  ],
+  "ConnectivityExternalChatObservation": [
+    {
+      "decoded": {
+        "botId": "app",
+        "firstObservedAt": 1,
+        "id": "chat-ref",
+        "lastObservedAt": 2,
+        "lastOperatorId": "member",
+        "observationState": "observed",
+        "range": {
+          "chatId": "chat",
+          "chatKind": "group",
+          "connectionId": "connection",
+          "platform": "feishu",
+          "tenantId": "tenant",
+          "topicId": "topic",
+          "version": 1
+        },
+        "revision": "1"
+      },
+      "name": "minimal_valid",
+      "value": {
+        "botId": "app",
+        "firstObservedAt": 1,
+        "id": "chat-ref",
+        "lastObservedAt": 2,
+        "lastOperatorId": "member",
+        "observationState": "observed",
+        "range": {
+          "chatId": "chat",
+          "chatKind": "group",
+          "connectionId": "connection",
+          "platform": "feishu",
+          "tenantId": "tenant",
+          "topicId": "topic",
+          "version": 1
+        },
+        "revision": "1"
+      }
+    }
+  ],
+  "ConnectivityExternalChatRange": [
+    {
+      "decoded": {
+        "chatId": "chat",
+        "chatKind": "group",
+        "connectionId": "connection",
+        "platform": "feishu",
+        "tenantId": "tenant",
+        "topicId": "topic",
+        "version": 1
+      },
+      "name": "minimal_valid",
+      "value": {
+        "chatId": "chat",
+        "chatKind": "group",
+        "connectionId": "connection",
+        "platform": "feishu",
+        "tenantId": "tenant",
+        "topicId": "topic",
+        "version": 1
+      }
+    }
+  ],
+  "ConnectivityLocalAuthorizationCleanupAvailability": [
+    {
+      "decoded": "unknown",
+      "name": "unknown",
+      "value": "unknown"
+    },
+    {
+      "decoded": "disabled",
+      "name": "disabled",
+      "value": "disabled"
+    }
+  ],
+  "ConnectivityLocalAuthorizationCleanupReceipt": [
+    {
+      "decoded": {
+        "availability": "unknown",
+        "connectionRef": {
+          "id": "original-connection",
+          "revision": "1"
+        },
+        "localRemoval": "accepted",
+        "operationId": "original-local-clear",
+        "providerRevocationRequested": false
+      },
+      "name": "local_only",
+      "value": {
+        "availability": "unknown",
+        "connectionRef": {
+          "id": "original-connection",
+          "revision": "1"
+        },
+        "localRemoval": "accepted",
+        "operationId": "original-local-clear",
+        "providerRevocationRequested": false
+      }
+    }
+  ],
+  "ConnectivityLocalAuthorizationCleanupState": [
+    {
+      "decoded": "unknown",
+      "name": "unknown",
+      "value": "unknown"
+    },
+    {
+      "decoded": "accepted",
+      "name": "accepted",
+      "value": "accepted"
+    }
+  ],
+  "ConnectivityMethod": [
+    {
+      "decoded": "listConnections",
+      "name": "minimal_valid",
+      "value": "listConnections"
+    }
+  ],
+  "ConnectivityPort": [
+    {
+      "decoded": "P-CONNECTION",
+      "name": "minimal_valid",
+      "value": "P-CONNECTION"
+    }
+  ],
+  "ConnectivityPortCall": [
+    {
+      "decoded": {
+        "method": "listConnections",
+        "port": "P-CONNECTION",
+        "request": {
+          "contractVersion": "parallel-v1",
+          "payload": {},
+          "requestId": "fixture-request",
+          "scope": {
+            "accountId": "fixture-owner",
+            "identityGeneration": "1",
+            "targetId": "fixture-target",
+            "targetRevision": "1",
+            "workspaceId": null
+          },
+          "timeoutMs": 1000
+        }
+      },
+      "name": "minimal_valid",
+      "value": {
+        "method": "listConnections",
+        "port": "P-CONNECTION",
+        "request": {
+          "contractVersion": "parallel-v1",
+          "payload": {},
+          "requestId": "fixture-request",
+          "scope": {
+            "accountId": "fixture-owner",
+            "identityGeneration": "1",
+            "targetId": "fixture-target",
+            "targetRevision": "1",
+            "workspaceId": null
+          },
+          "timeoutMs": 1000
+        }
+      }
+    }
+  ],
+  "ConnectivityProbeEvidence": [
+    {
+      "decoded": {
+        "checkName": "native-fixed-read-check",
+        "identityGeneration": "1",
+        "inputSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "observedAtMs": 1,
+        "policyRevision": "policy-1",
+        "requestRevision": "request-1",
+        "resourceRefs": [],
+        "resultSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "targetRevision": "1",
+        "toolRef": {
+          "name": "native-tool",
+          "schemaRevision": "1",
+          "sourceRevision": "source-1"
+        },
+        "verifierId": "native-read-verifier",
+        "verifierVersion": "1"
+      },
+      "name": "minimal_valid",
+      "value": {
+        "checkName": "native-fixed-read-check",
+        "identityGeneration": "1",
+        "inputSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "observedAtMs": 1,
+        "policyRevision": "policy-1",
+        "requestRevision": "request-1",
+        "resourceRefs": [],
+        "resultSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "targetRevision": "1",
+        "toolRef": {
+          "name": "native-tool",
+          "schemaRevision": "1",
+          "sourceRevision": "source-1"
+        },
+        "verifierId": "native-read-verifier",
+        "verifierVersion": "1"
+      }
+    }
+  ],
+  "ConnectivityProbeReport": [
+    {
+      "decoded": {
+        "businessValidated": false,
+        "capabilityId": "document.read",
+        "evidence": null,
+        "state": "unknown"
+      },
+      "name": "minimal_valid",
+      "value": {
+        "businessValidated": false,
+        "capabilityId": "document.read",
+        "evidence": null,
+        "state": "unknown"
+      }
+    }
+  ],
+  "ConnectivityProbeRequest": [
+    {
+      "decoded": {
+        "capabilityId": "document.read",
+        "resourceRefs": [],
+        "toolRef": {
+          "name": "native-tool",
+          "schemaRevision": "1",
+          "sourceRevision": "source-1"
+        }
+      },
+      "name": "minimal_valid",
+      "value": {
+        "capabilityId": "document.read",
+        "resourceRefs": [],
+        "toolRef": {
+          "name": "native-tool",
+          "schemaRevision": "1",
+          "sourceRevision": "source-1"
+        }
+      }
+    }
+  ],
+  "ConnectivityProbeState": [
+    {
+      "decoded": "unknown",
+      "name": "minimal_valid",
+      "value": "unknown"
+    }
+  ],
+  "ConnectivityReadinessReport": [
+    {
+      "decoded": {
+        "capabilities": [],
+        "connectionId": null,
+        "connectionRevision": null,
+        "id": "target",
+        "identityGeneration": "1",
+        "observations": [],
+        "observedAt": "2026-10-24T00:00:00.000Z",
+        "requestRevision": "inventory-1",
+        "revision": "1",
+        "targetRevision": "1"
+      },
+      "name": "minimal_valid",
+      "value": {
+        "capabilities": [],
+        "connectionId": null,
+        "connectionRevision": null,
+        "id": "target",
+        "identityGeneration": "1",
+        "observations": [],
+        "observedAt": "2026-10-24T00:00:00.000Z",
+        "requestRevision": "inventory-1",
+        "revision": "1",
+        "targetRevision": "1"
+      }
+    }
+  ],
+  "ConnectivityReadinessRequest": [
+    {
+      "decoded": {
+        "capabilityIds": [
+          "document.read"
+        ],
+        "resourceRefs": []
+      },
+      "name": "minimal_valid",
+      "value": {
+        "capabilityIds": [
+          "document.read"
+        ],
+        "resourceRefs": []
+      }
+    }
+  ],
+  "ConnectivitySettingsFlags": [
+    {
+      "decoded": {
+        "enabled": false,
+        "servicesEnabled": false
+      },
+      "name": "minimal_valid",
+      "value": {
+        "enabled": false,
+        "servicesEnabled": false
+      }
+    }
+  ],
+  "ConnectivitySettingsPersisted": [
+    {
+      "decoded": {
+        "enabled": null,
+        "servicesEnabled": null
+      },
+      "name": "minimal_valid",
+      "value": {
+        "enabled": null,
+        "servicesEnabled": null
+      }
+    }
+  ],
+  "ConnectivitySettingsReadResult": [
+    {
+      "decoded": {
+        "connection": {
+          "enabled": false,
+          "servicesEnabled": false
+        },
+        "controlledByOverlay": false,
+        "editable": true,
+        "effective": {
+          "enabled": false,
+          "servicesEnabled": false
+        },
+        "persisted": {
+          "enabled": null,
+          "servicesEnabled": null
+        },
+        "restartRequired": false,
+        "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "name": "disabled_is_readable",
+      "value": {
+        "connection": {
+          "enabled": false,
+          "servicesEnabled": false
+        },
+        "controlledByOverlay": false,
+        "editable": true,
+        "effective": {
+          "enabled": false,
+          "servicesEnabled": false
+        },
+        "persisted": {
+          "enabled": null,
+          "servicesEnabled": null
+        },
+        "restartRequired": false,
+        "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    }
+  ],
+  "ConnectivitySettingsSaveParams": [
+    {
+      "decoded": {
+        "enabled": true,
+        "expectedRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "name": "minimal_valid",
+      "value": {
+        "enabled": true,
+        "expectedRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    }
+  ],
+  "ConnectivityTaskBindingMutation": [
+    {
+      "decoded": {
+        "action": "bindTask",
+        "connectionId": "connection",
+        "expectedBindingRevision": null,
+        "externalChatRef": {
+          "id": "actual-chat",
+          "revision": "2"
+        },
+        "taskThreadId": "original-task"
+      },
+      "name": "bind_existing_task",
+      "value": {
+        "action": "bindTask",
+        "connectionId": "connection",
+        "expectedBindingRevision": null,
+        "externalChatRef": {
+          "id": "actual-chat",
+          "revision": "2"
+        },
+        "taskThreadId": "original-task"
+      }
+    },
+    {
+      "decoded": {
+        "action": "switchTask",
+        "connectionId": "connection",
+        "expectedBindingRevision": "1",
+        "externalChatRef": {
+          "id": "actual-chat",
+          "revision": "3"
+        },
+        "taskThreadId": "other-original-task"
+      },
+      "name": "switch_current_chat",
+      "value": {
+        "action": "switchTask",
+        "connectionId": "connection",
+        "expectedBindingRevision": "1",
+        "externalChatRef": {
+          "id": "actual-chat",
+          "revision": "3"
+        },
+        "taskThreadId": "other-original-task"
+      }
+    },
+    {
+      "decoded": {
+        "action": "unbindTask",
+        "bindingRef": {
+          "id": "binding",
+          "revision": "2"
+        },
+        "connectionId": "connection",
+        "taskThreadId": "original-task"
+      },
+      "name": "unbind_without_online_sdk",
+      "value": {
+        "action": "unbindTask",
+        "bindingRef": {
+          "id": "binding",
+          "revision": "2"
+        },
+        "connectionId": "connection",
+        "taskThreadId": "original-task"
+      }
+    },
+    {
+      "decoded": {
+        "action": "prepareTaskRuntime",
+        "bindingRef": {
+          "id": "binding",
+          "revision": "1"
+        },
+        "connectionId": "connection",
+        "taskThreadId": "original-task"
+      },
+      "name": "prepare_original_runtime_without_execution",
+      "value": {
+        "action": "prepareTaskRuntime",
+        "bindingRef": {
+          "id": "binding",
+          "revision": "1"
+        },
+        "connectionId": "connection",
+        "taskThreadId": "original-task"
+      }
+    }
+  ],
+  "ConnectivityTaskBindingQuery": [
+    {
+      "decoded": {
+        "operationId": "original-operation",
+        "taskThreadId": "task"
+      },
+      "name": "read_original_receipt",
+      "value": {
+        "operationId": "original-operation",
+        "taskThreadId": "task"
+      }
+    }
+  ],
+  "ConnectivityTaskBindingSummaryQuery": [
+    {
+      "decoded": {
+        "taskThreadIds": [
+          "original-task"
+        ]
+      },
+      "name": "visible_original_tasks",
+      "value": {
+        "taskThreadIds": [
+          "original-task"
+        ]
+      }
+    }
+  ],
+  "ConnectivityTaskLocator": [
+    {
+      "decoded": {
+        "scope": {
+          "accountId": "owner",
+          "identityGeneration": "1",
+          "targetId": "target",
+          "targetRevision": "1",
+          "workspaceId": "project"
+        },
+        "threadId": "original-task"
+      },
+      "name": "minimal_valid",
+      "value": {
+        "scope": {
+          "accountId": "owner",
+          "identityGeneration": "1",
+          "targetId": "target",
+          "targetRevision": "1",
+          "workspaceId": "project"
+        },
+        "threadId": "original-task"
+      }
+    }
+  ],
+  "ConnectivityTaskRuntimeOwner": [
+    {
+      "decoded": {
+        "phase": "prepared",
+        "sourceOperationId": "original-operation",
+        "task": {
+          "scope": {
+            "accountId": "owner",
+            "identityGeneration": "1",
+            "targetId": "target",
+            "targetRevision": "1",
+            "workspaceId": "project"
+          },
+          "threadId": "original-task"
+        }
+      },
+      "name": "original_passive_owner",
+      "value": {
+        "phase": "prepared",
+        "sourceOperationId": "original-operation",
+        "task": {
+          "scope": {
+            "accountId": "owner",
+            "identityGeneration": "1",
+            "targetId": "target",
+            "targetRevision": "1",
+            "workspaceId": "project"
+          },
+          "threadId": "original-task"
+        }
+      }
+    }
+  ],
+  "ConnectivityTaskRuntimePhase": [
+    {
+      "decoded": "prepared",
+      "name": "passive",
+      "value": "prepared"
+    }
+  ],
+  "ConnectivityToolRef": [
+    {
+      "decoded": {
+        "name": "mcp__docs__read",
+        "schemaRevision": "1",
+        "sourceRevision": "source-1"
+      },
+      "name": "minimal_valid",
+      "value": {
+        "name": "mcp__docs__read",
+        "schemaRevision": "1",
+        "sourceRevision": "source-1"
+      }
+    }
+  ],
+  "MessagingPlatform": [
+    {
+      "decoded": "feishu",
+      "name": "minimal_valid",
+      "value": "feishu"
+    }
+  ],
+  "ReadinessLevel": [
+    {
+      "decoded": "L3",
+      "name": "minimal_valid",
+      "value": "L3"
+    }
+  ],
+  "ReadinessObservation": [
+    {
+      "decoded": {
+        "level": "L3",
+        "reasonCode": "AUTHORIZATION_NOT_CHECKED",
+        "state": "unknown"
+      },
+      "name": "minimal_valid",
+      "value": {
+        "level": "L3",
+        "reasonCode": "AUTHORIZATION_NOT_CHECKED",
+        "state": "unknown"
+      }
+    }
+  ],
+  "ReadinessObservationState": [
+    {
+      "decoded": "unknown",
+      "name": "minimal_valid",
+      "value": "unknown"
+    }
+  ]
+}

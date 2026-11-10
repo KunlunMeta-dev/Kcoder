@@ -20,6 +20,47 @@ dependencies = [
 ]
 
 [[package]]
+name = "agent-client-protocol"
+version = "3.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "02898d848a20eb09b8a392e85bb3a4c79dba01d369758185d102b001362a60da"
+dependencies = [
+ "agent-client-protocol-derive",
+ "agent-client-protocol-schema",
+ "futures",
+ "futures-concurrency",
+ "rustc-hash",
+ "serde",
+ "serde_json",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "agent-client-protocol-derive"
+version = "3.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "26b57a6a7fae5ebd4368712bfcd0a366a20e1370ac3f3fcd83379b37637501c9"
+dependencies = [
+ "quote",
+ "syn 3.0.6",
+]
+
+[[package]]
+name = "agent-client-protocol-schema"
+version = "1.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3d9a84a76a4f44721e0d8dabcd85b219893c43d6171a4a033d84844d85880823"
+dependencies = [
+ "anyhow",
+ "derive_more",
+ "serde",
+ "serde_json",
+ "serde_with",
+ "strum 0.28.0",
+]
+
+[[package]]
 name = "ahash"
 version = "0.8.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -314,9 +355,9 @@ checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
 
 [[package]]
 name = "aws-lc-rs"
-version = "1.17.1"
+version = "1.18.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4342d8937fc7e5dd9b1c60292261c0670c882a2cd1719cfc11b1af41731e32ad"
+checksum = "faac5829c2b74c28f830747e7818ccfb684261b5f48a1118b1e2a13d36dfab13"
 dependencies = [
  "aws-lc-sys",
  "zeroize",
@@ -324,9 +365,9 @@ dependencies = [
 
 [[package]]
 name = "aws-lc-sys"
-version = "0.42.0"
+version = "0.46.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6d9ceb1da931507a12f4fccea479dccd00da1943e1b4ae72d8e502d707361444"
+checksum = "f1622d8446a2d4b2ce0c7eefc73dd43a99779028d5ee5c2dd8073a658ba8a2bc"
 dependencies = [
  "cc",
  "cmake",
@@ -340,6 +381,12 @@ name = "base64"
 version = "0.22.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
+
+[[package]]
+name = "base64"
+version = "0.23.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ac07cdecf99051d9a5238b80f35af32cdeba5b336e55d957b318b50137e18da5"
 
 [[package]]
 name = "bincode"
@@ -413,6 +460,15 @@ name = "borrow-or-share"
 version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dc0b364ead1874514c8c2855ab558056ebfeb775653e7ae45ff72f28f8f3166c"
+
+[[package]]
+name = "bs58"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bf88ba1141d185c399bee5288d850d63b8369520c1eafc32a0430b5b6c287bf4"
+dependencies = [
+ "tinyvec",
+]
 
 [[package]]
 name = "bstr"
@@ -797,12 +853,12 @@ dependencies = [
 
 [[package]]
 name = "darling"
-version = "0.21.3"
+version = "0.24.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9cdf337090841a411e2a7f3deb9187445851f91b309c0c0a29e05f74a00a48c0"
+checksum = "ed17f5901b6630b993ca003def43f2f8ef4014fc13b047b57aad617ff32bc2ec"
 dependencies = [
- "darling_core 0.21.3",
- "darling_macro 0.21.3",
+ "darling_core 0.24.1",
+ "darling_macro 0.24.1",
 ]
 
 [[package]]
@@ -821,16 +877,15 @@ dependencies = [
 
 [[package]]
 name = "darling_core"
-version = "0.21.3"
+version = "0.24.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1247195ecd7e3c85f83c8d2a366e4210d588e802133e1e355180a9870b517ea4"
+checksum = "6837e2cf7485aaae18f86181d2f0e9a7ed297a025e220aeabf63fdebd3a2ddff"
 dependencies = [
- "fnv",
  "ident_case",
  "proc-macro2",
  "quote",
  "strsim",
- "syn 2.0.117",
+ "syn 3.0.6",
 ]
 
 [[package]]
@@ -846,13 +901,13 @@ dependencies = [
 
 [[package]]
 name = "darling_macro"
-version = "0.21.3"
+version = "0.24.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d38308df82d1080de0afee5d069fa14b0326a88c14f15c5ccda35b4a6c414c81"
+checksum = "2ac7135c3ef02b2f7833bbeb1be5ba7f966dcde8a87c6b87f65a778d71a02785"
 dependencies = [
- "darling_core 0.21.3",
+ "darling_core 0.24.1",
  "quote",
- "syn 2.0.117",
+ "syn 3.0.6",
 ]
 
 [[package]]
@@ -888,6 +943,37 @@ dependencies = [
  "once_cell",
  "sha2",
  "zeroize",
+]
+
+[[package]]
+name = "defmt"
+version = "1.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e2953bfe4f93bbd20cc71198842756f77d161884c99ebbabc41d80231ded88d1"
+dependencies = [
+ "bitflags 1.3.2",
+ "defmt-macros",
+]
+
+[[package]]
+name = "defmt-macros"
+version = "1.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bad9c72e7ca2137e0dc3813245a0d282fd6daad32fd800af018306a9169b5fe8"
+dependencies = [
+ "defmt-parser",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.117",
+]
+
+[[package]]
+name = "defmt-parser"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "10d60334b3b2e7c9d91ef8150abfb6fa4c1c39ebbcf4a81c2e346aad939fee3e"
+dependencies = [
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -1309,6 +1395,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "futures-concurrency"
+version = "7.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "175cd8cca9e1d45b87f18ffa75088f2099e3c4fe5e2f83e42de112560bea8ea6"
+dependencies = [
+ "fixedbitset",
+ "futures-core",
+ "futures-lite",
+ "pin-project",
+ "smallvec",
+]
+
+[[package]]
 name = "futures-core"
 version = "0.3.32"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1394,7 +1493,7 @@ dependencies = [
 name = "genai"
 version = "0.6.5"
 dependencies = [
- "base64",
+ "base64 0.22.1",
  "bytes",
  "derive_more",
  "eventsource-stream",
@@ -1730,7 +1829,7 @@ version = "0.1.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "96547c2556ec9d12fb1578c4eaf448b04993e7fb79cbaad930a656880a6bdfa0"
 dependencies = [
- "base64",
+ "base64 0.22.1",
  "bytes",
  "futures-channel",
  "futures-util",
@@ -2015,6 +2114,60 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
 
 [[package]]
+name = "jiff"
+version = "0.2.38"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b2b005715dcbeb0089a3c0dab99f2ff1cc3b2525323552703d648585d342a383"
+dependencies = [
+ "defmt",
+ "jiff-core",
+ "jiff-static",
+ "jiff-tzdb-platform",
+ "log",
+ "portable-atomic",
+ "portable-atomic-util",
+ "serde_core",
+ "windows-link",
+]
+
+[[package]]
+name = "jiff-core"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5e52fe76043ccecc9005d2305ebaadf7d7fc0cc89ca6baa10a94d6bc68c7128c"
+dependencies = [
+ "defmt",
+ "log",
+]
+
+[[package]]
+name = "jiff-static"
+version = "0.2.38"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2cc9817253cf7c7ee4684451bd327e88d6f3658014e54a29198625590650695c"
+dependencies = [
+ "jiff-core",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.117",
+]
+
+[[package]]
+name = "jiff-tzdb"
+version = "0.1.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fa8377070c6bae868759445e5a77f66d84f0b72f3a054bfb00e6d038b8282da7"
+
+[[package]]
+name = "jiff-tzdb-platform"
+version = "0.1.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "875a5a69ac2bab1a891711cf5eccbec1ce0341ea805560dcd90b7a2e925132e8"
+dependencies = [
+ "jiff-tzdb",
+]
+
+[[package]]
 name = "jni"
 version = "0.22.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2146,6 +2299,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "kcoder_acp"
+version = "0.1.0"
+dependencies = [
+ "agent-client-protocol",
+ "agent-client-protocol-schema",
+ "anyhow",
+ "kcoder_app_protocol",
+ "kcoder_process_supervisor",
+ "kcoder_test_harness",
+ "kcoder_types",
+ "libc",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "tokio",
+ "tokio-util",
+]
+
+[[package]]
 name = "kcoder_api"
 version = "0.1.0"
 dependencies = [
@@ -2163,6 +2336,7 @@ dependencies = [
  "reqwest-eventsource",
  "serde",
  "serde_json",
+ "sha2",
  "thiserror 2.0.18",
  "tokio",
  "tokio-rustls",
@@ -2170,24 +2344,307 @@ dependencies = [
 ]
 
 [[package]]
+name = "kcoder_app_events"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-stream",
+ "dunce",
+ "futures",
+ "kcoder_app_interactions",
+ "kcoder_app_protocol",
+ "kcoder_cli_support",
+ "kcoder_config",
+ "kcoder_desktop_recovery",
+ "kcoder_engine",
+ "kcoder_host_transport",
+ "kcoder_permissions",
+ "kcoder_state",
+ "kcoder_tools",
+ "kcoder_transcript",
+ "kcoder_types",
+ "serde_json",
+ "tokio",
+ "tokio-util",
+ "tracing",
+]
+
+[[package]]
+name = "kcoder_app_interactions"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "kcoder_app_protocol",
+ "kcoder_app_rpc_codec",
+ "kcoder_cli_storage",
+ "kcoder_cli_support",
+ "kcoder_config",
+ "kcoder_host_transport",
+ "kcoder_permissions",
+ "kcoder_state",
+ "kcoder_tools",
+ "kcoder_transcript",
+ "kcoder_types",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "kcoder_app_protocol"
+version = "0.1.0"
+dependencies = [
+ "kcoder_channel_protocol",
+ "kcoder_integration_protocol",
+ "kcoder_types",
+ "schemars 0.8.22",
+ "serde",
+ "serde_json",
+ "sha2",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "kcoder_app_rpc_codec"
+version = "0.1.0"
+dependencies = [
+ "kcoder_app_protocol",
+ "kcoder_types",
+ "serde_json",
+]
+
+[[package]]
+name = "kcoder_application_host_runtime"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "futures",
+ "kcoder_app_protocol",
+ "kcoder_app_rpc_codec",
+ "kcoder_host_transport",
+ "kcoder_native_scope",
+ "kcoder_native_service_runtime",
+ "kcoder_types",
+ "ring",
+ "serde_json",
+ "tokio",
+ "tokio-util",
+ "uuid",
+]
+
+[[package]]
+name = "kcoder_application_receipts"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "base64 0.22.1",
+ "kcoder_integration_storage",
+ "kcoder_types",
+ "serde_json",
+ "sha2",
+]
+
+[[package]]
+name = "kcoder_async_box"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "futures",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.117",
+]
+
+[[package]]
+name = "kcoder_attachment_retention"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "fs2",
+ "hmac",
+ "kcoder_app_protocol",
+ "kcoder_config",
+ "kcoder_state",
+ "kcoder_test_harness",
+ "kcoder_types",
+ "kcoder_workspace_resources",
+ "libc",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "uuid",
+]
+
+[[package]]
+name = "kcoder_attachments"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "base64 0.22.1",
+ "fs2",
+ "kcoder_app_protocol",
+ "kcoder_attachment_retention",
+ "kcoder_fs",
+ "kcoder_tool_input",
+ "kcoder_transcript",
+ "kcoder_types",
+ "libc",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "tokio",
+ "tracing",
+ "uuid",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "kcoder_browser"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "base64 0.22.1",
+ "futures",
+ "kcoder_app_protocol",
+ "kcoder_app_rpc_codec",
+ "kcoder_config",
+ "kcoder_host_transport",
+ "kcoder_native_scope",
+ "kcoder_process_supervisor",
+ "kcoder_state",
+ "kcoder_types",
+ "libc",
+ "reqwest 0.12.28",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "tokio",
+ "tokio-tungstenite",
+ "tokio-util",
+ "tracing",
+ "which",
+]
+
+[[package]]
+name = "kcoder_channel_protocol"
 version = "0.1.0"
 dependencies = [
  "kcoder_types",
  "schemars 0.8.22",
  "serde",
  "serde_json",
- "thiserror 2.0.18",
 ]
 
 [[package]]
 name = "kcoder_cli"
+version = "2.0.9"
+dependencies = [
+ "anyhow",
+ "base64 0.22.1",
+ "chrono",
+ "dunce",
+ "fs2",
+ "futures",
+ "jsonschema",
+ "kcoder_acp",
+ "kcoder_api",
+ "kcoder_app_protocol",
+ "kcoder_cli_headless",
+ "kcoder_cli_runtime",
+ "kcoder_computer_use",
+ "kcoder_config",
+ "kcoder_knowledge",
+ "kcoder_migration",
+ "kcoder_plugins",
+ "kcoder_process_supervisor",
+ "kcoder_repl",
+ "kcoder_skills",
+ "kcoder_state",
+ "kcoder_test_harness",
+ "kcoder_tools",
+ "kcoder_types",
+ "kcoder_workflow",
+ "libc",
+ "reqwest 0.12.28",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "tokio",
+ "tokio-util",
+ "uuid",
+ "which",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "kcoder_cli_commands"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-stream",
+ "clap",
+ "dotenvy",
+ "dunce",
+ "futures",
+ "jsonc-parser",
+ "kcoder_api",
+ "kcoder_config",
+ "kcoder_engine",
+ "kcoder_hooks",
+ "kcoder_mcp",
+ "kcoder_migration_client",
+ "kcoder_plugin_rpc",
+ "kcoder_plugins",
+ "kcoder_skills",
+ "kcoder_state",
+ "kcoder_tools",
+ "kcoder_types",
+ "libc",
+ "reqwest 0.12.28",
+ "rpassword",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "kcoder_cli_headless"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "futures",
+ "kcoder_cli_support",
+ "kcoder_config",
+ "kcoder_engine",
+ "kcoder_memory",
+ "kcoder_permissions",
+ "kcoder_skills",
+ "kcoder_state",
+ "kcoder_tools",
+ "kcoder_types",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tokio-util",
+ "tracing",
+]
+
+[[package]]
+name = "kcoder_cli_runtime"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-stream",
  "async-trait",
- "base64",
+ "base64 0.22.1",
  "chrono",
  "clap",
  "dirs",
@@ -2196,30 +2653,79 @@ dependencies = [
  "fs2",
  "futures",
  "globset",
+ "hmac",
  "jsonc-parser",
  "jsonschema",
+ "kcoder_acp",
  "kcoder_api",
+ "kcoder_app_events",
+ "kcoder_app_interactions",
  "kcoder_app_protocol",
+ "kcoder_app_rpc_codec",
+ "kcoder_application_host_runtime",
+ "kcoder_application_receipts",
+ "kcoder_async_box",
+ "kcoder_attachment_retention",
+ "kcoder_attachments",
+ "kcoder_browser",
+ "kcoder_cli_commands",
+ "kcoder_cli_storage",
+ "kcoder_cli_support",
  "kcoder_computer_use",
  "kcoder_config",
+ "kcoder_connectivity_storage",
+ "kcoder_desktop_recovery",
  "kcoder_engine",
+ "kcoder_engine_factory",
+ "kcoder_foreground_runtime",
+ "kcoder_foreground_work",
  "kcoder_hooks",
+ "kcoder_host_transport",
  "kcoder_knowledge",
+ "kcoder_knowledge_management",
+ "kcoder_knowledge_rpc",
  "kcoder_mcp",
+ "kcoder_mcp_app_runtime",
+ "kcoder_mcp_app_storage",
  "kcoder_memory",
+ "kcoder_migration",
+ "kcoder_migration_client",
+ "kcoder_migration_rpc",
+ "kcoder_native_delegation",
+ "kcoder_native_journal",
+ "kcoder_native_model_admission",
+ "kcoder_native_outbound",
+ "kcoder_native_scope",
+ "kcoder_native_service_runtime",
+ "kcoder_office_worker",
  "kcoder_permissions",
+ "kcoder_plugin_rpc",
  "kcoder_plugins",
  "kcoder_process_supervisor",
- "kcoder_repl",
+ "kcoder_project_automation",
+ "kcoder_provider_transactions",
+ "kcoder_runtime_driver",
+ "kcoder_session_configuration",
  "kcoder_skills",
  "kcoder_state",
+ "kcoder_task_delivery",
+ "kcoder_test_harness",
+ "kcoder_thread_metadata",
  "kcoder_tools",
+ "kcoder_transcript",
+ "kcoder_transcript_observation",
+ "kcoder_turn_evidence",
+ "kcoder_turn_lifecycle",
  "kcoder_types",
  "kcoder_workflow",
+ "kcoder_workflow_rpc",
+ "kcoder_workspace_resources",
+ "kcoder_workspace_rpc",
  "libc",
  "portable-pty",
  "reqwest 0.12.28",
- "rpassword",
+ "ring",
+ "rusqlite",
  "serde",
  "serde_json",
  "sha2",
@@ -2234,6 +2740,60 @@ dependencies = [
  "walkdir",
  "which",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "kcoder_cli_storage"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "dunce",
+ "fs2",
+ "kcoder_api",
+ "kcoder_app_protocol",
+ "kcoder_config",
+ "kcoder_state",
+ "kcoder_types",
+ "kcoder_workspace_resources",
+ "libc",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "tokio-util",
+ "tracing",
+]
+
+[[package]]
+name = "kcoder_cli_support"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "futures",
+ "kcoder_api",
+ "kcoder_cli_commands",
+ "kcoder_config",
+ "kcoder_engine",
+ "kcoder_permissions",
+ "kcoder_skills",
+ "kcoder_state",
+ "kcoder_tools",
+ "kcoder_types",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "kcoder_common_types"
+version = "0.1.0"
+dependencies = [
+ "schemars 0.8.22",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -2260,26 +2820,73 @@ name = "kcoder_config"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "cap-primitives",
  "chrono",
  "dirs",
  "dunce",
  "fs2",
  "getrandom 0.3.4",
  "globset",
+ "http",
  "jsonc-parser",
  "jsonschema",
+ "kcoder_fs",
+ "kcoder_process_supervisor",
  "kcoder_types",
  "keyring",
  "libc",
  "percent-encoding",
+ "rusqlite",
  "serde",
  "serde_ignored",
  "serde_json",
+ "sha2",
  "tempfile",
  "tracing",
  "url",
  "windows-sys 0.61.2",
+ "zeroize",
+]
+
+[[package]]
+name = "kcoder_connectivity_storage"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "kcoder_config",
+ "kcoder_types",
+ "serde",
+ "serde_json",
+ "sha2",
+]
+
+[[package]]
+name = "kcoder_desktop_recovery"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "kcoder_app_protocol",
+ "kcoder_computer_use",
+ "kcoder_mcp",
+ "kcoder_types",
+ "serde_json",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
+name = "kcoder_document_parsers"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "encoding_rs",
+ "html5ever",
+ "kcoder_tool_error",
+ "percent-encoding",
+ "quick-xml 0.39.4",
+ "serde_json",
+ "thiserror 2.0.18",
+ "url",
+ "zip",
 ]
 
 [[package]]
@@ -2289,9 +2896,11 @@ dependencies = [
  "anyhow",
  "async-stream",
  "async-trait",
+ "base64 0.22.1",
  "chrono",
  "dunce",
  "futures",
+ "futures-timer",
  "kcoder_api",
  "kcoder_config",
  "kcoder_hooks",
@@ -2318,6 +2927,122 @@ dependencies = [
 ]
 
 [[package]]
+name = "kcoder_engine_factory"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "dirs",
+ "futures",
+ "kcoder_api",
+ "kcoder_app_protocol",
+ "kcoder_cli_commands",
+ "kcoder_cli_storage",
+ "kcoder_config",
+ "kcoder_engine",
+ "kcoder_knowledge_rpc",
+ "kcoder_mcp",
+ "kcoder_mcp_app_runtime",
+ "kcoder_memory",
+ "kcoder_migration",
+ "kcoder_permissions",
+ "kcoder_plugin_rpc",
+ "kcoder_plugins",
+ "kcoder_session_configuration",
+ "kcoder_skills",
+ "kcoder_state",
+ "kcoder_tools",
+ "kcoder_types",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "kcoder_file_search"
+version = "0.1.0"
+dependencies = [
+ "globset",
+ "regex",
+ "schemars 0.8.22",
+ "serde",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tokio-util",
+ "walkdir",
+]
+
+[[package]]
+name = "kcoder_foreground_runtime"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "futures",
+ "kcoder_app_events",
+ "kcoder_app_protocol",
+ "kcoder_engine",
+ "kcoder_foreground_work",
+ "kcoder_host_transport",
+ "kcoder_state",
+ "kcoder_turn_evidence",
+ "kcoder_turn_lifecycle",
+ "kcoder_types",
+ "kcoder_workspace_resources",
+ "serde_json",
+ "tokio",
+ "tokio-util",
+ "tracing",
+]
+
+[[package]]
+name = "kcoder_foreground_work"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "kcoder_api",
+ "kcoder_app_protocol",
+ "kcoder_cli_storage",
+ "kcoder_cli_support",
+ "kcoder_config",
+ "kcoder_engine",
+ "kcoder_host_transport",
+ "kcoder_memory",
+ "kcoder_permissions",
+ "kcoder_skills",
+ "kcoder_state",
+ "kcoder_tools",
+ "kcoder_turn_lifecycle",
+ "kcoder_types",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tokio-util",
+ "tracing",
+]
+
+[[package]]
+name = "kcoder_fs"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "cap-primitives",
+ "fs2",
+ "kcoder_process_supervisor",
+ "kcoder_types",
+ "libc",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "windows-sys 0.61.2",
+ "zeroize",
+]
+
+[[package]]
 name = "kcoder_hooks"
 version = "0.1.0"
 dependencies = [
@@ -2326,7 +3051,6 @@ dependencies = [
  "futures",
  "kcoder_api",
  "kcoder_config",
- "kcoder_tools",
  "kcoder_types",
  "libc",
  "regex",
@@ -2340,19 +3064,130 @@ dependencies = [
 ]
 
 [[package]]
+name = "kcoder_host_transport"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "futures",
+ "kcoder_app_protocol",
+ "kcoder_app_rpc_codec",
+ "kcoder_config",
+ "kcoder_native_scope",
+ "kcoder_process_supervisor",
+ "kcoder_types",
+ "libc",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "uuid",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "kcoder_integration_protocol"
+version = "0.1.0"
+dependencies = [
+ "kcoder_types",
+ "schemars 0.8.22",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "kcoder_integration_storage"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "fs2",
+ "kcoder_config",
+ "kcoder_types",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "kcoder_integration_types"
+version = "0.1.0"
+dependencies = [
+ "kcoder_common_types",
+ "schemars 0.8.22",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "kcoder_knowledge"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
+ "chrono",
+ "kcoder_config",
  "kcoder_types",
  "rusqlite",
+ "serde",
+ "serde_json",
+ "sha2",
+ "sqlite-vfs",
+ "tempfile",
+ "tokio",
+ "tokio-util",
+ "uuid",
+]
+
+[[package]]
+name = "kcoder_knowledge_management"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "kcoder_app_protocol",
+ "kcoder_knowledge",
+ "kcoder_memory",
+ "kcoder_runtime_driver",
+ "kcoder_schedule",
+ "kcoder_state",
+ "kcoder_types",
+ "kcoder_workflow",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "kcoder_knowledge_rpc"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "base64 0.22.1",
+ "chrono",
+ "clap",
+ "fs2",
+ "futures",
+ "kcoder_api",
+ "kcoder_app_protocol",
+ "kcoder_cli_commands",
+ "kcoder_config",
+ "kcoder_knowledge",
+ "kcoder_native_scope",
+ "kcoder_state",
+ "kcoder_tools",
+ "kcoder_types",
+ "libc",
  "serde",
  "serde_json",
  "sha2",
  "tempfile",
  "tokio",
  "tokio-util",
+ "tracing",
  "uuid",
 ]
 
@@ -2362,7 +3197,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
- "base64",
+ "base64 0.22.1",
  "bytes",
  "fs2",
  "futures",
@@ -2370,6 +3205,8 @@ dependencies = [
  "image",
  "kcoder_computer_use",
  "kcoder_config",
+ "kcoder_mcp_policy",
+ "kcoder_process_supervisor",
  "kcoder_state",
  "kcoder_tools",
  "kcoder_types",
@@ -2390,6 +3227,63 @@ dependencies = [
 ]
 
 [[package]]
+name = "kcoder_mcp_app_runtime"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "base64 0.22.1",
+ "kcoder_app_events",
+ "kcoder_app_interactions",
+ "kcoder_app_protocol",
+ "kcoder_app_rpc_codec",
+ "kcoder_config",
+ "kcoder_engine",
+ "kcoder_host_transport",
+ "kcoder_mcp",
+ "kcoder_mcp_app_storage",
+ "kcoder_permissions",
+ "kcoder_plugin_rpc",
+ "kcoder_plugins",
+ "kcoder_state",
+ "kcoder_tools",
+ "kcoder_types",
+ "kcoder_workspace_resources",
+ "serde_json",
+ "tokio",
+ "tokio-util",
+]
+
+[[package]]
+name = "kcoder_mcp_app_storage"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "base64 0.22.1",
+ "kcoder_app_protocol",
+ "kcoder_fs",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "tracing",
+]
+
+[[package]]
+name = "kcoder_mcp_policy"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "base64 0.22.1",
+ "http",
+ "kcoder_config",
+ "kcoder_types",
+ "serde_json",
+ "serde_urlencoded",
+ "url",
+]
+
+[[package]]
 name = "kcoder_memory"
 version = "0.1.0"
 dependencies = [
@@ -2398,6 +3292,7 @@ dependencies = [
  "fs2",
  "globset",
  "kcoder_config",
+ "kcoder_types",
  "rusqlite",
  "serde",
  "serde_json",
@@ -2409,21 +3304,334 @@ dependencies = [
 ]
 
 [[package]]
-name = "kcoder_permissions"
+name = "kcoder_migration"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "base64 0.22.1",
+ "chrono",
+ "fs2",
+ "image",
+ "jsonc-parser",
+ "kcoder_config",
+ "kcoder_mcp_policy",
+ "kcoder_plugins",
+ "kcoder_skills",
+ "kcoder_state",
+ "kcoder_types",
+ "libc",
+ "percent-encoding",
+ "pulldown-cmark",
+ "quick-xml 0.39.4",
+ "regex",
+ "rusqlite",
+ "rustls",
+ "semver",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "sha2",
+ "sqlite-vfs",
+ "tempfile",
+ "toml",
+ "url",
+ "uuid",
+ "windows-sys 0.61.2",
+ "zeroize",
+ "zstd",
+]
+
+[[package]]
+name = "kcoder_migration_client"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "base64 0.22.1",
+ "clap",
+ "futures",
+ "kcoder_app_protocol",
+ "kcoder_config",
+ "kcoder_mcp_policy",
+ "kcoder_migration",
+ "kcoder_plugins",
+ "kcoder_skills",
+ "kcoder_state",
+ "kcoder_types",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "tokio",
+ "tokio-tungstenite",
+ "uuid",
+]
+
+[[package]]
+name = "kcoder_migration_rpc"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "base64 0.22.1",
+ "futures",
+ "hmac",
+ "kcoder_app_protocol",
+ "kcoder_config",
+ "kcoder_host_transport",
+ "kcoder_mcp_policy",
+ "kcoder_migration",
+ "kcoder_migration_client",
+ "kcoder_plugins",
+ "kcoder_skills",
+ "kcoder_state",
+ "kcoder_types",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "kcoder_native_delegation"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "kcoder_config",
+ "kcoder_types",
+ "ring",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "uuid",
+ "zeroize",
+]
+
+[[package]]
+name = "kcoder_native_journal"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "kcoder_acp",
+ "kcoder_config",
+ "kcoder_native_receipts",
+ "kcoder_native_scope",
+ "kcoder_state",
+ "kcoder_types",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "tokio",
+]
+
+[[package]]
+name = "kcoder_native_model_admission"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "kcoder_api",
+ "kcoder_config",
+ "kcoder_engine",
+ "kcoder_native_receipts",
+ "kcoder_native_scope",
+ "kcoder_runtime_driver",
+ "kcoder_state",
+ "kcoder_types",
+ "kcoder_workflow_observations",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tracing",
+]
+
+[[package]]
+name = "kcoder_native_outbound"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
+ "base64 0.22.1",
+ "futures",
+ "kcoder_acp",
+ "kcoder_app_rpc_codec",
+ "kcoder_cli_commands",
  "kcoder_config",
+ "kcoder_engine",
+ "kcoder_host_transport",
+ "kcoder_native_journal",
+ "kcoder_native_scope",
+ "kcoder_office_worker",
+ "kcoder_runtime_driver",
+ "kcoder_state",
  "kcoder_tools",
+ "kcoder_types",
  "serde",
  "serde_json",
+ "sha2",
  "tempfile",
- "thiserror 2.0.18",
  "tokio",
+ "tokio-util",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "kcoder_native_receipts"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "kcoder_config",
+ "kcoder_integration_storage",
+ "kcoder_native_delegation",
+ "kcoder_native_scope",
+ "kcoder_types",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "tokio-util",
+]
+
+[[package]]
+name = "kcoder_native_scope"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "fs2",
+ "kcoder_app_protocol",
+ "kcoder_config",
+ "kcoder_process_supervisor",
+ "kcoder_types",
+ "libc",
+ "ring",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "tokio",
+ "tokio-util",
+ "url",
+ "uuid",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "kcoder_native_service_runtime"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "base64 0.22.1",
+ "fs2",
+ "futures",
+ "kcoder_app_protocol",
+ "kcoder_app_rpc_codec",
+ "kcoder_config",
+ "kcoder_connectivity_storage",
+ "kcoder_host_transport",
+ "kcoder_native_delegation",
+ "kcoder_native_receipts",
+ "kcoder_native_scope",
+ "kcoder_process_supervisor",
+ "kcoder_test_harness",
+ "kcoder_types",
+ "libc",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "tokio",
+ "tokio-util",
+ "uuid",
+ "which",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "kcoder_office_worker"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "base64 0.22.1",
+ "dunce",
+ "kcoder_app_rpc_codec",
+ "kcoder_config",
+ "kcoder_engine",
+ "kcoder_native_scope",
+ "kcoder_process_supervisor",
+ "kcoder_state",
+ "kcoder_test_harness",
+ "kcoder_tools",
+ "kcoder_types",
+ "libc",
+ "ring",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "tokio",
+ "tokio-util",
+ "uuid",
+]
+
+[[package]]
+name = "kcoder_permission_rules"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "kcoder_config",
+ "kcoder_tool_input",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
  "tracing",
  "tree-sitter",
  "tree-sitter-bash",
+]
+
+[[package]]
+name = "kcoder_permissions"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "kcoder_config",
+ "kcoder_native_delegation",
+ "kcoder_permission_rules",
+ "kcoder_tools",
+ "kcoder_types",
+ "serde_json",
+ "tempfile",
+ "tokio",
+]
+
+[[package]]
+name = "kcoder_plugin_rpc"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "kcoder_app_protocol",
+ "kcoder_config",
+ "kcoder_hooks",
+ "kcoder_mcp",
+ "kcoder_plugins",
+ "kcoder_skills",
+ "kcoder_types",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]
@@ -2431,7 +3639,7 @@ name = "kcoder_plugins"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "base64",
+ "base64 0.22.1",
  "dirs",
  "dunce",
  "flate2",
@@ -2464,11 +3672,51 @@ name = "kcoder_process_supervisor"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "libc",
  "serde",
  "serde_json",
+ "sha2",
  "tempfile",
+ "tokio",
+ "tokio-util",
  "which",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "kcoder_project_automation"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "kcoder_app_protocol",
+ "kcoder_app_rpc_codec",
+ "kcoder_state",
+ "kcoder_tools",
+ "kcoder_types",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "kcoder_provider_transactions"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "fs2",
+ "futures",
+ "kcoder_api",
+ "kcoder_app_protocol",
+ "kcoder_config",
+ "kcoder_engine",
+ "kcoder_types",
+ "reqwest 0.12.28",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "tokio",
 ]
 
 [[package]]
@@ -2485,7 +3733,7 @@ dependencies = [
  "anyhow",
  "arboard",
  "async-trait",
- "base64",
+ "base64 0.22.1",
  "chrono",
  "crossterm",
  "futures",
@@ -2501,6 +3749,7 @@ dependencies = [
  "kcoder_specs",
  "kcoder_state",
  "kcoder_tools",
+ "kcoder_tui_render",
  "kcoder_types",
  "libc",
  "pulldown-cmark",
@@ -2508,17 +3757,123 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
- "syntect",
  "tempfile",
  "tokio",
  "tokio-util",
  "tracing",
- "two-face",
  "unicode-segmentation",
  "unicode-width 0.2.0",
  "url",
+ "uuid",
  "wait-timeout",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "kcoder_runtime_driver"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "kcoder_app_protocol",
+ "kcoder_config",
+ "kcoder_integration_storage",
+ "kcoder_native_scope",
+ "kcoder_tools",
+ "kcoder_types",
+ "kcoder_workflow",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
+name = "kcoder_schedule"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "chrono-tz",
+ "kcoder_types",
+ "serde_json",
+]
+
+[[package]]
+name = "kcoder_session_configuration"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "futures",
+ "kcoder_api",
+ "kcoder_app_protocol",
+ "kcoder_cli_commands",
+ "kcoder_cli_storage",
+ "kcoder_config",
+ "kcoder_mcp",
+ "kcoder_plugin_rpc",
+ "kcoder_plugins",
+ "kcoder_tools",
+ "kcoder_types",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tokio-util",
+ "tracing",
+]
+
+[[package]]
+name = "kcoder_session_types"
+version = "0.1.0"
+dependencies = [
+ "kcoder_common_types",
+ "schemars 0.8.22",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "kcoder_shell_isolation"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "dirs",
+ "kcoder_config",
+ "kcoder_state",
+ "kcoder_types",
+ "landlock",
+ "libc",
+ "sha2",
+ "tempfile",
+ "tokio",
+ "tracing",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "kcoder_skill_support"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "dirs",
+ "flate2",
+ "kcoder_config",
+ "kcoder_memory",
+ "kcoder_shell_isolation",
+ "kcoder_skills",
+ "kcoder_tool_error",
+ "reqwest 0.12.28",
+ "schemars 0.8.22",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tracing",
+ "uuid",
+ "walkdir",
 ]
 
 [[package]]
@@ -2572,7 +3927,9 @@ dependencies = [
  "chrono",
  "dunce",
  "fs2",
+ "futures-timer",
  "kcoder_config",
+ "kcoder_integration_storage",
  "kcoder_types",
  "libc",
  "rusqlite",
@@ -2586,6 +3943,7 @@ dependencies = [
  "tracing",
  "uuid",
  "windows-sys 0.61.2",
+ "zstd",
 ]
 
 [[package]]
@@ -2621,6 +3979,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "kcoder_task_delivery"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "dunce",
+ "kcoder_app_protocol",
+ "kcoder_cli_storage",
+ "kcoder_config",
+ "kcoder_process_supervisor",
+ "kcoder_workspace_resources",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
 name = "kcoder_test_harness"
 version = "0.1.0"
 dependencies = [
@@ -2648,14 +4024,59 @@ dependencies = [
 ]
 
 [[package]]
+name = "kcoder_thread_metadata"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "dunce",
+ "fs2",
+ "kcoder_app_protocol",
+ "kcoder_cli_storage",
+ "kcoder_config",
+ "kcoder_host_transport",
+ "kcoder_state",
+ "kcoder_tools",
+ "kcoder_types",
+ "kcoder_workspace_resources",
+ "libc",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "tokio",
+ "tokio-util",
+ "tracing",
+]
+
+[[package]]
+name = "kcoder_tool_error"
+version = "0.1.0"
+dependencies = [
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "kcoder_tool_input"
+version = "0.1.0"
+dependencies = [
+ "image",
+ "kcoder_config",
+ "kcoder_tool_error",
+ "kcoder_types",
+ "schemars 0.8.22",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "kcoder_tools"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
- "base64",
+ "base64 0.22.1",
  "chrono",
- "chrono-tz",
  "dirs",
  "dunce",
  "encoding_rs",
@@ -2667,17 +4088,25 @@ dependencies = [
  "html5ever",
  "image",
  "kcoder_config",
+ "kcoder_document_parsers",
+ "kcoder_file_search",
  "kcoder_knowledge",
  "kcoder_memory",
+ "kcoder_process_supervisor",
+ "kcoder_schedule",
+ "kcoder_shell_isolation",
+ "kcoder_skill_support",
  "kcoder_skills",
  "kcoder_specs",
  "kcoder_state",
+ "kcoder_tool_error",
+ "kcoder_tool_input",
  "kcoder_types",
+ "kcoder_web",
  "kcoder_workflow",
- "landlock",
+ "kcoder_workflow_observations",
  "libc",
  "nix 0.30.1",
- "quick-xml 0.39.4",
  "regex",
  "reqwest 0.12.28",
  "schemars 0.8.22",
@@ -2695,17 +4124,148 @@ dependencies = [
  "uuid",
  "walkdir",
  "which",
+ "windows-registry",
  "windows-sys 0.61.2",
  "zip",
+]
+
+[[package]]
+name = "kcoder_transcript"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "kcoder_app_protocol",
+ "kcoder_engine",
+ "kcoder_state",
+ "kcoder_types",
+ "serde",
+ "serde_json",
+ "sha2",
+]
+
+[[package]]
+name = "kcoder_transcript_observation"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "dunce",
+ "kcoder_app_protocol",
+ "kcoder_attachment_retention",
+ "kcoder_cli_storage",
+ "kcoder_config",
+ "kcoder_state",
+ "kcoder_thread_metadata",
+ "kcoder_transcript",
+ "kcoder_workspace_resources",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "tokio",
+]
+
+[[package]]
+name = "kcoder_tui_render"
+version = "0.1.0"
+dependencies = [
+ "crossterm",
+ "libc",
+ "pulldown-cmark",
+ "ratatui",
+ "syntect",
+ "two-face",
+ "unicode-segmentation",
+ "unicode-width 0.2.0",
+ "url",
+]
+
+[[package]]
+name = "kcoder_turn_evidence"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-stream",
+ "dunce",
+ "futures",
+ "kcoder_app_protocol",
+ "kcoder_cli_storage",
+ "kcoder_config",
+ "kcoder_engine",
+ "kcoder_state",
+ "kcoder_tools",
+ "kcoder_transcript",
+ "kcoder_transcript_observation",
+ "kcoder_types",
+ "kcoder_workspace_resources",
+ "serde_json",
+ "sha2",
+ "similar",
+ "tempfile",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "kcoder_turn_lifecycle"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "dunce",
+ "fs2",
+ "kcoder_app_events",
+ "kcoder_app_interactions",
+ "kcoder_app_protocol",
+ "kcoder_attachment_retention",
+ "kcoder_attachments",
+ "kcoder_cli_storage",
+ "kcoder_config",
+ "kcoder_engine",
+ "kcoder_state",
+ "kcoder_thread_metadata",
+ "kcoder_transcript",
+ "kcoder_transcript_observation",
+ "kcoder_types",
+ "kcoder_workspace_resources",
+ "serde",
+ "serde_json",
+ "tracing",
 ]
 
 [[package]]
 name = "kcoder_types"
 version = "0.1.0"
 dependencies = [
+ "kcoder_integration_types",
+ "kcoder_session_types",
+ "serde_json",
+]
+
+[[package]]
+name = "kcoder_web"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "base64 0.22.1",
+ "chrono",
+ "html-escape",
+ "kcoder_config",
+ "kcoder_tool_error",
+ "kcoder_types",
+ "regex",
+ "reqwest 0.12.28",
  "schemars 0.8.22",
  "serde",
  "serde_json",
+ "system-configuration",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "url",
+ "uuid",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -2728,6 +4288,90 @@ dependencies = [
  "tokio",
  "tokio-util",
  "uuid",
+]
+
+[[package]]
+name = "kcoder_workflow_observations"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "fs2",
+ "kcoder_config",
+ "kcoder_tool_error",
+ "kcoder_types",
+ "kcoder_workflow",
+ "libc",
+ "nix 0.30.1",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "tokio",
+ "tokio-util",
+ "tracing",
+]
+
+[[package]]
+name = "kcoder_workflow_rpc"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "kcoder_app_protocol",
+ "kcoder_types",
+ "kcoder_workflow",
+ "kcoder_workflow_observations",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
+name = "kcoder_workspace_resources"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "base64 0.22.1",
+ "chrono",
+ "dirs",
+ "dunce",
+ "fs2",
+ "futures",
+ "kcoder_app_protocol",
+ "kcoder_app_rpc_codec",
+ "kcoder_config",
+ "kcoder_host_transport",
+ "kcoder_process_supervisor",
+ "libc",
+ "portable-pty",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "tokio",
+ "tracing",
+ "uuid",
+ "walkdir",
+ "which",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "kcoder_workspace_rpc"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "dunce",
+ "fs2",
+ "kcoder_app_protocol",
+ "kcoder_attachment_retention",
+ "kcoder_cli_storage",
+ "kcoder_config",
+ "kcoder_state",
+ "kcoder_workspace_resources",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tokio",
 ]
 
 [[package]]
@@ -3369,6 +5013,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "pin-project"
+version = "1.1.13"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2466b2336ed02bcdca6b294417127b90ec92038d1d5c4fbeac971a922e0e0924"
+dependencies = [
+ "pin-project-internal",
+]
+
+[[package]]
+name = "pin-project-internal"
+version = "1.1.13"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c96395f0a926bc13b1c17622aaddda1ecb55d49c8f1bf9777e4d877800a43f8b"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.117",
+]
+
+[[package]]
 name = "pin-project-lite"
 version = "0.2.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3397,7 +5061,7 @@ version = "1.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7da1d65da6dd5d1e44199ac0f58712d241c0f439f80adea8924d832384087f85"
 dependencies = [
- "base64",
+ "base64 0.22.1",
  "indexmap 2.14.0",
  "quick-xml 0.41.0",
  "serde",
@@ -3429,6 +5093,21 @@ dependencies = [
  "pin-project-lite",
  "rustix 1.1.4",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "portable-atomic"
+version = "1.15.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "05c8b63e8d9609db387f0324918f81d68fe27748f084ef092fb35954d0539a85"
+
+[[package]]
+name = "portable-atomic-util"
+version = "0.2.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "10ab3eb7f3becc3a1cbc4f2c6f20267996cfc1a6467a873763411b136a122715"
+dependencies = [
+ "portable-atomic",
 ]
 
 [[package]]
@@ -3548,6 +5227,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cdcc8dd4e2f670d309a5f0e83fe36dfdc05af317008fea29144da1a2ac858e5e"
 dependencies = [
  "memchr",
+ "serde",
 ]
 
 [[package]]
@@ -3817,7 +5497,7 @@ version = "0.12.28"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "eddd3ca559203180a307f12d114c268abf583f59b03cb906fd0b3ff8646c1147"
 dependencies = [
- "base64",
+ "base64 0.22.1",
  "bytes",
  "futures-core",
  "futures-util",
@@ -3858,7 +5538,7 @@ version = "0.13.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "219c5811de6525e5416c7d5d53bb656d3afdbc6c5af816e0802bcfa42dbdc1c3"
 dependencies = [
- "base64",
+ "base64 0.22.1",
  "bytes",
  "encoding_rs",
  "futures-core",
@@ -4043,9 +5723,9 @@ dependencies = [
 
 [[package]]
 name = "rustls"
-version = "0.23.40"
+version = "0.23.45"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ef86cd5876211988985292b91c96a8f2d298df24e75989a43a3c73f2d4d8168b"
+checksum = "0d41d731c7d2f962d1ccc364cec258de3c0e93b38c2fb3ba97ac74513048d634"
 dependencies = [
  "aws-lc-rs",
  "once_cell",
@@ -4107,9 +5787,9 @@ checksum = "f87165f0995f63a9fbeea62b64d10b4d9d8e78ec6d7d51fb2125fda7bb36788f"
 
 [[package]]
 name = "rustls-webpki"
-version = "0.103.13"
+version = "0.103.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "61c429a8649f110dddef65e2a5ad240f747e85f7758a6bccc7e5777bd33f756e"
+checksum = "f3c3cf1d8b1e7d4927e2d154c3fcb02979afb9939629c62cd9048d4f07b60ac2"
 dependencies = [
  "aws-lc-rs",
  "ring",
@@ -4315,10 +5995,11 @@ dependencies = [
 
 [[package]]
 name = "serde_json"
-version = "1.0.150"
+version = "1.0.154"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e8014e44b4736ed0538adeecded0fce2a272f22dc9578a7eb6b2d9993c74cfb9"
+checksum = "e7e9cc8b1b85264074fbcc02a88680c4096b1e47df8f739dceb03bf482f04bd6"
 dependencies = [
+ "foldhash 0.2.0",
  "indexmap 2.14.0",
  "itoa",
  "memchr",
@@ -4361,15 +6042,17 @@ dependencies = [
 
 [[package]]
 name = "serde_with"
-version = "3.17.0"
+version = "3.24.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "381b283ce7bc6b476d903296fb59d0d36633652b633b27f64db4fb46dcbfc3b9"
+checksum = "df9adc193c780ef8f159aee8b61e2d5801aaa555e6eb0947fe45530ec506296f"
 dependencies = [
- "base64",
+ "base64 0.23.1",
+ "bs58",
  "chrono",
  "hex",
  "indexmap 1.9.3",
  "indexmap 2.14.0",
+ "jiff",
  "schemars 0.9.0",
  "schemars 1.2.1",
  "serde_core",
@@ -4380,14 +6063,14 @@ dependencies = [
 
 [[package]]
 name = "serde_with_macros"
-version = "3.17.0"
+version = "3.24.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a6d4e30573c8cb306ed6ab1dca8423eec9a463ea0e155f45399455e0368b27e0"
+checksum = "3e17bbc68e28663bbbb90df47e058aa7eda4fb445b89fe70457bb94fbccf6e49"
 dependencies = [
- "darling 0.21.3",
+ "darling 0.24.1",
  "proc-macro2",
  "quote",
- "syn 2.0.117",
+ "syn 3.0.6",
 ]
 
 [[package]]
@@ -4953,7 +6636,11 @@ checksum = "d25a406cddcc431a75d3d9afc6a7c0f7428d4891dd973e4d54c56b46127bf857"
 dependencies = [
  "futures-util",
  "log",
+ "rustls",
+ "rustls-native-certs",
+ "rustls-pki-types",
  "tokio",
+ "tokio-rustls",
  "tungstenite",
 ]
 
@@ -5212,6 +6899,8 @@ dependencies = [
  "httparse",
  "log",
  "rand 0.9.4",
+ "rustls",
+ "rustls-pki-types",
  "sha1",
  "thiserror 2.0.18",
  "utf-8",
@@ -6388,6 +8077,34 @@ dependencies = [
  "crc32fast",
  "log",
  "simd-adler32",
+]
+
+[[package]]
+name = "zstd"
+version = "0.13.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e91ee311a569c327171651566e07972200e76fcfe2242a4fa446149a3881c08a"
+dependencies = [
+ "zstd-safe",
+]
+
+[[package]]
+name = "zstd-safe"
+version = "7.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "64d80649ab6db9d9f6f9c80a40becd948eda4714a0a5ac8c4d157a32231c7882"
+dependencies = [
+ "zstd-sys",
+]
+
+[[package]]
+name = "zstd-sys"
+version = "2.1.1+zstd.1.5.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "aeec9eaf2dffbbd09201e23bd0ffcbaa33bb8e9266a10734fd7ed90a85eca078"
+dependencies = [
+ "cc",
+ "pkg-config",
 ]
 
 [[package]]

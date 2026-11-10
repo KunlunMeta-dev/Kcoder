@@ -1,0 +1,3081 @@
+{
+  "ChannelDeliveryState": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "pending",
+      "sending",
+      "accepted",
+      "failed",
+      "unknown",
+      "cancelled",
+      "blocked"
+    ],
+    "title": "ChannelDeliveryState",
+    "type": "string"
+  },
+  "ConnectionState": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "configured",
+      "authorization_required",
+      "starting",
+      "connected",
+      "degraded",
+      "stopped",
+      "failed"
+    ],
+    "title": "ConnectionState",
+    "type": "string"
+  },
+  "ConnectivityCapabilityReadiness": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "ConnectivityCapabilityState": {
+        "enum": [
+          "ready",
+          "denied",
+          "unavailable",
+          "unknown"
+        ],
+        "type": "string"
+      },
+      "ConnectivityToolRef": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "schemaRevision": {
+            "type": "string"
+          },
+          "sourceRevision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "schemaRevision",
+          "sourceRevision"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "capabilityId": {
+        "type": "string"
+      },
+      "policyRevision": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "reasonCode": {
+        "type": "string"
+      },
+      "state": {
+        "$ref": "#/definitions/ConnectivityCapabilityState"
+      },
+      "toolRefs": {
+        "items": {
+          "$ref": "#/definitions/ConnectivityToolRef"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "capabilityId",
+      "reasonCode",
+      "state",
+      "toolRefs"
+    ],
+    "title": "ConnectivityCapabilityReadiness",
+    "type": "object"
+  },
+  "ConnectivityCapabilityState": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "ready",
+      "denied",
+      "unavailable",
+      "unknown"
+    ],
+    "title": "ConnectivityCapabilityState",
+    "type": "string"
+  },
+  "ConnectivityChatKind": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "private",
+      "group",
+      "channel"
+    ],
+    "title": "ConnectivityChatKind",
+    "type": "string"
+  },
+  "ConnectivityChatObservationState": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "observed",
+      "stale"
+    ],
+    "title": "ConnectivityChatObservationState",
+    "type": "string"
+  },
+  "ConnectivityChatTaskBinding": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "ConnectivityChatKind": {
+        "enum": [
+          "private",
+          "group",
+          "channel"
+        ],
+        "type": "string"
+      },
+      "ConnectivityChatTaskBindingState": {
+        "enum": [
+          "active",
+          "unbound"
+        ],
+        "type": "string"
+      },
+      "ConnectivityConnectionLocator": {
+        "additionalProperties": false,
+        "description": "The original connection namespace remains the owner of credentials and Inbox.",
+        "properties": {
+          "connectionId": {
+            "type": "string"
+          },
+          "namespaceId": {
+            "type": "string"
+          },
+          "scope": {
+            "$ref": "#/definitions/IntegrationScope"
+          }
+        },
+        "required": [
+          "connectionId",
+          "namespaceId",
+          "scope"
+        ],
+        "type": "object"
+      },
+      "ConnectivityExternalChatRange": {
+        "additionalProperties": false,
+        "description": "Operator identity belongs to each message and is not a conversation boundary.",
+        "properties": {
+          "chatId": {
+            "type": "string"
+          },
+          "chatKind": {
+            "$ref": "#/definitions/ConnectivityChatKind"
+          },
+          "connectionId": {
+            "type": "string"
+          },
+          "platform": {
+            "$ref": "#/definitions/MessagingPlatform"
+          },
+          "tenantId": {
+            "type": "string"
+          },
+          "topicId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "version": {
+            "format": "uint8",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "chatId",
+          "chatKind",
+          "connectionId",
+          "platform",
+          "tenantId",
+          "version"
+        ],
+        "type": "object"
+      },
+      "ConnectivityTaskLocator": {
+        "additionalProperties": false,
+        "description": "This refers to an original recoverable task, without copying its history.",
+        "properties": {
+          "scope": {
+            "$ref": "#/definitions/IntegrationScope"
+          },
+          "threadId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "scope",
+          "threadId"
+        ],
+        "type": "object"
+      },
+      "IntegrationNullable_for_String": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationScope": {
+        "additionalProperties": false,
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "identityGeneration": {
+            "type": "string"
+          },
+          "organizationId": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationNullable_for_String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "targetRevision": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "$ref": "#/definitions/IntegrationNullable_for_String"
+          }
+        },
+        "required": [
+          "accountId",
+          "identityGeneration",
+          "targetId",
+          "targetRevision",
+          "workspaceId"
+        ],
+        "type": "object"
+      },
+      "MessagingPlatform": {
+        "enum": [
+          "feishu",
+          "dingtalk",
+          "qq",
+          "weixin",
+          "wecom",
+          "github"
+        ],
+        "type": "string"
+      }
+    },
+    "description": "A target-side relationship projection. Execution and delivery reauthorize it.",
+    "properties": {
+      "boundAfterSequence": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "changedAtMs": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "changedBy": {
+        "type": "string"
+      },
+      "connection": {
+        "$ref": "#/definitions/ConnectivityConnectionLocator"
+      },
+      "generation": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "id": {
+        "type": "string"
+      },
+      "operationId": {
+        "type": "string"
+      },
+      "range": {
+        "$ref": "#/definitions/ConnectivityExternalChatRange"
+      },
+      "revision": {
+        "type": "string"
+      },
+      "sourceRevision": {
+        "type": "string"
+      },
+      "state": {
+        "$ref": "#/definitions/ConnectivityChatTaskBindingState"
+      },
+      "task": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/ConnectivityTaskLocator"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      }
+    },
+    "required": [
+      "boundAfterSequence",
+      "changedAtMs",
+      "changedBy",
+      "connection",
+      "generation",
+      "id",
+      "operationId",
+      "range",
+      "revision",
+      "sourceRevision",
+      "state"
+    ],
+    "title": "ConnectivityChatTaskBinding",
+    "type": "object"
+  },
+  "ConnectivityChatTaskBindingReceipt": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "ConnectivityChatKind": {
+        "enum": [
+          "private",
+          "group",
+          "channel"
+        ],
+        "type": "string"
+      },
+      "ConnectivityChatTaskBinding": {
+        "additionalProperties": false,
+        "description": "A target-side relationship projection. Execution and delivery reauthorize it.",
+        "properties": {
+          "boundAfterSequence": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "changedAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "changedBy": {
+            "type": "string"
+          },
+          "connection": {
+            "$ref": "#/definitions/ConnectivityConnectionLocator"
+          },
+          "generation": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "id": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string"
+          },
+          "range": {
+            "$ref": "#/definitions/ConnectivityExternalChatRange"
+          },
+          "revision": {
+            "type": "string"
+          },
+          "sourceRevision": {
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/definitions/ConnectivityChatTaskBindingState"
+          },
+          "task": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/ConnectivityTaskLocator"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "boundAfterSequence",
+          "changedAtMs",
+          "changedBy",
+          "connection",
+          "generation",
+          "id",
+          "operationId",
+          "range",
+          "revision",
+          "sourceRevision",
+          "state"
+        ],
+        "type": "object"
+      },
+      "ConnectivityChatTaskBindingState": {
+        "enum": [
+          "active",
+          "unbound"
+        ],
+        "type": "string"
+      },
+      "ConnectivityConnectionLocator": {
+        "additionalProperties": false,
+        "description": "The original connection namespace remains the owner of credentials and Inbox.",
+        "properties": {
+          "connectionId": {
+            "type": "string"
+          },
+          "namespaceId": {
+            "type": "string"
+          },
+          "scope": {
+            "$ref": "#/definitions/IntegrationScope"
+          }
+        },
+        "required": [
+          "connectionId",
+          "namespaceId",
+          "scope"
+        ],
+        "type": "object"
+      },
+      "ConnectivityExternalChatRange": {
+        "additionalProperties": false,
+        "description": "Operator identity belongs to each message and is not a conversation boundary.",
+        "properties": {
+          "chatId": {
+            "type": "string"
+          },
+          "chatKind": {
+            "$ref": "#/definitions/ConnectivityChatKind"
+          },
+          "connectionId": {
+            "type": "string"
+          },
+          "platform": {
+            "$ref": "#/definitions/MessagingPlatform"
+          },
+          "tenantId": {
+            "type": "string"
+          },
+          "topicId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "version": {
+            "format": "uint8",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "chatId",
+          "chatKind",
+          "connectionId",
+          "platform",
+          "tenantId",
+          "version"
+        ],
+        "type": "object"
+      },
+      "ConnectivityTaskLocator": {
+        "additionalProperties": false,
+        "description": "This refers to an original recoverable task, without copying its history.",
+        "properties": {
+          "scope": {
+            "$ref": "#/definitions/IntegrationScope"
+          },
+          "threadId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "scope",
+          "threadId"
+        ],
+        "type": "object"
+      },
+      "IntegrationNullable_for_String": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationScope": {
+        "additionalProperties": false,
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "identityGeneration": {
+            "type": "string"
+          },
+          "organizationId": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationNullable_for_String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "targetRevision": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "$ref": "#/definitions/IntegrationNullable_for_String"
+          }
+        },
+        "required": [
+          "accountId",
+          "identityGeneration",
+          "targetId",
+          "targetRevision",
+          "workspaceId"
+        ],
+        "type": "object"
+      },
+      "MessagingPlatform": {
+        "enum": [
+          "feishu",
+          "dingtalk",
+          "qq",
+          "weixin",
+          "wecom",
+          "github"
+        ],
+        "type": "string"
+      }
+    },
+    "description": "Stable original mutation receipt; archiving a previous task is a separate fact.",
+    "properties": {
+      "binding": {
+        "$ref": "#/definitions/ConnectivityChatTaskBinding"
+      },
+      "operationId": {
+        "type": "string"
+      },
+      "previousTask": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/ConnectivityTaskLocator"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      }
+    },
+    "required": [
+      "binding",
+      "operationId"
+    ],
+    "title": "ConnectivityChatTaskBindingReceipt",
+    "type": "object"
+  },
+  "ConnectivityChatTaskBindingState": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "active",
+      "unbound"
+    ],
+    "title": "ConnectivityChatTaskBindingState",
+    "type": "string"
+  },
+  "ConnectivityConnection": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "ConnectionState": {
+        "enum": [
+          "configured",
+          "authorization_required",
+          "starting",
+          "connected",
+          "degraded",
+          "stopped",
+          "failed"
+        ],
+        "type": "string"
+      },
+      "ConnectivityLocalAuthorizationCleanupAvailability": {
+        "enum": [
+          "unknown",
+          "disabled"
+        ],
+        "type": "string"
+      },
+      "ConnectivityLocalAuthorizationCleanupReceipt": {
+        "additionalProperties": false,
+        "description": "This is the original Main operation receipt, separate from any provider request.",
+        "properties": {
+          "availability": {
+            "$ref": "#/definitions/ConnectivityLocalAuthorizationCleanupAvailability"
+          },
+          "connectionRef": {
+            "$ref": "#/definitions/IntegrationRevisionRef"
+          },
+          "localRemoval": {
+            "$ref": "#/definitions/ConnectivityLocalAuthorizationCleanupState"
+          },
+          "operationId": {
+            "type": "string"
+          },
+          "providerRevocationRequested": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "availability",
+          "connectionRef",
+          "localRemoval",
+          "operationId",
+          "providerRevocationRequested"
+        ],
+        "type": "object"
+      },
+      "ConnectivityLocalAuthorizationCleanupState": {
+        "enum": [
+          "unknown",
+          "accepted"
+        ],
+        "type": "string"
+      },
+      "IntegrationRevisionRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "revision"
+        ],
+        "type": "object"
+      },
+      "ReadinessObservationState": {
+        "enum": [
+          "observed",
+          "failed",
+          "unknown",
+          "stale"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "configuration": true,
+      "connectionObservationState": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/ReadinessObservationState"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "enabled": {
+        "type": "boolean"
+      },
+      "hasCredential": {
+        "type": "boolean"
+      },
+      "id": {
+        "type": "string"
+      },
+      "kind": {
+        "type": "string"
+      },
+      "label": {
+        "type": "string"
+      },
+      "localAuthorizationCleanup": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/ConnectivityLocalAuthorizationCleanupReceipt"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "localAuthorizationCleanupObservation": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/ReadinessObservationState"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "resourceGrants": {
+        "default": [],
+        "items": true,
+        "type": "array"
+      },
+      "revision": {
+        "type": "string"
+      },
+      "state": {
+        "$ref": "#/definitions/ConnectionState"
+      }
+    },
+    "required": [
+      "configuration",
+      "enabled",
+      "hasCredential",
+      "id",
+      "kind",
+      "label",
+      "revision",
+      "state"
+    ],
+    "title": "ConnectivityConnection",
+    "type": "object"
+  },
+  "ConnectivityConnectionDirectory": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "ConnectivityConnectionSource": {
+        "additionalProperties": false,
+        "properties": {
+          "current": {
+            "type": "boolean"
+          },
+          "namespaceId": {
+            "type": "string"
+          },
+          "owner": {
+            "$ref": "#/definitions/IntegrationOwner"
+          },
+          "state": {
+            "$ref": "#/definitions/ConnectivityConnectionSourceState"
+          },
+          "workspacePath": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "current",
+          "namespaceId",
+          "owner",
+          "state"
+        ],
+        "type": "object"
+      },
+      "ConnectivityConnectionSourceState": {
+        "enum": [
+          "available",
+          "unregistered",
+          "unavailable"
+        ],
+        "type": "string"
+      },
+      "IntegrationNullable_for_String": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationOwner": {
+        "additionalProperties": false,
+        "description": "Stable owner identity excludes refreshable authorization/configuration generations.",
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "organizationId": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationNullable_for_String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "$ref": "#/definitions/IntegrationNullable_for_String"
+          }
+        },
+        "required": [
+          "accountId",
+          "targetId",
+          "workspaceId"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "complete": {
+        "type": "boolean"
+      },
+      "sources": {
+        "items": {
+          "$ref": "#/definitions/ConnectivityConnectionSource"
+        },
+        "type": "array"
+      },
+      "supported": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "complete",
+      "sources",
+      "supported"
+    ],
+    "title": "ConnectivityConnectionDirectory",
+    "type": "object"
+  },
+  "ConnectivityConnectionLocator": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationNullable_for_String": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationScope": {
+        "additionalProperties": false,
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "identityGeneration": {
+            "type": "string"
+          },
+          "organizationId": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationNullable_for_String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "targetRevision": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "$ref": "#/definitions/IntegrationNullable_for_String"
+          }
+        },
+        "required": [
+          "accountId",
+          "identityGeneration",
+          "targetId",
+          "targetRevision",
+          "workspaceId"
+        ],
+        "type": "object"
+      }
+    },
+    "description": "The original connection namespace remains the owner of credentials and Inbox.",
+    "properties": {
+      "connectionId": {
+        "type": "string"
+      },
+      "namespaceId": {
+        "type": "string"
+      },
+      "scope": {
+        "$ref": "#/definitions/IntegrationScope"
+      }
+    },
+    "required": [
+      "connectionId",
+      "namespaceId",
+      "scope"
+    ],
+    "title": "ConnectivityConnectionLocator",
+    "type": "object"
+  },
+  "ConnectivityConnectionSource": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "ConnectivityConnectionSourceState": {
+        "enum": [
+          "available",
+          "unregistered",
+          "unavailable"
+        ],
+        "type": "string"
+      },
+      "IntegrationNullable_for_String": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationOwner": {
+        "additionalProperties": false,
+        "description": "Stable owner identity excludes refreshable authorization/configuration generations.",
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "organizationId": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationNullable_for_String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "$ref": "#/definitions/IntegrationNullable_for_String"
+          }
+        },
+        "required": [
+          "accountId",
+          "targetId",
+          "workspaceId"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "current": {
+        "type": "boolean"
+      },
+      "namespaceId": {
+        "type": "string"
+      },
+      "owner": {
+        "$ref": "#/definitions/IntegrationOwner"
+      },
+      "state": {
+        "$ref": "#/definitions/ConnectivityConnectionSourceState"
+      },
+      "workspacePath": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "current",
+      "namespaceId",
+      "owner",
+      "state"
+    ],
+    "title": "ConnectivityConnectionSource",
+    "type": "object"
+  },
+  "ConnectivityConnectionSourceState": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "available",
+      "unregistered",
+      "unavailable"
+    ],
+    "title": "ConnectivityConnectionSourceState",
+    "type": "string"
+  },
+  "ConnectivityControlMethod": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "integrations/connectivity/listConnections",
+      "integrations/connectivity/readConnection",
+      "integrations/connectivity/resolveCapability",
+      "integrations/connectivity/readResourceGrant",
+      "integrations/connectivity/prepareConnectionAction",
+      "integrations/connectivity/inspectReadiness",
+      "integrations/connectivity/readReadiness",
+      "integrations/connectivity/verifyCapability",
+      "integrations/connectivity/submitDelivery",
+      "integrations/connectivity/readDelivery",
+      "integrations/connectivity/cancelDelivery",
+      "integrations/connectivity/reconcileDelivery"
+    ],
+    "title": "ConnectivityControlMethod",
+    "type": "string"
+  },
+  "ConnectivityDelivery": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "ChannelDeliveryState": {
+        "enum": [
+          "pending",
+          "sending",
+          "accepted",
+          "failed",
+          "unknown",
+          "cancelled",
+          "blocked"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "cancelled": {
+        "type": "boolean"
+      },
+      "deliveryId": {
+        "type": "string"
+      },
+      "deliveryState": {
+        "$ref": "#/definitions/ChannelDeliveryState"
+      },
+      "receipt": true
+    },
+    "required": [
+      "cancelled",
+      "deliveryId",
+      "deliveryState"
+    ],
+    "title": "ConnectivityDelivery",
+    "type": "object"
+  },
+  "ConnectivityDeliveryAccepted": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "ChannelDeliveryState": {
+        "enum": [
+          "pending",
+          "sending",
+          "accepted",
+          "failed",
+          "unknown",
+          "cancelled",
+          "blocked"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "deliveryId": {
+        "type": "string"
+      },
+      "deliveryState": {
+        "$ref": "#/definitions/ChannelDeliveryState"
+      }
+    },
+    "required": [
+      "deliveryId",
+      "deliveryState"
+    ],
+    "title": "ConnectivityDeliveryAccepted",
+    "type": "object"
+  },
+  "ConnectivityDeliveryContent": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationEntityKind": {
+        "enum": [
+          "model_policy_configuration",
+          "input",
+          "workspace",
+          "workflow",
+          "assistant",
+          "delegation",
+          "destination",
+          "thread",
+          "turn",
+          "task",
+          "artifact",
+          "dataset",
+          "subscription",
+          "publication",
+          "connection",
+          "delivery"
+        ],
+        "type": "string"
+      },
+      "IntegrationEntityRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/definitions/IntegrationEntityKind"
+          },
+          "revision": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "kind"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "artifactRefs": {
+        "default": [],
+        "items": {
+          "$ref": "#/definitions/IntegrationEntityRef"
+        },
+        "type": "array"
+      },
+      "text": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "title": "ConnectivityDeliveryContent",
+    "type": "object"
+  },
+  "ConnectivityDeliveryLookup": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "deliveryId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "deliveryId"
+    ],
+    "title": "ConnectivityDeliveryLookup",
+    "type": "object"
+  },
+  "ConnectivityDeliverySubmit": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "ConnectivityDeliveryContent": {
+        "additionalProperties": false,
+        "properties": {
+          "artifactRefs": {
+            "default": [],
+            "items": {
+              "$ref": "#/definitions/IntegrationEntityRef"
+            },
+            "type": "array"
+          },
+          "text": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "ConnectivityDestinationRef": {
+        "additionalProperties": false,
+        "description": "A revisioned reference is a locator; the current private grant still authorizes it.",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "revision"
+        ],
+        "type": "object"
+      },
+      "IntegrationEntityKind": {
+        "enum": [
+          "model_policy_configuration",
+          "input",
+          "workspace",
+          "workflow",
+          "assistant",
+          "delegation",
+          "destination",
+          "thread",
+          "turn",
+          "task",
+          "artifact",
+          "dataset",
+          "subscription",
+          "publication",
+          "connection",
+          "delivery"
+        ],
+        "type": "string"
+      },
+      "IntegrationEntityRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/definitions/IntegrationEntityKind"
+          },
+          "revision": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "kind"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "content": {
+        "$ref": "#/definitions/ConnectivityDeliveryContent"
+      },
+      "deliveryId": {
+        "type": "string"
+      },
+      "destinationRef": {
+        "$ref": "#/definitions/ConnectivityDestinationRef"
+      },
+      "parentOperationId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "subscriptionRef": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/ConnectivityDestinationRef"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      }
+    },
+    "required": [
+      "content",
+      "deliveryId",
+      "destinationRef"
+    ],
+    "title": "ConnectivityDeliverySubmit",
+    "type": "object"
+  },
+  "ConnectivityDestinationRef": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "description": "A revisioned reference is a locator; the current private grant still authorizes it.",
+    "properties": {
+      "id": {
+        "type": "string"
+      },
+      "revision": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "id",
+      "revision"
+    ],
+    "title": "ConnectivityDestinationRef",
+    "type": "object"
+  },
+  "ConnectivityExternalChatObservation": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "ConnectivityChatKind": {
+        "enum": [
+          "private",
+          "group",
+          "channel"
+        ],
+        "type": "string"
+      },
+      "ConnectivityChatObservationState": {
+        "enum": [
+          "observed",
+          "stale"
+        ],
+        "type": "string"
+      },
+      "ConnectivityExternalChatRange": {
+        "additionalProperties": false,
+        "description": "Operator identity belongs to each message and is not a conversation boundary.",
+        "properties": {
+          "chatId": {
+            "type": "string"
+          },
+          "chatKind": {
+            "$ref": "#/definitions/ConnectivityChatKind"
+          },
+          "connectionId": {
+            "type": "string"
+          },
+          "platform": {
+            "$ref": "#/definitions/MessagingPlatform"
+          },
+          "tenantId": {
+            "type": "string"
+          },
+          "topicId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "version": {
+            "format": "uint8",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "chatId",
+          "chatKind",
+          "connectionId",
+          "platform",
+          "tenantId",
+          "version"
+        ],
+        "type": "object"
+      },
+      "MessagingPlatform": {
+        "enum": [
+          "feishu",
+          "dingtalk",
+          "qq",
+          "weixin",
+          "wecom",
+          "github"
+        ],
+        "type": "string"
+      }
+    },
+    "description": "Target-side metadata projection without message bodies or credentials.",
+    "properties": {
+      "botId": {
+        "type": "string"
+      },
+      "firstObservedAt": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "id": {
+        "type": "string"
+      },
+      "lastObservedAt": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "lastOperatorId": {
+        "type": "string"
+      },
+      "observationState": {
+        "$ref": "#/definitions/ConnectivityChatObservationState"
+      },
+      "range": {
+        "$ref": "#/definitions/ConnectivityExternalChatRange"
+      },
+      "revision": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "botId",
+      "firstObservedAt",
+      "id",
+      "lastObservedAt",
+      "lastOperatorId",
+      "observationState",
+      "range",
+      "revision"
+    ],
+    "title": "ConnectivityExternalChatObservation",
+    "type": "object"
+  },
+  "ConnectivityExternalChatRange": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "ConnectivityChatKind": {
+        "enum": [
+          "private",
+          "group",
+          "channel"
+        ],
+        "type": "string"
+      },
+      "MessagingPlatform": {
+        "enum": [
+          "feishu",
+          "dingtalk",
+          "qq",
+          "weixin",
+          "wecom",
+          "github"
+        ],
+        "type": "string"
+      }
+    },
+    "description": "Operator identity belongs to each message and is not a conversation boundary.",
+    "properties": {
+      "chatId": {
+        "type": "string"
+      },
+      "chatKind": {
+        "$ref": "#/definitions/ConnectivityChatKind"
+      },
+      "connectionId": {
+        "type": "string"
+      },
+      "platform": {
+        "$ref": "#/definitions/MessagingPlatform"
+      },
+      "tenantId": {
+        "type": "string"
+      },
+      "topicId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "version": {
+        "format": "uint8",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "chatId",
+      "chatKind",
+      "connectionId",
+      "platform",
+      "tenantId",
+      "version"
+    ],
+    "title": "ConnectivityExternalChatRange",
+    "type": "object"
+  },
+  "ConnectivityLocalAuthorizationCleanupAvailability": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "unknown",
+      "disabled"
+    ],
+    "title": "ConnectivityLocalAuthorizationCleanupAvailability",
+    "type": "string"
+  },
+  "ConnectivityLocalAuthorizationCleanupReceipt": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "ConnectivityLocalAuthorizationCleanupAvailability": {
+        "enum": [
+          "unknown",
+          "disabled"
+        ],
+        "type": "string"
+      },
+      "ConnectivityLocalAuthorizationCleanupState": {
+        "enum": [
+          "unknown",
+          "accepted"
+        ],
+        "type": "string"
+      },
+      "IntegrationRevisionRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "revision"
+        ],
+        "type": "object"
+      }
+    },
+    "description": "This is the original Main operation receipt, separate from any provider request.",
+    "properties": {
+      "availability": {
+        "$ref": "#/definitions/ConnectivityLocalAuthorizationCleanupAvailability"
+      },
+      "connectionRef": {
+        "$ref": "#/definitions/IntegrationRevisionRef"
+      },
+      "localRemoval": {
+        "$ref": "#/definitions/ConnectivityLocalAuthorizationCleanupState"
+      },
+      "operationId": {
+        "type": "string"
+      },
+      "providerRevocationRequested": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "availability",
+      "connectionRef",
+      "localRemoval",
+      "operationId",
+      "providerRevocationRequested"
+    ],
+    "title": "ConnectivityLocalAuthorizationCleanupReceipt",
+    "type": "object"
+  },
+  "ConnectivityLocalAuthorizationCleanupState": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "unknown",
+      "accepted"
+    ],
+    "title": "ConnectivityLocalAuthorizationCleanupState",
+    "type": "string"
+  },
+  "ConnectivityMethod": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "listConnections",
+      "readConnection",
+      "resolveCapability",
+      "readResourceGrant",
+      "prepareConnectionAction",
+      "inspectReadiness",
+      "readReadiness",
+      "verifyCapability",
+      "submitDelivery",
+      "readDelivery",
+      "cancelDelivery",
+      "reconcileDelivery"
+    ],
+    "title": "ConnectivityMethod",
+    "type": "string"
+  },
+  "ConnectivityPort": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "P-CONNECTION",
+      "P-READINESS",
+      "P-DELIVERY"
+    ],
+    "title": "ConnectivityPort",
+    "type": "string"
+  },
+  "ConnectivityPortCall": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "ConnectivityMethod": {
+        "enum": [
+          "listConnections",
+          "readConnection",
+          "resolveCapability",
+          "readResourceGrant",
+          "prepareConnectionAction",
+          "inspectReadiness",
+          "readReadiness",
+          "verifyCapability",
+          "submitDelivery",
+          "readDelivery",
+          "cancelDelivery",
+          "reconcileDelivery"
+        ],
+        "type": "string"
+      },
+      "ConnectivityPort": {
+        "enum": [
+          "P-CONNECTION",
+          "P-READINESS",
+          "P-DELIVERY"
+        ],
+        "type": "string"
+      },
+      "IntegrationContractVersion": {
+        "enum": [
+          "parallel-v1"
+        ],
+        "type": "string"
+      },
+      "IntegrationNullable_for_String": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "cancellationRef": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "contractVersion": {
+            "$ref": "#/definitions/IntegrationContractVersion"
+          },
+          "expectedRevision": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "operationId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "payload": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "scope": {
+            "$ref": "#/definitions/IntegrationScope"
+          },
+          "timeoutMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "contractVersion",
+          "payload",
+          "requestId",
+          "scope",
+          "timeoutMs"
+        ],
+        "type": "object"
+      },
+      "IntegrationScope": {
+        "additionalProperties": false,
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "identityGeneration": {
+            "type": "string"
+          },
+          "organizationId": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationNullable_for_String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "targetRevision": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "$ref": "#/definitions/IntegrationNullable_for_String"
+          }
+        },
+        "required": [
+          "accountId",
+          "identityGeneration",
+          "targetId",
+          "targetRevision",
+          "workspaceId"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "method": {
+        "$ref": "#/definitions/ConnectivityMethod"
+      },
+      "port": {
+        "$ref": "#/definitions/ConnectivityPort"
+      },
+      "request": {
+        "$ref": "#/definitions/IntegrationRequest"
+      }
+    },
+    "required": [
+      "method",
+      "port",
+      "request"
+    ],
+    "title": "ConnectivityPortCall",
+    "type": "object"
+  },
+  "ConnectivityProbeEvidence": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "ConnectivityToolRef": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "schemaRevision": {
+            "type": "string"
+          },
+          "sourceRevision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "schemaRevision",
+          "sourceRevision"
+        ],
+        "type": "object"
+      },
+      "IntegrationEntityKind": {
+        "enum": [
+          "model_policy_configuration",
+          "input",
+          "workspace",
+          "workflow",
+          "assistant",
+          "delegation",
+          "destination",
+          "thread",
+          "turn",
+          "task",
+          "artifact",
+          "dataset",
+          "subscription",
+          "publication",
+          "connection",
+          "delivery"
+        ],
+        "type": "string"
+      },
+      "IntegrationEntityRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/definitions/IntegrationEntityKind"
+          },
+          "revision": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "kind"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "checkName": {
+        "type": "string"
+      },
+      "identityGeneration": {
+        "type": "string"
+      },
+      "inputSha256": {
+        "type": "string"
+      },
+      "observedAtMs": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "policyRevision": {
+        "type": "string"
+      },
+      "requestRevision": {
+        "type": "string"
+      },
+      "resourceRefs": {
+        "items": {
+          "$ref": "#/definitions/IntegrationEntityRef"
+        },
+        "type": "array"
+      },
+      "resultSha256": {
+        "type": "string"
+      },
+      "targetRevision": {
+        "type": "string"
+      },
+      "toolRef": {
+        "$ref": "#/definitions/ConnectivityToolRef"
+      },
+      "verifierId": {
+        "type": "string"
+      },
+      "verifierVersion": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "checkName",
+      "identityGeneration",
+      "inputSha256",
+      "observedAtMs",
+      "policyRevision",
+      "requestRevision",
+      "resourceRefs",
+      "resultSha256",
+      "targetRevision",
+      "toolRef",
+      "verifierId",
+      "verifierVersion"
+    ],
+    "title": "ConnectivityProbeEvidence",
+    "type": "object"
+  },
+  "ConnectivityProbeReport": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "ConnectivityProbeEvidence": {
+        "additionalProperties": false,
+        "properties": {
+          "checkName": {
+            "type": "string"
+          },
+          "identityGeneration": {
+            "type": "string"
+          },
+          "inputSha256": {
+            "type": "string"
+          },
+          "observedAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "policyRevision": {
+            "type": "string"
+          },
+          "requestRevision": {
+            "type": "string"
+          },
+          "resourceRefs": {
+            "items": {
+              "$ref": "#/definitions/IntegrationEntityRef"
+            },
+            "type": "array"
+          },
+          "resultSha256": {
+            "type": "string"
+          },
+          "targetRevision": {
+            "type": "string"
+          },
+          "toolRef": {
+            "$ref": "#/definitions/ConnectivityToolRef"
+          },
+          "verifierId": {
+            "type": "string"
+          },
+          "verifierVersion": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "checkName",
+          "identityGeneration",
+          "inputSha256",
+          "observedAtMs",
+          "policyRevision",
+          "requestRevision",
+          "resourceRefs",
+          "resultSha256",
+          "targetRevision",
+          "toolRef",
+          "verifierId",
+          "verifierVersion"
+        ],
+        "type": "object"
+      },
+      "ConnectivityProbeState": {
+        "enum": [
+          "verified",
+          "failed",
+          "unknown"
+        ],
+        "type": "string"
+      },
+      "ConnectivityToolRef": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "schemaRevision": {
+            "type": "string"
+          },
+          "sourceRevision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "schemaRevision",
+          "sourceRevision"
+        ],
+        "type": "object"
+      },
+      "IntegrationEntityKind": {
+        "enum": [
+          "model_policy_configuration",
+          "input",
+          "workspace",
+          "workflow",
+          "assistant",
+          "delegation",
+          "destination",
+          "thread",
+          "turn",
+          "task",
+          "artifact",
+          "dataset",
+          "subscription",
+          "publication",
+          "connection",
+          "delivery"
+        ],
+        "type": "string"
+      },
+      "IntegrationEntityRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/definitions/IntegrationEntityKind"
+          },
+          "revision": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "kind"
+        ],
+        "type": "object"
+      },
+      "IntegrationNullable_for_ConnectivityProbeEvidence": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "$ref": "#/definitions/ConnectivityProbeEvidence"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      }
+    },
+    "properties": {
+      "businessValidated": {
+        "type": "boolean"
+      },
+      "capabilityId": {
+        "type": "string"
+      },
+      "evidence": {
+        "$ref": "#/definitions/IntegrationNullable_for_ConnectivityProbeEvidence"
+      },
+      "state": {
+        "$ref": "#/definitions/ConnectivityProbeState"
+      }
+    },
+    "required": [
+      "businessValidated",
+      "capabilityId",
+      "evidence",
+      "state"
+    ],
+    "title": "ConnectivityProbeReport",
+    "type": "object"
+  },
+  "ConnectivityProbeRequest": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "ConnectivityToolRef": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "schemaRevision": {
+            "type": "string"
+          },
+          "sourceRevision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "schemaRevision",
+          "sourceRevision"
+        ],
+        "type": "object"
+      },
+      "IntegrationEntityKind": {
+        "enum": [
+          "model_policy_configuration",
+          "input",
+          "workspace",
+          "workflow",
+          "assistant",
+          "delegation",
+          "destination",
+          "thread",
+          "turn",
+          "task",
+          "artifact",
+          "dataset",
+          "subscription",
+          "publication",
+          "connection",
+          "delivery"
+        ],
+        "type": "string"
+      },
+      "IntegrationEntityRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/definitions/IntegrationEntityKind"
+          },
+          "revision": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "kind"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "capabilityId": {
+        "type": "string"
+      },
+      "connectionId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "resourceRefs": {
+        "items": {
+          "$ref": "#/definitions/IntegrationEntityRef"
+        },
+        "type": "array"
+      },
+      "toolRef": {
+        "$ref": "#/definitions/ConnectivityToolRef"
+      }
+    },
+    "required": [
+      "capabilityId",
+      "resourceRefs",
+      "toolRef"
+    ],
+    "title": "ConnectivityProbeRequest",
+    "type": "object"
+  },
+  "ConnectivityProbeState": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "verified",
+      "failed",
+      "unknown"
+    ],
+    "title": "ConnectivityProbeState",
+    "type": "string"
+  },
+  "ConnectivityReadinessReport": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "ConnectivityCapabilityReadiness": {
+        "additionalProperties": false,
+        "properties": {
+          "capabilityId": {
+            "type": "string"
+          },
+          "policyRevision": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "reasonCode": {
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/definitions/ConnectivityCapabilityState"
+          },
+          "toolRefs": {
+            "items": {
+              "$ref": "#/definitions/ConnectivityToolRef"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "capabilityId",
+          "reasonCode",
+          "state",
+          "toolRefs"
+        ],
+        "type": "object"
+      },
+      "ConnectivityCapabilityState": {
+        "enum": [
+          "ready",
+          "denied",
+          "unavailable",
+          "unknown"
+        ],
+        "type": "string"
+      },
+      "ConnectivityToolRef": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "schemaRevision": {
+            "type": "string"
+          },
+          "sourceRevision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "schemaRevision",
+          "sourceRevision"
+        ],
+        "type": "object"
+      },
+      "ReadinessLevel": {
+        "enum": [
+          "L0",
+          "L1",
+          "L2",
+          "L3",
+          "L4",
+          "L5",
+          "L6"
+        ],
+        "type": "string"
+      },
+      "ReadinessObservation": {
+        "additionalProperties": false,
+        "properties": {
+          "level": {
+            "$ref": "#/definitions/ReadinessLevel"
+          },
+          "reasonCode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "requestRevision": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "state": {
+            "$ref": "#/definitions/ReadinessObservationState"
+          },
+          "toolCount": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "level",
+          "state"
+        ],
+        "type": "object"
+      },
+      "ReadinessObservationState": {
+        "enum": [
+          "observed",
+          "failed",
+          "unknown",
+          "stale"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "capabilities": {
+        "items": {
+          "$ref": "#/definitions/ConnectivityCapabilityReadiness"
+        },
+        "type": "array"
+      },
+      "connectionId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "connectionRevision": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "id": {
+        "type": "string"
+      },
+      "identityGeneration": {
+        "type": "string"
+      },
+      "observations": {
+        "items": {
+          "$ref": "#/definitions/ReadinessObservation"
+        },
+        "type": "array"
+      },
+      "observedAt": {
+        "type": "string"
+      },
+      "requestRevision": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "revision": {
+        "type": "string"
+      },
+      "targetRevision": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "capabilities",
+      "id",
+      "identityGeneration",
+      "observations",
+      "observedAt",
+      "revision",
+      "targetRevision"
+    ],
+    "title": "ConnectivityReadinessReport",
+    "type": "object"
+  },
+  "ConnectivityReadinessRequest": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationEntityKind": {
+        "enum": [
+          "model_policy_configuration",
+          "input",
+          "workspace",
+          "workflow",
+          "assistant",
+          "delegation",
+          "destination",
+          "thread",
+          "turn",
+          "task",
+          "artifact",
+          "dataset",
+          "subscription",
+          "publication",
+          "connection",
+          "delivery"
+        ],
+        "type": "string"
+      },
+      "IntegrationEntityRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/definitions/IntegrationEntityKind"
+          },
+          "revision": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "kind"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "capabilityIds": {
+        "default": [],
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "connectionId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "resourceRefs": {
+        "default": [],
+        "items": {
+          "$ref": "#/definitions/IntegrationEntityRef"
+        },
+        "type": "array"
+      }
+    },
+    "title": "ConnectivityReadinessRequest",
+    "type": "object"
+  },
+  "ConnectivitySettingsFlags": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "enabled": {
+        "type": "boolean"
+      },
+      "servicesEnabled": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "enabled",
+      "servicesEnabled"
+    ],
+    "title": "ConnectivitySettingsFlags",
+    "type": "object"
+  },
+  "ConnectivitySettingsPersisted": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "enabled": {
+        "type": [
+          "boolean",
+          "null"
+        ]
+      },
+      "servicesEnabled": {
+        "type": [
+          "boolean",
+          "null"
+        ]
+      }
+    },
+    "title": "ConnectivitySettingsPersisted",
+    "type": "object"
+  },
+  "ConnectivitySettingsReadResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "ConnectivitySettingsFlags": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "servicesEnabled": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled",
+          "servicesEnabled"
+        ],
+        "type": "object"
+      },
+      "ConnectivitySettingsPersisted": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "servicesEnabled": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      }
+    },
+    "properties": {
+      "connection": {
+        "$ref": "#/definitions/ConnectivitySettingsFlags"
+      },
+      "controlledByOverlay": {
+        "type": "boolean"
+      },
+      "editable": {
+        "type": "boolean"
+      },
+      "effective": {
+        "$ref": "#/definitions/ConnectivitySettingsFlags"
+      },
+      "persisted": {
+        "$ref": "#/definitions/ConnectivitySettingsPersisted"
+      },
+      "restartRequired": {
+        "type": "boolean"
+      },
+      "revision": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "connection",
+      "controlledByOverlay",
+      "editable",
+      "effective",
+      "persisted",
+      "restartRequired",
+      "revision"
+    ],
+    "title": "ConnectivitySettingsReadResult",
+    "type": "object"
+  },
+  "ConnectivitySettingsSaveParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "enabled": {
+        "type": "boolean"
+      },
+      "expectedRevision": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "enabled",
+      "expectedRevision"
+    ],
+    "title": "ConnectivitySettingsSaveParams",
+    "type": "object"
+  },
+  "ConnectivityTaskBindingMutation": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "definitions": {
+      "IntegrationNullable_for_String": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationRevisionRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "revision"
+        ],
+        "type": "object"
+      }
+    },
+    "description": "The task belongs to the actual current Native workspace, never a supplied path.",
+    "oneOf": [
+      {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "enum": [
+              "bindTask"
+            ],
+            "type": "string"
+          },
+          "connectionId": {
+            "type": "string"
+          },
+          "expectedBindingRevision": {
+            "$ref": "#/definitions/IntegrationNullable_for_String"
+          },
+          "externalChatRef": {
+            "$ref": "#/definitions/IntegrationRevisionRef"
+          },
+          "taskThreadId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "action",
+          "connectionId",
+          "expectedBindingRevision",
+          "externalChatRef",
+          "taskThreadId"
+        ],
+        "type": "object"
+      },
+      {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "enum": [
+              "switchTask"
+            ],
+            "type": "string"
+          },
+          "connectionId": {
+            "type": "string"
+          },
+          "expectedBindingRevision": {
+            "type": "string"
+          },
+          "externalChatRef": {
+            "$ref": "#/definitions/IntegrationRevisionRef"
+          },
+          "taskThreadId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "action",
+          "connectionId",
+          "expectedBindingRevision",
+          "externalChatRef",
+          "taskThreadId"
+        ],
+        "type": "object"
+      },
+      {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "enum": [
+              "prepareTaskRuntime"
+            ],
+            "type": "string"
+          },
+          "bindingRef": {
+            "$ref": "#/definitions/IntegrationRevisionRef"
+          },
+          "connectionId": {
+            "type": "string"
+          },
+          "taskThreadId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "action",
+          "bindingRef",
+          "connectionId",
+          "taskThreadId"
+        ],
+        "type": "object"
+      },
+      {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "enum": [
+              "unbindTask"
+            ],
+            "type": "string"
+          },
+          "bindingRef": {
+            "$ref": "#/definitions/IntegrationRevisionRef"
+          },
+          "connectionId": {
+            "type": "string"
+          },
+          "taskThreadId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "action",
+          "bindingRef",
+          "connectionId",
+          "taskThreadId"
+        ],
+        "type": "object"
+      }
+    ],
+    "title": "ConnectivityTaskBindingMutation"
+  },
+  "ConnectivityTaskBindingQuery": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "operationId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "taskThreadId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "taskThreadId"
+    ],
+    "title": "ConnectivityTaskBindingQuery",
+    "type": "object"
+  },
+  "ConnectivityTaskBindingSummaryQuery": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "description": "Bounded read-only projection for tasks already visible in the current workspace.",
+    "properties": {
+      "taskThreadIds": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "taskThreadIds"
+    ],
+    "title": "ConnectivityTaskBindingSummaryQuery",
+    "type": "object"
+  },
+  "ConnectivityTaskLocator": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationNullable_for_String": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationScope": {
+        "additionalProperties": false,
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "identityGeneration": {
+            "type": "string"
+          },
+          "organizationId": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationNullable_for_String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "targetRevision": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "$ref": "#/definitions/IntegrationNullable_for_String"
+          }
+        },
+        "required": [
+          "accountId",
+          "identityGeneration",
+          "targetId",
+          "targetRevision",
+          "workspaceId"
+        ],
+        "type": "object"
+      }
+    },
+    "description": "This refers to an original recoverable task, without copying its history.",
+    "properties": {
+      "scope": {
+        "$ref": "#/definitions/IntegrationScope"
+      },
+      "threadId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "scope",
+      "threadId"
+    ],
+    "title": "ConnectivityTaskLocator",
+    "type": "object"
+  },
+  "ConnectivityTaskRuntimeOwner": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "ConnectivityTaskLocator": {
+        "additionalProperties": false,
+        "description": "This refers to an original recoverable task, without copying its history.",
+        "properties": {
+          "scope": {
+            "$ref": "#/definitions/IntegrationScope"
+          },
+          "threadId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "scope",
+          "threadId"
+        ],
+        "type": "object"
+      },
+      "ConnectivityTaskRuntimePhase": {
+        "description": "Current original runtime ownership, independent of execution authorization.",
+        "enum": [
+          "unowned",
+          "prepared",
+          "resident"
+        ],
+        "type": "string"
+      },
+      "IntegrationNullable_for_String": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationScope": {
+        "additionalProperties": false,
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "identityGeneration": {
+            "type": "string"
+          },
+          "organizationId": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationNullable_for_String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "targetRevision": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "$ref": "#/definitions/IntegrationNullable_for_String"
+          }
+        },
+        "required": [
+          "accountId",
+          "identityGeneration",
+          "targetId",
+          "targetRevision",
+          "workspaceId"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "phase": {
+        "$ref": "#/definitions/ConnectivityTaskRuntimePhase"
+      },
+      "sourceOperationId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "task": {
+        "$ref": "#/definitions/ConnectivityTaskLocator"
+      }
+    },
+    "required": [
+      "phase",
+      "task"
+    ],
+    "title": "ConnectivityTaskRuntimeOwner",
+    "type": "object"
+  },
+  "ConnectivityTaskRuntimePhase": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "description": "Current original runtime ownership, independent of execution authorization.",
+    "enum": [
+      "unowned",
+      "prepared",
+      "resident"
+    ],
+    "title": "ConnectivityTaskRuntimePhase",
+    "type": "string"
+  },
+  "ConnectivityToolRef": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "name": {
+        "type": "string"
+      },
+      "schemaRevision": {
+        "type": "string"
+      },
+      "sourceRevision": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "name",
+      "schemaRevision",
+      "sourceRevision"
+    ],
+    "title": "ConnectivityToolRef",
+    "type": "object"
+  },
+  "MessagingPlatform": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "feishu",
+      "dingtalk",
+      "qq",
+      "weixin",
+      "wecom",
+      "github"
+    ],
+    "title": "MessagingPlatform",
+    "type": "string"
+  },
+  "ReadinessLevel": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "L0",
+      "L1",
+      "L2",
+      "L3",
+      "L4",
+      "L5",
+      "L6"
+    ],
+    "title": "ReadinessLevel",
+    "type": "string"
+  },
+  "ReadinessObservation": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "ReadinessLevel": {
+        "enum": [
+          "L0",
+          "L1",
+          "L2",
+          "L3",
+          "L4",
+          "L5",
+          "L6"
+        ],
+        "type": "string"
+      },
+      "ReadinessObservationState": {
+        "enum": [
+          "observed",
+          "failed",
+          "unknown",
+          "stale"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "level": {
+        "$ref": "#/definitions/ReadinessLevel"
+      },
+      "reasonCode": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "requestRevision": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "state": {
+        "$ref": "#/definitions/ReadinessObservationState"
+      },
+      "toolCount": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "level",
+      "state"
+    ],
+    "title": "ReadinessObservation",
+    "type": "object"
+  },
+  "ReadinessObservationState": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "observed",
+      "failed",
+      "unknown",
+      "stale"
+    ],
+    "title": "ReadinessObservationState",
+    "type": "string"
+  }
+}

@@ -176,17 +176,13 @@ if [[ "$current_user" == root ]]; then
 fi
 
 if [[ "$expected_profile" == dev ]]; then
-  cmp -s "$env_file" "$root_config_dir/.env"
-  [[ "$(stat -c '%a' "$root_config_dir/.env")" == "600" ]]
+  # Repository dotenv is used only for the targeted credential import.
+  if [[ -e "$root_config_dir/.env" ]]; then
+    ! cmp -s "$env_file" "$root_config_dir/.env"
+  fi
   [[ "$(grep -c "args=config migrate " "$cli_log")" -eq 1 ]]
   [[ "$(grep -c "args=config import --scope user --file $repo_dir/crates/kcoder_config/setting_dev_user.jsonc " "$cli_log")" -eq 1 ]]
-  for setting in \
-    'providers.kunlunmeta.endpoint http://127.0.0.1:8000' \
-    'providers.kunlunmeta.no_proxy true' \
-    'base_url http://127.0.0.1:8000' \
-    'provider_no_proxy true'; do
-    [[ "$(grep -c "args=config set --scope user $setting " "$cli_log")" -eq 1 ]]
-  done
+  ! grep -q 'args=config set --scope user' "$cli_log"
   [[ "$(grep -c "args=auth login --provider kunlunmeta --env-file $env_file " "$cli_log")" -eq 1 ]]
   grep -q "kcoder_home=$root_config_dir config=$root_config_dir args=auth login --provider kunlunmeta" "$cli_log"
 else

@@ -14,13 +14,52 @@ pub(super) async fn publish(
         .goal()
         .map(|goal| super::thread_goal(&thread_id, &goal));
     if let Ok(value) =
-        serde_json::to_value(kcoder_app_protocol::ThreadGoalGetResult { thread_id, goal })
+        kcoder_app_rpc_codec::encode(kcoder_app_protocol::ThreadGoalGetResult { thread_id, goal })
     {
         let _ = super::send(
             outbound,
             super::notification(kcoder_app_protocol::method::THREAD_GOAL_UPDATED, value),
         )
         .await;
+    }
+}
+
+/// Publish the current goal without waiting for outbound capacity while holding
+/// the thread activity gate. Capture the goal only after both are available so
+/// a notification queued behind backpressure cannot describe an older state.
+pub(super) async fn publish_current_guarded(
+    engine: &QueryEngine,
+    outbound: &tokio::sync::mpsc::Sender<serde_json::Value>,
+    activity_gate: &tokio::sync::Mutex<()>,
+) {
+    loop {
+        let Ok(permit) = outbound.reserve().await else {
+            return;
+        };
+        let Ok(_gate) = activity_gate.try_lock() else {
+            // A request holding the gate may need this same output slot.
+            drop(permit);
+            tokio::select! {
+                _ = outbound.closed() => return,
+                gate = activity_gate.lock() => drop(gate),
+            }
+            continue;
+        };
+        let thread_id = engine.session_id();
+        let goal = engine
+            .state
+            .goal()
+            .map(|goal| super::thread_goal(&thread_id, &goal));
+        if let Ok(value) = kcoder_app_rpc_codec::encode(kcoder_app_protocol::ThreadGoalGetResult {
+            thread_id,
+            goal,
+        }) {
+            permit.send(super::notification(
+                kcoder_app_protocol::method::THREAD_GOAL_UPDATED,
+                value,
+            ));
+        }
+        return;
     }
 }
 
@@ -81,6 +120,15 @@ pub(super) struct GoalTurn {
     pub(super) permission_mode: Option<PermissionMode>,
 }
 
+/// A notice describes one observed goal revision and scheduler generation.
+/// It is not an authorization or a durable goal outcome.
+pub(super) struct GoalLimitNotice {
+    pub(super) goal_id: String,
+    pub(super) revision: u64,
+    pub(super) generation: u64,
+    pub(super) message: String,
+}
+
 impl GoalTurn {
     pub(super) fn tracks_goal(&self) -> bool {
         self.goal_id.is_some()
@@ -99,6 +147,9 @@ impl GoalLifecycle {
     pub(super) fn invalidate(&mut self) {
         self.generation = self.generation.wrapping_add(1);
         self.ready = None;
+        // A pending notice for the old generation may never have reached the
+        // client. A later explicit resumption may need a fresh notice.
+        self.limit_notified = false;
         if let Some(cancel) = self.automatic.take() {
             cancel.cancel();
         }
@@ -167,16 +218,37 @@ impl GoalLifecycle {
                 ))
     }
 
-    pub(super) fn take_limit_notice(&mut self, engine: &QueryEngine) -> Option<String> {
+    pub(super) fn take_limit_notice(&mut self, engine: &QueryEngine) -> Option<GoalLimitNotice> {
         if self.automatic_allowed(engine) || self.limit_notified {
             return None;
         }
+        let goal = engine.state.goal()?;
         self.ready = None;
         self.limit_notified = true;
-        Some(format!(
-            "[goal_auto_continuation_limit] Automatic goal continuation stopped (limit: {}). The goal is not marked complete. Review its state before sending another instruction or creating a new goal.",
-            engine.settings.read().unwrap().goal_max_auto_continuations
-        ))
+        Some(GoalLimitNotice {
+            goal_id: goal.goal_id,
+            revision: goal.revision,
+            generation: self.generation,
+            message: format!(
+                "[goal_auto_continuation_limit] Automatic goal continuation stopped (limit: {}). The goal is not marked complete. Review its state before sending another instruction or creating a new goal.",
+                engine.settings.read().unwrap().goal_max_auto_continuations
+            ),
+        })
+    }
+
+    pub(super) fn limit_notice_is_current(
+        &mut self,
+        engine: &QueryEngine,
+        notice: &GoalLimitNotice,
+    ) -> bool {
+        self.generation == notice.generation
+            && self.limit_notified
+            && engine.state.goal().is_some_and(|goal| {
+                goal.goal_id == notice.goal_id
+                    && goal.revision == notice.revision
+                    && goal.status.is_active()
+            })
+            && !self.automatic_allowed(engine)
     }
 
     pub(super) fn begin(
@@ -185,6 +257,11 @@ impl GoalLifecycle {
         permission_mode: Option<PermissionMode>,
         automatic: Option<CancellationToken>,
     ) -> GoalTurn {
+        if automatic.is_none() {
+            // A foreground user turn starts a new observation opportunity;
+            // it does not reset the existing automatic-continuation count.
+            self.limit_notified = false;
+        }
         let goal_id = engine.state.goal().map(|goal| goal.goal_id);
         let inherited_mode = if automatic.is_some() {
             self.ready

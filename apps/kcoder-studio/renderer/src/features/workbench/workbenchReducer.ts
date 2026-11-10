@@ -21,7 +21,11 @@ import {
 import { workbenchDeviceMatchesId } from '@/lib/workbench-device'
 import { getRuntimeTaskWorkspacePath, removeRuntimeTasks } from './workbenchRuntimeHelpers'
 import { debugRuntimeSidebarState, summarizeRuntimeWorkTaskIds } from './runtimeSidebarDiagnostics'
-import { reconcileRuntimeTaskActivity, updateRuntimeWorkActivity, type RuntimeTaskActivity } from './runtimeWorkActivity'
+import {
+  reconcileRuntimeTaskActivity,
+  updateRuntimeWorkActivity,
+  type RuntimeTaskActivity,
+} from './runtimeWorkActivity'
 
 type WorkbenchDeviceStatus = DeviceInfo['status']
 
@@ -84,6 +88,12 @@ export type WorkbenchAction =
   | { type: 'bootstrap_failed'; error: string }
   | { type: 'project_created'; project: ProjectWithTasks }
   | { type: 'project_selected'; project: ProjectWithTasks }
+  | {
+      type: 'expert_draft_selected'
+      expert: import('@/types/workbench').ExpertTaskSelection | null
+      draftKey: number
+      projectId: number | null
+    }
   | { type: 'runtime_project_removed'; projectId: number }
   | { type: 'device_workspace_prepared'; mapping: DeviceWorkspaceResponse }
   | {
@@ -102,6 +112,7 @@ export type WorkbenchAction =
   | { type: 'project_removed'; projectId: number }
   | {
       type: 'project_cleared'
+      expert?: Omit<import('@/types/workbench').ExpertTaskDraft, 'draftKey'>
       standaloneDeviceId?: string | null
       standaloneWorkspacePath?: string | null
       startFreshChat?: boolean
@@ -624,6 +635,9 @@ function reconcileCurrentRuntimeTaskAddress(
   if (hydratedCurrentDeviceTask) {
     return {
       ...currentRuntimeTask,
+      ...(!currentRuntimeTask.workspacePath && hydratedCurrentDeviceTask.workspacePath
+        ? { workspacePath: hydratedCurrentDeviceTask.workspacePath }
+        : {}),
       ...(hydratedCurrentDeviceTask.threadId
         ? { threadId: hydratedCurrentDeviceTask.threadId }
         : {}),
@@ -860,6 +874,25 @@ function upsertPreparedRuntimeWorkspace(
 }
 
 export function workbenchReducer(state: WorkbenchState, action: WorkbenchAction): WorkbenchState {
+  if (action.type === 'expert_draft_selected') {
+    if (
+      state.currentRuntimeTask ||
+      action.draftKey !== state.standaloneChatKey ||
+      action.projectId !== (state.currentProject?.id ?? null)
+    )
+      return state
+    return {
+      ...state,
+      expertDraft: action.expert
+        ? {
+            ...action.expert,
+            draftKey: action.draftKey,
+            projectId: action.projectId,
+            entry: 'task',
+          }
+        : null,
+    }
+  }
   switch (action.type) {
     case 'bootstrapped': {
       const devices = keepDevicesOnTransientEmpty(state.devices, action.devices)
@@ -895,7 +928,11 @@ export function workbenchReducer(state: WorkbenchState, action: WorkbenchAction)
       const mergedRuntimeWork =
         action.runtimeWork === undefined
           ? state.runtimeWork
-          : mergeRuntimeWorkPreservingTaskOrder(state.runtimeWork, action.runtimeWork, action.activityWatermark)
+          : mergeRuntimeWorkPreservingTaskOrder(
+              state.runtimeWork,
+              action.runtimeWork,
+              action.activityWatermark
+            )
       const runtimeWork = mergedRuntimeWork
       const refreshedState = {
         ...state,
@@ -1009,6 +1046,7 @@ export function workbenchReducer(state: WorkbenchState, action: WorkbenchAction)
     case 'project_selected':
       return {
         ...state,
+        expertDraft: null,
         currentProject: action.project,
         selectedDeviceWorkspaceId: null,
         pendingProjectWorkspaceProjectId: null,
@@ -1086,6 +1124,7 @@ export function workbenchReducer(state: WorkbenchState, action: WorkbenchAction)
     case 'project_workspace_selected':
       return {
         ...state,
+        expertDraft: null,
         currentProject: action.project,
         selectedDeviceWorkspaceId: action.deviceWorkspaceId,
         pendingProjectWorkspaceProjectId:
@@ -1114,6 +1153,12 @@ export function workbenchReducer(state: WorkbenchState, action: WorkbenchAction)
     case 'project_cleared':
       return {
         ...state,
+        expertDraft: action.expert
+          ? {
+              ...action.expert,
+              draftKey: state.standaloneChatKey + (action.startFreshChat ? 1 : 0),
+            }
+          : null,
         currentProject: null,
         selectedDeviceWorkspaceId: null,
         pendingProjectWorkspaceProjectId: null,
@@ -1184,27 +1229,41 @@ export function workbenchReducer(state: WorkbenchState, action: WorkbenchAction)
       return runtimeWork === state.runtimeWork ? state : { ...state, runtimeWork }
     }
     case 'runtime_target_invalidated': {
-      const keep = (workspace: RuntimeDeviceWorkspace) => workspace.deviceId !== action.targetId
-        && workspace.remoteHostId !== action.targetId
-      const runtimeWork = state.runtimeWork ? {
-        ...state.runtimeWork,
-        projects: state.runtimeWork.projects.map(project => {
-          const deviceWorkspaces = project.deviceWorkspaces.filter(keep)
-          return { ...project, deviceWorkspaces, totalTasks: countRuntimeTasks(deviceWorkspaces) }
-        }).filter(project => project.deviceWorkspaces.length > 0),
-        chats: state.runtimeWork.chats.filter(keep),
-      } : null
+      const keep = (workspace: RuntimeDeviceWorkspace) =>
+        workspace.deviceId !== action.targetId && workspace.remoteHostId !== action.targetId
+      const runtimeWork = state.runtimeWork
+        ? {
+            ...state.runtimeWork,
+            projects: state.runtimeWork.projects
+              .map(project => {
+                const deviceWorkspaces = project.deviceWorkspaces.filter(keep)
+                return {
+                  ...project,
+                  deviceWorkspaces,
+                  totalTasks: countRuntimeTasks(deviceWorkspaces),
+                }
+              })
+              .filter(project => project.deviceWorkspaces.length > 0),
+            chats: state.runtimeWork.chats.filter(keep),
+          }
+        : null
       if (runtimeWork) runtimeWork.totalTasks = countRuntimeWorkTasks(runtimeWork)
       const current = state.currentRuntimeTask?.deviceId === action.targetId
       const blank = !state.currentRuntimeTask && state.standaloneDeviceId === action.targetId
       return {
-        ...state, runtimeWork,
-        ...(current || blank ? {
-          currentRuntimeTask: null, currentProject: null,
-          selectedDeviceWorkspaceId: null, pendingProjectWorkspaceProjectId: null,
-          standaloneDeviceId: null, standaloneWorkspacePath: null,
-          standaloneChatKey: state.standaloneChatKey + 1,
-        } : {}),
+        ...state,
+        runtimeWork,
+        ...(current || blank
+          ? {
+              currentRuntimeTask: null,
+              currentProject: null,
+              selectedDeviceWorkspaceId: null,
+              pendingProjectWorkspaceProjectId: null,
+              standaloneDeviceId: null,
+              standaloneWorkspacePath: null,
+              standaloneChatKey: state.standaloneChatKey + 1,
+            }
+          : {}),
       }
     }
     case 'current_task_cleared':

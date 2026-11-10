@@ -3,17 +3,20 @@ use anyhow::{Context, Result};
 use kcoder_api::{MissingApiKeyError, Provider, ProviderFactory, ProviderKind};
 use kcoder_config::{Settings, SettingsLoader};
 use std::sync::Arc;
+#[path = "model_configuration/credential_provider.rs"]
 mod credential_provider;
+#[path = "model_configuration/snapshot.rs"]
 mod snapshot;
+pub use snapshot::MissingSnapshotCredentialAuthority;
 
 #[derive(Clone)]
-pub(crate) struct ModelConfiguration {
+pub struct ModelConfiguration {
     loader: SettingsLoader,
     cli: crate::Cli,
 }
 
 impl ModelConfiguration {
-    pub(crate) fn new(loader: SettingsLoader, cli: crate::Cli) -> Self {
+    pub fn new(loader: SettingsLoader, cli: crate::Cli) -> Self {
         Self { loader, cli }
     }
 
@@ -105,7 +108,7 @@ impl ModelConfiguration {
         Ok(fields)
     }
 
-    pub(crate) fn provider_for_kind(
+    pub fn provider_for_kind(
         &self,
         settings: &Settings,
         kind: ProviderKind,
@@ -118,6 +121,7 @@ impl ModelConfiguration {
             Err(error) if error.downcast_ref::<MissingApiKeyError>().is_some() => {
                 Ok(Arc::new(crate::SignedOutProvider {
                     name: kind.as_str(),
+                    error_type: "missing_api_key",
                     error_message: error.to_string(),
                 }))
             }
@@ -125,7 +129,7 @@ impl ModelConfiguration {
         }
     }
 
-    pub(crate) fn with_live_credentials(
+    pub fn with_live_credentials(
         &self,
         settings: &Settings,
         kind: ProviderKind,
@@ -184,7 +188,13 @@ impl ModelConfiguration {
     }
 }
 
-impl kcoder_engine::ClientModelConfiguration for ModelConfiguration {
+impl kcoder_api::ClientModelConfiguration for ModelConfiguration {
+    fn web_settings(&self) -> Result<Option<kcoder_config::WebSettings>> {
+        Ok(Some(
+            self.loader.load_read_only_configuration()?.settings.web,
+        ))
+    }
+
     fn snapshot_api_format(&self, snapshot: &[u8]) -> Result<Option<kcoder_config::ApiFormat>> {
         self.snapshot_format(snapshot)
     }
@@ -307,7 +317,7 @@ impl kcoder_engine::ClientModelConfiguration for ModelConfiguration {
 mod default_selection_tests {
     use super::*;
     use clap::Parser;
-    use kcoder_engine::ClientModelConfiguration;
+    use kcoder_api::ClientModelConfiguration;
 
     #[test]
     fn object_overlays_apply_to_default_and_explicit_models_without_copying_old_model_fields() {
@@ -413,7 +423,7 @@ mod default_selection_tests {
 mod summary_source_tests {
     use super::*;
     use clap::Parser;
-    use kcoder_engine::ClientModelConfiguration;
+    use kcoder_api::ClientModelConfiguration;
     #[test]
     fn catalog_availability_uses_the_same_explicit_credential_as_the_session() {
         let temp = tempfile::tempdir().unwrap();
@@ -501,3 +511,7 @@ mod summary_source_tests {
         assert!(summary.sources["tools.profile"].contains("cli_environment"));
     }
 }
+
+#[cfg(test)]
+#[path = "model_configuration_web_tests.rs"]
+mod web_source_tests;

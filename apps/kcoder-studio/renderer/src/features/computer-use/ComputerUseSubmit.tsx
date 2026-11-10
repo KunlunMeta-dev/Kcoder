@@ -4,7 +4,7 @@ import { Monitor } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ModalDialog } from '@/components/ui/modal-dialog'
 import { useTranslation } from '@/hooks/useTranslation'
-import { requestLocalExecutor } from '@/tauri/localExecutor'
+import { requestLocalExecutor } from '@/host/localExecutor'
 
 export function ComputerUseSubmit({
   serverId,

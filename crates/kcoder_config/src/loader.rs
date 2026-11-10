@@ -1,9 +1,11 @@
 #[path = "provider_transaction.rs"]
 mod provider_transaction;
 
+#[cfg(test)]
+use super::CURRENT_CONFIG_VERSION;
 use super::{
-    CURRENT_CONFIG_VERSION, Settings, default_settings_document,
-    normalize_legacy_profile_references, normalize_legacy_settings_document,
+    Settings, default_settings_document, migrate_settings_document,
+    normalize_legacy_profile_references,
 };
 use anyhow::{Context, Result, bail};
 use fs2::FileExt;
@@ -101,6 +103,7 @@ pub struct SettingsLoader {
     executable_dir: Option<PathBuf>,
     overlay_files: Vec<PathBuf>,
     frozen_overlays: std::collections::BTreeMap<PathBuf, FrozenOverlay>,
+    project_document: Option<FrozenOverlay>,
 }
 
 #[derive(Clone, Default, PartialEq, Eq)]
@@ -108,6 +111,7 @@ pub struct CredentialStore {
     pub credentials: BTreeMap<String, String>,
     pub revoked: std::collections::BTreeSet<String>,
     pub plugin_credentials: crate::plugin_credentials::PluginCredentialDocument,
+    pub imported_credentials: crate::imported_credentials::ImportedCredentialDocument,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -146,6 +150,7 @@ mod tests;
 mod frozen_overlay_tests;
 
 mod discovery;
+mod test_harness_profile;
 #[cfg(test)]
 use discovery::resolve_user_config_dir;
 pub use discovery::user_config_dir;
@@ -165,6 +170,8 @@ mod persistence;
 pub use persistence::ensure_project_gitignore;
 pub use persistence::read_scope;
 pub use persistence::read_settings_file;
+pub use persistence::read_settings_file_if_present;
+pub(crate) use persistence::reconcile_jsonc_object;
 pub use persistence::update_scope;
 pub use persistence::update_settings_and_credentials;
 pub use persistence::update_settings_file;

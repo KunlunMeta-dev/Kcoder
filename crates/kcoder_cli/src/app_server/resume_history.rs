@@ -24,12 +24,26 @@ pub(super) async fn response(
         before_cursor: None,
     };
     let page = if options.indexed {
-        indexed_transcript::read(engine, params, &running, projection).await
+        indexed_transcript::read(
+            engine,
+            params,
+            &running,
+            projection,
+            state.transcript_snapshot_v1,
+            state.transcript_observation_v1,
+        )
+        .await
     } else {
-        thread_transcript(engine, params, &running, projection).await
+        thread_transcript(engine, params, &running, projection)
+            .await
+            .map(|page| indexed_transcript::ReadOutcome::legacy(page, state.transcript_snapshot_v1))
     };
     let result = match page {
-        Ok(page) => serde_json::to_value(ThreadResumeResult::from(page))?,
+        Ok(mut page) => {
+            recent_error::decorate(engine, &mut page.page.thread, projection.negotiated);
+            let page = page.finish(projection);
+            serde_json::to_value(ThreadResumeResult::from(page))?
+        }
         // Preserve the normal activation projection, including compatible
         // snapshot extensions not modeled by the typed transcript Thread.
         Err(_) => json!({"thread":thread,"history":{
@@ -99,6 +113,202 @@ mod tests {
         (engine, path)
     }
 
+    fn enable_snapshot_tracking(engine: &QueryEngine, history_path: &Path) {
+        use kcoder_state::history_index::journal::{JournalDomain, JournalFence};
+        let client = engine.client_storage_root();
+        ensure_private_artifact_directory(&client).unwrap();
+        for (root, domain) in [
+            (history_path.parent().unwrap(), JournalDomain::History),
+            (client.as_path(), JournalDomain::ClientMetadata),
+        ] {
+            JournalFence::try_acquire(root, domain)
+                .unwrap()
+                .activate()
+                .unwrap();
+        }
+    }
+
+    #[tokio::test]
+    async fn transcript_snapshot_indexed_pages_and_inline_resume_share_proven_identity() {
+        let root = tempfile::tempdir().unwrap();
+        let (engine, path) = engine_with_history(root.path());
+        enable_snapshot_tracking(&engine, &path);
+        let manager = ThreadManager::default();
+        let projection = ThreadRunProjection::for_thread(&manager, false, &engine.session_id());
+        let params = |before_cursor| ThreadReadParams {
+            thread_id: engine.session_id(),
+            limit: Some(2),
+            before_cursor,
+        };
+        let first = indexed_transcript::read(
+            &engine,
+            params(None),
+            &HashSet::new(),
+            projection,
+            true,
+            false,
+        )
+        .await
+        .unwrap()
+        .finish(projection);
+        assert!(matches!(
+            first.transcript_snapshot_v1,
+            Some(kcoder_app_protocol::ThreadTranscriptSnapshotV1::Available { .. })
+        ));
+        let older = indexed_transcript::read(
+            &engine,
+            params(first.before_cursor.clone()),
+            &HashSet::new(),
+            projection,
+            true,
+            false,
+        )
+        .await
+        .unwrap()
+        .finish(projection);
+        assert_eq!(first.transcript_snapshot_v1, older.transcript_snapshot_v1);
+        assert_eq!(first.range_start, older.range_end);
+        let state = ConnectionState {
+            transcript_snapshot_v1: true,
+            ..ConnectionState::default()
+        };
+        let inline = response(
+            json!(1),
+            &engine,
+            &manager,
+            &state,
+            thread_snapshot(&engine, false),
+            Some(&ThreadResumeHistoryOptionsV1 {
+                limit: Some(2),
+                indexed: true,
+            }),
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            inline["result"]["history"]["page"]["transcriptSnapshotV1"],
+            serde_json::to_value(&first.transcript_snapshot_v1).unwrap()
+        );
+        let legacy = response(
+            json!(2),
+            &engine,
+            &manager,
+            &state,
+            thread_snapshot(&engine, false),
+            Some(&ThreadResumeHistoryOptionsV1 {
+                limit: Some(2),
+                indexed: false,
+            }),
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            legacy["result"]["history"]["page"]["transcriptSnapshotV1"],
+            json!({"status":"unavailable","code":"legacyReader"})
+        );
+        let unnegotiated = response(
+            json!(3),
+            &engine,
+            &manager,
+            &ConnectionState::default(),
+            thread_snapshot(&engine, false),
+            Some(&ThreadResumeHistoryOptionsV1 {
+                limit: Some(2),
+                indexed: true,
+            }),
+        )
+        .await
+        .unwrap();
+        assert!(
+            unnegotiated["result"]["history"]["page"]
+                .get("transcriptSnapshotV1")
+                .is_none()
+        );
+    }
+
+    #[tokio::test]
+    async fn transcript_snapshot_history_and_client_metadata_independently_invalidate_old_pages() {
+        use kcoder_state::history_index::journal::{JournalDomain, JournalFence};
+        let root = tempfile::tempdir().unwrap();
+        let (engine, path) = engine_with_history(root.path());
+        enable_snapshot_tracking(&engine, &path);
+        let projection = ThreadRunProjection {
+            negotiated: false,
+            facts: None,
+        };
+        let params = |before_cursor| ThreadReadParams {
+            thread_id: engine.session_id(),
+            limit: Some(2),
+            before_cursor,
+        };
+        let mut previous = indexed_transcript::read(
+            &engine,
+            params(None),
+            &HashSet::new(),
+            projection,
+            true,
+            false,
+        )
+        .await
+        .unwrap()
+        .finish(projection);
+        for domain in [JournalDomain::History, JournalDomain::ClientMetadata] {
+            match domain {
+                JournalDomain::History => {
+                    engine
+                        .state
+                        .add_message(kcoder_types::Message::user_text("new committed body"));
+                    engine.state.save_history().unwrap();
+                }
+                JournalDomain::ClientMetadata => {
+                    let client = engine.client_storage_root();
+                    let mut fence = JournalFence::try_acquire(&client, domain).unwrap();
+                    fence.begin(&engine.session_id()).unwrap().finish().unwrap();
+                }
+            }
+            assert!(
+                indexed_transcript::read(
+                    &engine,
+                    params(previous.before_cursor.clone()),
+                    &HashSet::new(),
+                    projection,
+                    true,
+                    false,
+                )
+                .await
+                .is_err()
+            );
+            let next = indexed_transcript::read(
+                &engine,
+                params(None),
+                &HashSet::new(),
+                projection,
+                true,
+                false,
+            )
+            .await
+            .unwrap()
+            .finish(projection);
+            match (
+                &previous.transcript_snapshot_v1,
+                &next.transcript_snapshot_v1,
+            ) {
+                (
+                    Some(kcoder_app_protocol::ThreadTranscriptSnapshotV1::Available {
+                        snapshot_id: old,
+                        ..
+                    }),
+                    Some(kcoder_app_protocol::ThreadTranscriptSnapshotV1::Available {
+                        snapshot_id: new,
+                        ..
+                    }),
+                ) => assert_ne!(old, new),
+                other => panic!("tracked committed source must remain proven: {other:?}"),
+            }
+            previous = next;
+        }
+    }
+
     #[tokio::test]
     async fn resume_history_page_reuses_both_existing_projections_and_cursors() {
         let root = tempfile::tempdir().unwrap();
@@ -130,11 +340,24 @@ mod tests {
             };
             let projection = ThreadRunProjection::for_thread(&manager, true, &engine.session_id());
             let expected = if indexed {
-                indexed_transcript::read(&engine, params, &HashSet::new(), projection).await
+                indexed_transcript::read(
+                    &engine,
+                    params,
+                    &HashSet::new(),
+                    projection,
+                    state.transcript_snapshot_v1,
+                    state.transcript_observation_v1,
+                )
+                .await
             } else {
-                thread_transcript(&engine, params, &HashSet::new(), projection).await
+                thread_transcript(&engine, params, &HashSet::new(), projection)
+                    .await
+                    .map(|page| {
+                        indexed_transcript::ReadOutcome::legacy(page, state.transcript_snapshot_v1)
+                    })
             }
-            .unwrap();
+            .unwrap()
+            .finish(projection);
             assert_eq!(
                 actual["result"],
                 serde_json::to_value(ThreadResumeResult::from(expected)).unwrap()
@@ -158,9 +381,12 @@ mod tests {
                 },
                 &HashSet::new(),
                 projection,
+                state.transcript_snapshot_v1,
+                state.transcript_observation_v1,
             )
             .await
-            .unwrap();
+            .unwrap()
+            .finish(projection);
             assert!(
                 older.range_end
                     <= actual["result"]["history"]["page"]["rangeStart"]
@@ -213,6 +439,8 @@ mod tests {
         let result = ThreadResumeResult::from(ThreadReadResult {
             thread,
             messages: vec![ThreadMessage {
+                file_changes_capture: None,
+                review_evidence: None,
                 id: "message-1".into(),
                 client_message_id: None,
                 turn_id: None,
@@ -233,6 +461,8 @@ mod tests {
             range_end: 1,
             has_more_before: false,
             before_cursor: None,
+            transcript_snapshot_v1: None,
+            transcript_observation_v1: None,
         });
         let id = json!("请求身份".repeat(100));
         let size = serde_json::to_vec(&success_response(

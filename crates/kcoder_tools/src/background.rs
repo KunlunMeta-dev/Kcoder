@@ -84,7 +84,11 @@ pub enum BackgroundJobEvent {
     /// A background job finished successfully.
     Completed { id: String, output: ToolOutput },
     /// A background job failed.
-    Failed { id: String, error: String },
+    Failed {
+        id: String,
+        error: String,
+        execution_metadata: Vec<crate::ToolExecutionMetadata>,
+    },
     /// A sub-agent stopped at a complete Provider/tool boundary and remains resumable.
     Paused { id: String, reason: String },
     /// A sub-agent stopped gracefully at a complete boundary and is not resumable.
@@ -232,8 +236,8 @@ pub async fn wait_with_foreground_budget(
                 Ok(BackgroundJobEvent::Completed { id: event_id, output }) if event_id == id => {
                     return Ok(ForegroundWaitOutcome::Completed(output));
                 }
-                Ok(BackgroundJobEvent::Failed { id: event_id, error }) if event_id == id => {
-                    return Ok(ForegroundWaitOutcome::Completed(ToolOutput::error(error)));
+                Ok(BackgroundJobEvent::Failed { id: event_id, error, execution_metadata }) if event_id == id => {
+                    return Ok(ForegroundWaitOutcome::Completed(failed_output(error, execution_metadata)));
                 }
                 Ok(BackgroundJobEvent::Paused { id: event_id, reason }) if event_id == id => {
                     return Ok(ForegroundWaitOutcome::Completed(ToolOutput::error(reason)));
@@ -289,8 +293,8 @@ pub async fn wait_for_foreground_completion(
                 Ok(BackgroundJobEvent::Completed { id: event_id, output }) if event_id == id => {
                     return Ok(ForegroundWaitOutcome::Completed(output));
                 }
-                Ok(BackgroundJobEvent::Failed { id: event_id, error }) if event_id == id => {
-                    return Ok(ForegroundWaitOutcome::Completed(ToolOutput::error(error)));
+                Ok(BackgroundJobEvent::Failed { id: event_id, error, execution_metadata }) if event_id == id => {
+                    return Ok(ForegroundWaitOutcome::Completed(failed_output(error, execution_metadata)));
                 }
                 Ok(BackgroundJobEvent::Paused { id: event_id, reason }) if event_id == id => {
                     return Ok(ForegroundWaitOutcome::Completed(ToolOutput::error(reason)));
@@ -341,6 +345,15 @@ fn terminal_output_from_state(
         TaskStatus::Halted => Some(ToolOutput::error("sub-agent halted")),
         TaskStatus::Pending | TaskStatus::Running | TaskStatus::Unknown(_) => None,
     }
+}
+
+fn failed_output(
+    error: String,
+    execution_metadata: Vec<crate::ToolExecutionMetadata>,
+) -> ToolOutput {
+    let mut output = ToolOutput::error(error);
+    output.execution_metadata = execution_metadata;
+    output
 }
 
 #[cfg(test)]

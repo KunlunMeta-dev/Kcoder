@@ -1,0 +1,29 @@
+[package]
+name = "kcoder_native_model_admission"
+description = "Organization model admission, task budgets and Native Workflow provenance."
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+anyhow.workspace = true
+kcoder_api = { path = "../../../kcoder_api" }
+kcoder_config = { path = "../../../kcoder_config" }
+kcoder_engine = { path = "../../../kcoder_engine" }
+kcoder_native_receipts = { path = "../native_receipts" }
+kcoder_native_scope = { path = "../native_scope" }
+kcoder_runtime_driver = { path = "../runtime_driver" }
+kcoder_state = { path = "../../../kcoder_state" }
+kcoder_types = { path = "../../../kcoder_types" }
+kcoder_workflow_observations = { path = "../../../kcoder_tools/internal/workflow_observations" }
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+tracing.workspace = true
+
+[lib]
+path = "../../src/internal/native_model_admission/lib.rs"

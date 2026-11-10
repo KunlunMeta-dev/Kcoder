@@ -21,7 +21,7 @@ import { isKCoderGatewayPage } from '@/kcoder/gatewayRpc'
 import { queuePluginReferenceTrial, queuePluginTrial } from '@/features/plugins/pluginTrial'
 import { localPathExists } from '@/lib/local-terminal'
 import { buildRuntimeTaskRoute, navigateTo } from '@/lib/navigation'
-import { isTauriRuntime } from '@/lib/runtime-environment'
+import { isGatewayRuntime } from '@/lib/runtime-environment'
 import { isLocalFirstAppRuntime } from '@/lib/runtime-mode'
 import type { InstalledPlugin, LocalDeviceSkill, RuntimeTaskAddress } from '@/types/api'
 
@@ -84,7 +84,7 @@ export function SitesPage() {
   const { logout } = useAuth()
   const cloudConnection = useCloudConnection()
   const isMobile = useIsMobile()
-  const isTauri = isTauriRuntime()
+  const isGateway = isGatewayRuntime()
   const [settingsOpen, setSettingsOpen] = useState(false)
   const mobileSettingsLayout = useSettingsLayout(isMobile, settingsOpen)
   const [drawerOpen, setDrawerOpen] = useState(false)
@@ -136,7 +136,6 @@ export function SitesPage() {
     const token = cloudConnection.token
     return createSitesApi(cloudConnection.apiBaseUrl, {
       getToken: () => token,
-      redirectOnUnauthorized: false,
     })
   }, [
     apiBaseUrl,
@@ -253,7 +252,7 @@ export function SitesPage() {
   }
 
   const topBarLeftActions =
-    !isMobile && !isTauri ? (
+    !isMobile && !isGateway ? (
       sidebarCollapsed ? (
         <DesktopWindowControls
           sidebarCollapsed

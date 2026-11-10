@@ -89,7 +89,7 @@ describe('CloudConnectionProvider', () => {
     const error = onError.mock.calls[0][0]
     expect(error).toBeInstanceOf(Error)
     expect((error as Error).message).toContain('健康检查失败')
-    expect((error as Error).message).toContain('HTTP 权限拦截')
+    expect((error as Error).message).toContain('url not allowed on the configured scope')
     expect(httpMocks.post).not.toHaveBeenCalled()
   })
 

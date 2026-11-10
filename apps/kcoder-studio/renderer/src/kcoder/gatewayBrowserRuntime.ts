@@ -1,6 +1,14 @@
 import type { GatewayServer } from './gatewayRpc'
 import { assertRemoteBrowserAvailable } from './gatewayBrowserPreflight'
 import type { GatewayClient } from './gatewayRuntimeTypes'
+import { isContract } from '../../../shared/generated/validator.mjs'
+import type {
+  BrowserAccountProfile,
+  BrowserProfileSelection,
+  BrowserHandoffState,
+} from '../../../shared/generated/contracts'
+import { captureAccountContextRevision } from './accountContextEvents'
+import { hookTargetScope } from './gatewayHookConfiguration'
 
 const MAX_REMOTE_BROWSER_SESSIONS = 4
 const REMOTE_BROWSER_FRAME_INTERVAL_MS = 250
@@ -43,6 +51,12 @@ interface GatewayBrowserState {
   lastPointerMoveAt: number
   inputQueue: GatewayBrowserInputEntry[]
   inputProcessing: boolean
+  profile: BrowserAccountProfile | null
+  profileKey: string
+  profileSelection: BrowserProfileSelection | null
+  handoff: BrowserHandoffState | null
+  controlPending: boolean
+  controlUncertain: boolean
 }
 
 function record(value: unknown): Record<string, unknown> {
@@ -81,6 +95,7 @@ export class GatewayBrowserRuntime {
     string,
     Promise<ReturnType<GatewayBrowserRuntime['browserPageResult']>>
   >()
+  private readonly openingProfileKeys = new Map<string, string>()
   private readonly resolveServerForLabel: GatewayBrowserRuntimeOptions['resolveServerForLabel']
   private readonly connectBrowserClient: GatewayBrowserRuntimeOptions['connectBrowserClient']
 
@@ -94,6 +109,11 @@ export class GatewayBrowserRuntime {
       nativeLabel: state.nativeLabel,
       title: state.page.title,
       url: state.page.url,
+      ...(state.profile ? { profile: state.profile } : {}),
+      ...(state.profileSelection
+        ? { profileSelection: state.profileSelection, gatewayTargetId: state.serverId }
+        : {}),
+      ...(state.handoff ? { handoff: state.handoff } : {}),
     }
   }
 
@@ -111,7 +131,13 @@ export class GatewayBrowserRuntime {
       height: `${Math.round(bounds.height)}px`,
       display: visible ? 'block' : 'none',
       pointerEvents:
-        visible && state.connected && state.surface.dataset.frameReady === 'true' ? 'auto' : 'none',
+        visible &&
+        state.connected &&
+        state.surface.dataset.frameReady === 'true' &&
+        (!state.profile ||
+          (state.handoff?.mode === 'human' && !state.controlUncertain && !state.controlPending))
+          ? 'auto'
+          : 'none',
     })
   }
 
@@ -181,7 +207,13 @@ export class GatewayBrowserRuntime {
       state.surface.dataset.frameReady = 'true'
       state.surface.dataset.connection = 'connected'
       state.surface.style.opacity = '1'
-      state.surface.style.pointerEvents = state.visible && state.connected ? 'auto' : 'none'
+      state.surface.style.pointerEvents =
+        state.visible &&
+        state.connected &&
+        (!state.profile ||
+          (state.handoff?.mode === 'human' && !state.controlUncertain && !state.controlPending))
+          ? 'auto'
+          : 'none'
       delete state.surface.dataset.frameError
     } catch (error) {
       if (!state.closed) state.surface.dataset.frameError = String(error)
@@ -195,9 +227,20 @@ export class GatewayBrowserRuntime {
 
   private async sendBrowserAction(state: GatewayBrowserState, action: Record<string, unknown>) {
     if (state.closed) return
+    const human = state.profile && state.handoff?.mode === 'human'
+    if (state.profile && !human && action.action !== 'resize')
+      throw new Error('BROWSER_PROFILE_HUMAN_CONTROL_REQUIRED')
     const result = await state.client.request<{
       page?: { url?: string; title?: string | null; faviconUrl?: string | null }
-    }>('browser/action', { session_id: state.wireSessionId, ...action })
+    }>(
+      human ? 'browser/profile/humanAction' : 'browser/action',
+      human
+        ? {
+            expectedRevision: state.handoff!.revision,
+            action: { session_id: state.wireSessionId, ...action },
+          }
+        : { session_id: state.wireSessionId, ...action }
+    )
     if (result.page) {
       state.page = {
         url: text(result.page.url) ?? state.page.url,
@@ -212,6 +255,8 @@ export class GatewayBrowserRuntime {
     state: GatewayBrowserState,
     action: Record<string, unknown>
   ): Promise<void> {
+    if (state.controlPending || state.controlUncertain)
+      return Promise.reject(new Error('BROWSER_PROFILE_CONTROL_UNCONFIRMED'))
     if (state.closed || !state.connected) {
       return Promise.reject(new Error('KCoder 远程浏览器连接已断开'))
     }
@@ -359,22 +404,47 @@ export class GatewayBrowserRuntime {
     const url = text(params.url)
     if (!url) throw new Error('浏览器 URL 无效')
     if (this.disposed) throw new Error('KCoder 远程浏览器运行时已关闭')
+    const profile = params.profile
+    if (profile != null && !isContract('BrowserProfileSelection', profile))
+      throw new Error('BROWSER_PROFILE_SELECTION_INVALID')
+    const selected = profile as BrowserProfileSelection | null | undefined
+    const profileKey = selected
+      ? JSON.stringify([
+          selected.profileId,
+          selected.expectedRevision,
+          selected.scope.accountId,
+          selected.scope.targetId,
+          selected.scope.workspaceId,
+          selected.scope.identityGeneration,
+          selected.scope.targetRevision,
+          selected.scope.organizationId ?? null,
+        ])
+      : 'temporary'
     const existing = this.browserByLabel.get(label)
-    if (existing) return this.browserPageResult(existing)
+    if (existing) {
+      if (existing.profileKey !== profileKey) throw new Error('BROWSER_PROFILE_SELECTION_CHANGED')
+      return this.browserPageResult(existing)
+    }
     const opening = this.browserOpeningByLabel.get(label)
-    if (opening) return opening
+    if (opening) {
+      if (this.openingProfileKeys.get(label) !== profileKey)
+        throw new Error('BROWSER_PROFILE_SELECTION_CHANGED')
+      return opening
+    }
     if (this.browserByLabel.size + this.browserOpeningByLabel.size >= MAX_REMOTE_BROWSER_SESSIONS) {
       throw new Error(`远程浏览器最多同时打开 ${MAX_REMOTE_BROWSER_SESSIONS} 个会话`)
     }
 
     // Reservation must occur before the first await; otherwise concurrent calls can bypass label deduplication and the global capacity limit.
-    const reservation = this.createBrowser(label, url, params)
+    const reservation = this.createBrowser(label, url, params, selected ?? null, profileKey)
+    this.openingProfileKeys.set(label, profileKey)
     this.browserOpeningByLabel.set(label, reservation)
     try {
       return await reservation
     } finally {
       if (this.browserOpeningByLabel.get(label) === reservation) {
         this.browserOpeningByLabel.delete(label)
+        this.openingProfileKeys.delete(label)
       }
     }
   }
@@ -382,13 +452,21 @@ export class GatewayBrowserRuntime {
   private async createBrowser(
     label: string,
     url: string,
-    params: Record<string, unknown>
+    params: Record<string, unknown>,
+    profile: BrowserProfileSelection | null,
+    profileKey: string
   ): Promise<ReturnType<GatewayBrowserRuntime['browserPageResult']>> {
+    const accountCurrent = captureAccountContextRevision()
     const server = await this.resolveServerForLabel(label)
+    const target = hookTargetScope(server)
+    if (!accountCurrent(server.id)) throw new Error('BROWSER_PROFILE_OWNER_CHANGED')
     const client = await this.connectBrowserClient(server)
     let state: GatewayBrowserState | null = null
     try {
       await assertRemoteBrowserAvailable(client)
+      if (!accountCurrent(server.id)) throw new Error('BROWSER_PROFILE_OWNER_CHANGED')
+      if (profile && client.supportsExperimental?.('browserProfileSessionsV1') !== true)
+        throw new Error('BROWSER_PROFILE_SESSION_UNAVAILABLE')
       const bounds = browserBounds(params.bounds)
       const result = await client.request<{
         session_id?: string
@@ -396,11 +474,25 @@ export class GatewayBrowserRuntime {
         width?: number
         height?: number
         sandbox_disabled?: boolean
+        profile?: unknown
       }>('browser/start', {
         url,
         width: Math.round(bounds.width),
         height: Math.round(bounds.height),
+        ...(profile ? { profile } : {}),
       })
+      if (
+        !accountCurrent(server.id) ||
+        (profile && hookTargetScope(await this.resolveServerForLabel(label)) !== target)
+      )
+        throw new Error('BROWSER_PROFILE_OWNER_CHANGED')
+      if (
+        profile &&
+        (!isContract('BrowserAccountProfile', result.profile) ||
+          (result.profile as BrowserAccountProfile).draft.id !== profile.profileId ||
+          (result.profile as BrowserAccountProfile).revision !== profile.expectedRevision)
+      )
+        throw new Error('BROWSER_PROFILE_REPLY_INVALID')
       const wireSessionId = text(result.session_id)
       if (!wireSessionId) throw new Error('KCoder app-server 未返回浏览器 session id')
       if (this.disposed) throw new Error('KCoder 远程浏览器运行时已关闭')
@@ -430,6 +522,19 @@ export class GatewayBrowserRuntime {
         lastPointerMoveAt: 0,
         inputQueue: [],
         inputProcessing: false,
+        profile: profile ? (result.profile as BrowserAccountProfile) : null,
+        profileKey,
+        profileSelection: profile,
+        handoff: profile
+          ? {
+              sessionId: wireSessionId,
+              revision: 1,
+              mode: 'automation',
+              observedUrl: text(result.url) ?? url,
+            }
+          : null,
+        controlPending: false,
+        controlUncertain: false,
       }
       state = createdState
       createdState.surface = this.createBrowserSurface(createdState)
@@ -497,7 +602,8 @@ export class GatewayBrowserRuntime {
     try {
       await this.queueBrowserInput(state, action)
     } finally {
-      if (navigating && state.connected && state.visible) state.surface.style.pointerEvents = 'auto'
+      if (navigating && state.connected && state.visible)
+        this.applyBrowserBounds(state, state.bounds, state.visible)
     }
   }
 
@@ -559,6 +665,76 @@ export class GatewayBrowserRuntime {
     }
   }
 
+  async closeForAccountSwitch(labelValue: unknown) {
+    const label = text(labelValue) ?? 'workspace-browser'
+    const state = this.browserByLabel.get(label)
+    if (!state) return
+    if (!state.connected) throw new Error('BROWSER_PROFILE_CLEANUP_UNCONFIRMED')
+    const result = await state.client.request<{ closed?: boolean }>('browser/close', {
+      session_id: state.wireSessionId,
+    })
+    if (result.closed !== true) throw new Error('BROWSER_PROFILE_CLEANUP_UNCONFIRMED')
+    if (this.browserByLabel.get(label) !== state) throw new Error('BROWSER_PROFILE_OWNER_CHANGED')
+    state.connected = false
+    await this.closeBrowser(label)
+  }
+
+  async setHandoff(labelValue: unknown, mode: 'human' | 'automation') {
+    const label = text(labelValue) ?? 'workspace-browser'
+    const state = this.browserByLabel.get(label)
+    if (!state?.profile || !state.handoff) throw new Error('BROWSER_PROFILE_SESSION_REQUIRED')
+    if (state.controlPending || state.controlUncertain)
+      throw new Error('BROWSER_PROFILE_CONTROL_UNCONFIRMED')
+    if (state.inputProcessing || state.inputQueue.length)
+      throw new Error('BROWSER_PROFILE_INPUT_PENDING')
+    const prior = state.handoff
+    state.controlPending = true
+    try {
+      const value = await state.client.request<unknown>('browser/profile/handoff', {
+        sessionId: state.wireSessionId,
+        expectedRevision: prior.revision,
+        mode,
+      })
+      if (this.browserByLabel.get(label) !== state || !isContract('BrowserHandoffState', value))
+        throw new Error('BROWSER_PROFILE_OWNER_CHANGED')
+      const next = value as BrowserHandoffState
+      if (
+        next.sessionId !== state.wireSessionId ||
+        next.revision !== prior.revision + 1 ||
+        next.mode !== mode
+      )
+        throw new Error('BROWSER_PROFILE_REPLY_INVALID')
+      state.handoff = next
+      state.page.url = next.observedUrl
+      this.queueBrowserFrame(state, true)
+      return next
+    } catch (error) {
+      state.controlUncertain = true
+      throw error
+    } finally {
+      state.controlPending = false
+      if (!state.closed) this.applyBrowserBounds(state, state.bounds, state.visible)
+    }
+  }
+
+  async readHandoff(labelValue: unknown) {
+    const label = text(labelValue) ?? 'workspace-browser'
+    const state = this.browserByLabel.get(label)
+    if (!state?.profile) throw new Error('BROWSER_PROFILE_SESSION_REQUIRED')
+    const value = await state.client.request<unknown>('browser/profile/controlRead', {
+      session_id: state.wireSessionId,
+    })
+    if (this.browserByLabel.get(label) !== state || !isContract('BrowserHandoffState', value))
+      throw new Error('BROWSER_PROFILE_OWNER_CHANGED')
+    const observed = value as BrowserHandoffState
+    if (observed.sessionId !== state.wireSessionId) throw new Error('BROWSER_PROFILE_REPLY_INVALID')
+    state.handoff = observed
+    state.controlUncertain = false
+    state.page.url = observed.observedUrl
+    this.applyBrowserBounds(state, state.bounds, state.visible)
+    return observed
+  }
+
   async clearBrowserData() {
     const labels = [...this.browserByLabel.keys()]
     await Promise.all(labels.map(label => this.closeBrowser(label)))
@@ -566,11 +742,14 @@ export class GatewayBrowserRuntime {
   }
 
   async invalidateTarget(targetId: string): Promise<void> {
-    await Promise.allSettled([...this.browserByLabel].filter(([, state]) => state.serverId === targetId)
-      .map(([label, state]) => {
-        state.surface.removeAttribute('src')
-        return this.closeBrowser(label)
-      }))
+    await Promise.allSettled(
+      [...this.browserByLabel]
+        .filter(([, state]) => state.serverId === targetId)
+        .map(([label, state]) => {
+          state.surface.removeAttribute('src')
+          return this.closeBrowser(label)
+        })
+    )
   }
 
   async dispose(): Promise<void> {

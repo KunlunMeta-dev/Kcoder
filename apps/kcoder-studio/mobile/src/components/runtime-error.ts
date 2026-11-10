@@ -1,5 +1,8 @@
 import { t } from "@/i18n";
 export function runtimeErrorSummary(error: string): string {
+  if (/configuration root is (?:writable by other users|not owned by the effective user)/i.test(error)) {
+    return t("task.configuration_directory_unsafe");
+  }
   if (
     /\b401\b|unauthori[sz]ed|authentication(?:_error)?|incorrect\s+api[_ -]?key|api[_ -]?key|invalid[_ -]?(?:token|credential)/i.test(
       error,
@@ -15,6 +18,7 @@ export function runtimeErrorSummary(error: string): string {
   if (/\b403\b|forbidden/i.test(error)) {
     return t("task.the_provider_rejected_the_request_check_the_api");
   }
+  if (/\bHTTP\s*503\b|\b503\s+Service Unavailable\b/i.test(error)) return t("task.model_service_unavailable");
   if (error.length > 240)
     return t("task.the_request_failed_the_server_returned_detailed_technical");
   return error;

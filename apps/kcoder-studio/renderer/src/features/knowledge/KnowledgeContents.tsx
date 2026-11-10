@@ -1,4 +1,5 @@
 import { WikiError } from './WikiError'
+import { usePageSurfaceTransition } from '@/components/layout/pageTransitionAnimation'
 import { WikiSearch } from './WikiSearch'
 import { WikiSourceReader } from './WikiSourceReader'
 import { WikiImport } from './WikiImport'
@@ -55,6 +56,7 @@ export function KnowledgeContents({
     setJobsDisconnected(disconnected)
   }, [])
   const [page, setPage] = useState<WikiPage | null>(null)
+  const pageSurface = usePageSurfaceTransition<HTMLElement>(page?.draft.pageId ?? 'library')
   const [tab, setTab] = useState<'pages' | 'sources'>('pages')
   const [sort, setSort] = useState('catalog')
   const [localQuery, setLocalQuery] = useState('')
@@ -148,7 +150,11 @@ export function KnowledgeContents({
     }
   }
   return (
-    <section className="flex flex-1 flex-col" aria-busy={loading || reading !== null}>
+    <section
+      ref={pageSurface}
+      className="flex flex-1 flex-col"
+      aria-busy={loading || reading !== null}
+    >
       {original && (
         <WikiSourceReader
           serverId={serverId}
@@ -196,55 +202,61 @@ export function KnowledgeContents({
         <>
           <div className="mb-4 flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border/60">
             <div role="tablist" aria-label={t('contentTabs')} className="flex shrink-0 gap-6">
-              {(['pages', 'sources'] as const).map(value => (
-                <button
-                  key={value}
-                  role="tab"
-                  id={`wiki-tab-${value}`}
-                  aria-controls="wiki-content-panel"
-                  aria-selected={tab === value}
-                  tabIndex={tab === value ? 0 : -1}
-                  data-testid={`knowledge-tab-${value}`}
-                  onClick={() => setTab(value)}
-                  onKeyDown={event => {
-                    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
-                    event.preventDefault()
-                    const next =
-                      event.key === 'Home'
-                        ? 'pages'
-                        : event.key === 'End'
-                          ? 'sources'
-                          : value === 'pages'
-                            ? 'sources'
-                            : 'pages'
-                    setTab(next)
-                    document.getElementById(`wiki-tab-${next}`)?.focus()
-                  }}
-                  className={cn(
-                    'inline-flex min-h-11 items-center gap-2 border-b-2 px-0.5 pb-3 pt-1 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/50',
-                    tab === value
-                      ? 'border-focus font-medium text-text-primary'
-                      : 'border-transparent text-text-muted hover:text-text-primary'
-                  )}
-                >
-                  {t(value)}
-                  <span className="text-xs tabular-nums text-text-muted">
-                    {value === 'pages' ? pages.length : sources.length}
-                    {(value === 'pages' ? pageCatalog.cursor : sourceCatalog.cursor) ? '+' : ''}
-                  </span>
-                </button>
-              ))}
-              {tab === 'sources' && (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="ml-auto"
-                  data-testid="wiki-trash-toggle"
-                  onClick={() => setShowRemoved(value => !value)}
-                >
-                  {t(showRemoved ? 'activeSources' : 'removedSources')}
-                </Button>
-              )}
+              {(['pages', 'sources', 'removed'] as const).map(value => {
+                const selectedTab = showRemoved ? 'removed' : tab
+                const choose = (next: 'pages' | 'sources' | 'removed') => {
+                  setShowRemoved(next === 'removed')
+                  setTab(next === 'pages' ? 'pages' : 'sources')
+                }
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    role="tab"
+                    id={`wiki-tab-${value}`}
+                    aria-controls="wiki-content-panel"
+                    aria-selected={selectedTab === value}
+                    tabIndex={selectedTab === value ? 0 : -1}
+                    data-testid={
+                      value === 'removed' ? 'wiki-trash-toggle' : `knowledge-tab-${value}`
+                    }
+                    onClick={() => choose(value)}
+                    onKeyDown={event => {
+                      const tabs = ['pages', 'sources', 'removed'] as const
+                      const index = tabs.indexOf(value)
+                      const next =
+                        event.key === 'Home'
+                          ? tabs[0]
+                          : event.key === 'End'
+                            ? tabs[2]
+                            : event.key === 'ArrowRight'
+                              ? tabs[(index + 1) % 3]
+                              : event.key === 'ArrowLeft'
+                                ? tabs[(index + 2) % 3]
+                                : undefined
+                      if (next) {
+                        event.preventDefault()
+                        choose(next)
+                        document.getElementById(`wiki-tab-${next}`)?.focus()
+                      }
+                    }}
+                    className={cn(
+                      'inline-flex min-h-11 items-center gap-2 border-b-2 px-0.5 pb-3 pt-1 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/50',
+                      selectedTab === value
+                        ? 'border-text-primary bg-surface/40 font-medium text-text-primary'
+                        : 'border-transparent text-text-muted hover:text-text-primary'
+                    )}
+                  >
+                    {t(value === 'removed' ? 'removedSources' : value)}
+                    {value !== 'removed' && !(value === 'sources' && showRemoved) && (
+                      <span className="text-xs tabular-nums text-text-muted">
+                        {value === 'pages' ? pages.length : sources.length}
+                        {(value === 'pages' ? pageCatalog.cursor : sourceCatalog.cursor) ? '+' : ''}
+                      </span>
+                    )}
+                  </button>
+                )
+              })}
             </div>
             <div className="flex min-w-0 flex-1 items-center justify-end gap-3 pb-3 sm:flex-none">
               {canRetrieve && (
@@ -294,7 +306,7 @@ export function KnowledgeContents({
           <div
             id="wiki-content-panel"
             role="tabpanel"
-            aria-labelledby={`wiki-tab-${tab}`}
+            aria-labelledby={`wiki-tab-${showRemoved ? 'removed' : tab}`}
             className="flex flex-1 flex-col"
           >
             {(sort !== 'catalog' || (!canRetrieve && localQuery.trim())) && catalog.cursor && (
@@ -329,19 +341,19 @@ export function KnowledgeContents({
                 )}
               </div>
             ) : (
-              <div className="space-y-2 py-1">
+              <div className="studio-card-stack py-1">
                 {tab === 'pages'
                   ? visiblePages.map(item => (
                       <div
                         key={item.pageId}
-                        className="flex items-center rounded-xl border border-border/60 bg-background pr-3 transition-colors hover:border-text-muted/30 hover:bg-surface/40"
+                        className="studio-card flex items-center rounded-xl border border-border/60 bg-background pr-5 transition-colors hover:border-text-muted/30 hover:bg-surface/40"
                       >
                         <button
                           key={item.pageId}
                           data-testid={`wiki-page-row-${item.pageId}`}
                           aria-label={item.title}
                           disabled={reading !== null}
-                          className="group flex min-h-16 min-w-0 flex-1 items-center gap-4 rounded-xl px-3 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/50 disabled:opacity-50"
+                          className="studio-card-inset group flex min-h-16 min-w-0 flex-1 items-center gap-4 rounded-xl text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/50 disabled:opacity-50"
                           onClick={() => void openPage(item)}
                         >
                           <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-surface text-text-secondary">
@@ -389,13 +401,13 @@ export function KnowledgeContents({
                   : visibleSources.map(source => (
                       <div
                         key={source.sourceId}
-                        className="flex items-center rounded-xl border border-border/60 bg-background pr-3 transition-colors hover:border-text-muted/30 hover:bg-surface/40"
+                        className="studio-card flex items-center rounded-xl border border-border/60 bg-background pr-5 transition-colors hover:border-text-muted/30 hover:bg-surface/40"
                       >
                         <button
                           key={source.sourceId}
                           data-testid={`wiki-source-row-${source.sourceId}`}
                           onClick={() => setOriginal(source)}
-                          className="flex min-h-16 min-w-0 flex-1 items-center gap-4 rounded-xl px-3 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
+                          className="studio-card-inset flex min-h-16 min-w-0 flex-1 items-center gap-4 rounded-xl text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
                         >
                           <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-surface text-text-secondary">
                             <FileText className="size-4" />

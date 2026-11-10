@@ -3,13 +3,14 @@ use super::*;
 #[test]
 fn shared_fork_snapshot_is_immutable_across_replacement_and_clear() {
     let root = tempfile::tempdir().unwrap();
-    let engine = TestEngineBuilder::new(root.path()).build();
+    let engine = TestEngineBuilder::new(root.path()).build_with_profile_directory();
     let make = |text: &str| {
         Arc::new(crate::agent::CacheSafeParams {
             fork_context_messages: vec![Message::user_text(text)].into(),
             active_skills: vec![],
             snapshot_provider: "captured-provider".into(),
             snapshot_model: "captured-model".into(),
+            context_history_anchor: None,
             full_context_compatible: false,
         })
     };
@@ -37,7 +38,7 @@ fn shared_fork_snapshot_is_immutable_across_replacement_and_clear() {
 #[test]
 fn session_replacement_releases_fork_cache_after_external_owner_finishes() {
     let root = tempfile::tempdir().unwrap();
-    let engine = TestEngineBuilder::new(root.path()).build();
+    let engine = TestEngineBuilder::new(root.path()).build_with_profile_directory();
     for generation in 0..32 {
         let snapshot = Arc::new(crate::agent::CacheSafeParams {
             fork_context_messages: vec![Message::user_text(format!("generation {generation}"))]
@@ -45,6 +46,7 @@ fn session_replacement_releases_fork_cache_after_external_owner_finishes() {
             active_skills: vec![],
             snapshot_provider: engine.provider_name(),
             snapshot_model: engine.model_name(),
+            context_history_anchor: None,
             full_context_compatible: true,
         });
         let observed = Arc::downgrade(&snapshot);

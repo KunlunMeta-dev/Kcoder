@@ -2,7 +2,7 @@ import { afterEach, expect, it } from "vitest";
 import type { JsonRecord, RpcMessage } from "@/gateway/rpc";
 import type { ThreadMessage } from "@/gateway/types";
 import { TaskRuntime, taskRuntimeTestHelpers } from "./task-runtime";
-import { FakeClient, profile, server } from "./task-runtime/fixture.test-support";
+import { FakeClient, appServerId, profile, server } from "./task-runtime/fixture.test-support";
 
 const threadId = "mock-active-session";
 const serverId = "backend4a";
@@ -14,6 +14,8 @@ const attemptId = `ux-profile-attempt-${marker}`;
 const itemId = `ux-profile-item-${marker}`;
 const deltaText = `\n\n${marker} synchronous task fixture update.`;
 const fixtureWorkspace = server.workspacePath;
+const observationId = "a".repeat(64);
+const observedCursorPrefix = `tp1:ob1-${observationId}:`;
 
 interface ReadPageEvidence {
   beforeCursor: string | null;
@@ -29,7 +31,9 @@ class PagedHistoryClient extends FakeClient {
 
   constructor() {
     super([]);
-    this.supportsExperimental = () => false;
+    this.supportsExperimental = (capability: string) =>
+      capability === "threadIndexedPagesV1" ||
+      capability === "threadTranscriptObservationV1";
   }
 
   override async request<T>(method: string, params: JsonRecord = {}): Promise<T> {
@@ -46,7 +50,7 @@ class PagedHistoryClient extends FakeClient {
         },
       } as T;
     }
-    if (method === "thread/read") {
+    if (method === "thread/read/indexed") {
       const requestedLimit = Number.isSafeInteger(params.limit) && Number(params.limit) > 0
         ? Math.min(Number(params.limit), pageSize)
         : pageSize;
@@ -86,8 +90,13 @@ afterEach(() => {
 
 function makeHistoryPage(total: number, beforeCursor: string | null, limit: number) {
   let end = total;
-  if (beforeCursor && /^ux:\d+$/.test(beforeCursor))
-    end = Number(beforeCursor.slice(3));
+  if (beforeCursor) {
+    if (!beforeCursor.startsWith(observedCursorPrefix))
+      throw new Error("Unexpected observed fixture cursor");
+    end = Number(beforeCursor.slice(observedCursorPrefix.length));
+    if (!Number.isSafeInteger(end) || end <= 0 || end > total)
+      throw new Error("Unexpected observed fixture cursor offset");
+  }
   const rangeStart = Math.max(0, end - Math.min(limit, pageSize));
   const messages = Array.from(
     { length: end - rangeStart },
@@ -98,7 +107,9 @@ function makeHistoryPage(total: number, beforeCursor: string | null, limit: numb
     rangeStart,
     rangeEnd: end,
     hasMoreBefore: rangeStart > 0,
-    beforeCursor: rangeStart > 0 ? `ux:${rangeStart}` : null,
+    beforeCursor: rangeStart > 0 ? `${observedCursorPrefix}${rangeStart}` : null,
+    // All 499 synthetic rows share one proven read domain, not an unknown legacy page.
+    transcriptObservationV1: { observationId, viewKey: "b".repeat(64) },
   };
 }
 
@@ -161,7 +172,7 @@ function makeHistoryMessage(index: number): ThreadMessage {
 }
 
 function seedFrames(): RpcMessage[] {
-  const common = { serverId, threadId, turnId, attemptId };
+  const common = { serverId: appServerId, threadId, turnId, attemptId };
   return [
     {
       jsonrpc: "2.0",
@@ -249,8 +260,8 @@ it("projects the ordered 499-row paged history before the four app-facing seed f
   expect(client.readPages.map(({ rangeStart, rangeEnd }) => [rangeStart, rangeEnd]))
     .toEqual(expectedRanges);
   expect(client.readPages.map(({ beforeCursor }) => beforeCursor)).toEqual([
-    null, "ux:449", "ux:399", "ux:349", "ux:299", "ux:249", "ux:199",
-    "ux:149", "ux:99", "ux:49",
+    null, ...[449, 399, 349, 299, 249, 199, 149, 99, 49]
+      .map((offset) => `${observedCursorPrefix}${offset}`),
   ]);
 
   const history = runtime.getSnapshot().messages;

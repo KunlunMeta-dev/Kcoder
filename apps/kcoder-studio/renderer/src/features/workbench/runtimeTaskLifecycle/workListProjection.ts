@@ -6,6 +6,46 @@ import type {
   RuntimeTaskSummary,
   RuntimeWorkListResponse,
 } from '@/types/api'
+import type { IntegrationRuntimeAcceptance } from '../../../../../shared/generated/contracts'
+
+/** Translate an authoritative acceptance into the legacy directory activity field. */
+export function projectRuntimeAcceptanceActivity<T extends { running: boolean }>(
+  task: T,
+  state: IntegrationRuntimeAcceptance['state']
+): T {
+  if (state === 'outcome_unknown') return task
+  return { ...task, running: ['queued', 'running', 'waiting_for_user'].includes(state) }
+}
+
+// While a task runs, every streamed update bumps updatedAt. Ordering lists by
+// that would move it again on each update, so a running task keeps the order
+// time it had when first seen running; once it stops its real time applies.
+const runningOrderTimes = new Map<string, number>()
+const RUNNING_ORDER_TIME_LIMIT = 500
+
+/** Order time for a directory list; stable for the duration of a run. */
+export function runtimeTaskOrderTime(
+  key: string,
+  task: Pick<RuntimeTaskSummary, 'running'>,
+  time: number
+): number {
+  if (!task.running) {
+    runningOrderTimes.delete(key)
+    return time
+  }
+  const frozen = runningOrderTimes.get(key)
+  if (frozen !== undefined) return frozen
+  if (runningOrderTimes.size >= RUNNING_ORDER_TIME_LIMIT) {
+    runningOrderTimes.delete(runningOrderTimes.keys().next().value as string)
+  }
+  runningOrderTimes.set(key, time)
+  return time
+}
+
+/** Test hook: forget order times frozen for running tasks. */
+export function resetRuntimeTaskOrderTimes() {
+  runningOrderTimes.clear()
+}
 
 const activityObservation = Symbol('runtime-work-activity')
 const snapshotObservation = Symbol('runtime-work-snapshot')

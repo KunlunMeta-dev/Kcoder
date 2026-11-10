@@ -1,19 +1,21 @@
+import { chromium } from '../../renderer/node_modules/@playwright/test/index.mjs';
 import { constants, createReadStream } from 'node:fs';
 import { access, mkdir, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { createHash, randomBytes } from 'node:crypto';
 import { basename, dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { RunContext, repoRoot, waitFor } from './run-context.mjs';
+import { RunContext, repoRoot, retainedArtifactRunRoot, waitFor } from './run-context.mjs';
 import { startGateway, waitForGatewayRpcToken } from './gateway.mjs';
+import { login } from './http.mjs';
 import { startApprovalModelFixture } from './approval-model.mjs';
 import { materializeWorkspace } from './workspace-fixture.mjs';
 import { buildAiVerifyGatewayEnvironment } from '../../renderer/scripts/ai-verify-environment.mjs';
 
 const metadata = {
-  testId: 'ai-verify-owned-tauri-gateway',
+  testId: 'ai-verify-owned-electron-gateway',
   modelPolicy: 'model-independent',
   retainSuccessEvidence: true,
-  evidenceReason: 'Explicit real Tauri verification with an owned display',
+  evidenceReason: 'Explicit real Electron verification with an owned display',
 };
 
 
@@ -36,7 +38,7 @@ export function parseOwnedPointerDrag(value) {
 
 export async function gatewayVerificationOptions(options) {
   if (process.platform !== 'linux') throw new Error('Owned-display Gateway verification currently requires Linux');
-  const allowed = new Set(['gateway', 'tauri-bin', 'kcoder-bin', 'renderer-root', 'timeout', 'scenario', 'provider-fixture', 'continuation-fixture', 'drop-save-reply', 'drop-steer-reply', 'delay-cancel-reply', 'delay-workspace-file-reply', 'ui-receipt-fault']);
+  const allowed = new Set(['gateway', 'electron-bin', 'kcoder-bin', 'renderer-root', 'timeout', 'scenario', 'provider-fixture', 'continuation-fixture', 'drop-save-reply', 'drop-steer-reply', 'delay-cancel-reply', 'delay-workspace-file-reply', 'ui-receipt-fault']);
   if (Object.keys(options).some(name => !allowed.has(name))) {
     throw new Error('Unknown Gateway verification option; external origins, tokens and displays are not accepted');
   }
@@ -49,19 +51,19 @@ export async function gatewayVerificationOptions(options) {
   if (options['continuation-fixture'] !== undefined && options['continuation-fixture'] !== 'true') throw new Error('Continuation fixture must be explicitly enabled with true');
   if (options['continuation-fixture'] && (options.scenario || options['provider-fixture'])) throw new Error('Continuation fixture cannot be combined with another fixture');
   if (options.scenario && options.scenario !== 'subagent-trace') throw new Error('Unsupported owned Gateway verification scenario');
-  for (const name of ['tauri-bin', 'kcoder-bin', 'renderer-root']) {
+  for (const name of ['electron-bin', 'kcoder-bin', 'renderer-root']) {
     if (!options[name]) throw new Error(`Gateway verification requires --${name}`);
   }
-  const tauriBin = await realpath(resolve(options['tauri-bin']));
+  const electronBin = await realpath(resolve(options['electron-bin']));
   const kcoderBin = await realpath(resolve(options['kcoder-bin']));
   const rendererRoot = await realpath(resolve(options['renderer-root']));
   await Promise.all([
-    access(tauriBin, constants.X_OK), access(kcoderBin, constants.X_OK),
+    access(electronBin, constants.X_OK), access(kcoderBin, constants.X_OK),
     access(join(rendererRoot, 'index.html'), constants.R_OK),
-    access('/usr/bin/Xvfb', constants.X_OK), access('/usr/bin/import', constants.X_OK),
+    access('/usr/bin/Xvfb', constants.X_OK),
     access('/usr/bin/git', constants.X_OK),
   ]);
-  return { tauriBin, kcoderBin, rendererRoot, scenario: options.scenario, providerFixture: options['provider-fixture'] === 'true', continuationFixture: options['continuation-fixture'] === 'true', dropSaveReply: options['drop-save-reply'] === 'true', dropSteerReply: options['drop-steer-reply'] === 'true', delayCancelReply: options['delay-cancel-reply'] === 'true', delayWorkspaceFileReply: options['delay-workspace-file-reply'] === 'true', uiReceiptFault: options['ui-receipt-fault'] === 'true' };
+  return { electronBin, kcoderBin, rendererRoot, noSandbox: process.env.KCODER_E2E_CHROMIUM_NO_SANDBOX === '1', scenario: options.scenario, providerFixture: options['provider-fixture'] === 'true', continuationFixture: options['continuation-fixture'] === 'true', dropSaveReply: options['drop-save-reply'] === 'true', dropSteerReply: options['drop-steer-reply'] === 'true', delayCancelReply: options['delay-cancel-reply'] === 'true', delayWorkspaceFileReply: options['delay-workspace-file-reply'] === 'true', uiReceiptFault: options['ui-receipt-fault'] === 'true' };
 }
 
 export async function createGatewayVerificationRun() {
@@ -72,8 +74,9 @@ export async function resumeGatewayVerificationRun(runRoot, token) {
   const source = fileURLToPath(import.meta.url);
   const sourceRelative = relative(repoRoot, source);
   const canonicalRoot = await realpath(runRoot);
-  const expectedParent = resolve(repoRoot, 'target/test', sourceRelative);
-  if (dirname(canonicalRoot) !== expectedParent || !/^\d{8}-\d{6}\.\d{3}Z(?:-p\d+-\d+-[a-f0-9]+)?$/.test(basename(canonicalRoot))) {
+  const runId = basename(canonicalRoot);
+  if (!/^\d{8}-\d{6}\.\d{3}Z(?:-p\d+-\d+-[a-f0-9]+)?$/.test(runId) ||
+      retainedArtifactRunRoot(source, runId) !== canonicalRoot) {
     throw new Error('Gateway verification controller can only resume its owned run directory');
   }
   const manifest = JSON.parse(await readFile(join(canonicalRoot, 'manifest.json'), 'utf8'));
@@ -101,12 +104,12 @@ export function xauthorityRecord(display, cookie) {
   ]);
 }
 
-export async function startOwnedDisplay(context) {
+export async function startOwnedDisplay(context, { startupTimeoutMs = 10_000 } = {}) {
   const cookie = randomBytes(16);
   context.registerSecret(cookie.toString('hex'));
   const authority = context.pathInState('display.xauthority');
   await writeFile(authority, xauthorityRecord('0', cookie), { mode: 0o600, flag: 'wx' });
-  const child = context.spawnOwned('tauri-display', '/usr/bin/Xvfb', [
+  const child = context.spawnOwned('electron-display', '/usr/bin/Xvfb', [
     '-displayfd', '1', '-screen', '0', '1280x900x24', '-nolisten', 'tcp', '-auth', authority,
   ]);
   let output = '';
@@ -114,16 +117,16 @@ export async function startOwnedDisplay(context) {
   const number = await waitFor(() => {
     if (child.exitCode !== null) throw new Error('Owned Xvfb exited before allocating a display');
     return output.match(/^(\d+)\r?$/m)?.[1];
-  }, 10_000, 'owned Xvfb display', 50);
+  }, startupTimeoutMs, 'owned Xvfb display', 50);
   await writeFile(authority, xauthorityRecord(number, cookie), { mode: 0o600 });
   return { display: `:${number}`, authority, child };
 }
 
 export async function prepareGatewayWorkspace(context) {
   const { path: workspace } = await materializeWorkspace(context, 'rust-project', {
-    instanceId: 'tauri-verification',
+    instanceId: 'electron-verification',
   });
-  const child = context.spawnOwned('tauri-workspace-git', '/usr/bin/git', [
+  const child = context.spawnOwned('electron-workspace-git', '/usr/bin/git', [
     '-c', 'init.templateDir=', 'init', '--initial-branch=main', workspace,
   ], { env: context.isolatedEnvironment({ GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: '/dev/null' }) });
   await waitFor(() => child.exitCode !== null, 10_000, 'owned workspace Git boundary');
@@ -160,7 +163,7 @@ export async function launchGatewayVerification(context, options, { controlUrl, 
     });
   }
   const gateway = await startGateway(context, {
-    label: 'tauri-gateway', workspace, kcoderBin: options.kcoderBin,
+    label: 'electron-gateway', auth: true, workspace, kcoderBin: options.kcoderBin,
     dropSaveReply: options.dropSaveReply,
     dropSteerReply: options.dropSteerReply,
     delayCancelReply: options.delayCancelReply,
@@ -172,7 +175,9 @@ export async function launchGatewayVerification(context, options, { controlUrl, 
       KCODER_STUDIO_SCENARIO: options.scenario,
     },
   });
-  await waitForGatewayRpcToken(context, gateway);
+  const cookie = await login(gateway.baseUrl, gateway.authToken);
+  context.registerSecret(cookie);
+  await waitForGatewayRpcToken(context, gateway, { headers: { cookie } });
   const fingerprint = async path => {
     const hash = createHash('sha256');
     for await (const chunk of createReadStream(path)) hash.update(chunk);
@@ -180,33 +185,59 @@ export async function launchGatewayVerification(context, options, { controlUrl, 
   };
   await context.writeArtifactJson('launch-policy.json', {
     gatewayOrigin: gateway.baseUrl,
-    nativeIpcPolicy: 'deny-all; external WebView URL; unchanged default devUrl and capabilities',
-    capturePolicy: 'authenticated owned Xvfb only',
+    nativeIpcPolicy: 'actual Electron thin host; contextIsolation and sandbox; allowlisted preload only',
+    capturePolicy: 'owned Electron page capture through its run-local CDP endpoint',
+    osSandbox: !options.noSandbox,
     scenario: options.scenario ?? null,
     inputs: {
-      tauriBinary: { path: options.tauriBin, sha256: await fingerprint(options.tauriBin) },
+      electronBinary: { path: options.electronBin, sha256: await fingerprint(options.electronBin) },
       kcoderBinary: { path: options.kcoderBin, sha256: await fingerprint(options.kcoderBin) },
       renderer: { path: options.rendererRoot, indexSha256: await fingerprint(join(options.rendererRoot, 'index.html')) },
     },
   });
   const display = await startOwnedDisplay(context);
   const environment = buildAiVerifyGatewayEnvironment(process.env, {
-    gatewayOrigin: gateway.baseUrl, controlUrl, token, sessionDirectory: context.stateDir,
+    sessionDirectory: context.stateDir,
   });
   environment.DISPLAY = display.display;
   environment.XAUTHORITY = display.authority;
   environment.GDK_BACKEND = 'x11';
-  await Promise.all([
-    mkdir(environment.HOME, { recursive: true }),
-    mkdir(environment.KCODER_STUDIO_APP_CONFIG_DIR, { recursive: true }),
-  ]);
-  const app = context.spawnOwned('tauri-app', options.tauriBin, [], {
-    cwd: workspace, env: environment,
+  await mkdir(environment.HOME, { recursive: true });
+  const userData = context.pathInState('electron-profile');
+  await mkdir(userData);
+  Object.assign(environment, {
+    KCODER_STUDIO_REMOTE_URL: gateway.baseUrl,
+    KCODER_STUDIO_REMOTE_TOKEN: gateway.authToken,
+    KCODER_STUDIO_DESKTOP_USER_DATA_DIR: userData,
   });
-  let captures = 0;
+  const app = context.spawnOwned('electron-app', options.electronBin, [
+    fileURLToPath(new URL('../../desktop/remote-main.mjs', import.meta.url)),
+    '--remote-debugging-address=127.0.0.1', '--remote-debugging-port=0', '--disable-gpu',
+    ...(options.noSandbox ? ['--no-sandbox', '--disable-setuid-sandbox'] : []),
+  ], { cwd: workspace, env: environment });
+  const endpoint = await waitFor(async () => {
+    if (app.exitCode !== null) throw new Error('Owned Electron exited before CDP was ready');
+    const text = await readFile(join(userData, 'DevToolsActivePort'), 'utf8').catch(() => '');
+    const [port, path] = text.trim().split('\n');
+    return /^[1-9][0-9]{0,4}$/.test(port) && Number(port) <= 65535 && /^\/devtools\/browser\/[A-Za-z0-9-]+$/.test(path || '')
+      ? { port: Number(port), url: `ws://127.0.0.1:${port}${path}` } : null;
+  }, 30_000, 'owned Electron CDP endpoint', 50, context.abortSignal);
+  context.registerPort('electron-cdp', endpoint.port);
+  const browser = await chromium.connectOverCDP(endpoint.url, { timeout: 10_000 });
+  context.addCleanup('close owned Electron CDP client', () => browser.close());
+  const page = await waitFor(() => browser.contexts().flatMap(context => context.pages())
+    .find(page => page.url().startsWith(`${gateway.baseUrl}/`)),
+    30_000, 'owned Electron Gateway window', 50, context.abortSignal);
+  const browserContext = page.context();
+  // Do not interrupt the real host's initial loadURL promise with the instrumented reload.
+  await page.waitForLoadState('load', { timeout: 30_000 });
+  const bootstrap = (await readFile(new URL('./electron-verification-bootstrap.js', import.meta.url), 'utf8'))
+    .replace('__KCODER_VERIFY_CONFIG__', JSON.stringify({ origin: gateway.baseUrl, controlUrl, token }));
+  await browserContext.addInitScript({ content: bootstrap });
+  await page.reload({ waitUntil: 'domcontentloaded', timeout: 30_000 });
   let resizeCommands = 0;
   const runXdotool = async args => {
-        const child = context.spawnOwned(`tauri-resize-${++resizeCommands}`, '/usr/bin/xdotool', args, { env: environment });
+        const child = context.spawnOwned(`electron-resize-${++resizeCommands}`, '/usr/bin/xdotool', args, { env: environment });
         let output = '', closed = false;
         child.stdout.on('data', bytes => { output += bytes.toString(); });
         child.once('close', () => { closed = true; });
@@ -219,7 +250,7 @@ export async function launchGatewayVerification(context, options, { controlUrl, 
     resizeWindow: async (selector, value) => {
       if (selector !== 'body') throw new Error('Owned-window resize requires body selector');
       const { width, height } = parseOwnedWindowSize(value);
-      if (app.exitCode !== null || display.child.exitCode !== null) throw new Error('Owned Tauri display is unavailable');
+      if (app.exitCode !== null || display.child.exitCode !== null) throw new Error('Owned Electron display is unavailable');
       const ids = (await runXdotool(['search', '--onlyvisible', '--pid', String(app.pid)])).split(/\s+/).filter(Boolean);
       if (ids.length !== 1 || !/^\d+$/.test(ids[0])) throw new Error('Expected one visible window belonging to this run');
       await runXdotool(['windowsize', '--sync', ids[0], String(width), String(height)]);
@@ -228,7 +259,7 @@ export async function launchGatewayVerification(context, options, { controlUrl, 
     dragPointer: async (selector, value) => {
       if (selector !== 'body') throw new Error('Owned pointer requires body selector');
       const [x,y,targetX,targetY] = parseOwnedPointerDrag(value);
-      if (app.exitCode !== null || display.child.exitCode !== null) throw new Error('Owned Tauri display is unavailable');
+      if (app.exitCode !== null || display.child.exitCode !== null) throw new Error('Owned Electron display is unavailable');
       const ids = (await runXdotool(['search', '--onlyvisible', '--pid', String(app.pid)])).split(/\s+/).filter(Boolean);
       if (ids.length !== 1 || !/^\d+$/.test(ids[0])) throw new Error('Expected one visible owned window');
       const args = ['mousemove', '--sync', '--window', ids[0], String(x), String(y), 'mousedown', '1'];
@@ -240,17 +271,8 @@ export async function launchGatewayVerification(context, options, { controlUrl, 
     },
     capture: async selector => {
       if (selector !== 'body') throw new Error('Owned-display capture requires --selector body');
-      if (app.exitCode !== null || display.child.exitCode !== null) throw new Error('Owned Tauri display is unavailable');
-      const label = `tauri-capture-${++captures}`;
-      const output = context.pathInState(`${label}.png`);
-      const capture = context.spawnOwned(label, '/usr/bin/import', [
-        '-display', display.display, '-window', 'root', output,
-      ], { env: environment });
-      await waitFor(() => capture.exitCode !== null, 10_000, 'owned-display capture', 25);
-      if (capture.exitCode !== 0) throw new Error('Owned-display capture failed');
-      const png = await readFile(output);
-      await rm(output);
-      if (png.subarray(0, 8).toString('hex') !== '89504e470d0a1a0a') throw new Error('Invalid owned-display PNG');
+      if (app.exitCode !== null || display.child.exitCode !== null) throw new Error('Owned Electron display is unavailable');
+      const png = await page.screenshot({ type: 'png', timeout: 10_000 });
       return `data:image/png;base64,${png.toString('base64')}`;
     },
   };

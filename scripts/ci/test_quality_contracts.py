@@ -3,7 +3,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from check_quality_contracts import check, covered_cli_targets, ignored_differences
+from check_quality_contracts import check, covered_cli_targets, ignored_differences, ignored_listing_command
 
 
 class QualityContracts(unittest.TestCase):
@@ -64,6 +64,23 @@ class QualityContracts(unittest.TestCase):
         root = self.workspace()
         (root / "tests/ignored-tests.linux.json").write_text('{"cases":["new_case"]}')
         self.assertIn("Linux ignored count disagrees with the reviewed named roster", check(root))
+
+    def test_listing_uses_exact_target_without_executing_existing_runner_flags(self):
+        self.assertEqual(ignored_listing_command(["cargo", "test", "-p", "kcoder_cli", "--bin", "kcoder", "--", "--test-threads=1"]),
+                         ["cargo", "test", "-p", "kcoder_cli", "--bin", "kcoder", "--", "--list", "--ignored"])
+
+    def test_cli_named_roster_is_required_and_duplicate_names_are_rejected(self):
+        root = self.workspace()
+        with (root / "tests/matrix.toml").open("a") as file:
+            file.write('\n[[suite]]\nid="cli-kcoder-unit"\ntiers=["pr","full"]\ncommand=["cargo","test","-p","kcoder_cli","--bin","kcoder"]\nsummary={expected_skips={linux=1,macos=0,windows=0}}\n')
+        self.assertIn("Native CLI suites require their separate reviewed named roster", check(root))
+        roster = {"suites": {"cli-kcoder-unit": {"cases": {"linux": ["one"], "macos": [], "windows": []}}}}
+        path = root / "tests/ignored-tests.cli.json"
+        path.write_text(json.dumps(roster))
+        self.assertEqual(check(root), [])
+        roster["suites"]["cli-kcoder-unit"]["cases"]["linux"] = ["one", "one"]
+        path.write_text(json.dumps(roster))
+        self.assertIn("Duplicate named CLI case: cli-kcoder-unit/linux", check(root))
 
 
 if __name__ == "__main__":

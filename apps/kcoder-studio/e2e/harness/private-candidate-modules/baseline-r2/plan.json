@@ -1,0 +1,578 @@
+{
+  "key": "baseline-r2",
+  "root": "apps/kcoder-studio/e2e/private/candidates/render-profile-full-v8-capture-20261009/mobile-render-profile.baseline-candidate-r2.mjs",
+  "original": {
+    "blob": "d228c6004c3241416fbfecaf0f25a2973c85c85d",
+    "sha256": "e00e5de23224a6b5937d890011f9bdb2a675c51a61eb800b38df4c7e6b6dd068"
+  },
+  "groups": [
+    {
+      "key": "helpers",
+      "factory": "createPrivateScrollV1Helpers",
+      "path": "apps/kcoder-studio/e2e/harness/private-candidate-modules/scroll-v1/helpers.mjs",
+      "names": [
+        "resolveProvenanceReference",
+        "readFrozenGatewayRuntime",
+        "startFrozenGateway",
+        "assertSafeBundleRelativePath",
+        "assertNoSymlinkAncestors",
+        "verifyExactBundleTree",
+        "installPerformanceInstrumentation",
+        "configureRuntimeConsumerProbe",
+        "safeSeedErrorMessage",
+        "safeSeedErrorStack",
+        "beginSeedUiTraceInPage",
+        "endSeedUiTraceInPage",
+        "captureSeedFailureDom"
+      ],
+      "parameters": [
+        "assert",
+        "lstat",
+        "performance",
+        "randomBytes",
+        "readFile",
+        "readdir",
+        "relative",
+        "repoRoot",
+        "resolve",
+        "sep",
+        "sha256",
+        "sha256File",
+        "waitFor"
+      ],
+      "segments": [
+        {
+          "start": 83379,
+          "end": 83626
+        },
+        {
+          "start": 83626,
+          "end": 88553
+        },
+        {
+          "start": 88553,
+          "end": 90133
+        },
+        {
+          "start": 96262,
+          "end": 97056
+        },
+        {
+          "start": 97056,
+          "end": 97336
+        },
+        {
+          "start": 97336,
+          "end": 99099
+        },
+        {
+          "start": 99099,
+          "end": 124842
+        },
+        {
+          "start": 233112,
+          "end": 234067
+        },
+        {
+          "start": 258716,
+          "end": 259265
+        },
+        {
+          "start": 259265,
+          "end": 259509
+        },
+        {
+          "start": 259509,
+          "end": 269432
+        },
+        {
+          "start": 269432,
+          "end": 269523
+        },
+        {
+          "start": 269523,
+          "end": 275348
+        }
+      ]
+    },
+    {
+      "key": "source-inputs",
+      "factory": "createPrivateBaselineR2SourceInputs",
+      "path": "apps/kcoder-studio/e2e/harness/private-candidate-modules/baseline-r2/source-inputs.mjs",
+      "names": [
+        "readSourceSpec",
+        "copyAndVerifyRetainedBuilderExport"
+      ],
+      "parameters": [
+        "assert",
+        "assertNoSymlinkAncestors",
+        "assertPathWithinApprovedRoots",
+        "assertSafeBundleRelativePath",
+        "basename",
+        "coreAttributionOnly",
+        "dirname",
+        "lstat",
+        "mkdir",
+        "optionValue",
+        "readFile",
+        "readVerifiedMobileExportFile",
+        "relative",
+        "repoRoot",
+        "requiredDigest",
+        "requiredOption",
+        "resolve",
+        "resolveProvenanceReference",
+        "rm",
+        "sep",
+        "sha256",
+        "verifyExactBundleTree",
+        "verifyMobileExportManifestEnvelope",
+        "verifySourceMapBundleEvidence",
+        "writeFile"
+      ],
+      "segments": [
+        {
+          "start": 64357,
+          "end": 83379
+        },
+        {
+          "start": 90133,
+          "end": 96262
+        }
+      ]
+    },
+    {
+      "key": "view-ledger",
+      "factory": "createPrivateScrollV1ViewLedger",
+      "path": "apps/kcoder-studio/e2e/harness/private-candidate-modules/scroll-v1/view-ledger.mjs",
+      "names": [
+        "installHistoryAndNotificationFixture",
+        "readFocusState",
+        "connectMobile",
+        "loadHistoryToCount",
+        "latestLoadedHistoryTail",
+        "readTranscriptViewport",
+        "captureBrowserMemory",
+        "captureTranscriptEvidence",
+        "makeHistoryPage",
+        "makeHistoryMessage",
+        "createPageState",
+        "areNotificationBatchesOrdered",
+        "summarizeObservations",
+        "summarizeLongTasks",
+        "summarizeLongAnimationFrames",
+        "createCoverage",
+        "percentile",
+        "sampleHostCpuWindow",
+        "readHostCpuSnapshot"
+      ],
+      "parameters": [
+        "activeDeltaChunksPerStream",
+        "assert",
+        "fixturePageSize",
+        "parseFrame",
+        "performance",
+        "readFile",
+        "readdir",
+        "serverId",
+        "suiteSourceSha256",
+        "threadId",
+        "transcriptVirtualizationTraceLimits",
+        "waitFor",
+        "waitForTwoFrames"
+      ],
+      "segments": [
+        {
+          "start": 124842,
+          "end": 128846
+        },
+        {
+          "start": 128846,
+          "end": 130742
+        },
+        {
+          "start": 130742,
+          "end": 132192
+        },
+        {
+          "start": 132192,
+          "end": 132969
+        },
+        {
+          "start": 132969,
+          "end": 134075
+        },
+        {
+          "start": 432441,
+          "end": 457409
+        },
+        {
+          "start": 461666,
+          "end": 462582
+        },
+        {
+          "start": 462582,
+          "end": 463472
+        },
+        {
+          "start": 463472,
+          "end": 464291
+        },
+        {
+          "start": 464291,
+          "end": 466199
+        },
+        {
+          "start": 466199,
+          "end": 467758
+        },
+        {
+          "start": 467758,
+          "end": 468479
+        },
+        {
+          "start": 468479,
+          "end": 471810
+        },
+        {
+          "start": 471810,
+          "end": 472317
+        },
+        {
+          "start": 472317,
+          "end": 474282
+        },
+        {
+          "start": 474282,
+          "end": 485608
+        },
+        {
+          "start": 485608,
+          "end": 485757
+        },
+        {
+          "start": 485757,
+          "end": 487205
+        },
+        {
+          "start": 487205,
+          "end": 488806
+        }
+      ]
+    },
+    {
+      "key": "follow-scenarios",
+      "factory": "createPrivateScrollV1FollowScenarios",
+      "path": "apps/kcoder-studio/e2e/harness/private-candidate-modules/scroll-v1/follow-scenarios.mjs",
+      "names": [
+        "summarizeSeedDispatchEvidence",
+        "beginTranscriptVirtualizationScrollTrace",
+        "stopTranscriptVirtualizationScrollTrace",
+        "scrollTranscriptToLatestCore",
+        "waitForProductTailMarkerWithoutAction",
+        "assertProductHistoryAnchorPreserved",
+        "assertProductVisibleHistoryOrder",
+        "chooseVisibleProductCodeAnchor",
+        "makeLongTailWindowAppendDelta",
+        "expandProductHistoryCodeDisclosure",
+        "runTailWindowProductRegression",
+        "runTailWindowPaginationRegression",
+        "runTranscriptFollowGestureRegression",
+        "disposeTranscriptFollowGestureInputTrace",
+        "waitForProductAppendCommit",
+        "performTrustedTranscriptTouch",
+        "waitForTranscriptTouchSettled",
+        "waitForProgrammaticFollowScrollEvent",
+        "waitForFollowAppendLayout",
+        "assertNoFollowPull",
+        "readVisibleHistoryAnchor",
+        "readCompletedAssistantMarkerUi",
+        "trustedJumpClickEventsSince",
+        "summarizeFollowGestureNotification",
+        "emitSyntheticTaskSnapshot"
+      ],
+      "parameters": [
+        "areNotificationBatchesOrdered",
+        "assert",
+        "fixturePageSize",
+        "installTranscriptFollowGestureInputTrace",
+        "measuredTranscriptLatestDistance",
+        "normalizeStableReaderAnchorWithTrustedInput",
+        "performProductTouchStroke",
+        "performProductTouchToOlderHistory",
+        "performProductWheelToOlderHistoryControl",
+        "performance",
+        "prepareProductTouchStroke",
+        "readProductHistoryViewport",
+        "readTranscriptFollowGestureInputTrace",
+        "readTranscriptViewport",
+        "safeSeedErrorMessage",
+        "safeSeedErrorStack",
+        "scrollTranscriptToLatest",
+        "serverId",
+        "threadId",
+        "transcriptInputEventsSince",
+        "transcriptVirtualizationTraceLimits",
+        "waitFor",
+        "waitForStableProductHistoryAnchor",
+        "waitForStableProductHistoryWindow",
+        "waitForTwoFrames"
+      ],
+      "segments": [
+        {
+          "start": 252029,
+          "end": 256064
+        },
+        {
+          "start": 276752,
+          "end": 279986
+        },
+        {
+          "start": 279986,
+          "end": 281916
+        },
+        {
+          "start": 281916,
+          "end": 291479
+        },
+        {
+          "start": 291479,
+          "end": 297664
+        },
+        {
+          "start": 304332,
+          "end": 305865
+        },
+        {
+          "start": 305865,
+          "end": 306437
+        },
+        {
+          "start": 306437,
+          "end": 307032
+        },
+        {
+          "start": 307032,
+          "end": 307672
+        },
+        {
+          "start": 307672,
+          "end": 309908
+        },
+        {
+          "start": 309908,
+          "end": 337109
+        },
+        {
+          "start": 337109,
+          "end": 350389
+        },
+        {
+          "start": 350389,
+          "end": 369633
+        },
+        {
+          "start": 382174,
+          "end": 382320
+        },
+        {
+          "start": 419614,
+          "end": 421233
+        },
+        {
+          "start": 421233,
+          "end": 425332
+        },
+        {
+          "start": 425332,
+          "end": 427108
+        },
+        {
+          "start": 427108,
+          "end": 427749
+        },
+        {
+          "start": 427749,
+          "end": 428426
+        },
+        {
+          "start": 428426,
+          "end": 429399
+        },
+        {
+          "start": 429399,
+          "end": 430554
+        },
+        {
+          "start": 430554,
+          "end": 431418
+        },
+        {
+          "start": 431577,
+          "end": 431818
+        },
+        {
+          "start": 431818,
+          "end": 432441
+        },
+        {
+          "start": 457409,
+          "end": 461666
+        }
+      ]
+    },
+    {
+      "key": "measurements",
+      "factory": "createPrivateBaselineR2Measurements",
+      "path": "apps/kcoder-studio/e2e/harness/private-candidate-modules/baseline-r2/measurements.mjs",
+      "names": [
+        "measureInputFeedback",
+        "measureScrollFeedback",
+        "summarizeScrollCausalityViewport",
+        "summarizeScrollCausalityTailGate",
+        "summarizeScrollCausalityWheel",
+        "summarizeScrollCausalityTouchTrace",
+        "evaluateScrollCausalityTouchEvidence",
+        "measureActiveMarkdownDelta",
+        "dispatchActiveFrame",
+        "dispatchActiveStreamFrames",
+        "makeLongMarkdownDelta",
+        "measureSnapshotUpdates",
+        "captureCdpClockAnchor",
+        "summarizeCpuProfile",
+        "mapCpuProfileWithSourceMaps",
+        "sendSyntheticSnapshot",
+        "readRuntimeConsumerProbe",
+        "drainRuntimeConsumerProbe",
+        "buildRuntimeConsumerSeedDiagnostic",
+        "summarizeRuntimeConsumerSeedFailure",
+        "summarizeSeedTranscriptViewport"
+      ],
+      "parameters": [
+        "activeDeltaChunksPerStream",
+        "assert",
+        "beginSeedUiTraceInPage",
+        "captureSeedFailureDom",
+        "captureSeedUiDomTrace",
+        "collectLongTasks",
+        "configureRuntimeConsumerProbe",
+        "createRequire",
+        "disposeTranscriptFollowGestureInputTrace",
+        "emitSyntheticTaskSnapshot",
+        "endSeedUiTraceInPage",
+        "installTranscriptFollowGestureInputTrace",
+        "manualHistoryLogicalDistanceFromLatest",
+        "mapGeneratedProfilePosition",
+        "moveAwayFromLatestWithTrustedWheel",
+        "performance",
+        "readTranscriptFollowGestureInputTrace",
+        "readTranscriptViewport",
+        "readVerifiedMobileExportFile",
+        "recordScriptUrlIdentity",
+        "repoRoot",
+        "resolve",
+        "resolveScriptMapBinding",
+        "resolveTranscriptScrollportTransform",
+        "runtimeConsumerDiagnostic",
+        "safePath",
+        "safeSeedErrorMessage",
+        "safeSeedErrorStack",
+        "scrollTranscriptToLatest",
+        "serverId",
+        "sha256",
+        "summarizeManualHistoryResetViewport",
+        "summarizeSeedDispatchEvidence",
+        "threadId",
+        "transcriptInputEventsSince",
+        "transcriptVirtualizationTraceLimits",
+        "waitForTwoFrames"
+      ],
+      "segments": [
+        {
+          "start": 155515,
+          "end": 161665
+        },
+        {
+          "start": 161665,
+          "end": 177237
+        },
+        {
+          "start": 177237,
+          "end": 178656
+        },
+        {
+          "start": 178656,
+          "end": 179572
+        },
+        {
+          "start": 179572,
+          "end": 181589
+        },
+        {
+          "start": 181589,
+          "end": 183466
+        },
+        {
+          "start": 183466,
+          "end": 185321
+        },
+        {
+          "start": 185321,
+          "end": 211597
+        },
+        {
+          "start": 211597,
+          "end": 211970
+        },
+        {
+          "start": 211970,
+          "end": 212329
+        },
+        {
+          "start": 212329,
+          "end": 212950
+        },
+        {
+          "start": 212950,
+          "end": 218401
+        },
+        {
+          "start": 218401,
+          "end": 219368
+        },
+        {
+          "start": 219368,
+          "end": 225096
+        },
+        {
+          "start": 225096,
+          "end": 228708
+        },
+        {
+          "start": 228708,
+          "end": 233112
+        },
+        {
+          "start": 234067,
+          "end": 234496
+        },
+        {
+          "start": 234496,
+          "end": 238629
+        },
+        {
+          "start": 238629,
+          "end": 251433
+        },
+        {
+          "start": 251433,
+          "end": 252029
+        },
+        {
+          "start": 256064,
+          "end": 258716
+        }
+      ]
+    }
+  ]
+}

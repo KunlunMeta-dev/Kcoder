@@ -7,6 +7,7 @@ import {
   editBrowserAddressDraft,
   normalizeBrowserUrl,
   settleBrowserAddressDraft,
+  workspaceBrowserOwnerKey,
 } from "./browser-viewport";
 
 describe("browser viewport", () => {
@@ -23,17 +24,28 @@ describe("browser viewport", () => {
 
 describe("browser URL normalization", () => {
   it("uses http for local hosts and https for public hosts", () => {
-    expect(normalizeBrowserUrl(" localhost:4173 ")).toBe("http://localhost:4173");
+    expect(normalizeBrowserUrl(" localhost:4173 ")).toBe("http://localhost:4173/");
     expect(normalizeBrowserUrl("127.0.0.1:3000/path")).toBe("http://127.0.0.1:3000/path");
-    expect(normalizeBrowserUrl("[::1]:5173")).toBe("http://[::1]:5173");
+    expect(normalizeBrowserUrl("[::1]:5173")).toBe("http://[::1]:5173/");
     expect(normalizeBrowserUrl("example.com/docs")).toBe("https://example.com/docs");
     expect(normalizeBrowserUrl("//example.com/docs")).toBe("https://example.com/docs");
   });
 
-  it("keeps an explicit scheme and supplies a safe blank default", () => {
-    expect(normalizeBrowserUrl("http://203.0.113.8:8080")).toBe("http://203.0.113.8:8080");
-    expect(normalizeBrowserUrl("file:///tmp/index.html")).toBe("file:///tmp/index.html");
+  it("keeps valid HTTP(S) schemes, rejects unsafe schemes and credentials, and supplies a safe blank default", () => {
+    expect(normalizeBrowserUrl("http://203.0.113.8:8080")).toBe("http://203.0.113.8:8080/");
+    expect(() => normalizeBrowserUrl("file:///tmp/index.html")).toThrow();
+    expect(() => normalizeBrowserUrl("https://user:secret@example.com")).toThrow();
     expect(normalizeBrowserUrl("  ")).toBe("https://example.com");
+  });
+
+  it("binds a browser owner to the exact task cwd and Gateway authorization/target scope", () => {
+    const profile = { id: "gateway", baseUrl: "https://gateway.example", authorizationGeneration: "grant-1" } as any;
+    const server = { id: "target", runtime: "kcoder", transport: "ssh", workspacePath: "/workspace" } as any;
+    const owner = workspaceBrowserOwnerKey(profile, server, "/workspace/task-a");
+    expect(owner).not.toContain("secret");
+    expect(workspaceBrowserOwnerKey(profile, server, "/workspace/task-b")).not.toBe(owner);
+    expect(workspaceBrowserOwnerKey({ ...profile, authorizationGeneration: "grant-2" }, server, "/workspace/task-a")).not.toBe(owner);
+    expect(workspaceBrowserOwnerKey(profile, { ...server, id: "target-2" }, "/workspace/task-a")).not.toBe(owner);
   });
 });
 

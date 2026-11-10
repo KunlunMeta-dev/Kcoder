@@ -91,6 +91,17 @@ test('sets the unified KCoder config directory on Unix', () => {
   });
 });
 
+test('allows isolated Unix runs to avoid login shell profiles', () => {
+  assert.deepEqual(platformShell('linux', { SHELL: '/bin/bash', KCODER_TUI_LAB_NON_LOGIN_SHELL: '1' }), {
+    file: '/bin/bash',
+    commandArgs: ['-c'],
+  });
+  assert.deepEqual(platformShell('linux', { SHELL: '/bin/bash' }), {
+    file: '/bin/bash',
+    commandArgs: ['-lc'],
+  });
+});
+
 test('builds delayed launches with PowerShell on Windows', () => {
   assert.deepEqual(
     delayedSpawn('C:\\bin\\kcoder.exe', ['--cwd', "C:\\O'Brien"], 0.7, 'win32', {

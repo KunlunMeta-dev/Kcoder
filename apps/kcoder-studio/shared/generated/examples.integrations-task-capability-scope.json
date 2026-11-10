@@ -1,0 +1,799 @@
+{
+  "IntegrationTaskCapabilityScopeControlOperationParams": [
+    {
+      "decoded": {
+        "operationId": "original-source-control-op",
+        "target": {
+          "initialAttempt": {
+            "attemptId": "source-attempt",
+            "threadId": "source-thread",
+            "turnId": "source-turn"
+          },
+          "runtimeOperationId": "original-runtime-op"
+        }
+      },
+      "name": "read-original-control-operation",
+      "value": {
+        "operationId": "original-source-control-op",
+        "target": {
+          "initialAttempt": {
+            "attemptId": "source-attempt",
+            "threadId": "source-thread",
+            "turnId": "source-turn"
+          },
+          "runtimeOperationId": "original-runtime-op"
+        }
+      }
+    }
+  ],
+  "IntegrationTaskCapabilityScopeControlReadParams": [
+    {
+      "decoded": {
+        "params": {
+          "threadId": "source-thread"
+        },
+        "target": {
+          "initialAttempt": {
+            "attemptId": "source-attempt",
+            "threadId": "source-thread",
+            "turnId": "source-turn"
+          },
+          "runtimeOperationId": "original-runtime-op"
+        }
+      },
+      "name": "read-original-binding",
+      "value": {
+        "params": {
+          "threadId": "source-thread"
+        },
+        "target": {
+          "initialAttempt": {
+            "attemptId": "source-attempt",
+            "threadId": "source-thread",
+            "turnId": "source-turn"
+          },
+          "runtimeOperationId": "original-runtime-op"
+        }
+      }
+    }
+  ],
+  "IntegrationTaskCapabilityScopeControlSetParams": [
+    {
+      "decoded": {
+        "params": {
+          "selection": {
+            "mode": "none",
+            "sources": []
+          },
+          "threadId": "source-thread"
+        },
+        "target": {
+          "initialAttempt": {
+            "attemptId": "source-attempt",
+            "threadId": "source-thread",
+            "turnId": "source-turn"
+          },
+          "runtimeOperationId": "original-runtime-op"
+        }
+      },
+      "name": "set-none-for-original-binding",
+      "value": {
+        "params": {
+          "selection": {
+            "mode": "none",
+            "sources": []
+          },
+          "threadId": "source-thread"
+        },
+        "target": {
+          "initialAttempt": {
+            "attemptId": "source-attempt",
+            "threadId": "source-thread",
+            "turnId": "source-turn"
+          },
+          "runtimeOperationId": "original-runtime-op"
+        }
+      }
+    }
+  ],
+  "IntegrationTaskCapabilityScopeControlTarget": [
+    {
+      "decoded": {
+        "initialAttempt": {
+          "attemptId": "source-attempt",
+          "threadId": "source-thread",
+          "turnId": "source-turn"
+        },
+        "runtimeOperationId": "original-runtime-op"
+      },
+      "name": "original-runtime-tuple",
+      "value": {
+        "initialAttempt": {
+          "attemptId": "source-attempt",
+          "threadId": "source-thread",
+          "turnId": "source-turn"
+        },
+        "runtimeOperationId": "original-runtime-op"
+      }
+    },
+    {
+      "decoded": {
+        "initialAttempt": {
+          "attemptId": "source-attempt",
+          "threadId": "source-thread",
+          "turnId": "source-turn"
+        }
+      },
+      "name": "original-studio-tuple",
+      "value": {
+        "initialAttempt": {
+          "attemptId": "source-attempt",
+          "threadId": "source-thread",
+          "turnId": "source-turn"
+        }
+      }
+    }
+  ],
+  "IntegrationTaskCapabilityScopeDirectoryEntry": [
+    {
+      "decoded": {
+        "observationState": "saved_only",
+        "reasonCode": "TASK_CAPABILITY_SCOPE_LIVE_AUTHORITY_NOT_OBSERVED",
+        "referenceId": "saved-source-reference",
+        "savedSnapshot": {
+          "effectiveFrom": "current_snapshot",
+          "effectiveSources": [],
+          "revision": 1,
+          "selection": {
+            "mode": "none",
+            "sources": []
+          },
+          "threadId": "source-thread"
+        },
+        "target": {
+          "initialAttempt": {
+            "attemptId": "source-attempt",
+            "threadId": "source-thread",
+            "turnId": "source-turn"
+          }
+        }
+      },
+      "name": "original-saved-target",
+      "value": {
+        "observationState": "saved_only",
+        "reasonCode": "TASK_CAPABILITY_SCOPE_LIVE_AUTHORITY_NOT_OBSERVED",
+        "referenceId": "saved-source-reference",
+        "savedSnapshot": {
+          "effectiveFrom": "current_snapshot",
+          "effectiveSources": [],
+          "revision": 1,
+          "selection": {
+            "mode": "none",
+            "sources": []
+          },
+          "threadId": "source-thread"
+        },
+        "target": {
+          "initialAttempt": {
+            "attemptId": "source-attempt",
+            "threadId": "source-thread",
+            "turnId": "source-turn"
+          }
+        }
+      }
+    },
+    {
+      "decoded": {
+        "observationState": "unknown",
+        "reasonCode": "TASK_CAPABILITY_SCOPE_SAVED_RECORD_UNREADABLE",
+        "referenceId": "saved-unknown",
+        "savedSnapshot": null,
+        "target": null
+      },
+      "name": "unreadable-original-record",
+      "value": {
+        "observationState": "unknown",
+        "reasonCode": "TASK_CAPABILITY_SCOPE_SAVED_RECORD_UNREADABLE",
+        "referenceId": "saved-unknown",
+        "savedSnapshot": null,
+        "target": null
+      }
+    }
+  ],
+  "IntegrationTaskCapabilityScopeDirectoryReadParams": [
+    {
+      "decoded": {},
+      "name": "existing-scope-page",
+      "value": {}
+    },
+    {
+      "decoded": {
+        "threadId": "source-thread"
+      },
+      "name": "original-thread-filter",
+      "value": {
+        "threadId": "source-thread"
+      }
+    }
+  ],
+  "IntegrationTaskCapabilityScopeDirectorySnapshot": [
+    {
+      "decoded": {
+        "entries": [
+          {
+            "observationState": "saved_only",
+            "reasonCode": "TASK_CAPABILITY_SCOPE_LIVE_AUTHORITY_NOT_OBSERVED",
+            "referenceId": "saved-source-reference",
+            "savedSnapshot": {
+              "effectiveFrom": "current_snapshot",
+              "effectiveSources": [],
+              "revision": 1,
+              "selection": {
+                "mode": "none",
+                "sources": []
+              },
+              "threadId": "source-thread"
+            },
+            "target": {
+              "initialAttempt": {
+                "attemptId": "source-attempt",
+                "threadId": "source-thread",
+                "turnId": "source-turn"
+              }
+            }
+          }
+        ],
+        "nextCursor": null,
+        "observationState": "saved_only",
+        "reasonCode": null
+      },
+      "name": "bounded-saved-page",
+      "value": {
+        "entries": [
+          {
+            "observationState": "saved_only",
+            "reasonCode": "TASK_CAPABILITY_SCOPE_LIVE_AUTHORITY_NOT_OBSERVED",
+            "referenceId": "saved-source-reference",
+            "savedSnapshot": {
+              "effectiveFrom": "current_snapshot",
+              "effectiveSources": [],
+              "revision": 1,
+              "selection": {
+                "mode": "none",
+                "sources": []
+              },
+              "threadId": "source-thread"
+            },
+            "target": {
+              "initialAttempt": {
+                "attemptId": "source-attempt",
+                "threadId": "source-thread",
+                "turnId": "source-turn"
+              }
+            }
+          }
+        ],
+        "nextCursor": null,
+        "observationState": "saved_only",
+        "reasonCode": null
+      }
+    },
+    {
+      "decoded": {
+        "entries": [],
+        "nextCursor": null,
+        "observationState": "unknown",
+        "reasonCode": "TASK_CAPABILITY_SCOPE_BINDINGS_NOT_OBSERVED"
+      },
+      "name": "unobserved-store",
+      "value": {
+        "entries": [],
+        "nextCursor": null,
+        "observationState": "unknown",
+        "reasonCode": "TASK_CAPABILITY_SCOPE_BINDINGS_NOT_OBSERVED"
+      }
+    }
+  ],
+  "IntegrationTaskCapabilityScopeDirectoryState": [
+    {
+      "decoded": "saved_only",
+      "name": "saved-data-only",
+      "value": "saved_only"
+    },
+    {
+      "decoded": "unknown",
+      "name": "unknown",
+      "value": "unknown"
+    }
+  ],
+  "IntegrationTaskCapabilityScopeReadParams": [
+    {
+      "decoded": {
+        "threadId": "native-thread"
+      },
+      "name": "native-source-example",
+      "value": {
+        "threadId": "native-thread"
+      }
+    }
+  ],
+  "IntegrationTaskCapabilityScopeSelection": [
+    {
+      "decoded": {
+        "mode": "selected",
+        "sources": [
+          {
+            "accountRef": null,
+            "sourceRef": {
+              "id": "configured-source",
+              "revision": "security-v1"
+            }
+          }
+        ]
+      },
+      "name": "native-source-example",
+      "value": {
+        "mode": "selected",
+        "sources": [
+          {
+            "accountRef": null,
+            "sourceRef": {
+              "id": "configured-source",
+              "revision": "security-v1"
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "IntegrationTaskCapabilityScopeSetParams": [
+    {
+      "decoded": {
+        "selection": {
+          "mode": "selected",
+          "sources": [
+            {
+              "accountRef": null,
+              "sourceRef": {
+                "id": "configured-source",
+                "revision": "security-v1"
+              }
+            }
+          ]
+        },
+        "threadId": "native-thread"
+      },
+      "name": "native-source-example",
+      "value": {
+        "selection": {
+          "mode": "selected",
+          "sources": [
+            {
+              "accountRef": null,
+              "sourceRef": {
+                "id": "configured-source",
+                "revision": "security-v1"
+              }
+            }
+          ]
+        },
+        "threadId": "native-thread"
+      }
+    },
+    {
+      "decoded": {
+        "resourceBindings": [],
+        "selection": {
+          "mode": "selected",
+          "sources": [
+            {
+              "accountRef": null,
+              "sourceRef": {
+                "id": "configured-source",
+                "revision": "security-v1"
+              }
+            }
+          ]
+        },
+        "threadId": "native-thread"
+      },
+      "name": "explicit-empty-resource-ceiling",
+      "value": {
+        "resourceBindings": [],
+        "selection": {
+          "mode": "selected",
+          "sources": [
+            {
+              "accountRef": null,
+              "sourceRef": {
+                "id": "configured-source",
+                "revision": "security-v1"
+              }
+            }
+          ]
+        },
+        "threadId": "native-thread"
+      }
+    },
+    {
+      "decoded": {
+        "resourceBindings": [
+          {
+            "connectionRef": {
+              "id": "original-application-connection",
+              "revision": "3"
+            },
+            "resourceRefs": [
+              {
+                "id": "original-resource-reference",
+                "kind": "document",
+                "revision": "original-resource-revision"
+              }
+            ],
+            "source": {
+              "accountRef": null,
+              "sourceRef": {
+                "id": "configured-source",
+                "revision": "security-v1"
+              }
+            }
+          }
+        ],
+        "selection": {
+          "mode": "selected",
+          "sources": [
+            {
+              "accountRef": null,
+              "sourceRef": {
+                "id": "configured-source",
+                "revision": "security-v1"
+              }
+            }
+          ]
+        },
+        "threadId": "native-thread"
+      },
+      "name": "separate-source-and-resource-selection",
+      "value": {
+        "resourceBindings": [
+          {
+            "connectionRef": {
+              "id": "original-application-connection",
+              "revision": "3"
+            },
+            "resourceRefs": [
+              {
+                "id": "original-resource-reference",
+                "kind": "document",
+                "revision": "original-resource-revision"
+              }
+            ],
+            "source": {
+              "accountRef": null,
+              "sourceRef": {
+                "id": "configured-source",
+                "revision": "security-v1"
+              }
+            }
+          }
+        ],
+        "selection": {
+          "mode": "selected",
+          "sources": [
+            {
+              "accountRef": null,
+              "sourceRef": {
+                "id": "configured-source",
+                "revision": "security-v1"
+              }
+            }
+          ]
+        },
+        "threadId": "native-thread"
+      }
+    }
+  ],
+  "IntegrationTaskCapabilityScopeSnapshot": [
+    {
+      "decoded": {
+        "effectiveFrom": "next_tool_boundary",
+        "effectiveSources": [
+          {
+            "accountRef": null,
+            "sourceRef": {
+              "id": "configured-source",
+              "revision": "security-v1"
+            }
+          }
+        ],
+        "revision": 1,
+        "selection": {
+          "mode": "selected",
+          "sources": [
+            {
+              "accountRef": null,
+              "sourceRef": {
+                "id": "configured-source",
+                "revision": "security-v1"
+              }
+            }
+          ]
+        },
+        "threadId": "native-thread"
+      },
+      "name": "native-source-example",
+      "value": {
+        "effectiveFrom": "next_tool_boundary",
+        "effectiveSources": [
+          {
+            "accountRef": null,
+            "sourceRef": {
+              "id": "configured-source",
+              "revision": "security-v1"
+            }
+          }
+        ],
+        "revision": 1,
+        "selection": {
+          "mode": "selected",
+          "sources": [
+            {
+              "accountRef": null,
+              "sourceRef": {
+                "id": "configured-source",
+                "revision": "security-v1"
+              }
+            }
+          ]
+        },
+        "threadId": "native-thread"
+      }
+    }
+  ],
+  "IntegrationTaskCapabilitySourceCatalogState": [
+    {
+      "decoded": "unknown",
+      "name": "native-observation-only",
+      "value": "unknown"
+    }
+  ],
+  "IntegrationTaskCapabilitySourceChoice": [
+    {
+      "decoded": {
+        "accountRef": null,
+        "sourceRef": {
+          "id": "configured-source",
+          "revision": "security-v1"
+        }
+      },
+      "name": "native-source-example",
+      "value": {
+        "accountRef": null,
+        "sourceRef": {
+          "id": "configured-source",
+          "revision": "security-v1"
+        }
+      }
+    }
+  ],
+  "IntegrationTaskCapabilitySourceChoicesPage": [
+    {
+      "decoded": {
+        "catalogRevision": "actual-native-catalog",
+        "catalogState": "observed",
+        "items": [
+          {
+            "accountDisplayName": null,
+            "accountRef": null,
+            "capabilities": [
+              "tools",
+              "resources"
+            ],
+            "displayName": "已配置连接器",
+            "kind": "mcp",
+            "reasonCode": null,
+            "sourceRef": {
+              "id": "configured-source",
+              "revision": "security-v1"
+            },
+            "state": "ready"
+          }
+        ],
+        "nextCursor": null,
+        "target": {
+          "initialAttempt": {
+            "attemptId": "source-attempt",
+            "threadId": "source-thread",
+            "turnId": "source-turn"
+          },
+          "runtimeOperationId": "original-runtime-op"
+        }
+      },
+      "name": "native-observation-only",
+      "value": {
+        "catalogRevision": "actual-native-catalog",
+        "catalogState": "observed",
+        "items": [
+          {
+            "accountDisplayName": null,
+            "accountRef": null,
+            "capabilities": [
+              "tools",
+              "resources"
+            ],
+            "displayName": "已配置连接器",
+            "kind": "mcp",
+            "reasonCode": null,
+            "sourceRef": {
+              "id": "configured-source",
+              "revision": "security-v1"
+            },
+            "state": "ready"
+          }
+        ],
+        "nextCursor": null,
+        "target": {
+          "initialAttempt": {
+            "attemptId": "source-attempt",
+            "threadId": "source-thread",
+            "turnId": "source-turn"
+          },
+          "runtimeOperationId": "original-runtime-op"
+        }
+      }
+    }
+  ],
+  "IntegrationTaskCapabilitySourceChoicesParams": [
+    {
+      "decoded": {
+        "target": {
+          "initialAttempt": {
+            "attemptId": "source-attempt",
+            "threadId": "source-thread",
+            "turnId": "source-turn"
+          },
+          "runtimeOperationId": "original-runtime-op"
+        }
+      },
+      "name": "native-observation-only",
+      "value": {
+        "target": {
+          "initialAttempt": {
+            "attemptId": "source-attempt",
+            "threadId": "source-thread",
+            "turnId": "source-turn"
+          },
+          "runtimeOperationId": "original-runtime-op"
+        }
+      }
+    }
+  ],
+  "IntegrationTaskCapabilitySourceDescriptor": [
+    {
+      "decoded": {
+        "accountDisplayName": null,
+        "accountRef": null,
+        "capabilities": [
+          "tools",
+          "resources"
+        ],
+        "displayName": "已配置连接器",
+        "kind": "mcp",
+        "reasonCode": null,
+        "sourceRef": {
+          "id": "configured-source",
+          "revision": "security-v1"
+        },
+        "state": "ready"
+      },
+      "name": "native-source-example",
+      "value": {
+        "accountDisplayName": null,
+        "accountRef": null,
+        "capabilities": [
+          "tools",
+          "resources"
+        ],
+        "displayName": "已配置连接器",
+        "kind": "mcp",
+        "reasonCode": null,
+        "sourceRef": {
+          "id": "configured-source",
+          "revision": "security-v1"
+        },
+        "state": "ready"
+      }
+    }
+  ],
+  "IntegrationTaskResourceBinding": [
+    {
+      "decoded": {
+        "connectionRef": {
+          "id": "original-application-connection",
+          "revision": "3"
+        },
+        "resourceRefs": [
+          {
+            "id": "original-resource-reference",
+            "kind": "document",
+            "revision": "original-resource-revision"
+          }
+        ],
+        "source": {
+          "accountRef": null,
+          "sourceRef": {
+            "id": "configured-source",
+            "revision": "security-v1"
+          }
+        }
+      },
+      "name": "independent-original-resource-locators",
+      "value": {
+        "connectionRef": {
+          "id": "original-application-connection",
+          "revision": "3"
+        },
+        "resourceRefs": [
+          {
+            "id": "original-resource-reference",
+            "kind": "document",
+            "revision": "original-resource-revision"
+          }
+        ],
+        "source": {
+          "accountRef": null,
+          "sourceRef": {
+            "id": "configured-source",
+            "revision": "security-v1"
+          }
+        }
+      }
+    }
+  ],
+  "IntegrationTaskResourceRef": [
+    {
+      "decoded": {
+        "id": "original-resource-reference",
+        "kind": "document",
+        "revision": "original-resource-revision"
+      },
+      "name": "original-current-resource-locator",
+      "value": {
+        "id": "original-resource-reference",
+        "kind": "document",
+        "revision": "original-resource-revision"
+      }
+    }
+  ],
+  "TaskCapabilityScopeDirectoryMethod": [
+    {
+      "decoded": "integrations/tasks/readSavedTaskSourceBindings",
+      "name": "saved-only-directory",
+      "value": "integrations/tasks/readSavedTaskSourceBindings"
+    }
+  ],
+  "TaskCapabilityScopeMethod": [
+    {
+      "decoded": "integrations/tasks/readTaskSources",
+      "name": "live-read",
+      "value": "integrations/tasks/readTaskSources"
+    },
+    {
+      "decoded": "integrations/tasks/setTaskSources",
+      "name": "live-set",
+      "value": "integrations/tasks/setTaskSources"
+    },
+    {
+      "decoded": "integrations/tasks/readTaskSourceOperation",
+      "name": "original-op-read",
+      "value": "integrations/tasks/readTaskSourceOperation"
+    }
+  ],
+  "TaskCapabilitySourceChoicesMethod": [
+    {
+      "decoded": "integrations/tasks/listTaskSourceChoices",
+      "name": "native-observation-only",
+      "value": "integrations/tasks/listTaskSourceChoices"
+    }
+  ]
+}

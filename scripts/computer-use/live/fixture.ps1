@@ -1,4 +1,4 @@
-param([Parameter(Mandatory=$true)][string]$OutputDirectory, [switch]$VisualChallenge, [switch]$FullViewIsolation, [switch]$InputDiagnostics,
+param([Parameter(Mandatory=$true)][string]$OutputDirectory, [switch]$VisualChallenge, [switch]$FullViewIsolation, [switch]$InputDiagnostics, [switch]$OwnedInputFocus,
     [ValidateRange(10,600)][int]$LifetimeSeconds = 150)
 $ErrorActionPreference = 'Stop'
 Add-Type -TypeDefinition 'using System.Runtime.InteropServices; public static class KCTestDpi { [DllImport("user32.dll")] public static extern bool SetProcessDPIAware(); }'
@@ -103,7 +103,9 @@ $form.Add_Shown({
     $click = $button.PointToScreen((New-Object Drawing.Point(70, 20)))
     $virtual = [Windows.Forms.SystemInformation]::VirtualScreen
     $isolationConfirmed = $FullViewIsolation -and $rect.Left -eq $virtual.Left -and $rect.Top -eq $virtual.Top -and $rect.Right -eq $virtual.Right -and $rect.Bottom -eq $virtual.Bottom
-    $ready = @{ fullViewIsolated = $isolationConfirmed; pid = $PID; hwnd = $form.Handle.ToInt64(); challenge = $challenge; region = @($rect.Left, $rect.Top, $rect.Right, $rect.Bottom); inputLoc = @($point.X, $point.Y); buttonLoc = @($click.X, $click.Y) } | ConvertTo-Json -Compress
+    $readyData = @{ fullViewIsolated = $isolationConfirmed; pid = $PID; hwnd = $form.Handle.ToInt64(); challenge = $challenge; region = @($rect.Left, $rect.Top, $rect.Right, $rect.Bottom); inputLoc = @($point.X, $point.Y); buttonLoc = @($click.X, $click.Y) }
+    if ($OwnedInputFocus) { $readyData.inputHwnd = $inputBox.Handle.ToInt64() }
+    $ready = $readyData | ConvertTo-Json -Compress
     [IO.File]::WriteAllText((Join-Path $OutputDirectory 'fixture-ready.json'), $ready, $utf8)
 })
 $timer = New-Object Windows.Forms.Timer

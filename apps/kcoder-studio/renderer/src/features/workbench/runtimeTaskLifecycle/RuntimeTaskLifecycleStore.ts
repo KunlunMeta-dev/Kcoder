@@ -1,3 +1,4 @@
+import { isRuntimeDebugEnabled } from '@/lib/diagnosticPreferences'
 import type {
   RuntimeDeviceWorkspace,
   RuntimeGoalStatus,
@@ -32,6 +33,8 @@ export class RuntimeTaskLifecycleStore {
   private readonly machines = new Map<string, RuntimeTaskMachine>()
   private readonly listeners = new Set<Listener>()
   private readonly unreadStorageKey: string
+  private readonly legacyUnreadStorageKey: string
+  private readonly removedUnreadKeys = new Set<string>()
   private currentTaskKey: string | null = null
   private windowFocused = true
   private persistedUnreadSerialized: string | null = null
@@ -39,7 +42,9 @@ export class RuntimeTaskLifecycleStore {
   private snapshot = EMPTY_STORE_SNAPSHOT
 
   constructor(userId: number | string | null | undefined) {
-    this.unreadStorageKey = `wework.runtimeTaskLifecycle.${userId ?? 'anonymous'}.unread.v1`
+    const scope = userId ?? 'anonymous'
+    this.unreadStorageKey = `kcoder.runtimeTaskLifecycle.${scope}.unread.v1`
+    this.legacyUnreadStorageKey = `wework.runtimeTaskLifecycle.${scope}.unread.v1`
   }
 
   subscribe = (listener: Listener): (() => void) => {
@@ -193,6 +198,12 @@ export class RuntimeTaskLifecycleStore {
 
   removeTarget(targetId: string): void {
     let changed = false
+    for (const key of this.readUnreadKeys()) {
+      if (key.startsWith(`${targetId}\0`)) {
+        this.removedUnreadKeys.add(key)
+        changed = true
+      }
+    }
     for (const key of this.machines.keys()) {
       if (key.startsWith(`${targetId}\0`)) changed = this.machines.delete(key) || changed
     }
@@ -200,8 +211,11 @@ export class RuntimeTaskLifecycleStore {
   }
 
   remove(address: RuntimeTaskAddress): void {
-    const deleted = this.machines.delete(getRuntimeTaskLifecycleKey(address))
-    if (deleted) this.publish()
+    const key = getRuntimeTaskLifecycleKey(address)
+    const persisted = this.readUnreadKeys().has(key)
+    const deleted = this.machines.delete(key)
+    if (persisted) this.removedUnreadKeys.add(key)
+    if (deleted || persisted) this.publish()
   }
 
   rename(previous: RuntimeTaskAddress, next: RuntimeTaskAddress): void {
@@ -210,7 +224,15 @@ export class RuntimeTaskLifecycleStore {
     if (previousKey === nextKey) return
 
     const previousMachine = this.machines.get(previousKey)
-    if (!previousMachine) return
+    if (!previousMachine) {
+      if (this.readUnreadKeys().has(previousKey)) {
+        this.removedUnreadKeys.add(previousKey)
+        this.ensureMachine(next).dispatch({ type: 'marked_unread' })
+        if (this.currentTaskKey === previousKey) this.currentTaskKey = nextKey
+        this.publish()
+      }
+      return
+    }
     const previousState = previousMachine.getState()
     const nextMachine = this.ensureMachine(next)
     const nextState = nextMachine.getState()
@@ -251,6 +273,7 @@ export class RuntimeTaskLifecycleStore {
     }
     if (previousState.unread) nextMachine.dispatch({ type: 'marked_unread' })
     this.machines.delete(previousKey)
+    this.removedUnreadKeys.add(previousKey)
     if (this.currentTaskKey === previousKey) this.currentTaskKey = nextKey
     this.publish()
   }
@@ -313,7 +336,11 @@ export class RuntimeTaskLifecycleStore {
   private readUnreadKeys(): Set<string> {
     if (typeof window === 'undefined') return new Set()
     try {
-      const value = JSON.parse(window.localStorage.getItem(this.unreadStorageKey) ?? '[]')
+      const value = JSON.parse(
+        window.localStorage.getItem(this.unreadStorageKey) ??
+          window.localStorage.getItem(this.legacyUnreadStorageKey) ??
+          '[]'
+      )
       const keys = new Set<string>(
         Array.isArray(value) ? value.filter(item => typeof item === 'string') : []
       )
@@ -326,11 +353,21 @@ export class RuntimeTaskLifecycleStore {
 
   private persistUnreadKeys(keys: ReadonlySet<string>): void {
     if (typeof window === 'undefined') return
-    const serialized = serializeUnreadKeys(keys)
-    if (serialized === this.persistedUnreadSerialized) return
+    // An incomplete work list cannot prove that unread tasks on other targets
+    // or later pages have been read or deleted.
+    const retained = this.readUnreadKeys()
+    for (const key of this.machines.keys()) retained.delete(key)
+    for (const key of this.removedUnreadKeys) retained.delete(key)
+    for (const key of keys) retained.add(key)
+    const serialized = serializeUnreadKeys(retained)
+    if (serialized === this.persistedUnreadSerialized) {
+      this.removedUnreadKeys.clear()
+      return
+    }
     try {
       window.localStorage.setItem(this.unreadStorageKey, serialized)
       this.persistedUnreadSerialized = serialized
+      this.removedUnreadKeys.clear()
     } catch (error) {
       console.warn('Failed to persist runtime task unread state', error)
     }
@@ -342,7 +379,7 @@ function debugRuntimeLifecycleTransition(
   previous: RuntimeTaskLifecycleSnapshot,
   next: RuntimeTaskLifecycleSnapshot
 ): void {
-  if (globalThis.localStorage?.getItem('wework:debug-runtime') !== '1') return
+  if (!isRuntimeDebugEnabled()) return
   console.debug('[KCoder Studio] Runtime lifecycle transition', {
     event: event.type,
     taskId: next.address.taskId,

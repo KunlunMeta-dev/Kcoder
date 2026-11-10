@@ -211,11 +211,41 @@ impl PluginRegistry {
                 });
                 continue;
             }
+            let project_root = if let Some(identity) = &record.project_identity {
+                if !project_trusted
+                    || settings.runtime.project_policy == PluginProjectPolicy::Disabled
+                {
+                    continue;
+                }
+                match crate::project::runtime_root(cwd, identity) {
+                    Ok(Some(root)) => {
+                        let trusted = store.root().parent().is_some_and(|profile| {
+                            kcoder_config::FolderTrustStore::load(profile).check(&root)
+                                == kcoder_config::FolderTrust::Trusted
+                        });
+                        if !trusted {
+                            continue;
+                        }
+                        Some(root)
+                    }
+                    Ok(None) => continue,
+                    Err(_) => {
+                        diagnostics.push(PluginLoadDiagnostic {
+                            root: root.clone(),
+                            code: "managed_plugin_project_changed".into(),
+                            message: "Project installation identity cannot be verified".into(),
+                        });
+                        continue;
+                    }
+                }
+            } else {
+                None
+            };
             load_discovered_plugin(
                 &root,
                 Some(&record),
                 Some(lease),
-                None,
+                project_root.as_deref(),
                 settings,
                 credentials_by_operation.get(&record.operation_id),
                 &mut plugins,

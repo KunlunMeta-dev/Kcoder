@@ -201,6 +201,11 @@ test.each(['desktop', 'compact'] as const)(
       editor.focus()
     })
     expect(screen.getByTestId('send-message-button')).toBeDisabled()
+    const modelTrigger = variant === 'desktop' ? screen.getByTestId('model-selector-button') : null
+    if (modelTrigger) {
+      expect(modelTrigger).toBeVisible()
+      expect(modelTrigger).toBeDisabled()
+    }
     fireEvent.keyDown(editor, { key: 'Enter', code: 'Enter' })
     expect(onSubmit).not.toHaveBeenCalled()
     expect(editor.value).toBe('restored conversation draft')
@@ -212,6 +217,10 @@ test.each(['desktop', 'compact'] as const)(
       />
     )
     expect(screen.getByTestId('send-message-button')).toBeEnabled()
+    if (modelTrigger) {
+      expect(screen.getByTestId('model-selector-button')).toBe(modelTrigger)
+      expect(modelTrigger).toBeEnabled()
+    }
     fireEvent.click(screen.getByTestId('send-message-button'))
     await waitFor(() => expect(onSubmit).toHaveBeenCalled())
   }

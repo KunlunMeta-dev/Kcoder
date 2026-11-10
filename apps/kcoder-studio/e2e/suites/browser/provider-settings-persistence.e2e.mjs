@@ -7,6 +7,7 @@ import { assertRendererBuildFresh } from "../../harness/renderer-build.mjs";
 import { runE2E, waitFor } from "../../harness/run-context.mjs";
 import { materializeWorkspace } from "../../harness/workspace-fixture.mjs";
 import { startApprovalModelFixture } from "../../harness/approval-model.mjs";
+import { openPageGatewayRpc, closeRpcAndWait } from '../../harness/rpc.mjs';
 
 await assertRendererBuildFresh();
 
@@ -22,10 +23,15 @@ await runE2E(
     const { path: workspace } = await materializeWorkspace(context, "minimal", {
       instanceId: "provider-settings",
     });
-    const upstream = await startApprovalModelFixture(context, {textOnly:true});
+    const discoveryOnly = process.env.KCODER_E2E_PROVIDER_DISCOVERY_ONLY === '1';
+    const discoveryKey = `e2e-catalog-${randomBytes(20).toString('hex')}`;
+    context.registerSecret(discoveryKey);
+    const upstream = await startApprovalModelFixture(context, {textOnly:true,
+      ...(discoveryOnly ? { modelList: { apiKey: discoveryKey, ids: ['Exact-Model-B', 'Exact-Model-A', 'Exact-Model-B'] } } : {}) });
     const rejected = await startApprovalModelFixture(context, {httpErrorPrompt:'Reply only OK.',httpErrorStatus:401,httpErrorMessage:'rejected key'});
     // Keep the runtime's established settings.json filename; this is not an overlay.
     await context.writeStateJson("provider-home/settings.json", {
+      ...(discoveryOnly ? { memory: { observer_mode: 'disabled', structured_enabled: false, legacy_prompt_enabled: false }, session_memory: { enabled: false } } : {}),
       active_provider: "fixture-existing",
       model: "MiniMax-M3",
       providers: {
@@ -33,7 +39,9 @@ await runE2E(
           api_format: "openai_chat_completions",
           endpoint: upstream.baseUrl,
           default_model: "fixture-original",
-          context_window_tokens: 32000,
+          // The board fixture sends the real full tool catalog; retain budget enforcement
+          // with a declared window that can hold it. The original settings-only lane stays unchanged.
+          context_window_tokens: discoveryOnly ? 131072 : 32000,
           max_output_tokens: 4096,
           output_headroom_tokens: 4096,
         },
@@ -79,7 +87,58 @@ await runE2E(
     try {
       await login(page, gateway);
       await openSettings(page, gateway);
-      const catalog = await page.evaluate(() => window.__TAURI_INTERNALS__.invoke('local_executor_request', {method:'runtime.models.list',params:{}}));
+      if (discoveryOnly) {
+        const before = await snapshotTargetFiles(context);
+        await page.getByTestId('provider-endpoint').fill(upstream.baseUrl);
+        await page.getByTestId('provider-apiKey').fill(discoveryKey);
+        assert.equal(await page.getByTestId('provider-model').inputValue(), '');
+        assert.equal(await page.getByTestId('provider-id').inputValue(), '');
+        const picker = page.getByTestId('provider-discovered-model');
+        await picker.waitFor({ timeout: 20000 });
+        assert.deepEqual(await picker.locator('option').evaluateAll(options => options.map(option => option.value)), ['', 'Exact-Model-A', 'Exact-Model-B']);
+        assert.equal(await picker.inputValue(), '');
+        assert.deepEqual(await snapshotTargetFiles(context), before, 'model discovery cannot persist settings or credentials');
+        assert.equal(upstream.requests.length, 0, 'listing models sends no inference');
+        await picker.selectOption('Exact-Model-B');
+        assert.equal(await page.getByTestId('provider-model').inputValue(), 'Exact-Model-B');
+        assert.ok(upstream.modelListRequests.length >= 1);
+        assert.ok(upstream.modelListRequests.every(request => request.authorized));
+        await page.screenshot({ path: context.pathInArtifacts('url-key-discovered-model-selection.png') });
+        assert.equal(responseExposedSensitiveValue, false);
+        const rpc = await openPageGatewayRpc(context, page, gateway, 'close owned model and board RPC');
+        let completedThread, newThread;
+        try {
+          await rpc.request('initialize', { protocolVersion: '2026-07-27',
+            clientInfo: { name: 'model-discovery-and-board', version: '1' },
+            capabilities: { experimental: { threadRunSummaryV1: true } } });
+          newThread = (await rpc.request('thread/start', { cwd: workspace, model: 'fixture-existing::fixture-original' })).thread.id;
+          completedThread = (await rpc.request('thread/start', { cwd: workspace, model: 'fixture-existing::fixture-original' })).thread.id;
+          const started = await rpc.request('turn/start', { threadId: completedThread,
+            input: [{ type: 'text', text: 'OWNED_BOARD_COMPLETED_PROTOCOL_CHECK' }] });
+          const terminal = await rpc.waitFor(message => message.method === 'turn/completed' && message.params?.threadId === completedThread
+            && message.params?.turnId === started.turn.id, 20000, 'original bounded board fixture turn');
+          const native = await rpc.request('thread/list', { limit: 20 });
+          await context.writeArtifactJson('board-original-native-summary.json', {
+            terminalStatus: terminal.params?.turn?.status,
+            terminalError: context.redactText(JSON.stringify(terminal.params?.turn?.error ?? terminal.params?.error ?? null)),
+            actualProviderRequests: upstream.requests.length,
+            threads: native.threads.filter(thread => [newThread, completedThread].includes(thread.id))
+              .map(thread => ({ id: thread.id, status: thread.status, runSummary: thread.runSummary })),
+          });
+          assert.equal(terminal.params?.turn?.status, 'completed', 'the board fixture must finish successfully before checking its column');
+          await page.evaluate(() => { history.pushState({}, '', '/tasks'); dispatchEvent(new PopStateEvent('popstate')); });
+          await page.locator(`[data-testid="task-board-column-completed"] [data-thread-id="${completedThread}"]`).waitFor({ timeout: 20000 });
+          await page.locator(`[data-testid="task-board-column-idle"] [data-thread-id="${newThread}"]`).waitFor({ timeout: 20000 });
+          await page.screenshot({ path: context.pathInArtifacts('real-new-and-completed-task-board.png') });
+          assert.equal(await page.getByTestId('office-button').count(), 0);
+        } finally { await closeRpcAndWait(rpc, 'owned model and board RPC'); }
+        assert.equal(upstream.requests.length, 1, 'only the explicit board fixture invokes the loopback model');
+        return { onlyUrlAndKey: true, actualAuthenticatedModelsGet: true,
+          noImplicitSelection: true, selectedExactModelId: true, settingsUnchanged: true,
+          actualCompletedAndNewBoardColumns: true, modelListInferenceRequests: 0,
+          controlledBoardModelRequests: upstream.requests.length, taskTurns: submittedTurns };
+      }
+      const catalog = await page.evaluate(() => window.__ELECTRON_INTERNALS__.invoke('local_executor_request', {method:'runtime.models.list',params:{}}));
       assert.equal(catalog.data.find(item => item.providerId === 'fixture-existing').model, 'fixture-original');
       await page.locator('[data-testid^="provider-edit-fixture-existing"]').click();
       assert.equal(
@@ -491,7 +550,7 @@ async function assertSensitiveValueAbsent(page, value, inputCleared = true) {
 async function providerRequest(page, method, params = {}) {
   const serverId = await page.getByTestId("provider-target").inputValue();
   return page.evaluate(({ serverId, method, params }) =>
-    window.__TAURI_INTERNALS__.invoke("local_executor_request", {
+    window.__ELECTRON_INTERNALS__.invoke("local_executor_request", {
       method: "runtime.providers.request", params: { serverId, method, params },
     }), { serverId, method, params });
 }

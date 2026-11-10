@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { WorkbenchPage } from './WorkbenchPage'
 
 const mocks = vi.hoisted(() => ({
-  isNativeTauriHost: vi.fn(),
+  isNativeGatewayHost: vi.fn(),
   isMobile: vi.fn(),
   getUsage: vi.fn(),
   syncTray: vi.fn(),
@@ -21,8 +21,11 @@ vi.mock('@/components/layout/DesktopWorkbenchLayout', () => ({
 vi.mock('@/components/layout/MobileWorkbenchLayout', () => ({
   MobileWorkbenchLayout: () => <div data-testid="mobile-layout" />,
 }))
+vi.mock('@/components/chat/ScheduledTasksPanel', () => ({
+  ScheduledTasksPanel: () => <div data-testid="mobile-scheduled-tasks" />,
+}))
 vi.mock('@/features/workbench/useWorkbench', () => ({
-  useWorkbench: () => ({ state: { runtimeWork: null }, runtimeTaskReminders: mocks.reminders }),
+  useWorkbench: () => ({ state: { runtimeWork: null, devices: [] }, runtimeTaskReminders: mocks.reminders }),
 }))
 vi.mock('@/features/workbench/runtimeTaskReminders', () => ({
   EMPTY_RUNTIME_TASK_REMINDERS: mocks.reminders,
@@ -34,9 +37,9 @@ vi.mock('@/features/workbench/runtimeTaskLifecycle', () => ({
   useRuntimeTaskLifecycleStoreSnapshot: () => null,
 }))
 vi.mock('@/hooks/useIsMobile', () => ({ useIsMobile: mocks.isMobile }))
-vi.mock('@/lib/runtime-environment', () => ({ isNativeTauriHost: mocks.isNativeTauriHost }))
-vi.mock('@/tauri/trayMenuState', () => ({ buildTrayMenuTaskGroups: () => mocks.taskGroups }))
-vi.mock('@/tauri/trayNavigation', () => ({ syncTrayMenuState: mocks.syncTray }))
+vi.mock('@/lib/runtime-environment', () => ({ isNativeGatewayHost: mocks.isNativeGatewayHost }))
+vi.mock('@/host/trayMenuState', () => ({ buildTrayMenuTaskGroups: () => mocks.taskGroups }))
+vi.mock('@/host/trayNavigation', () => ({ syncTrayMenuState: mocks.syncTray }))
 vi.mock('@/api/local/codexUsage', () => ({
   getLocalCodexUsageDisplay: mocks.getUsage,
   emptyCodexUsageDisplay: () => ({ status: 'none', tooltip: '', trayTitle: '' }),
@@ -59,11 +62,11 @@ describe('WorkbenchPage quota removal', () => {
 
   test.each([
     { native: true, mobile: false, layout: 'desktop-layout' },
-    { native: true, mobile: true, layout: 'desktop-layout' },
+    { native: true, mobile: true, layout: 'mobile-layout' },
     { native: false, mobile: false, layout: 'desktop-layout' },
     { native: false, mobile: true, layout: 'mobile-layout' },
   ])('never fetches quota on $layout with native=$native mobile=$mobile', async options => {
-    mocks.isNativeTauriHost.mockReturnValue(options.native)
+    mocks.isNativeGatewayHost.mockReturnValue(options.native)
     mocks.isMobile.mockReturnValue(options.mobile)
 
     const view = render(<WorkbenchPage />)
@@ -87,7 +90,7 @@ describe('WorkbenchPage quota removal', () => {
 
 test('tray status follows the selected application language without an OS-language override', async () => {
   const previous = i18n.language
-  mocks.isNativeTauriHost.mockReturnValue(true)
+  mocks.isNativeGatewayHost.mockReturnValue(true)
   mocks.isMobile.mockReturnValue(false)
   await i18n.changeLanguage('en')
   const view = render(<WorkbenchPage />)
@@ -96,4 +99,23 @@ test('tray status follows the selected application language without an OS-langua
   expect(mocks.syncTray.mock.lastCall?.[2].tooltip).toContain('有任务运行中')
   view.unmount()
   await i18n.changeLanguage(previous)
+})
+
+test.each([false,true])('retired office deep link returns to workbench without office UI (mobile=%s)',mobile=>{
+ mocks.isMobile.mockReturnValue(mobile)
+ mocks.isNativeGatewayHost.mockReturnValue(false)
+ window.history.replaceState({},'', '/office')
+ render(<WorkbenchPage/>)
+ expect(window.location.pathname).toBe('/')
+ expect(screen.getByTestId(mobile?'mobile-layout':'desktop-layout')).toBeInTheDocument()
+})
+
+test('scheduled tasks stay on their page when a web viewport becomes narrow', async () => {
+  mocks.isMobile.mockReturnValue(true)
+  mocks.isNativeGatewayHost.mockReturnValue(false)
+  window.history.replaceState({}, '', '/automations')
+  render(<WorkbenchPage />)
+  expect(await screen.findByTestId('mobile-scheduled-tasks')).toBeInTheDocument()
+  expect(screen.queryByTestId('mobile-layout')).not.toBeInTheDocument()
+  window.history.replaceState({}, '', '/')
 })

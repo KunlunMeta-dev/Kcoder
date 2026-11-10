@@ -1,0 +1,27 @@
+[package]
+name = "kcoder_async_box"
+description = "Generic future coercion for async-trait implementation bodies."
+version.workspace = true
+publish = false
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lib]
+path = "../../src/internal/async_box/lib.rs"
+proc-macro = true
+
+[dependencies]
+proc-macro2 = "1"
+quote = "1"
+syn = { version = "2", features = ["full"] }
+
+[dev-dependencies]
+async-trait.workspace = true
+futures.workspace = true
+
+[[test]]
+name = "boxing"
+path = "../../tests/internal/async_box/boxing.rs"

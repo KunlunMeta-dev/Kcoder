@@ -50,6 +50,7 @@ pub fn validate(definition: &WorkflowDefinition, complete: bool) -> Result<()> {
         crate::schema_defaults::validate(schema)?;
     }
     if complete {
+        crate::collaboration::validate_definition(definition)?;
         crate::node_contract::validate_references(definition)?;
         for node in &definition.nodes {
             if let Some(until) = node

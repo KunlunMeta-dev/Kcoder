@@ -1,7 +1,7 @@
 import { withLocalIdentityLock } from "@/storage/context-lock";
 import { GatewaySessionExpiredError, refreshMobileSession } from "@/gateway/http";
 import type { GatewayProfile } from "@/gateway/types";
-import { profileAuthorizationScopeKey } from "./profile-coordinator";
+import { profileAuthorizationScopeKey, type ProfileCredentialUpdateIntent } from "./profile-coordinator";
 
 export const deviceRefreshLead = (profile: GatewayProfile) => Math.min(60_000, Math.max(25, (profile.accessTtlMs ?? 180_000) / 3));
 
@@ -10,8 +10,8 @@ export class DeviceAuthorizationManager {
   private readonly pending = new Map<string, { promise: Promise<void>; callers: Set<GatewayProfile> }>();
   private readonly failures = new Map<string, { retryAt: number; count: number; error: unknown }>();
   constructor(private readonly getProfile: (id: string) => GatewayProfile | undefined,
-    private readonly commit: (expected: GatewayProfile, next: GatewayProfile) => Promise<GatewayProfile | null>,
-    private readonly changed: () => void,
+    private readonly commit: (expected: GatewayProfile, next: GatewayProfile, intent?: ProfileCredentialUpdateIntent) => Promise<GatewayProfile | null>,
+    private readonly changed: (profileId?: string) => void,
     private readonly renew = refreshMobileSession,
     private readonly rotationId = () => `rotation-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`,
     private readonly synchronize?: () => Promise<void>) {}
@@ -27,7 +27,12 @@ export class DeviceAuthorizationManager {
     if (!force && failure && failure.retryAt > Date.now()) return Promise.reject(failure.error);
     const callers = new Set([profile]);
     const execute = () => this.rotate(profile, force, scope);
-    const operation = (profile.authMode === "device" ? withLocalIdentityLock(`device-authorization:${JSON.stringify([profile.baseUrl, profile.deviceId, profile.authorizationGeneration])}`, execute) : execute()).then(() => {
+    // Preserve the existing device-operation fence for older secure-context tabs.
+    // Profile/index metadata transactions still finish before a network response is awaited.
+    const coordinated = profile.authMode === "device" && typeof navigator !== "undefined" && typeof navigator.locks?.request === "function"
+      ? withLocalIdentityLock(`device-authorization:${JSON.stringify([profile.baseUrl, profile.deviceId, profile.authorizationGeneration])}`, execute)
+      : execute();
+    const operation = coordinated.then(() => {
       const current = this.getProfile(profile.id);
       if (!current || profileAuthorizationScopeKey(current) !== scope) throw new GatewaySessionExpiredError();
       for (const caller of callers) Object.assign(caller, current);
@@ -68,7 +73,7 @@ export class DeviceAuthorizationManager {
     // its recovered refresh secret first, then rotate once more with a new ID.
     for (let attempt = 0; attempt < 2; attempt++) {
       if (!profile.pendingRotationId) {
-        const staged = await this.commit({ ...profile }, { ...profile, pendingRotationId: this.rotationId() });
+        const staged = await this.commit({ ...profile }, { ...profile, pendingRotationId: this.rotationId() }, "rotation-stage");
         if (!staged) throw new GatewaySessionExpiredError();
         profile = staged;
       }
@@ -76,10 +81,10 @@ export class DeviceAuthorizationManager {
       const expected = { ...profile };
       const renewed = await this.renew(expected, expected.pendingRotationId!);
       assertScope();
-      const committed = await this.commit(expected, renewed);
+      const committed = await this.commit(expected, renewed, "validated-refresh");
       if (!committed) throw new GatewaySessionExpiredError();
       assertScope();
-      profile = committed; Object.assign(input, committed); this.changed();
+      profile = committed; Object.assign(input, committed); this.changed(input.id);
       if (committed.expiresAt > Date.now()) return;
     }
     throw new GatewaySessionExpiredError();

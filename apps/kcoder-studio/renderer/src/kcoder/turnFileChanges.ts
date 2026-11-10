@@ -1,4 +1,4 @@
-import { requestLocalExecutor } from '@/tauri/localExecutor'
+import { requestLocalExecutor } from '@/host/localExecutor'
 
 /** Effective `turn_file_changes` snapshot policy. */
 export interface TurnFileChangesPolicy {

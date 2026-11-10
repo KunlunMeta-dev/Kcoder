@@ -1,0 +1,25 @@
+[Unit]
+Description=KCoder design atlas v1 isolated review service
+After=network.target
+
+[Service]
+Type=simple
+User=kcoder-atlas-v1
+Group=kcoder-atlas-v1
+WorkingDirectory=/opt/kcoder-design-atlas-v1
+ExecStart=/opt/kcoder-design-atlas-v1/atlas-server -root /var/www/kcoder-review/mobile-design-atlas-v1-20261023 -config /etc/kcoder-design-atlas-v1/auth.json -listen 127.0.0.1:18673
+Restart=on-failure
+RestartSec=2
+UMask=0077
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_UNIX AF_INET
+MemoryMax=128M
+TasksMax=32
+LimitNOFILE=1024
+
+[Install]
+WantedBy=multi-user.target

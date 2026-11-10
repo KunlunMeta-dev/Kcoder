@@ -2,12 +2,12 @@ import '@/i18n'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { expect, test, vi } from 'vitest'
 import { ToolBlocksDisplay } from '@/components/chat/blocks/ToolBlocksDisplay'
-import { requestLocalExecutor } from '@/tauri/localExecutor'
+import { requestLocalExecutor } from '@/host/localExecutor'
 import { ToolsCatalogProvider } from './toolsCatalog'
 import { ScrollableMessageArea } from '@/components/chat/ScrollableMessageArea'
 import { LOCAL_MODEL_SETTINGS_CHANGED_EVENT } from '@/features/model-settings/localModelSettings'
 
-vi.mock('@/tauri/localExecutor', () => ({ requestLocalExecutor: vi.fn() }))
+vi.mock('@/host/localExecutor', () => ({ requestLocalExecutor: vi.fn() }))
 const catalog = (displayName: string, icon = 'globe') => ({
   scope: 'thread',
   threadId: 'wire',

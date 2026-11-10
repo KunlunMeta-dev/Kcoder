@@ -44,7 +44,6 @@ describe('ChatInput composer', () => {
       configurable: true,
       value: originalInnerWidth,
     })
-    delete (window as typeof window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__
   })
   test('renders remote project IPs and hides local device names in the project menu', async () => {
     render(

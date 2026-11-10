@@ -1,0 +1,200 @@
+{
+  "MigrationBatchControlReadParams": {
+    "valid": [
+      {
+        "name": "observe_original",
+        "value": {
+          "jobId": "mig-original"
+        }
+      },
+      {
+        "name": "reconcile_command",
+        "value": {
+          "jobId": "mig-original",
+          "commandId": "40000000-0000-4000-8000-000000000001"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "no_runner_path",
+        "value": {
+          "jobId": "mig-original",
+          "runnerPath": "forbidden"
+        }
+      }
+    ]
+  },
+  "MigrationBatchControlCancelParams": {
+    "valid": [
+      {
+        "name": "original_generation",
+        "value": {
+          "planId": "plan-original",
+          "runRequestId": "run-original",
+          "admissionSequence": 3,
+          "commandId": "40000000-0000-4000-8000-000000000001",
+          "jobId": "mig-original"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "no_progress_as_authority",
+        "value": {
+          "planId": "plan-original",
+          "runRequestId": "run-original",
+          "commandId": "40000000-0000-4000-8000-000000000001",
+          "jobId": "mig-original",
+          "expectedSequence": 14
+        }
+      },
+      {
+        "name": "no_owner_injection",
+        "value": {
+          "planId": "plan-original",
+          "runRequestId": "run-original",
+          "admissionSequence": 3,
+          "commandId": "40000000-0000-4000-8000-000000000001",
+          "jobId": "mig-original",
+          "ownerId": "forbidden"
+        }
+      }
+    ]
+  },
+  "MigrationBatchControlResult": {
+    "valid": [
+      {
+        "name": "requested_is_not_stopped",
+        "value": {
+          "jobId": "mig-original",
+          "currentSequence": 15,
+          "planId": "plan-original",
+          "phase": "tracked",
+          "generation": {
+            "planId": "plan-original",
+            "runRequestId": "run-original",
+            "admissionSequence": 3,
+            "mode": "apply"
+          },
+          "cancelRequested": true,
+          "lastCancellation": {
+            "planId": "plan-original",
+            "runRequestId": "run-original",
+            "admissionSequence": 3,
+            "commandId": "40000000-0000-4000-8000-000000000001",
+            "acceptedSequence": 14
+          },
+          "requestedReceipt": {
+            "planId": "plan-original",
+            "runRequestId": "run-original",
+            "admissionSequence": 3,
+            "commandId": "40000000-0000-4000-8000-000000000001",
+            "acceptedSequence": 14
+          }
+        }
+      },
+      {
+        "name": "unadmitted",
+        "value": {
+          "jobId": "mig-original",
+          "currentSequence": 1,
+          "planId": null,
+          "phase": "unadmitted",
+          "generation": null,
+          "cancelRequested": false,
+          "lastCancellation": null,
+          "requestedReceipt": null
+        }
+      },
+      {
+        "name": "old_unknown",
+        "value": {
+          "jobId": "mig-original",
+          "currentSequence": 1,
+          "planId": null,
+          "phase": "legacy_unknown",
+          "generation": null,
+          "cancelRequested": false,
+          "lastCancellation": null,
+          "requestedReceipt": null
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing_nullable_generation",
+        "value": {
+          "jobId": "mig-original",
+          "currentSequence": 1,
+          "planId": null,
+          "phase": "unadmitted",
+          "cancelRequested": false,
+          "lastCancellation": null,
+          "requestedReceipt": null
+        }
+      },
+      {
+        "name": "no_worker_projection",
+        "value": {
+          "jobId": "mig-original",
+          "currentSequence": 15,
+          "planId": "plan-original",
+          "phase": "tracked",
+          "generation": {
+            "planId": "plan-original",
+            "runRequestId": "run-original",
+            "admissionSequence": 3,
+            "mode": "apply"
+          },
+          "cancelRequested": true,
+          "lastCancellation": {
+            "planId": "plan-original",
+            "runRequestId": "run-original",
+            "admissionSequence": 3,
+            "commandId": "40000000-0000-4000-8000-000000000001",
+            "acceptedSequence": 14
+          },
+          "requestedReceipt": {
+            "planId": "plan-original",
+            "runRequestId": "run-original",
+            "admissionSequence": 3,
+            "commandId": "40000000-0000-4000-8000-000000000001",
+            "acceptedSequence": 14
+          },
+          "workerRunning": false
+        }
+      },
+      {
+        "name": "unknown_mode",
+        "value": {
+          "jobId": "mig-original",
+          "currentSequence": 15,
+          "planId": "plan-original",
+          "phase": "tracked",
+          "generation": {
+            "planId": "plan-original",
+            "runRequestId": "run-original",
+            "admissionSequence": 3,
+            "mode": "latest"
+          },
+          "cancelRequested": true,
+          "lastCancellation": {
+            "planId": "plan-original",
+            "runRequestId": "run-original",
+            "admissionSequence": 3,
+            "commandId": "40000000-0000-4000-8000-000000000001",
+            "acceptedSequence": 14
+          },
+          "requestedReceipt": {
+            "planId": "plan-original",
+            "runRequestId": "run-original",
+            "admissionSequence": 3,
+            "commandId": "40000000-0000-4000-8000-000000000001",
+            "acceptedSequence": 14
+          }
+        }
+      }
+    ]
+  }
+}

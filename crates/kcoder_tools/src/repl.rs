@@ -1,4 +1,10 @@
-use crate::process::configure_isolated_process_environment;
+use crate::background::{
+    ForegroundWaitOutcome, ManagedForegroundJob, wait_for_foreground_completion,
+};
+use crate::process::{
+    CapturedOutput, LiveOutputCapture, OutputLimits, OutputStream,
+    configure_isolated_process_environment, read_output_pipe_bounded,
+};
 use crate::{Tool, ToolContext, ToolError, ToolOutput, parse_input};
 use async_trait::async_trait;
 use schemars::JsonSchema;
@@ -7,8 +13,6 @@ use serde_json::Value;
 use std::process::{ExitStatus, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
-#[cfg(windows)]
-use tokio::io::AsyncReadExt;
 use tokio::process::Command;
 use tokio::time::timeout;
 use tracing::debug;
@@ -73,195 +77,432 @@ impl Tool for REPLTool {
         if ctx.is_aborted() {
             return Err(ToolError::Aborted);
         }
-
         let input: REPLInput = parse_input(&input)?;
-        let language = detect_language(&input);
-        let (program, args, extension) = resolve_interpreter(&language)?;
-
-        if let Some(sandbox) = &ctx.sandbox {
-            sandbox.check_shell().map_err(ToolError::Execution)?;
-        }
-        #[cfg(windows)]
-        let os_sandbox = ctx.sandbox.as_ref().and_then(|sandbox| sandbox.os_spec());
-
-        // Create the directory atomically with private permissions and keep
-        // the guard alive for the whole call. TempDir removes both script and
-        // directory on success, timeout, spawn failure, and every `?` path.
-        let temp_dir = tempfile::Builder::new()
-            .prefix("kcoder-repl-")
-            .tempdir()
-            .map_err(|e| ToolError::Execution(format!("failed to create repl temp dir: {e}")))?;
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            std::fs::set_permissions(temp_dir.path(), std::fs::Permissions::from_mode(0o700))
-                .map_err(|e| {
-                    ToolError::Execution(format!(
-                        "failed to restrict repl temp dir permissions: {e}"
-                    ))
-                })?;
-        }
-
-        let file_name = format!("{}.{}.{}", self.name(), ulid::generate(), extension);
-        let script_path = temp_dir.path().join(file_name);
-        let script = prepare_repl_script(&language, &input.code);
-        tokio::fs::write(&script_path, encode_repl_script(&language, &script))
-            .await
-            .map_err(|e| ToolError::Execution(format!("failed to write repl script: {}", e)))?;
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            std::fs::set_permissions(&script_path, std::fs::Permissions::from_mode(0o600))
-                .map_err(|e| {
-                    ToolError::Execution(format!("failed to restrict repl script permissions: {e}"))
-                })?;
-        }
-
-        debug!(
-            "running REPL script {:?} with {} (language={})",
-            script_path, program, language
-        );
-
-        let cwd = ctx.state.cwd();
-        let mut cmd = Command::new(&program);
-        cmd.args(&args).arg(&script_path).current_dir(&cwd);
-        configure_isolated_process_environment(&mut cmd, &cwd);
-        if extension == "py" {
-            // Windows Python otherwise inherits the legacy console code page
-            // (often cp1252), which makes normal Unicode tool output fail to
-            // encode before KCoder can capture it.
-            cmd.env("PYTHONUTF8", "1").env("PYTHONIOENCODING", "utf-8");
-        }
-        cmd.env("KCODER_REPL", "1")
-            .env("KCODER_REPL_CWD", &cwd)
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .kill_on_drop(true);
-        #[cfg(unix)]
-        cmd.process_group(0);
-
-        #[cfg(windows)]
-        if let Some(spec) = os_sandbox {
-            let mut environment = crate::process::isolated_process_environment(&cwd);
-            if extension == "py" {
-                environment.push(("PYTHONUTF8".into(), "1".into()));
-                environment.push(("PYTHONIOENCODING".into(), "utf-8".into()));
-            }
-            environment.push(("KCODER_REPL".into(), "1".into()));
-            environment.push(("KCODER_REPL_CWD".into(), cwd.as_os_str().to_os_string()));
-            let sandbox_args = args
-                .iter()
-                .map(Into::into)
-                .chain(std::iter::once(script_path.as_os_str().to_os_string()))
-                .collect::<Vec<_>>();
-            let mut child = crate::windows_sandbox::spawn(
-                std::ffi::OsStr::new(&program),
-                &sandbox_args,
-                &cwd,
-                &environment,
-                &spec,
+        let Some(manager) = ctx.background_job_manager.as_ref() else {
+            return execute_repl(input, ctx, None).await;
+        };
+        let capture = LiveOutputCapture::new(OutputLimits::from_context(ctx));
+        let run_capture = capture.clone();
+        // Copy only the execution context; never retain a manager through its own job.
+        let mut run_ctx = ToolContext::new(ctx.state.clone())
+            .with_output_limits(
+                ctx.max_output_bytes,
+                ctx.output_head_bytes,
+                ctx.output_tail_bytes,
             )
-            .map_err(|reason| ToolError::SandboxDenied {
-                reason,
-                output: None,
-            })?;
-            let mut stdout = child.stdout.take().ok_or_else(|| {
-                ToolError::Execution("failed to capture sandboxed REPL stdout".to_string())
-            })?;
-            let mut stderr = child.stderr.take().ok_or_else(|| {
-                ToolError::Execution("failed to capture sandboxed REPL stderr".to_string())
-            })?;
-            let stdout_reader = tokio::spawn(async move {
-                let mut bytes = Vec::new();
-                stdout.read_to_end(&mut bytes).await.map(|_| bytes)
-            });
-            let stderr_reader = tokio::spawn(async move {
-                let mut bytes = Vec::new();
-                stderr.read_to_end(&mut bytes).await.map(|_| bytes)
-            });
-            let status = match timeout(Duration::from_secs(input.timeout), child.wait()).await {
-                Ok(Ok(status)) => status,
-                Ok(Err(error)) => {
-                    return Err(ToolError::Execution(format!(
-                        "failed to run sandboxed REPL: {error}"
-                    )));
-                }
-                Err(_) => {
-                    child.terminate();
-                    let _ = child.wait().await;
-                    return Err(ToolError::Execution(format!(
-                        "REPL execution timed out after {} seconds",
-                        input.timeout
-                    )));
-                }
-            };
-            // A background descendant can keep inherited pipes open after the
-            // root exits. End the Job before collecting output.
-            child.terminate();
-            let stdout = stdout_reader
-                .await
-                .map_err(|error| {
-                    ToolError::Execution(format!("REPL stdout reader failed: {error}"))
-                })?
-                .map_err(|error| {
-                    ToolError::Execution(format!("failed to read REPL stdout: {error}"))
-                })?;
-            let stderr = stderr_reader
-                .await
-                .map_err(|error| {
-                    ToolError::Execution(format!("REPL stderr reader failed: {error}"))
-                })?
-                .map_err(|error| {
-                    ToolError::Execution(format!("failed to read REPL stderr: {error}"))
-                })?;
-            return finish_repl_output(ctx, status, stdout, stderr);
+            .with_owned_command_program(ctx.owned_command_program.clone());
+        run_ctx.sandbox = ctx.sandbox.clone();
+        run_ctx.abort_token = ctx.abort_token.clone();
+        // Keep the same execution future when a longer script needs managed progress.
+        let mut execution =
+            Box::pin(async move { execute_repl(input, &run_ctx, Some(run_capture)).await });
+        tokio::select! {
+            result = &mut execution => return result,
+            _ = tokio::time::sleep(Duration::from_millis(200)) => {}
         }
-
-        let child = cmd
-            .spawn()
-            .map_err(|e| ToolError::Execution(format!("failed to run REPL: {}", e)))?;
-        let process_tree = child
-            .id()
-            .map(ReplProcessTreeTerminator::new)
-            .ok_or_else(|| {
-                ToolError::Execution("REPL process did not expose a process id".to_string())
-            })?;
-        let output_result =
-            timeout(Duration::from_secs(input.timeout), child.wait_with_output()).await;
-
-        let output = match output_result {
-            Ok(Ok(out)) => {
-                process_tree.disarm();
-                out
+        let execution_error = std::sync::Arc::new(std::sync::Mutex::new(None));
+        let job_error = execution_error.clone();
+        let events = ctx.subscribe_background_jobs()?;
+        let id = ctx.spawn_foreground(
+            crate::background::tool_background_description("repl", "REPL"),
+            async move {
+                match execution.await {
+                    Ok(output) => output,
+                    Err(error) => {
+                        let output = ToolOutput::error(error.to_string());
+                        *job_error.lock().unwrap_or_else(|p| p.into_inner()) = Some(error);
+                        output
+                    }
+                }
+            },
+        )?;
+        let guard = ManagedForegroundJob::new(ctx, id.clone())?;
+        capture.report_progress_to(manager, &id);
+        if let Some(path) = ctx.state.task(&id).and_then(|task| task.output_path) {
+            capture.attach(path).await;
+        }
+        match wait_for_foreground_completion(ctx, &id, events).await? {
+            ForegroundWaitOutcome::Completed(output) => {
+                guard.complete();
+                match execution_error
+                    .lock()
+                    .unwrap_or_else(|p| p.into_inner())
+                    .take()
+                {
+                    Some(error) => Err(error),
+                    None => Ok(output),
+                }
             }
-            Ok(Err(e)) => {
-                return Err(ToolError::Execution(format!("failed to run REPL: {}", e)));
+            ForegroundWaitOutcome::TimedOut => {
+                unreachable!("REPL uses its own total execution deadline")
+            }
+        }
+    }
+}
+
+async fn execute_repl(
+    input: REPLInput,
+    ctx: &ToolContext,
+    live: Option<LiveOutputCapture>,
+) -> Result<ToolOutput, ToolError> {
+    if ctx.is_aborted() {
+        return Err(ToolError::Aborted);
+    }
+
+    let language = detect_language(&input);
+    let (program, args, extension) = resolve_interpreter(&language)?;
+
+    if let Some(sandbox) = &ctx.sandbox {
+        sandbox.check_shell().map_err(ToolError::Execution)?;
+    }
+    #[cfg(windows)]
+    let os_sandbox = ctx.sandbox.as_ref().and_then(|sandbox| sandbox.os_spec());
+
+    // Create the directory atomically with private permissions and keep
+    // the guard alive for the whole call. TempDir removes both script and
+    // directory on success, timeout, spawn failure, and every `?` path.
+    let temp_dir = tempfile::Builder::new()
+        .prefix("kcoder-repl-")
+        .tempdir()
+        .map_err(|e| ToolError::Execution(format!("failed to create repl temp dir: {e}")))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(temp_dir.path(), std::fs::Permissions::from_mode(0o700)).map_err(
+            |e| ToolError::Execution(format!("failed to restrict repl temp dir permissions: {e}")),
+        )?;
+    }
+
+    let file_name = format!("REPL.{}.{}", ulid::generate(), extension);
+    let script_path = temp_dir.path().join(file_name);
+    let script = prepare_repl_script(&language, &input.code);
+    tokio::fs::write(&script_path, encode_repl_script(&language, &script))
+        .await
+        .map_err(|e| ToolError::Execution(format!("failed to write repl script: {}", e)))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&script_path, std::fs::Permissions::from_mode(0o600)).map_err(
+            |e| ToolError::Execution(format!("failed to restrict repl script permissions: {e}")),
+        )?;
+    }
+
+    debug!(
+        "running REPL script {:?} with {} (language={})",
+        script_path, program, language
+    );
+
+    let cwd = ctx.state.cwd();
+    let mut cmd = Command::new(&program);
+    #[cfg(target_os = "linux")]
+    if let Some(owner) = ctx.owned_command_program.as_deref() {
+        cmd = Command::new(owner);
+        cmd.arg(kcoder_process_supervisor::linux_stdio::INTERNAL_COMMAND_OWNER_V1)
+            .arg(std::process::id().to_string())
+            .arg(&program);
+    }
+    cmd.args(&args).arg(&script_path).current_dir(&cwd);
+    configure_isolated_process_environment(&mut cmd, &cwd);
+    if extension == "py" {
+        // Windows Python otherwise inherits the legacy console code page
+        // (often cp1252), which makes normal Unicode tool output fail to
+        // encode before KCoder can capture it.
+        cmd.env("PYTHONUTF8", "1").env("PYTHONIOENCODING", "utf-8");
+    }
+    cmd.env("KCODER_REPL", "1")
+        .env("KCODER_REPL_CWD", &cwd)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .kill_on_drop(true);
+    #[cfg(unix)]
+    cmd.process_group(0);
+
+    #[cfg(windows)]
+    if let Some(spec) = os_sandbox {
+        let mut environment = crate::process::isolated_process_environment(&cwd);
+        if extension == "py" {
+            environment.push(("PYTHONUTF8".into(), "1".into()));
+            environment.push(("PYTHONIOENCODING".into(), "utf-8".into()));
+        }
+        environment.push(("KCODER_REPL".into(), "1".into()));
+        environment.push(("KCODER_REPL_CWD".into(), cwd.as_os_str().to_os_string()));
+        let sandbox_args = args
+            .iter()
+            .map(Into::into)
+            .chain(std::iter::once(script_path.as_os_str().to_os_string()))
+            .collect::<Vec<_>>();
+        let mut child = crate::windows_sandbox::spawn(
+            std::ffi::OsStr::new(&program),
+            &sandbox_args,
+            &cwd,
+            &environment,
+            &spec,
+        )
+        .map_err(|reason| ToolError::SandboxDenied {
+            reason,
+            output: None,
+        })?;
+        let stdout = child.stdout.take().ok_or_else(|| {
+            ToolError::Execution("failed to capture sandboxed REPL stdout".to_string())
+        })?;
+        let stderr = child.stderr.take().ok_or_else(|| {
+            ToolError::Execution("failed to capture sandboxed REPL stderr".to_string())
+        })?;
+        let mut readers = ReplOutputReaders::new(stdout, stderr, ctx, temp_dir.path(), live);
+        let status = match timeout(Duration::from_secs(input.timeout), child.wait()).await {
+            Ok(Ok(status)) => status,
+            Ok(Err(error)) => {
+                return Err(ToolError::Execution(format!(
+                    "failed to run sandboxed REPL: {error}"
+                )));
             }
             Err(_) => {
-                process_tree.terminate();
+                child.terminate();
+                let _ = child.wait().await;
                 return Err(ToolError::Execution(format!(
                     "REPL execution timed out after {} seconds",
                     input.timeout
                 )));
             }
         };
+        // A background descendant can keep inherited pipes open after the
+        // root exits. End the Job before collecting output.
+        child.terminate();
+        let (stdout, stderr) = readers.collect().await?;
+        return finish_repl_output(ctx, status, stdout, stderr);
+    }
 
-        finish_repl_output(ctx, output.status, output.stdout, output.stderr)
+    #[cfg(windows)]
+    let mut windows_job = kcoder_process_supervisor::suspended_child::SuspendedChildJob::new()
+        .map_err(|error| {
+            ToolError::Execution(format!("cannot create REPL process job: {error}"))
+        })?;
+    #[cfg(windows)]
+    cmd.creation_flags(kcoder_process_supervisor::suspended_child::SUSPENDED_CHILD_FLAGS);
+    let mut child = cmd
+        .spawn()
+        .map_err(|e| ToolError::Execution(format!("failed to run REPL: {}", e)))?;
+    #[cfg(windows)]
+    {
+        let handle = child
+            .raw_handle()
+            .ok_or_else(|| ToolError::Execution("REPL process handle unavailable".into()))?;
+        // SAFETY: the unreaped suspended child owns the borrowed process handle.
+        windows_job
+            .assign_and_resume(unsafe { std::os::windows::io::BorrowedHandle::borrow_raw(handle) })
+            .map_err(|error| {
+                ToolError::Execution(format!("cannot assign REPL process job: {error}"))
+            })?;
+    }
+    let process_tree = child
+        .id()
+        .map(ReplProcessTreeTerminator::new)
+        .ok_or_else(|| {
+            ToolError::Execution("REPL process did not expose a process id".to_string())
+        })?;
+    #[cfg(any(target_os = "linux", windows))]
+    let mut process_tree = process_tree;
+    #[cfg(windows)]
+    {
+        process_tree.windows_job = Some(windows_job);
+    }
+    #[cfg(target_os = "linux")]
+    if ctx.owned_command_program.is_some() {
+        process_tree.owner = Some(
+            kcoder_process_supervisor::linux_stdio::StdioOwnerGuard::for_child(process_tree.pid)
+                .map_err(|error| {
+                    ToolError::Execution(format!("cannot bind REPL process owner: {error}"))
+                })?,
+        );
+    }
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| ToolError::Execution("REPL stdout unavailable".into()))?;
+    let stderr = child
+        .stderr
+        .take()
+        .ok_or_else(|| ToolError::Execution("REPL stderr unavailable".into()))?;
+    let mut readers = ReplOutputReaders::new(stdout, stderr, ctx, temp_dir.path(), live);
+    let execution = async {
+        let status = child
+            .wait()
+            .await
+            .map_err(|e| ToolError::Execution(format!("failed to run REPL: {e}")))?;
+        process_tree.finish_after_exit();
+        let (stdout, stderr) = readers.collect().await?;
+        finish_repl_output(ctx, status, stdout, stderr)
+    };
+    tokio::select! {
+        result = timeout(Duration::from_secs(input.timeout), execution) => match result {
+            Ok(output) => output,
+            Err(_) => {
+                process_tree.terminate();
+                let _ = child.wait().await;
+                Err(ToolError::Execution(format!("REPL execution timed out after {} seconds", input.timeout)))
+            }
+        },
+        _ = ctx.cancelled() => {
+            process_tree.terminate();
+            let _ = child.wait().await;
+            Err(ToolError::Aborted)
+        }
+    }
+}
+
+struct ReplOutputReaders {
+    stdout: tokio::task::JoinHandle<std::io::Result<CapturedOutput>>,
+    stderr: tokio::task::JoinHandle<std::io::Result<CapturedOutput>>,
+    stdout_spool: Option<tempfile::NamedTempFile>,
+    stderr_spool: Option<tempfile::NamedTempFile>,
+    spill_dir: std::path::PathBuf,
+}
+
+impl ReplOutputReaders {
+    fn new(
+        stdout: impl tokio::io::AsyncRead + Unpin + Send + 'static,
+        stderr: impl tokio::io::AsyncRead + Unpin + Send + 'static,
+        ctx: &ToolContext,
+        temp_root: &std::path::Path,
+        live: Option<LiveOutputCapture>,
+    ) -> Self {
+        let limits = OutputLimits::from_context(ctx);
+        let make_spool = || {
+            let file = (ctx.max_output_bytes > 0)
+                .then(|| tempfile::NamedTempFile::new_in(temp_root).ok())
+                .flatten();
+            let writer = file
+                .as_ref()
+                .and_then(|file| file.as_file().try_clone().ok())
+                .map(|file| {
+                    tokio::io::BufWriter::with_capacity(64 * 1024, tokio::fs::File::from_std(file))
+                });
+            (file, writer)
+        };
+        let (stdout_spool, stdout_writer) = make_spool();
+        let (stderr_spool, stderr_writer) = make_spool();
+        Self {
+            stdout: tokio::spawn(read_output_pipe_bounded(
+                stdout,
+                limits.clone(),
+                live.clone().map(|capture| (capture, OutputStream::Stdout)),
+                stdout_writer,
+            )),
+            stderr: tokio::spawn(read_output_pipe_bounded(
+                stderr,
+                limits,
+                live.map(|capture| (capture, OutputStream::Stderr)),
+                stderr_writer,
+            )),
+            stdout_spool,
+            stderr_spool,
+            spill_dir: crate::truncate::spill_dir_for_state(&ctx.state),
+        }
+    }
+
+    async fn collect(&mut self) -> Result<(CapturedOutput, CapturedOutput), ToolError> {
+        let (stdout, stderr) = tokio::try_join!(&mut self.stdout, &mut self.stderr)
+            .map_err(|error| ToolError::Execution(format!("REPL output reader failed: {error}")))?;
+        let mut stdout =
+            stdout.map_err(|error| ToolError::Execution(format!("REPL stdout failed: {error}")))?;
+        let stderr =
+            stderr.map_err(|error| ToolError::Execution(format!("REPL stderr failed: {error}")))?;
+        if (stdout.truncated || stderr.truncated) && stdout.spool_complete && stderr.spool_complete
+        {
+            let files = self
+                .stdout_spool
+                .as_ref()
+                .zip(self.stderr_spool.as_ref())
+                .and_then(|(out, err)| {
+                    Some((
+                        out.as_file().try_clone().ok()?,
+                        err.as_file().try_clone().ok()?,
+                    ))
+                });
+            if let Some((mut out, mut err)) = files {
+                let directory = self.spill_dir.clone();
+                stdout.full_output_path =
+                    tokio::task::spawn_blocking(move || -> Option<std::path::PathBuf> {
+                        use std::io::{Read, Seek};
+                        out.rewind().ok()?;
+                        err.rewind().ok()?;
+                        let mut reader = std::io::Cursor::new(b"stdout:\n")
+                            .chain(out)
+                            .chain(std::io::Cursor::new(b"\nstderr:\n"))
+                            .chain(err);
+                        let name = format!("repl-{}.txt", uuid::Uuid::new_v4());
+                        kcoder_config::PrivateDirectory::open_or_create(&directory)
+                            .ok()?
+                            .atomic_publish_from_reader(
+                                std::ffi::OsStr::new(&name),
+                                &mut reader,
+                                false,
+                                || Ok(None),
+                            )
+                            .ok()?;
+                        Some(directory.join(name))
+                    })
+                    .await
+                    .ok()
+                    .flatten();
+            }
+        }
+        Ok((stdout, stderr))
+    }
+}
+
+impl Drop for ReplOutputReaders {
+    fn drop(&mut self) {
+        self.stdout.abort();
+        self.stderr.abort();
     }
 }
 
 fn finish_repl_output(
     ctx: &ToolContext,
     status: ExitStatus,
-    stdout: Vec<u8>,
-    stderr: Vec<u8>,
+    stdout: CapturedOutput,
+    stderr: CapturedOutput,
 ) -> Result<ToolOutput, ToolError> {
-    let stdout = String::from_utf8_lossy(&stdout).to_string();
-    let stderr = String::from_utf8_lossy(&stderr).to_string();
+    let truncated = stdout.truncated || stderr.truncated;
+    let full_output_path = stdout
+        .full_output_path
+        .as_ref()
+        .or(stderr.full_output_path.as_ref());
+    let stdout = stdout.utf8_preview();
+    let stderr = stderr.utf8_preview();
+    let notice = if truncated {
+        "[tool output exceeded size limit]\n"
+    } else {
+        ""
+    };
+    let render = |text: &str| {
+        if !truncated {
+            return ctx.truncate(text);
+        }
+        let trailer = full_output_path
+            .as_ref()
+            .map(|path| format!(" Full output at: {}.", path.display()));
+        let text = if text.len() <= ctx.max_output_bytes {
+            format!("{text}{}", trailer.as_deref().unwrap_or_default())
+        } else {
+            text.to_string()
+        };
+        crate::truncate::truncate_text_with_trailer(
+            &text,
+            ctx.max_output_bytes,
+            ctx.output_head_bytes,
+            ctx.output_tail_bytes,
+            crate::truncate::TruncationReason::OutputTooLarge,
+            trailer.as_deref(),
+        )
+        .text
+    };
 
     if !status.success() {
         let mut message = format!(
-            "REPL exited with status {}\n",
+            "{notice}REPL exited with status {}\n",
             format_repl_exit_status(&status)
         );
         if !stdout.is_empty() {
@@ -273,7 +514,7 @@ fn finish_repl_output(
             message.push_str("stderr:\n");
             message.push_str(&stderr);
         }
-        return Ok(ToolOutput::error(ctx.truncate(message.trim_end())));
+        return Ok(ToolOutput::error(render(message.trim_end())));
     }
 
     let result = if stderr.is_empty() {
@@ -282,7 +523,7 @@ fn finish_repl_output(
         format!("{}\nstderr:\n{}", stdout, stderr)
     };
 
-    Ok(ToolOutput::text(ctx.truncate(&result)))
+    Ok(ToolOutput::text(render(&format!("{notice}{result}"))))
 }
 
 fn prepare_repl_script(_language: &str, code: &str) -> String {
@@ -324,6 +565,10 @@ fn format_repl_exit_status(status: &ExitStatus) -> String {
 struct ReplProcessTreeTerminator {
     pid: u32,
     finished: AtomicBool,
+    #[cfg(target_os = "linux")]
+    owner: Option<kcoder_process_supervisor::linux_stdio::StdioOwnerGuard>,
+    #[cfg(windows)]
+    windows_job: Option<kcoder_process_supervisor::suspended_child::SuspendedChildJob>,
 }
 
 impl ReplProcessTreeTerminator {
@@ -331,11 +576,20 @@ impl ReplProcessTreeTerminator {
         Self {
             pid,
             finished: AtomicBool::new(false),
+            #[cfg(target_os = "linux")]
+            owner: None,
+            #[cfg(windows)]
+            windows_job: None,
         }
     }
 
     fn terminate(&self) {
         if self.finished.swap(true, Ordering::SeqCst) {
+            return;
+        }
+        #[cfg(target_os = "linux")]
+        if let Some(owner) = &self.owner {
+            owner.request_stop();
             return;
         }
         #[cfg(unix)]
@@ -347,6 +601,10 @@ impl ReplProcessTreeTerminator {
         }
         #[cfg(windows)]
         {
+            if let Some(job) = &self.windows_job {
+                let _ = job.terminate();
+                return;
+            }
             let _ = std::process::Command::new("taskkill.exe")
                 .args(["/PID", &self.pid.to_string(), "/T", "/F"])
                 .stdout(Stdio::null())
@@ -355,8 +613,23 @@ impl ReplProcessTreeTerminator {
         }
     }
 
-    fn disarm(&self) {
-        self.finished.store(true, Ordering::SeqCst);
+    fn finish_after_exit(&self) {
+        if self.finished.swap(true, Ordering::SeqCst) {
+            return;
+        }
+        #[cfg(target_os = "linux")]
+        if self.owner.is_some() {
+            return;
+        }
+        #[cfg(windows)]
+        if let Some(job) = &self.windows_job {
+            let _ = job.terminate();
+        }
+        // The root was reaped: never signal its numeric PID after that point.
+        #[cfg(unix)]
+        unsafe {
+            libc::kill(-(self.pid as libc::pid_t), libc::SIGKILL);
+        }
     }
 }
 
@@ -587,6 +860,75 @@ mod tests {
         }
     }
 
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn exited_repl_does_not_wait_for_descendant_output_pipes() {
+        let root = tempfile::tempdir().unwrap();
+        let context = ToolContext::new(AppState::new(root.path()));
+        let output = tokio::time::timeout(
+            Duration::from_secs(2),
+            REPLTool.call(
+                serde_json::json!({
+                    "language": "shell", "code": "sleep 10 & printf REPL_ROOT_DONE", "timeout": 5
+                }),
+                &context,
+            ),
+        )
+        .await
+        .expect("exited script must close its owned descendant pipes")
+        .unwrap();
+        assert!(!output.is_error);
+        assert!(text_from_output(output).contains("REPL_ROOT_DONE"));
+    }
+
+    #[tokio::test]
+    async fn bounded_repl_capture_retains_the_complete_output_artifact() {
+        let root = tempfile::tempdir().unwrap();
+        let context =
+            ToolContext::new(AppState::new(root.path())).with_output_limits(1024, 200, 200);
+        let payload = format!(
+            "HEAD{}MIDDLE_EXACT{}TAIL",
+            "你".repeat(2048),
+            "好".repeat(2048)
+        );
+        let code = if cfg!(windows) {
+            format!("Write-Output '{payload}'")
+        } else {
+            format!("printf '%s' '{payload}'")
+        };
+        let result = REPLTool
+            .call(
+                serde_json::json!({"language":"shell","code":code,"timeout":5}),
+                &context,
+            )
+            .await
+            .unwrap();
+        assert!(!result.is_error);
+        let text = text_from_output(result);
+        assert!(text.len() <= 1024);
+        assert!(
+            !text.contains('\u{fffd}'),
+            "valid UTF-8 must not break at capture boundaries"
+        );
+        assert!(!text.contains("MIDDLE_EXACT"));
+        let directory = crate::truncate::spill_dir_for_state(&context.state);
+        let artifacts = std::fs::read_dir(directory)
+            .unwrap()
+            .map(|entry| entry.unwrap().path())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            artifacts.len(),
+            1,
+            "only the complete log should be published"
+        );
+        assert!(text.contains(&artifacts[0].display().to_string()));
+        let full = std::fs::read_to_string(&artifacts[0]).unwrap();
+        assert!(
+            full.contains(&payload),
+            "middle bytes must not be lost by bounded capture"
+        );
+    }
+
     #[tokio::test]
     async fn shell_repl_output_uses_context_truncation_limits() {
         let tmp = tempfile::tempdir().unwrap();
@@ -734,6 +1076,17 @@ mod tests {
     #[cfg(windows)]
     #[tokio::test]
     async fn native_windows_repl_job_closes_background_descendant_pipes() {
+        windows_repl_closes_descendant_pipes(true).await;
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn regular_windows_repl_job_closes_background_descendant_pipes() {
+        windows_repl_closes_descendant_pipes(false).await;
+    }
+
+    #[cfg(windows)]
+    async fn windows_repl_closes_descendant_pipes(sandboxed: bool) {
         let tmp = tempfile::tempdir().unwrap();
         let workspace = tmp.path().join("workspace");
         std::fs::create_dir_all(&workspace).unwrap();
@@ -754,7 +1107,12 @@ mod tests {
                 ..Default::default()
             },
         ));
-        let ctx = ToolContext::new(AppState::new(&workspace)).with_sandbox(sandbox);
+        let ctx = ToolContext::new(AppState::new(&workspace));
+        let ctx = if sandboxed {
+            ctx.with_sandbox(sandbox)
+        } else {
+            ctx
+        };
         let code = format!(
             "Start-Process -FilePath powershell.exe -ArgumentList @('-NoProfile','-File','{}')",
             script.display()

@@ -2,15 +2,23 @@ import { useEffect, useSyncExternalStore } from 'react'
 import { LoaderCircle } from 'lucide-react'
 import { useTranslation } from '@/hooks/useTranslation'
 import { toolPathPreviews } from '@/kcoder/toolPathPreview'
+import { cn } from '@/lib/utils'
 
 export function ToolInputProgressStatus({
   target,
   task,
   embedded = false,
+  className,
 }: {
   target?: string
   task?: string
   embedded?: boolean
+  /**
+   * Column of the transcript this row belongs to. The surrounding list mounts its rows
+   * with the same class, so passing it keeps the status line on the transcript's left
+   * edge instead of centering it inside a wider pane.
+   */
+  className?: string
 }) {
   const { t } = useTranslation()
   useSyncExternalStore(
@@ -27,8 +35,11 @@ export function ToolInputProgressStatus({
     <div
       className={
         embedded
-          ? 'min-w-0 py-2 text-sm text-text-secondary'
-          : 'mx-auto w-full max-w-3xl px-6 py-3 text-sm text-text-secondary'
+          ? cn('min-w-0 py-2 text-sm text-text-secondary', className)
+          : cn(
+              'w-full py-3 text-sm text-text-secondary',
+              className ?? 'mx-auto max-w-3xl px-6'
+            )
       }
       data-testid="tool-input-progress-status"
       role="status"

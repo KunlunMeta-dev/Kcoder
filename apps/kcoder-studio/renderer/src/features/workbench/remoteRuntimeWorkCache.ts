@@ -13,7 +13,8 @@ import { EMPTY_RUNTIME_WORK, mergeRuntimeWorkLists } from './workbenchCloudStatu
 const REMOTE_RUNTIME_WORK_CACHE_VERSION = 1
 // v2 keys carry the runtime target and the authenticated account principal;
 // v1 entries were keyed by the local placeholder user id and are never read.
-const REMOTE_RUNTIME_WORK_CACHE_KEY_PREFIX = 'wework.workbench.remoteRuntimeWork.v2'
+const REMOTE_RUNTIME_WORK_CACHE_KEY_PREFIX = 'kcoder.workbench.remoteRuntimeWork.v2'
+const LEGACY_REMOTE_RUNTIME_WORK_CACHE_KEY_PREFIX = 'wework.workbench.remoteRuntimeWork.v2'
 
 export interface RemoteRuntimeWorkCacheScope {
   targetId: string
@@ -24,11 +25,11 @@ function scopeKeyPart(value: string): string {
   return value.replace(/[^A-Za-z0-9._-]/g, '')
 }
 
-function cacheKey(scope: RemoteRuntimeWorkCacheScope): string | null {
+function cacheScopeKey(scope: RemoteRuntimeWorkCacheScope): string | null {
   const targetId = scopeKeyPart(scope.targetId)
   const principalId = scopeKeyPart(scope.principalId)
   if (!targetId || !principalId) return null
-  return `${REMOTE_RUNTIME_WORK_CACHE_KEY_PREFIX}.${targetId}.${principalId}`
+  return `${targetId}.${principalId}`
 }
 
 interface RemoteRuntimeWorkCacheEnvelope {
@@ -278,10 +279,12 @@ export function createRemoteRuntimeWorkCacheSnapshot(value: unknown): RuntimeWor
 export function readCachedRemoteRuntimeWork(
   scope: RemoteRuntimeWorkCacheScope | null
 ): RuntimeWorkListResponse {
-  const key = scope ? cacheKey(scope) : null
+  const key = scope ? cacheScopeKey(scope) : null
   if (!key) return EMPTY_RUNTIME_WORK
   try {
-    const raw = window.localStorage.getItem(key)
+    const raw =
+      window.localStorage.getItem(`${REMOTE_RUNTIME_WORK_CACHE_KEY_PREFIX}.${key}`) ??
+      window.localStorage.getItem(`${LEGACY_REMOTE_RUNTIME_WORK_CACHE_KEY_PREFIX}.${key}`)
     if (!raw) return EMPTY_RUNTIME_WORK
     const envelope = recordValue(JSON.parse(raw))
     if (envelope.version !== REMOTE_RUNTIME_WORK_CACHE_VERSION) return EMPTY_RUNTIME_WORK
@@ -300,7 +303,7 @@ export function writeCachedRemoteRuntimeWork(
     createRemoteRuntimeWorkCacheSnapshot(runtimeWork),
     devices
   )
-  const key = scope ? cacheKey(scope) : null
+  const key = scope ? cacheScopeKey(scope) : null
   if (!key) return snapshot
   const envelope: RemoteRuntimeWorkCacheEnvelope = {
     version: REMOTE_RUNTIME_WORK_CACHE_VERSION,
@@ -308,7 +311,10 @@ export function writeCachedRemoteRuntimeWork(
     runtimeWork: snapshot,
   }
   try {
-    window.localStorage.setItem(key, JSON.stringify(envelope))
+    window.localStorage.setItem(
+      `${REMOTE_RUNTIME_WORK_CACHE_KEY_PREFIX}.${key}`,
+      JSON.stringify(envelope)
+    )
   } catch {
     // The current runtime work remains available when persistent storage is unavailable.
   }

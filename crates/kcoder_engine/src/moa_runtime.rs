@@ -1,6 +1,6 @@
 use super::{QueryEngine, recover_read_lock, recover_write_lock};
 use crate::stream::default_timed_stream;
-use anyhow::Result;
+use anyhow::{Context, Result};
 use futures::{StreamExt, stream::FuturesUnordered};
 use kcoder_api::{Provider, ProviderFactory};
 use kcoder_config::{MoaModelConfig, MoaPresetConfig, Settings};
@@ -51,7 +51,14 @@ access. Your response is private guidance handed to the aggregator, not an \
 answer shown to the user.";
 const MOA_REFERENCE_TOOL_RESULT_BUDGET: usize = 4000;
 
-pub(super) async fn run_moa_references(
+#[cfg(test)]
+pub(super) use tests::run_moa_references;
+
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Native owner observation is explicit beside the original per-reference source and cancellation inputs"
+)]
+pub(super) async fn run_moa_references_observed(
     settings: Settings,
     preset: MoaPresetConfig,
     messages: &SharedMessages,
@@ -59,6 +66,7 @@ pub(super) async fn run_moa_references(
     cancel_token: CancellationToken,
     max_workers: usize,
     source: Option<Arc<dyn crate::ClientModelConfiguration>>,
+    budget: Option<Arc<crate::native_model_requests::ModelRequestBinding>>,
 ) -> Result<Vec<MoaReferenceOutput>> {
     let semaphore = Arc::new(Semaphore::new(max_workers.max(1)));
     let mut futures = FuturesUnordered::new();
@@ -66,6 +74,7 @@ pub(super) async fn run_moa_references(
     let messages = SharedMessages::from(moa_reference_messages(messages));
 
     for (index, model) in preset.reference_models.into_iter().enumerate() {
+        let budget = budget.clone();
         let settings = settings.clone();
         let source = source.clone();
         let messages = messages.clone();
@@ -83,7 +92,7 @@ pub(super) async fn run_moa_references(
                 .acquire_owned()
                 .await
                 .map_err(|_| anyhow::anyhow!("MoA reference worker limiter closed"))?;
-            match run_single_moa_reference(
+            match run_single_moa_reference_observed(
                 settings,
                 model,
                 index,
@@ -92,6 +101,7 @@ pub(super) async fn run_moa_references(
                 cancel_token,
                 max_tokens,
                 source,
+                budget,
             )
             .await
             {
@@ -123,9 +133,9 @@ pub(super) async fn run_moa_references(
 
 #[expect(
     clippy::too_many_arguments,
-    reason = "Keep independent per-reference snapshot, session identity, cancellation and token budget ownership"
+    reason = "Actual per-reference request and native owner remain explicit"
 )]
-pub(super) async fn run_single_moa_reference(
+pub(super) async fn run_single_moa_reference_observed(
     settings: Settings,
     model: MoaModelConfig,
     index: usize,
@@ -134,6 +144,7 @@ pub(super) async fn run_single_moa_reference(
     cancel_token: CancellationToken,
     max_tokens: u32,
     source: Option<Arc<dyn crate::ClientModelConfiguration>>,
+    budget: Option<Arc<crate::native_model_requests::ModelRequestBinding>>,
 ) -> Result<MoaReferenceOutput> {
     let model = resolve_moa_model(&settings, &model)?;
     reject_recursive_moa_provider(&model.provider)?;
@@ -152,6 +163,18 @@ pub(super) async fn run_single_moa_reference(
     );
     let label = format!("{}:{}", model.provider.trim(), model.model.trim());
     let provider = build_moa_provider(&settings, &model, source.as_deref())?;
+    let provider = match budget {
+        Some(binding) => binding.wrap(
+            provider,
+            crate::native_model_requests::NativeModelRequestPurpose::MoaReference,
+            crate::model_configuration_summary(
+                &selected,
+                kcoder_types::ModelConfigurationBoundary::SessionSnapshot,
+            )
+            .ok(),
+        ),
+        None => provider,
+    };
     let request = MessagesRequest::new_shared(model.model.clone(), messages)
         .with_system(MOA_REFERENCE_SYSTEM_PROMPT)
         .with_max_tokens(max_tokens.max(1))
@@ -194,7 +217,7 @@ pub(super) fn resolve_moa_model(
             .provider
             .as_deref()
             .filter(|value| !value.trim().is_empty())
-            .unwrap_or("kunlunmeta")
+            .context("MoA requires a configured current Provider")?
             .to_string()
     } else {
         provider.to_string()
@@ -527,7 +550,7 @@ impl QueryEngine {
             .max_reference_workers
             .max(1)
             .min(preset.reference_models.len().max(1));
-        let references = run_moa_references(
+        let references = run_moa_references_observed(
             settings.clone(),
             preset.clone(),
             messages,
@@ -535,6 +558,7 @@ impl QueryEngine {
             self.cancel_token(),
             max_workers,
             self.client_model_configuration.clone(),
+            self.validated_model_request_binding()?,
         )
         .await?;
         if references.is_empty() {
@@ -607,3 +631,35 @@ impl QueryEngine {
 #[cfg(test)]
 #[path = "tests/moa_internal_failure.rs"]
 mod tests;
+
+impl QueryEngine {
+    pub(crate) fn build_moa_provider_observed(
+        &self,
+        settings: &Settings,
+        model: &MoaModelConfig,
+        source: Option<&dyn crate::ClientModelConfiguration>,
+        purpose: crate::native_model_requests::NativeModelRequestPurpose,
+    ) -> Result<Arc<dyn Provider>> {
+        let provider = build_moa_provider(settings, model, source)?;
+        if self.model_request_binding.is_none() {
+            return Ok(provider);
+        }
+        let selected = if let Some(profile) = model.profile.as_deref() {
+            let mut selected = settings.clone();
+            selected.apply_provider(Some(profile))?;
+            selected
+        } else {
+            ProviderFactory::new(settings)
+                .settings_for_named_isolated(&model.provider, &model.model)?
+        };
+        Ok(self.observe_model_provider(
+            provider,
+            purpose,
+            crate::model_configuration_summary(
+                &selected,
+                kcoder_types::ModelConfigurationBoundary::SessionSnapshot,
+            )
+            .ok(),
+        ))
+    }
+}

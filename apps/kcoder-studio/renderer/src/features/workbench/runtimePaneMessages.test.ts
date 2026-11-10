@@ -6,6 +6,20 @@ import {
 } from './runtimePaneMessages'
 import type { RuntimePaneMessageAction } from './runtimePaneMessages'
 import type { RuntimeTaskAddress } from '@/types/api'
+import { reduceWorkbenchMessages } from '@wegent/chat-core'
+
+test('accepted response identity survives the normal event adapter and message reducer', () => {
+  let messages: ReturnType<typeof reduceWorkbenchMessages> = []
+  const handlers = createRuntimeTaskStreamHandlers({ taskId: 'task', deviceId: 'local' }, {
+    onMessageAction: action => { messages = reduceWorkbenchMessages(messages, action) },
+  })
+  emitResponseApiEvent(handlers, 'response.created', {
+    taskId: 'task', deviceId: 'local', subtaskId: 'accepted-attempt',
+    turnId: 'logical-turn', attemptId: 'accepted-attempt', data: {},
+  }, createResponseApiStreamState())
+  expect(messages).toHaveLength(1)
+  expect(messages[0]).toMatchObject({ subtaskId: 'accepted-attempt', turnId: 'logical-turn', attemptId: 'accepted-attempt', status: 'streaming' })
+})
 
 describe('runtime transcript status', () => {
   test.each(['future_cleanup', 'Failed', 'Completed', ''])('unknown turn status remains exact and does not become done: %j', raw => {
@@ -66,58 +80,35 @@ describe('runtime transcript status', () => {
 })
 
 describe('createRuntimeTaskStreamHandlers', () => {
-  test.each(['done', 'error'] as const)(
-    'settles only reconnect messages on %s updates and snapshots',
-    status => {
-      const address = { taskId: 'task', deviceId: 'local' }
-      const actions: RuntimePaneMessageAction[] = []
-      const onAssistantSettled = vi.fn()
-      const handlers = createRuntimeTaskStreamHandlers(address, {
-        onMessageAction: action => actions.push(action),
-        onAssistantSettled,
-      })
-      const reconnect = 'runtime-reconnecting-thread-first'
-      handlers.onBlockCreated?.({
-        ...address,
-        subtaskId: reconnect,
-        block: {
-          id: reconnect,
-          type: 'tool',
-          tool_name: 'runtime_reconnecting',
-          status: 'pending',
-        },
-      })
-      expect(actions.map(action => action.type)).toEqual(['block_created'])
-      handlers.onBlockUpdated?.({ ...address, subtaskId: reconnect, blockId: reconnect, status })
-      expect(actions.at(-1)).toEqual({ type: 'assistant_done', subtaskId: reconnect, content: '' })
-      const next = 'runtime-reconnecting-thread-second'
-      handlers.onBlockCreated?.({
-        ...address,
-        subtaskId: next,
-        block: { id: next, type: 'tool', tool_name: 'runtime_reconnecting', status: 'pending' },
-      })
-      expect(actions.at(-1)?.type).toBe('block_created')
-      handlers.onBlockUpdated?.({ ...address, subtaskId: reconnect, blockId: reconnect, status })
-      expect(actions.at(-1)?.type).toBe('block_updated')
-      handlers.onBlockCreated?.({
-        ...address,
-        subtaskId: next,
-        block: { id: next, type: 'tool', tool_name: 'runtime_reconnecting', status },
-      })
-      expect(actions.at(-1)).toEqual({ type: 'assistant_done', subtaskId: next, content: '' })
-      handlers.onBlockUpdated?.({ ...address, subtaskId: 'real-turn', blockId: next, status })
-      expect(actions.at(-1)?.type).toBe('block_updated')
-      const ordinary = 'runtime-reconnecting-not-a-system-message'
-      handlers.onBlockCreated?.({
-        ...address,
-        subtaskId: ordinary,
-        block: { id: ordinary, type: 'tool', tool_name: 'bash', status: 'pending' },
-      })
-      handlers.onBlockUpdated?.({ ...address, subtaskId: ordinary, blockId: ordinary, status })
-      expect(actions.at(-1)?.type).toBe('block_updated')
-      expect(onAssistantSettled).not.toHaveBeenCalled()
+  test('ignores legacy reconnect blocks and updates without settling the assistant', () => {
+    const address = { taskId: 'task', deviceId: 'local' }
+    const onMessageAction = vi.fn()
+    const onAssistantSettled = vi.fn()
+    const handlers = createRuntimeTaskStreamHandlers(address, { onMessageAction, onAssistantSettled })
+    const stream = createResponseApiStreamState()
+    const reconnect = 'runtime-reconnecting-thread-01234567-89ab-cdef-0123-456789abcdef'
+    const scope = { ...address, subtaskId: reconnect }
+    for (const block of [
+      { id: reconnect, type: 'runtime_connection', status: 'pending' },
+      { id: reconnect, type: 'tool', tool_name: 'runtime_reconnecting', status: 'pending' },
+    ]) {
+      emitResponseApiEvent(handlers, 'response.block.created', { ...scope, data: { block } }, stream)
     }
-  )
+    emitResponseApiEvent(handlers, 'response.block.updated', {
+      ...scope, data: { blockId: reconnect, updates: { status: 'error' } },
+    }, stream)
+    expect(onMessageAction).not.toHaveBeenCalled()
+    expect(onAssistantSettled).not.toHaveBeenCalled()
+
+    handlers.onBlockCreated?.({
+      ...address,
+      subtaskId: 'real-turn',
+      block: { id: 'real-tool', type: 'tool', tool_name: 'runtime_reconnecting', status: 'pending' },
+    })
+    expect(onMessageAction).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'block_created', block: expect.objectContaining({ type: 'tool', id: 'real-tool' }),
+    }))
+  })
 
   afterEach(() => {
     vi.restoreAllMocks()

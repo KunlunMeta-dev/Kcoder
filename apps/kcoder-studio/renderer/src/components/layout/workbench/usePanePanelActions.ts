@@ -1,6 +1,7 @@
 import type { EnvironmentDiffMode } from '@/api/environment'
 import type { AssistantPlanOpenRequest } from '@/components/chat/AssistantPlanCard'
 import { subscribeDesktopFileAction } from '@/kcoder/desktopFileActions'
+import { captureAccountContextRevision } from '@/kcoder/accountContextEvents'
 import {
   DEFAULT_EMBEDDED_BROWSER_LABEL,
   listenEmbeddedBrowserOpenRequests,
@@ -31,6 +32,7 @@ export function usePanePanelActions(context: ReturnType<typeof usePaneWorkspaceR
   const {
     onTerminalPanePinChange,
     paneActive,
+    workbenchMainRef,
     loadTurnFileChangesDiff,
     t,
     tChat,
@@ -39,6 +41,7 @@ export function usePanePanelActions(context: ReturnType<typeof usePaneWorkspaceR
     paneSession,
     setSubagentArtifact,
     workspaceTarget,
+    activeDeviceId,
     environmentInfo,
     loadEnvironmentDiff,
     devices,
@@ -52,6 +55,7 @@ export function usePanePanelActions(context: ReturnType<typeof usePaneWorkspaceR
     temporaryChatTabSequenceRef,
     setEmbeddedBrowserOpenRequest,
     setConversationSelectionInsertion,
+    projectChatWithModelSelectorSignal,
     temporaryChatInitialInputsRef,
     setSelectedAssistantPlan,
     setBottomPanelOpenByKey,
@@ -73,13 +77,18 @@ export function usePanePanelActions(context: ReturnType<typeof usePaneWorkspaceR
     paneIsBusy,
     latestPreviousTurnSubtaskId,
     openRightPanelTab,
+    fileEditorNavigation,
   } = context
   const selectRightPanelTab = useCallback(
     (tab: RightWorkspacePanelTab) => {
-      setRightPanelOpen(true)
-      setRightPanelView(tab)
+      const select = () => {
+        setRightPanelOpen(true)
+        setRightPanelView(tab)
+      }
+      if (tab === 'files') select()
+      else fileEditorNavigation.request(select)
     },
-    [setRightPanelOpen, setRightPanelView]
+    [setRightPanelOpen, setRightPanelView, fileEditorNavigation]
   )
 
   const openTemporaryChatTab = useCallback(
@@ -100,23 +109,34 @@ export function usePanePanelActions(context: ReturnType<typeof usePaneWorkspaceR
     [openTemporaryChatTab, paneActive]
   )
 
+  const insertionScopeKey = JSON.stringify([paneKey, projectChatWithModelSelectorSignal.scopeKey])
   const addSelectionToConversation = useCallback(
     (selectedText: string) => {
+      const accountCurrent = captureAccountContextRevision()
+      const targetId = currentRuntimeTask?.deviceId ?? activeDeviceId
       setConversationSelectionInsertion(current => ({
         id: (current?.id ?? 0) + 1,
         text: selectedText,
+        scopeKey: insertionScopeKey,
+        isCurrent: () => !targetId || accountCurrent(targetId),
       }))
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
-          document
-            .querySelector<HTMLElement>(
+          workbenchMainRef.current
+            ?.querySelector<HTMLElement>(
               '[data-testid="desktop-floating-composer-card"] [data-testid="chat-message-input"]'
             )
             ?.focus()
         })
       })
     },
-    [setConversationSelectionInsertion]
+    [
+      activeDeviceId,
+      currentRuntimeTask?.deviceId,
+      insertionScopeKey,
+      setConversationSelectionInsertion,
+      workbenchMainRef,
+    ]
   )
 
   const askSelectionInSidebar = useCallback(
@@ -170,31 +190,36 @@ export function usePanePanelActions(context: ReturnType<typeof usePaneWorkspaceR
 
   const closeRightPanelTab = useCallback(
     (tab: RightWorkspacePanelTab) => {
-      if (tab.startsWith('chat:')) {
-        temporaryChatInitialInputsRef.current.delete(tab as RightWorkspaceChatTab)
-      }
-      if (tab === 'files') {
-        setOpenFileRequest(null)
-      }
-      if (tab === 'browser') {
-        setEmbeddedBrowserUrl(null)
-      }
-      setRightPanelTabs(current => {
-        const currentTabs = current.includes(tab) ? current : [...current, tab]
-        const next = currentTabs.filter(openTab => openTab !== tab)
-        if (next.length === 0) {
-          setRightPanelOpen(false)
-          setRightPanelView('launcher')
+      const close = () => {
+        if (tab.startsWith('chat:')) {
+          temporaryChatInitialInputsRef.current.delete(tab as RightWorkspaceChatTab)
+        }
+        if (tab === 'files') {
+          setOpenFileRequest(null)
+        }
+        if (tab === 'browser') {
+          setEmbeddedBrowserUrl(null)
+        }
+        setRightPanelTabs(current => {
+          const currentTabs = current.includes(tab) ? current : [...current, tab]
+          const next = currentTabs.filter(openTab => openTab !== tab)
+          if (next.length === 0) {
+            setRightPanelOpen(false)
+            setRightPanelView('launcher')
+            return next
+          }
+          if (rightPanelView === tab) {
+            setRightPanelView(next[next.length - 1])
+          }
           return next
-        }
-        if (rightPanelView === tab) {
-          setRightPanelView(next[next.length - 1])
-        }
-        return next
-      })
+        })
+      }
+      if (tab === 'files') fileEditorNavigation.request(close)
+      else close()
     },
     [
       rightPanelView,
+      fileEditorNavigation,
       setEmbeddedBrowserUrl,
       setOpenFileRequest,
       setRightPanelOpen,
@@ -394,6 +419,7 @@ export function usePanePanelActions(context: ReturnType<typeof usePaneWorkspaceR
         path: trimmedPath,
         lineStart: options?.lineStart,
         lineEnd: options?.lineEnd,
+        sourceRevision: options?.sourceRevision,
         isDirectory,
         target: localTarget ?? undefined,
       })
@@ -538,16 +564,21 @@ export function usePanePanelActions(context: ReturnType<typeof usePaneWorkspaceR
       : null
 
   const toggleRightPanel = useCallback(() => {
-    setRightPanelOpen(open => {
-      const nextOpen = !open
-      if (nextOpen) {
-        setRightPanelView(current =>
-          effectiveRightPanelTabs.includes(current as RightWorkspacePanelTab) ? current : 'launcher'
-        )
-      }
-      return nextOpen
-    })
-  }, [effectiveRightPanelTabs, setRightPanelOpen, setRightPanelView])
+    if (rightPanelOpen) {
+      fileEditorNavigation.request(() => setRightPanelOpen(false))
+    } else {
+      setRightPanelOpen(true)
+      setRightPanelView(current =>
+        effectiveRightPanelTabs.includes(current as RightWorkspacePanelTab) ? current : 'launcher'
+      )
+    }
+  }, [
+    rightPanelOpen,
+    fileEditorNavigation,
+    effectiveRightPanelTabs,
+    setRightPanelOpen,
+    setRightPanelView,
+  ])
 
   const toggleBottomPanel = useCallback(
     () => setCurrentBottomPanelOpen(open => !open),

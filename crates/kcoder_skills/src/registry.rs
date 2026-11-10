@@ -13,6 +13,9 @@ pub struct SkillRegistry {
     project_trust_context: Option<(PathBuf, Option<PathBuf>)>,
     user_directory: Option<PathBuf>,
     disabled_names: BTreeSet<String>,
+    enabled_imports: std::collections::BTreeMap<String, String>,
+    scope_workspace: Option<(PathBuf, bool)>,
+    runtime_names: BTreeSet<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -39,6 +42,27 @@ impl SkillRegistry {
     /// Load project-layer skills only, excluding skills from the current OS user; used for isolated runtimes and deterministic tests.
     pub fn load_project_only(cwd: &Path) -> Result<Self> {
         Self::load_with_layers(cwd, std::iter::empty::<PathBuf>(), None, true)
+    }
+
+    /// Resolve a selected native profile; do not consult another profile's ambient user layer.
+    pub fn load_for_profile<I, P>(
+        cwd: &Path,
+        external_dirs: I,
+        config_dir: &Path,
+        project_trusted: bool,
+    ) -> Result<Self>
+    where
+        I: IntoIterator<Item = P>,
+        P: AsRef<Path>,
+    {
+        let user_dir = config_dir.join("skills");
+        let mut registry =
+            Self::load_with_layers(cwd, external_dirs, Some(&user_dir), project_trusted)?;
+        registry.project_trust_context = Some((cwd.to_path_buf(), Some(config_dir.to_path_buf())));
+        for root in project_skill_dirs(cwd, dirs::home_dir().as_deref()) {
+            registry.require_folder_trust(&root, cwd, Some(config_dir.to_path_buf()));
+        }
+        Ok(registry)
     }
 
     /// Skip project skills discovered upward from cwd when the project is untrusted; external and user layers retain their normal loading rules.
@@ -73,6 +97,12 @@ impl SkillRegistry {
         P: AsRef<Path>,
     {
         let mut registry = Self {
+            scope_workspace: Some((cwd.to_path_buf(), project_trusted)),
+            enabled_imports: user_dir
+                .and_then(Path::parent)
+                .map(crate::activation::enabled_imports)
+                .transpose()?
+                .unwrap_or_default(),
             user_directory: user_dir.map(Path::to_path_buf),
             disabled_names: user_dir
                 .and_then(Path::parent)
@@ -149,12 +179,18 @@ impl SkillRegistry {
             Self::load_with_layers(cwd, external_dirs, self.user_directory.as_deref(), trusted)?;
         refreshed.project_trust_context = self.project_trust_context.clone();
         refreshed.disabled_names = self.disabled_names.clone();
+        refreshed.enabled_imports = self.enabled_imports.clone();
         if let Some((directory, config_dir)) = &self.project_trust_context {
             for root in project_skill_dirs(cwd, dirs::home_dir().as_deref()) {
                 refreshed.require_folder_trust(&root, directory, config_dir.clone());
             }
         }
         refreshed.inherit_trust_requirements(self);
+        for name in &self.runtime_names {
+            if let Some(skill) = self.skills.get(name) {
+                refreshed.insert_runtime_skill(skill.clone())?;
+            }
+        }
         Ok(refreshed)
     }
 
@@ -167,6 +203,35 @@ impl SkillRegistry {
     }
 
     fn trusted(&self, skill: &Skill) -> bool {
+        if let Some(root) = skill
+            .activation
+            .as_ref()
+            .and_then(|activation| activation.workspace.as_ref())
+        {
+            let Some((cwd, trusted)) = &self.scope_workspace else {
+                return false;
+            };
+            let Some(root) = root.canonicalize().ok() else {
+                return false;
+            };
+            if !cwd
+                .canonicalize()
+                .ok()
+                .is_some_and(|cwd| cwd.starts_with(&root))
+            {
+                return false;
+            }
+            let profile = self.user_directory.as_ref().and_then(|root| root.parent());
+            if !kcoder_config::FolderTrustStore::trust_all_from_environment()
+                && (!trusted
+                    || !profile.is_some_and(|profile| {
+                        kcoder_config::FolderTrustStore::load(profile).check(&root)
+                            == kcoder_config::FolderTrust::Trusted
+                    }))
+            {
+                return false;
+            }
+        }
         kcoder_config::FolderTrustStore::trust_all_from_environment()
             || self
                 .trust_rules
@@ -189,6 +254,35 @@ impl SkillRegistry {
 
     pub fn empty() -> Self {
         Self::default()
+    }
+
+    /// A caller-owned immutable snapshot supplies the source; normal activation guards still apply.
+    pub fn insert_runtime_skill(&mut self, skill: Skill) -> Result<()> {
+        anyhow::ensure!(
+            skill.name.starts_with("expert:"),
+            "runtime skill namespace required"
+        );
+        anyhow::ensure!(
+            !self.skills.contains_key(&skill.name)
+                && !self
+                    .conditional
+                    .iter()
+                    .any(|existing| existing.name == skill.name),
+            "runtime skill name collision"
+        );
+        self.runtime_names.insert(skill.name.clone());
+        self.skills.insert(skill.name.clone(), skill);
+        Ok(())
+    }
+
+    pub fn clear_runtime_expert_skills(&mut self) {
+        self.skills
+            .retain(|name, _| !self.runtime_names.contains(name));
+        self.runtime_names.clear();
+    }
+
+    pub fn runtime_skill_names(&self) -> &BTreeSet<String> {
+        &self.runtime_names
     }
 
     fn scan_dir(&mut self, root: &Path) -> Result<()> {
@@ -247,7 +341,17 @@ impl SkillRegistry {
     }
 
     pub fn is_enabled(&self, name: &str) -> bool {
-        !self.disabled_names.contains(name)
+        if self.disabled_names.contains(name) {
+            return false;
+        }
+        self.skills
+            .get(name)
+            .or_else(|| self.conditional.iter().find(|skill| skill.name == name))
+            .and_then(|skill| skill.activation.as_ref())
+            .is_none_or(|activation| {
+                activation.default_enabled
+                    || self.enabled_imports.get(name) == Some(&activation.token)
+            })
     }
 
     /// Management can display installed, trusted entries even when disabled.
@@ -261,6 +365,7 @@ impl SkillRegistry {
     }
 
     pub fn remove_named(&mut self, name: &str) -> bool {
+        self.runtime_names.remove(name);
         let removed_invocable = self.skills.remove(name).is_some();
         let conditional_len = self.conditional.len();
         self.conditional.retain(|skill| skill.name != name);
@@ -420,6 +525,54 @@ mod live_trust_tests {
         .unwrap();
         assert!(restored.get("invocable").is_some());
         assert!(restored.get_active("conditional").is_none());
+    }
+
+    #[test]
+    fn imported_skill_tokens_do_not_reenable_replacements_and_project_scope_survives_user_installation()
+     {
+        let root = tempfile::tempdir().unwrap();
+        let profile = root.path().join("profile");
+        let user = profile.join("skills");
+        let project = root.path().join("project");
+        let other = root.path().join("other");
+        std::fs::create_dir_all(&project).unwrap();
+        std::fs::create_dir_all(&other).unwrap();
+        write_skill(&user, "imported", false);
+        let path = user.join("imported/SKILL.md");
+        let write = |token: &str| {
+            let activation = crate::SkillActivation {
+                token: token.into(),
+                default_enabled: false,
+                workspace: Some(project.clone()),
+            };
+            std::fs::write(&path,format!("---\nname: imported\ndescription: Fixture\nactivation:\n{}---\nIMPORTED_SCOPE_FIXTURE",serde_yaml::to_string(&activation).unwrap().lines().map(|line|format!("  {line}\n")).collect::<String>())).unwrap();
+        };
+        write("first-import");
+        let mut trust = kcoder_config::FolderTrustStore::load(&profile);
+        trust.trust(&project).unwrap();
+        let load = |cwd: &Path| {
+            SkillRegistry::load_with_layers(cwd, std::iter::empty::<PathBuf>(), Some(&user), true)
+                .unwrap()
+        };
+        assert!(load(&project).get_active("imported").is_none());
+        crate::activation::set_enabled_for_import(&profile, "imported", true, Some("first-import"))
+            .unwrap();
+        let first = load(&project);
+        assert!(first.get_active("imported").is_some());
+        assert!(load(&other).list_catalog().is_empty());
+        write("second-import");
+        assert!(load(&project).get_active("imported").is_none());
+        crate::activation::set_enabled_for_import(
+            &profile,
+            "imported",
+            true,
+            Some("second-import"),
+        )
+        .unwrap();
+        let second = load(&project);
+        assert!(second.get_active("imported").is_some());
+        trust.revoke(&project).unwrap();
+        assert!(second.get_active("imported").is_none());
     }
 }
 

@@ -33,7 +33,7 @@ const localExecutorMocks = vi.hoisted(() => ({
   subscribeLocalExecutorEvents: vi.fn(),
 }))
 
-vi.mock('@/tauri/localExecutor', () => ({
+vi.mock('@/host/localExecutor', () => ({
   connectLocalExecutorToBackend: localExecutorMocks.connectLocalExecutorToBackend,
   disconnectLocalExecutorFromBackend: localExecutorMocks.disconnectLocalExecutorFromBackend,
   ensureLocalExecutorStarted: localExecutorMocks.ensureLocalExecutorStarted,
@@ -64,7 +64,7 @@ import {
   RuntimeTopLevelStreamLifecycleProbe,
   StartSkillChatProbe,
   WorkbenchProbeSessionProvider,
-  clearTauriRuntime,
+  clearGatewayRuntime,
   createDevice,
   createProject,
   createRuntimeGoal,
@@ -77,13 +77,13 @@ import {
   renderStrictWorkbench,
   renderWorkbench,
   renderWorkbenchWithDefaultServices,
-  setTauriRuntime,
+  setGatewayRuntime,
 } from './WorkbenchProvider.test-support'
 describe('WorkbenchProvider runtime tasks', () => {
   beforeEach(() => {
     vi.useRealTimers()
     delete window.__KCODER_STUDIO_RUNTIME_CONFIG__
-    clearTauriRuntime()
+    clearGatewayRuntime()
     window.history.pushState({}, '', '/')
     localStorage.clear()
     sessionStorage.clear()
@@ -112,7 +112,7 @@ describe('WorkbenchProvider runtime tasks', () => {
   })
 
   test('bootstraps with local app services in local-first runtime mode', async () => {
-    setTauriRuntime()
+    setGatewayRuntime()
     window.__KCODER_STUDIO_RUNTIME_CONFIG__ = {
       runtimeMode: 'local-first',
     }
@@ -262,7 +262,7 @@ describe('WorkbenchProvider runtime tasks', () => {
   })
 
   test('starts a fresh blank chat with a requested local skill mentioned', async () => {
-    setTauriRuntime()
+    setGatewayRuntime()
     localExecutorMocks.requestLocalExecutor.mockImplementation(
       async (method: string, params?: unknown) => {
         if (method === 'runtime.tasks.list') {
@@ -319,7 +319,7 @@ describe('WorkbenchProvider runtime tasks', () => {
   })
 
   test('does not resolve local skills for a Backend-only skill chat', async () => {
-    setTauriRuntime()
+    setGatewayRuntime()
     localExecutorMocks.requestLocalExecutor.mockImplementation(
       async (method: string, params?: unknown) => {
         if (method === 'runtime.tasks.list') {

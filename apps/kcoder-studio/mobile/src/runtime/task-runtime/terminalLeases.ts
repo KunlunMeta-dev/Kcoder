@@ -26,7 +26,7 @@ export interface BufferedTerminalProtocolEvent {
   sequence: number;
   kind: "output" | "exit";
   data?: string;
-  exitCode?: string;
+  exitCode?: string | null;
 }
 
 export class TaskTerminalSession {
@@ -41,8 +41,14 @@ export class TaskTerminalSession {
   private generation = 0;
   private disposed = false;
   private reconnectQueued = false;
+  private exitUnconfirmed = false;
+  private restarting = false;
   private lastProtocolSequence = 0;
   private readonly pendingProtocolEvents: BufferedTerminalProtocolEvent[] = [];
+  private readonly earlyExitEvents = new Map<
+    string,
+    BufferedTerminalProtocolEvent
+  >();
   private scrollbackLines = 10_000;
   private terminalSize = { rows: 28, cols: 100 };
   private snapshot: TaskTerminalSnapshot;
@@ -97,7 +103,14 @@ export class TaskTerminalSession {
   }
 
   async start(): Promise<void> {
-    if (this.disposed || this.snapshot.status === "running") return;
+    if (
+      this.disposed ||
+      this.restarting ||
+      this.exitUnconfirmed ||
+      this.snapshot.status === "running" ||
+      this.snapshot.status === "exited"
+    )
+      return;
     if (this.startPromise) return this.startPromise;
     if (!this.task.getSnapshot().connected) {
       this.patch({
@@ -114,6 +127,7 @@ export class TaskTerminalSession {
     let createdSessionId: string | null = null;
     this.patch({ status: "starting", error: null });
     this.pendingProtocolEvents.length = 0;
+    this.earlyExitEvents.clear();
     this.startPromise = (async () => {
       let sessionId = previousSessionId;
       let cwd = this.snapshot.cwd;
@@ -140,6 +154,12 @@ export class TaskTerminalSession {
           return;
         }
         this.patch({ sessionId, cwd });
+        const exited = this.earlyExitEvents.get(sessionId);
+        this.earlyExitEvents.clear();
+        if (exited) {
+          this.applyProtocolEvent(exited);
+          return;
+        }
       }
       const attached = await this.task.request<{
         session_id?: string;
@@ -154,7 +174,7 @@ export class TaskTerminalSession {
       if (!attached.session_id)
         throw new Error("app-server 未返回 terminal attach session id");
       if (this.disposed || generation !== this.generation) {
-        if (created)
+        if (created && !this.exitUnconfirmed)
           void this.task
             .request("terminal/close", { session_id: sessionId })
             .catch(() => {});
@@ -174,8 +194,9 @@ export class TaskTerminalSession {
         .sort((left, right) => left.sequence - right.sequence);
       for (const event of buffered) this.applyProtocolEvent(event);
       if (
-        this.terminalSize.rows !== startSize.rows ||
-        this.terminalSize.cols !== startSize.cols
+        this.snapshot.status === "running" &&
+        (this.terminalSize.rows !== startSize.rows ||
+          this.terminalSize.cols !== startSize.cols)
       ) {
         this.sendResize(
           sessionId,
@@ -210,26 +231,71 @@ export class TaskTerminalSession {
   }
 
   async restart(): Promise<void> {
+    if (
+      this.disposed ||
+      this.restarting ||
+      (this.snapshot.status === "starting" && this.startPromise)
+    )
+      return;
     const previous = this.snapshot.sessionId;
+    const clientGeneration = this.task.clientGeneration;
+    this.restarting = true;
     this.generation += 1;
     this.startPromise = null;
     this.pendingProtocolEvents.length = 0;
-    this.lastProtocolSequence = 0;
-    this.patch({ sessionId: null, status: "idle", error: null });
-    if (previous && this.task.getSnapshot().connected) {
-      await this.task
-        .request("terminal/close", { session_id: previous })
-        .catch(() => {});
+    try {
+      if (previous) {
+        this.exitUnconfirmed = true;
+        this.patch({ status: "starting", error: "正在核对原终端的关闭结果…" });
+        const result = await this.task.request<{ closed?: boolean }>(
+          "terminal/close",
+          { session_id: previous },
+        );
+        if (this.disposed || this.task.clientGeneration !== clientGeneration)
+          return;
+        if (result.closed !== true) throw new Error("原终端的关闭结果未确认");
+      }
+      if (this.disposed || this.task.clientGeneration !== clientGeneration)
+        return;
+      this.exitUnconfirmed = false;
+      this.lastProtocolSequence = 0;
+      this.patch({ sessionId: null, status: "idle", error: null });
+      this.restarting = false;
+      await this.start();
+    } catch (value) {
+      if (this.disposed || this.task.clientGeneration !== clientGeneration)
+        return;
+      this.exitUnconfirmed = true;
+      this.patch({
+        sessionId: previous,
+        status: "error",
+        error: `原终端退出或清理结果未确认：${value instanceof Error ? value.message : String(value)}`,
+      });
+    } finally {
+      this.restarting = false;
     }
-    await this.start();
   }
 
   write(data: string): void {
     const sessionId = this.snapshot.sessionId;
-    if (!sessionId || !data) return;
+    if (
+      this.disposed ||
+      this.snapshot.status !== "running" ||
+      !sessionId ||
+      !data
+    )
+      return;
+    const generation = this.generation;
     void this.task
       .request("terminal/write", { session_id: sessionId, data })
       .catch((value) => {
+        if (
+          this.disposed ||
+          generation !== this.generation ||
+          this.snapshot.status !== "running" ||
+          sessionId !== this.snapshot.sessionId
+        )
+          return;
         this.patch({
           error: value instanceof Error ? value.message : String(value),
         });
@@ -246,7 +312,8 @@ export class TaskTerminalSession {
       return;
     this.terminalSize = { rows: Math.floor(rows), cols: Math.floor(cols) };
     const sessionId = this.snapshot.sessionId;
-    if (!sessionId) return;
+    if (this.disposed || this.snapshot.status !== "running" || !sessionId)
+      return;
     this.sendResize(sessionId, this.terminalSize.rows, this.terminalSize.cols);
   }
 
@@ -271,6 +338,7 @@ export class TaskTerminalSession {
     this.generation += 1;
     this.unsubscribeProtocol();
     this.unsubscribeTask();
+    this.earlyExitEvents.clear();
     const sessionId = this.snapshot.sessionId;
     this.outputListeners.clear();
     this.listeners.clear();
@@ -283,6 +351,18 @@ export class TaskTerminalSession {
 
   private handleTaskState(): void {
     if (this.disposed) return;
+    if (this.exitUnconfirmed) {
+      if (
+        !this.task.getSnapshot().connected &&
+        this.snapshot.status === "starting"
+      )
+        this.patch({
+          status: "error",
+          error:
+            "连接中断，原终端退出或清理结果仍未确认，请显式关闭或重启以核对",
+        });
+      return;
+    }
     if (!this.task.getSnapshot().connected) {
       if (
         this.snapshot.status === "running" ||
@@ -308,6 +388,7 @@ export class TaskTerminalSession {
   }
 
   private handleProtocol(message: RpcMessage): void {
+    if (this.disposed) return;
     const params = record(message.params);
     if (message.method === "terminal/output") {
       const eventSession = String(params.session_id ?? "");
@@ -333,29 +414,64 @@ export class TaskTerminalSession {
     }
     if (message.method === "terminal/exit") {
       const eventSession = String(params.session_id ?? "");
-      const exit = String(params.exit_code ?? 0);
+      const exit =
+        typeof params.exit_code === "number" &&
+        Number.isSafeInteger(params.exit_code)
+          ? String(params.exit_code)
+          : null;
       const sequence = Number(params.sequence ?? this.lastProtocolSequence + 1);
-      if (
-        eventSession !== this.snapshot.sessionId ||
-        !Number.isFinite(sequence)
-      )
+      if (!eventSession || !Number.isSafeInteger(sequence) || sequence < 1)
         return;
       const event: BufferedTerminalProtocolEvent = {
         sequence,
         kind: "exit",
         exitCode: exit,
       };
-      if (
-        this.snapshot.status === "starting" ||
-        this.snapshot.status === "reconnecting"
-      )
-        this.pendingProtocolEvents.push(event);
-      else this.applyProtocolEvent(event);
+      if (eventSession !== this.snapshot.sessionId) {
+        // Notifications may precede the start reply. Only its returned ID grants ownership.
+        if (
+          this.snapshot.status === "starting" &&
+          !this.snapshot.sessionId &&
+          (this.earlyExitEvents.has(eventSession) ||
+            this.earlyExitEvents.size < 16)
+        ) {
+          const before = this.earlyExitEvents.get(eventSession);
+          if (!before || before.sequence < sequence)
+            this.earlyExitEvents.set(eventSession, event);
+        }
+        return;
+      }
+      this.applyProtocolEvent(event);
     }
   }
 
   private applyProtocolEvent(event: BufferedTerminalProtocolEvent): void {
     if (event.sequence <= this.lastProtocolSequence) return;
+    if (event.kind === "exit") {
+      this.lastProtocolSequence = event.sequence;
+      this.generation += 1;
+      this.startPromise = null;
+      this.pendingProtocolEvents.length = 0;
+      this.exitUnconfirmed = event.exitCode == null;
+      if (this.exitUnconfirmed) {
+        this.append("\r\n\u001b[33m[终端退出或清理结果未确认]\u001b[0m\r\n");
+        this.patch({
+          status: "error",
+          error: "终端退出或清理结果未确认，请显式关闭或重启以核对",
+        });
+      } else {
+        this.append(
+          `\r\n\u001b[33m[进程已退出：${event.exitCode}]\u001b[0m\r\n`,
+        );
+        this.patch({
+          sessionId: null,
+          status: "exited",
+          error: "终端进程已退出，可点击重新启动",
+        });
+      }
+      return;
+    }
+    if (this.exitUnconfirmed || this.snapshot.status === "exited") return;
     if (event.sequence !== this.lastProtocolSequence + 1) {
       this.patch({
         status: "reconnecting",
@@ -372,18 +488,7 @@ export class TaskTerminalSession {
       return;
     }
     this.lastProtocolSequence = event.sequence;
-    if (event.kind === "output") {
-      this.append(event.data ?? "");
-      return;
-    }
-    this.append(
-      `\r\n\u001b[33m[进程已退出：${event.exitCode ?? "0"}]\u001b[0m\r\n`,
-    );
-    this.patch({
-      sessionId: null,
-      status: "exited",
-      error: "终端进程已退出，可点击重新启动",
-    });
+    this.append(event.data ?? "");
   }
 
   private append(data: string): void {

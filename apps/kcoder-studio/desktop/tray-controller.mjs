@@ -101,9 +101,15 @@ export function createDesktopTray({ Tray, Menu, ipcMain, dialog, window, icon, n
     requestWindowClose(0);
   };
   const resetTaskKnowledge = () => { activeTaskCount = null; badge.clear(); };
+  const onNavigation = (event, _url, isInPlace, isMainFrame) => {
+    const sameDocument = event?.isSameDocument ?? isInPlace;
+    const mainFrame = event?.isMainFrame ?? isMainFrame;
+    if (sameDocument === true || mainFrame === false) return;
+    resetTaskKnowledge();
+  };
   window.on('close', onClose);
   contents.on('render-process-gone', resetTaskKnowledge);
-  contents.on('did-start-navigation', resetTaskKnowledge);
+  contents.on('did-start-navigation', onNavigation);
   ipcMain.handle(channels[0], (event, value) => {
     authorize(event);
     if (!validRecord(value, ['closeToTrayEnabled', 'language']) ||
@@ -133,6 +139,7 @@ export function createDesktopTray({ Tray, Menu, ipcMain, dialog, window, icon, n
   ipcMain.handle(channels[2], event => { authorize(event); hide(); });
   ipcMain.handle(channels[3], (event, action) => {
     authorize(event);
+    if (action === 'show') return show();
     if (action === 'quit') return requestQuit(0);
     if (action === 'close') return window.close();
     if (action === 'minimize') return window.minimize();
@@ -153,7 +160,7 @@ export function createDesktopTray({ Tray, Menu, ipcMain, dialog, window, icon, n
     disposed = true;
     window.removeListener('close', onClose);
     contents.removeListener('render-process-gone', resetTaskKnowledge);
-    contents.removeListener('did-start-navigation', resetTaskKnowledge);
+    contents.removeListener('did-start-navigation', onNavigation);
     for (const channel of channels) ipcMain.removeHandler(channel);
     tray?.destroy();
     tray = null;

@@ -77,3 +77,27 @@ export async function runBrowserScenarioLifecycle({
     throw error;
   }
 }
+
+// Retain every original session object across process replacement until its exit is confirmed.
+export async function cleanupOwnedBrowserSessions({ browser, sessions, timeoutMs = 5000, exitTimeoutMs = 1000 }) {
+  const steps = [];
+  const exits = [];
+  const record = outcome => ({
+    ...outcome,
+    ...(outcome.error ? { error: { name: outcome.error.name || 'Error', message: outcome.error.message || String(outcome.error) } } : {}),
+  });
+  if (browser) steps.push(record(await settleLifecycleStep('browser', () => browser.close(), timeoutMs)));
+  for (const [index, session] of sessions.entries()) {
+    steps.push(record(await settleLifecycleStep(`session-${index + 1}`, () => session.stop(), timeoutMs)));
+    const exit = record(await settleLifecycleStep(`pty-exit-${index + 1}`, () => session.exitPromise, exitTimeoutMs));
+    steps.push(exit);
+    exits.push(exit);
+  }
+  return {
+    steps,
+    ptyExitObserved: exits.every(exit => exit.status === 'completed'),
+    ptyExits: exits.map(exit => exit.value ?? null),
+    // The private profile contains resume evidence; never delete it after unknown cleanup.
+    profileRetained: true,
+  };
+}

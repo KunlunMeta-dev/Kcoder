@@ -11,6 +11,7 @@ const SKILLS: &[&str] = &[
     "doc-coauthoring",
     "docx",
     "frontend-design",
+    "kworker-visualization",
     "pdf",
     "pptx",
     "skill-creator",

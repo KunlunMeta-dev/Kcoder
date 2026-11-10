@@ -1,5 +1,5 @@
 import { notifyAccountContextChange } from './accountContextEvents'
-import { listen } from '@tauri-apps/api/event'
+import { listen } from '@/lib/runtime-events'
 import { describe, expect, test, vi } from 'vitest'
 import {
   readPreferences,
@@ -9,6 +9,8 @@ import {
 } from './gatewayRuntimeSettings'
 import { createTestGatewayRuntime, FakeGatewayClient } from './gatewayRuntime.test-support'
 import { LEGACY_KCODER_STUDIO_STORAGE_KEYS } from './legacyRuntimeAbi'
+
+const KCODER_PRESENTATION = { version: 1, studioWorkMode: 'kcoder', inlineWidgets: false }
 
 describe('KCoder gateway runtime task isolation', () => {
   test('plugin operations open only the explicitly selected remote workspace', async () => {
@@ -55,6 +57,13 @@ describe('KCoder gateway runtime task isolation', () => {
   test('starts with the canonical quick phrases while preserving an explicit empty list', () => {
     localStorage.removeItem('kcoder-studio:app-preferences')
 
+    expect(readPreferences()).toMatchObject({
+      conversationFontScale: 'normal',
+      conversationLineSpacing: 'normal',
+      thinkingCollapsedByDefault: true,
+      toolsCollapsedByDefault: true,
+    })
+
     expect(readPreferences().quickPhrases).toEqual([
       expect.objectContaining({ id: 'default-summary-progress', mode: 'normal' }),
       expect.objectContaining({ id: 'default-create-plan', mode: 'plan' }),
@@ -63,6 +72,28 @@ describe('KCoder gateway runtime task isolation', () => {
 
     expect(writePreferences({ quickPhrases: [] }).quickPhrases).toEqual([])
     expect(readPreferences().quickPhrases).toEqual([])
+
+    expect(writePreferences({ conversationFontScale: 'large' })).toMatchObject({
+      language: 'zh-CN',
+      quickPhrases: [],
+      conversationFontScale: 'large',
+      conversationLineSpacing: 'normal',
+    })
+    expect(readPreferences().conversationFontScale).toBe('large')
+    writePreferences({
+      conversationLineSpacing: 'snug',
+      conversationBlockSpacing: 'relaxed',
+      conversationLetterSpacing: 'compact',
+      conversationFontFamily: 'system',
+    })
+    expect(readPreferences()).toMatchObject({
+      conversationLineSpacing: 'snug',
+      conversationBlockSpacing: 'relaxed',
+      conversationLetterSpacing: 'compact',
+      conversationFontFamily: 'system',
+      conversationFontScale: 'large',
+      quickPhrases: [],
+    })
   })
 
   test('keeps unavailable workspaces visible without opening app-server clients for them', async () => {
@@ -169,11 +200,12 @@ describe('KCoder gateway runtime task isolation', () => {
 
     expect(client.requests).toContainEqual({
       method: 'thread/start',
-      params: { cwd: '/workspace', model: 'kunlunmeta', clientRequestId: 'draft-codex' },
+      params: { studioWorkMode: 'kcoder', cwd: '/workspace', model: 'kunlunmeta', clientRequestId: 'draft-codex' },
     })
     expect(client.requests).toContainEqual({
       method: 'turn/start',
       params: {
+        clientPresentation: KCODER_PRESENTATION,
         threadId: 'codex-thread-1',
         input: [{ type: 'text', text: 'run Codex' }],
         model: 'kunlunmeta',
@@ -513,6 +545,7 @@ describe('KCoder gateway runtime task isolation', () => {
     expect(client.requests).toContainEqual({
       method: 'thread/start',
       params: {
+        studioWorkMode: 'kcoder',
         cwd: '/workspace',
         model: 'provider-special::model-special',
         clientRequestId: 'model-task',
@@ -522,6 +555,7 @@ describe('KCoder gateway runtime task isolation', () => {
       {
         method: 'turn/start',
         params: {
+          clientPresentation: KCODER_PRESENTATION,
           threadId: 'thread-model',
           input: [{ type: 'text', text: 'use selected model' }],
           model: 'provider-special::model-special',
@@ -533,6 +567,7 @@ describe('KCoder gateway runtime task isolation', () => {
       {
         method: 'turn/start',
         params: {
+          clientPresentation: KCODER_PRESENTATION,
           threadId: 'thread-model',
           input: [{ type: 'text', text: 'continue' }],
           model: 'provider-special::model-special',
@@ -743,6 +778,7 @@ describe('KCoder gateway runtime task isolation', () => {
     expect(clients[0].requests.at(-1)).toEqual({
       method: 'turn/start',
       params: {
+        clientPresentation: KCODER_PRESENTATION,
         threadId: 'thread-1',
         input: [{ type: 'text', text: 'continue first task' }],
       },
@@ -966,6 +1002,7 @@ describe('KCoder gateway runtime task isolation', () => {
     expect(client.requests.at(-1)).toEqual({
       method: 'turn/start',
       params: {
+        clientPresentation: KCODER_PRESENTATION,
         threadId: 'thread-operations',
         input: [{ type: 'text', text: 'edited message' }],
       },
@@ -1199,6 +1236,82 @@ describe('KCoder gateway runtime task isolation', () => {
   })
 })
 
+test('tool selections use the addressed target and require the separate selection capability', async () => {
+  const client = new FakeGatewayClient(null)
+  const request = vi.spyOn(client, 'request').mockResolvedValue({ revision: 'saved' } as never)
+  const capability = vi
+    .spyOn(client, 'supportsExperimental')
+    .mockImplementation(name => name === 'toolSelectionsV1')
+  const connections: string[] = []
+  const runtime = createTestGatewayRuntime('token', {
+    loadServers: async () => [{ id: 'local', label: 'Local', description: '', transport: 'local' }],
+    createClient: serverId => {
+      connections.push(serverId)
+      return client
+    },
+  })
+  await runtime.request('runtime.settings.request', {
+    serverId: 'local',
+    method: 'settings/tools/selection/read',
+    params: {},
+  })
+  const selection = {
+    mode: 'kworker',
+    allowedTools: ['read', 'show_widget'],
+    expectedRevision: 'original',
+  }
+  await runtime.request('runtime.settings.request', {
+    serverId: 'local',
+    method: 'settings/tools/selection/save',
+    params: selection,
+  })
+  expect(connections).toEqual(['local'])
+  expect(request).toHaveBeenLastCalledWith('settings/tools/selection/save', selection)
+  capability.mockImplementation(name => name === 'toolProfilesV1')
+  request.mockClear()
+  await expect(
+    runtime.request('runtime.settings.request', {
+      serverId: 'local',
+      method: 'settings/tools/selection/read',
+      params: {},
+    })
+  ).rejects.toThrow('TOOL_SELECTION_UNSUPPORTED')
+  expect(request).not.toHaveBeenCalled()
+})
+
+test('Luna baseline reads opt in only on targets that advertise the separate capability', async () => {
+  const client = new FakeGatewayClient(null)
+  const request = vi.spyOn(client, 'request').mockResolvedValue({ revision: 'catalog' } as never)
+  const capability = vi
+    .spyOn(client, 'supportsExperimental')
+    .mockImplementation(name => name === 'toolSelectionsV1')
+  const runtime = createTestGatewayRuntime('token', {
+    loadServers: async () => [{ id: 'local', label: 'Local', description: '', transport: 'local' }],
+    createClient: () => client,
+  })
+  try {
+    const params = {
+      serverId: 'local',
+      workspacePath: '/original-project',
+      method: 'settings/tools/selection/read',
+      params: { includeLunaBaseline: true },
+    }
+    await runtime.request('runtime.settings.request', params)
+    expect(request).toHaveBeenLastCalledWith('settings/tools/selection/read', {})
+    capability.mockImplementation(
+      name => name === 'toolSelectionsV1' || name === 'lunaToolSelectionsV1'
+    )
+    await runtime.request('runtime.settings.request', params)
+    expect(request).toHaveBeenLastCalledWith('settings/tools/selection/read', {
+      includeLunaBaseline: true,
+    })
+    await runtime.request('runtime.settings.request', { ...params, params: {} })
+    expect(request).toHaveBeenLastCalledWith('settings/tools/selection/read', {})
+  } finally {
+    await runtime.dispose()
+  }
+})
+
 test('tool profile settings are scoped, leaf-only, and require an explicit target capability', async () => {
   const client = new FakeGatewayClient(null)
   const connections: string[] = []
@@ -1301,35 +1414,154 @@ test('account changes during target lookup reject old workflow writes and task p
 test('named workflow routes require the explicit target capability before dispatch', async () => {
   const client = new FakeGatewayClient(null)
   const request = vi.spyOn(client, 'request').mockResolvedValue({} as never)
-  const capability = vi.spyOn(client, 'supportsExperimental').mockImplementation(name => ['workflowCanvasV1','workflowGraphV2'].includes(name))
+  const capability = vi
+    .spyOn(client, 'supportsExperimental')
+    .mockImplementation(name => ['workflowCanvasV1', 'workflowGraphV2'].includes(name))
   const runtime = createTestGatewayRuntime('token', {
-    loadServers: async () => [{id:'named-route-target',label:'Target',description:'',transport:'local',workspacePath:'/owned'}],
+    loadServers: async () => [
+      {
+        id: 'named-route-target',
+        label: 'Target',
+        description: '',
+        transport: 'local',
+        workspacePath: '/owned',
+      },
+    ],
     createClient: () => client,
   })
-  for (const node of [{id:'router',kind:'switch'}, {id:'branch',runIf:{nodeId:'router',equals:'true'}}]) {
+  for (const node of [
+    { id: 'router', kind: 'switch' },
+    { id: 'branch', runIf: { nodeId: 'router', equals: 'true' } },
+  ]) {
     request.mockClear()
-    await expect(runtime.request('runtime.workflows.request', {serverId:'named-route-target',method:'workflow/upsertNode',params:{id:'flow',expectedRevision:1,node}})).rejects.toThrow()
+    await expect(
+      runtime.request('runtime.workflows.request', {
+        serverId: 'named-route-target',
+        method: 'workflow/upsertNode',
+        params: { id: 'flow', expectedRevision: 1, node },
+      })
+    ).rejects.toThrow()
     expect(request).not.toHaveBeenCalled()
   }
   capability.mockReturnValue(true)
-  await runtime.request('runtime.workflows.request', {serverId:'named-route-target',method:'workflow/upsertNode',params:{id:'flow',expectedRevision:1,node:{id:'router',kind:'switch'}}})
-  expect(request).toHaveBeenCalledWith('workflow/upsertNode', expect.objectContaining({node:{id:'router',kind:'switch'}}))
+  await runtime.request('runtime.workflows.request', {
+    serverId: 'named-route-target',
+    method: 'workflow/upsertNode',
+    params: { id: 'flow', expectedRevision: 1, node: { id: 'router', kind: 'switch' } },
+  })
+  expect(request).toHaveBeenCalledWith(
+    'workflow/upsertNode',
+    expect.objectContaining({ node: { id: 'router', kind: 'switch' } })
+  )
 })
 
 test('workflow layout writes require explicit capability and preserve position-only payload', async () => {
   const client = new FakeGatewayClient(null)
   const request = vi.spyOn(client, 'request').mockResolvedValue({} as never)
-  const capability = vi.spyOn(client, 'supportsExperimental').mockImplementation(name => name === 'workflowCanvasV1')
+  const capability = vi
+    .spyOn(client, 'supportsExperimental')
+    .mockImplementation(name => name === 'workflowCanvasV1')
   const runtime = createTestGatewayRuntime('token', {
-    loadServers: async () => [{id:'layout-target',label:'Target',description:'',transport:'local',workspacePath:'/owned'}],
+    loadServers: async () => [
+      {
+        id: 'layout-target',
+        label: 'Target',
+        description: '',
+        transport: 'local',
+        workspacePath: '/owned',
+      },
+    ],
     createClient: () => client,
   })
-  const params = {id:'flow',nodeId:'a',expectedPosition:{x:0,y:0},position:{x:10,y:20}}
+  const params = {
+    id: 'flow',
+    nodeId: 'a',
+    expectedPosition: { x: 0, y: 0 },
+    position: { x: 10, y: 20 },
+  }
   try {
-    await expect(runtime.request('runtime.workflows.request', {serverId:'layout-target',method:'workflow/moveNode',params})).rejects.toThrow()
+    await expect(
+      runtime.request('runtime.workflows.request', {
+        serverId: 'layout-target',
+        method: 'workflow/moveNode',
+        params,
+      })
+    ).rejects.toThrow()
     expect(request).not.toHaveBeenCalled()
     capability.mockReturnValue(true)
-    await runtime.request('runtime.workflows.request', {serverId:'layout-target',method:'workflow/moveNode',params})
+    await runtime.request('runtime.workflows.request', {
+      serverId: 'layout-target',
+      method: 'workflow/moveNode',
+      params,
+    })
     expect(request).toHaveBeenCalledWith('workflow/moveNode', params)
+  } finally {
+    await runtime.dispose()
+  }
+})
+
+test('tool selections use separate command clients for explicitly addressed projects on one target', async () => {
+  const connections: Array<{ serverId: string; workspacePath?: string }> = []
+  const runtime = createTestGatewayRuntime('token', {
+    loadServers: async () => [
+      {
+        id: 'local',
+        label: 'Local',
+        description: '',
+        transport: 'local',
+        workspacePath: '/default-project',
+      },
+    ],
+    createClient: (serverId, _token, _channel, workspacePath) => {
+      connections.push({ serverId, workspacePath })
+      const client = new FakeGatewayClient(null)
+      vi.spyOn(client, 'supportsExperimental').mockImplementation(
+        name => name === 'toolSelectionsV1'
+      )
+      vi.spyOn(client, 'request').mockResolvedValue({ revision: workspacePath } as never)
+      return client
+    },
+  })
+  for (const workspacePath of ['/first-project', '/second-project']) {
+    await runtime.request('runtime.settings.request', {
+      serverId: 'local',
+      workspacePath,
+      method: 'settings/tools/selection/read',
+      params: {},
+    })
+  }
+  expect(connections).toEqual([
+    { serverId: 'local', workspacePath: '/first-project' },
+    { serverId: 'local', workspacePath: '/second-project' },
+  ])
+})
+
+test('tool previews retain target routing and are stripped for older strict targets', async () => {
+  const client = new FakeGatewayClient(null)
+  const request = vi.spyOn(client, 'request').mockResolvedValue({ revision: 'catalog' } as never)
+  const capability = vi.spyOn(client, 'supportsExperimental')
+    .mockImplementation(name => name === 'toolSelectionsV1')
+  const runtime = createTestGatewayRuntime('token', {
+    loadServers: async () => [{ id: 'local', label: 'Local', description: '', transport: 'local' }],
+    createClient: () => client,
+  })
+  try {
+    const params = {
+      serverId: 'local', workspacePath: '/selected-project',
+      method: 'settings/tools/selection/read',
+      params: { includeResolution: true, includeExpertToolSelection: true, previewExpert: { id: 'selected-expert' } },
+    }
+    await runtime.request('runtime.settings.request', params)
+    expect(request).toHaveBeenLastCalledWith('settings/tools/selection/read', {})
+    capability.mockImplementation(name => name === 'toolSelectionsV1' || name === 'toolSelectionResolutionV1')
+    await runtime.request('runtime.settings.request', params)
+    expect(request).toHaveBeenLastCalledWith('settings/tools/selection/read', {
+      includeResolution: true, previewExpert: params.params.previewExpert,
+    })
+    capability.mockImplementation(name =>
+      ['toolSelectionsV1', 'toolSelectionResolutionV1', 'expertToolSelectionV1'].includes(name)
+    )
+    await runtime.request('runtime.settings.request', params)
+    expect(request).toHaveBeenLastCalledWith('settings/tools/selection/read', params.params)
   } finally { await runtime.dispose() }
 })

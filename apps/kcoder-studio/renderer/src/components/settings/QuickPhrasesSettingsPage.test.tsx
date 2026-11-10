@@ -5,8 +5,8 @@ import { QuickPhrasesSettingsPage } from './QuickPhrasesSettingsPage'
 const getAppPreferences = vi.hoisted(() => vi.fn())
 const updateAppPreferences = vi.hoisted(() => vi.fn())
 
-vi.mock('@/tauri/appPreferences', async importOriginal => {
-  const actual = await importOriginal<typeof import('@/tauri/appPreferences')>()
+vi.mock('@/host/appPreferences', async importOriginal => {
+  const actual = await importOriginal<typeof import('@/host/appPreferences')>()
   return { ...actual, getAppPreferences, updateAppPreferences }
 })
 

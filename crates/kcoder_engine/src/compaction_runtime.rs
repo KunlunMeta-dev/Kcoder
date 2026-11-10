@@ -18,6 +18,8 @@ pub(super) struct AutoCompactState {
     /// while the conversation is still below the threshold so the threshold
     /// pass only has to summarize the newer delta.
     prefire_note: Option<crate::context::PrefireNote>,
+    prefire_configuration: Option<[u8; 32]>,
+    prefire_source: Option<(usize, [u8; 32])>,
     prefire_in_flight: bool,
     prefire_idle_reserved: Arc<AtomicBool>,
     prefire_scope: Arc<()>,
@@ -68,6 +70,8 @@ impl AutoCompactState {
         self.prefire_scope = Arc::new(());
         self.prefire_in_flight = false;
         self.prefire_note = None;
+        self.prefire_configuration = None;
+        self.prefire_source = None;
         self.prefire_job.take()
     }
 }
@@ -168,6 +172,23 @@ impl QueryEngine {
             None => TokenCounter::count(messages),
         }
     }
+
+    async fn native_model_context_tokens(&self, messages: &[Message]) -> Result<usize> {
+        if self.native_office_projection.is_none() {
+            return Ok(TokenCounter::count(messages));
+        }
+        let mut view = kcoder_types::SharedMessages::from(messages.to_vec());
+        let projected = tokio::select! {
+            biased;
+            _ = self.cancel_token().cancelled_owned() => anyhow::bail!("NATIVE_OFFICE_PROJECTION_CANCELLED"),
+            result = self.project_native_office_request(&mut view) => result?,
+        };
+        Ok(if projected.projected_calls > 0 {
+            self.projected_full_context_tokens(&view.into_vec())
+        } else {
+            TokenCounter::count(messages)
+        })
+    }
     /// Force a full context compaction regardless of current token count.
     ///
     /// Used by the `/compact` slash command.
@@ -222,6 +243,39 @@ impl QueryEngine {
         )
     }
 
+    pub(super) fn take_auto_compaction_events(&self, compacted: bool) -> (Vec<EngineEvent>, bool) {
+        let mut events = self
+            .take_recovered_compaction_provider_retries()
+            .into_iter()
+            .map(EngineEvent::ProviderRetry)
+            .collect::<Vec<_>>();
+        events.extend(
+            self.take_recovered_compaction_diagnostics()
+                .into_iter()
+                .map(|details| EngineEvent::CompactionRecovered { details }),
+        );
+        let failure = if compacted {
+            None
+        } else {
+            self.take_auto_compact_failure()
+        };
+        let failed = failure.is_some();
+        if compacted {
+            let (pre, post) = self.last_auto_compact_tokens();
+            let prefire = if self.take_prefire_used_flag() {
+                " (background prefire reused)"
+            } else {
+                ""
+            };
+            events.push(EngineEvent::SystemNotice(format!(
+                "Context auto-compacted: {pre} -> {post} tokens{prefire}"
+            )));
+        } else if let Some((error, details)) = failure {
+            events.push(EngineEvent::CompactionFailed { error, details });
+        }
+        (events, failed)
+    }
+
     /// Compact conversation history when it grows too long.
     ///
     /// Implements a layered strategy similar to KCoder:
@@ -232,6 +286,37 @@ impl QueryEngine {
     ///
     /// Returns `true` if a full compaction was performed.
     pub async fn maybe_compact_conversation(&self, turn_count: usize) -> bool {
+        self.maybe_compact_in_context(turn_count, None).await
+    }
+
+    /// Growth maintenance runs only after the complete prepared request fits.
+    /// Static instructions and schemas must pass the hard gate first.
+    pub(super) async fn maybe_compact_prepared_request(
+        &self,
+        turn_count: usize,
+        budget: &ContextBudget,
+        prepared_tokens: usize,
+    ) -> bool {
+        if prepared_tokens > budget.hard_input_limit()
+            || recover_read_lock(&self.settings, "settings").training_mode
+        {
+            return false;
+        }
+        if crate::context::compact::incremental::growth_is_ready(&self.state.messages(), budget) {
+            self.maybe_compact_in_context(turn_count, Some(prepared_tokens))
+                .await
+        } else {
+            self.maybe_prefire_in_context(budget, prepared_tokens, true)
+                .await;
+            false
+        }
+    }
+
+    async fn maybe_compact_in_context(
+        &self,
+        turn_count: usize,
+        prepared_tokens: Option<usize>,
+    ) -> bool {
         if recover_read_lock(&self.settings, "settings").training_mode {
             return false;
         }
@@ -243,7 +328,9 @@ impl QueryEngine {
         }
         let check_sequence = {
             let mut state = recover_write_lock(&self.auto_compact_state, "auto_compact_state");
-            state.check_sequence = state.check_sequence.saturating_add(1);
+            if prepared_tokens.is_none() {
+                state.check_sequence = state.check_sequence.saturating_add(1);
+            }
             state.check_sequence
         };
         let budget = {
@@ -251,21 +338,51 @@ impl QueryEngine {
             ContextBudget::from_settings(&settings)
         };
         let current_messages = self.state.messages();
-        let model_visible_messages = messages_after_latest_compact_boundary(&current_messages);
-        let mut current_tokens = TokenCounter::count(&model_visible_messages);
+        let mut model_visible_messages = messages_after_latest_compact_boundary(&current_messages);
+        let mut current_tokens = match self
+            .native_model_context_tokens(&model_visible_messages)
+            .await
+        {
+            Ok(tokens) => tokens,
+            Err(error) => {
+                recover_write_lock(&self.auto_compact_state, "auto_compact_state").last_failure =
+                    Some((error.to_string(), None));
+                return false;
+            }
+        };
+        if let Some(prepared) = prepared_tokens {
+            current_tokens = prepared;
+        }
         // Above the full-summary threshold, keep the existing pipeline so a
         // summary still sees the original evidence if cheap cleanup is insufficient.
         if current_tokens > budget.tool_result_compact_threshold()
             && current_tokens <= budget.auto_compact_threshold()
             && self.try_early_tool_result_compaction().await
         {
-            current_tokens = TokenCounter::count(&messages_after_latest_compact_boundary(
-                &self.state.messages(),
-            ));
+            model_visible_messages = messages_after_latest_compact_boundary(&self.state.messages());
+            current_tokens = match self
+                .native_model_context_tokens(&model_visible_messages)
+                .await
+            {
+                Ok(tokens) => tokens,
+                Err(error) => {
+                    recover_write_lock(&self.auto_compact_state, "auto_compact_state")
+                        .last_failure = Some((error.to_string(), None));
+                    return false;
+                }
+            };
+            if prepared_tokens.is_some() {
+                current_tokens = self.projected_full_context_tokens(&model_visible_messages);
+            }
         }
 
         // Threshold check: current messages exceed the auto-compact threshold.
         let over_threshold = current_tokens > budget.auto_compact_threshold();
+        let growth_ready = prepared_tokens.is_some()
+            && crate::context::compact::incremental::growth_is_ready(
+                &model_visible_messages,
+                &budget,
+            );
         let hard = current_tokens >= budget.hard_input_limit();
 
         // The circuit breaker may suppress soft-compaction cost but must never bypass a true hard-limit condition.
@@ -281,11 +398,16 @@ impl QueryEngine {
             return false;
         }
 
-        if !over_threshold {
+        if !over_threshold && !growth_ready {
             // Below the threshold but within the prefire lead window: warm the
             // pass-1 summary in the background so the threshold pass later
             // only summarizes the delta (grok-style two-pass compaction).
-            self.maybe_prefire_compaction(&budget, current_tokens).await;
+            if prepared_tokens.is_some() {
+                self.maybe_prefire_in_context(&budget, current_tokens, true)
+                    .await;
+            } else {
+                self.maybe_prefire_compaction(&budget, current_tokens).await;
+            }
             return false;
         }
 
@@ -318,7 +440,12 @@ impl QueryEngine {
         match self
             // An automatic hard trigger still runs inexpensive tool-storage and micro
             // layers first. If they reduce actual context below soft, do not force a summary-model call.
-            .perform_compaction_with_trigger(false, false, hard)
+            .perform_compaction_with_trigger_and_cancel(
+                growth_ready && !over_threshold,
+                false,
+                hard,
+                Some(self.cancel_token()),
+            )
             .await
         {
             Ok(mut result) => {
@@ -362,6 +489,9 @@ impl QueryEngine {
                 true
             }
             Err(e) => {
+                if self.is_cancelled() {
+                    return false;
+                }
                 warn!("auto-compact failed: {}", e);
                 let mut details = crate::context::compact::compaction_protocol_details(&e);
                 if let Some(details) = details.as_mut() {
@@ -432,18 +562,67 @@ impl QueryEngine {
     /// threshold is later crossed, the compaction only summarizes the delta
     /// newer than this note instead of re-reading the whole prefix.
     async fn maybe_prefire_compaction(&self, budget: &ContextBudget, current_tokens: usize) {
+        self.maybe_prefire_in_context(budget, current_tokens, false)
+            .await;
+    }
+
+    async fn maybe_prefire_in_context(
+        &self,
+        budget: &ContextBudget,
+        current_tokens: usize,
+        allow_growth: bool,
+    ) {
+        let configuration = crate::context::compact::fingerprint_serializable(&*recover_read_lock(
+            &self.settings,
+            "settings",
+        ));
+        let messages = self.state.messages();
+        let model_visible = messages_after_latest_compact_boundary(&messages);
+        let (stale_configuration, source) = {
+            let state = recover_read_lock(&self.auto_compact_state, "auto_compact_state");
+            (
+                state.prefire_configuration.is_some()
+                    && state.prefire_configuration != configuration,
+                state.prefire_source,
+            )
+        };
+        let stale_source = source.is_some_and(|(covered, fingerprint)| {
+            model_visible
+                .get(..covered)
+                .and_then(crate::context::compact::fingerprint_serializable)
+                != Some(fingerprint)
+        });
+        if stale_configuration || stale_source {
+            self.prefire_owner.cancel();
+        }
+        if configuration.is_none() {
+            return;
+        }
         let scope = Arc::clone(
             &recover_read_lock(&self.auto_compact_state, "auto_compact_state").prefire_scope,
         );
         let threshold = budget.auto_compact_threshold();
         let prefire_line = budget.prefire_threshold();
-        if current_tokens <= prefire_line || threshold == 0 {
+        let growth_step = crate::context::compact::incremental::growth_threshold(budget);
+        let growth_prefire = allow_growth
+            && crate::context::compact::incremental::consumed_growth_tokens(&model_visible)
+                >= growth_step
+                    .saturating_sub(budget.estimated_tool_growth)
+                    .max(growth_step / 2);
+        if (current_tokens <= prefire_line && !growth_prefire) || threshold == 0 {
             return;
         }
         // When Session Memory is updating or an existing snapshot should reduce the
         // window below soft, prefire would summarize the same prefix again and is skipped.
+        let split = crate::context::compact::split_for_compaction(&model_visible);
+        let summary_plan =
+            crate::context::compact::incremental::summary_plan(&split.old, budget, true);
+        if summary_plan.no_work || split.old.is_empty() {
+            return;
+        }
         if self.session_memory_update_running.load(Ordering::SeqCst)
-            || self.session_memory_projected_below_soft(budget).await
+            || (summary_plan.retained_summary.is_none()
+                && self.session_memory_projected_below_soft(budget).await)
         {
             debug!("prefire skipped: session memory is pending or projected below soft limit");
             return;
@@ -459,25 +638,37 @@ impl QueryEngine {
             }
         }
 
-        let messages = self.state.messages();
-        let model_visible = messages_after_latest_compact_boundary(&messages);
-        let split = crate::context::compact::split_for_compaction(&model_visible);
-        if split.old.is_empty() {
+        let Some(source_fingerprint) =
+            crate::context::compact::fingerprint_serializable(&split.old)
+        else {
+            return;
+        };
+        // Resolve while the foreground owns its Engine. A prefire future must
+        // never retain a native service that indirectly holds the Engine lease.
+        let mut request_old =
+            kcoder_types::SharedMessages::from(split.old[summary_plan.source_start..].to_vec());
+        let projected = tokio::select! {
+            biased;
+            _ = self.cancel_token().cancelled_owned() => return,
+            result = self.project_native_office_request(&mut request_old) => result,
+        };
+        if projected.is_err() {
+            debug!("prefire skipped: native Office source is unavailable");
             return;
         }
+        let request_old = request_old.into_vec();
 
-        let (model, summary_max_tokens) = {
-            let settings = recover_read_lock(&self.settings, "settings");
-            (
-                settings
-                    .summary_model
-                    .clone()
-                    .filter(|model| !model.trim().is_empty())
-                    .unwrap_or_else(|| settings.model.clone()),
-                settings.summary_max_tokens.max(1),
-            )
-        };
-        let provider = self.current_provider();
+        let ((_, model, summary_max_tokens, provider), configuration) =
+            match self.summary_runtime_with_identity() {
+                Ok(runtime) => runtime,
+                Err(error) => {
+                    debug!("prefire skipped: summary runtime unavailable: {error}");
+                    return;
+                }
+            };
+        if configuration.is_none() {
+            return;
+        }
         let debug_id = self.state.session_id();
         let budget_copy = *budget;
         let usage_state = self.state.clone();
@@ -498,6 +689,8 @@ impl QueryEngine {
                 abort: None,
             });
             state.prefire_in_flight = true;
+            state.prefire_configuration = configuration;
+            state.prefire_source = Some((split.old.len(), source_fingerprint));
         }
         // Construct outside the future so cancellation before its first poll cleans up too.
         let guard = PrefireTaskGuard {
@@ -518,7 +711,7 @@ impl QueryEngine {
                 .with_usage_tracking(usage_state);
             let outcome = compactor
                 .summarize_old_messages(
-                    &split.old,
+                    &request_old,
                     &model,
                     summary_max_tokens,
                     None,
@@ -526,8 +719,10 @@ impl QueryEngine {
                 )
                 .await;
             // Hash the immutable source outside the lifecycle lock.
-            let outcome =
-                outcome.map(|summary| crate::context::PrefireNote::new(&split.old, summary));
+            let outcome = outcome.map(|summary| {
+                crate::context::PrefireNote::new(&split.old, summary)
+                    .with_retained_summary(summary_plan.retained_summary)
+            });
             let Some(state_handle) = guard.state.upgrade() else {
                 return;
             };
@@ -654,13 +849,12 @@ impl QueryEngine {
         summary_cancel: Option<CancellationToken>,
         deadline: crate::recovery_deadline::RecoveryDeadline,
     ) -> Result<crate::context::CompactionResult> {
-        let (model, budget, active_skills, session_memory_settings) = {
+        let active_skills = self.effective_active_skill_names();
+        let (model, budget, session_memory_settings) = {
             let settings = recover_read_lock(&self.settings, "settings");
-            let skills = recover_read_lock(&self.active_skills, "active_skills");
             (
                 settings.model.clone(),
                 ContextBudget::from_settings(&settings),
-                skills.clone(),
                 settings.session_memory.clone(),
             )
         };
@@ -785,9 +979,18 @@ impl QueryEngine {
             .as_deref()
             .map(str::trim)
             .is_some_and(|instructions| !instructions.is_empty());
+        let split = crate::context::compact::split_for_compaction(&messages);
+        let prefer_incremental = crate::context::compact::incremental::summary_plan(
+            &split.old,
+            &budget,
+            !manual_trigger && !emergency_split && !has_custom_compact_instructions,
+        )
+        .retained_summary
+        .is_some();
         if session_memory_settings.enabled
             && session_memory_settings.compact_enabled
             && !has_custom_compact_instructions
+            && !prefer_incremental
         {
             if deadline.is_active() {
                 let cancel = summary_cancel
@@ -944,13 +1147,22 @@ impl QueryEngine {
             }
         }
 
-        let (summary_model, _, summary_max_tokens, summary_provider) = self.summary_runtime()?;
-        let compactor = ConversationCompactor::new(summary_provider, budget)
+        let ((summary_model, _, summary_max_tokens, summary_provider), configuration) =
+            self.summary_runtime_with_identity()?;
+        let mut compactor = ConversationCompactor::new(summary_provider, budget)
             .with_usage_tracking(self.state.clone());
+        if let Some(projection) = self.native_office_summary_projection() {
+            compactor = compactor.with_message_projection(projection);
+        }
         let prefire_note = {
             let mut state = recover_write_lock(&self.auto_compact_state, "auto_compact_state");
-            state.prefire_note.take()
+            if configuration.is_some() && state.prefire_configuration == configuration {
+                state.prefire_note.take()
+            } else {
+                None
+            }
         };
+        self.prefire_owner.cancel();
         let compact = compactor.compact(
             CompactionRequest {
                 messages: messages.clone(),
@@ -1089,8 +1301,20 @@ impl QueryEngine {
         if !is_compact_summary || text.contains("read the full transcript at:") {
             return;
         }
+        let supports_tools = recover_read_lock(&self.settings, "settings")
+            .model_capabilities
+            .tools;
+        let history_lookup = if supports_tools
+            && self
+                .model_tool_names(&self.active_tool_registry(), false)
+                .contains("ContextHistory")
+        {
+            " Use ContextHistory to search compressed evidence or restore a referenced block. "
+        } else {
+            " "
+        };
         let hint = format!(
-            "\n\nIf you need specific details from before compaction (like exact code snippets, error messages, or content you generated), read the full transcript at: {}",
+            "\n\nIf you need specific details from before compaction (like exact code snippets, error messages, or content you generated),{history_lookup}read the full transcript at: {}",
             transcript_path.display()
         );
         if let Some(index) = text.find("\n\nRecent messages are preserved verbatim.") {

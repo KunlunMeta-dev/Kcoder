@@ -1,10 +1,13 @@
-import { listen } from '@tauri-apps/api/event'
-import { clearMocks, mockIPC } from '@tauri-apps/api/mocks'
+import { taskConnectionStatus } from './taskConnectionStatus'
+import { listen } from '@/lib/runtime-events'
+import { clearTestTransports, installTestTransport } from '@/test/runtime-transport'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { FakeGatewayClient } from './gateway/runtime/contractFixture.test-support'
 import { KCoderGatewayRuntime as CoreRuntime } from './gatewayRuntime'
 import { KCoderGatewayRuntime } from './installGatewayRuntime'
 import { KCODER_RUNTIME_METHODS } from './legacyRuntimeAbi'
+
+const KCODER_PRESENTATION = { version: 1, studioWorkMode: 'kcoder', inlineWidgets: false }
 
 describe.each([
   ['installed', KCoderGatewayRuntime],
@@ -21,7 +24,7 @@ describe.each([
   afterEach(async () => {
     await Promise.all([...runtimes].map(runtime => runtime.disposeAsync?.() ?? runtime.dispose()))
     runtimes.clear()
-    clearMocks()
+    clearTestTransports()
     vi.restoreAllMocks()
   })
   test('does not warn when page teardown cancels persisted task hydration', async () => {
@@ -139,7 +142,7 @@ describe.each([
   })
 
   test('links background subagent completion back to its original tool block', async () => {
-    mockIPC(() => undefined, { shouldMockEvents: true })
+    installTestTransport(() => undefined)
     const received: Array<{ event: string; payload: Record<string, unknown> }> = []
     const unlisten = await listen<{ event: string; payload: Record<string, unknown> }>(
       'local-executor:event',
@@ -251,7 +254,7 @@ describe.each([
   })
 
   test('interrupts the exact active turn and waits for completion before replacing it', async () => {
-    mockIPC(() => undefined, { shouldMockEvents: true })
+    installTestTransport(() => undefined)
     const client = new FakeGatewayClient('thread-1')
     const runtime = new KCoderGatewayRuntime('token', {
       loadServers: async () => [
@@ -303,6 +306,7 @@ describe.each([
     expect(client.requests.at(-1)).toEqual({
       method: 'turn/start',
       params: {
+        clientPresentation: KCODER_PRESENTATION,
         threadId: 'thread-1',
         input: [{ type: 'text', text: 'replacement' }],
       },
@@ -338,8 +342,8 @@ describe.each([
     })
   })
 
-  test('interrupts the foreground turn but preserves resident background jobs across reconnect', async () => {
-    mockIPC(() => undefined, { shouldMockEvents: true })
+  test('retains the foreground turn and background jobs across a transient socket reconnect', async () => {
+    installTestTransport(() => undefined)
     const received: Array<{ event: string; payload: Record<string, unknown> }> = []
     const unlisten = await listen<{ event: string; payload: Record<string, unknown> }>(
       'local-executor:event',
@@ -377,15 +381,8 @@ describe.each([
       method: 'thread/resume',
       params: { threadId: 'thread-reconnect' },
     })
-    expect(received).toContainEqual(
-      expect.objectContaining({
-        event: 'response.failed',
-        payload: expect.objectContaining({
-          taskId: created.taskId,
-          data: { message: 'KCoder app-server 连接已断开，已停止当前任务' },
-        }),
-      })
-    )
+    expect(received.some(event => event.event === 'response.failed')).toBe(false)
+    expect(taskConnectionStatus.read('local', created.taskId)).toBe('reconnecting')
     const sendAfterReconnect = runtime.request('runtime.tasks.send', {
       taskId: created.taskId,
       message: 'after reconnect',
@@ -397,19 +394,34 @@ describe.each([
       accepted: true,
       taskId: created.taskId,
     })
-    expect(
-      second.requests.filter(request => request.method !== 'runtime.context.get').slice(0, 3)
-    ).toEqual([
+    expect(received).toContainEqual({
+      event: 'executor.task_stream_gap',
+      payload: { deviceId: 'local', taskId: created.taskId },
+    })
+    expect(taskConnectionStatus.read('local', created.taskId)).toBeNull()
+    const resumedRequests = second.requests.filter(
+      request => request.method !== 'runtime.context.get'
+    )
+    expect(resumedRequests.slice(0, 2)).toEqual([
       { method: 'thread/resume', params: { threadId: 'thread-reconnect' } },
-      { method: 'agent/list', params: { threadId: 'thread-reconnect' } },
       {
         method: 'turn/start',
         params: {
+          clientPresentation: KCODER_PRESENTATION,
           threadId: 'thread-reconnect',
           input: [{ type: 'text', text: 'after reconnect' }],
         },
       },
     ])
+    await expect
+      .poll(() =>
+        second.requests.some(
+          request =>
+            request.method === 'agent/list' && request.params.threadId === 'thread-reconnect'
+        )
+      )
+      .toBe(true)
+    await expect.poll(() => runtime.pendingAsyncJobs.size).toBe(0)
     second.emitNotification('turn/completed', {
       threadId: 'thread-reconnect',
       turnId: 'thread-reconnect-turn',
@@ -469,7 +481,7 @@ describe.each([
   })
 
   test('waits for the latest reconnect generation before sending a new turn', async () => {
-    mockIPC(() => undefined, { shouldMockEvents: true })
+    installTestTransport(() => undefined)
     const first = new FakeGatewayClient('thread-reconnect-generation')
     const second = new FakeGatewayClient('thread-reconnect-generation')
     const third = new FakeGatewayClient('thread-reconnect-generation')
@@ -487,15 +499,7 @@ describe.each([
     const unlisten = await listen<{ event: string; payload: Record<string, unknown> }>(
       'local-executor:event',
       event => {
-        const forwarded = event.payload
-        const data = forwarded.payload as Record<string, unknown>
-        const updates = data?.data as Record<string, unknown> | undefined
-        const blockUpdates = updates?.updates as Record<string, unknown> | undefined
-        if (
-          !closedSecond &&
-          forwarded.event === 'response.block.updated' &&
-          blockUpdates?.status === 'done'
-        ) {
+        if (!closedSecond && event.payload.event === 'async-question:refresh') {
           closedSecond = true
           second.close()
         }
@@ -538,12 +542,14 @@ describe.each([
         params: { threadId: 'thread-reconnect-generation' },
       })
     expect(second.requests.some(request => request.method === 'turn/start')).toBe(false)
+    expect(taskConnectionStatus.read('local', created.taskId)).toBe('reconnecting')
 
     releaseThirdResume?.()
     await expect(sendDuringRecovery).resolves.toMatchObject({ accepted: true })
     expect(third.requests.at(-1)).toEqual({
       method: 'turn/start',
       params: {
+        clientPresentation: KCODER_PRESENTATION,
         threadId: 'thread-reconnect-generation',
         input: [{ type: 'text', text: 'send only after the latest recovery' }],
       },
@@ -552,7 +558,7 @@ describe.each([
   })
 
   test('uses authoritative background completion after reconnect despite stale history', async () => {
-    mockIPC(() => undefined, { shouldMockEvents: true })
+    installTestTransport(() => undefined)
     const received: Array<{ event: string; payload: Record<string, unknown> }> = []
     const unlisten = await listen<{ event: string; payload: Record<string, unknown> }>(
       'local-executor:event',

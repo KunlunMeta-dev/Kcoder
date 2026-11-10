@@ -27,6 +27,7 @@ struct Environment {
     executor: Arc<dyn AgentExecutor>,
     sink: Arc<dyn EventSink>,
     prefix: String,
+    agent_resume_attempt: usize,
     events: Arc<AtomicUsize>,
     executions: Arc<AtomicUsize>,
     max_events: usize,
@@ -97,6 +98,26 @@ impl WorkflowRuntime {
         }
         let deadline =
             tokio::time::Instant::now() + Duration::from_millis(config.max_runtime_millis.max(1));
+        if definition
+            .nodes
+            .iter()
+            .any(|node| node.config.collaboration_role.is_some())
+        {
+            for node in definition
+                .nodes
+                .iter()
+                .filter(|node| node.kind == WorkflowNodeKind::Tool)
+            {
+                let allowed = node
+                    .config
+                    .tool
+                    .as_ref()
+                    .is_some_and(|tool| executor.tool_is_read_only(&tool.name));
+                if !allowed {
+                    return Err(WorkflowError::Definition("workflow_collaboration: actual native read-only tool contract is unavailable".into()));
+                }
+            }
+        }
         let catalog = tokio::select! {
             _ = config.cancellation_token.cancelled() => return Err(WorkflowError::Cancelled),
             result = tokio::time::timeout_at(deadline, crate::subworkflow_catalog::resolve(definition, &executor)) => {
@@ -131,6 +152,7 @@ impl WorkflowRuntime {
             executor,
             sink,
             prefix: config.agent_id_prefix,
+            agent_resume_attempt: config.agent_resume_attempt,
             events: Arc::new(AtomicUsize::new(0)),
             executions: Arc::new(AtomicUsize::new(0)),
             max_events: config.max_events.max(1),
@@ -334,6 +356,11 @@ async fn execute_checkpointed_node(
             .await
             .map_err(anyhow::Error::msg)?
     {
+        let output = env
+            .executor
+            .recheck_node_checkpoint(node, identity, output)
+            .await
+            .map_err(anyhow::Error::msg)?;
         let checked: Result<()> = async {
             data::bounded_value(&output, env.output_budget)?;
             if node.kind != WorkflowNodeKind::Loop
@@ -672,6 +699,7 @@ async fn execute_subworkflow(
         catalog: env.catalog.clone(),
         executor: env.executor.clone(),
         sink: env.sink.clone(),
+        agent_resume_attempt: env.agent_resume_attempt,
         prefix: format!(
             "sub-{:x}",
             Sha256::digest(format!(
@@ -723,7 +751,10 @@ async fn execute_agent(
     let _slot = env.slots.acquire().await?;
     let mut invalid_output = String::new();
     let mut validation_error = String::new();
-    let agent_context = if env.legacy_agent_context {
+    let agent_context = if node.config.collaboration_role.is_some() {
+        // Serialization edges do not implicitly share unrelated dependency data.
+        json!({"bindings": context.get("bindings").cloned().unwrap_or(json!({}))})
+    } else if env.legacy_agent_context {
         json!({"input":context["input"],"dependencies":node.depends_on.iter().map(|id| json!({"nodeId":id,"output":context["nodes"][id]})).collect::<Vec<_>>()})
     } else {
         context.clone()
@@ -736,11 +767,14 @@ async fn execute_agent(
     })?;
     for attempt in 0..=node.config.validation_retries {
         env.charge()?;
-        let agent_id = format!(
+        let mut agent_id = format!(
             "{}-n{index}-i{}-a{attempt}",
             env.prefix,
             iteration.unwrap_or(0)
         );
+        if env.agent_resume_attempt > 0 {
+            agent_id.push_str(&format!("-r{}", env.agent_resume_attempt));
+        }
         let repair = attempt > 0;
         let mut prompt = if repair {
             format!(
@@ -761,6 +795,12 @@ async fn execute_agent(
             "workflow_quota: agent prompt too large"
         );
         let request = AgentRequest {
+            model_selection: node.config.model_selection.clone().map(Box::new),
+            artifact_requirements: if repair {
+                vec![]
+            } else {
+                node.config.artifact_requirements.clone()
+            },
             output_repair_only: repair,
             prompt,
             agent_type: node.agent_type.clone(),
@@ -1000,6 +1040,90 @@ mod tests {
             Ok(())
         }
     }
+    #[tokio::test]
+    async fn resumed_agents_have_distinct_sessions_while_completed_nodes_reuse_checkpoints() {
+        #[derive(Default)]
+        struct ResumeHost {
+            checkpoints: CheckpointHost,
+            calls: Mutex<Vec<(String, String)>>,
+        }
+        #[async_trait::async_trait]
+        impl AgentExecutor for ResumeHost {
+            async fn execute(
+                &self,
+                id: &str,
+                request: AgentRequest,
+            ) -> std::result::Result<String, String> {
+                let mut calls = self.calls.lock().unwrap();
+                if calls.iter().any(|(existing, _)| existing == id) {
+                    return Err("background task id already exists".into());
+                }
+                let first_b = request.prompt.starts_with('B')
+                    && !calls.iter().any(|(_, prompt)| prompt.starts_with('B'));
+                calls.push((id.into(), request.prompt));
+                if first_b {
+                    return Err("cancelled".into());
+                }
+                Ok("{\"ok\":true}".into())
+            }
+            async fn load_node_checkpoint(
+                &self,
+                id: &str,
+                fingerprint: &str,
+            ) -> std::result::Result<Option<Value>, String> {
+                self.checkpoints.load_node_checkpoint(id, fingerprint).await
+            }
+            async fn save_node_checkpoint(
+                &self,
+                id: &str,
+                fingerprint: &str,
+                value: &Value,
+            ) -> std::result::Result<(), String> {
+                self.checkpoints
+                    .save_node_checkpoint(id, fingerprint, value)
+                    .await
+            }
+        }
+        let graph = definition(vec![
+            node("A", WorkflowNodeKind::Agent, &[], json!({})),
+            node("B", WorkflowNodeKind::Agent, &["A"], json!({})),
+        ]);
+        let host = Arc::new(ResumeHost::default());
+        let first = WorkflowRuntime::execute_definition(
+            &graph,
+            json!({}),
+            host.clone(),
+            Arc::new(Sink::default()),
+            WorkflowRuntimeConfig::default(),
+        )
+        .await;
+        assert!(first.unwrap_err().to_string().contains("cancelled"));
+        let sink = Arc::new(Sink::default());
+        WorkflowRuntime::execute_definition(
+            &graph,
+            json!({}),
+            host.clone(),
+            sink.clone(),
+            WorkflowRuntimeConfig {
+                agent_resume_attempt: 1,
+                ..WorkflowRuntimeConfig::default()
+            },
+        )
+        .await
+        .unwrap();
+        let calls = host.calls.lock().unwrap();
+        assert_eq!(calls.len(), 3, "Completed A must not run again");
+        assert_ne!(
+            calls[1].0, calls[2].0,
+            "Resumed B must not collide with its cancelled session"
+        );
+        assert!(
+            sink.0.lock().unwrap().iter().any(
+                |event| matches!(event, WorkflowEvent::NodeReused { node_id } if node_id == "A")
+            )
+        );
+    }
+
     #[tokio::test]
     async fn checkpoint_resume_reuses_all_successful_kinds_and_retries_failed_node() {
         let graph = definition(vec![

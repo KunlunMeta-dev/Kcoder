@@ -467,7 +467,13 @@ pub fn render_template(template: &str, context: &Value) -> Result<String> {
 pub(crate) fn allowed_config_fields(kind: WorkflowNodeKind) -> &'static [&'static str] {
     use WorkflowNodeKind::*;
     match kind {
-        Agent => &["outputSchema", "validationRetries"],
+        Agent => &[
+            "outputSchema",
+            "validationRetries",
+            "modelSelection",
+            "artifactRequirements",
+            "collaborationRole",
+        ],
         Code => &["code", "outputSchema"],
         Tool => &["tool", "outputSchema"],
         Subworkflow => &["subworkflow", "outputSchema"],
@@ -480,7 +486,13 @@ pub(crate) fn allowed_config_fields(kind: WorkflowNodeKind) -> &'static [&'stati
         Condition => &["condition"],
         Switch => &["switch"],
         Merge => &["mergePolicy"],
-        Loop => &["loop", "outputSchema", "validationRetries"],
+        Loop => &[
+            "loop",
+            "outputSchema",
+            "validationRetries",
+            "modelSelection",
+            "artifactRequirements",
+        ],
     }
 }
 pub fn validate_node_config(node: &WorkflowNode, complete: bool) -> Result<()> {

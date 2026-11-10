@@ -1,4 +1,4 @@
-// Local, isolated authorization review against the frozen Gateway/Relay candidate.
+// Local, isolated authorization review against the versioned Gateway/Relay source.
 // One test uses Gateway mock RPC; another uses a scripted stdio app-server fixture
 // to exercise the real Gateway broker without a real Engine or model provider.
 import assert from 'node:assert/strict';
@@ -12,17 +12,15 @@ import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { setTimeout as sleep } from 'node:timers/promises';
 import test from 'node:test';
+import { isolatedGatewayAuthority } from '../../kcoder-relay/src/gateway-origin.mjs';
 
 const repoRoot = fileURLToPath(new URL('../../..', import.meta.url));
-const candidateRoot = process.env.PHONE_AUTH_CANDIDATE_ROOT ?? join(repoRoot, 'target/private-phone-latency-implementation/after-auth-candidate-20261007-184645');
-const candidateDigest = process.env.PHONE_AUTH_CANDIDATE_DIGEST ?? 'cf96615cebfacc5bd1afa4f22bc5cc4b14e3596723fa2d05eb42feef602fc73c';
-const candidateCount = Number(process.env.PHONE_AUTH_CANDIDATE_COUNT ?? 326);
-const candidate212651Root = join(repoRoot, 'target/private-phone-latency-implementation/after-final-scope-mobile-gateway-20261007-212651');
-const candidate212651Digest = '5b6c54a14ae1442941b7719a53026d0825b37850fc3e1efd9aa626e96dc7806f';
-const candidate212651Count = 356;
 const accessTtlMs = 800;
 const socketGraceMs = 400;
+// The shared root only carries Relay registry configuration; each Gateway is
+// configured with, and reached on, only its own derived isolated authority.
 const relayAuthority = 'relay.test';
+const gatewayAuthority = id => isolatedGatewayAuthority(relayAuthority, id);
 const mobileOrigin = 'https://mobile.test';
 const relayRequire = createRequire(join(repoRoot, 'apps/kcoder-relay/package.json'));
 const WebSocket = relayRequire('ws');
@@ -35,34 +33,7 @@ function timeout(promise, ms, message) {
     .finally(() => clearTimeout(timer));
 }
 
-async function verifyFrozenCandidate() {
-  let freeze;
-  try { freeze = JSON.parse(await readFile(join(candidateRoot, 'freeze.json'), 'utf8')); }
-  catch { freeze = JSON.parse(await readFile(join(candidateRoot, 'metadata.json'), 'utf8')); }
-  const count = freeze.count ?? freeze.files;
-  check(freeze.sourceDigest === candidateDigest && count === candidateCount, 'frozen source metadata does not match the reviewed candidate');
-  const manifest = JSON.parse(await readFile(join(candidateRoot, 'sha256.json'), 'utf8'));
-  const entries = Object.entries(manifest);
-  check(entries.length === count, 'frozen source manifest count mismatch');
-  for (const [relative, expected] of entries) {
-    const actual = createHash('sha256').update(await readFile(join(candidateRoot, relative))).digest('hex');
-    check(actual === expected, `frozen source hash mismatch: ${relative}`);
-  }
-}
-
-async function verify212651Candidate() {
-  const freeze = JSON.parse(await readFile(join(candidate212651Root, 'metadata.json'), 'utf8'));
-  check(freeze.sourceDigest === candidate212651Digest && freeze.files === candidate212651Count, '212651 frozen source metadata does not match the reviewed candidate');
-  const manifest = JSON.parse(await readFile(join(candidate212651Root, 'sha256.json'), 'utf8'));
-  const entries = Object.entries(manifest);
-  check(entries.length === candidate212651Count, '212651 frozen source manifest count mismatch');
-  for (const [relative, expected] of entries) {
-    const actual = createHash('sha256').update(await readFile(join(candidate212651Root, relative))).digest('hex');
-    check(actual === expected, `212651 frozen source hash mismatch: ${relative}`);
-  }
-}
-
-async function makeRuntimeCopy(root, sourceRoot = candidateRoot) {
+async function makeRuntimeCopy(root, sourceRoot = repoRoot) {
   const appsRoot = join(root, 'apps');
   const studioSource = join(sourceRoot, 'apps/kcoder-studio');
   const relaySource = join(sourceRoot, 'apps/kcoder-relay');
@@ -80,6 +51,7 @@ async function makeRuntimeCopy(root, sourceRoot = candidateRoot) {
     symlink(join(repoRoot, 'apps/kcoder-studio/node_modules'), join(studioTarget, 'node_modules'), 'dir'),
     symlink(join(repoRoot, 'apps/kcoder-relay/node_modules'), join(relayTarget, 'node_modules'), 'dir'),
   ]);
+  if (sourceRoot === repoRoot) await cp(join(studioSource, 'shared'), join(studioTarget, 'shared'), { recursive: true });
   const webRoot = join(root, 'web');
   await mkdir(webRoot, { recursive: true });
   await writeFile(join(webRoot, 'index.html'), '<!doctype html><title>isolated fixture</title>', { mode: 0o600 });
@@ -105,24 +77,39 @@ async function createGatewayState(root, id, authToken) {
   const home = join(root, `home-${id}`);
   const config = join(home, 'config');
   const workspace = join(root, `workspace-${id}`);
+  const relaySecret = authToken ? credential() : '';
+  const mobilePairingToken = authToken ? credential() : '';
   await Promise.all([mkdir(config, { recursive: true, mode: 0o700 }), mkdir(workspace, { recursive: true, mode: 0o700 })]);
   const serversStore = join(config, 'servers.json');
   await writeFile(serversStore, JSON.stringify([
     { id: 'local', label: `isolated-${id}`, runtime: 'kcoder', transport: 'local', workspace },
   ]), { mode: 0o600 });
-  return { id, home, config, workspace, serversStore, authToken, port: 0, child: null };
+  if (authToken) {
+    assert.notEqual(relaySecret, authToken, 'Relay validation secret is separate from Gateway login');
+    assert.notEqual(mobilePairingToken, authToken, 'Mobile pairing token is separate from Gateway login');
+    assert.notEqual(mobilePairingToken, relaySecret, 'Mobile pairing token is separate from Relay validation');
+  } else {
+    assert.equal(relaySecret, '', 'no-auth Gateway fixture has no Relay validation secret');
+    assert.equal(mobilePairingToken, '', 'no-auth Gateway fixture has no fixed Mobile pairing token');
+  }
+  return { id, home, config, workspace, serversStore, authToken, relaySecret, mobilePairingToken, port: 0, child: null };
 }
 
 async function createBrokerFixtureGatewayState(root, id, authToken, command) {
   const home = join(root, `home-${id}`);
   const config = join(home, 'config');
   const workspace = join(root, `workspace-${id}`);
+  const relaySecret = credential();
+  const mobilePairingToken = credential();
   await Promise.all([mkdir(config, { recursive: true, mode: 0o700 }), mkdir(workspace, { recursive: true, mode: 0o700 })]);
   const serversStore = join(config, 'servers.json');
   await writeFile(serversStore, JSON.stringify([
     { id: 'local', label: `isolated-${id}`, runtime: 'kcoder', transport: 'local', workspace, command },
   ]), { mode: 0o600 });
-  return { id, home, config, workspace, serversStore, authToken, command, mock: false, port: 0, child: null };
+  assert.notEqual(relaySecret, authToken, 'Relay validation secret is separate from Gateway login');
+  assert.notEqual(mobilePairingToken, authToken, 'Mobile pairing token is separate from Gateway login');
+  assert.notEqual(mobilePairingToken, relaySecret, 'Mobile pairing token is separate from Relay validation');
+  return { id, home, config, workspace, serversStore, authToken, relaySecret, mobilePairingToken, command, mock: false, port: 0, child: null };
 }
 
 function isolatedEnvironment(state, webRoot, port) {
@@ -135,16 +122,19 @@ function isolatedEnvironment(state, webRoot, port) {
     KCODER_STUDIO_HOST: '127.0.0.1',
     KCODER_STUDIO_PORT: String(port),
     KCODER_STUDIO_AUTH_TOKEN: state.authToken,
+    KCODER_STUDIO_RELAY_SECRET: state.relaySecret || '',
+    KCODER_STUDIO_MOBILE_PAIRING_TOKEN: state.mobilePairingToken || '',
     KCODER_STUDIO_AUTH_SESSION_TTL_MS: '3600000',
     KCODER_STUDIO_MOBILE_ACCESS_TTL_MS: String(state.mobileAccessTtlMs ?? accessTtlMs),
     KCODER_STUDIO_MOBILE_SOCKET_GRACE_MS: String(state.mobileSocketGraceMs ?? socketGraceMs),
     KCODER_STUDIO_MOBILE_WEB_ORIGINS: mobileOrigin,
-    KCODER_STUDIO_PUBLIC_ORIGINS: `https://${relayAuthority}`,
-    KCODER_STUDIO_ALLOWED_HOSTS: `127.0.0.1,localhost,${relayAuthority}`,
+    KCODER_STUDIO_PUBLIC_ORIGINS: `https://${gatewayAuthority(state.id)}`,
+    KCODER_STUDIO_ALLOWED_HOSTS: `127.0.0.1,localhost,${gatewayAuthority(state.id)}`,
     KCODER_STUDIO_MOCK: state.mock === false ? '0' : '1',
     KCODER_STUDIO_WORKSPACE: state.workspace,
     KCODER_STUDIO_SERVERS_STORE: state.serversStore,
     KCODER_STUDIO_WEB_ROOT: webRoot,
+    ...(state.authToken ? {} : { NODE_ENV: 'test', KCODER_STUDIO_TEST_DISABLE_AUTH: '1' }),
   };
 }
 
@@ -399,7 +389,7 @@ async function stopClients(clients) {
 function throughRelay(relay, id, path, { method = 'GET', body, headers = {}, origin = mobileOrigin } = {}) {
   const bodyBytes = body === undefined ? null : Buffer.from(JSON.stringify(body));
   const requestHeaders = {
-    host: relayAuthority,
+    host: gatewayAuthority(id),
     connection: 'close',
     ...(origin ? { origin } : {}),
     ...headers,
@@ -461,7 +451,7 @@ async function getViaRelay(relay, id, accessToken, path = '/api/servers') {
 function openRpc(relay, id, session, { channel = 'runtime' } = {}) {
   const url = `ws://127.0.0.1:${relay.proxyPort}/g/${id}/rpc?token=${encodeURIComponent(session.rpcToken)}&server=local&channel=${encodeURIComponent(channel)}`;
   const socket = new WebSocket(url, {
-    headers: { host: relayAuthority, authorization: `Bearer ${session.accessToken}` },
+    headers: { host: gatewayAuthority(id), authorization: `Bearer ${session.accessToken}` },
     handshakeTimeout: 5_000,
     perMessageDeflate: false,
   });
@@ -553,8 +543,7 @@ async function waitForClose(socket, ms, message) {
   await timeout(once(socket, 'close'), ms, message);
 }
 
-test('frozen mobile device authorization survives refresh/restart and isolates Relay routes without interrupting a live mock turn', { timeout: 60_000 }, async t => {
-  await verifyFrozenCandidate();
+test('mobile device authorization survives refresh/restart and isolates Relay routes without interrupting a live mock turn', { timeout: 60_000 }, async t => {
   const temporaryRoot = await mkdtemp(join(tmpdir(), 'kcoder-phone-auth-review-'));
   const clients = [];
   const rpcSockets = [];
@@ -582,7 +571,7 @@ test('frozen mobile device authorization survives refresh/restart and isolates R
   const relayConfigs = [gatewayA, gatewayB].map((gateway, index) => ({
     id: gateway.id,
     secret: credential(),
-    pairingToken: gateway.authToken,
+    gatewaySecret: gateway.relaySecret,
     baseUrl: `http://127.0.0.1:${gateway.port}`,
   }));
   const relayStart = await startRelay(relayModule, clientModule, { gateways: relayConfigs });
@@ -602,8 +591,15 @@ test('frozen mobile device authorization survives refresh/restart and isolates R
   });
   assert.equal(deniedPreflight.status, 403, 'unallowlisted cross-origin refresh is rejected');
 
-  let sessionA = await pair(relayState, 'a', tokenA);
-  let sessionB = await pair(relayState, 'b', tokenB);
+  for (const [label, token] of [['Gateway login', gatewayA.authToken], ['Relay validation', gatewayA.relaySecret]]) {
+    const wrongScopePairing = await throughRelay(relayState, 'a', '/api/mobile/session', {
+      method: 'POST', body: { token, durableDeviceAuthorization: true, deviceLabel: `wrong-scope-${label}` },
+    });
+    assert.equal(wrongScopePairing.status, 401, `${label} credential cannot be used to pair a Mobile device`);
+  }
+
+  let sessionA = await pair(relayState, 'a', gatewayA.mobilePairingToken);
+  let sessionB = await pair(relayState, 'b', gatewayB.mobilePairingToken);
   assert.ok(sessionA.expiresAt > Date.now() && sessionA.expiresAt <= Date.now() + accessTtlMs + 200, 'mobile access uses the configured short TTL');
   const wrongRouteRefresh = await throughRelay(relayState, 'b', '/api/mobile/session/refresh', {
     method: 'POST', body: { refreshToken: sessionA.refreshToken, rotationId: `wrong-route-${randomUUID()}`, deviceId: sessionA.deviceId },
@@ -655,7 +651,7 @@ test('frozen mobile device authorization survives refresh/restart and isolates R
   const completed = await primaryRpc.waitForNotification('turn/completed', value => value.params?.turnId === longTurn.turnId);
   assert.equal(completed.params.turn?.status, 'completed', 'held mock turn completes after several successful rotations');
 
-  let adminSession = await pair(relayState, 'a', tokenA);
+  let adminSession = await pair(relayState, 'a', gatewayA.mobilePairingToken);
   adminSession = await refresh(relayState, 'a', adminSession);
   const devicesBeforeRevoke = jsonBody(await throughRelay(relayState, 'a', '/api/mobile/devices', { headers: { authorization: `Bearer ${adminSession.accessToken}` } })).devices;
   assert.equal(devicesBeforeRevoke.length, 2, 'a full-scope Gateway device grant can see device families on that Gateway');
@@ -676,7 +672,7 @@ test('frozen mobile device authorization survives refresh/restart and isolates R
   assert.equal(adminDevicesAfterRevoke.some(device => device.id === sessionA.deviceId), false, 'revoked family is absent from Gateway device listing');
   assert.equal(revokeTurn.turnId.length > 0, true, 'explicit revoke targeted a live mock turn');
 
-  let idleSession = await pair(relayState, 'a', tokenA);
+  let idleSession = await pair(relayState, 'a', gatewayA.mobilePairingToken);
   const idleRpc = openRpc(relayState, 'a', idleSession);
   rpcSockets.push(idleRpc);
   await idleRpc.opened;
@@ -703,16 +699,21 @@ test('frozen mobile device authorization survives refresh/restart and isolates R
   idleSession = afterGatewayRestart;
 
   sessionB = await refresh(relayState, 'b', sessionB);
+  idleSession = await refresh(relayState, 'a', idleSession);
+  assert.ok(idleSession.expiresAt > Date.now(), 'A access grant is unexpired before the Relay restart');
+  assert.ok(sessionB.expiresAt > Date.now(), 'B access grant is unexpired before the Relay restart');
   await stopClients(clients);
   await relayState.close();
   relayState = null;
   const relayAfterRestart = await startRelay(relayModule, clientModule, { gateways: relayConfigs });
   relayState = relayAfterRestart.relay;
   clients.push(...relayAfterRestart.clients);
-  assert.equal((await getViaRelay(relayState, 'a', idleSession.accessToken)).status, 401, 'Relay restart clears its in-memory access map');
+  assert.ok(idleSession.expiresAt > Date.now(), 'A access grant remains unexpired after the Relay restart');
+  assert.equal((await getViaRelay(relayState, 'a', idleSession.accessToken)).status, 200, 'Relay restart revalidates A access through its owning Gateway');
+  assert.ok(sessionB.expiresAt > Date.now(), 'B access grant remains unexpired after the Relay restart');
+  assert.equal((await getViaRelay(relayState, 'b', sessionB.accessToken)).status, 200, 'Relay restart revalidates B access through its owning Gateway');
   const afterRelayRestart = await refresh(relayState, 'a', idleSession);
   assert.equal((await getViaRelay(relayState, 'a', afterRelayRestart.accessToken)).status, 200, 'Relay restart restores access through Gateway-owned refresh');
-  assert.equal((await getViaRelay(relayState, 'b', sessionB.accessToken)).status, 401, 'Relay restart clears its Gateway B access map too');
   sessionB = await refresh(relayState, 'b', sessionB);
   assert.equal((await getViaRelay(relayState, 'b', sessionB.accessToken)).status, 200, 'Gateway B recovers only through its own refresh route');
   assert.equal((await getViaRelay(relayState, 'a', sessionB.accessToken)).status, 401, 'Gateway B access remains rejected on Gateway A after Relay restart');
@@ -734,12 +735,15 @@ test('frozen mobile device authorization survives refresh/restart and isolates R
   });
   assert.equal(noAuthRefresh.status, 403, 'no-auth Gateway refuses persistent refresh');
 
-  assert.equal((await getViaRelay(relayState, 'a', afterRelayRestart.accessToken)).status, 200, 'A route remains usable after isolated Gateway/Relay restarts');
-  assert.equal((await getViaRelay(relayState, 'b', sessionB.accessToken)).status, 200, 'B route retains its own live session after route-specific refresh');
+  await waitUntilWallClock(afterRelayRestart.expiresAt + 1, accessTtlMs + 3_000, 'post-restart A access grant did not reach its configured expiry');
+  assert.equal((await getViaRelay(relayState, 'a', afterRelayRestart.accessToken)).status, 401, 'A access grant issued after Relay restart is rejected once its short TTL expires');
+  const restoredSessionA = await refresh(relayState, 'a', afterRelayRestart);
+  assert.equal((await getViaRelay(relayState, 'a', restoredSessionA.accessToken)).status, 200, 'A route remains usable after isolated Gateway/Relay restarts and durable refresh');
+  sessionB = await refresh(relayState, 'b', sessionB);
+  assert.equal((await getViaRelay(relayState, 'b', sessionB.accessToken)).status, 200, 'B route retains its own session after route-specific refresh');
+  assert.equal((await getViaRelay(relayState, 'a', sessionB.accessToken)).status, 401, 'refreshed Gateway B access remains rejected on Gateway A');
 
-  // Invalid refresh attempts must not poison a valid device grant at the same
-  // Relay peer. The older candidate intentionally reproduces the prior bug;
-  // current candidates must keep the valid refresh usable.
+  // A below-threshold burst of invalid refreshes must not poison a valid device grant.
   for (let index = 0; index < 4; index += 1) {
     const failed = await throughRelay(relayState, 'b', '/api/mobile/session/refresh', {
       method: 'POST', body: { refreshToken: credential(), rotationId: `rate-probe-${index}-${randomUUID()}` },
@@ -749,14 +753,11 @@ test('frozen mobile device authorization survives refresh/restart and isolates R
   const validAfterInvalidBurst = await throughRelay(relayState, 'b', '/api/mobile/session/refresh', {
     method: 'POST', body: { refreshToken: sessionB.refreshToken, rotationId: `valid-after-rate-probe-${randomUUID()}`, deviceId: sessionB.deviceId },
   });
-  const expectedValidStatus = candidateDigest === 'cf96615cebfacc5bd1afa4f22bc5cc4b14e3596723fa2d05eb42feef602fc73c' ? 429 : 200;
-  assert.equal(validAfterInvalidBurst.status, expectedValidStatus, 'invalid refreshes do not block a valid device refresh in the reviewed candidate');
-  if (expectedValidStatus === 429) t.diagnostic('older candidate finding reproduced in isolated fixture: invalid refreshes cause a valid Gateway B refresh to receive 429; no secrets or external sessions used');
-  else t.diagnostic('valid Gateway B refresh remained usable after invalid refresh attempts from the same Relay peer');
+  assert.equal(validAfterInvalidBurst.status, 200, 'invalid refreshes do not block a valid device refresh in the current source');
+  t.diagnostic('valid Gateway B refresh remained usable after invalid refresh attempts from the same Relay peer');
 });
 
 test('routine refresh preserves a broker-owned stdio turn; explicit device revoke drains it and owned browser resources', { timeout: 45_000 }, async t => {
-  await verifyFrozenCandidate();
   const temporaryRoot = await mkdtemp(join(tmpdir(), 'kcoder-phone-auth-broker-review-'));
   const clients = [];
   const rpcSockets = [];
@@ -780,13 +781,13 @@ test('routine refresh preserves a broker-owned stdio turn; explicit device revok
   await startGateway(gateway, runtime.studioTarget, runtime.webRoot);
 
   const relayStart = await startRelay(relayModule, clientModule, {
-    gateways: [{ id: gateway.id, secret: credential(), pairingToken: gateway.authToken, baseUrl: `http://127.0.0.1:${gateway.port}` }],
+    gateways: [{ id: gateway.id, secret: credential(), gatewaySecret: gateway.relaySecret, baseUrl: `http://127.0.0.1:${gateway.port}` }],
   });
   relayState = relayStart.relay;
   clients.push(...relayStart.clients);
 
-  let device = await pair(relayState, gateway.id, gatewayToken);
-  let administrator = await pair(relayState, gateway.id, gatewayToken);
+  let device = await pair(relayState, gateway.id, gateway.mobilePairingToken);
+  let administrator = await pair(relayState, gateway.id, gateway.mobilePairingToken);
   const rpc = openRpc(relayState, gateway.id, device);
   rpcSockets.push(rpc);
   await rpc.opened;
@@ -847,17 +848,17 @@ test('routine refresh preserves a broker-owned stdio turn; explicit device revok
   assert.equal(audit.filter(event => event.direction === 'in' && event.method === 'turn/interrupt').length, 1, 'explicit revoke interrupts the held turn exactly once');
   assert.equal(audit.filter(event => event.direction === 'in' && event.method === 'thread/automation/suspend').length, 1, 'explicit revoke suspends the owned thread automation');
   assert.equal(audit.filter(event => event.direction === 'in' && event.method === 'browser/close').length, 1, 'explicit revoke closes the owned browser resource');
-  t.diagnostic('broker continuity evidence uses the frozen Gateway and Relay plus a scripted stdio app-server fixture; no Rust Engine, Provider, or user session was started');
+  t.diagnostic('broker continuity evidence uses the current Gateway and Relay source plus a scripted stdio app-server fixture; no Rust Engine, Provider, or user session was started');
 });
 
-test('212651 natural-clock approval hold: routine rotation preserves broker ownership; revoke and lease expiry detach exactly once', { timeout: 90_000 }, async t => {
-  await verify212651Candidate();
-  const temporaryRoot = await mkdtemp(join(tmpdir(), 'kcoder-phone-auth-212651-lifecycle-'));
+test('natural-clock approval hold: routine rotation preserves broker ownership; revoke and lease expiry detach exactly once', { timeout: 90_000 }, async t => {
+  const temporaryRoot = await mkdtemp(join(tmpdir(), 'kcoder-phone-auth-natural-lifecycle-'));
   const evidenceDirectory = process.env.PHONE_AUTH_LIFECYCLE_EVIDENCE_DIR;
   const serverTimeline = [];
   const clients = [];
   const rpcSockets = [];
   const gateways = [];
+  let sourceDigest = null;
   let fixture = null;
   let relayState = null;
   let gateway = null;
@@ -870,6 +871,8 @@ test('212651 natural-clock approval hold: routine rotation preserves broker owne
         const fixtureProcess = audit.find(event => event.direction === 'meta' && event.method === 'fixture-process-start');
         const gatewayLog = String(gateway?.lifecycleGatewayOutput ?? '')
           .replaceAll(gateway?.authToken ?? '', '[REDACTED]')
+          .replaceAll(gateway?.relaySecret ?? '', '[REDACTED]')
+          .replaceAll(gateway?.mobilePairingToken ?? '', '[REDACTED]')
           .replace(/(authorization|token|secret|bearer)(\s*[:=]\s*)[^\s,]+/gi, '$1$2[REDACTED]');
         await writeFile(join(evidenceDirectory, 'gateway-startup.log'), gatewayLog, { mode: 0o600 });
         await writeFile(join(evidenceDirectory, 'process-and-server-time.json'), JSON.stringify({
@@ -880,7 +883,7 @@ test('212651 natural-clock approval hold: routine rotation preserves broker owne
           gatewayPid: gateway?.child?.pid ?? null,
           gatewayPort: gateway?.port ?? null,
           stdioFixturePid: fixtureProcess?.pid ?? null,
-          candidate: { path: 'after-final-scope-mobile-gateway-20261007-212651', files: candidate212651Count, sourceDigest: candidate212651Digest },
+          source: { root: 'versioned repository source', authFilesSha256: sourceDigest },
           serverTimeline,
         }, null, 2) + '\n', { mode: 0o600 });
       } catch (error) {
@@ -896,12 +899,13 @@ test('212651 natural-clock approval hold: routine rotation preserves broker owne
 
   const accessTtl = 6_000;
   const socketGrace = 2_000;
-  const runtime = await makeRuntimeCopy(temporaryRoot, candidate212651Root);
+  const runtime = await makeRuntimeCopy(temporaryRoot, repoRoot);
+  sourceDigest = await authSourceSnapshotDigest(runtime);
   const relayModule = await import(pathToFileURL(join(runtime.relayTarget, 'src/server.mjs')).href);
   const clientModule = await import(pathToFileURL(join(runtime.relayTarget, 'src/client.mjs')).href);
   fixture = await createApprovalHeldAppServerFixture(temporaryRoot);
   const gatewayToken = credential();
-  gateway = await createBrokerFixtureGatewayState(temporaryRoot, '212651-lifecycle', gatewayToken, fixture.launcherPath);
+  gateway = await createBrokerFixtureGatewayState(temporaryRoot, 'natural-lifecycle', gatewayToken, fixture.launcherPath);
   gateway.mobileAccessTtlMs = accessTtl;
   gateway.mobileSocketGraceMs = socketGrace;
   gateway.captureLifecycleGatewayLog = true;
@@ -910,20 +914,20 @@ test('212651 natural-clock approval hold: routine rotation preserves broker owne
   serverTimeline.push({ event: 'gateway-started', observedAt: Date.now(), pid: gateway.child.pid, port: gateway.port, runtime: 'real Gateway broker with scripted stdio app-server fixture' });
 
   const relayStart = await startRelay(relayModule, clientModule, {
-    gateways: [{ id: gateway.id, secret: credential(), pairingToken: gateway.authToken, baseUrl: `http://127.0.0.1:${gateway.port}` }],
+    gateways: [{ id: gateway.id, secret: credential(), gatewaySecret: gateway.relaySecret, baseUrl: `http://127.0.0.1:${gateway.port}` }],
   });
   relayState = relayStart.relay;
   clients.push(...relayStart.clients);
 
-  let device = await pair(relayState, gateway.id, gatewayToken);
+  let device = await pair(relayState, gateway.id, gateway.mobilePairingToken);
   serverTimeline.push({ event: 'primary-paired', observedAt: Date.now(), accessExpiresAt: device.expiresAt, wsLeaseExpiresAt: device.wsLeaseExpiresAt });
   assert.ok(device.expiresAt > Date.now() && device.expiresAt - Date.now() <= accessTtl + 250, 'Gateway returns the real short access expiry');
   assert.ok(device.wsLeaseExpiresAt >= device.expiresAt && device.wsLeaseExpiresAt <= device.expiresAt + socketGrace + 250, 'Gateway returns a separately bounded WebSocket lease');
   const rpc = openRpc(relayState, gateway.id, device);
   rpcSockets.push(rpc);
   await rpc.opened;
-  const initialized = await rpc.request('initialize', { protocolVersion: '2026-07-27', clientInfo: { name: '212651-natural-lease-review', version: '1' } });
-  assert.equal(initialized.serverInfo.name, 'approval-held-stdio-fixture', '212651 Gateway broker connects to the approval-held scripted stdio child');
+  const initialized = await rpc.request('initialize', { protocolVersion: '2026-07-27', clientInfo: { name: 'mobile-natural-lease-review', version: '1' } });
+  assert.equal(initialized.serverInfo.name, 'approval-held-stdio-fixture', 'the current Gateway broker connects to the approval-held scripted stdio child');
   assert.equal(initialized.capabilities?.experimental?.goalContinuation, true, 'fixture enables the broker automation-suspend contract');
   const thread = await rpc.request('thread/start', {});
   const threadId = thread.thread?.id;
@@ -942,7 +946,7 @@ test('212651 natural-clock approval hold: routine rotation preserves broker owne
   const browserRpc = openRpc(relayState, gateway.id, device, { channel: 'browser' });
   rpcSockets.push(browserRpc);
   await browserRpc.opened;
-  await browserRpc.request('initialize', { protocolVersion: '2026-07-27', clientInfo: { name: '212651-browser-resource-review', version: '1' } });
+  await browserRpc.request('initialize', { protocolVersion: '2026-07-27', clientInfo: { name: 'mobile-browser-resource-review', version: '1' } });
   const browser = await browserRpc.request('browser/start', { url: 'https://fixture.invalid' });
   assert.equal(typeof browser.session_id, 'string', 'scripted app-server creates a protocol-level browser fixture');
 
@@ -950,7 +954,7 @@ test('212651 natural-clock approval hold: routine rotation preserves broker owne
   for (let index = 0; index < rotationCount; index += 1) {
     await waitUntilWallClock(device.expiresAt - 1_500, 10_000, 'routine refresh did not reach the server-issued access renewal window');
     const priorExpiry = device.expiresAt;
-    device = await refresh(relayState, gateway.id, device, `212651-held-${index}-${randomUUID()}`);
+    device = await refresh(relayState, gateway.id, device, `lifecycle-held-${index}-${randomUUID()}`);
     serverTimeline.push({ event: 'routine-refresh', index: index + 1, observedAt: Date.now(), priorAccessExpiresAt: priorExpiry, accessExpiresAt: device.expiresAt, wsLeaseExpiresAt: device.wsLeaseExpiresAt });
     assert.ok(device.expiresAt > priorExpiry && device.expiresAt > Date.now(), 'successful rotation advances the server-issued access expiry');
     assert.equal(rpc.socket.readyState, WebSocket.OPEN, 'ordinary rotation does not replace or close the runtime socket owner');
@@ -974,7 +978,7 @@ test('212651 natural-clock approval hold: routine rotation preserves broker owne
   const revokeTurnId = revokeTurn.turn?.id;
   await rpc.waitForNotification('turn/started', value => value.params?.turnId === revokeTurnId);
   await rpc.waitForNotification('approval/request', value => value.params?.approvalId === 'held-approval-2');
-  const administrator = await pair(relayState, gateway.id, gatewayToken);
+  const administrator = await pair(relayState, gateway.id, gateway.mobilePairingToken);
   const beforeRevoke = (await readFixtureAudit(fixture.auditPath)).length;
   const revoke = await throughRelay(relayState, gateway.id, `/api/mobile/devices/${encodeURIComponent(device.deviceId)}`, {
     method: 'DELETE', headers: { authorization: `Bearer ${administrator.accessToken}` },
@@ -1000,14 +1004,14 @@ test('212651 natural-clock approval hold: routine rotation preserves broker owne
   });
   assert.equal(revokedRefresh.status, 401, 'device revocation rejects its durable refresh credential');
 
-  const expiringDevice = await pair(relayState, gateway.id, gatewayToken);
+  const expiringDevice = await pair(relayState, gateway.id, gateway.mobilePairingToken);
   serverTimeline.push({ event: 'expiry-device-paired', observedAt: Date.now(), accessExpiresAt: expiringDevice.expiresAt, wsLeaseExpiresAt: expiringDevice.wsLeaseExpiresAt });
   assert.ok(expiringDevice.expiresAt > Date.now() + 3_000, 'natural-expiry fixture starts with enough real lease time for setup');
   assert.ok(expiringDevice.wsLeaseExpiresAt > expiringDevice.expiresAt, 'natural-expiry fixture has an explicit post-access WebSocket grace');
   const expiryRpc = openRpc(relayState, gateway.id, expiringDevice);
   rpcSockets.push(expiryRpc);
   await expiryRpc.opened;
-  await expiryRpc.request('initialize', { protocolVersion: '2026-07-27', clientInfo: { name: '212651-natural-expiry-runtime', version: '1' } });
+  await expiryRpc.request('initialize', { protocolVersion: '2026-07-27', clientInfo: { name: 'mobile-natural-expiry-runtime', version: '1' } });
   const expiryThread = await expiryRpc.request('thread/start', {});
   const expiryThreadId = expiryThread.thread?.id;
   const expiryTurn = await expiryRpc.request('turn/start', { threadId: expiryThreadId, input: [{ type: 'text', text: 'remain pending until the natural family lease expires' }] });
@@ -1019,7 +1023,7 @@ test('212651 natural-clock approval hold: routine rotation preserves broker owne
   const expiryBrowserRpc = openRpc(relayState, gateway.id, expiringDevice, { channel: 'browser' });
   rpcSockets.push(expiryBrowserRpc);
   await expiryBrowserRpc.opened;
-  await expiryBrowserRpc.request('initialize', { protocolVersion: '2026-07-27', clientInfo: { name: '212651-natural-expiry-browser', version: '1' } });
+  await expiryBrowserRpc.request('initialize', { protocolVersion: '2026-07-27', clientInfo: { name: 'mobile-natural-expiry-browser', version: '1' } });
   const expiryBrowser = await expiryBrowserRpc.request('browser/start', { url: 'https://expiry.fixture.invalid' });
   assert.equal(typeof expiryBrowser.session_id, 'string', 'expiry case owns a browser protocol fixture');
   const beforeNaturalExpiry = (await readFixtureAudit(fixture.auditPath)).length;
@@ -1048,7 +1052,7 @@ test('212651 natural-clock approval hold: routine rotation preserves broker owne
   }
   assert.equal(expiryAudit.filter(event => event.direction === 'out' && event.method === 'turn/interrupted').length, 1, 'the fixture confirms exactly one interrupted event after natural expiry');
   assert.equal(expiryAudit.filter(event => event.direction === 'in' && event.method === 'terminal/close').length, 0, 'broker retains the live terminal across natural client detach by existing contract');
-  t.diagnostic('212651 test uses real Gateway and Relay plus a synthetic approval-held stdio protocol fixture; terminal/browser are protocol objects, goalContinuation only observes suspend RPCs, and no Rust Engine, Provider, user session, OS clock override, Chrome, or Cargo build is involved');
+  t.diagnostic('current-source lifecycle test uses the real Gateway and Relay plus a synthetic approval-held stdio protocol fixture; terminal/browser are protocol objects, goalContinuation only observes suspend RPCs, and no Rust Engine, Provider, user session, OS clock override, Chrome, or Cargo build is involved');
 });
 
 test('current working source separates invalid refresh failures from valid grants and applies bounded Relay peer admission', { timeout: 45_000 }, async t => {
@@ -1073,12 +1077,12 @@ test('current working source separates invalid refresh failures from valid grant
   gateways.push(gateway);
   await startGateway(gateway, runtime.studioTarget, runtime.webRoot);
   const relayStart = await startRelay(relayModule, clientModule, {
-    gateways: [{ id: gateway.id, secret: credential(), pairingToken: gateway.authToken, baseUrl: `http://127.0.0.1:${gateway.port}` }],
+    gateways: [{ id: gateway.id, secret: credential(), gatewaySecret: gateway.relaySecret, baseUrl: `http://127.0.0.1:${gateway.port}` }],
   });
   relayState = relayStart.relay;
   clients.push(...relayStart.clients);
 
-  const firstDevice = await pair(relayState, gateway.id, gatewayToken);
+  const firstDevice = await pair(relayState, gateway.id, gateway.mobilePairingToken);
   for (let index = 0; index < 6; index += 1) {
     const failed = await throughRelay(relayState, gateway.id, '/api/mobile/session/refresh', {
       method: 'POST', body: { refreshToken: credential(), rotationId: `invalid-current-${index}-${randomUUID()}` },
@@ -1088,7 +1092,7 @@ test('current working source separates invalid refresh failures from valid grant
 
   const validAfterInvalidBurst = await refresh(relayState, gateway.id, firstDevice, `valid-current-after-invalid-${randomUUID()}`);
   assert.equal((await getViaRelay(relayState, gateway.id, validAfterInvalidBurst.accessToken)).status, 200, 'a valid device refresh remains available after invalid refresh attempts');
-  const secondDevice = await pair(relayState, gateway.id, gatewayToken);
+  const secondDevice = await pair(relayState, gateway.id, gateway.mobilePairingToken);
   assert.equal(secondDevice.capabilities?.mobileRefreshV1, true, 'pairing remains available after invalid refresh attempts');
 
   let sixtieth;

@@ -8,6 +8,20 @@ use std::fmt;
 
 pub const PRIVATE_RETENTION_FIELD_V1: &str = "kcoderPrivateRetention";
 
+/// Parent-only lifecycle declaration. This is deliberately not a public method
+/// allowlist entry. A verified launcher and a durable administrative proof are
+/// both required; transient authentication failure is not lifecycle evidence.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct PrivateRetentionCleanupV1 {
+    #[serde(deserialize_with = "version_one")]
+    pub version: u8,
+    pub operation_id: String,
+    pub retention_id: String,
+    pub expected_revision: u64,
+    pub reason: crate::RetentionAdministrativeReasonV1,
+}
+
 /// Non-secret facts supplied only by the OS-trusted process launcher. This is
 /// a declaration, not proof of a parent process or remote account identity.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -133,7 +147,7 @@ pub fn decode_private_retention_request(
     Ok(request)
 }
 
-struct UniqueValue(Value);
+pub(crate) struct UniqueValue(pub(crate) Value);
 
 impl<'de> Deserialize<'de> for UniqueValue {
     fn deserialize<D: Deserializer<'de>>(input: D) -> Result<Self, D::Error> {
@@ -190,5 +204,34 @@ impl<'de> Visitor<'de> for UniqueVisitor {
             values.insert(key, value.0);
         }
         Ok(UniqueValue(Value::Object(values)))
+    }
+}
+
+#[cfg(test)]
+mod cleanup_contract_tests {
+    use super::*;
+
+    #[test]
+    fn private_cleanup_is_strict_and_not_a_public_method_or_client_ack() {
+        let valid = serde_json::json!({
+            "version": 1, "operationId": "operation-a",
+            "retentionId": "r1.root.1.0123456789abcdef0123456789abcdef", "expectedRevision": 1,
+            "reason": {"kind": "threadDeleted", "threadId": "thread-a", "proofSha256": "a".repeat(64)}
+        });
+        let request: PrivateRetentionCleanupV1 = serde_json::from_value(valid.clone()).unwrap();
+        assert_eq!(serde_json::to_value(request).unwrap(), valid);
+        let mut claimed = valid.clone();
+        claimed["deleted"] = true.into();
+        assert!(serde_json::from_value::<PrivateRetentionCleanupV1>(claimed).is_err());
+        let mut old = valid;
+        old["version"] = 0.into();
+        assert!(serde_json::from_value::<PrivateRetentionCleanupV1>(old).is_err());
+        assert!(!crate::is_attachment_retention_method(
+            "attachment/retention/adminCleanup"
+        ));
+        assert!(serde_json::from_value::<crate::RetentionConsumeAckV1>(serde_json::json!({
+            "operationId": "operation-a", "retentionId": "r1.root.1.nonce", "terminalRevision": 2,
+            "reason": {"kind": "threadDeleted", "threadId": "thread-a", "proofSha256": "a".repeat(64)}
+        })).is_err());
     }
 }

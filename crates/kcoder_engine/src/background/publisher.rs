@@ -11,6 +11,7 @@ pub(super) struct ScopedPublisher {
     sequence: Arc<AtomicU64>,
     pending: Arc<Mutex<Option<BackgroundJobEvent>>>,
     retry_after: Arc<Mutex<Option<std::time::Instant>>>,
+    terminal_observers: super::terminal_observers::TerminalObservers,
 }
 
 impl ScopedPublisher {
@@ -18,6 +19,7 @@ impl ScopedPublisher {
         sender: broadcast::Sender<BackgroundJobEvent>,
         state: AppState,
         run: BackgroundRunKey,
+        terminal_observers: super::terminal_observers::TerminalObservers,
     ) -> Self {
         Self {
             sender,
@@ -26,6 +28,7 @@ impl ScopedPublisher {
             sequence: Arc::new(AtomicU64::new(0)),
             pending: Arc::new(Mutex::new(None)),
             retry_after: Arc::new(Mutex::new(None)),
+            terminal_observers,
         }
     }
     pub(super) fn retry_pending(&self) {
@@ -110,6 +113,7 @@ impl ScopedPublisher {
                 .lock()
                 .unwrap_or_else(|error| error.into_inner())
                 .take();
+            self.terminal_observers.notify();
             identity
         } else {
             let sequence = self.sequence.fetch_add(1, Ordering::Relaxed);

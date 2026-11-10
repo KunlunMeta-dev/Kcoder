@@ -15,6 +15,7 @@ use std::sync::Arc;
 /// the epoch stable because existing cache entries remain valid.
 #[derive(Debug, Clone, Default)]
 pub struct TranscriptStore {
+    pub(super) native_web_sources: crate::web_sources::NativeSourceSlots,
     cells: Vec<Arc<dyn HistoryCell>>,
     messages: Vec<DisplayMessage>,
     metadata: Vec<EntryMetadata>,
@@ -29,6 +30,16 @@ impl TranscriptStore {
 
     pub fn render_epoch(&self) -> u64 {
         self.render_epoch
+    }
+
+    pub(crate) fn source_text_len(&self, index: usize) -> usize {
+        let message = &self.messages[index];
+        self.native_web_sources
+            .resolve(message, true)
+            .as_ref()
+            .unwrap_or(message)
+            .text
+            .len()
     }
 
     pub(crate) fn identity(&self, index: usize) -> Option<EntryMetadata> {
@@ -68,7 +79,8 @@ impl TranscriptStore {
                 .iter()
                 .position(|meta| meta.id == anchor.entry)
             {
-                let text = &self.messages[index].text;
+                let projected = self.native_web_sources.resolve(&self.messages[index], true);
+                let text = &projected.as_ref().unwrap_or(&self.messages[index]).text;
                 return (anchor.source_byte <= text.len()
                     && text.is_char_boundary(anchor.source_byte))
                 .then_some((index, anchor.source_byte));
@@ -83,6 +95,7 @@ impl TranscriptStore {
     }
 
     pub fn clear(&mut self) {
+        self.native_web_sources = Default::default();
         if !self.cells.is_empty() {
             self.cells.clear();
             self.messages.clear();
@@ -275,6 +288,7 @@ impl From<Vec<DisplayMessage>> for TranscriptStore {
             metadata: (0..messages.len())
                 .map(|_| EntryMetadata::default())
                 .collect(),
+            native_web_sources: Default::default(),
             redirects: HashMap::new(),
             cells,
             messages,

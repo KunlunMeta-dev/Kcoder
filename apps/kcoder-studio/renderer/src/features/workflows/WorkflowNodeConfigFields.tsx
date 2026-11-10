@@ -1,3 +1,4 @@
+import { SettingsSelect } from '@/components/settings/SettingsSelect'
 import { WorkflowReusePicker } from './WorkflowReusePicker'
 import { useTranslation } from '@/hooks/useTranslation'
 import { Button } from '@/components/ui/button'
@@ -42,7 +43,7 @@ export function PredicateFields({
     <div className="space-y-2" data-testid="workflow-predicate">
       <label className="block space-y-1 text-sm">
         {t('workflowCanvas.operator')}
-        <select
+        <SettingsSelect
           data-testid="workflow-predicate-operator"
           className={field}
           value={op}
@@ -89,7 +90,7 @@ export function PredicateFields({
               {t(`workflowCanvas.op_${item}`)}
             </option>
           ))}
-        </select>
+        </SettingsSelect>
       </label>
       {grouped ? (
         <div className="space-y-3 border-l border-border pl-3">
@@ -296,15 +297,15 @@ export function WorkflowNodeConfigFields({
   ]
   return (
     <div className="space-y-3" data-testid="workflow-node-config-fields">
-      <details className="rounded-lg border border-border p-2">
+      <details className="studio-card-spacing rounded-lg border border-border">
         <summary data-testid="workflow-failure-toggle" className="cursor-pointer text-sm">{t('workflowCanvas.failurePolicy')}</summary>
         <div className="mt-2 space-y-2">
           <p className="text-xs text-text-muted">{t('workflowCanvas.failurePolicyHint')}</p>
           <label className="block space-y-1 text-sm">{t('workflowCanvas.failureAction')}
-            <select data-testid="workflow-failure-action" className={field} value={record(config.failurePolicy).continueOnError ? 'continue' : 'stop'} onChange={event => patch({failurePolicy:{...record(config.failurePolicy),continueOnError:event.target.value === 'continue'}})}>
+            <SettingsSelect data-testid="workflow-failure-action" className={field} value={record(config.failurePolicy).continueOnError ? 'continue' : 'stop'} onChange={event => patch({failurePolicy:{...record(config.failurePolicy),continueOnError:event.target.value === 'continue'}})}>
               <option value="stop">{t('workflowCanvas.stopOnError')}</option>
               <option value="continue">{t('workflowCanvas.routeOnError')}</option>
-            </select>
+            </SettingsSelect>
           </label>
           {!['agent','loop','subworkflow','wait','human','event'].includes(kind) && <>
             <label className="block space-y-1 text-sm">{t('workflowCanvas.maxAttempts')}
@@ -390,25 +391,25 @@ export function WorkflowNodeConfigFields({
       {kind === 'merge' && (
         <label className="block space-y-1 text-sm">
           {t('workflowCanvas.mergePolicy')}
-          <select
+          <SettingsSelect
             className={field}
             value={String(config.mergePolicy ?? 'all')}
             onChange={event => patch({ mergePolicy: event.target.value })}
           >
             <option value="all">{t('workflowCanvas.mergeAll')}</option>
             <option value="any">{t('workflowCanvas.mergeAny')}</option>
-          </select>
+          </SettingsSelect>
         </label>
       )}
       {kind === 'loop' && (
         <>
           <label className="block space-y-1 text-sm">
             {t('workflowCanvas.loopBody')}
-            <select className={field} data-testid="workflow-loop-body-kind" value={loop.body ? 'subworkflow' : 'agent'}
+            <SettingsSelect className={field} data-testid="workflow-loop-body-kind" value={loop.body ? 'subworkflow' : 'agent'}
               onChange={event => patch({validationRetries:undefined,loop:{...loop,body:event.target.value === 'subworkflow' ? {definitionId:'',version:1,arguments:{},bindings:{}} : undefined}})}>
               <option value="agent">{t('workflowCanvas.kind_agent')}</option>
               <option value="subworkflow">{t('workflowCanvas.kind_subworkflow')}</option>
-            </select>
+            </SettingsSelect>
           </label>
           {Boolean(loop.body) && <div className="space-y-2">
             <p className="text-xs text-text-muted">{t('workflowCanvas.loopBodyHint')}</p>
@@ -419,7 +420,7 @@ export function WorkflowNodeConfigFields({
 
           <label className="block space-y-1 text-sm">
             {t('workflowCanvas.loopMode')}
-            <select
+            <SettingsSelect
               className={field}
               value={String(loop.mode ?? 'repeat')}
               onChange={event =>
@@ -436,7 +437,7 @@ export function WorkflowNodeConfigFields({
             >
               <option value="repeat">{t('workflowCanvas.repeat')}</option>
               <option value="for_each">{t('workflowCanvas.forEach')}</option>
-            </select>
+            </SettingsSelect>
           </label>
           <label className="block space-y-1 text-sm">
             {t('workflowCanvas.maxIterations')}

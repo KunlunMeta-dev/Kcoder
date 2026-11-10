@@ -129,7 +129,7 @@ export function PluginMarketplaceRow({
         <div
           role="status"
           data-testid={`plugin-install-failure-${item.id}`}
-          className="col-span-2 min-w-0 rounded-lg border border-destructive/25 bg-destructive/5 p-3 text-sm"
+          className="studio-card-spacing col-span-2 min-w-0 rounded-lg border border-destructive/25 bg-destructive/5 text-sm"
           onClick={event => event.stopPropagation()}
         >
           <p className="text-destructive">{failure.message}</p>

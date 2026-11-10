@@ -1,3 +1,4 @@
+import { SettingsSelect } from '@/components/settings/SettingsSelect'
 import { Checkbox } from '@/components/ui/checkbox'
 import type { LocalModelCatalogEntry } from '@/features/model-settings/localModelCatalog'
 import { useTranslation } from '@/hooks/useTranslation'
@@ -341,7 +342,7 @@ export function CustomModelCapabilitiesForm({
         <Field label={t('workbench.local_model_reasoning_levels_label', '支持的推理等级')}>
           <div
             data-testid="local-model-reasoning-levels"
-            className="grid grid-cols-2 gap-2 rounded-md border border-border bg-background p-3 sm:grid-cols-4"
+            className="studio-card-spacing grid grid-cols-2 gap-2 rounded-md border border-border bg-background sm:grid-cols-4"
           >
             {REASONING_LEVEL_OPTIONS.map(option => {
               const current = structuredItems(entry.supported_reasoning_levels)
@@ -382,7 +383,7 @@ export function CustomModelCapabilitiesForm({
           </div>
         </Field>
         <Field label={t('workbench.local_model_default_reasoning_label', '默认推理等级')}>
-          <select
+          <SettingsSelect
             data-testid="local-model-default-reasoning-input"
             value={stringValue(entry.default_reasoning_level)}
             onChange={event =>
@@ -399,7 +400,7 @@ export function CustomModelCapabilitiesForm({
                 </option>
               ) : null
             })}
-          </select>
+          </SettingsSelect>
         </Field>
         <Field label={t('workbench.local_model_parallel_tools_label', '并行工具调用')}>
           <BooleanSelect
@@ -568,7 +569,7 @@ export function CustomModelCapabilitiesForm({
                             '默认推理摘要'
                           )}
                         >
-                          <select
+                          <SettingsSelect
                             data-testid="local-model-default-reasoning-summary-select"
                             value={stringValue(entry.default_reasoning_summary) || 'auto'}
                             onChange={event =>
@@ -581,7 +582,7 @@ export function CustomModelCapabilitiesForm({
                                 {value}
                               </option>
                             ))}
-                          </select>
+                          </SettingsSelect>
                         </Field>
                         <Field label={t('workbench.local_model_field_verbosity', '详细程度参数')}>
                           <BooleanSelect
@@ -593,7 +594,7 @@ export function CustomModelCapabilitiesForm({
                         <Field
                           label={t('workbench.local_model_field_default_verbosity', '默认详细程度')}
                         >
-                          <select
+                          <SettingsSelect
                             data-testid="local-model-default-verbosity-select"
                             value={stringValue(entry.default_verbosity)}
                             onChange={event =>
@@ -607,7 +608,7 @@ export function CustomModelCapabilitiesForm({
                                 {value}
                               </option>
                             ))}
-                          </select>
+                          </SettingsSelect>
                         </Field>
                         <Field
                           label={t('workbench.local_model_field_original_image', '原始图片精度')}
@@ -633,7 +634,7 @@ export function CustomModelCapabilitiesForm({
                         <Field
                           label={t('workbench.local_model_field_shell_type', 'Shell 工具类型')}
                         >
-                          <select
+                          <SettingsSelect
                             data-testid="local-model-shell-type-select"
                             value={stringValue(entry.shell_type)}
                             onChange={event => update({ shell_type: event.target.value })}
@@ -646,10 +647,10 @@ export function CustomModelCapabilitiesForm({
                                 </option>
                               )
                             )}
-                          </select>
+                          </SettingsSelect>
                         </Field>
                         <Field label={t('workbench.local_model_field_apply_patch', '补丁工具')}>
-                          <select
+                          <SettingsSelect
                             data-testid="local-model-apply-patch-type-select"
                             value={stringValue(entry.apply_patch_tool_type)}
                             onChange={event =>
@@ -659,7 +660,7 @@ export function CustomModelCapabilitiesForm({
                           >
                             <option value="">Disabled</option>
                             <option value="freeform">freeform</option>
-                          </select>
+                          </SettingsSelect>
                         </Field>
                         <Field
                           label={t(
@@ -667,7 +668,7 @@ export function CustomModelCapabilitiesForm({
                             '网页搜索工具类型'
                           )}
                         >
-                          <select
+                          <SettingsSelect
                             data-testid="local-model-web-search-tool-type-select"
                             value={stringValue(entry.web_search_tool_type) || 'text'}
                             onChange={event => update({ web_search_tool_type: event.target.value })}
@@ -675,7 +676,7 @@ export function CustomModelCapabilitiesForm({
                           >
                             <option value="text">text</option>
                             <option value="text_and_image">text_and_image</option>
-                          </select>
+                          </SettingsSelect>
                         </Field>
                         <Field label={t('workbench.local_model_field_search_tool', '搜索工具')}>
                           <BooleanSelect
@@ -694,7 +695,7 @@ export function CustomModelCapabilitiesForm({
                           />
                         </Field>
                         <Field label={t('workbench.local_model_field_tool_mode', '工具模式')}>
-                          <select
+                          <SettingsSelect
                             data-testid="local-model-tool-mode-select"
                             value={stringValue(entry.tool_mode)}
                             onChange={event =>
@@ -708,10 +709,10 @@ export function CustomModelCapabilitiesForm({
                                 {value}
                               </option>
                             ))}
-                          </select>
+                          </SettingsSelect>
                         </Field>
                         <Field label={t('workbench.local_model_field_multi_agent', '多智能体版本')}>
-                          <select
+                          <SettingsSelect
                             data-testid="local-model-multi-agent-version-select"
                             value={stringValue(entry.multi_agent_version)}
                             onChange={event =>
@@ -725,7 +726,7 @@ export function CustomModelCapabilitiesForm({
                                 {value}
                               </option>
                             ))}
-                          </select>
+                          </SettingsSelect>
                         </Field>
                         <Field
                           label={t('workbench.local_model_field_experimental_tools', '实验性工具')}
@@ -747,7 +748,7 @@ export function CustomModelCapabilitiesForm({
                       <div className="grid gap-4">
                         <div className="grid gap-3 sm:grid-cols-2">
                           <Field label={t('workbench.local_model_field_visibility', '可见性')}>
-                            <select
+                            <SettingsSelect
                               data-testid="local-model-visibility-select"
                               value={stringValue(entry.visibility)}
                               onChange={event => update({ visibility: event.target.value })}
@@ -758,7 +759,7 @@ export function CustomModelCapabilitiesForm({
                                   {value}
                                 </option>
                               ))}
-                            </select>
+                            </SettingsSelect>
                           </Field>
                           <Field label={t('workbench.local_model_field_supported_api', 'API 可用')}>
                             <BooleanSelect
@@ -828,7 +829,7 @@ export function CustomModelCapabilitiesForm({
                           <Field
                             label={t('workbench.local_model_field_truncation_mode', '截断模式')}
                           >
-                            <select
+                            <SettingsSelect
                               data-testid="local-model-truncation-mode-select"
                               value={
                                 stringValue(nestedObject(entry.truncation_policy).mode) || 'tokens'
@@ -845,7 +846,7 @@ export function CustomModelCapabilitiesForm({
                             >
                               <option value="tokens">tokens</option>
                               <option value="bytes">bytes</option>
-                            </select>
+                            </SettingsSelect>
                           </Field>
                           <Field
                             label={t('workbench.local_model_field_truncation_limit', '截断保留量')}
@@ -888,7 +889,7 @@ export function CustomModelCapabilitiesForm({
                               '默认服务档位'
                             )}
                           >
-                            <select
+                            <SettingsSelect
                               data-testid="local-model-default-service-tier-input"
                               value={stringValue(entry.default_service_tier)}
                               onChange={event =>
@@ -907,7 +908,7 @@ export function CustomModelCapabilitiesForm({
                                   </option>
                                 ) : null
                               })}
-                            </select>
+                            </SettingsSelect>
                           </Field>
                         </div>
 

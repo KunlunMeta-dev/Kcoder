@@ -1,0 +1,264 @@
+{
+  "MigrationDefinitionsDiscoverParams": {
+    "valid": [
+      {
+        "name": "owned_pending_asset",
+        "value": {
+          "sources": [
+            "claude-code"
+          ],
+          "includeProject": false,
+          "pageIndex": 0
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown_property",
+        "value": {
+          "sources": [
+            "claude-code"
+          ],
+          "includeProject": false,
+          "pageIndex": 0,
+          "arbitraryExecution": true
+        }
+      }
+    ]
+  },
+  "MigrationDefinitionsDiscoverResult": {
+    "valid": [
+      {
+        "name": "owned_pending_asset",
+        "value": {
+          "catalogId": "defcat-owned",
+          "sources": [
+            {
+              "sourceId": "src-owned",
+              "kind": "claude-code",
+              "displayName": "Claude Code",
+              "formatRevision": "passive-definition/v1",
+              "availableCategories": [
+                "agent"
+              ],
+              "scope": "user-agents"
+            }
+          ],
+          "problems": [],
+          "totalSources": 1,
+          "nextPage": null
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown_property",
+        "value": {
+          "catalogId": "defcat-owned",
+          "sources": [
+            {
+              "sourceId": "src-owned",
+              "kind": "claude-code",
+              "displayName": "Claude Code",
+              "formatRevision": "passive-definition/v1",
+              "availableCategories": [
+                "agent"
+              ],
+              "scope": "user-agents"
+            }
+          ],
+          "problems": [],
+          "totalSources": 1,
+          "nextPage": null,
+          "arbitraryExecution": true
+        }
+      }
+    ]
+  },
+  "MigrationDefinitionReportParams": {
+    "valid": [
+      {
+        "name": "owned_pending_asset",
+        "value": {
+          "jobId": "mig-owned",
+          "itemId": "item-owned",
+          "pageIndex": 0
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown_property",
+        "value": {
+          "jobId": "mig-owned",
+          "itemId": "item-owned",
+          "pageIndex": 0,
+          "arbitraryExecution": true
+        }
+      }
+    ]
+  },
+  "MigrationDefinitionReportResult": {
+    "valid": [
+      {
+        "name": "owned_pending_asset",
+        "value": {
+          "jobId": "mig-owned",
+          "itemId": "item-owned",
+          "pageIndex": 0,
+          "report": {
+            "kind": "agent",
+            "format": "claude_agent_markdown",
+            "parseStatus": "parsed",
+            "elements": 1,
+            "fields": [
+              {
+                "ordinal": 0,
+                "element": 0,
+                "field": "name"
+              },
+              {
+                "ordinal": 1,
+                "element": 0,
+                "field": null
+              }
+            ],
+            "unknownFields": 1,
+            "executionAllowed": false,
+            "requiresReview": true
+          },
+          "totalFields": 2,
+          "nextPage": null,
+          "totalBytes": 3
+        }
+      },
+      {
+        "name": "opaque_still_reviewable_storage",
+        "value": {
+          "jobId": "mig-owned",
+          "itemId": "item-owned",
+          "pageIndex": 0,
+          "report": {
+            "kind": "agent",
+            "format": "claude_agent_markdown",
+            "parseStatus": "opaque",
+            "elements": null,
+            "fields": [],
+            "unknownFields": null,
+            "executionAllowed": false,
+            "requiresReview": true
+          },
+          "totalFields": 0,
+          "nextPage": null,
+          "totalBytes": 3
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown_property",
+        "value": {
+          "jobId": "mig-owned",
+          "itemId": "item-owned",
+          "pageIndex": 0,
+          "report": {
+            "kind": "agent",
+            "format": "claude_agent_markdown",
+            "parseStatus": "parsed",
+            "elements": 1,
+            "fields": [
+              {
+                "ordinal": 0,
+                "element": 0,
+                "field": "name"
+              },
+              {
+                "ordinal": 1,
+                "element": 0,
+                "field": null
+              }
+            ],
+            "unknownFields": 1,
+            "executionAllowed": false,
+            "requiresReview": true
+          },
+          "totalFields": 2,
+          "nextPage": null,
+          "totalBytes": 3,
+          "arbitraryExecution": true
+        }
+      }
+    ]
+  },
+  "MigrationDefinitionBodyParams": {
+    "valid": [
+      {
+        "name": "owned_pending_asset",
+        "value": {
+          "jobId": "mig-owned",
+          "itemId": "item-owned",
+          "offset": 0
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown_property",
+        "value": {
+          "jobId": "mig-owned",
+          "itemId": "item-owned",
+          "offset": 0,
+          "arbitraryExecution": true
+        }
+      }
+    ]
+  },
+  "MigrationDefinitionBodyResult": {
+    "valid": [
+      {
+        "name": "owned_pending_asset",
+        "value": {
+          "jobId": "mig-owned",
+          "itemId": "item-owned",
+          "offset": 0,
+          "encoding": "utf8",
+          "bytesBase64": "YWJj",
+          "text": "abc",
+          "totalBytes": 3,
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "nextOffset": null
+        }
+      },
+      {
+        "name": "opaque_binary_download",
+        "value": {
+          "jobId": "mig-owned",
+          "itemId": "item-owned",
+          "offset": 0,
+          "encoding": "binary",
+          "bytesBase64": "/wA=",
+          "totalBytes": 2,
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "nextOffset": null
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown_property",
+        "value": {
+          "jobId": "mig-owned",
+          "itemId": "item-owned",
+          "offset": 0,
+          "encoding": "utf8",
+          "bytesBase64": "YWJj",
+          "text": "abc",
+          "totalBytes": 3,
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "nextOffset": null,
+          "arbitraryExecution": true
+        }
+      }
+    ]
+  }
+}

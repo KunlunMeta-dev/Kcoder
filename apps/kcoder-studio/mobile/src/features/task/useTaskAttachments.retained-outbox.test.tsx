@@ -52,19 +52,23 @@ vi.mock("react", async (importOriginal) => {
 });
 
 
-vi.mock("react-native", () => ({ Appearance: { getColorScheme: () => "dark", addChangeListener: () => ({ remove() {} }) }, Platform: { OS: "web" }, StyleSheet: { create: (value: unknown) => value, hairlineWidth: 1, absoluteFillObject: {} }, ActivityIndicator: "ActivityIndicator", Pressable: "Pressable", ScrollView: "ScrollView", Text: "Text", TextInput: "TextInput", View: "View" }));
+vi.mock("react-native", () => ({ Keyboard: { isVisible: () => false, addListener: () => ({ remove() {} }) }, Appearance: { getColorScheme: () => "dark", addChangeListener: () => ({ remove() {} }) }, Platform: { OS: "web" }, useWindowDimensions: () => ({ width: 390, height: 844 }), StyleSheet: { create: (value: unknown) => value, hairlineWidth: 1, absoluteFill: {} }, ActivityIndicator: "ActivityIndicator", Modal: "Modal", Pressable: "Pressable", ScrollView: "ScrollView", Text: "Text", TextInput: "TextInput", View: "View" }));
 // Type-only named imports can preserve an empty runtime import under verbatimModuleSyntax.
 // The actual hook uses only our explicit task stub; unrelated runtime/Expo entry is outside this contract.
 vi.mock("@/runtime/task-runtime", () => ({}));
 vi.mock("expo-sharing", () => ({ shareAsync: vi.fn(), isAvailableAsync: vi.fn(async () => false) }));
 vi.mock("react-native-safe-area-context", () => ({ useSafeAreaInsets: () => ({top:0,bottom:0,left:0,right:0}) }));
+vi.mock("@/storage/app-preferences", () => ({ getAppPreferencesSnapshot: () => ({ quickPhrases: [] }), subscribeAppPreferences: () => () => {} }));
 vi.mock("expo-document-picker", () => ({ getDocumentAsync: vi.fn() }));
 vi.mock("expo-image-picker", () => ({}));
 vi.mock("expo-image-manipulator", () => ({ manipulateAsync: vi.fn(), SaveFormat: { JPEG: "jpeg" } }));
 vi.mock("expo-file-system", () => ({ File: class {} }));
 vi.mock("expo-file-system/legacy", () => ({ EncodingType: { Base64: "base64" }, readAsStringAsync: vi.fn() }));
 vi.mock("@/features/task/TaskAttachments", () => ({ StagedAttachmentChip: "StagedAttachmentChip" }));
-vi.mock("lucide-react-native", () => ({ ArrowUp: "ArrowUp", Paperclip: "Paperclip", Square: "Square", X: "X" }));
+vi.mock("lucide-react-native", () => Object.fromEntries([
+  "ArrowUp", "Bot", "Check", "Download", "FilePenLine", "Flame", "Paperclip", "Plus", "RotateCcw",
+  "Send", "Shield", "ShieldOff", "ShieldQuestion", "ShieldX", "Sparkles", "Square", "X",
+].map(name => [name, name])));
 vi.mock("@/features/task/attachmentPreparation", async importOriginal => ({ ...(await importOriginal<typeof import("@/features/task/attachmentPreparation")>()), webBlobBase64: async (blob: Blob) => Buffer.from(await blob.arrayBuffer()).toString("base64") }));
 vi.mock("@/storage/staged-attachment-bytes.web", () => ({ createAttachmentBytesBackend: () => fixture.backend! }));
 vi.mock("@/gateway/http", () => ({ ensureGatewayAuthorization: async () => {} }));

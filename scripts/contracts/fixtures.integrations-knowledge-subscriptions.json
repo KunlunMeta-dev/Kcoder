@@ -1,0 +1,520 @@
+{
+  "AutomationSubscriptionDraft": {
+    "valid": [
+      {
+        "name": "valid_AutomationSubscriptionDraft",
+        "value": {
+          "id": "fixture-weekly-summary",
+          "title": "合成项目周报",
+          "workflowId": "fixture-approved-workflow",
+          "workflowVersion": 1,
+          "inputs": {
+            "project": "synthetic-project"
+          },
+          "schedule": {
+            "kind": "zoned_cron",
+            "expression": "0 9 * * 1",
+            "timezone": "Asia/Shanghai"
+          },
+          "eventSource": null,
+          "maximumTokens": 5000,
+          "maximumRuntimeSeconds": 120,
+          "delivery": {
+            "kind": "studio"
+          }
+        }
+      },
+      {
+        "name": "explicit-auto-original-intent",
+        "value": {
+          "id": "fixture-weekly-summary",
+          "title": "合成项目周报",
+          "workflowId": "fixture-approved-workflow",
+          "workflowVersion": 1,
+          "inputs": {
+            "project": "synthetic-project"
+          },
+          "schedule": {
+            "kind": "zoned_cron",
+            "expression": "0 9 * * 1",
+            "timezone": "Asia/Shanghai"
+          },
+          "eventSource": null,
+          "maximumTokens": 5000,
+          "maximumRuntimeSeconds": 120,
+          "delivery": {
+            "kind": "studio"
+          },
+          "modelSelection": {
+            "kind": "auto_policy",
+            "id": "configured-office",
+            "version": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject_invalid_AutomationSubscriptionDraft",
+        "value": {
+          "id": "fixture-weekly-summary",
+          "title": "合成项目周报",
+          "workflowId": "fixture-approved-workflow",
+          "workflowVersion": 1,
+          "inputs": {
+            "project": "synthetic-project"
+          },
+          "schedule": {
+            "kind": "zoned_cron",
+            "expression": "0 9 * * 1",
+            "timezone": "Asia/Shanghai"
+          },
+          "eventSource": null,
+          "maximumTokens": 5000,
+          "maximumRuntimeSeconds": 120,
+          "delivery": {
+            "kind": "studio"
+          },
+          "__untrustedAuthority": true
+        }
+      },
+      {
+        "name": "auto-selection-does-not-accept-caller-authority",
+        "value": {
+          "id": "fixture-weekly-summary",
+          "title": "合成项目周报",
+          "workflowId": "fixture-approved-workflow",
+          "workflowVersion": 1,
+          "inputs": {
+            "project": "synthetic-project"
+          },
+          "schedule": {
+            "kind": "zoned_cron",
+            "expression": "0 9 * * 1",
+            "timezone": "Asia/Shanghai"
+          },
+          "eventSource": null,
+          "maximumTokens": 5000,
+          "maximumRuntimeSeconds": 120,
+          "delivery": {
+            "kind": "studio"
+          },
+          "modelSelection": {
+            "kind": "auto_policy",
+            "id": "configured-office",
+            "version": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "trusted": true
+          }
+        }
+      }
+    ]
+  },
+  "AutomationSubscription": {
+    "valid": [
+      {
+        "name": "valid_AutomationSubscription",
+        "value": {
+          "owner": {
+            "accountId": "fixture-account",
+            "targetId": "fixture-target",
+            "workspaceId": null
+          },
+          "revision": 1,
+          "enabled": true,
+          "draft": {
+            "id": "fixture-weekly-summary",
+            "title": "合成项目周报",
+            "workflowId": "fixture-approved-workflow",
+            "workflowVersion": 1,
+            "inputs": {
+              "project": "synthetic-project"
+            },
+            "schedule": {
+              "kind": "zoned_cron",
+              "expression": "0 9 * * 1",
+              "timezone": "Asia/Shanghai"
+            },
+            "eventSource": null,
+            "maximumTokens": 5000,
+            "maximumRuntimeSeconds": 120,
+            "delivery": {
+              "kind": "studio"
+            }
+          },
+          "consentRef": "fixture-explicit-consent",
+          "nextFireAtMs": 2000,
+          "createdAtMs": 1000,
+          "updatedAtMs": 1000
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject_invalid_AutomationSubscription",
+        "value": {
+          "owner": {
+            "accountId": "fixture-account",
+            "targetId": "fixture-target",
+            "workspaceId": null
+          },
+          "revision": 1,
+          "enabled": true,
+          "draft": {
+            "id": "fixture-weekly-summary",
+            "title": "合成项目周报",
+            "workflowId": "fixture-approved-workflow",
+            "workflowVersion": 1,
+            "inputs": {
+              "project": "synthetic-project"
+            },
+            "schedule": {
+              "kind": "zoned_cron",
+              "expression": "0 9 * * 1",
+              "timezone": "Asia/Shanghai"
+            },
+            "eventSource": null,
+            "maximumTokens": 5000,
+            "maximumRuntimeSeconds": 120,
+            "delivery": {
+              "kind": "studio"
+            }
+          },
+          "consentRef": "fixture-explicit-consent",
+          "nextFireAtMs": 2000,
+          "createdAtMs": 1000,
+          "updatedAtMs": 1000,
+          "__untrustedAuthority": true
+        }
+      }
+    ]
+  },
+  "SubscriptionSaveParams": {
+    "valid": [
+      {
+        "name": "valid_SubscriptionSaveParams",
+        "value": {
+          "draft": {
+            "id": "fixture-weekly-summary",
+            "title": "合成项目周报",
+            "workflowId": "fixture-approved-workflow",
+            "workflowVersion": 1,
+            "inputs": {
+              "project": "synthetic-project"
+            },
+            "schedule": {
+              "kind": "zoned_cron",
+              "expression": "0 9 * * 1",
+              "timezone": "Asia/Shanghai"
+            },
+            "eventSource": null,
+            "maximumTokens": 5000,
+            "maximumRuntimeSeconds": 120,
+            "delivery": {
+              "kind": "studio"
+            }
+          },
+          "consentRef": "fixture-explicit-consent"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject_invalid_SubscriptionSaveParams",
+        "value": {
+          "draft": {
+            "id": "fixture-weekly-summary",
+            "title": "合成项目周报",
+            "workflowId": "fixture-approved-workflow",
+            "workflowVersion": 1,
+            "inputs": {
+              "project": "synthetic-project"
+            },
+            "schedule": {
+              "kind": "zoned_cron",
+              "expression": "0 9 * * 1",
+              "timezone": "Asia/Shanghai"
+            },
+            "eventSource": null,
+            "maximumTokens": 5000,
+            "maximumRuntimeSeconds": 120,
+            "delivery": {
+              "kind": "studio"
+            }
+          },
+          "consentRef": "fixture-explicit-consent",
+          "__untrustedAuthority": true
+        }
+      }
+    ]
+  },
+  "SubscriptionEnableParams": {
+    "valid": [
+      {
+        "name": "valid_SubscriptionEnableParams",
+        "value": {
+          "subscriptionId": "fixture-weekly-summary",
+          "enabled": false
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject_invalid_SubscriptionEnableParams",
+        "value": {
+          "subscriptionId": "fixture-weekly-summary",
+          "enabled": false,
+          "__untrustedAuthority": true
+        }
+      }
+    ]
+  },
+  "SubscriptionListResult": {
+    "valid": [
+      {
+        "name": "valid_SubscriptionListResult",
+        "value": {
+          "page": {
+            "items": [
+              {
+                "owner": {
+                  "accountId": "fixture-account",
+                  "targetId": "fixture-target",
+                  "workspaceId": null
+                },
+                "revision": 1,
+                "enabled": true,
+                "draft": {
+                  "id": "fixture-weekly-summary",
+                  "title": "合成项目周报",
+                  "workflowId": "fixture-approved-workflow",
+                  "workflowVersion": 1,
+                  "inputs": {
+                    "project": "synthetic-project"
+                  },
+                  "schedule": {
+                    "kind": "zoned_cron",
+                    "expression": "0 9 * * 1",
+                    "timezone": "Asia/Shanghai"
+                  },
+                  "eventSource": null,
+                  "maximumTokens": 5000,
+                  "maximumRuntimeSeconds": 120,
+                  "delivery": {
+                    "kind": "studio"
+                  }
+                },
+                "consentRef": "fixture-explicit-consent",
+                "nextFireAtMs": 2000,
+                "createdAtMs": 1000,
+                "updatedAtMs": 1000
+              }
+            ],
+            "nextCursor": null
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject_invalid_SubscriptionListResult",
+        "value": {
+          "page": {
+            "items": [
+              {
+                "owner": {
+                  "accountId": "fixture-account",
+                  "targetId": "fixture-target",
+                  "workspaceId": null
+                },
+                "revision": 1,
+                "enabled": true,
+                "draft": {
+                  "id": "fixture-weekly-summary",
+                  "title": "合成项目周报",
+                  "workflowId": "fixture-approved-workflow",
+                  "workflowVersion": 1,
+                  "inputs": {
+                    "project": "synthetic-project"
+                  },
+                  "schedule": {
+                    "kind": "zoned_cron",
+                    "expression": "0 9 * * 1",
+                    "timezone": "Asia/Shanghai"
+                  },
+                  "eventSource": null,
+                  "maximumTokens": 5000,
+                  "maximumRuntimeSeconds": 120,
+                  "delivery": {
+                    "kind": "studio"
+                  }
+                },
+                "consentRef": "fixture-explicit-consent",
+                "nextFireAtMs": 2000,
+                "createdAtMs": 1000,
+                "updatedAtMs": 1000
+              }
+            ],
+            "nextCursor": null
+          },
+          "__untrustedAuthority": true
+        }
+      }
+    ]
+  },
+  "SubscriptionReadResult": {
+    "valid": [
+      {
+        "name": "valid_SubscriptionReadResult",
+        "value": {
+          "subscription": {
+            "owner": {
+              "accountId": "fixture-account",
+              "targetId": "fixture-target",
+              "workspaceId": null
+            },
+            "revision": 1,
+            "enabled": true,
+            "draft": {
+              "id": "fixture-weekly-summary",
+              "title": "合成项目周报",
+              "workflowId": "fixture-approved-workflow",
+              "workflowVersion": 1,
+              "inputs": {
+                "project": "synthetic-project"
+              },
+              "schedule": {
+                "kind": "zoned_cron",
+                "expression": "0 9 * * 1",
+                "timezone": "Asia/Shanghai"
+              },
+              "eventSource": null,
+              "maximumTokens": 5000,
+              "maximumRuntimeSeconds": 120,
+              "delivery": {
+                "kind": "studio"
+              }
+            },
+            "consentRef": "fixture-explicit-consent",
+            "nextFireAtMs": 2000,
+            "createdAtMs": 1000,
+            "updatedAtMs": 1000
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject_invalid_SubscriptionReadResult",
+        "value": {
+          "subscription": {
+            "owner": {
+              "accountId": "fixture-account",
+              "targetId": "fixture-target",
+              "workspaceId": null
+            },
+            "revision": 1,
+            "enabled": true,
+            "draft": {
+              "id": "fixture-weekly-summary",
+              "title": "合成项目周报",
+              "workflowId": "fixture-approved-workflow",
+              "workflowVersion": 1,
+              "inputs": {
+                "project": "synthetic-project"
+              },
+              "schedule": {
+                "kind": "zoned_cron",
+                "expression": "0 9 * * 1",
+                "timezone": "Asia/Shanghai"
+              },
+              "eventSource": null,
+              "maximumTokens": 5000,
+              "maximumRuntimeSeconds": 120,
+              "delivery": {
+                "kind": "studio"
+              }
+            },
+            "consentRef": "fixture-explicit-consent",
+            "nextFireAtMs": 2000,
+            "createdAtMs": 1000,
+            "updatedAtMs": 1000
+          },
+          "__untrustedAuthority": true
+        }
+      }
+    ]
+  },
+  "SubscriptionPreviewResult": {
+    "valid": [
+      {
+        "name": "valid_SubscriptionPreviewResult",
+        "value": {
+          "nextFireAtMs": 1000,
+          "workflowId": "fixed-graph",
+          "workflowVersion": 1,
+          "maximumTokens": 5000,
+          "maximumRuntimeSeconds": 30,
+          "createsSubscription": false,
+          "periodBudget": {
+            "configuration": {
+              "windowSeconds": 86400,
+              "maximumTokens": 10000,
+              "maximumModelCalls": 20
+            },
+            "currentWindow": {
+              "startsAtMs": 0,
+              "endsAtMs": 86400000
+            },
+            "effectiveMaximumTokens": 8000,
+            "effectiveMaximumModelCalls": 20,
+            "chargedTokens": 1000,
+            "chargedModelCalls": 2,
+            "unknownCostReservations": 2,
+            "increasesApplyNextWindow": true,
+            "createsSubscription": false,
+            "activeTasks": 0,
+            "activeCalls": 0
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing_required_SubscriptionPreviewResult",
+        "value": {}
+      },
+      {
+        "name": "extra_SubscriptionPreviewResult",
+        "value": {
+          "nextFireAtMs": 1000,
+          "workflowId": "fixed-graph",
+          "workflowVersion": 1,
+          "maximumTokens": 5000,
+          "maximumRuntimeSeconds": 30,
+          "createsSubscription": false,
+          "periodBudget": {
+            "configuration": {
+              "windowSeconds": 86400,
+              "maximumTokens": 10000,
+              "maximumModelCalls": 20
+            },
+            "currentWindow": {
+              "startsAtMs": 0,
+              "endsAtMs": 86400000
+            },
+            "effectiveMaximumTokens": 8000,
+            "effectiveMaximumModelCalls": 20,
+            "chargedTokens": 1000,
+            "chargedModelCalls": 2,
+            "unknownCostReservations": 2,
+            "increasesApplyNextWindow": true,
+            "createsSubscription": false,
+            "activeTasks": 0,
+            "activeCalls": 0
+          },
+          "callerTrusted": true
+        }
+      }
+    ]
+  }
+}

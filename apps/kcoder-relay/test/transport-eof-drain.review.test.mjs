@@ -10,6 +10,7 @@ import WebSocket, { WebSocketServer, createWebSocketStream } from 'ws';
 import { bridge, RelayDuplex, RELAY_EOF_DRAIN_TIMEOUT_MS } from '../src/transport.mjs';
 import { startRelay } from '../src/server.mjs';
 import { startClient } from '../src/client.mjs';
+import { isolatedGatewayAuthority } from '../src/gateway-origin.mjs';
 
 const deferred = () => {
   let resolve, reject;
@@ -137,7 +138,7 @@ test('a never-uncorked orderly EOF reaches the fixed total drain deadline', asyn
 
 test('server readable backlog survives normal WS EOF until full session HTTP completes', async t => {
   const id = 'owned-drain-review', host = 'owned-drain-review.test';
-  const secret = randomBytes(32).toString('hex'), pairingToken = randomBytes(32).toString('hex');
+  const secret = randomBytes(32).toString('hex'), gatewaySecret = randomBytes(32).toString('hex');
   const session = { accessToken: randomBytes(32).toString('hex'), rpcToken: randomBytes(32).toString('hex'), expiresAt: Date.now() + 120000 };
   const body = Buffer.from(JSON.stringify(session));
   const paused = deferred(), requestSeen = deferred(), releaseResponse = deferred();
@@ -161,7 +162,7 @@ test('server readable backlog survives normal WS EOF until full session HTTP com
       for await (const chunk of incoming) chunks.push(Buffer.from(chunk));
       const parsed = JSON.parse(Buffer.concat(chunks).toString());
       assert.equal(incoming.method, 'POST'); assert.equal(incoming.url, '/api/mobile/session');
-      assert.equal(parsed.token === pairingToken, true, 'owned pairing token matches');
+      assert.equal(parsed.token === gatewaySecret, true, 'owned pairing token matches');
       requestSeen.resolve();
       await releaseResponse.promise;
       response.writeHead(200, { 'content-type': 'application/json', 'content-length': body.length, connection: 'close' });
@@ -178,15 +179,15 @@ test('server readable backlog survives normal WS EOF until full session HTTP com
     assert.equal(gatewaySockets.size, 0);
   });
   gateway.listen(0, '127.0.0.1'); await once(gateway, 'listening');
-  relay = await startRelay({ gateways: [{ id, secret, pairingToken, maxConnections: 2, maxBytesPerWindow: 1024 * 1024, trafficWindowMs: 60000 }], sharedHosts: [host], controlPort: 0, proxyPort: 0 });
+  relay = await startRelay({ gateways: [{ id, secret, gatewaySecret, maxConnections: 2, maxBytesPerWindow: 1024 * 1024, trafficWindowMs: 60000 }], sharedHosts: [host], controlPort: 0, proxyPort: 0 });
   const online = deferred();
   client = startClient({ url: `http://127.0.0.1:${relay.controlPort}`, secret, gatewayId: id,
     gateway: `http://127.0.0.1:${gateway.address().port}`, allowInsecure: true, onOnline: online.resolve });
   await bounded(online.promise);
   const response = new Promise((resolve, reject) => {
-    const payload = Buffer.from(JSON.stringify({ token: pairingToken }));
+    const payload = Buffer.from(JSON.stringify({ token: gatewaySecret }));
     const outgoing = request({ host: '127.0.0.1', port: relay.proxyPort, method: 'POST', path: `/g/${id}/api/mobile/session`,
-      headers: { host, 'content-type': 'application/json', 'content-length': payload.length, connection: 'close' } }, incoming => {
+      headers: { host: isolatedGatewayAuthority(host, id), 'content-type': 'application/json', 'content-length': payload.length, connection: 'close' } }, incoming => {
       const chunks = [];
       incoming.on('data', chunk => chunks.push(Buffer.from(chunk)));
       incoming.once('aborted', () => reject(new Error('session response aborted')));

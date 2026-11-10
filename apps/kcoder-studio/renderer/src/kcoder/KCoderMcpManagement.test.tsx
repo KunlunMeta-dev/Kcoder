@@ -1,13 +1,83 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, expect, test, vi } from 'vitest'
 import '@/i18n'
-import { requestLocalExecutor } from '@/tauri/localExecutor'
+import { requestLocalExecutor } from '@/host/localExecutor'
 import { openExternalUrl } from '@/lib/external-links'
 import { KCoderMcpManagement } from './KCoderMcpManagement'
 
-vi.mock('@/tauri/localExecutor', () => ({ requestLocalExecutor: vi.fn() }))
+vi.mock('@/host/localExecutor', () => ({ requestLocalExecutor: vi.fn() }))
 vi.mock('@/lib/external-links', () => ({ openExternalUrl: vi.fn() }))
 let authorization = 'notAuthorized'
+
+test('enables bundled search without asking for an external service URL', async () => {
+  let installed = false
+  vi.mocked(requestLocalExecutor).mockImplementation(async (_method, value) => {
+    const request = value as { method: string; params: unknown }
+    if (request.method === 'mcp/list') return { servers: installed ? [{ name: 'searxng', transport: 'searxng', authorization: 'notApplicable' }] : [] }
+    if (request.method === 'mcp/install') {
+      expect(request.params).toEqual({ config: { name: 'searxng', transport: 'searxng' } })
+      installed = true
+    }
+    return {}
+  })
+  render(<KCoderMcpManagement deviceId="remote" workspacePath="/remote/project" />)
+  fireEvent.click(await screen.findByTestId('kcoder-searxng-enable'))
+  const toggle = await screen.findByTestId('kcoder-mcp-toggle')
+  expect(toggle).toHaveAttribute('aria-checked', 'true')
+  expect(screen.queryByTestId('kcoder-searxng-enable')).not.toBeInTheDocument()
+  expect(requestLocalExecutor).toHaveBeenCalledWith('runtime.plugins.request', { deviceId: 'remote', workspacePath: '/remote/project', method: 'mcp/setEnabled', params: { name: 'searxng', enabled: true } })
+})
+
+test('toggles a plugin MCP independently, keeps it listed, and reloads the saved state', async () => {
+  let enabled = true
+  vi.mocked(requestLocalExecutor).mockImplementation(async (_method, value) => {
+    const request = value as { method: string; params: { enabled: boolean } }
+    if (request.method === 'mcp/list') return { servers: [{ name: 'plugin.demo.search', pluginId: 'demo', transport: 'stdio', authorization: 'notApplicable', enabled }] }
+    if (request.method === 'mcp/setEnabled') enabled = request.params.enabled
+    return {}
+  })
+  render(<KCoderMcpManagement deviceId="remote" workspacePath="/remote/project" />)
+  const toggle = await screen.findByTestId('kcoder-mcp-toggle')
+  expect(toggle).toHaveAttribute('aria-checked', 'true')
+  fireEvent.click(toggle)
+  await waitFor(() => expect(toggle).toHaveAttribute('aria-checked', 'false'))
+  expect(screen.getByText('plugin.demo.search')).toBeInTheDocument()
+  expect(requestLocalExecutor).toHaveBeenCalledWith('runtime.plugins.request', { deviceId: 'remote', workspacePath: '/remote/project', method: 'mcp/setEnabled', params: { name: 'plugin.demo.search', pluginId: 'demo', enabled: false } })
+  fireEvent.click(toggle)
+  await waitFor(() => expect(toggle).toHaveAttribute('aria-checked', 'true'))
+})
+
+test('failed activation does not pretend that the server was disabled', async () => {
+  const original = vi.mocked(requestLocalExecutor).getMockImplementation()!
+  vi.mocked(requestLocalExecutor).mockImplementation((method, value) => {
+    if ((value as { method: string }).method === 'mcp/setEnabled') return Promise.reject(new Error('settings write failed'))
+    return original(method, value)
+  })
+  render(<KCoderMcpManagement />)
+  const toggle = await screen.findByTestId('kcoder-mcp-toggle')
+  fireEvent.click(toggle)
+  expect(await screen.findByRole('alert')).toHaveTextContent('settings write failed')
+  expect(toggle).toHaveAttribute('aria-checked', 'true')
+  expect(toggle).not.toBeDisabled()
+})
+
+test('an activation finishing after target navigation cannot overwrite the new target', async () => {
+  let finish!: () => void
+  vi.mocked(requestLocalExecutor).mockImplementation(async (_method, value) => {
+    const request = value as { method: string; deviceId: string }
+    if (request.method === 'mcp/list') return { servers: [{ name: request.deviceId, transport: 'stdio', authorization: 'notApplicable' }] }
+    if (request.method === 'mcp/setEnabled') await new Promise<void>(resolve => { finish = resolve })
+    return {}
+  })
+  const view = render(<KCoderMcpManagement deviceId="alpha" />)
+  fireEvent.click(await screen.findByTestId('kcoder-mcp-toggle'))
+  view.rerender(<KCoderMcpManagement deviceId="beta" />)
+  await screen.findByText('beta')
+  await act(async () => { finish() })
+  expect(screen.queryByText('alpha')).not.toBeInTheDocument()
+  expect(screen.getByTestId('kcoder-mcp-toggle')).toHaveAttribute('aria-checked', 'true')
+  expect(screen.getByTestId('kcoder-mcp-toggle')).not.toBeDisabled()
+})
 beforeEach(() => {
   vi.clearAllMocks()
   authorization = 'notAuthorized'

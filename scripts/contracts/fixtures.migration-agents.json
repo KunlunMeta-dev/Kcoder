@@ -1,0 +1,128 @@
+{
+  "MigrationAgentAdaptation": {
+    "valid": [
+      {
+        "name": "explicit_reviewed_native_mapping",
+        "value": {
+          "reviewedSourceSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "model": {
+            "kind": "target",
+            "provider": "mapped",
+            "model": "review-model"
+          },
+          "tools": [
+            "read"
+          ]
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "source_privileges_are_not_native_mapping",
+        "value": {
+          "reviewedSourceSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "model": {
+            "kind": "target",
+            "provider": "mapped",
+            "model": "review-model"
+          },
+          "tools": [
+            "read"
+          ],
+          "permissionMode": "bypassPermissions"
+        }
+      }
+    ]
+  },
+  "MigrationAgentCompatibility": {
+    "valid": [
+      {
+        "name": "explicit_reviewed_native_mapping",
+        "value": {
+          "sourceSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "canAdapt": true,
+          "availableTools": [
+            "read"
+          ],
+          "sourceModelReference": true,
+          "problem": null
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "source_privileges_are_not_native_mapping",
+        "value": {
+          "sourceSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "canAdapt": true,
+          "availableTools": [
+            "read"
+          ],
+          "sourceModelReference": true,
+          "problem": null,
+          "permissionMode": "bypassPermissions"
+        }
+      }
+    ]
+  },
+  "MigrationAgentPreviewParams": {
+    "valid": [
+      {
+        "name": "explicit_reviewed_native_mapping",
+        "value": {
+          "jobId": "owned-job",
+          "itemId": "owned-item"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "source_privileges_are_not_native_mapping",
+        "value": {
+          "jobId": "owned-job",
+          "itemId": "owned-item",
+          "permissionMode": "bypassPermissions"
+        }
+      }
+    ]
+  },
+  "MigrationAgentPreviewResult": {
+    "valid": [
+      {
+        "name": "explicit_reviewed_native_mapping",
+        "value": {
+          "jobId": "owned-job",
+          "itemId": "owned-item",
+          "compatibility": {
+            "sourceSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "canAdapt": true,
+            "availableTools": [
+              "read"
+            ],
+            "sourceModelReference": true,
+            "problem": null
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "source_privileges_are_not_native_mapping",
+        "value": {
+          "jobId": "owned-job",
+          "itemId": "owned-item",
+          "compatibility": {
+            "sourceSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "canAdapt": true,
+            "availableTools": [
+              "read"
+            ],
+            "sourceModelReference": true,
+            "problem": null
+          },
+          "permissionMode": "bypassPermissions"
+        }
+      }
+    ]
+  }
+}

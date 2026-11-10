@@ -3,6 +3,68 @@
 use super::*;
 
 impl QueryEngine {
+    pub fn web_search_runtime(&self) -> Arc<kcoder_tools::web_search::WebSearchRuntime> {
+        self.web_search_runtime.clone()
+    }
+    pub fn web_search_context(&self, cancel: CancellationToken) -> kcoder_tools::ToolContext {
+        let (max, head, tail, agents) = {
+            let settings = recover_read_lock(&self.settings, "settings");
+            (
+                settings.max_tool_output_bytes,
+                settings.tool_output_head_bytes,
+                settings.tool_output_tail_bytes,
+                settings.max_concurrent_subagents,
+            )
+        };
+        self.base_tool_context(max, head, tail, Some(agents))
+            .with_abort_token(cancel)
+    }
+    /// Host-owned search transport. It does not register tools or change their permissions.
+    pub fn with_bundled_search_backend(
+        mut self,
+        backend: Arc<dyn kcoder_tools::web_search::BundledSearchBackend>,
+    ) -> Self {
+        self.bundled_search_backend = Some(backend);
+        self
+    }
+
+    /// Bind reviewed-memory maintenance to this native task's current authority.
+    /// Revocation stays in the sink; removing it must not downgrade a live task to legacy storage.
+    pub fn with_curated_memory_observer_sink(
+        mut self,
+        sink: Arc<dyn crate::integrations::knowledge::CuratedMemoryObserverSink>,
+    ) -> Self {
+        self.curated_memory_observer_sink = Some(sink);
+        self
+    }
+    /// Install an owner executable for ephemeral commands, without changing durable workers.
+    pub fn with_owned_command_program(mut self, program: Option<PathBuf>) -> Self {
+        self.owned_command_program = program;
+        self
+    }
+    /// A client may shrink user interactions without changing tool permissions.
+    pub fn with_client_questions_supported(mut self, supported: bool) -> Self {
+        self.client_questions_supported = supported;
+        self
+    }
+
+    /// Set the negotiated non-blocking question capability independently from
+    /// synchronous client prompts. Unsupported and delegated runtimes stay closed.
+    pub fn with_async_user_questions_supported(mut self, supported: bool) -> Self {
+        self.async_user_questions_supported = supported;
+        self
+    }
+
+    pub(crate) fn async_user_questions_main_task_supported(&self) -> bool {
+        self.async_user_questions_supported
+            && self.agent_depth() == 0
+            && self.subagent_system_prompt.is_none()
+    }
+
+    pub(crate) fn async_user_questions_available(&self) -> bool {
+        self.async_user_questions_main_task_supported()
+            && self.user_questioner.supports_async_user_questions()
+    }
     /// Replace the default cancel token with an externally-controlled one.
     pub fn with_cancel_token(mut self, token: CancellationToken) -> Self {
         self.cancel_token = token;
@@ -10,7 +72,8 @@ impl QueryEngine {
     }
 
     /// Explicitly enable user-settings persistence. Unless called, the engine never infers or writes to a default home directory.
-    pub fn with_settings_persistence_path(self, path: PathBuf) -> Self {
+    pub fn with_settings_persistence_path(mut self, path: PathBuf) -> Self {
+        self.imported_context_notice = Arc::new(std::sync::atomic::AtomicBool::new(false));
         self.state
             .set_usage_history_root(path.parent().map(|parent| parent.join("usage")).as_deref());
         *recover_write_lock(
@@ -28,8 +91,12 @@ impl QueryEngine {
         plugins: kcoder_plugins::EffectivePluginSnapshot,
     ) -> Result<Self> {
         strip_private_plugin_settings(&mut settings)?;
+        let tools = match &self.session_tool_contributions {
+            Some(contributions) => contributions.merge(tools, &settings)?,
+            None => tools,
+        };
         self.settings = Arc::new(RwLock::new(settings));
-        self.tools = tools;
+        self = self.with_turn_tools(tools);
         self.plugin_snapshot = Arc::new(plugins);
         Ok(self)
     }
@@ -40,8 +107,35 @@ impl QueryEngine {
             &self.settings_persistence_target,
             "settings_persistence_target",
         ) {
-            SettingsPersistenceTarget::Disabled => None,
+            SettingsPersistenceTarget::Disabled
+            | SettingsPersistenceTarget::ReadOnlyUserFile(_) => None,
             SettingsPersistenceTarget::UserFile(path) => Some(path.clone()),
+        }
+    }
+
+    /// Native identity checks may read the actual parent's configuration source.
+    /// This detached target never grants settings or permission persistence.
+    pub fn with_native_readonly_settings_source_from(
+        mut self,
+        parent: &QueryEngine,
+    ) -> Result<Self> {
+        let path = parent
+            .native_settings_source_path()
+            .context("NATIVE_SETTINGS_SOURCE_UNAVAILABLE")?;
+        anyhow::ensure!(path.is_absolute(), "NATIVE_SETTINGS_SOURCE_UNAVAILABLE");
+        self.settings_persistence_target = Arc::new(RwLock::new(
+            SettingsPersistenceTarget::ReadOnlyUserFile(path),
+        ));
+        Ok(self)
+    }
+    pub fn native_settings_source_path(&self) -> Option<PathBuf> {
+        match &*recover_read_lock(
+            &self.settings_persistence_target,
+            "settings_persistence_target",
+        ) {
+            SettingsPersistenceTarget::UserFile(path)
+            | SettingsPersistenceTarget::ReadOnlyUserFile(path) => Some(path.clone()),
+            SettingsPersistenceTarget::Disabled => None,
         }
     }
 
@@ -68,6 +162,10 @@ impl QueryEngine {
             "settings_persistence_target",
         )
         .clone();
+        anyhow::ensure!(
+            !matches!(target, SettingsPersistenceTarget::ReadOnlyUserFile(_)),
+            "SETTINGS_PERSISTENCE_READ_ONLY"
+        );
         let SettingsPersistenceTarget::UserFile(path) = target else {
             return Ok(());
         };
@@ -257,7 +355,8 @@ impl QueryEngine {
     }
 
     /// Override the base tool registry used by sub-agents before role filtering.
-    pub fn with_subagent_tools(self, tools: ToolRegistry) -> Self {
+    pub fn with_subagent_tools(mut self, tools: ToolRegistry) -> Self {
+        self.subagent_tools_explicit = true;
         *recover_write_lock(&self.subagent_tools, "subagent_tools") = tools;
         self
     }
@@ -291,7 +390,9 @@ impl QueryEngine {
     }
 
     pub(crate) fn active_subagent_tools_for_mode(&self, arrangement_mode: bool) -> ToolRegistry {
-        if arrangement_mode {
+        let registry = if self.subagent_tools_explicit {
+            self.subagent_tools()
+        } else if arrangement_mode {
             if self.state.session_mode().is_orchestrate() {
                 kcoder_tools::orchestrate_subagent_registry()
             } else {
@@ -299,7 +400,9 @@ impl QueryEngine {
             }
         } else {
             self.subagent_tools()
-        }
+        };
+        let registry = self.inherit_registered_native_wiki_reader(registry);
+        self.restrict_to_native_tool_ceiling(self.filter_task_tool_selection(registry))
     }
 
     pub(crate) fn active_subagent_tools(&self) -> ToolRegistry {
@@ -367,3 +470,93 @@ mod private_plugin_settings_tests {
         assert_eq!(externally_supplied.runtime_plugin_mcp_count, 0);
     }
 }
+
+#[cfg(test)]
+mod client_question_tests {
+    use super::*;
+    use kcoder_tools::{
+        AskUserQuestionTool, FileReadTool, UserQuestionRequest, UserQuestionResponse,
+        UserQuestioner,
+    };
+    use std::sync::atomic::AtomicUsize;
+    struct InteractiveHost(Arc<AtomicUsize>);
+    #[async_trait::async_trait]
+    impl UserQuestioner for InteractiveHost {
+        async fn ask(
+            &self,
+            request: UserQuestionRequest,
+        ) -> std::result::Result<UserQuestionResponse, String> {
+            self.0.fetch_add(1, Ordering::SeqCst);
+            Ok(UserQuestionResponse {
+                questions: request.questions,
+                answers: request.answers,
+                annotations: None,
+            })
+        }
+    }
+    #[tokio::test]
+    async fn unsupported_client_questions_are_hidden_and_forced_calls_do_not_reach_an_injected_host()
+     {
+        let root = tempfile::tempdir().unwrap();
+        let calls = Arc::new(AtomicUsize::new(0));
+        let mut engine = crate::test_support::engine_builder::TestEngineBuilder::new(root.path())
+            .settings(Settings {
+                permission_mode: kcoder_config::PermissionMode::Ask,
+                ..Default::default()
+            })
+            .tool_registry(
+                ToolRegistry::new()
+                    .register(AskUserQuestionTool)
+                    .register(FileReadTool),
+            )
+            .build_with_profile_directory();
+        assert!(
+            engine
+                .active_tool_registry()
+                .get("AskUserQuestion")
+                .is_some()
+        );
+        engine = engine.with_client_questions_supported(false);
+        engine.set_user_questioner(Arc::new(InteractiveHost(calls.clone())));
+        assert!(
+            engine
+                .active_tool_registry()
+                .get("AskUserQuestion")
+                .is_none()
+        );
+        assert!(engine.active_tool_registry().get("read").is_some());
+        assert!(engine.tools.get("AskUserQuestion").is_some());
+        assert_eq!(engine.tools.revision(), engine.tool_schema_revision);
+        engine
+            .permissions
+            .write()
+            .unwrap()
+            .allow_for_session("AskUserQuestion");
+        let (output, ..) = engine
+            .execute_tool(
+                "forced",
+                "AskUserQuestion",
+                serde_json::json!({"questions":[]}),
+                &kcoder_permissions::AutoAllowPrompt,
+            )
+            .await
+            .unwrap();
+        assert!(output.is_error);
+        assert!(
+            engine
+                .effective_user_questioner()
+                .ask(UserQuestionRequest {
+                    questions: vec![],
+                    answers: Default::default(),
+                    annotations: None
+                })
+                .await
+                .is_err()
+        );
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
+    }
+}
+
+#[cfg(test)]
+#[path = "native_settings_source_tests.rs"]
+mod native_settings_source_tests;

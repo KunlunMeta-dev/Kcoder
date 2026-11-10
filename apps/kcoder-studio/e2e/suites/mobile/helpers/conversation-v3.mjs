@@ -1,0 +1,85 @@
+import assert from "node:assert/strict";
+import { waitFor } from "../../../harness/run-context.mjs";
+
+/** Reuse the owned real Gateway and the same creation/permission controllers. */
+export async function verifyConversationV3({ page, ui, capture, back, selectVersion, provider, setHold }) {
+  await back(); await selectVersion("v3", "home");
+  await ui("home-interface-v3").waitFor();
+  await ui("home-settings").waitFor();
+  await page.reload({ waitUntil: "networkidle" });
+  await ui("home-interface-v3").waitFor({ timeout: 30_000 });
+  assert.equal(await ui("conversation-v3-background").count(), 0, "Home retains V2 presentation");
+  await ui("new-workspace-api-0").click();
+  await waitFor(async () => await ui("draft-model-selector").isEnabled(), 45_000, "V3 reuses the ready real workspace");
+  await ui("conversation-v3-background").waitFor();
+  await ui("conversation-v3-welcome-mark").waitFor();
+  assert.equal(await ui("task-header").innerText(), "", "the new conversation header does not say Home");
+  await ui("task-new").waitFor(); await ui("task-more").waitFor();
+  assert.equal(await ui("draft-permission-selector").count(), 0, "permissions move out of the composer");
+  const context = await ui("draft-context-bar").boundingBox(), composer = await ui("message-input-root").boundingBox();
+  assert.ok(context && composer && context.y + context.height <= composer.y, "target/project chips are above the composer");
+  const emptyInput = await ui("message-input").evaluate(node => ({ client: node.clientHeight, scroll: node.scrollHeight }));
+  assert.ok(emptyInput.scroll <= emptyInput.client + 1, "empty V3 input must not show a scrollbar");
+  await capture("v3-draft");
+  const originalViewport = page.viewportSize();
+  await page.setViewportSize({ width: originalViewport.width, height: 360 });
+  await ui("message-input").focus();
+  await page.waitForTimeout(150);
+  const shortTitle = await ui("new-task-draft-title").boundingBox(), shortHeader = await ui("task-header").boundingBox(), shortComposer = await ui("message-input-root").boundingBox();
+  assert.ok(shortTitle && shortHeader && shortComposer && shortTitle.y >= shortHeader.y + shortHeader.height && shortComposer.y + shortComposer.height <= 360,
+    "short viewports keep the title below navigation and input above the lower edge");
+  await capture("v3-short-viewport");
+  await page.setViewportSize(originalViewport);
+  await page.waitForTimeout(150);
+  await ui("v3-conversation-menu").click();
+  assert.equal(await ui("v3-menu-permissions").count(), 0, "navigation no longer contains permissions");
+  await ui("home-interface-v3").waitFor();
+  await capture("v3-selection"); await page.goBack(); await ui("message-input").waitFor();
+  await ui("task-more").click(); await ui("v3-draft-more").waitFor();
+  await ui("v3-menu-permissions").waitFor(); await capture("v3-draft-more"); await ui("v3-draft-more-close").click();
+  await ui("task-more").click(); await ui("v3-menu-permissions").click();
+  await ui("permission-mode-ask").click();
+  await ui("task-more").click(); await ui("v3-menu-permissions").click();
+  assert.equal(await ui("permission-mode-ask").getAttribute("aria-checked"), "true", "draft permission changes use the current creation state");
+  await capture("v3-draft-permissions"); await ui("permission-mode-close").click();
+  await ui("message-input").fill("从 V3 创建会话，保留实际项目与权限。"); await ui("send-message").click();
+  await ui("task-header").waitFor({ timeout: 45_000 });
+  await page.getByText("回合已完成。", { exact: true }).filter({ visible: true }).waitFor({ timeout: 45_000 });
+  assert.equal(await ui("composer-permission-selector").count(), 0);
+  assert.equal(await ui("v3-conversation-context").count(), 0);
+  await ui("task-more").click(); await capture("v3-conversation-more"); await ui("v3-menu-permissions").click();
+  await ui("permission-mode-default").click();
+  await ui("task-more").click(); await ui("v3-menu-permissions").click();
+  assert.equal(await ui("permission-mode-default").getAttribute("aria-checked"), "true", "the menu operates the existing live permission controller");
+  await ui("permission-mode-close").click(); await capture("v3-conversation");
+  const url = page.url();
+  setHold(true);
+  const requestsBefore = provider.requests.length;
+  await ui("message-input").fill("V3 生成期间切换回 V2。"); await ui("send-message").click();
+  await ui("stop-turn").waitFor();
+  await waitFor(() => provider.requests.length === requestsBefore + 1, 15_000, "one V3 turn accepted");
+  await ui("message-input").fill("V3 与 V2 之间保留的草稿");
+  await ui("task-more").click();
+  assert.equal(await ui("v3-menu-permissions").isDisabled(), true, "a running turn still prevents permission mutation");
+  await ui("task-menu-close").click();
+  await selectVersion("modern", "task");
+  assert.equal(page.url(), url);
+  assert.equal(await ui("message-input").inputValue(), "V3 与 V2 之间保留的草稿");
+  // The route through selection may refresh target ownership and remount the input.
+  // The durable draft and running turn must survive that transition.
+  await selectVersion("v3", "task");
+  assert.equal(await ui("message-input").inputValue(), "V3 与 V2 之间保留的草稿");
+  assert.equal(provider.requests.length, requestsBefore + 1, "changing presentation does not replay or cancel the running turn");
+  await capture("v3-running"); setHold(false);
+  await waitFor(async () => await ui("stop-turn").count() === 0, 45_000, "the original V3 turn continues to completion");
+  await back();
+  await waitFor(async () => await page.locator('[data-testid^="home-interface-"]:visible [role="progressbar"]:visible').count() === 0, 45_000, "V3 Home finishes refreshing its projects");
+  await ui("new-workspace-offline-0").scrollIntoViewIfNeeded(); await ui("new-workspace-offline-0").click();
+  await ui("conversation-v3-background").waitFor();
+  await waitFor(async () => await ui("message-input").isEditable(), 45_000, "offline V3 allows drafting without enabling submission");
+  await ui("message-input").fill("离线时先写下问题");
+  assert.equal(await ui("send-message").isDisabled(), true);
+  await ui("task-more").click();
+  assert.equal(await ui("v3-menu-permissions").isDisabled(), true);
+  await ui("v3-draft-more-close").click(); await capture("v3-offline");
+}

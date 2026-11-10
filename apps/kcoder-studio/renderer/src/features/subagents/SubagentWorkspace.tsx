@@ -1,6 +1,7 @@
 import { ArrowLeft, RefreshCw, LoaderCircle, Square, ChevronDown } from 'lucide-react'
 import { ScrollableMessageArea } from '@/components/chat/ScrollableMessageArea'
 import { ProjectChatComposer } from '@/components/chat/composer/ProjectChatComposer'
+import { ConversationWidgetsContext } from '@/components/chat/widgets/widgetContext'
 import {
   DESKTOP_MESSAGE_LIST_CLASS,
   DESKTOP_STICKY_COMPOSER_FOOTER_CLASS,
@@ -8,7 +9,7 @@ import {
   DESKTOP_SCROLL_TO_BOTTOM_BUTTON_CLASS,
 } from '@/components/layout/workbench/paneLayoutStyles'
 import { subagentConversation } from './subagentConversation'
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useEscapeKey } from '@/hooks/useEscapeKey'
 import { useTranslation } from '@/hooks/useTranslation'
@@ -26,6 +27,11 @@ import {
 } from './subagentWorkspaceState'
 
 export interface SubagentWorkspaceProps {
+  /** Observer-only host: no composer, runtime controls, approval UI or App actions. */
+  readOnly?: boolean
+  /** Native run commands may remain available while message/App content stays passive. */
+  readOnlyMessages?: boolean
+  instructionHint?: string
   agent: RuntimeSubagentStatus
   parentLabel?: string
   role?: string
@@ -89,6 +95,7 @@ const controlClass =
 
 /** A view of an existing worker: opening or closing never changes its lifecycle. */
 export function SubagentWorkspace(props: SubagentWorkspaceProps) {
+  const widgets = useContext(ConversationWidgetsContext)
   const { t } = useTranslation('common')
   const mobile = useIsMobile()
   const { agent, connected, canSteer, onReadArtifact, onSteer, onLookupCommand, onClose } = props
@@ -278,6 +285,7 @@ export function SubagentWorkspace(props: SubagentWorkspaceProps) {
     const message = submittedValue.trim()
     if (
       !message ||
+      props.readOnly ||
       !connected ||
       !canSteer ||
       archiving ||
@@ -335,7 +343,14 @@ export function SubagentWorkspace(props: SubagentWorkspaceProps) {
   }
 
   const archive = async () => {
-    if (!props.onArchiveCommands || archiving || !connected || !props.canArchiveCommands) return
+    if (
+      props.readOnly ||
+      !props.onArchiveCommands ||
+      archiving ||
+      !connected ||
+      !props.canArchiveCommands
+    )
+      return
     setArchiving(true)
     try {
       const ids = displayedCommands
@@ -351,7 +366,7 @@ export function SubagentWorkspace(props: SubagentWorkspaceProps) {
   }
 
   const stop = async () => {
-    if (!props.onStop || !props.canStop || stopping || !connected) return
+    if (props.readOnly || !props.onStop || !props.canStop || stopping || !connected) return
     setStopping(true)
     const runId = props.runId
     try {
@@ -386,7 +401,7 @@ export function SubagentWorkspace(props: SubagentWorkspaceProps) {
     }
   }
 
-  return createPortal(
+  const portal = createPortal(
     <div
       className="fixed inset-0 z-modal flex bg-background"
       style={{ left: pageBounds.left, top: pageBounds.top }}
@@ -447,7 +462,7 @@ export function SubagentWorkspace(props: SubagentWorkspaceProps) {
               connected && <LoaderCircle className="size-3 animate-spin" />}
             {t(`workbench.subagent_${agent.status}`)}
           </span>
-          {props.canStop && props.onStop && (
+          {!props.readOnly && props.canStop && props.onStop && (
             <button
               type="button"
               data-testid="subagent-workspace-stop"
@@ -491,7 +506,7 @@ export function SubagentWorkspace(props: SubagentWorkspaceProps) {
                   ))}
               </dl>
             </details>
-            {!connected && (
+            {!connected && !props.readOnly && (
               <p role="status" className="mb-3 text-sm text-text-secondary">
                 {t('workbench.subagent_detail_disconnected')}
               </p>
@@ -564,10 +579,12 @@ export function SubagentWorkspace(props: SubagentWorkspaceProps) {
             )}
             {props.conversationError && (
               <p role="status" className="mb-2 text-sm text-text-secondary">
-                {t('workbench.subagent_detail_stream_error')}
+                {props.readOnly || props.readOnlyMessages
+                  ? props.conversationError
+                  : t('workbench.subagent_detail_stream_error')}
               </p>
             )}
-            {props.canReadTranscript === false && (
+            {props.canReadTranscript === false && !structuredConversation && (
               <p className="mb-3 text-xs text-text-muted">
                 {t('workbench.subagent_detail_public_history_unavailable')}
               </p>
@@ -620,11 +637,11 @@ export function SubagentWorkspace(props: SubagentWorkspaceProps) {
             scrollTestId="subagent-workspace-scroll"
             messageListClassName={mobile ? undefined : DESKTOP_MESSAGE_LIST_CLASS}
             scrollButtonClassName={DESKTOP_SCROLL_TO_BOTTOM_BUTTON_CLASS}
-            hideRequestUserInputBlocks={Boolean(props.interactions)}
+            hideRequestUserInputBlocks={props.readOnly || props.readOnlyMessages || Boolean(props.interactions)}
             stickyFooterClassName={`${DESKTOP_STICKY_COMPOSER_FOOTER_CLASS} from-background via-background`}
             stickyFooter={
               <div className={mobile ? 'mx-auto w-full px-4' : DESKTOP_STICKY_COMPOSER_LAYER_CLASS}>
-                {props.interactions}
+                {!props.readOnly && !props.readOnlyMessages && props.interactions}
                 <div className="max-h-48 overflow-y-auto">
                   {visibleCommandReceipts.length > 0 && (
                     <ol data-testid="subagent-workspace-commands" className="space-y-2 pb-2">
@@ -666,7 +683,8 @@ export function SubagentWorkspace(props: SubagentWorkspaceProps) {
                       {t('workbench.subagent_detail_capacity')}
                     </p>
                   )}
-                  {props.onArchiveCommands &&
+                  {!props.readOnly &&
+                    props.onArchiveCommands &&
                     (!structuredConversation ||
                       (props.retainedCommandCount ?? 0) >= (props.commandLimit ?? 256)) && (
                       <button
@@ -689,37 +707,47 @@ export function SubagentWorkspace(props: SubagentWorkspaceProps) {
                       </button>
                     )}
                 </div>
-                <ProjectChatComposer
-                  textOnly
-                  inputTestId="subagent-workspace-input"
-                  sendTestId="subagent-workspace-send"
-                  pauseTestId="subagent-workspace-pause"
-                  value={draft}
-                  onChange={setDraft}
-                  onSubmit={value => void submit(value)}
-                  disabled={false}
-                  submitDisabled={
-                    !connected ||
-                    !canSteer ||
-                    archiving ||
-                    unresolvedDuplicate ||
-                    (props.retainedCommandCount ?? 0) >= (props.commandLimit ?? 256)
-                  }
-                  placeholder={t('workbench.subagent_steer_message')}
-                  isStreaming={Boolean(props.conversationActive && connected)}
-                  onPause={
-                    props.canStop && props.onStop && !stopping ? () => void stop() : undefined
-                  }
-                  toolbarLeadingContext={
-                    <span className="text-xs text-text-muted">
-                      {t(
-                        canSteer
-                          ? 'workbench.subagent_detail_compose_hint'
-                          : 'workbench.subagent_detail_read_only'
-                      )}
-                    </span>
-                  }
-                />
+                {!props.readOnly && (
+                  <ProjectChatComposer
+                    inputHistory={displayedCommands.flatMap(command =>
+                      command.message ? [command.message] : []
+                    )}
+                    inputHistoryScope={JSON.stringify([
+                      props.conversationKey,
+                      agent.agentId,
+                      props.runId,
+                    ])}
+                    textOnly
+                    inputTestId="subagent-workspace-input"
+                    sendTestId="subagent-workspace-send"
+                    pauseTestId="subagent-workspace-pause"
+                    value={draft}
+                    onChange={setDraft}
+                    onSubmit={value => void submit(value)}
+                    disabled={false}
+                    submitDisabled={
+                      !connected ||
+                      !canSteer ||
+                      archiving ||
+                      unresolvedDuplicate ||
+                      (props.retainedCommandCount ?? 0) >= (props.commandLimit ?? 256)
+                    }
+                    placeholder={t('workbench.subagent_steer_message')}
+                    isStreaming={Boolean(props.conversationActive && connected)}
+                    onPause={
+                      props.canStop && props.onStop && !stopping ? () => void stop() : undefined
+                    }
+                    toolbarLeadingContext={
+                      <span className="text-xs text-text-muted">
+                        {props.instructionHint ?? t(
+                          canSteer
+                            ? 'workbench.subagent_detail_compose_hint'
+                            : 'workbench.subagent_detail_read_only'
+                        )}
+                      </span>
+                    }
+                  />
+                )}
               </div>
             }
           />
@@ -727,5 +755,10 @@ export function SubagentWorkspace(props: SubagentWorkspaceProps) {
       </section>
     </div>,
     document.body
+  )
+  return (
+    <ConversationWidgetsContext.Provider value={props.readOnly || props.readOnlyMessages ? null : widgets}>
+      {portal}
+    </ConversationWidgetsContext.Provider>
   )
 }

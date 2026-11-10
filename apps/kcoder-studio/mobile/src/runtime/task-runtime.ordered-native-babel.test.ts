@@ -10,6 +10,7 @@ import {
   canAcceptToolCallUpdate,
   decodeToolCallStatus,
 } from "../../../shared/toolCallStatus";
+import { normalizeWebSources } from "../../../shared/webSources";
 
 const projectRoot = path.resolve(path.dirname(import.meta.filename), "../..");
 const taskRuntimeRoot = path.join(projectRoot, "src/runtime/task-runtime");
@@ -69,7 +70,9 @@ function loadExpoTransformedReducerFunction(
     })
     .join("\n");
 
-  const metro = getDefaultConfig(projectRoot);
+  const metro = getDefaultConfig(projectRoot) as {
+    transformer: { babelTransformerPath: string };
+  };
   const transformer = require(metro.transformer.babelTransformerPath) as {
     transform(input: {
       filename: string;
@@ -101,7 +104,7 @@ function loadExpoTransformedReducerFunction(
   const module = { exports: {} as Record<string, unknown> };
   vm.runInNewContext(
     `${commonJs.code}\nmodule.exports.target = ${functionName};`,
-    { module, exports: module.exports, require, ...bindings },
+    { module, exports: module.exports, require, normalizeWebSources, ...bindings },
   );
   const target = module.exports.target;
   if (typeof target !== "function")
@@ -352,7 +355,9 @@ describe("Expo Android Babel for ordered TaskRuntime helpers", () => {
   });
 
   it("transforms the ordered transcript UI module through Expo Android Metro", () => {
-    const metro = getDefaultConfig(projectRoot);
+    const metro = getDefaultConfig(projectRoot) as {
+      transformer: { babelTransformerPath: string };
+    };
     const transformer = require(metro.transformer.babelTransformerPath) as {
       transform(input: {
         filename: string;

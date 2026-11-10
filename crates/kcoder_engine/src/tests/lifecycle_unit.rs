@@ -7,7 +7,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 fn lifecycle_test_engine(cwd: &Path) -> QueryEngine {
-    TestEngineBuilder::new(cwd).build()
+    TestEngineBuilder::new(cwd).build_with_profile_directory()
 }
 
 fn test_engine_with_settings_and_trust(
@@ -20,7 +20,7 @@ fn test_engine_with_settings_and_trust(
         .provider(provider)
         .settings(settings)
         .folder_trusted(folder_trusted)
-        .build()
+        .build_with_profile_directory()
 }
 
 #[test]

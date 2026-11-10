@@ -126,8 +126,8 @@ export function DesktopAppSwitcher({
     const appOptions: AppOption[] = [
       {
         key: 'studio',
-        label: t('workbench.app_wework_label', '任务'),
-        description: t('workbench.app_wework_description', '使用 AI 解决具体问题'),
+        label: t('workbench.app_studio_label', '任务'),
+        description: t('workbench.app_studio_description', '使用 AI 解决具体问题'),
       },
     ]
 

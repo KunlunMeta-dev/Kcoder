@@ -371,9 +371,6 @@
   font-size: var(--text-xs);
   letter-spacing: 0.25em;
 }
-.kcoder-startup-shell [data-testid='local-runtime-slow-startup-icon'] {
-  color: #92400e;
-}
 @keyframes kcoder-startup-enter {
   from {
     opacity: 0;

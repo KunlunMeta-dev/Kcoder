@@ -34,7 +34,7 @@
 <section class="hero">
   <div class="wrap hero-grid">
     <div class="hero-copy">
-      <p class="eyebrow">Rust · workspace v0.1.0 · Studio v0.3.41 · edition 2024 · MIT license</p>
+      <p class="eyebrow">Rust · workspace v0.1.0 · Studio v2.0.9 · edition 2024 · MIT license</p>
       <h1>An <span class="accent">open-source AI coding platform</span>, built in Rust.</h1>
       <p class="lede">
         KCoder covers model providers, the agent loop, tool systems, permissions and sandboxing,
@@ -47,10 +47,10 @@
         <a class="cta ghost" href="#architecture">See the architecture</a>
       </div>
       <ul class="hero-stats" role="list">
-        <li><strong data-source-fact="crates.product.count">21</strong><span>product crates</span></li>
+        <li><strong data-source-fact="crates.product.count">90</strong><span>product crates</span></li>
         <li><strong data-source-fact="wiki.stages.count">7</strong><span>Wiki stages</span></li>
         <li><strong data-source-fact="api.formats.count">4</strong><span>model API formats</span></li>
-        <li><strong data-source-fact="tools.full.range">65–67</strong><span>full-profile registrations</span></li>
+        <li><strong data-source-fact="tools.full.range">67–69</strong><span>full-profile registrations</span></li>
       </ul>
     </div>
     <aside class="hero-card" aria-label="Quick start example">
@@ -177,12 +177,18 @@
     </div>
 
     <details class="arch-table">
-      <summary>Show all 21 product crates (plus 3 test workspace crates)</summary>
+      <summary>Show product crates and test workspace crates</summary>
       <table>
         <thead><tr><th>Crate</th><th>Responsibility</th><th>Layer</th></tr></thead>
         <tbody>
           <tr><td><code>kcoder_repl</code></td><td>Terminal UI, slash commands, rendering, scrolling, overlays, clipboard, external editor.</td><td>Interface</td></tr>
+          <tr><td><code>kcoder_foreground_runtime</code></td><td>Admitted turn event-loop execution over the original borrowed state.</td><td>Turn runtime</td></tr>
+          <tr><td><code>kcoder_foreground_work</code></td><td>Foreground continuous-work input admission and application.</td><td>Runtime support</td></tr>
+          <tr><td><code>kcoder_turn_lifecycle</code></td><td>Turn admission, retry receipts and recent error projection.</td><td>Runtime support</td></tr>
+          <tr><td><code>kcoder_turn_evidence</code></td><td>Turn file observations and tool review evidence.</td><td>Runtime support</td></tr>
+          <tr><td><code>kcoder_shell_isolation</code></td><td>Shell sandbox enforcement and environment snapshots.</td><td>Runtime support</td></tr>
           <tr><td><code>kcoder_tools</code></td><td>Base registries, file/Shell/search/Agent tools, Cron, Workflow and Wiki adapters; post-write diagnostics.</td><td>Capabilities</td></tr>
+          <tr><td><code>kcoder_file_search</code></td><td>Bounded local Grep and Glob scanning and pagination.</td><td>Capabilities</td></tr>
           <tr><td><code>kcoder_engine</code></td><td>Query main loop, streaming, layered compaction, session memory, tool repair, sub-agents, Goal Pro, MoA, TDD guard.</td><td>Orchestration</td></tr>
           <tr><td><code>kcoder_cli</code></td><td><code>kcoder</code> binary: headless, JSON events, daemon, app-server, marketplace/plugin/config/auth commands.</td><td>Entry point</td></tr>
           <tr><td><code>kcoder_state</code></td><td>AppState, session snapshots, transcript, history, tasks, todos, goals, checkpoints.</td><td>Persistence</td></tr>
@@ -191,16 +197,79 @@
           <tr><td><code>kcoder_plugins</code></td><td>Plugin discovery (trust gate), manifests, marketplace, MCP/hook contributions.</td><td>Extensions</td></tr>
           <tr><td><code>kcoder_api</code></td><td>Provider trait, Anthropic/OpenAI/Gemini/Grok clients, streaming, typed transport failures.</td><td>Model transport</td></tr>
           <tr><td><code>kcoder_mcp</code></td><td>MCP transports (stdio / legacy SSE / Streamable HTTP), OAuth authorization, tool bridge.</td><td>Extension transport</td></tr>
+          <tr><td><code>kcoder_migration</code></td><td>Claude Code/Codex configuration candidates, explicit single-Provider import and conservative rollback; full migration is not yet available.</td><td>Migration services</td></tr>
+          <tr><td><code>kcoder_migration_client</code></td><td>Migration command arguments, terminal guides and public RPC projections, compiled independently of Engine and REPL.</td><td>CLI adapter</td></tr>
+          <tr><td><code>kcoder_fs</code></td><td>Private filesystem handles, permissions, atomic publication and source-read safety primitives.</td><td>Filesystem services</td></tr>
+          <tr><td><code>kcoder_tui_render</code></td><td>Markdown, syntax highlighting, themes and terminal text layout independent of Engine.</td><td>Presentation</td></tr>
+          <tr><td><code>kcoder_office_worker</code></td><td>Owned Office generation and read-only document subprocesses.</td><td>Process adapters</td></tr>
+          <tr><td><code>kcoder_native_scope</code></td><td>Native integration identity, domain storage and scope checks.</td><td>Integration infrastructure</td></tr>
+          <tr><td><code>kcoder_host_transport</code></td><td>Bounded JSONL, host RPC and supervised child launch.</td><td>Integration infrastructure</td></tr>
+          <tr><td><code>kcoder_session_configuration</code></td><td>Session settings, model refresh, and scoped MCP snapshots.</td><td>Runtime support</td></tr>
+          <tr><td><code>kcoder_cli_runtime</code></td><td>CLI startup, headless modes and App Server.</td><td>Runtime wiring</td></tr>
+          <tr><td><code>kcoder_browser</code></td><td>Owned Chromium sessions and browser profile catalog.</td><td>Browser service</td></tr>
+          <tr><td><code>kcoder_attachment_retention</code></td><td>Private attachment retention, verified receipts and cleanup.</td><td>Storage service</td></tr>
+          <tr><td><code>kcoder_migration_rpc</code></td><td>Native migration RPC, source authorization and job workers.</td><td>RPC adapter</td></tr>
+          <tr><td><code>kcoder_runtime_driver</code></td><td>Durable Native task queue, receipts and workflow pins.</td><td>CLI services</td></tr>
+          <tr><td><code>kcoder_native_model_admission</code></td><td>Organization model admission, task budgets and Native Workflow provenance.</td><td>Runtime support</td></tr>
+          <tr><td><code>kcoder_app_interactions</code></td><td>Approval and question protocol and bound reply receipts.</td><td>Runtime support</td></tr>
+          <tr><td><code>kcoder_app_events</code></td><td>App Server notifications and background event delivery.</td><td>CLI services</td></tr>
+          <tr><td><code>kcoder_cli_storage</code></td><td>Storage diagnostics, transcript journals, pagination and workspace search.</td><td>CLI services</td></tr>
+          <tr><td><code>kcoder_cli_commands</code></td><td>CLI arguments, administrative commands and session model configuration.</td><td>CLI services</td></tr>
+          <tr><td><code>kcoder_project_automation</code></td><td>Project cron requests, trigger delivery and reconciliation.</td><td>Runtime support</td></tr>
+          <tr><td><code>kcoder_workspace_rpc</code></td><td>Workspace and project registry operations and authorized file search.</td><td>Runtime support</td></tr>
+          <tr><td><code>kcoder_workspace_resources</code></td><td>Workspace files, revisions and owned terminal sessions.</td><td>Workspace service</td></tr>
+          <tr><td><code>kcoder_permission_rules</code></td><td>Permission evaluation, prompt context, and audit.</td><td>Authorization service</td></tr>
+          <tr><td><code>kcoder_native_delegation</code></td><td>Signed native service delegations and durable revocation.</td><td>Authorization service</td></tr>
+          <tr><td><code>kcoder_application_host_runtime</code></td><td>Owned application host, private pipe, kernel leases and process cleanup.</td><td>Application runtime</td></tr>
+          <tr><td><code>kcoder_native_outbound</code></td><td>Accepted-turn outgoing execution, source budgets, material transfer and original receipt reconciliation.</td><td>Native orchestration</td></tr>
+          <tr><td><code>kcoder_engine_factory</code></td><td>Concrete Engine construction and temporary MCP setup; Native installation and task admission stay with the host.</td><td>App-server composition</td></tr>
+          <tr><td><code>kcoder_native_service_runtime</code></td><td>Original signed service owners, live process fences and lease ancestry.</td><td>Native runtime</td></tr>
+          <tr><td><code>kcoder_native_receipts</code></td><td>Native operations, policy, budgets, service leases and original receipt reads.</td><td>Storage service</td></tr>
+          <tr><td><code>kcoder_native_journal</code></td><td>Remote delegation journals bound to the original session and transport.</td><td>Storage service</td></tr>
+          <tr><td><code>kcoder_knowledge_rpc</code></td><td>Target Wiki catalog and archive RPC.</td><td>Host service</td></tr>
+          <tr><td><code>kcoder_cli_headless</code></td><td>Headless turns and owned cleanup.</td><td>CLI service</td></tr>
+          <tr><td><code>kcoder_cli_support</code></td><td>Shared CLI JSON events and build identity.</td><td>CLI service</td></tr>
+          <tr><td><code>kcoder_connectivity_storage</code></td><td>Native channel credentials and event routing.</td><td>Storage service</td></tr>
+          <tr><td><code>kcoder_web</code></td><td>Web access policy, search contracts and provider protocols.</td><td>Web access</td></tr>
+          <tr><td><code>kcoder_tool_error</code></td><td>Shared tool failure contract.</td><td>Runtime support</td></tr>
+          <tr><td><code>kcoder_tool_input</code></td><td>Tool input schema projection, coercion and validation.</td><td>Input contracts</td></tr>
+          <tr><td><code>kcoder_mcp_policy</code></td><td>MCP configuration policy, credentials and tool names.</td><td>Configuration</td></tr>
+          <tr><td><code>kcoder_mcp_app_runtime</code></td><td>Dedicated MCP App connections and tool adapters.</td><td>Runtime support</td></tr>
+          <tr><td><code>kcoder_mcp_app_storage</code></td><td>MCP App operation receipts and resource cache.</td><td>Storage</td></tr>
+          <tr><td><code>kcoder_provider_transactions</code></td><td>Provider configuration and credential transactions.</td><td>Configuration</td></tr>
+          <tr><td><code>kcoder_plugin_rpc</code></td><td>Plugin marketplace, installation and status RPC.</td><td>RPC adapter</td></tr>
+          <tr><td><code>kcoder_attachments</code></td><td>Connection-owned attachment staging and bounded attachment I/O.</td><td>Storage</td></tr>
+          <tr><td><code>kcoder_transcript</code></td><td>History-to-protocol transcript projection.</td><td>Projection service</td></tr>
           <tr><td><code>kcoder_skills</code></td><td>SkillStore transactions, built-in skill materialization, external directory loading.</td><td>Resources</td></tr>
           <tr><td><code>kcoder_memory</code></td><td>SQLite structured memory with FTS5 retrieval, observer, privacy policy.</td><td>Domain service</td></tr>
+          <tr><td><code>kcoder_channel_protocol</code></td><td>Channel, Connectivity, and external task wire types.</td><td>Wire contracts</td></tr>
+          <tr><td><code>kcoder_integration_storage</code></td><td>Native integration storage and original turn-attempt receipts.</td><td>Runtime support</td></tr>
+          <tr><td><code>kcoder_integration_protocol</code></td><td>Host, Wiki, Office, model policy, and remote target wire types.</td><td>Wire contracts</td></tr>
+          <tr><td><code>kcoder_transcript_observation</code></td><td>Bounded transcript artifact capture and decoding.</td><td>Runtime support</td></tr>
+          <tr><td><code>kcoder_thread_metadata</code></td><td>Thread metadata storage, lifecycle locks, and projections.</td><td>Runtime support</td></tr>
+          <tr><td><code>kcoder_schedule</code></td><td>Shared schedule calendar calculations.</td><td>Domain service</td></tr>
+          <tr><td><code>kcoder_skill_support</code></td><td>Skill package input and local metadata services.</td><td>Domain service</td></tr>
+          <tr><td><code>kcoder_application_receipts</code></td><td>Original application receipts, readback, and exported content verification.</td><td>Domain service</td></tr>
+          <tr><td><code>kcoder_knowledge_management</code></td><td>Wiki, memory, and automation management handlers.</td><td>Domain service</td></tr>
+          <tr><td><code>kcoder_document_parsers</code></td><td>Bounded HTML and Office document text parsers.</td><td>Tools</td></tr>
+          <tr><td><code>kcoder_task_delivery</code></td><td>Task delivery receipts and read-only Git and Forge observations.</td><td>Task delivery</td></tr>
+          <tr><td><code>kcoder_async_box</code></td><td>Generic async-trait future boxing with unchanged lifetime and Send contracts.</td><td>Compile-time adapter</td></tr>
+          <tr><td><code>kcoder_app_rpc_codec</code></td><td>JSON codecs for app-server requests and responses.</td><td>Wire contracts</td></tr>
           <tr><td><code>kcoder_app_protocol</code></td><td>app-server protocol JSON-RPC wire types shared by desktop/Web/server.</td><td>Wire contracts</td></tr>
+          <tr><td><code>kcoder_acp</code></td><td>Experimental ACP v1 sessions, private stdio MCP, approvals and cancellation; Linux client acceptance passed, Windows native acceptance pending.</td><td>Protocol adapter</td></tr>
           <tr><td><code>kcoder_hooks</code></td><td>Hook types, matching, execution, secret redaction.</td><td>Lifecycle</td></tr>
           <tr><td><code>kcoder_permissions</code></td><td>Permission decisions, prompts, audit, bash risk classification (tree-sitter decomposition).</td><td>Policy</td></tr>
           <tr><td><code>kcoder_process_supervisor</code></td><td>Cross-platform process supervisor binary (<code>kcoder-process-supervisor</code>).</td><td>Infrastructure</td></tr>
+          <tr><td><code>kcoder_common_types</code></td><td>Common contracts.</td><td>Wire contracts</td></tr>
+          <tr><td><code>kcoder_integration_types</code></td><td>Integration contracts.</td><td>Wire contracts</td></tr>
+          <tr><td><code>kcoder_session_types</code></td><td>Session contracts.</td><td>Wire contracts</td></tr>
           <tr><td><code>kcoder_types</code></td><td>Provider/tool/TUI shared message and schema types.</td><td>Shared contracts</td></tr>
+          <tr><td><code>kcoder_workflow_observations</code></td><td>Workflow run observations, archives and control receipts.</td><td>Runtime support</td></tr>
           <tr><td><code>kcoder_workflow</code></td><td>Restricted JavaScript and typed graph execution, validation and compatible checkpoints.</td><td>Execution</td></tr>
+          <tr><td><code>kcoder_workflow_rpc</code></td><td>Workflow Canvas library and observation RPCs.</td><td>Runtime support</td></tr>
           <tr><td><code>kcoder_knowledge</code></td><td>Wiki sources, pages, citations, staged jobs, checkpoints and portable archives.</td><td>Domain service</td></tr>
           <tr><td><code>kcoder_computer_use</code></td><td>Leased desktop broker/worker transport, action receipts and owned input cleanup.</td><td>Desktop control</td></tr>
+          <tr><td><code>kcoder_desktop_recovery</code></td><td>Desktop recovery grants, claims and cleanup receipts.</td><td>Desktop control</td></tr>
           <tr><td><code>kcoder_query</code></td><td>Compatibility re-exports of Engine; no separate query loop.</td><td>Compatibility</td></tr>
         </tbody>
       </table>
@@ -267,7 +336,7 @@
       <article class="feature">
         <div class="feature-icon" aria-hidden="true">🖥️</div>
         <h3>KCoder Studio</h3>
-        <p>Desktop (Electron + Tauri), Web, and mobile clients over the Gateway and JSON-RPC app-server: workbench, account isolation, SSH/remote targets, file menus, terminals, usage dashboards, and scheduled-task management.</p>
+        <p>Desktop (Electron), Web, and mobile clients over the Gateway and JSON-RPC app-server: workbench, account isolation, SSH/remote targets, file menus, terminals, usage dashboards, and scheduled-task management.</p>
       </article>
     </div>
   </div>
@@ -378,7 +447,7 @@ kcoder --provider kunlunmeta "hi"</code></pre>
     <header class="section-head">
       <h2>Built-in Tools</h2>
       <p>Tools implement the <code>Tool</code> trait in <code>kcoder_tools</code> and register with role-scoped registries (core, orchestrator, worker). Every tool honors the active permission mode and bounded-output rules.</p>
-      <p>The base full registry has 64 tools and one platform shell. CLI adds Config (65); enabling one Wiki capability gives 66, and enabling retrieval plus organization gives 67. Core has 28–30, nano 11–13, and none 0. MCP, plugins and desktop tools add separately; model and role filters can reduce exposure. There are 21 product crates and 3 test crates in the 24-member Rust workspace.</p>
+      <p>The base full registry has 64 tools and one platform shell. CLI adds Config (65); enabling one Wiki capability gives 66, and enabling retrieval plus organization gives 67. Core has 28–30, nano 11–13, and none 0. MCP, plugins and desktop tools add separately; model and role filters can reduce exposure. There are 90 product crates and 3 test crates in the 93-member Rust workspace.</p>
     </header>
 
     <div class="tools-grid">

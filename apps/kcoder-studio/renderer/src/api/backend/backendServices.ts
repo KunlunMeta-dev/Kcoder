@@ -26,7 +26,6 @@ export interface BackendWorkbenchServicesOptions {
   socketBaseUrl: string
   socketPath: string
   getToken: () => string | null
-  redirectOnUnauthorized?: boolean
   transportKind?: ExecutorTransportKind
 }
 
@@ -42,7 +41,6 @@ export function createBackendWorkbenchServices(
   const client = createHttpClient({
     baseUrl: apiBaseUrl,
     getToken: resolveToken,
-    redirectOnUnauthorized: options.redirectOnUnauthorized,
   })
   const deviceApi = createDeviceApi(client)
   const projectApi = createProjectApi(client)

@@ -1,24 +1,9 @@
 //! Notification projection: extracted from the app-server connection boundary.
 
 use super::*;
+use kcoder_transcript::{TOOL_PREVIEW_BYTES, input_preview, tool_images, truncate_utf8_bytes};
 
 const STREAM_TEXT_CHUNK_BYTES: usize = 128 * 1024;
-const TOOL_PREVIEW_BYTES: usize = 64 * 1024;
-
-pub(super) fn input_preview(input: Value) -> (Value, bool, usize) {
-    let encoded = serde_json::to_string(&input).expect("tool input serializes");
-    let bytes = encoded.len();
-    if bytes <= TOOL_PREVIEW_BYTES {
-        return (input, false, bytes);
-    }
-    let (preview, _, _) = truncate_utf8_bytes(encoded, TOOL_PREVIEW_BYTES);
-    (
-        json!({"_truncated":true,"_preview":preview,"_original_bytes":bytes}),
-        true,
-        bytes,
-    )
-}
-
 fn text_chunks(text: &str) -> impl Iterator<Item = &str> {
     let mut rest = text;
     std::iter::from_fn(move || {
@@ -36,13 +21,14 @@ fn text_chunks(text: &str) -> impl Iterator<Item = &str> {
 }
 
 impl StreamProjection {
-    pub(super) fn new(
+    pub fn new(
         server_id: String,
         thread_id: String,
         turn_id: String,
         sequence: Arc<AtomicU64>,
     ) -> Self {
         Self {
+            native_child_sources: false,
             server_id,
             thread_id,
             item_namespace: turn_id.clone(),
@@ -54,7 +40,7 @@ impl StreamProjection {
         }
     }
 
-    pub(super) fn params(&self, payload: Value) -> Value {
+    pub fn params(&self, payload: Value) -> Value {
         with_event_context(
             &self.server_id,
             &self.thread_id,
@@ -64,11 +50,11 @@ impl StreamProjection {
         )
     }
 
-    pub(super) fn project(&mut self, event: EngineEvent) -> Vec<Value> {
+    pub fn project(&mut self, event: EngineEvent) -> Vec<Value> {
         self.project_with_client_message_id(event, None)
     }
 
-    pub(super) fn project_with_client_message_id(
+    pub fn project_with_client_message_id(
         &mut self,
         event: EngineEvent,
         client_message_id: Option<String>,
@@ -133,6 +119,10 @@ impl StreamProjection {
                     })
                     .collect()
             }
+            EngineEvent::AssistantStopReason { reason } => vec![notification(
+                "item/event",
+                self.params(json!({"event":{"type":"assistant_stop_reason","reason":reason}})),
+            )],
             EngineEvent::AssistantMessageDone => self
                 .assistant_item
                 .take()
@@ -156,6 +146,12 @@ impl StreamProjection {
                     )
                 })
                 .collect(),
+            EngineEvent::WidgetInputPreview { id, preview } => vec![notification(
+                "item/event",
+                self.params(json!({"attemptId":self.item_namespace,"event":{
+                    "type":"widget_input_preview","id":id,"preview":preview
+                }})),
+            )],
             EngineEvent::ToolUseStarted { id, name, input } => {
                 // Full arguments remain in authoritative history; the live preview must fit
                 // even when JSON escaping expands control characters sixfold.
@@ -169,7 +165,30 @@ impl StreamProjection {
                 )]
             }
             EngineEvent::ToolResult { id, name, output } => {
-                let (images, images_omitted) = tool_images::observations(&output.content);
+                let (images, images_omitted) = tool_images::observations(&name, &output.content);
+                let widget = output
+                    .execution_metadata
+                    .iter()
+                    .find_map(|metadata| match metadata {
+                        kcoder_tools::ToolExecutionMetadata::Widget(widget) => Some(widget.clone()),
+                        _ => None,
+                    });
+                let web_sources =
+                    output
+                        .execution_metadata
+                        .iter()
+                        .find_map(|metadata| match metadata {
+                            kcoder_tools::ToolExecutionMetadata::WebSources(receipt)
+                                if (receipt.matches(&self.thread_id, &id)
+                                    && receipt.identity.turn_id == self.turn_id
+                                    && receipt.identity.attempt_id == self.item_namespace)
+                                    || (self.native_child_sources
+                                        && receipt.matches(&receipt.identity.thread_id, &id)) =>
+                            {
+                                Some(receipt.clone())
+                            }
+                            _ => None,
+                        });
                 let mut raw = engine_event_json(EngineEvent::ToolResult {
                     id: id.clone(),
                     name: name.clone(),
@@ -187,6 +206,7 @@ impl StreamProjection {
                 vec![notification(
                     "item/completed",
                     self.params(json!({
+                        "attemptId": self.item_namespace,
                         "item": {
                             "id": id,
                             "type": "toolCall",
@@ -197,6 +217,8 @@ impl StreamProjection {
                             "outputOriginalBytes": bytes,
                             "outputImages": images,
                             "outputImagesOmitted": images_omitted,
+                            "widgetRef": widget,
+                            "webSources": web_sources,
                         },
                     })),
                 )]
@@ -209,7 +231,7 @@ impl StreamProjection {
     }
 }
 
-pub(super) fn background_event_id(event: &EngineEvent) -> Option<&str> {
+pub fn background_event_id(event: &EngineEvent) -> Option<&str> {
     match event.background_payload() {
         EngineEvent::BackgroundJobStarted { id, .. }
         | EngineEvent::SubagentSteerApplied { agent_id: id, .. }
@@ -225,14 +247,14 @@ pub(super) fn background_event_id(event: &EngineEvent) -> Option<&str> {
     }
 }
 
-pub(super) fn tool_can_spawn_managed_background_job(name: &str) -> bool {
+pub fn tool_can_spawn_managed_background_job(name: &str) -> bool {
     matches!(
         name,
         "spawn_agent" | "explore_agent" | "PlanAgent" | "Workflow"
     )
 }
 
-pub(super) fn is_background_terminal_event(event: &EngineEvent) -> bool {
+pub fn is_background_terminal_event(event: &EngineEvent) -> bool {
     matches!(
         event.background_payload(),
         EngineEvent::BackgroundJobCompleted { .. }
@@ -242,7 +264,7 @@ pub(super) fn is_background_terminal_event(event: &EngineEvent) -> bool {
     )
 }
 
-pub(super) fn agent_steer_result_from_receipt(
+pub fn agent_steer_result_from_receipt(
     client_message_id: Option<String>,
     receipt: kcoder_tools::SubagentSteerReceipt,
 ) -> AgentSteerResult {
@@ -267,10 +289,11 @@ pub(super) fn agent_steer_result_from_receipt(
         queue_position: receipt.queue_position,
         reason_code: receipt.reason_code,
         client_message_id,
+        expected_background_run: None,
     }
 }
 
-pub(super) fn with_event_context(
+pub fn with_event_context(
     server_id: &str,
     thread_id: &str,
     turn_id: Option<&str>,
@@ -292,19 +315,40 @@ pub(super) fn with_event_context(
     payload
 }
 
-pub(super) fn turn_completion_error(
+pub fn turn_completion_error(
     message: Option<String>,
     details: Option<kcoder_types::ProviderFailureDetails>,
 ) -> Option<Value> {
     message.map(|message| json!({"code": -32010, "message": message, "details": details}))
 }
 
+pub fn file_progress_notification(
+    server_id: &str,
+    thread_id: &str,
+    turn_id: &str,
+    sequence: &AtomicU64,
+    tool_id: Option<&str>,
+    counts: kcoder_types::tool_ui::WorkspaceFileProgress,
+) -> Value {
+    let event = match tool_id {
+        Some(id) => json!({"type":"tool_file_progress","id":id,"counts":counts}),
+        None => json!({"type":"workspace_file_progress","counts":counts}),
+    };
+    notification(
+        "item/event",
+        with_event_context(
+            server_id,
+            thread_id,
+            Some(turn_id),
+            sequence,
+            json!({"event":event}),
+        ),
+    )
+}
+
 /// Cancellation can close a provider socket before its transport returns an error.
 /// Normalize before persisting or projecting the event, not only at turn completion.
-pub(super) fn normalize_cancelled_terminal_event(
-    event: EngineEvent,
-    cancelled: bool,
-) -> EngineEvent {
+pub fn normalize_cancelled_terminal_event(event: EngineEvent, cancelled: bool) -> EngineEvent {
     if cancelled
         && matches!(
             &event,
@@ -321,10 +365,7 @@ pub(super) fn normalize_cancelled_terminal_event(
     }
 }
 
-pub(super) fn terminal_outcome(
-    event: &EngineEvent,
-    cancelled: bool,
-) -> Option<(&'static str, String)> {
+pub fn terminal_outcome(event: &EngineEvent, cancelled: bool) -> Option<(&'static str, String)> {
     match event {
         EngineEvent::Error(message) | EngineEvent::ProviderFailed { message, .. } => {
             Some(("failed", message.clone()))

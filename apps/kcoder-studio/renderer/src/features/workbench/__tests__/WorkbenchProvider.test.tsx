@@ -4,13 +4,13 @@ import { beforeEach, expect, test, vi } from 'vitest'
 import { WorkbenchProvider, type WorkbenchServices } from '../WorkbenchProvider'
 import { useWorkbench } from '../useWorkbench'
 import {
-  clearTauriRuntime,
+  clearGatewayRuntime,
   createRuntimeWork,
   createRuntimeWorkApiMock,
   createWorkbenchServices,
 } from '../WorkbenchProvider.test-support'
 
-vi.mock('@/tauri/localExecutor', () => ({
+vi.mock('@/host/localExecutor', () => ({
   ensureLocalExecutorStarted: vi
     .fn()
     .mockResolvedValue({ running: true, ready: true, deviceId: 'local-device' }),
@@ -21,7 +21,7 @@ vi.mock('@/tauri/localExecutor', () => ({
 }))
 
 beforeEach(() => {
-  clearTauriRuntime()
+  clearGatewayRuntime()
   localStorage.clear()
   sessionStorage.clear()
   window.history.replaceState({}, '', '/')

@@ -1,18 +1,13 @@
 //! Bounded extraction for host-authorized Wiki attachments, without OCR.
 use crate::{ToolContext, ToolError};
-#[path = "wiki_docx.rs"]
-mod docx;
-#[path = "wiki_html.rs"]
-mod html;
-#[path = "wiki_pptx.rs"]
-mod pptx;
-#[path = "wiki_xlsx.rs"]
-mod xlsx;
+pub use kcoder_document_parsers::MAX_EXTRACTED_BYTES;
+use kcoder_document_parsers::{
+    decode_text, extract_docx, extract_html, extract_pptx, extract_xlsx,
+};
 use std::{ops::Range, path::Path, time::Duration};
 use tokio::io::AsyncReadExt;
 
 pub const MAX_DOCUMENT_BYTES: usize = 32 * 1024 * 1024;
-pub const MAX_EXTRACTED_BYTES: usize = 8 * 1024 * 1024;
 pub const MAX_CHUNK_BYTES: usize = 8192;
 pub const MAX_DOCUMENT_CHUNKS: usize = 8192;
 
@@ -235,7 +230,7 @@ pub async fn extract_document_report(
         }
         match format {
             DocumentFormat::Html => {
-                let text = tokio::task::spawn_blocking(move || html::extract(&bytes))
+                let text = tokio::task::spawn_blocking(move || extract_html(&bytes))
                     .await
                     .map_err(|_| error("HTML extraction worker failed"))??;
                 Ok(reported(
@@ -250,8 +245,8 @@ pub async fn extract_document_report(
             DocumentFormat::Xlsx | DocumentFormat::Pptx => {
                 let (text, extracted, total, missing_cache) =
                     tokio::task::spawn_blocking(move || match format {
-                        DocumentFormat::Xlsx => xlsx::extract_with_units(&bytes),
-                        _ => pptx::extract_with_units(&bytes)
+                        DocumentFormat::Xlsx => extract_xlsx(&bytes),
+                        _ => extract_pptx(&bytes)
                             .map(|(text, extracted, total)| (text, extracted, total, false)),
                     })
                     .await
@@ -276,10 +271,9 @@ pub async fn extract_document_report(
                 ))
             }
             DocumentFormat::Docx => {
-                let (text, warnings) =
-                    tokio::task::spawn_blocking(move || docx::extract_with_warnings(&bytes))
-                        .await
-                        .map_err(|_| error("Word extraction worker failed"))??;
+                let (text, warnings) = tokio::task::spawn_blocking(move || extract_docx(&bytes))
+                    .await
+                    .map_err(|_| error("Word extraction worker failed"))??;
                 Ok(reported(
                     bounded_chunks(&text, false)?,
                     "docx",
@@ -349,40 +343,6 @@ fn error(message: &str) -> ToolError {
     ToolError::Execution(message.into())
 }
 
-fn decode_text(bytes: &[u8]) -> Result<String, ToolError> {
-    let text = if bytes.starts_with(&[0xff, 0xfe]) || bytes.starts_with(&[0xfe, 0xff]) {
-        if !bytes.len().is_multiple_of(2) {
-            return Err(error("Invalid UTF-16: odd byte length"));
-        }
-        let little = bytes[0] == 0xff;
-        let units: Vec<_> = bytes[2..]
-            .chunks_exact(2)
-            .map(|pair| {
-                if little {
-                    u16::from_le_bytes([pair[0], pair[1]])
-                } else {
-                    u16::from_be_bytes([pair[0], pair[1]])
-                }
-            })
-            .collect();
-        String::from_utf16(&units).map_err(|_| error("Invalid UTF-16: malformed surrogate"))?
-    } else {
-        let bytes = bytes.strip_prefix(&[0xef, 0xbb, 0xbf]).unwrap_or(bytes);
-        std::str::from_utf8(bytes)
-            .map_err(|_| error("Unknown encoding: expected strict UTF-8 or BOM-marked UTF-16"))?
-            .to_owned()
-    };
-    if text.contains('\0') {
-        return Err(error("Unsupported binary or unknown text encoding"));
-    }
-    Ok(text)
-}
-
-/// OOXML permits UTF-16 XML parts; decode bytes before namespace/text parsing.
-pub(super) fn decode_xml(bytes: &[u8]) -> Result<String, ToolError> {
-    decode_text(bytes)
-}
-
 fn pdf_chunks(text: &str) -> Result<Vec<DocumentChunk>, ToolError> {
     if text.trim().is_empty() {
         return Err(error(
@@ -430,6 +390,48 @@ fn bounded_chunks(text: &str, pdf: bool) -> Result<Vec<DocumentChunk>, ToolError
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn unsupported_alternate_content_is_reported_without_duplicating_or_hiding_body() {
+        let xml = r#"<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" xmlns:x="urn:unknown"><w:body><mc:AlternateContent><mc:Choice Requires="x"><w:p><w:r><w:t>Unknown fact</w:t></w:r></w:p></mc:Choice></mc:AlternateContent><w:p><w:r><w:t>Final body</w:t></w:r></w:p></w:body></w:document>"#;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("alternate.docx");
+        let mut archive = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+        archive
+            .start_file(
+                "word/document.xml",
+                zip::write::SimpleFileOptions::default(),
+            )
+            .unwrap();
+        std::io::Write::write_all(&mut archive, xml.as_bytes()).unwrap();
+        std::fs::write(&path, archive.finish().unwrap().into_inner()).unwrap();
+        let ctx = crate::ToolContext::new(kcoder_state::AppState::new(dir.path()));
+        let result = extract_document_report(&path, DocumentFormat::Docx, &ctx)
+            .await
+            .unwrap();
+        assert_eq!(result.chunks[0].text.trim(), "Final body");
+        assert!(
+            result
+                .report
+                .warnings
+                .iter()
+                .any(|warning| warning == "docx_final_revision_view")
+        );
+        assert!(
+            result
+                .report
+                .warnings
+                .iter()
+                .any(|warning| warning == "docx_unsupported_alternate_choice")
+        );
+        assert!(
+            result
+                .report
+                .warnings
+                .iter()
+                .any(|warning| warning == "docx_alternate_content_without_supported_branch")
+        );
+    }
 
     #[test]
     fn every_supported_file_uses_the_same_authoritative_limit() {

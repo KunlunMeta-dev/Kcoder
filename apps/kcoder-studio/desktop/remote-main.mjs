@@ -1,4 +1,5 @@
 import { registerDownloads } from "./download-controller.mjs";
+import { configureWidgetProcessIsolation, createNativeWidgetIsolationController } from "./widget-isolation/controller.mjs";
 import { app, nativeImage, BrowserWindow, dialog, ipcMain, Menu, Tray, session, shell } from "electron";
 import { fileURLToPath } from "node:url";
 import { createDesktopTray } from "./tray-controller.mjs";
@@ -17,6 +18,8 @@ import {
   isTrustedGatewayUrl,
 } from "./security-policy.mjs";
 
+configureWidgetProcessIsolation(app);
+
 let mainWindow = null;
 let quitting = false;
 let desktopTray = null;
@@ -24,10 +27,13 @@ const remotePartition = "persist:kcoder-studio-remote";
 const additionalWindows = new Set();
 let primaryHiddenForOtherWindows = false;
 let stopDownloads = () => {};
+let widgetIsolation = null;
 
 function requestQuit(exitCode = 0) {
   if (quitting) return;
   quitting = true;
+  widgetIsolation?.dispose();
+  widgetIsolation = null;
   stopDownloads();
   desktopTray?.dispose();
   app.exit(exitCode);
@@ -95,6 +101,11 @@ async function createMainWindow() {
   stopDownloads = registerDownloads({ session: desktopSession, ipcMain,
     getWindow: contents => [mainWindow, ...additionalWindows].find(window => window && !window.isDestroyed() && window.webContents === contents),
     getGatewayOrigin: () => remote.origin, downloadsDirectory: app.getPath("downloads"),
+  });
+  widgetIsolation?.dispose();
+  widgetIsolation = createNativeWidgetIsolationController({ app, ipcMain,
+    getWindow: contents => [mainWindow, ...additionalWindows].find(window => window && !window.isDestroyed() && window.webContents === contents),
+    getGatewayOrigin: () => remote.origin, verifiedPlatforms: ['win32'],
   });
   const customMenu = process.platform === "win32" || (!app.isPackaged && process.env.KCODER_STUDIO_TEST_WINDOWS_MENU === "1");
   mainWindow = new BrowserWindow({

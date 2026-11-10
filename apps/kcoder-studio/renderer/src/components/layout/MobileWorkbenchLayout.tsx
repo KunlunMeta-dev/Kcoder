@@ -1,3 +1,7 @@
+import { TaskConnectionNotice } from '@/components/chat/composer/TaskConnectionNotice'
+import { composerInputHistoryScope } from '@/components/chat/composer/composerInputHistory'
+import { ConversationWidgetsProvider } from '@/components/chat/widgets/ConversationWidgetsProvider'
+import { useStudioWorkMode } from '@/features/workbench/studioWorkMode'
 import { runtimeProjectLabel } from '@/kcoder/gatewayServerLabel'
 import { ArrowLeftRight, Bot, Menu, MessageCircle } from 'lucide-react'
 import { memo, useCallback, useEffect, useRef, useState } from 'react'
@@ -5,11 +9,14 @@ import type { ProjectChatControls } from '@/components/chat/ChatInput'
 import { RequestUserInputCard } from '@/components/chat/RequestUserInputCard'
 import { ModelSelector } from '@/components/chat/composer/ModelSelector'
 import { ProjectWorkBar } from '@/components/chat/composer/ProjectWorkBar'
-import { MobileSettingsPage } from '@/components/settings/MobileSettingsPage'
+import {
+  DeferredWorkbenchPage,
+  DeferredMobileSettingsPage as MobileSettingsPage,
+} from './DeferredWorkbenchPage'
 import { stripAppBasePath } from '@/config/runtime'
 import { useWorkbench, useWorkbenchPaneContext } from '@/features/workbench/useWorkbench'
 import { useTranslation } from '@/hooks/useTranslation'
-import { isSettingsRoute, navigateTo } from '@/lib/navigation'
+import { isSettingsRoute, navigateTo, navigateToParentPage } from '@/lib/navigation'
 import {
   findWorkbenchDevice,
   getActiveWorkbenchDeviceId,
@@ -128,6 +135,7 @@ const MobileWorkbenchPane = memo(function MobileWorkbenchPane({
     tone: 'success' | 'error'
   } | null>(null)
   const currentRuntimeTask = pane.currentRuntimeTask
+  const studioMode = useStudioWorkMode(currentRuntimeTask)
   const paneSession = useWorkbenchPaneSession({ currentRuntimeTask })
   const retryFailedMessage = paneSession.retryFailedMessage
   const continueInIm = useRuntimeTaskContinueInIm(currentRuntimeTask)
@@ -241,18 +249,20 @@ const MobileWorkbenchPane = memo(function MobileWorkbenchPane({
 
   if (settingsOpen) {
     return (
-      <MobileSettingsPage
-        services={services}
-        devices={state.devices}
-        onOpenRuntimeTask={onOpenRuntimeTask}
-        onRefreshWorkLists={onRefreshWorkLists}
-        onLeaveToRuntimeTask={() => setSettingsOpen(false)}
-        onBack={() => {
-          setSettingsOpen(false)
-          navigateTo('/')
-        }}
-        onOpenPlugins={() => navigateTo('/plugins')}
-      />
+      <DeferredWorkbenchPage>
+        <MobileSettingsPage
+          services={services}
+          devices={state.devices}
+          onOpenRuntimeTask={onOpenRuntimeTask}
+          onRefreshWorkLists={onRefreshWorkLists}
+          onLeaveToRuntimeTask={() => setSettingsOpen(false)}
+          onBack={() => {
+            setSettingsOpen(false)
+            navigateToParentPage()
+          }}
+          onOpenPlugins={() => navigateTo('/plugins')}
+        />
+      </DeferredWorkbenchPage>
     )
   }
 
@@ -346,49 +356,61 @@ const MobileWorkbenchPane = memo(function MobileWorkbenchPane({
                 <div className="h-11 min-w-[44px]" />
               )}
             </header>
-            <ScrollableMessageArea
+            <ConversationWidgetsProvider
+              address={currentRuntimeTask}
               messages={paneMessages}
-              loading={paneSession.transcriptLoading}
-              isWaitingForAssistant={paneSession.status.isWaitingForAssistantIndicator}
-              hasMoreBefore={paneSession.transcriptHasMoreBefore}
-              loadingMoreBefore={paneSession.transcriptLoadingMoreBefore}
-              turnNavigation={paneSession.turnNavigation}
-              loadedTranscriptRanges={paneSession.loadedTranscriptRanges}
-              onLoadMoreBefore={paneSession.loadMoreTranscriptBefore}
-              onLoadFullTranscript={paneSession.loadFullTranscript}
-              loadingFullTranscript={paneSession.transcriptLoadingFullContent}
-              onLoadTurnNavigationItem={paneSession.loadTranscriptTurnNavigationItem}
-              onLoadTranscriptGap={paneSession.loadTranscriptGap}
-              toolsCatalogTaskId={currentRuntimeTask?.taskId}
-              toolsCatalogServerId={currentRuntimeTask?.deviceId}
-              conversationKey={
-                currentRuntimeTask
-                  ? `${currentRuntimeTask.deviceId}:${currentRuntimeTask.taskId}`
-                  : null
+              onSendPrompt={text =>
+                paneSession.setInput(
+                  paneSession.input.trim() ? `${paneSession.input}\n\n${text}` : text
+                )
               }
-              className="h-full"
-              scrollerClassName="pb-28 pt-16"
-              devices={state.devices}
-              onRetryFailedMessage={message => {
-                void paneSession.retryFailedMessage(message)
-              }}
-              onSwitchModelForFailedMessage={message => {
-                pendingModelRetryRef.current = message
-                setModelSelectorOpenSignal(signal => signal + 1)
-              }}
-              onLoadFileChangesDiff={(subtaskId, fileChanges) =>
-                loadTurnFileChangesDiff(subtaskId, paneMessages, fileChanges, currentRuntimeTask)
-              }
-              onRevertFileChanges={(subtaskId, fileChanges) =>
-                revertTurnFileChanges(subtaskId, paneMessages, fileChanges, currentRuntimeTask)
-              }
-              onEditLastUserMessage={paneSession.editLastUserMessage}
-              canEditLastUserMessage={canEditLastUserMessage}
-              onRequestUserInputSubmit={paneSession.sendRequestUserInputResponse}
-              onRequestUserInputIgnore={paneSession.ignoreRequestUserInput}
-              hideRequestUserInputBlocks={Boolean(pendingRequestUserInput)}
-              hiddenRequestUserInputIds={paneSession.answeredRequestUserInputIds}
-            />
+            >
+              <ScrollableMessageArea
+                importedHistoryTaskId={currentRuntimeTask?.taskId}
+                historyWorkspacePath={currentRuntimeTask?.workspacePath || undefined}
+                messages={paneMessages}
+                loading={paneSession.transcriptLoading}
+                isWaitingForAssistant={paneSession.status.isWaitingForAssistantIndicator}
+                hasMoreBefore={paneSession.transcriptHasMoreBefore}
+                loadingMoreBefore={paneSession.transcriptLoadingMoreBefore}
+                turnNavigation={paneSession.turnNavigation}
+                loadedTranscriptRanges={paneSession.loadedTranscriptRanges}
+                onLoadMoreBefore={paneSession.loadMoreTranscriptBefore}
+                onLoadFullTranscript={paneSession.loadFullTranscript}
+                loadingFullTranscript={paneSession.transcriptLoadingFullContent}
+                onLoadTurnNavigationItem={paneSession.loadTranscriptTurnNavigationItem}
+                onLoadTranscriptGap={paneSession.loadTranscriptGap}
+                toolsCatalogTaskId={currentRuntimeTask?.taskId}
+                toolsCatalogServerId={currentRuntimeTask?.deviceId}
+                conversationKey={
+                  currentRuntimeTask
+                    ? `${currentRuntimeTask.deviceId}:${currentRuntimeTask.taskId}`
+                    : null
+                }
+                className="h-full"
+                scrollerClassName="pb-28 pt-16"
+                devices={state.devices}
+                onRetryFailedMessage={message => {
+                  void paneSession.retryFailedMessage(message)
+                }}
+                onSwitchModelForFailedMessage={message => {
+                  pendingModelRetryRef.current = message
+                  setModelSelectorOpenSignal(signal => signal + 1)
+                }}
+                onLoadFileChangesDiff={(subtaskId, fileChanges) =>
+                  loadTurnFileChangesDiff(subtaskId, paneMessages, fileChanges, currentRuntimeTask)
+                }
+                onRevertFileChanges={(subtaskId, fileChanges) =>
+                  revertTurnFileChanges(subtaskId, paneMessages, fileChanges, currentRuntimeTask)
+                }
+                onEditLastUserMessage={paneSession.editLastUserMessage}
+                canEditLastUserMessage={canEditLastUserMessage}
+                onRequestUserInputSubmit={paneSession.sendRequestUserInputResponse}
+                onRequestUserInputIgnore={paneSession.ignoreRequestUserInput}
+                hideRequestUserInputBlocks={Boolean(pendingRequestUserInput)}
+                hiddenRequestUserInputIds={paneSession.answeredRequestUserInputIds}
+              />
+            </ConversationWidgetsProvider>
             <div
               data-testid="mobile-chat-input-dock"
               className="pointer-events-none absolute bottom-0 left-0 right-0 z-chrome px-4 pb-[max(16px,env(safe-area-inset-bottom))] pt-3"
@@ -412,6 +434,7 @@ const MobileWorkbenchPane = memo(function MobileWorkbenchPane({
                     className="mb-2"
                   />
                 )}
+                {currentRuntimeTask && <TaskConnectionNotice address={currentRuntimeTask} />}
                 {pendingRequestUserInput ? (
                   <RequestUserInputCard
                     key={
@@ -433,6 +456,11 @@ const MobileWorkbenchPane = memo(function MobileWorkbenchPane({
                   />
                 ) : (
                   <BufferedChatInput
+                    historyMessages={paneSession.messages}
+                    inputHistoryScope={composerInputHistoryScope(
+                      currentRuntimeTask,
+                      projectChatWithModelSelectorSignal.scopeKey
+                    )}
                     value={paneSession.input}
                     onChange={paneSession.setInput}
                     onSubmit={paneSession.send}
@@ -517,7 +545,9 @@ const MobileWorkbenchPane = memo(function MobileWorkbenchPane({
                 className="flex w-full max-w-[360px] flex-col items-center gap-6"
               >
                 <Bot className="h-8 w-8 text-text-muted" />
-                <h1 className="heading-lg text-center tracking-normal">{emptyTitle}</h1>
+                <h1 className="heading-lg text-center tracking-normal">
+                  {studioMode === 'kworker' ? t('workbench.work_mode.office_title') : emptyTitle}
+                </h1>
                 <ProjectWorkBar
                   {...effectiveProjectWork}
                   className="min-h-0 flex-col justify-center gap-1 px-0"
@@ -539,6 +569,11 @@ const MobileWorkbenchPane = memo(function MobileWorkbenchPane({
                 className="mb-2"
               />
               <BufferedChatInput
+                historyMessages={paneSession.messages}
+                inputHistoryScope={composerInputHistoryScope(
+                  currentRuntimeTask,
+                  projectChatWithModelSelectorSignal.scopeKey
+                )}
                 value={paneSession.input}
                 onChange={paneSession.setInput}
                 onSubmit={paneSession.send}

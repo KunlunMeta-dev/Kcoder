@@ -1,3 +1,4 @@
+import { isRuntimeDebugEnabled } from '@/lib/diagnosticPreferences'
 import { safeErrorDiagnostic } from '@/lib/error-diagnostics'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
@@ -5,7 +6,7 @@ import {
   defaultAppPreferences,
   getAppPreferences,
   type AppPreferences,
-} from '@/tauri/appPreferences'
+} from '@/host/appPreferences'
 import type {
   RuntimeDeviceWorkspace,
   RuntimeTaskAddress,
@@ -54,7 +55,7 @@ function debugReminderKey(key: string): string {
 }
 
 function logRuntimeTaskReminderState(event: string, payload: Record<string, unknown>) {
-  if (globalThis.localStorage?.getItem('wework:debug-runtime') !== '1') return
+  if (!isRuntimeDebugEnabled()) return
 
   console.info(`[KCoder Studio] Runtime task reminder ${event}`, payload)
 }

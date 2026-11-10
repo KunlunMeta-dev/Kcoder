@@ -6,7 +6,14 @@ use std::{
     process::Command,
 };
 
-const CONTRACT_CRATES: &[&str] = &["kcoder_types", "kcoder_config", "kcoder_app_protocol"];
+const CONTRACT_CRATES: &[&str] = &[
+    "kcoder_types",
+    "kcoder_common_types",
+    "kcoder_integration_types",
+    "kcoder_session_types",
+    "kcoder_config",
+    "kcoder_app_protocol",
+];
 const FORBIDDEN: &[&str] = &["kcoder_engine", "kcoder_repl", "kcoder_cli", "kcoder_query"];
 
 fn metadata(manifest: &Path) -> Value {

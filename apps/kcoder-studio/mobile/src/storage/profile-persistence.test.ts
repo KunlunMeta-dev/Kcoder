@@ -6,6 +6,7 @@ const values=vi.hoisted(()=>new Map<string,string>());
 vi.mock("./secure",()=>({getSecureValue:vi.fn(async(key:string)=>values.get(key)??null),setSecureValue:vi.fn(async(key:string,value:string)=>{values.set(key,value)}),deleteSecureValue:vi.fn(async(key:string)=>{values.delete(key)})}));
 const a={id:"a",label:"A",baseUrl:"https://a.example",accessToken:"token-a",rpcToken:"rpc-a",expiresAt:1000};
 const b={...a,id:"b",label:"B",baseUrl:"https://b.example",accessToken:"token-b",rpcToken:"rpc-b"};
+const routeProfile={...a,id:"route-profile",label:"Route profile",baseUrl:"https://relay.example/g/tenant-a",connectionRoutes:{version:1 as const,gatewayId:"a".repeat(64),publicKey:"b".repeat(64),endpoints:[{kind:"public" as const,url:"https://alternate-relay.example/g/tenant-a"},{kind:"public" as const,url:"https://relay.example/g/tenant-a"}]}};
 beforeEach(()=>{installBrowserProfileFixture([]);values.clear();vi.clearAllMocks();vi.mocked(setSecureValue).mockImplementation(async(key,value)=>{values.set(key,value)});vi.mocked(deleteSecureValue).mockImplementation(async key=>{values.delete(key)})});
 it("preserves the previously committed credentials if index persistence fails",async()=>{
  await persistProfiles([a],a.id);
@@ -70,4 +71,59 @@ it("persists same-origin Gateway routes with independent profile ids and credent
  expect(index.profiles[0].secretKey).not.toBe(index.profiles[1].secretKey);
 });
 
+it("persists a non-secret route descriptor and binds its Gateway key to the credential envelope",async()=>{
+ await persistProfiles([routeProfile],routeProfile.id);
+ const index=JSON.parse(values.get(PROFILE_INDEX_KEY)!);
+ const entry=index.profiles[0];
+ const secret=JSON.parse(values.get(entry.secretKey)!);
+ expect(entry.connectionRoutes).toEqual(routeProfile.connectionRoutes);
+ expect(entry.connectionRoutesKeyId).toBeUndefined();
+ expect(secret.connectionRoutesKeyId).toBe(`${routeProfile.connectionRoutes.gatewayId}:${routeProfile.connectionRoutes.publicKey}`);
+ await expect(loadProfiles()).resolves.toMatchObject({profiles:[routeProfile],activeId:routeProfile.id});
+});
+
+it("fails closed when public route metadata is changed or removed without its secret key binding",async()=>{
+ await persistProfiles([routeProfile],routeProfile.id);
+ const index=JSON.parse(values.get(PROFILE_INDEX_KEY)!);
+ const original=structuredClone(index);
+ index.profiles[0].connectionRoutes.publicKey="c".repeat(64);
+ values.set(PROFILE_INDEX_KEY,JSON.stringify(index));
+ await expect(loadProfiles()).resolves.toMatchObject({profiles:[{id:routeProfile.id,accessToken:"",expiresAt:0}]});
+
+ original.profiles[0].connectionRoutes=undefined;
+ values.set(PROFILE_INDEX_KEY,JSON.stringify(original));
+ await expect(loadProfiles()).resolves.toMatchObject({profiles:[{id:routeProfile.id,accessToken:"",expiresAt:0}]});
+});
+
+it("refuses to replace or downgrade a Gateway key on an existing profile",async()=>{
+ await persistProfiles([routeProfile],routeProfile.id);
+ const changed={...routeProfile,connectionRoutes:{...routeProfile.connectionRoutes,gatewayId:"c".repeat(64),publicKey:"d".repeat(64)}};
+ await expect(persistProfiles([changed],routeProfile.id)).rejects.toThrow("不能替换或移除其 route key");
+ const {connectionRoutes:_routes,...downgraded}=routeProfile;
+ await expect(persistProfiles([downgraded],routeProfile.id)).rejects.toThrow("不能替换或移除其 route key");
+ await expect(loadProfiles()).resolves.toMatchObject({profiles:[routeProfile]});
+});
+
+it("allows endpoint updates for an already bound public key",async()=>{
+ await persistProfiles([routeProfile],routeProfile.id);
+ const updated={...routeProfile,connectionRoutes:{...routeProfile.connectionRoutes,endpoints:[
+  {kind:"public" as const,url:"https://new-relay.example/g/tenant-a"},
+  routeProfile.connectionRoutes.endpoints[1]!,
+ ]}};
+ await persistProfiles([updated],routeProfile.id);
+ await expect(loadProfiles()).resolves.toMatchObject({profiles:[updated]});
+});
+
 beforeEach(() => installBrowserProfileFixture([]));
+
+it("drops retired LAN metadata while preserving saved credentials, key binding and active profile",async()=>{
+ await persistProfiles([routeProfile],routeProfile.id);
+ const index=JSON.parse(values.get(PROFILE_INDEX_KEY)!);
+ index.profiles[0].connectionRoutes.endpoints.unshift({kind:"lan",url:"https://192.168.1.20/g/tenant-a"});
+ values.set(PROFILE_INDEX_KEY,JSON.stringify(index));
+ const restored=await loadProfiles();
+ expect(restored.profiles).toEqual([routeProfile]);
+ expect(restored.activeId).toBe(routeProfile.id);
+ await persistProfiles(restored.profiles,restored.activeId);
+ expect(JSON.parse(values.get(PROFILE_INDEX_KEY)!).profiles[0].connectionRoutes.endpoints).toEqual(routeProfile.connectionRoutes.endpoints);
+});

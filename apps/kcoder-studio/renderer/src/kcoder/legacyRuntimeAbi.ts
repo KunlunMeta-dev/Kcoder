@@ -41,11 +41,8 @@ interface RuntimeHostDocument {
   querySelector(selectors: string): Element | null
 }
 
-/**
- * The standalone Wework Tauri build retains its native runtime, while KCoder Studio
- * gateway pages must produce KCoder domain objects. This module centralizes all
- * host-dependent compatibility runtime-name selection.
- */
+// Preserve the existing wire namespace selection for saved configurations and
+// older app-server contracts; this does not select a desktop framework.
 export function runtimeNameForCurrentHost(
   documentLike: RuntimeHostDocument | undefined = globalThis.document
 ): 'kcoder' | 'codex' {
@@ -62,7 +59,7 @@ export function runtimeMethodForCurrentHost(
     : LEGACY_KCODER_STUDIO_RUNTIME_METHODS[key]
 }
 
-export const LEGACY_KCODER_STUDIO_TAURI_COMMANDS = {
+export const LEGACY_KCODER_STUDIO_HOST_COMMANDS = {
   readRuntimeConfig: 'local_executor_read_codex_local_config',
   updateRuntimeConfig: 'local_executor_update_codex_local_config',
 } as const

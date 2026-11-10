@@ -138,6 +138,61 @@ pub struct RetentionConsumeAckV1 {
     pub client_ack_id: String,
 }
 
+/// Server lifecycle facts, never a public client's deletion/revocation claim.
+/// Deserialization is not authority: the private adapter must verify the durable
+/// lifecycle record and mint an exact-scope proof before service mutation.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase",
+    deny_unknown_fields
+)]
+pub enum RetentionAdministrativeReasonV1 {
+    ThreadDeleted {
+        thread_id: String,
+        proof_sha256: String,
+    },
+    DeviceRevoked {
+        gateway_namespace_id: String,
+        device_id: String,
+        authorization_generation: String,
+        proof_sha256: String,
+    },
+}
+
+/// Nonsecret readback evidence. It is distinct from a client consume ACK and
+/// does not authorize deletion of transferred thread artifacts.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct RetentionAdministrativeTerminalV1 {
+    pub operation_id: String,
+    pub root_namespace: String,
+    pub epoch: u64,
+    pub scope_id: String,
+    pub retention_id: String,
+    pub terminal_revision: u64,
+    pub reason: RetentionAdministrativeReasonV1,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(
+    tag = "status",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase",
+    deny_unknown_fields
+)]
+pub enum RetentionCleanupStatusV1 {
+    Pending,
+    /// Observe the existing client terminal without rewriting its proof.
+    ClientConsumed {
+        ack: RetentionConsumeAckV1,
+    },
+    Administrative {
+        proof: RetentionAdministrativeTerminalV1,
+    },
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(
     tag = "status",
@@ -282,6 +337,7 @@ pub struct RetentionUploadRecoveryV1 {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "json-schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct TurnRetentionReferenceV1 {
     pub retention_id: String,
@@ -298,9 +354,113 @@ pub struct TurnRetentionAuthorizationV1 {
     pub consume_acks: Vec<RetentionConsumeAckV1>,
 }
 
+/// Public turn input contains references and presentation only. The trusted
+/// parent envelope supplies authority separately; no path is an authorization.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "json-schema", derive(schemars::JsonSchema))]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct TurnRetentionRequestV1 {
+    pub references: Vec<TurnRetentionReferenceV1>,
+    pub attachments: Vec<TurnRetainedAttachmentV1>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "json-schema", derive(schemars::JsonSchema))]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct TurnRetainedAttachmentV1 {
+    pub entry_id: String,
+    pub filename: String,
+    pub mime_type: String,
+}
+
+impl TurnRetentionRequestV1 {
+    pub fn validate(&self) -> Result<(), &'static str> {
+        if self.references.is_empty() || self.attachments.is_empty() {
+            return Err("empty retained turn input");
+        }
+        check_batch(self.references.len())?;
+        check_batch(self.attachments.len())?;
+        let mut receipts = std::collections::BTreeSet::new();
+        let mut entries = std::collections::BTreeSet::new();
+        for reference in &self.references {
+            if !operation_id(&reference.retention_id)
+                || reference.expected_revision == 0
+                || reference.entry_ids.is_empty()
+                || !receipts.insert(reference.retention_id.as_str())
+            {
+                return Err("invalid retained turn receipt");
+            }
+            for entry in &reference.entry_ids {
+                if !valid_atom(entry) || !entries.insert(entry.as_str()) {
+                    return Err("duplicate or invalid retained turn entry");
+                }
+            }
+        }
+        check_batch(entries.len())?;
+        let mut descriptions = std::collections::BTreeSet::new();
+        for attachment in &self.attachments {
+            if !entries.contains(attachment.entry_id.as_str())
+                || !descriptions.insert(attachment.entry_id.as_str())
+                || attachment.filename.is_empty()
+                || attachment.filename.len() > 255
+                || attachment
+                    .filename
+                    .chars()
+                    .any(|c| c.is_control() || matches!(c, '/' | '\\'))
+                || attachment.mime_type.len() > 255
+                || attachment.mime_type.split('/').count() != 2
+                || attachment.mime_type.split('/').any(|part| {
+                    part.is_empty()
+                        || !part
+                            .bytes()
+                            .all(|b| b.is_ascii_alphanumeric() || b"!#$&^_.+-".contains(&b))
+                })
+            {
+                return Err("invalid retained turn presentation");
+            }
+        }
+        if entries != descriptions {
+            return Err("retained turn presentation does not cover the exact batch");
+        }
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn retained_turn_public_metadata_boundary_contract() {
+        let value = serde_json::json!({
+            "references": [{"retentionId": format!("r1.root.1.{}", "a".repeat(32)),
+                "expectedRevision": 1, "entryIds": ["é".repeat(128)]}],
+            "attachments": [{"entryId": "é".repeat(128),
+                "filename": format!("{}x", "é".repeat(127)), "mimeType": "text/plain"}],
+        });
+        let parsed: TurnRetentionRequestV1 = serde_json::from_value(value.clone()).unwrap();
+        parsed.validate().unwrap();
+        for filename in ["é".repeat(128), "bad\u{85}name".into()] {
+            let mut invalid = parsed.clone();
+            invalid.attachments[0].filename = filename;
+            assert!(invalid.validate().is_err());
+        }
+        let mut duplicate = parsed.clone();
+        let first = duplicate.references[0].entry_ids[0].clone();
+        duplicate.references[0].entry_ids.push(first);
+        assert!(duplicate.validate().is_err());
+        let mut extra = value.clone();
+        extra["attachments"][0]["path"] = serde_json::json!("/foreign");
+        assert!(serde_json::from_value::<TurnRetentionRequestV1>(extra).is_err());
+        let mut missing = value;
+        missing["attachments"] = serde_json::json!([]);
+        assert!(
+            serde_json::from_value::<TurnRetentionRequestV1>(missing)
+                .unwrap()
+                .validate()
+                .is_err()
+        );
+    }
 
     #[test]
     fn retention_contract_keeps_legacy_nil_and_rejects_unknown_context_fields() {

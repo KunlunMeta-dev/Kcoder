@@ -8,12 +8,12 @@ use super::*;
 /// renderer detects URLs and local paths from decoded text, so keeping adjacent decoded text
 /// together preserves those tokens while still carrying a useful source range for offset-aware
 /// table parsing.
-pub(super) struct DecodedTextMerge<I: Iterator> {
-    pub(super) iter: Peekable<I>,
+pub struct DecodedTextMerge<I: Iterator> {
+    pub iter: Peekable<I>,
 }
 
 impl<I: Iterator> DecodedTextMerge<I> {
-    pub(super) fn new(iter: I) -> Self {
+    pub fn new(iter: I) -> Self {
         Self {
             iter: iter.peekable(),
         }
@@ -49,19 +49,19 @@ where
 
 /// Strip markdown fences that wrap pipe tables so assistant responses render
 /// those tables structurally instead of as code blocks.
-pub(super) fn unwrap_markdown_fences<'a>(markdown_source: &'a str) -> Cow<'a, str> {
+pub fn unwrap_markdown_fences<'a>(markdown_source: &'a str) -> Cow<'a, str> {
     normalize_agent_markdown(markdown_source, None)
         .expect("normal rendering does not impose navigation budgets")
         .text
 }
 
-pub(super) struct NormalizedMarkdown<'a> {
-    pub(super) text: Cow<'a, str>,
-    pub(super) source_ranges: Vec<(usize, Range<usize>)>,
+pub struct NormalizedMarkdown<'a> {
+    pub text: Cow<'a, str>,
+    pub source_ranges: Vec<(usize, Range<usize>)>,
 }
 
 impl NormalizedMarkdown<'_> {
-    pub(super) fn original_offset(&self, offset: usize) -> usize {
+    pub fn original_offset(&self, offset: usize) -> usize {
         let index = self
             .source_ranges
             .partition_point(|(start, _)| *start <= offset);
@@ -73,7 +73,7 @@ impl NormalizedMarkdown<'_> {
     }
 }
 
-pub(super) fn normalize_agent_markdown<'a>(
+pub fn normalize_agent_markdown<'a>(
     markdown_source: &'a str,
     mut budget: Option<&mut NavigationBudget<'_>>,
 ) -> Result<NormalizedMarkdown<'a>, NavigationRenderError> {

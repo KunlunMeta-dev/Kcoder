@@ -39,14 +39,12 @@ export interface SitesApi {
 
 interface SitesApiOptions {
   getToken?: () => string | null
-  redirectOnUnauthorized?: boolean
 }
 
 export function createSitesApi(baseUrl: string, options: SitesApiOptions = {}): SitesApi {
   const client = createHttpClient({
     baseUrl: baseUrl.replace(/\/+$/, ''),
     getToken: options.getToken,
-    redirectOnUnauthorized: options.redirectOnUnauthorized,
   })
 
   return {

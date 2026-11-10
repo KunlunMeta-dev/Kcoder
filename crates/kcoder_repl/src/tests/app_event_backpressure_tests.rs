@@ -1,4 +1,5 @@
 use super::*;
+use kcoder_permissions::{PermissionPrompt, PermissionRequestContext};
 
 #[test]
 fn classifies_must_deliver_coalescible_and_droppable_events() {
@@ -94,4 +95,35 @@ async fn ordered_send_waits_for_capacity_when_channel_is_full() {
         rx.recv().await,
         Some(AppEvent::Terminal(CEvent::FocusGained))
     ));
+}
+
+#[tokio::test]
+async fn explicit_local_origin_permission_uses_a_real_tui_response_channel() {
+    let (tx, mut rx) = mpsc::channel(1);
+    let prompt = crate::events::TuiPermissionPrompt::new(AppEventSender::new(tx));
+    let request = PermissionRequestContext {
+        tool_name: "WebFetch".into(),
+        description: "Read one approved local origin".into(),
+        input: serde_json::json!({"url":"http://127.0.0.1:1234","prompt":"read"}),
+        risk: PermissionRisk::High,
+        detail_lines: vec!["Origin: http://127.0.0.1:1234".into()],
+    };
+    let task = tokio::spawn(async move { prompt.ask_explicit_context_with_edit(&request).await });
+    let AppEvent::PermissionRequest {
+        response_tx,
+        tool_name,
+        ..
+    } = rx.recv().await.unwrap()
+    else {
+        panic!("explicit permission must reach the TUI event loop");
+    };
+    assert_eq!(tool_name, "WebFetch");
+    assert!(!task.is_finished());
+    response_tx
+        .send(PermissionDialogResult {
+            response: PermissionResponse::DenyOnce,
+            modified_input: None,
+        })
+        .unwrap();
+    assert_eq!(task.await.unwrap().response, PermissionResponse::DenyOnce);
 }

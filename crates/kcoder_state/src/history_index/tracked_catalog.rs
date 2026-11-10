@@ -230,6 +230,20 @@ impl TrackedHistoryCatalog {
     /// Read only bounded invalidations. Restarted consumers may rebuild individual dirty sources;
     /// this API does not persist or restore a committed projection's suffix-reader state.
     pub fn prepare_update(&self, maximum: usize) -> Result<ListCatalogDelta> {
+        self.prepare_update_with(maximum, false)
+    }
+
+    /// Explicit history refresh may briefly settle active source mutations before capturing its
+    /// bounded invalidation batch. Ordinary list readers must use `prepare_update` and stay fast.
+    pub fn prepare_refresh_update(&self, maximum: usize) -> Result<ListCatalogDelta> {
+        self.prepare_update_with(maximum, true)
+    }
+
+    fn prepare_update_with(
+        &self,
+        maximum: usize,
+        settle_pending: bool,
+    ) -> Result<ListCatalogDelta> {
         ensure!(
             (1..=MAX_BATCH_ROWS).contains(&maximum),
             "invalid list delta budget"
@@ -239,20 +253,41 @@ impl TrackedHistoryCatalog {
             .marks
             .as_ref()
             .context("baseline has not started")?;
-        let source = journal::changes_since(
-            &self.history_root,
-            JournalDomain::History,
-            &marks.source,
-            maximum,
-        )?
-        .context("source journal tracking is disabled")?;
-        let client = journal::changes_since(
-            &self.client_root,
-            JournalDomain::ClientMetadata,
-            &marks.client,
-            maximum,
-        )?
-        .context("client journal tracking is disabled")?;
+        let (source, client) = if settle_pending {
+            (
+                journal::changes_since_settling_pending(
+                    &self.history_root,
+                    JournalDomain::History,
+                    &marks.source,
+                    maximum,
+                )?
+                .context("source journal tracking is disabled")?,
+                journal::changes_since_settling_pending(
+                    &self.client_root,
+                    JournalDomain::ClientMetadata,
+                    &marks.client,
+                    maximum,
+                )?
+                .context("client journal tracking is disabled")?,
+            )
+        } else {
+            (
+                journal::changes_since(
+                    &self.history_root,
+                    JournalDomain::History,
+                    &marks.source,
+                    maximum,
+                )?
+                .context("source journal tracking is disabled")?,
+                journal::changes_since(
+                    &self.client_root,
+                    JournalDomain::ClientMetadata,
+                    &marks.client,
+                    maximum,
+                )?
+                .context("client journal tracking is disabled")?,
+            )
+        };
         let ids: std::collections::BTreeSet<_> = source
             .session_ids
             .into_iter()
@@ -281,6 +316,13 @@ impl TrackedHistoryCatalog {
         rows: &[ListCatalogSession],
         deleted: &[&str],
     ) -> Result<ListCatalogCheckpoint> {
+        // Settle only before opening the catalog write transaction. The in-transaction
+        // observations remain fail-fast and still reject any later journal movement.
+        let current_marks = observe_settling_pending(&self.history_root, &self.client_root)?;
+        ensure!(
+            current_marks.as_ref() == Some(&delta.marks),
+            "journals changed after delta preparation"
+        );
         self.commit_delta_with(delta, rows, deleted, true, || Ok(()))
     }
 
@@ -333,14 +375,16 @@ impl TrackedHistoryCatalog {
                 },
             "invalid baseline publication transition"
         );
+        let current_marks = observe(&self.history_root, &self.client_root)?;
         ensure!(
-            observe(&self.history_root, &self.client_root)?.as_ref() == Some(&delta.marks),
+            current_marks.as_ref() == Some(&delta.marks),
             "journals changed after delta preparation"
         );
         let count = apply_rows(&transaction, &encoded, deleted, current.row_count)?;
         before_final_check()?;
+        let current_marks = observe(&self.history_root, &self.client_root)?;
         ensure!(
-            observe(&self.history_root, &self.client_root)?.as_ref() == Some(&delta.marks),
+            current_marks.as_ref() == Some(&delta.marks),
             "journals changed while publishing list rows"
         );
         write_checkpoint(
@@ -453,10 +497,28 @@ fn tracked_list_scope(workspace: &str, history_root: &Path, client_root: &Path) 
 }
 
 fn observe(history: &Path, client: &Path) -> Result<Option<Watermarks>> {
-    let Some(source) = journal::current_watermark(history, JournalDomain::History)? else {
+    observe_with_policy(history, client, false)
+}
+
+fn observe_settling_pending(history: &Path, client: &Path) -> Result<Option<Watermarks>> {
+    observe_with_policy(history, client, true)
+}
+
+fn observe_with_policy(
+    history: &Path,
+    client: &Path,
+    settle_pending: bool,
+) -> Result<Option<Watermarks>> {
+    let read_watermark: fn(&Path, JournalDomain) -> Result<Option<JournalWatermark>> =
+        if settle_pending {
+            journal::current_watermark_settling_pending
+        } else {
+            journal::current_watermark
+        };
+    let Some(source) = read_watermark(history, JournalDomain::History)? else {
         return Ok(None);
     };
-    let Some(client) = journal::current_watermark(client, JournalDomain::ClientMetadata)? else {
+    let Some(client) = read_watermark(client, JournalDomain::ClientMetadata)? else {
         return Ok(None);
     };
     Ok(Some(Watermarks { source, client }))
@@ -974,6 +1036,93 @@ mod tests {
                 .stage_baseline(&complete.revision, &[row("a", 1)])
                 .is_err()
         );
+    }
+
+    #[test]
+    fn tracked_catalog_refresh_settles_active_writer_before_capturing_delta() {
+        let _serial = serial();
+        for domain in [JournalDomain::History, JournalDomain::ClientMetadata] {
+            let (history, client, mut catalog) = fixture();
+            let initial = catalog.checkpoint().unwrap();
+            let building = catalog.begin_baseline(&initial.revision).unwrap();
+            catalog.stage_baseline(&building.revision, &[]).unwrap();
+            let root = if domain == JournalDomain::History {
+                history.path().to_path_buf()
+            } else {
+                client.path().to_path_buf()
+            };
+            let (ready_sender, ready_receiver) = std::sync::mpsc::channel();
+            let (release_sender, release_receiver) = std::sync::mpsc::channel();
+            let writer = std::thread::spawn(move || {
+                let mut fence = JournalFence::try_acquire(&root, domain).unwrap();
+                let mutation = fence.begin("session").unwrap();
+                ready_sender.send(()).unwrap();
+                release_receiver
+                    .recv_timeout(std::time::Duration::from_secs(2))
+                    .expect("refresh test should release the writer");
+                assert!(mutation.finish().unwrap());
+            });
+            ready_receiver
+                .recv_timeout(std::time::Duration::from_secs(1))
+                .expect("writer should publish its pending receipt");
+            let release = std::thread::spawn(move || {
+                std::thread::sleep(std::time::Duration::from_millis(100));
+                release_sender.send(()).unwrap();
+            });
+
+            let delta = catalog.prepare_refresh_update(10).unwrap();
+            assert_eq!(delta.session_ids(), ["session"]);
+            let complete = catalog
+                .finish_baseline(delta, &[row("session", 1)], &[])
+                .unwrap();
+            assert_eq!(complete.state, BaselineState::Ready);
+            release.join().unwrap();
+            writer.join().unwrap();
+        }
+    }
+
+    #[test]
+    fn tracked_catalog_finish_settles_then_rejects_delta_if_watermark_changed() {
+        let _serial = serial();
+        for domain in [JournalDomain::History, JournalDomain::ClientMetadata] {
+            let (history, client, mut catalog) = fixture();
+            let initial = catalog.checkpoint().unwrap();
+            let building = catalog.begin_baseline(&initial.revision).unwrap();
+            catalog.stage_baseline(&building.revision, &[]).unwrap();
+            let delta = catalog.prepare_update(10).unwrap();
+            let root = if domain == JournalDomain::History {
+                history.path().to_path_buf()
+            } else {
+                client.path().to_path_buf()
+            };
+            let (ready_sender, ready_receiver) = std::sync::mpsc::channel();
+            let (release_sender, release_receiver) = std::sync::mpsc::channel();
+            let writer = std::thread::spawn(move || {
+                let mut fence = JournalFence::try_acquire(&root, domain).unwrap();
+                let mutation = fence.begin("session").unwrap();
+                ready_sender.send(()).unwrap();
+                release_receiver
+                    .recv_timeout(std::time::Duration::from_secs(2))
+                    .expect("finish test should release the writer");
+                assert!(mutation.finish().unwrap());
+            });
+            ready_receiver
+                .recv_timeout(std::time::Duration::from_secs(1))
+                .expect("writer should publish its pending receipt");
+            let release = std::thread::spawn(move || {
+                std::thread::sleep(std::time::Duration::from_millis(100));
+                release_sender.send(()).unwrap();
+            });
+
+            let error = catalog
+                .finish_baseline(delta, &[], &[])
+                .expect_err("a delta predating the writer must not publish Ready");
+            assert!(format!("{error:#}").contains("journals changed after delta preparation"));
+            assert_eq!(catalog.checkpoint().unwrap().state, BaselineState::Building);
+            assert_eq!(catalog.checkpoint().unwrap().row_count(), 0);
+            release.join().unwrap();
+            writer.join().unwrap();
+        }
     }
 
     #[test]

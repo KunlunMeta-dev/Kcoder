@@ -1,4 +1,7 @@
+import { normalizeWebSources, type WebSourcesV1 } from '../../../shared/webSources'
+import { normalizeReviewEvidence } from '../../../shared/reviewEvidence'
 import { decodeProviderFailure } from '@wegent/chat-core'
+import { normalizeTurnFileCapture } from '../../../shared/turnFileCapture'
 import type {
   ChatBlock,
   RuntimeContextUsage,
@@ -6,6 +9,7 @@ import type {
   RuntimeGoalContinuationPayload,
   RuntimePlanEventPayload,
   RuntimeTokenUsageBreakdown,
+  NormalizedRuntimeMessage,
 } from '@/types/api'
 import type { ChatStreamHandlers } from './chatStream'
 
@@ -51,6 +55,7 @@ export const RESPONSE_API_STREAM_EVENTS = [
   'runtime.goal.cleared',
   'runtime.goal.continuation',
   'runtime.plan.updated',
+  'runtime.user_message',
   'thread/tokenUsage/updated',
   'thread.tokenUsage.updated',
   'response.status.updated',
@@ -131,7 +136,11 @@ function recordField(record: Record<string, unknown>, key: string): Record<strin
 
 function eventBase(payload: Record<string, unknown>) {
   const data = eventResult(payload)
+  const turnId = idField(payload, 'turnId') ?? idField(data, 'turnId')
+  const attemptId = idField(payload, 'attemptId') ?? idField(data, 'attemptId')
   return {
+    ...(turnId === undefined ? {} : { turnId }),
+    ...(attemptId === undefined ? {} : { attemptId }),
     taskId: idField(payload, 'taskId') ?? idField(data, 'taskId'),
     subtaskId: idField(payload, 'subtaskId') ?? idField(data, 'subtaskId'),
     deviceId: stringField(payload, 'deviceId') ?? stringField(data, 'deviceId'),
@@ -194,6 +203,10 @@ function completedContent(data: Record<string, unknown>): string | undefined {
 
 function completedResult(data: Record<string, unknown>): Record<string, unknown> {
   const result: Record<string, unknown> = { ...data }
+  const capture = normalizeTurnFileCapture(data.file_changes_capture ?? data.fileChangesCapture)
+  if (capture) result.fileChangesCapture = capture
+  const review = normalizeReviewEvidence(data.review_evidence ?? data.reviewEvidence)
+  if (review) result.reviewEvidence = review
   const content = completedContent(data)
   if (content !== undefined) {
     result.value = content
@@ -442,6 +455,7 @@ function emitBlockUpdated(
     toolOutputOriginalBytes?: number
     content?: string
     fileChanges?: ChatBlock['fileChanges']
+    webSources?: WebSourcesV1
     renderPayload?: unknown
   }
 ): void {
@@ -492,11 +506,13 @@ function emitToolDone(
   const nextInput = Object.keys(toolInput).length > 0 ? toolInput : previous?.input
   const toolOutput = item.output ?? data.output ?? data.failure_reason
   const status = toolStatusFromItem(item, data.failure_reason ? 'error' : 'done')
+  const webSources = normalizeWebSources(item.webSources, { toolCallId: callId })
 
   emitBlockUpdated(handlers, 'response.output_item.done', base, callId, {
     status,
     ...(nextInput && { toolInput: nextInput }),
     ...(toolOutput !== undefined && { toolOutput }),
+    ...(webSources ? { webSources } : {}),
     ...(item.type === 'image_generation_call' && {
       renderPayload: imageGenerationRenderPayload(item),
     }),
@@ -678,10 +694,20 @@ export function emitResponseApiEvent(
   const base = eventBase(payload)
   const data = eventResult(payload)
 
+  if (eventName === 'runtime.user_message') {
+    const message = asRecord(data.message)
+    if (typeof message.id !== 'string' || !message.id || message.role !== 'user' ||
+        typeof message.content !== 'string') return
+    handlers.onUserMessage?.({ ...base, message: message as unknown as NormalizedRuntimeMessage })
+    return
+  }
+
   if (eventName === 'response.created' || eventName === 'response.in_progress') {
     handlers.onChatStart?.({
       ...base,
       shellType: stringField(payload, 'runtime'),
+      turnId: stringField(payload, 'turnId') ?? stringField(data, 'turnId'),
+      attemptId: stringField(payload, 'attemptId') ?? stringField(data, 'attemptId'),
     })
     return
   }
@@ -878,6 +904,8 @@ export function emitResponseApiEvent(
       ...base,
       error: errorMessage(payload, data),
       providerFailure: decodeProviderFailure(data.provider_failure),
+      fileChangesCapture: normalizeTurnFileCapture(data.file_changes_capture ?? data.fileChangesCapture),
+      reviewEvidence: normalizeReviewEvidence(data.review_evidence ?? data.reviewEvidence),
       // Terminal status is authoritative; cancellation reasons can include
       // forced-shutdown details and must not be mistaken for provider failures.
       type: ['interrupted', 'cancelled', 'canceled', 'aborted'].includes(

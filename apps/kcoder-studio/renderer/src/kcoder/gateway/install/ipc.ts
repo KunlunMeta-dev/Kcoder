@@ -1,7 +1,7 @@
 import { copyTextToClipboard } from '@/lib/clipboard'
 import { desktopHost, syncDesktopPreferences, syncDesktopTrayState } from '../../desktopHost'
 import type { KCoderGatewayRuntime } from '../../gatewayRuntime'
-import { LEGACY_KCODER_STUDIO_TAURI_COMMANDS } from '../../legacyRuntimeAbi'
+import { LEGACY_KCODER_STUDIO_HOST_COMMANDS } from '../../legacyRuntimeAbi'
 import { record, text } from '../runtime/contracts'
 import {
   readGatewayRuntimeConfig,
@@ -28,16 +28,6 @@ export function createGatewayPageIpcHandler(runtime: KCoderGatewayRuntime) {
       if (!host) throw new Error('System tray is only available in the desktop application')
       return host.hideToTray()
     }
-    if (desktopHost() && command.startsWith('plugin:window|')) {
-      const actions: Record<string, string> = {
-        'plugin:window|close': 'close',
-        'plugin:window|minimize': 'minimize',
-        'plugin:window|is_maximized': 'isMaximized',
-        'plugin:window|toggle_maximize': 'toggleMaximize',
-      }
-      const action = actions[command]
-      if (action) return desktopHost()?.windowAction(action)
-    }
     if (
       command === 'local_executor_ensure_started' ||
       command === 'local_executor_status' ||
@@ -51,10 +41,10 @@ export function createGatewayPageIpcHandler(runtime: KCoderGatewayRuntime) {
         signal: args.signal instanceof AbortSignal ? args.signal : undefined,
       })
     }
-    if (command === LEGACY_KCODER_STUDIO_TAURI_COMMANDS.readRuntimeConfig) {
+    if (command === LEGACY_KCODER_STUDIO_HOST_COMMANDS.readRuntimeConfig) {
       return readGatewayRuntimeConfig()
     }
-    if (command === LEGACY_KCODER_STUDIO_TAURI_COMMANDS.updateRuntimeConfig) {
+    if (command === LEGACY_KCODER_STUDIO_HOST_COMMANDS.updateRuntimeConfig) {
       return updateGatewayRuntimeConfig(args.patch)
     }
     if (command === 'save_local_attachment_file') return runtime.saveAttachmentForIpc(args)
@@ -64,6 +54,9 @@ export function createGatewayPageIpcHandler(runtime: KCoderGatewayRuntime) {
     if (command === 'cancel_local_attachment_upload') return runtime.cancelAttachmentUpload(args)
     if (command === 'read_local_attachment_file') return runtime.readAttachment(args)
     if (command === 'embedded_browser_open') return runtime.openBrowser(args)
+    if (command === 'embedded_browser_profiles') return runtime.browserProfiles(args)
+    if (command === 'embedded_browser_handoff') return runtime.browserHandoff(args)
+    if (command === 'embedded_browser_close_for_account_switch') return runtime.closeBrowserForAccountSwitch(args.label)
     if (command === 'embedded_browser_set_bounds') return runtime.setBrowserBounds(args)
     if (command === 'embedded_browser_navigate') {
       return runtime.controlBrowser(args.label, {
@@ -143,12 +136,10 @@ export function createGatewayPageIpcHandler(runtime: KCoderGatewayRuntime) {
       command === 'acknowledge_frontend_resume_probe' ||
       command === 'log_system_drag_debug' ||
       command === 'open_appshots_permission_settings' ||
-      command === 'acknowledge_appshot' ||
-      command === 'plugin:log|log'
+      command === 'acknowledge_appshot'
     ) {
       return null
     }
-    if (command.startsWith('plugin:window|')) return null
     throw new Error(`KCoder browser mode does not support native command: ${command}`)
   }
 }

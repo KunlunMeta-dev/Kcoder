@@ -58,6 +58,8 @@ mod tests {
     #[test]
     fn explicit_unauthenticated_profile_never_resolves_any_key() {
         let mut document = crate::default_settings_document();
+        document["providers"]["kunlunmeta"] =
+            serde_json::to_value(crate::default_active_provider_config()).unwrap();
         document["providers"]["kunlunmeta"]["api_format"] =
             serde_json::json!("openai_chat_completions");
         document["providers"]["kunlunmeta"]["authentication"] = serde_json::json!({"mode":"none"});
@@ -75,7 +77,7 @@ mod tests {
     fn authentication_policy_schema_accepts_only_known_modes() {
         let mut document = crate::default_settings_document();
         document["providers"] =
-            serde_json::json!({"private-local":document["providers"]["kunlunmeta"].clone()});
+            serde_json::json!({"private-local":crate::default_active_provider_config()});
         document["active_provider"] = serde_json::json!("private-local");
         document["providers"]["private-local"]["api_format"] =
             serde_json::json!("openai_chat_completions");
@@ -123,12 +125,6 @@ mod tests {
                 );
             }
         }
-        assert_eq!(
-            crate::default_providers()
-                .keys()
-                .map(String::as_str)
-                .collect::<Vec<_>>(),
-            ["kunlunmeta"]
-        );
+        assert!(crate::default_providers().is_empty());
     }
 }

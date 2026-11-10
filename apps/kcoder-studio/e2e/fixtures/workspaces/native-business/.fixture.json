@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "id": "native-business",
+  "version": 1,
+  "description": "Isolated synthetic business analysis workspace with its own local guide; no inherited development repository instructions or expected answers.",
+  "tags": ["office", "real-model", "native-automation", "source-grounding"],
+  "materializer": "copy"
+}

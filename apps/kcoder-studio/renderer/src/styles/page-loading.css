@@ -1,0 +1,83 @@
+/* Keep the HTML placeholder readable before the application stylesheet arrives. */
+:root:not([data-theme]) {
+  color-scheme: light;
+  --color-bg-base: 255 255 255;
+  --color-text-secondary: 96 99 104;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    color-scheme: dark;
+    --color-bg-base: 17 19 22;
+    --color-text-secondary: 203 213 225;
+  }
+}
+
+body:has(#kcoder-boot-loading) {
+  margin: 0;
+  background: rgb(var(--color-bg-base));
+}
+
+.kcoder-page-loading {
+  box-sizing: border-box;
+  display: flex;
+  flex: 1 1 0%;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  width: 100%;
+  height: 100%;
+  min-height: min(16rem, 100dvh);
+  padding: 1.5rem;
+  background: rgb(var(--color-bg-base));
+  color: rgb(var(--color-text-secondary));
+  font-family: var(--font-ui, system-ui, sans-serif);
+  font-size: var(--text-sm, small);
+  line-height: 1.5;
+  text-align: center;
+}
+
+.kcoder-page-loading-screen {
+  min-height: 100dvh;
+}
+
+.kcoder-page-loading-status {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.kcoder-page-loading-spinner {
+  box-sizing: border-box;
+  width: 1.5rem;
+  height: 1.5rem;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-bottom-color: transparent;
+  border-radius: 50%;
+  opacity: 0.6;
+  animation: kcoder-page-loading-spin 0.9s linear infinite;
+}
+
+.kcoder-page-loading-help {
+  max-width: 24rem;
+  margin: 0;
+}
+
+@keyframes kcoder-page-loading-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kcoder-page-loading-spinner {
+    animation: none;
+  }
+}
+
+[data-reduce-motion='true'] .kcoder-page-loading-spinner {
+  animation: none;
+}

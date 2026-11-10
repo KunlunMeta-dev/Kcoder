@@ -24,6 +24,8 @@ pub enum FileReadFormat {
 /// Read the contents of a file, or a slice of it.
 #[derive(Debug, Default)]
 pub struct FileReadTool;
+pub(crate) mod read_access;
+pub use read_access::SuccessfulFileRead;
 
 const FILE_UNCHANGED_STUB: &str = "File unchanged since last read. The content from the earlier read tool_result in this conversation is still current; refer to that instead of re-reading.";
 
@@ -274,7 +276,10 @@ impl Tool for FileReadTool {
             )));
         }
 
-        let text_file = crate::text_file::read_text_file_with_encoding(&path, input.encoding).await.map_err(|e| {
+        let (bytes, access) = read_access::read_actual(&path, MAX_TEXT_READ_BYTES)
+            .await
+            .map_err(|e| ToolError::Execution(format!("failed to read {}: {e}", path.display())))?;
+        let text_file = crate::text_file::decode_text_bytes_with_encoding(&bytes, input.encoding).map_err(|e| {
             if e.kind() == std::io::ErrorKind::InvalidData {
                 ToolError::Execution(format!(
                     "This tool cannot read binary, unknown-encoding files as text; specify the known encoding explicitly: {} ({e})",
@@ -284,6 +289,7 @@ impl Tool for FileReadTool {
                 ToolError::Execution(format!("failed to read {}: {}", path.display(), e))
             }
         })?;
+        drop(bytes);
         let content = text_file.content;
         let modified = file_modified_time(&path);
         let covers_entire_file = input.format == FileReadFormat::Raw
@@ -308,9 +314,14 @@ impl Tool for FileReadTool {
                 covers_entire_file,
                 true,
             );
-            return Ok(ToolOutput::text(build_compaction_read_anchor(
-                &path, &content,
-            )));
+            return Ok(read_access::attach_cached(
+                ToolOutput::text(build_compaction_read_anchor(&path, &content)),
+                access,
+                &path,
+                input.offset,
+                input.limit,
+                covers_entire_file,
+            ));
         }
         record_text_read_snapshot(
             ctx,
@@ -326,7 +337,14 @@ impl Tool for FileReadTool {
             if ctx.truncate(&content) != content {
                 return Err(ToolError::Execution("raw text exceeds the tool output budget; provide a smaller data file instead of parsing truncated content".into()));
             }
-            return Ok(ToolOutput::text(content));
+            return Ok(read_access::attach_cached(
+                ToolOutput::text(content),
+                access,
+                &path,
+                input.offset,
+                input.limit,
+                covers_entire_file,
+            ));
         }
         let lines: Vec<&str> = content.lines().collect();
         let offset = input.offset.unwrap_or(1).saturating_sub(1);
@@ -344,34 +362,38 @@ impl Tool for FileReadTool {
         // regardless of how the model invokes the tool.
         let result = ctx.truncate(&result);
 
-        if content.is_empty() {
-            Ok(ToolOutput::text(format!(
+        let output = if content.is_empty() {
+            ToolOutput::text(format!(
                 "<system-reminder>Warning: {} exists but the contents are empty.</system-reminder>",
                 path.display()
-            )))
+            ))
         } else if selected.is_empty() && offset >= lines.len() {
-            Ok(ToolOutput::text(format!(
+            ToolOutput::text(format!(
                 "<system-reminder>Warning: {} is shorter than the provided offset ({}). The file has {} lines.</system-reminder>",
                 path.display(),
                 offset + 1,
                 lines.len()
-            )))
+            ))
         } else if selected.len() < lines.len() || input.offset.is_some() || input.limit.is_some() {
-            Ok(ToolOutput::text(format!(
+            ToolOutput::text(format!(
                 "Showing lines {}-{} of {} from {}:\n\n{}",
                 offset + 1,
                 offset + selected.len(),
                 lines.len(),
                 path.display(),
                 result
-            )))
+            ))
         } else {
-            Ok(ToolOutput::text(format!(
-                "Contents of {}:\n\n{}",
-                path.display(),
-                result
-            )))
-        }
+            ToolOutput::text(format!("Contents of {}:\n\n{}", path.display(), result))
+        };
+        Ok(read_access::attach_cached(
+            output,
+            access,
+            &path,
+            input.offset,
+            input.limit,
+            covers_entire_file,
+        ))
     }
 }
 
@@ -561,7 +583,7 @@ async fn read_image(path: &Path, media_type: &str) -> Result<ToolOutput, ToolErr
         )));
     }
 
-    let bytes = tokio::fs::read(path)
+    let (bytes, access) = read_access::read_actual(path, MAX_IMAGE_READ_BYTES)
         .await
         .map_err(|e| ToolError::Execution(format!("failed to read {}: {}", path.display(), e)))?;
     let info = match crate::image_input::inspect(&bytes, media_type) {
@@ -570,27 +592,30 @@ async fn read_image(path: &Path, media_type: &str) -> Result<ToolOutput, ToolErr
     };
     let notice = info.small_warning().unwrap_or_else(|| format!("Image dimensions: {}x{}. Use native model vision; do not run OCR unless the user explicitly asks for OCR.", info.width, info.height));
     let sha256 = format!("{:x}", Sha256::digest(&bytes));
-    Ok(ToolOutput {
-        content: vec![
-            ContentBlock::Text {
-                text: format!(
-                    "Read image {} ({} bytes, {}). {notice}",
-                    path.display(),
-                    bytes.len(),
-                    media_type
-                ),
-            },
-            ContentBlock::Image {
-                source: ImageSource::base64(media_type, BASE64_STANDARD.encode(bytes)),
-            },
-        ],
-        is_error: false,
-        execution_metadata: vec![crate::ToolExecutionMetadata::Artifact {
-            path: path.to_path_buf(),
-            sha256,
-        }],
-        user_context: Vec::new(),
-    })
+    Ok(read_access::attach(
+        ToolOutput {
+            content: vec![
+                ContentBlock::Text {
+                    text: format!(
+                        "Read image {} ({} bytes, {}). {notice}",
+                        path.display(),
+                        bytes.len(),
+                        media_type
+                    ),
+                },
+                ContentBlock::Image {
+                    source: ImageSource::base64(media_type, BASE64_STANDARD.encode(bytes)),
+                },
+            ],
+            is_error: false,
+            execution_metadata: vec![crate::ToolExecutionMetadata::Artifact {
+                path: path.to_path_buf(),
+                sha256,
+            }],
+            user_context: Vec::new(),
+        },
+        access,
+    ))
 }
 
 async fn read_notebook(
@@ -598,9 +623,13 @@ async fn read_notebook(
     input: &FileReadInput,
     ctx: &ToolContext,
 ) -> Result<ToolOutput, ToolError> {
-    let raw = tokio::fs::read_to_string(path).await.map_err(|e| {
-        ToolError::Execution(format!("failed to read notebook {}: {}", path.display(), e))
-    })?;
+    let (bytes, access) = read_access::read_actual(path, 100 * 1024 * 1024)
+        .await
+        .map_err(|e| {
+            ToolError::Execution(format!("failed to read notebook {}: {}", path.display(), e))
+        })?;
+    let raw = String::from_utf8(bytes)
+        .map_err(|e| ToolError::Execution(format!("invalid notebook UTF-8: {e}")))?;
     let modified = file_modified_time(path);
     let covers_entire_file = read_request_covers_entire_content(input, &raw);
     if let Some(snapshot) = ctx.state.full_file_read_snapshot(path)
@@ -610,13 +639,27 @@ async fn read_notebook(
         && snapshot.content.as_deref() == Some(raw.as_str())
     {
         record_text_read_snapshot(ctx, path, &raw, modified, input, covers_entire_file, true);
-        return Ok(ToolOutput::text(build_compaction_read_anchor(path, &raw)));
+        return Ok(read_access::attach_cached(
+            ToolOutput::text(build_compaction_read_anchor(path, &raw)),
+            access,
+            path,
+            input.offset,
+            input.limit,
+            covers_entire_file,
+        ));
     }
     let notebook: Value = serde_json::from_str(&raw)
         .map_err(|e| ToolError::Execution(format!("invalid notebook JSON: {}", e)))?;
     let rendered = render_notebook(&notebook, path);
     record_text_read_snapshot(ctx, path, &raw, modified, input, covers_entire_file, false);
-    Ok(ToolOutput::text(ctx.truncate(&rendered)))
+    Ok(read_access::attach_cached(
+        ToolOutput::text(ctx.truncate(&rendered)),
+        access,
+        path,
+        input.offset,
+        input.limit,
+        covers_entire_file,
+    ))
 }
 
 fn render_notebook(notebook: &Value, path: &Path) -> String {

@@ -776,6 +776,8 @@ pub(super) enum TranscriptRenderItem<'a> {
     },
     ToolSummary {
         absolute_idx: usize,
+        /// Last running tool actually included in this summary, if any.
+        last_running_idx: Option<usize>,
         message: DisplayMessage,
     },
 }
@@ -1108,6 +1110,7 @@ pub(super) fn collapse_tool_runs_with_minimum<'a>(
 
         let mut summary_mask = vec![false; run_end - run_start];
         let mut summary_messages = Vec::new();
+        let mut last_running_idx = None;
         let mut cursor = run_start;
         while cursor < run_end {
             if let Some(next) = msgs.get(cursor + 1).filter(|_| cursor + 1 < run_end)
@@ -1118,6 +1121,9 @@ pub(super) fn collapse_tool_runs_with_minimum<'a>(
             }
             if is_collapsible_tool_message(&msgs[cursor]) {
                 summary_mask[cursor - run_start] = true;
+                if msgs[cursor].text.starts_with("⟳ Running tool:") {
+                    last_running_idx = Some(start_idx + cursor);
+                }
                 summary_messages.push(msgs[cursor].clone());
             }
             cursor += 1;
@@ -1141,6 +1147,7 @@ pub(super) fn collapse_tool_runs_with_minimum<'a>(
             if cursor == first_summary {
                 items.push(TranscriptRenderItem::ToolSummary {
                     absolute_idx: start_idx + first_summary,
+                    last_running_idx,
                     message: DisplayMessage {
                         role: MessageRole::System,
                         text: summary.take().expect("tool summary inserted once"),

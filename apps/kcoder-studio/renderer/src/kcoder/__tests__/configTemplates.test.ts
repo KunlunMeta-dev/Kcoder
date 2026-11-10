@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-vi.mock('@/tauri/localExecutor', () => ({
+vi.mock('@/host/localExecutor', () => ({
   requestLocalExecutor: vi.fn(async () => ({ templates: [], defaultId: undefined })),
 }))
 
-import { requestLocalExecutor } from '@/tauri/localExecutor'
+import { requestLocalExecutor } from '@/host/localExecutor'
 import {
   deleteSettingsTemplate,
   listSettingsTemplates,

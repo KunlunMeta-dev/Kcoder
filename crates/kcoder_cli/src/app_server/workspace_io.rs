@@ -8,13 +8,13 @@ use std::{
 };
 
 const WRITER_LOCK: &str = ".kcoder-workspace-write.lock";
-pub(super) const PREVIOUS_PREFIX: &str = ".kcoder-previous-";
+pub const PREVIOUS_PREFIX: &str = ".kcoder-previous-";
 
-pub(super) fn internal_name(name: &str) -> bool {
+pub fn internal_name(name: &str) -> bool {
     name == WRITER_LOCK || name.starts_with(PREVIOUS_PREFIX)
 }
 
-pub(super) fn validate_name(name: &str) -> Result<()> {
+pub fn validate_name(name: &str) -> Result<()> {
     let path = Path::new(name);
     ensure!(
         !name.trim().is_empty()
@@ -29,7 +29,7 @@ pub(super) fn validate_name(name: &str) -> Result<()> {
     Ok(())
 }
 
-pub(super) fn parent(root: &Path, requested: &Path) -> Result<(PathBuf, PrivateDirectory)> {
+pub fn parent(root: &Path, requested: &Path) -> Result<(PathBuf, PrivateDirectory)> {
     ensure!(requested.is_absolute(), "workspace path must be absolute");
     let root = super::workspace_fs::canonicalize_for_client(root)?;
     let requested = super::workspace_fs::canonicalize_for_client(requested)?;
@@ -52,7 +52,7 @@ pub(super) fn parent(root: &Path, requested: &Path) -> Result<(PathBuf, PrivateD
 
 /// Resolve permitted in-workspace aliases for compatibility, then open every
 /// resolved component from the workspace capability without following new links.
-pub(super) fn file(
+pub fn file(
     root: &Path,
     requested_parent: &Path,
     name: &str,
@@ -78,7 +78,7 @@ pub(super) fn file(
 
 /// The leaf remains in place so all participating processes lock one identity.
 /// Waiting is bounded and performed only inside blocking worker tasks.
-pub(super) fn writer_lock(directory: &PrivateDirectory) -> Result<File> {
+pub fn writer_lock(directory: &PrivateDirectory) -> Result<File> {
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
     loop {
         if let Some(lock) = directory.try_exclusive_lock(WRITER_LOCK.as_ref())? {

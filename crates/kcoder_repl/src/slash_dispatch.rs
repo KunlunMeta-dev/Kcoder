@@ -32,6 +32,12 @@ pub(super) async fn handle_slash_command(
             SlashResult::StartMoaPlan(request) => {
                 return Some(UserAction::StartMoaPlan(request));
             }
+            SlashResult::StartMigration(arguments) => {
+                return Some(UserAction::StartMigration(arguments));
+            }
+            SlashResult::StartMigrate(arguments) => {
+                return Some(UserAction::StartMigrate(arguments));
+            }
             SlashResult::Handled => {}
         }
     } else if slash_token_looks_like_path(cmd) {

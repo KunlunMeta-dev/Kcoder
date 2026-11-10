@@ -1,0 +1,896 @@
+{
+  "AutomationDestination": {
+    "valid": [
+      {
+        "name": "valid_AutomationDestination",
+        "value": {
+          "kind": "channel",
+          "destinationRef": "fixture-approved-destination",
+          "destinationRevision": "fixture-destination-v1"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject_invalid_AutomationDestination",
+        "value": {
+          "kind": "unsupported_destination"
+        }
+      }
+    ]
+  },
+  "AutomationRunStatus": {
+    "valid": [
+      {
+        "name": "valid_AutomationRunStatus",
+        "value": "running"
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject_invalid_AutomationRunStatus",
+        "value": "unsupported_fixture_case"
+      }
+    ]
+  },
+  "AutomationDeliveryStatus": {
+    "valid": [
+      {
+        "name": "valid_AutomationDeliveryStatus",
+        "value": "studio_available"
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject_invalid_AutomationDeliveryStatus",
+        "value": "unsupported_fixture_case"
+      }
+    ]
+  },
+  "AutomationRun": {
+    "valid": [
+      {
+        "name": "valid_AutomationRun",
+        "value": {
+          "id": "fixture-run",
+          "owner": {
+            "accountId": "fixture-account",
+            "targetId": "fixture-target",
+            "workspaceId": null
+          },
+          "subscriptionId": "fixture-weekly-summary",
+          "subscriptionRevision": 1,
+          "triggerId": "fixture-trigger",
+          "nativeOperationId": "fixture-native-operation",
+          "nativeThreadId": "fixture-native-thread",
+          "nativeTurnId": null,
+          "status": "running",
+          "deliveryStatus": "not_ready",
+          "artifactRefs": [],
+          "output": null,
+          "deliveryId": null,
+          "createdAtMs": 1000,
+          "updatedAtMs": 1000,
+          "errorCode": null,
+          "title": "Synthetic daily report"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject_invalid_AutomationRun",
+        "value": {
+          "id": "fixture-run",
+          "owner": {
+            "accountId": "fixture-account",
+            "targetId": "fixture-target",
+            "workspaceId": null
+          },
+          "subscriptionId": "fixture-weekly-summary",
+          "subscriptionRevision": 1,
+          "triggerId": "fixture-trigger",
+          "nativeOperationId": "fixture-native-operation",
+          "nativeThreadId": "fixture-native-thread",
+          "nativeTurnId": null,
+          "status": "running",
+          "deliveryStatus": "not_ready",
+          "artifactRefs": [],
+          "output": null,
+          "deliveryId": null,
+          "createdAtMs": 1000,
+          "updatedAtMs": 1000,
+          "errorCode": null,
+          "__untrustedAuthority": true,
+          "title": "Synthetic daily report"
+        }
+      }
+    ]
+  },
+  "AutomationRunReadParams": {
+    "valid": [
+      {
+        "name": "valid_AutomationRunReadParams",
+        "value": {
+          "runId": "fixture-run"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject_invalid_AutomationRunReadParams",
+        "value": {
+          "runId": "fixture-run",
+          "__untrustedAuthority": true
+        }
+      }
+    ]
+  },
+  "AutomationTriggerParams": {
+    "valid": [
+      {
+        "name": "valid_AutomationTriggerParams",
+        "value": {
+          "subscriptionId": "fixture-weekly-summary",
+          "subscriptionRevision": 1,
+          "triggerId": "fixture-trigger",
+          "triggerFacts": {
+            "sourceRevision": "1"
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject_invalid_AutomationTriggerParams",
+        "value": {
+          "subscriptionId": "fixture-weekly-summary",
+          "subscriptionRevision": 1,
+          "triggerId": "fixture-trigger",
+          "triggerFacts": {
+            "sourceRevision": "1"
+          },
+          "__untrustedAuthority": true
+        }
+      }
+    ]
+  },
+  "AutomationRunListResult": {
+    "valid": [
+      {
+        "name": "valid_AutomationRunListResult",
+        "value": {
+          "page": {
+            "items": [
+              {
+                "id": "fixture-run",
+                "owner": {
+                  "accountId": "fixture-account",
+                  "targetId": "fixture-target",
+                  "workspaceId": null
+                },
+                "subscriptionId": "fixture-weekly-summary",
+                "subscriptionRevision": 1,
+                "triggerId": "fixture-trigger",
+                "nativeOperationId": "fixture-native-operation",
+                "nativeThreadId": "fixture-native-thread",
+                "nativeTurnId": null,
+                "status": "running",
+                "deliveryStatus": "not_ready",
+                "artifactRefs": [],
+                "output": null,
+                "deliveryId": null,
+                "createdAtMs": 1000,
+                "updatedAtMs": 1000,
+                "errorCode": null,
+                "title": "Synthetic daily report"
+              }
+            ],
+            "nextCursor": null
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject_invalid_AutomationRunListResult",
+        "value": {
+          "page": {
+            "items": [
+              {
+                "id": "fixture-run",
+                "owner": {
+                  "accountId": "fixture-account",
+                  "targetId": "fixture-target",
+                  "workspaceId": null
+                },
+                "subscriptionId": "fixture-weekly-summary",
+                "subscriptionRevision": 1,
+                "triggerId": "fixture-trigger",
+                "nativeOperationId": "fixture-native-operation",
+                "nativeThreadId": "fixture-native-thread",
+                "nativeTurnId": null,
+                "status": "running",
+                "deliveryStatus": "not_ready",
+                "artifactRefs": [],
+                "output": null,
+                "deliveryId": null,
+                "createdAtMs": 1000,
+                "updatedAtMs": 1000,
+                "errorCode": null,
+                "title": "Synthetic daily report"
+              }
+            ],
+            "nextCursor": null
+          },
+          "__untrustedAuthority": true
+        }
+      }
+    ]
+  },
+  "AutomationRunReadResult": {
+    "valid": [
+      {
+        "name": "valid_AutomationRunReadResult",
+        "value": {
+          "run": {
+            "id": "fixture-run",
+            "owner": {
+              "accountId": "fixture-account",
+              "targetId": "fixture-target",
+              "workspaceId": null
+            },
+            "subscriptionId": "fixture-weekly-summary",
+            "subscriptionRevision": 1,
+            "triggerId": "fixture-trigger",
+            "nativeOperationId": "fixture-native-operation",
+            "nativeThreadId": "fixture-native-thread",
+            "nativeTurnId": null,
+            "status": "running",
+            "deliveryStatus": "not_ready",
+            "artifactRefs": [],
+            "output": null,
+            "deliveryId": null,
+            "createdAtMs": 1000,
+            "updatedAtMs": 1000,
+            "errorCode": null,
+            "title": "Synthetic daily report"
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject_invalid_AutomationRunReadResult",
+        "value": {
+          "run": {
+            "id": "fixture-run",
+            "owner": {
+              "accountId": "fixture-account",
+              "targetId": "fixture-target",
+              "workspaceId": null
+            },
+            "subscriptionId": "fixture-weekly-summary",
+            "subscriptionRevision": 1,
+            "triggerId": "fixture-trigger",
+            "nativeOperationId": "fixture-native-operation",
+            "nativeThreadId": "fixture-native-thread",
+            "nativeTurnId": null,
+            "status": "running",
+            "deliveryStatus": "not_ready",
+            "artifactRefs": [],
+            "output": null,
+            "deliveryId": null,
+            "createdAtMs": 1000,
+            "updatedAtMs": 1000,
+            "errorCode": null,
+            "title": "Synthetic daily report"
+          },
+          "__untrustedAuthority": true
+        }
+      }
+    ]
+  },
+  "AutomationTemplate": {
+    "valid": [
+      {
+        "name": "synthetic-valid",
+        "value": {
+          "id": "weekly-report",
+          "title": "Weekly work report",
+          "description": "Synthetic template definition",
+          "workflowId": "builtin-office-weekly-report",
+          "workflowVersion": 1,
+          "inputSchema": {
+            "type": "object"
+          },
+          "suggestedSchedule": {
+            "kind": "zoned_cron",
+            "expression": "0 16 * * 5",
+            "timezone": "Asia/Shanghai"
+          },
+          "maximumTokens": 5000,
+          "maximumRuntimeSeconds": 300,
+          "acceptanceCriteria": [
+            "Trace every claim to actual approved sources."
+          ]
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown-authority-field",
+        "value": {
+          "id": "weekly-report",
+          "title": "Weekly work report",
+          "description": "Synthetic template definition",
+          "workflowId": "builtin-office-weekly-report",
+          "workflowVersion": 1,
+          "inputSchema": {
+            "type": "object"
+          },
+          "suggestedSchedule": {
+            "kind": "zoned_cron",
+            "expression": "0 16 * * 5",
+            "timezone": "Asia/Shanghai"
+          },
+          "maximumTokens": 5000,
+          "maximumRuntimeSeconds": 300,
+          "acceptanceCriteria": [
+            "Trace every claim to actual approved sources."
+          ],
+          "__untrustedAuthority": true
+        }
+      }
+    ]
+  },
+  "AutomationTemplateListResult": {
+    "valid": [
+      {
+        "name": "synthetic-valid",
+        "value": {
+          "templates": [
+            {
+              "id": "weekly-report",
+              "title": "Weekly work report",
+              "description": "Synthetic template definition",
+              "workflowId": "builtin-office-weekly-report",
+              "workflowVersion": 1,
+              "inputSchema": {
+                "type": "object"
+              },
+              "suggestedSchedule": {
+                "kind": "zoned_cron",
+                "expression": "0 16 * * 5",
+                "timezone": "Asia/Shanghai"
+              },
+              "maximumTokens": 5000,
+              "maximumRuntimeSeconds": 300,
+              "acceptanceCriteria": [
+                "Trace every claim to actual approved sources."
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown-authority-field",
+        "value": {
+          "templates": [
+            {
+              "id": "weekly-report",
+              "title": "Weekly work report",
+              "description": "Synthetic template definition",
+              "workflowId": "builtin-office-weekly-report",
+              "workflowVersion": 1,
+              "inputSchema": {
+                "type": "object"
+              },
+              "suggestedSchedule": {
+                "kind": "zoned_cron",
+                "expression": "0 16 * * 5",
+                "timezone": "Asia/Shanghai"
+              },
+              "maximumTokens": 5000,
+              "maximumRuntimeSeconds": 300,
+              "acceptanceCriteria": [
+                "Trace every claim to actual approved sources."
+              ]
+            }
+          ],
+          "__untrustedAuthority": true
+        }
+      }
+    ]
+  },
+  "AutomationArtifactClaim": {
+    "valid": [
+      {
+        "name": "valid_AutomationArtifactClaim",
+        "value": {
+          "owner": {
+            "accountId": "fixture-account",
+            "targetId": "fixture-target",
+            "workspaceId": null
+          },
+          "runId": "fixture-run",
+          "nativeOperationId": "fixture-native-operation",
+          "manifestRef": {
+            "kind": "artifact",
+            "id": "fixture-artifact",
+            "revision": "1"
+          },
+          "exportId": "fixture-native-export",
+          "bytes": 29,
+          "sha256": "e410f3a412c0d415ea85c89c588bf153e29fc5e181787900e246a4b760067b02",
+          "completedAtMs": 1000
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown_field_AutomationArtifactClaim",
+        "value": {
+          "owner": {
+            "accountId": "fixture-account",
+            "targetId": "fixture-target",
+            "workspaceId": null
+          },
+          "runId": "fixture-run",
+          "nativeOperationId": "fixture-native-operation",
+          "manifestRef": {
+            "kind": "artifact",
+            "id": "fixture-artifact",
+            "revision": "1"
+          },
+          "exportId": "fixture-native-export",
+          "bytes": 29,
+          "sha256": "e410f3a412c0d415ea85c89c588bf153e29fc5e181787900e246a4b760067b02",
+          "completedAtMs": 1000,
+          "untrustedDownloaded": true
+        }
+      }
+    ]
+  },
+  "AutomationClaimListResult": {
+    "valid": [
+      {
+        "name": "valid_AutomationClaimListResult",
+        "value": {
+          "page": {
+            "items": [
+              {
+                "owner": {
+                  "accountId": "fixture-account",
+                  "targetId": "fixture-target",
+                  "workspaceId": null
+                },
+                "runId": "fixture-run",
+                "nativeOperationId": "fixture-native-operation",
+                "manifestRef": {
+                  "kind": "artifact",
+                  "id": "fixture-artifact",
+                  "revision": "1"
+                },
+                "exportId": "fixture-native-export",
+                "bytes": 29,
+                "sha256": "e410f3a412c0d415ea85c89c588bf153e29fc5e181787900e246a4b760067b02",
+                "completedAtMs": 1000
+              }
+            ],
+            "nextCursor": null
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown_field_AutomationClaimListResult",
+        "value": {
+          "page": {
+            "items": [
+              {
+                "owner": {
+                  "accountId": "fixture-account",
+                  "targetId": "fixture-target",
+                  "workspaceId": null
+                },
+                "runId": "fixture-run",
+                "nativeOperationId": "fixture-native-operation",
+                "manifestRef": {
+                  "kind": "artifact",
+                  "id": "fixture-artifact",
+                  "revision": "1"
+                },
+                "exportId": "fixture-native-export",
+                "bytes": 29,
+                "sha256": "e410f3a412c0d415ea85c89c588bf153e29fc5e181787900e246a4b760067b02",
+                "completedAtMs": 1000
+              }
+            ],
+            "nextCursor": null
+          },
+          "untrustedDownloaded": true
+        }
+      }
+    ]
+  },
+  "AutomationFileSelectionParams": {
+    "valid": [
+      {
+        "name": "native-selection-metadata",
+        "value": {
+          "relativeDirectory": ".",
+          "fileNames": [
+            "Evidence.md"
+          ]
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-payload-authority",
+        "value": {
+          "relativeDirectory": ".",
+          "fileNames": [
+            "Evidence.md"
+          ],
+          "authorized": true
+        }
+      }
+    ]
+  },
+  "AutomationFileSelectionReceipt": {
+    "valid": [
+      {
+        "name": "native-selection-metadata",
+        "value": {
+          "owner": {
+            "accountId": "fixture-account",
+            "targetId": "fixture-target",
+            "workspaceId": "fixture-workspace"
+          },
+          "sourceRef": "file-events-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "selectionRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "items": [
+            {
+              "resourceRef": "file-resource-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "name": "Evidence.md",
+              "identityRevision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            }
+          ]
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-payload-authority",
+        "value": {
+          "owner": {
+            "accountId": "fixture-account",
+            "targetId": "fixture-target",
+            "workspaceId": "fixture-workspace"
+          },
+          "sourceRef": "file-events-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "selectionRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "items": [
+            {
+              "resourceRef": "file-resource-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "name": "Evidence.md",
+              "identityRevision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            }
+          ],
+          "permission": true
+        }
+      }
+    ]
+  },
+  "AutomationPeriodBudgetPreview": {
+    "valid": [
+      {
+        "name": "valid_AutomationPeriodBudgetPreview",
+        "value": {
+          "configuration": {
+            "windowSeconds": 86400,
+            "maximumTokens": 10000,
+            "maximumModelCalls": 20
+          },
+          "currentWindow": {
+            "startsAtMs": 0,
+            "endsAtMs": 86400000
+          },
+          "effectiveMaximumTokens": 8000,
+          "effectiveMaximumModelCalls": 20,
+          "chargedTokens": 1000,
+          "chargedModelCalls": 2,
+          "unknownCostReservations": 2,
+          "increasesApplyNextWindow": true,
+          "createsSubscription": false,
+          "activeTasks": 0,
+          "activeCalls": 0
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing_required_AutomationPeriodBudgetPreview",
+        "value": {}
+      },
+      {
+        "name": "extra_AutomationPeriodBudgetPreview",
+        "value": {
+          "configuration": {
+            "windowSeconds": 86400,
+            "maximumTokens": 10000,
+            "maximumModelCalls": 20
+          },
+          "currentWindow": {
+            "startsAtMs": 0,
+            "endsAtMs": 86400000
+          },
+          "effectiveMaximumTokens": 8000,
+          "effectiveMaximumModelCalls": 20,
+          "chargedTokens": 1000,
+          "chargedModelCalls": 2,
+          "unknownCostReservations": 2,
+          "increasesApplyNextWindow": true,
+          "createsSubscription": false,
+          "callerTrusted": true,
+          "activeTasks": 0,
+          "activeCalls": 0
+        }
+      }
+    ]
+  },
+  "AutomationQuarantinedEvent": {
+    "valid": [
+      {
+        "name": "original_quarantined_fact",
+        "value": {
+          "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "subscriptionId": "fixture-subscription",
+          "subscriptionRevision": 2,
+          "sourceRef": "selected-file-source",
+          "eventId": "old-event-1",
+          "occurredAtMs": 0,
+          "reasonCode": "AUTOMATION_EVENT_STALE_QUARANTINED"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "no_raw_facts",
+        "value": {
+          "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "subscriptionId": "fixture-subscription",
+          "subscriptionRevision": 2,
+          "sourceRef": "selected-file-source",
+          "eventId": "old-event-1",
+          "occurredAtMs": 0,
+          "reasonCode": "AUTOMATION_EVENT_STALE_QUARANTINED",
+          "facts": {
+            "privatePath": "not-exported"
+          }
+        }
+      }
+    ]
+  },
+  "AutomationQuarantineListResult": {
+    "valid": [
+      {
+        "name": "paged_original_quarantine",
+        "value": {
+          "page": {
+            "items": [
+              {
+                "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "subscriptionId": "fixture-subscription",
+                "subscriptionRevision": 2,
+                "sourceRef": "selected-file-source",
+                "eventId": "old-event-1",
+                "occurredAtMs": 0,
+                "reasonCode": "AUTOMATION_EVENT_STALE_QUARANTINED"
+              }
+            ],
+            "nextCursor": null
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "invalid_item",
+        "value": {
+          "page": {
+            "items": [
+              {
+                "id": "missing-fields"
+              }
+            ],
+            "nextCursor": null
+          }
+        }
+      }
+    ]
+  },
+  "AutomationConnectionEventSource": {
+    "valid": [
+      {
+        "name": "actual_native_source_metadata",
+        "value": {
+          "sourceRef": "connection-event-native-reference",
+          "connectionId": "owned-connection",
+          "platform": "wecom",
+          "receivedAtMs": 1000,
+          "state": "available",
+          "reasonCode": null
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "not_a_grant",
+        "value": {
+          "sourceRef": "connection-event-native-reference",
+          "connectionId": "owned-connection",
+          "platform": "wecom",
+          "receivedAtMs": 1000,
+          "state": "available",
+          "reasonCode": null,
+          "approved": true
+        }
+      }
+    ]
+  },
+  "AutomationConnectionEventSourceState": {
+    "valid": [
+      {
+        "name": "available",
+        "value": "available"
+      },
+      {
+        "name": "unavailable",
+        "value": "unavailable"
+      }
+    ],
+    "invalid": [
+      {
+        "name": "not_trusted",
+        "value": "trusted"
+      }
+    ]
+  },
+  "AutomationConnectionEventSourceListResult": {
+    "valid": [
+      {
+        "name": "source_page",
+        "value": {
+          "page": {
+            "items": [
+              {
+                "sourceRef": "connection-event-native-reference",
+                "connectionId": "owned-connection",
+                "platform": "wecom",
+                "receivedAtMs": 1000,
+                "state": "available",
+                "reasonCode": null
+              }
+            ],
+            "nextCursor": null
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "incomplete_source",
+        "value": {
+          "page": {
+            "items": [
+              {
+                "sourceRef": "missing-metadata"
+              }
+            ],
+            "nextCursor": null
+          }
+        }
+      }
+    ]
+  },
+  "AutomationApplicationSelectionParams": {
+    "valid": [
+      {
+        "name": "fixed_original_source_resource_and_explicit_read_consent",
+        "value": {
+          "source": {
+            "sourceRef": {
+              "id": "fixture-native-source",
+              "revision": "native-source-v1"
+            },
+            "accountRef": null
+          },
+          "resourceUri": "mailbox://fixture/inbox",
+          "readConsentRef": "explicit-resource-read-consent"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing_explicit_read_consent",
+        "value": {
+          "source": {
+            "sourceRef": {
+              "id": "fixture-native-source",
+              "revision": "native-source-v1"
+            },
+            "accountRef": null
+          },
+          "resourceUri": "mailbox://fixture/inbox"
+        }
+      },
+      {
+        "name": "json_approved_is_not_resource_read_authority",
+        "value": {
+          "source": {
+            "sourceRef": {
+              "id": "fixture-native-source",
+              "revision": "native-source-v1"
+            },
+            "accountRef": null
+          },
+          "resourceUri": "mailbox://fixture/inbox",
+          "readConsentRef": "explicit-resource-read-consent",
+          "approved": true
+        }
+      }
+    ]
+  },
+  "AutomationApplicationSelectionReceipt": {
+    "valid": [
+      {
+        "name": "resource_selection_returns_fixed_refs_without_body_or_credentials",
+        "value": {
+          "owner": {
+            "accountId": "fixture-account",
+            "targetId": "fixture-target",
+            "workspaceId": null
+          },
+          "sourceRef": "application-events-fixture",
+          "selectionRevision": "selection-v1",
+          "source": {
+            "sourceRef": {
+              "id": "fixture-native-source",
+              "revision": "native-source-v1"
+            },
+            "accountRef": null
+          },
+          "resourceRef": "application-resource-fixture"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "resource_receipt_never_contains_event_body",
+        "value": {
+          "owner": {
+            "accountId": "fixture-account",
+            "targetId": "fixture-target",
+            "workspaceId": null
+          },
+          "sourceRef": "application-events-fixture",
+          "selectionRevision": "selection-v1",
+          "source": {
+            "sourceRef": {
+              "id": "fixture-native-source",
+              "revision": "native-source-v1"
+            },
+            "accountRef": null
+          },
+          "resourceRef": "application-resource-fixture",
+          "body": "untrusted"
+        }
+      }
+    ]
+  }
+}

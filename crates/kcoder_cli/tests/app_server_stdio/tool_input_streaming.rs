@@ -4,7 +4,7 @@ use super::*;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 #[derive(Clone, Copy)]
-enum ProgressWire {
+pub(super) enum ProgressWire {
     Anthropic,
     GenAiChat,
 }
@@ -36,7 +36,11 @@ fn progress_fixture_event(socket: &mut std::net::TcpStream, event: &str, data: V
     progress_fixture_chunk(socket, &format!("event: {event}\ndata: {data}\n\n"));
 }
 
-fn progress_fixture_delta(socket: &mut std::net::TcpStream, wire: ProgressWire, part: &str) {
+pub(super) fn progress_fixture_delta(
+    socket: &mut std::net::TcpStream,
+    wire: ProgressWire,
+    part: &str,
+) {
     match wire {
         ProgressWire::Anthropic => progress_fixture_event(
             socket,
@@ -54,6 +58,15 @@ fn progress_fixture_delta(socket: &mut std::net::TcpStream, wire: ProgressWire, 
 }
 
 fn progress_fixture_start(socket: &mut std::net::TcpStream, wire: ProgressWire) {
+    progress_fixture_tool_start(socket, wire, "write", "early-write");
+}
+
+pub(super) fn progress_fixture_tool_start(
+    socket: &mut std::net::TcpStream,
+    wire: ProgressWire,
+    name: &str,
+    id: &str,
+) {
     write!(socket, "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n").unwrap();
     match wire {
         ProgressWire::Anthropic => {
@@ -65,20 +78,20 @@ fn progress_fixture_start(socket: &mut std::net::TcpStream, wire: ProgressWire) 
             progress_fixture_event(
                 socket,
                 "content_block_start",
-                json!({"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"early-write","name":"write","input":{}}}),
+                json!({"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":id,"name":name,"input":{}}}),
             );
         }
         ProgressWire::GenAiChat => progress_fixture_chunk(
             socket,
             &format!(
                 "data: {}\n\n",
-                json!({"id":"progress-message","model":"fixture-model","choices":[{"index":0,"delta":{"role":"assistant","tool_calls":[{"index":0,"id":"early-write","type":"function","function":{"name":"write","arguments":""}}]},"finish_reason":null}]})
+                json!({"id":"progress-message","model":"fixture-model","choices":[{"index":0,"delta":{"role":"assistant","tool_calls":[{"index":0,"id":id,"type":"function","function":{"name":name,"arguments":""}}]},"finish_reason":null}]})
             ),
         ),
     }
 }
 
-fn progress_fixture_terminal(socket: &mut std::net::TcpStream, wire: ProgressWire) {
+pub(super) fn progress_fixture_terminal(socket: &mut std::net::TcpStream, wire: ProgressWire) {
     match wire {
         ProgressWire::Anthropic => {
             progress_fixture_event(
@@ -106,6 +119,14 @@ fn progress_fixture_terminal(socket: &mut std::net::TcpStream, wire: ProgressWir
 }
 
 fn progress_fixture_final_answer(socket: &mut std::net::TcpStream, wire: ProgressWire) {
+    progress_fixture_final_text(socket, wire, "Done");
+}
+
+pub(super) fn progress_fixture_final_text(
+    socket: &mut std::net::TcpStream,
+    wire: ProgressWire,
+    text: &str,
+) {
     write!(socket, "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n").unwrap();
     match wire {
         ProgressWire::Anthropic => {
@@ -122,7 +143,7 @@ fn progress_fixture_final_answer(socket: &mut std::net::TcpStream, wire: Progres
             progress_fixture_event(
                 socket,
                 "content_block_delta",
-                json!({"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Done"}}),
+                json!({"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":text}}),
             );
             progress_fixture_event(
                 socket,
@@ -140,7 +161,7 @@ fn progress_fixture_final_answer(socket: &mut std::net::TcpStream, wire: Progres
             socket,
             &format!(
                 "data: {}\n\ndata: {}\n\ndata: [DONE]\n\n",
-                json!({"choices":[{"index":0,"delta":{"content":"Done"},"finish_reason":null}]}),
+                json!({"choices":[{"index":0,"delta":{"content":text},"finish_reason":null}]}),
                 json!({"choices":[{"index":0,"delta":{},"finish_reason":"stop"}]})
             ),
         ),
@@ -207,6 +228,25 @@ fn tool_input_stream_fixture(wire: ProgressWire) -> ToolInputStreamFixture {
             assert_eq!(request["model"], "fixture-model");
             model_calls += 1;
             if model_calls == 2 {
+                if let ProgressWire::Anthropic = wire {
+                    assert!(
+                        request["messages"]
+                            .as_array()
+                            .unwrap()
+                            .iter()
+                            .any(|message| {
+                                message["content"].as_array().is_some_and(|content| {
+                                    content.iter().any(|block| {
+                                        block["type"] == "tool_result"
+                                            && block["tool_use_id"] == "early-write"
+                                            && block["is_error"] != true
+                                            && !block.to_string().contains("interrupted")
+                                    })
+                                })
+                            }),
+                        "the next request must contain the completed tool result"
+                    );
+                }
                 progress_fixture_final_answer(&mut socket, wire);
                 continue;
             }
@@ -235,11 +275,28 @@ fn tool_input_stream_fixture(wire: ProgressWire) -> ToolInputStreamFixture {
     }
 }
 
-fn assert_tool_lines_reach_stdio_before_provider_terminal(wire: ProgressWire) {
+fn assert_tool_lines_reach_stdio_before_provider_terminal(wire: ProgressWire, stop_hook: bool) {
     let temporary = tempfile::tempdir().unwrap();
     let workspace = temporary.path().join("workspace");
     let config = temporary.path().join("profile");
     std::fs::create_dir_all(&workspace).unwrap();
+    if stop_hook {
+        let profile = kcoder_config::PrivateDirectory::open_or_create(&config).unwrap();
+        let command = if cfg!(windows) {
+            "Add-Content stop-hook-runs.txt stop; Write-Output '{\"continue\":false}'"
+        } else {
+            "echo stop >> stop-hook-runs.txt; printf '{\"continue\":false}'"
+        };
+        profile
+            .atomic_replace(
+                std::ffi::OsStr::new("settings.json"),
+                &serde_json::to_vec(&json!({
+                    "hooks": {"Stop":[{"hooks":[{"type":"command","command":command}]}]}
+                }))
+                .unwrap(),
+            )
+            .unwrap();
+    }
     let fixture = tool_input_stream_fixture(wire);
     let settings = temporary.path().join("settings.json");
     let format = match wire {
@@ -382,15 +439,29 @@ fn assert_tool_lines_reach_stdio_before_provider_terminal(wire: ProgressWire) {
         std::fs::read_to_string(workspace.join("streamed.txt")).unwrap(),
         "one\ntwo\n"
     );
+    if stop_hook {
+        assert_eq!(
+            std::fs::read_to_string(workspace.join("stop-hook-runs.txt"))
+                .unwrap()
+                .lines()
+                .count(),
+            1
+        );
+    }
     server.shutdown_successfully();
 }
 
 #[test]
 fn anthropic_tool_lines_reach_stdio_before_provider_terminal() {
-    assert_tool_lines_reach_stdio_before_provider_terminal(ProgressWire::Anthropic);
+    assert_tool_lines_reach_stdio_before_provider_terminal(ProgressWire::Anthropic, false);
 }
 
 #[test]
 fn genai_chat_tool_lines_reach_stdio_before_provider_terminal() {
-    assert_tool_lines_reach_stdio_before_provider_terminal(ProgressWire::GenAiChat);
+    assert_tool_lines_reach_stdio_before_provider_terminal(ProgressWire::GenAiChat, false);
+}
+
+#[test]
+fn anthropic_stop_hook_preserves_tool_execution_and_completed_receipt() {
+    assert_tool_lines_reach_stdio_before_provider_terminal(ProgressWire::Anthropic, true);
 }

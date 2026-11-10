@@ -1,6 +1,7 @@
 import { Cpu, Loader2, Network, Search, Server, ShieldCheck, TerminalSquare } from 'lucide-react'
-import type { ComponentType, UIEvent } from 'react'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { usePageSurfaceTransition } from '@/components/layout/pageTransitionAnimation'
+import type { ComponentType, Ref, UIEvent } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createDeviceApi } from '@/api/devices'
 import { createHttpClient } from '@/api/http'
 import { createUserApi } from '@/api/users'
@@ -84,7 +85,6 @@ function createAppsPageApis() {
         const response = await client.get<{ apps?: WegentInstalledConnectorApp[] }>(
           '/apps/installed',
           {
-            redirectOnUnauthorized: false,
           }
         )
         return Array.isArray(response.apps) ? response.apps : []
@@ -255,7 +255,7 @@ function ExecutorStatusCard({ devices }: { devices: DeviceInfo[] }) {
   const version = getLatestExecutorVersion(devices)
 
   return (
-    <article className="rounded-3xl border border-border bg-background p-5">
+    <article className="studio-card-spacing rounded-3xl border border-border bg-background">
       <div className="flex items-center justify-between gap-3">
         <div className="text-sm font-bold text-text-primary">Executor 状态</div>
         <StatusPill
@@ -283,11 +283,12 @@ function ExecutorStatusCard({ devices }: { devices: DeviceInfo[] }) {
 }
 
 function HeroSection() {
+  const { t } = useTranslation('common')
   return (
-    <article className="relative overflow-hidden rounded-3xl border border-border bg-background p-6">
+    <article className="studio-card-spacing relative overflow-hidden rounded-3xl border border-border bg-background">
       <div className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-primary/10 blur-2xl" />
       <div className="relative max-w-2xl text-heading-lg font-medium leading-tight tracking-[-0.04em] text-text-primary">
-        让 WeWork 成为所有 AI 工具的统一入口
+        {t('workbench.apps_tab', '应用')}
       </div>
       <p className="relative mt-3 max-w-3xl text-sm leading-7 text-text-secondary">
         使用公司的模型服务代理 Claude 和 Codex，任务服务负责本地/云端运行，小程序负责办公流程。
@@ -314,7 +315,13 @@ function HeroSection() {
   )
 }
 
-function AppsPageHeader({ collapseProgress }: { collapseProgress: number }) {
+function AppsPageHeader({
+  collapseProgress,
+  headerRef,
+}: {
+  collapseProgress: number
+  headerRef?: Ref<HTMLDivElement>
+}) {
   const { appearance } = useAppearance()
   const typography = resolveUiTypographyVariables(appearance.uiFontSize)
   const detailOpacity = 1 - collapseProgress
@@ -332,6 +339,7 @@ function AppsPageHeader({ collapseProgress }: { collapseProgress: number }) {
 
   return (
     <div
+      ref={headerRef}
       data-testid="apps-page-header"
       data-collapse-progress={collapseProgress.toFixed(2)}
       className="sticky top-0 z-10 flex flex-col gap-3 border-b border-border/70 bg-background/90 backdrop-blur-xl lg:flex-row lg:items-center lg:justify-between"
@@ -393,7 +401,7 @@ function AppCard({ app }: { app: AppCardData }) {
   const Icon = app.icon
 
   return (
-    <article className="flex min-h-44 flex-col rounded-2xl border border-border bg-background p-4 transition hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-[0_12px_28px_rgba(15,23,42,0.07)]">
+    <article className="studio-card-spacing flex min-h-44 flex-col rounded-2xl border border-border bg-background transition hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-[0_12px_28px_rgba(15,23,42,0.07)]">
       <div className="flex items-start justify-between gap-3">
         <div className={`grid h-11 w-11 place-items-center rounded-2xl ${app.iconClassName}`}>
           <Icon className="h-5 w-5" />
@@ -418,7 +426,7 @@ function AppCard({ app }: { app: AppCardData }) {
 
 function SummaryCard({ value, label }: { value: string; label: string }) {
   return (
-    <article className="rounded-2xl border border-border bg-background p-4">
+    <article className="studio-card-spacing rounded-2xl border border-border bg-background">
       <div className="text-heading-lg font-medium tracking-[-0.04em] text-text-primary">
         {value}
       </div>
@@ -439,7 +447,7 @@ function ActivityRow({
   time: string
 }) {
   return (
-    <div className="grid grid-cols-[10px_minmax(0,1fr)_auto] items-center gap-3 rounded-2xl border border-border bg-background px-4 py-3">
+    <div className="studio-card-spacing grid grid-cols-[10px_minmax(0,1fr)_auto] items-center gap-3 rounded-2xl border border-border bg-background">
       <span className={`h-2.5 w-2.5 rounded-full ${color}`} />
       <div className="min-w-0">
         <div className="truncate text-sm font-semibold text-text-primary">{title}</div>
@@ -455,7 +463,7 @@ function InstalledAppsSection({ apps }: { apps: WegentInstalledConnectorApp[] })
     return (
       <section
         data-testid="installed-apps-empty"
-        className="rounded-2xl border border-border bg-background p-8"
+        className="studio-card-spacing rounded-2xl border border-border bg-background"
       >
         <div className="max-w-xl">
           <h2 className="heading-base text-text-primary">已安装应用</h2>
@@ -482,7 +490,7 @@ function InstalledAppsSection({ apps }: { apps: WegentInstalledConnectorApp[] })
           <article
             key={app.id}
             data-testid={`installed-app-${app.slug}`}
-            className="rounded-2xl border border-border bg-background p-4"
+            className="studio-card-spacing rounded-2xl border border-border bg-background"
           >
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
@@ -566,8 +574,14 @@ export function AppsPage() {
 
 function GatewayAppsPage() {
   const { t } = useTranslation('common')
+  const pageSurface = usePageSurfaceTransition<HTMLElement>('apps')
   return (
-    <main data-testid="apps-page" className="flex-1 overflow-auto p-5 text-text-primary">
+    <main
+      ref={pageSurface}
+      data-studio-page-content="true"
+      data-testid="apps-page"
+      className="flex-1 overflow-auto p-5 text-text-primary"
+    >
       <h1 className="heading-base">{t('workbench.apps_tab', '应用')}</h1>
       <p data-testid="gateway-apps-unavailable" className="mt-2 text-sm text-text-secondary">
         {t('workbench.gateway_apps_unavailable', '当前 Gateway 未提供云端应用中心。')}
@@ -583,8 +597,21 @@ function LegacyAppsPage() {
   const [activeSection, setActiveSection] = useState<AppsSection>(() =>
     getAppsSectionFromLocation()
   )
+  const pageSurface = usePageSurfaceTransition<HTMLDivElement>(activeSection)
   const [headerCollapseProgress, setHeaderCollapseProgress] = useState(0)
   const scrollFrameRef = useRef<number | null>(null)
+  // The sticky header shrinks while scrolling. Give the lost height back at
+  // the end of the scroll content so the scroll range stays constant;
+  // otherwise near the bottom the browser clamps scrollTop, the header
+  // re-expands and the page oscillates.
+  const headerRef = useRef<HTMLDivElement>(null)
+  const expandedHeaderHeightRef = useRef(0)
+  const [headerCollapsedBy, setHeaderCollapsedBy] = useState(0)
+  useLayoutEffect(() => {
+    const height = headerRef.current?.offsetHeight ?? 0
+    if (headerCollapseProgress === 0) expandedHeaderHeightRef.current = height
+    setHeaderCollapsedBy(Math.max(0, expandedHeaderHeightRef.current - height))
+  }, [headerCollapseProgress])
 
   useEffect(() => {
     let cancelled = false
@@ -660,6 +687,8 @@ function LegacyAppsPage() {
 
   return (
     <div
+      ref={pageSurface}
+      data-studio-page-content="true"
       data-testid="apps-page"
       data-sidebar-collapsed={sidebarCollapsed}
       className={cn(
@@ -676,12 +705,12 @@ function LegacyAppsPage() {
         className="min-w-0 overflow-auto rounded-xl border border-border/60 bg-background shadow-[0_3px_16px_rgba(0,0,0,0.04)]"
         onScroll={handleScroll}
       >
-        <AppsPageHeader collapseProgress={headerCollapseProgress} />
+        <AppsPageHeader collapseProgress={headerCollapseProgress} headerRef={headerRef} />
         <SectionTabs activeSection={activeSection} onSelect={setActiveSection} />
 
         <div className="p-5">
           {state.error && (
-            <div className="mb-4 rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-500">
+            <div className="studio-card-spacing mb-4 rounded-2xl border border-red-500/20 bg-red-500/10 text-sm text-red-500">
               {state.error}
             </div>
           )}
@@ -778,6 +807,7 @@ function LegacyAppsPage() {
             </>
           )}
         </div>
+        <div aria-hidden="true" style={{ height: headerCollapsedBy }} />
       </section>
     </div>
   )
@@ -785,7 +815,7 @@ function LegacyAppsPage() {
 
 function PlaceholderSection({ title, detail }: { title: string; detail: string }) {
   return (
-    <section className="rounded-2xl border border-border bg-background p-8">
+    <section className="studio-card-spacing rounded-2xl border border-border bg-background">
       <div className="max-w-xl">
         <h2 className="heading-base text-text-primary">{title}</h2>
         <p className="mt-2 text-sm leading-6 text-text-secondary">{detail}</p>
@@ -804,7 +834,7 @@ function QuickAction({
   detail: string
 }) {
   return (
-    <article className="rounded-2xl border border-border bg-background p-4">
+    <article className="studio-card-spacing rounded-2xl border border-border bg-background">
       <div className="flex items-center gap-2">
         <div className="grid h-8 w-8 place-items-center rounded-xl bg-muted text-text-secondary">
           <Icon className="h-4 w-4" />

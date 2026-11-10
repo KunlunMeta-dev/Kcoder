@@ -2,15 +2,16 @@ use super::engine_factory::AppServerEngineFactory;
 use anyhow::Result;
 use kcoder_app_protocol::{McpAuthorizationStatus as Status, McpListResult, McpServerSummary};
 use kcoder_mcp::McpServerConfig;
+use kcoder_plugin_rpc::mcp_authorization::{status, token_store_for};
 
-pub(super) struct ConfiguredMcp {
-    pub config: McpServerConfig,
-    pub plugin_id: Option<String>,
-}
+pub(super) use kcoder_plugin_rpc::runtime_snapshot::ConfiguredMcp;
 
 pub(super) async fn list(factory: AppServerEngineFactory) -> Result<McpListResult> {
     let source = factory.clone();
-    let configured = tokio::task::spawn_blocking(move || source.current_mcp_servers()).await??;
+    let (settings, configured) = tokio::task::spawn_blocking(move || {
+        Ok::<_, anyhow::Error>((source.current_settings()?, source.current_mcp_servers()?))
+    })
+    .await??;
     let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(3);
     let mut servers = Vec::with_capacity(configured.len());
     for server in configured {
@@ -22,6 +23,7 @@ pub(super) async fn list(factory: AppServerEngineFactory) -> Result<McpListResul
         let last_connection_attempt = attempt.as_ref().map(|attempt| attempt.status.clone());
         let last_connection_failure = attempt.and_then(|attempt| attempt.failure_reason);
         servers.push(McpServerSummary {
+            enabled: settings.mcp_server_enabled(&server.config.name),
             name: server.config.name,
             transport: server.config.transport,
             plugin_id: server.plugin_id,
@@ -33,56 +35,33 @@ pub(super) async fn list(factory: AppServerEngineFactory) -> Result<McpListResul
     Ok(McpListResult { servers })
 }
 
-pub(super) async fn status(config: &McpServerConfig) -> Result<Status> {
-    if config.transport != "http" {
-        return Ok(Status::NotApplicable);
-    }
-    if config
-        .headers
-        .keys()
-        .any(|name| name.eq_ignore_ascii_case("authorization"))
-    {
-        return Ok(Status::ConfiguredHeader);
-    }
-    let endpoint = reqwest::Url::parse(&config.url)?;
-    if kcoder_mcp::authorization::validate_endpoint(&endpoint).is_err() {
-        return Ok(Status::NotApplicable);
-    }
-    let store = crate::mcp_connection::token_store()?;
-    let association = store.acquire_connection(&endpoint).await?;
-    let Some(saved) = association.load()? else {
-        return Ok(Status::NotAuthorized);
-    };
-    let registration = store
-        .acquire_registration(&saved.metadata, &saved.redirect_uri)
-        .await?;
-    let Some(client) = registration.load()? else {
-        return Ok(Status::ReauthorizationRequired);
-    };
-    if client.client_id() != saved.binding.client_id {
-        return Ok(Status::ReauthorizationRequired);
-    }
-    drop(registration);
-    let lease = store.acquire(saved.binding).await?;
-    let tokens = match lease.load() {
-        Ok(Some(tokens)) => tokens,
-        Ok(None) => return Ok(Status::NotAuthorized),
-        Err(error)
-            if error
-                .downcast_ref::<kcoder_mcp::authorization_tokens::RefreshRecoveryRequired>()
-                .is_some() =>
-        {
-            return Ok(Status::ReauthorizationRequired);
-        }
-        Err(error) => return Err(error),
-    };
-    if tokens
-        .expires_at()
-        .is_some_and(|expiry| expiry <= std::time::Instant::now())
-    {
-        return Ok(Status::Expired);
-    }
-    Ok(Status::Authorized)
+pub(super) async fn set_enabled(
+    factory: AppServerEngineFactory,
+    params: kcoder_app_protocol::McpSetEnabledParams,
+) -> Result<kcoder_app_protocol::McpSetEnabledResult> {
+    let name = params.name.clone();
+    tokio::task::spawn_blocking(move || {
+        let servers = factory.current_mcp_servers()?;
+        let matches = servers
+            .iter()
+            .filter(|server| server.config.name == params.name)
+            .collect::<Vec<_>>();
+        anyhow::ensure!(
+            matches.len() == 1 && matches[0].plugin_id == params.plugin_id,
+            "MCP server identity is unavailable or ambiguous on this target"
+        );
+        super::mcp_configuration::set_enabled(
+            &factory.mcp_activation_user_settings_path()?,
+            &params.name,
+            params.enabled,
+        )
+    })
+    .await??;
+    Ok(kcoder_app_protocol::McpSetEnabledResult {
+        name,
+        enabled: params.enabled,
+        applies_to_new_conversations: true,
+    })
 }
 
 pub(super) async fn resolve(
@@ -121,9 +100,7 @@ pub(super) async fn logout(
     }
     let endpoint =
         reqwest::Url::parse(&config.url).map_err(|_| anyhow::anyhow!("Invalid MCP endpoint"))?;
-    crate::mcp_connection::token_store()?
-        .logout_endpoint(&endpoint)
-        .await?;
+    token_store_for(&config)?.logout_endpoint(&endpoint).await?;
     Ok(kcoder_app_protocol::McpLogoutResult { logged_out: true })
 }
 
@@ -144,6 +121,7 @@ pub(super) async fn install(
             "url",
             "env",
             "headers",
+            "policy",
         ]
         .contains(&key.as_str())
     }) {
@@ -188,3 +166,6 @@ pub(super) async fn remove(
         applies_to_new_conversations: true,
     })
 }
+
+mod provider_revocation;
+pub(super) use provider_revocation::process as provider_revocation;

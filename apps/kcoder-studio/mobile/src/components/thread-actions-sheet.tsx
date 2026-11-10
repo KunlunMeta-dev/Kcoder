@@ -84,7 +84,9 @@ export function ThreadActionsSheet({
       liveTask.getSnapshot().threadId,
     )
       ? liveTask
-      : null;
+      : target && thread
+        ? taskRuntimeRegistry.getForTarget(profile, target.server, thread.id, thread.cwd)
+        : null;
   const liveSnapshot = useSyncExternalStore(
     matchingTask?.subscribe ?? subscribeNoop,
     matchingTask?.getSnapshot ?? getNullSnapshot,
@@ -148,7 +150,12 @@ export function ThreadActionsSheet({
             attachmentPaths,
           );
         }
-        void removeWorkspaceState(profile.id, target.server.id, thread!.id, workspaceStateAuthorizationScope(profile, target.server)).catch(() => {});
+        try {
+          await removeWorkspaceState(profile.id, target.server.id, thread!.id, workspaceStateAuthorizationScope(profile, target.server));
+        } catch {
+          setError(t("task.remote_delete_confirmed_local_cleanup_failed"));
+          return;
+        }
         taskRuntimeRegistry.remove(profile.id, target.server.id, thread!.id);
         onRemoved("deleted", thread!);
         onClose();
@@ -175,8 +182,7 @@ export function ThreadActionsSheet({
       />
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : undefined}
-        pointerEvents="box-none"
-        style={styles.keyboard}
+        style={[styles.keyboard, { pointerEvents: "box-none" }]}
       >
         <View
           ref={modalRef}
@@ -301,10 +307,10 @@ const getNullSnapshot = () => null;
 
 const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   overlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: colors.overlay,
   },
-  keyboard: { ...StyleSheet.absoluteFillObject },
+  keyboard: { ...StyleSheet.absoluteFill },
   sheet: {
     position: "absolute",
     left: 0,

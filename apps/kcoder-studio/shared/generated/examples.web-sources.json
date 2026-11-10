@@ -1,0 +1,82 @@
+{
+  "WebSourcesToolResultV1": [
+    {
+      "decoded": {},
+      "name": "legacy-absent",
+      "value": {}
+    },
+    {
+      "decoded": {
+        "webSources": {
+          "attempts": [
+            {
+              "elapsedMs": 12,
+              "provider": "exa-public",
+              "requestSent": true,
+              "status": "partial"
+            }
+          ],
+          "identity": {
+            "attemptId": "attempt-1",
+            "threadId": "thread-1",
+            "turnId": "turn-1"
+          },
+          "operation": "search",
+          "provider": "exa-public",
+          "schemaVersion": 1,
+          "sources": [
+            {
+              "author": "Publisher",
+              "cacheAgeMs": 0,
+              "cacheHit": false,
+              "publishedAt": "2026-10-30",
+              "readStatus": "summary_only",
+              "retrievedAt": "2026-10-31T00:00:00Z",
+              "sourceId": "web-native-1",
+              "title": "Official release",
+              "url": "https://example.com/release"
+            }
+          ],
+          "status": "partial",
+          "toolCallId": "search-1"
+        }
+      },
+      "name": "native-summary",
+      "value": {
+        "webSources": {
+          "attempts": [
+            {
+              "elapsedMs": 12,
+              "provider": "exa-public",
+              "requestSent": true,
+              "status": "partial"
+            }
+          ],
+          "identity": {
+            "attemptId": "attempt-1",
+            "threadId": "thread-1",
+            "turnId": "turn-1"
+          },
+          "operation": "search",
+          "provider": "exa-public",
+          "schemaVersion": 1,
+          "sources": [
+            {
+              "author": "Publisher",
+              "cacheAgeMs": 0,
+              "cacheHit": false,
+              "publishedAt": "2026-10-30",
+              "readStatus": "summary_only",
+              "retrievedAt": "2026-10-31T00:00:00Z",
+              "sourceId": "web-native-1",
+              "title": "Official release",
+              "url": "https://example.com/release"
+            }
+          ],
+          "status": "partial",
+          "toolCallId": "search-1"
+        }
+      }
+    }
+  ]
+}

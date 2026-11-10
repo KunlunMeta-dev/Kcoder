@@ -12,7 +12,7 @@ import {
   updateAppPreferences,
   type QuickPhrase,
   type QuickPhraseMode,
-} from '@/tauri/appPreferences'
+} from '@/host/appPreferences'
 import { SettingsPage, SettingsPageHeader } from './settings-ui'
 
 const emptyPhrase = (): QuickPhrase => ({

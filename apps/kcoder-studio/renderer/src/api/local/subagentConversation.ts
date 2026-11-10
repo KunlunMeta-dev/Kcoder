@@ -1,5 +1,5 @@
 import { captureAccountContextRevision } from '@/kcoder/accountContextEvents'
-import { requestLocalExecutor, subscribeLocalExecutorEvents } from '@/tauri/localExecutor'
+import { requestLocalExecutor, subscribeLocalExecutorEvents } from '@/host/localExecutor'
 import { createRandomUuid } from '@/lib/random-id'
 import { SubagentConversationProjection } from '@/kcoder/subagentConversationProjection'
 import type {
@@ -15,6 +15,12 @@ export async function subscribeSubagentConversation(
   handler: (event: RuntimeSubagentConversationEvent) => void
 ): Promise<RuntimeSubagentConversationSubscription> {
   const subscriptionId = createRandomUuid()
+  const expected = data.expectedBackgroundRun ? { ...data.expectedBackgroundRun } : undefined
+  if (
+    expected &&
+    (data.agentId !== expected.agentId || data.address.threadId !== expected.parentSessionId)
+  )
+    throw new Error('Exact subagent parent/run identity is unavailable')
   const current = captureAccountContextRevision()
   const projection = new SubagentConversationProjection(data.address)
   let active = true,
@@ -25,6 +31,17 @@ export async function subscribeSubagentConversation(
     runId = ''
   const deliver = (raw: Record<string, unknown>) => {
     if (!active || !current(data.address.deviceId)) return
+    if (expected && raw.type !== 'disconnected' && raw.runId !== expected.runId) {
+      handler({
+        type: 'disconnected',
+        threadId: expected.parentSessionId,
+        agentId: expected.agentId,
+        subscriptionId,
+        reason: 'agent_run_changed',
+      })
+      void unsubscribe()
+      return
+    }
     if (raw.type === 'reset') {
       if (raw.runId === runId && Number(raw.sequence) < sequence) return
       const snapshot = projection.snapshot(raw)
@@ -89,6 +106,7 @@ export async function subscribeSubagentConversation(
       raw.subscriptionId !== subscriptionId ||
       (data.address.threadId && raw.threadId !== data.address.threadId) ||
       typeof raw.runId !== 'string' ||
+      (expected && raw.runId !== expected.runId) ||
       !raw.runId ||
       !Number.isSafeInteger(raw.sequence) ||
       Number(raw.sequence) < 0

@@ -24,6 +24,7 @@ impl ReplApp {
     pub(super) fn start_streaming_message(&mut self) {
         if self.active_turn.is_none() {
             self.active_turn = Some(ActiveCell::default());
+            self.active_text_cap.reset();
             self.bump_active_turn_render_revision();
         }
         self.is_loading = true;
@@ -58,10 +59,15 @@ impl ReplApp {
             .nth(max_graphemes)
             .map(|(idx, _)| idx)
             .unwrap_or(self.streaming_text_pending.len());
-        self.streaming_text_pending.drain(..split_at).collect()
+        let prefix: String = self.streaming_text_pending.drain(..split_at).collect();
+        self.streaming_text_pending_cap.consume_prefix(&prefix);
+        prefix
     }
 
     pub(super) fn append_streaming_text_visible(&mut self, text: impl AsRef<str>) {
+        if !self.pending_web_source_slots.is_empty() {
+            self.flush_active_turn();
+        }
         self.start_streaming_message();
         self.streaming_output_active = true;
         self.streaming_status_suppressed_after_output = false;
@@ -74,13 +80,19 @@ impl ReplApp {
                     &text,
                     ACTIVE_TURN_TEXT_MAX_CHARS,
                     "assistant output",
+                    &mut self.active_text_cap,
                 );
             } else {
-                active.entries.push(ActiveEntry::Text(capped_tui_text(
+                let mut visible = String::new();
+                self.active_text_cap.reset();
+                append_capped_tui_text(
+                    &mut visible,
                     &text,
                     ACTIVE_TURN_TEXT_MAX_CHARS,
                     "assistant output",
-                )));
+                    &mut self.active_text_cap,
+                );
+                active.entries.push(ActiveEntry::Text(visible));
             }
         }
         self.bump_active_turn_render_revision();
@@ -102,6 +114,7 @@ impl ReplApp {
             &text,
             ACTIVE_TURN_TEXT_MAX_CHARS,
             "assistant output",
+            &mut self.streaming_text_pending_cap,
         );
         if self.transcript_viewport.is_at_tail() {
             self.snap_to_bottom();
@@ -119,6 +132,7 @@ impl ReplApp {
 
     pub(super) fn drain_pending_streaming_text_all(&mut self) -> bool {
         let text = std::mem::take(&mut self.streaming_text_pending);
+        self.streaming_text_pending_cap.reset();
         if text.is_empty() {
             return false;
         }
@@ -142,12 +156,14 @@ impl ReplApp {
             &text,
             ACTIVE_TURN_TEXT_MAX_CHARS,
             "thinking output",
+            &mut self.streaming_thinking_status_cap,
         );
         append_capped_tui_text(
             &mut self.streaming_thinking_buffer,
             &text,
             ACTIVE_TURN_TEXT_MAX_CHARS,
             "thinking output",
+            &mut self.streaming_thinking_buffer_cap,
         );
         self.bump_active_turn_render_revision();
     }
@@ -481,6 +497,14 @@ impl ReplApp {
     /// engine, preserving assistant text and tool calls in the order the model
     /// produced them. Thinking deltas are summarized separately.
     pub(super) fn flush_active_turn(&mut self) {
+        self.flush_active_turn_with_pending_tools(false);
+    }
+
+    pub(super) fn flush_interrupted_turn(&mut self) {
+        self.flush_active_turn_with_pending_tools(true);
+    }
+
+    fn flush_active_turn_with_pending_tools(&mut self, retain_pending_tools: bool) {
         self.drain_pending_streaming_text_all();
         self.streaming_message_done_pending = false;
         self.streaming_output_active = false;
@@ -492,12 +516,17 @@ impl ReplApp {
                 |entry| matches!(entry, ActiveEntry::SubagentPanel(panel) if !panel.all_terminal()),
             )
         });
-        let messages = if has_live_subagent_panel {
+        let has_pending_tools = retain_pending_tools
+            && self
+                .active_turn
+                .as_ref()
+                .is_some_and(ActiveCell::has_running_tool_entries);
+        let messages = if has_live_subagent_panel || has_pending_tools {
             StreamController::commit_stable_prefix(&mut self.active_turn, true)
         } else {
             StreamController::flush(&mut self.active_turn, true)
         };
-        if messages.is_empty() {
+        if messages.is_empty() && self.pending_web_source_slots.is_empty() {
             return;
         }
         self.bump_active_turn_render_revision();
@@ -505,6 +534,9 @@ impl ReplApp {
 
         for msg in messages {
             self.push_message(msg.role, msg.text);
+        }
+        for message in std::mem::take(&mut self.pending_web_source_slots) {
+            self.messages.push(message);
         }
     }
 

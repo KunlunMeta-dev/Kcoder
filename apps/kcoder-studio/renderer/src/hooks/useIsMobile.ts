@@ -1,17 +1,12 @@
 import { useEffect, useState } from 'react'
-import { isNativeTauriHost } from '@/lib/runtime-environment'
 import { isMobileViewport, mobileMediaQuery } from '@/lib/responsive'
 
 export function useIsMobile(): boolean {
   const [isMobile, setIsMobile] = useState(
-    () => !isNativeTauriHost() && isMobileViewport(window.innerWidth)
+    () => isMobileViewport(window.innerWidth)
   )
 
   useEffect(() => {
-    if (isNativeTauriHost()) {
-      return
-    }
-
     if (typeof window.matchMedia !== 'function') return
 
     const mql = window.matchMedia(mobileMediaQuery())

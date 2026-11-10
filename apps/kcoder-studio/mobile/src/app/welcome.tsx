@@ -25,26 +25,36 @@ import { parsePairingLink } from "@/gateway/pairing";
 import { useModalFocusTrap } from "@/components/use-modal-focus-trap";
 import { t } from "@/i18n";
 import { useLocale } from "@/i18n/use-locale";
+import { gatewayHttpErrorPresentation } from "@/gateway/http-errors";
+import { getMobileClientVersion } from "@/runtime/mobile-client-version";
 
 export default function WelcomeRoute() {
   useLocale();
   const { colors } = useTheme();
+  const { value: clientVersion } = getMobileClientVersion();
   const styles = useThemedStyles(makeStyles);
   const router = useRouter();
-  const params = useLocalSearchParams<{ gateway?: string; reauth?: string }>();
+  const params = useLocalSearchParams<{ gateway?: string | string[]; reauth?: string | string[]; connectMode?: string | string[] }>();
   const insets = useSafeAreaInsets();
   const { connectGateway, profileHydrationError, profileHydrationRetrying, retryStoredProfiles } = useApp();
-  const [directOpen, setDirectOpen] = useState(false);
+  const [directOpen, setDirectOpen] = useState(() => Boolean(firstParam(params.reauth) || firstParam(params.connectMode) === "direct"));
   const [linkOpen, setLinkOpen] = useState(false);
   const [endpoint, setEndpoint] = useState("http://127.0.0.1:4173");
   const [token, setToken] = useState("");
-  const linkRef = useRef("");
+  const [pairingLink, setPairingLink] = useState("");
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<Error | string | null>(null);
+  const [httpDetailsOpen, setHttpDetailsOpen] = useState(false);
   const mountedRef = useRef(true);
   const connectionAttemptRef = useRef(0);
   const connectionControllerRef = useRef<AbortController | null>(null);
   const restoringRef = useRef(false);
+  const requestedGateway = firstParam(params.gateway).trim();
+  const reauthProfileId = firstParam(params.reauth);
+  const connectMode = firstParam(params.connectMode);
+  const routeOwner = JSON.stringify([requestedGateway, reauthProfileId]);
+  const routeOwnerRef = useRef(routeOwner);
+  routeOwnerRef.current = routeOwner;
 
   useEffect(() => {
     mountedRef.current = true;
@@ -57,7 +67,15 @@ export default function WelcomeRoute() {
   }, []);
 
   useEffect(() => {
-    const requestedGateway = params.gateway?.trim();
+    connectionAttemptRef.current += 1;
+    connectionControllerRef.current?.abort();
+    connectionControllerRef.current = null;
+    setLoading(false);
+    setError(null);
+    setToken("");
+    setPairingLink("");
+    setDirectOpen(Boolean(reauthProfileId));
+    setLinkOpen(false);
     const currentOrigin =
       Platform.OS === "web"
         ? (() => {
@@ -68,25 +86,44 @@ export default function WelcomeRoute() {
         : undefined;
     if (requestedGateway || currentOrigin)
       setEndpoint(requestedGateway || currentOrigin || endpoint);
-    if (params.reauth) setDirectOpen(true);
     // endpoint is only the current value when no deep-link parameter exists; user input must not retrigger this initialization effect.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.gateway, params.reauth]);
 
+  useEffect(() => {
+    if (connectMode !== "direct" && connectMode !== "pairing") return;
+    if (!reauthProfileId) {
+      if (connectMode === "direct") {
+        setDirectOpen(true);
+        setLinkOpen(false);
+      } else {
+        setDirectOpen(false);
+        setLinkOpen(true);
+      }
+      setError(null);
+    }
+    router.setParams({ connectMode: undefined });
+  }, [connectMode, reauthProfileId, router]);
+
+  useEffect(() => { setHttpDetailsOpen(false); }, [error]);
+
   const connect = async (baseUrl: string, token: string) => {
+    if (!mountedRef.current || routeOwner !== routeOwnerRef.current || connectionControllerRef.current) return;
     const attempt = ++connectionAttemptRef.current;
-    connectionControllerRef.current?.abort();
+    const owner = routeOwner;
     const controller = new AbortController();
     connectionControllerRef.current = controller;
     setLoading(true);
     setError(null);
     try {
       const profile = await connectGateway({ baseUrl, token, signal: controller.signal });
-      if (!mountedRef.current || attempt !== connectionAttemptRef.current) return;
+      if (!mountedRef.current || owner !== routeOwnerRef.current || attempt !== connectionAttemptRef.current) return;
       if (!profile) {
         setError(t("welcome.connection_superseded"));
         return;
       }
+      // The committed profile owns activation; navigation cleanup must not cancel it.
+      if (connectionControllerRef.current === controller) connectionControllerRef.current = null;
       setDirectOpen(false);
       setLinkOpen(false);
       router.replace({
@@ -94,10 +131,10 @@ export default function WelcomeRoute() {
         params: { profileId: profile.id },
       });
     } catch (value) {
-      if (mountedRef.current && attempt === connectionAttemptRef.current)
-        setError(value instanceof Error ? value.message : String(value));
+      if (mountedRef.current && owner === routeOwnerRef.current && attempt === connectionAttemptRef.current)
+        setError(value instanceof Error ? value : String(value));
     } finally {
-      if (mountedRef.current && attempt === connectionAttemptRef.current) {
+      if (mountedRef.current && owner === routeOwnerRef.current && attempt === connectionAttemptRef.current) {
         setLoading(false);
         if (connectionControllerRef.current === controller)
           connectionControllerRef.current = null;
@@ -115,19 +152,55 @@ export default function WelcomeRoute() {
 
   const connectLink = () => {
     try {
-      const pairing = parsePairingLink(linkRef.current);
+      const pairing = parsePairingLink(pairingLink);
       void connect(pairing.gateway, pairing.token);
     } catch (value) {
       setError(value instanceof Error ? value.message : String(value));
     }
   };
 
+  const renderConnectionError = () => {
+    if (!error) return null;
+    const presentation = gatewayHttpErrorPresentation(error);
+    if (!presentation) {
+      return <Text accessibilityRole="alert" accessibilityLiveRegion="assertive" style={styles.error}>
+        {error instanceof Error ? error.message : String(error)}
+      </Text>;
+    }
+    return <View testID="gateway-http-error">
+      <Text accessibilityRole="alert" accessibilityLiveRegion="assertive" style={styles.error}>
+        {presentation.detail ?? t(presentation.categoryKey)}
+      </Text>
+      {presentation.detail ? <Text style={styles.errorGuidance}>{t(presentation.categoryKey)}</Text> : null}
+      <Pressable
+        testID="gateway-http-error-details-toggle"
+        accessibilityRole="button"
+        accessibilityState={{ expanded: httpDetailsOpen }}
+        onPress={() => setHttpDetailsOpen(value => !value)}
+        style={styles.httpDetailsToggle}
+      >
+        <Text style={styles.mutedActionText}>{t(httpDetailsOpen ? "connect.http_hide_details" : "connect.http_show_details")}</Text>
+      </Pressable>
+      {httpDetailsOpen ? <Text testID="gateway-http-error-status" style={styles.httpStatus}>
+        {t("connect.http_status_detail", { status: presentation.status })}
+      </Text> : null}
+    </View>;
+  };
+
   const retryHydration = async () => {
-    if (restoringRef.current || loading) return;
+    if (!mountedRef.current || routeOwner !== routeOwnerRef.current || restoringRef.current || loading) return;
     restoringRef.current = true;
+    const owner = routeOwner;
+    const attempt = connectionAttemptRef.current;
     try {
       const profileId = await retryStoredProfiles();
-      if (mountedRef.current && profileId)
+      // A gateway URL does not prove which profile the global recovery selected.
+      // Only an unscoped welcome or the exact reauthorization profile may redirect.
+      const recoveryMatchesRoute = profileId && (
+        (!requestedGateway && !reauthProfileId) ||
+        (Boolean(reauthProfileId) && profileId === reauthProfileId)
+      );
+      if (mountedRef.current && owner === routeOwnerRef.current && attempt === connectionAttemptRef.current && recoveryMatchesRoute)
         router.replace({ pathname: "/h/[profileId]", params: { profileId } });
     } finally {
       restoringRef.current = false;
@@ -161,41 +234,46 @@ export default function WelcomeRoute() {
                 </Button>
               </View>
             ) : null}
-            <Button
-              testID="welcome-direct-connection"
+            {Platform.OS !== "web" ? <Button
+              testID="welcome-scan-qr"
               variant="primary"
-              onPress={() => {
-                setError(null);
-                setDirectOpen(true);
-              }}
+              disabled={loading}
+              onPress={() => router.push("/pair-scan")}
             >
-              <Link2 size={19} color={colors.accentText} />
-              <Text style={styles.primaryText}>{t("welcome.direct_connect")}</Text>
-            </Button>
+              <QrCode size={19} color={colors.accentText} />
+              <Text style={styles.primaryText}>{t("welcome.scan_qr")}</Text>
+            </Button> : null}
             <Button
               testID="welcome-paste-pairing-link"
-              variant="ghost"
+              variant={Platform.OS === "web" ? "primary" : "ghost"}
+              disabled={loading}
               onPress={() => {
                 setError(null);
+                setDirectOpen(false);
                 setLinkOpen(true);
               }}
             >
-              <ClipboardPaste size={19} color={colors.textMuted} />
-              <Text style={styles.mutedActionText}>{t("welcome.paste_pairing_link")}</Text>
+              <ClipboardPaste size={19} color={Platform.OS === "web" ? colors.accentText : colors.textMuted} />
+              <Text style={Platform.OS === "web" ? styles.primaryText : styles.mutedActionText}>{t("welcome.paste_pairing_link")}</Text>
             </Button>
             <Button
-              testID="welcome-scan-qr"
+              testID="welcome-direct-connection"
               variant="ghost"
-              onPress={() => router.push("/pair-scan")}
+              disabled={loading}
+              onPress={() => {
+                setError(null);
+                setLinkOpen(false);
+                setDirectOpen(true);
+              }}
             >
-              <QrCode size={19} color={colors.textMuted} />
-              <Text style={styles.mutedActionText}>{t("welcome.scan_qr")}</Text>
+              <Link2 size={19} color={colors.textMuted} />
+              <Text style={styles.mutedActionText}>{t("welcome.direct_connect")}</Text>
             </Button>
           </View>
           <Text style={styles.setup}>{t("welcome.setup_hint")}</Text>
         </View>
         <View style={styles.footer}>
-          <Text style={styles.version}>{t("welcome.version_line")}</Text>
+          <Text style={styles.version}>{clientVersion ? t("welcome.version_line", { version: clientVersion }) : t("settings.product_name")}</Text>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={t("welcome.open_settings")}
@@ -218,6 +296,7 @@ export default function WelcomeRoute() {
           testID="gateway-endpoint"
           label={t("welcome.gateway_endpoint_label")}
           value={endpoint}
+          editable={!loading}
           autoCapitalize="none"
           autoCorrect={false}
           onChangeText={setEndpoint}
@@ -227,20 +306,13 @@ export default function WelcomeRoute() {
           testID="gateway-token"
           label={t("welcome.gateway_token_label")}
           value={token}
+          editable={!loading}
           secureTextEntry
           autoCapitalize="none"
           onChangeText={setToken}
           hint={t("welcome.gateway_token_hint")}
         />
-        {error ? (
-          <Text
-            accessibilityRole="alert"
-            accessibilityLiveRegion="assertive"
-            style={styles.error}
-          >
-            {error}
-          </Text>
-        ) : null}
+        {renderConnectionError()}
         <Button
           testID="gateway-connect"
           variant="primary"
@@ -261,23 +333,15 @@ export default function WelcomeRoute() {
           testID="pair-link-input"
           label={t("welcome.pair_link_label")}
           multiline
-          defaultValue=""
+          value={pairingLink}
+          editable={!loading}
           autoCapitalize="none"
-          onChangeText={(value) => {
-            linkRef.current = value;
-          }}
+          autoCorrect={false}
+          onChangeText={setPairingLink}
           hint={t("welcome.pair_link_hint")}
         />
-        {error ? (
-          <Text
-            accessibilityRole="alert"
-            accessibilityLiveRegion="assertive"
-            style={styles.error}
-          >
-            {error}
-          </Text>
-        ) : null}
-        <Button variant="primary" loading={loading} onPress={connectLink}>
+        {renderConnectionError()}
+        <Button testID="pair-link-connect" variant="primary" loading={loading} onPress={connectLink}>
           {t("common.connect")}
         </Button>
       </ConnectModal>
@@ -324,7 +388,7 @@ function ConnectModal({
           <View ref={modalRef} style={styles.modalCard}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>{title}</Text>
-              <Pressable accessibilityLabel={t("common.close")} onPress={onClose}>
+              <Pressable accessibilityLabel={t("common.close")} onPress={onClose} style={styles.modalClose}>
                 <X size={20} color={colors.textMuted} />
               </Pressable>
             </View>
@@ -334,6 +398,10 @@ function ConnectModal({
       </KeyboardAvoidingView>
     </Modal>
   );
+}
+
+function firstParam(value: string | string[] | undefined): string {
+  return Array.isArray(value) ? value[0] ?? "" : value ?? "";
 }
 
 const makeStyles = (colors: ThemeColors) => StyleSheet.create({
@@ -406,6 +474,9 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   settingsText: { color: colors.textMuted, fontSize: 12, fontWeight: "600" },
   version: { color: colors.textMuted, fontSize: 12 },
   error: { color: colors.red, fontSize: 13, lineHeight: 19 },
+  errorGuidance: { color: colors.textMuted, fontSize: 13, lineHeight: 19 },
+  httpDetailsToggle: { minHeight: 44, justifyContent: "center", alignSelf: "flex-start" },
+  httpStatus: { color: colors.textDim, fontSize: 12, lineHeight: 18 },
   modalOverlay: {
     flex: 1,
     backgroundColor: colors.overlay,
@@ -430,5 +501,6 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
   },
-  modalTitle: { color: colors.text, fontSize: 18, fontWeight: "700" },
+  modalTitle: { flex: 1, color: colors.text, fontSize: 18, fontWeight: "700" },
+  modalClose: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
 });

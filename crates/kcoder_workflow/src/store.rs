@@ -1,5 +1,6 @@
 //! Account-scoped workflow library with bounded legacy JSON or explicitly migrated
 //! immutable objects. The caller supplies the authorized profile root.
+mod collaboration;
 use anyhow::{Context, Result, ensure};
 use kcoder_config::PrivateDirectory;
 use kcoder_types::workflow::{
@@ -1492,6 +1493,11 @@ mod tests {
             .unwrap();
         assert_eq!(edited.status, WorkflowStatus::Draft);
         assert_eq!(edited.saved_version, Some(1));
+        assert_eq!(reopened.list().unwrap()[0].status, WorkflowStatus::Draft);
+        let versions = reopened.versions(&saved.id).unwrap();
+        assert_eq!(versions.len(), 1);
+        assert_eq!(versions[0].version, 1);
+        assert_eq!(versions[0].title, saved.title);
         assert_eq!(reopened.read_saved(&saved.id, Some(1)).unwrap(), saved);
         let next = reopened.save(&edited.id, edited.revision).unwrap();
         assert_eq!(next.saved_version, Some(2));

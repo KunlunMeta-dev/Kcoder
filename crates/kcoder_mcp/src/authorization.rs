@@ -329,6 +329,10 @@ pub struct AuthorizationServerMetadata {
     pub token_endpoint: String,
     #[serde(default)]
     pub registration_endpoint: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub revocation_endpoint: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub revocation_endpoint_auth_methods_supported: Option<Vec<String>>,
     pub response_types_supported: Vec<String>,
     #[serde(default)]
     pub grant_types_supported: Option<Vec<String>>,
@@ -371,6 +375,7 @@ pub async fn discover_authorization_server(issuer: &Url) -> Result<Authorization
     for endpoint in [&metadata.authorization_endpoint, &metadata.token_endpoint]
         .into_iter()
         .chain(metadata.registration_endpoint.as_ref())
+        .chain(metadata.revocation_endpoint.as_ref())
     {
         let endpoint =
             Url::parse(endpoint).map_err(|_| anyhow::anyhow!("Invalid OAuth endpoint"))?;

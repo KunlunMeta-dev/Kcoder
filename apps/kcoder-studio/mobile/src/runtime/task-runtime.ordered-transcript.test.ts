@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TaskRuntime, taskRuntimeTestHelpers } from "./task-runtime";
 import {
   FakeClient,
+  appServerId,
   profile,
   server,
 } from "./task-runtime/fixture.test-support";
@@ -24,7 +25,37 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+function withObservedHistory(client: FakeClient, observationId: string) {
+  const supports = client.supportsExperimental.bind(client);
+  client.supportsExperimental = (capability: string) =>
+    capability === "threadTranscriptObservationV1" || supports(capability);
+  const request = client.request.bind(client);
+  client.request = vi.fn(async <T>(method: string, params = {}) => {
+    const result = await request<T>(method, params);
+    if (method !== "thread/read" && method !== "thread/read/indexed")
+      return result;
+    return {
+      ...(result as object),
+      transcriptObservationV1: { observationId, viewKey: "b".repeat(64) },
+    } as T;
+  }) as never;
+  return client;
+}
+
 describe("Mobile ordered assistant transcript projection", () => {
+  it("preserves structured retry progress and diagnostics without marking a failed request completed", async () => {
+    const client = new FakeClient([]);
+    taskRuntimeTestHelpers.setConnector(vi.fn(async () => client as never) as never);
+    const runtime = await TaskRuntime.resume({ profile, server, threadId: "thread-1" });
+    try {
+      client.emit({ method: "item/event", params: { serverId: appServerId, threadId: "thread-1", turnId: "turn-retry", sequence: 1,
+        event: { type: "system_notice", kind: "provider_retry", request_kind: "main", attempt: 2, max_retries: 3, text: "RAW_RETRY_DIAGNOSTIC", retry_after_ms: 2000 } } });
+      const message = runtime.getSnapshot().messages.find(message => message.turnId === "turn-retry");
+      expect(message?.activities?.[0]).toMatchObject({ status: "paused", providerRetry: { attempt: 2, maxRetries: 3 }, detail: "RAW_RETRY_DIAGNOSTIC" });
+      expect(message?.orderedBlocks?.[0]).toMatchObject({ kind: "activity", activity: { providerRetry: { attempt: 2, maxRetries: 3 } } });
+    } finally { runtime.close(); }
+  });
+
   it("preserves typed thread/read block order and places scalar content last", async () => {
     const history: ThreadMessage[] = [
       {
@@ -122,7 +153,7 @@ describe("Mobile ordered assistant transcript projection", () => {
       threadId: "thread-1",
     });
     const context = (sequence: number) => ({
-      serverId: "app-server-1",
+      serverId: appServerId,
       threadId: "thread-1",
       turnId: "turn-live",
       sequence,
@@ -281,7 +312,7 @@ describe("Mobile ordered assistant transcript projection", () => {
       threadId: "thread-1",
     });
     const context = (sequence: number) => ({
-      serverId: "app-server-1",
+      serverId: appServerId,
       threadId: "thread-1",
       turnId: "turn-incremental-text",
       sequence,
@@ -365,7 +396,7 @@ describe("Mobile ordered assistant transcript projection", () => {
     ];
     const client = new FakeClient(latestPage, [], {
       hasMoreBefore: true,
-      beforeCursor: "cursor-older",
+      beforeCursor: `tp1:ob1-${"a".repeat(64)}:9`,
       rangeStart: 9,
       rangeEnd: 10,
     });
@@ -388,6 +419,8 @@ describe("Mobile ordered assistant transcript projection", () => {
       }
       return request<T>(method, params);
     }) as never;
+    // Page-order composition requires both pages to belong to one proven read domain.
+    withObservedHistory(client, "a".repeat(64));
     taskRuntimeTestHelpers.setConnector(
       vi.fn(async () => client as never) as never,
     );
@@ -445,7 +478,7 @@ describe("Mobile ordered assistant transcript projection", () => {
       },
     ];
     const context = (sequence: number) => ({
-      serverId: "app-server-1",
+      serverId: appServerId,
       threadId: "thread-1",
       turnId,
       sequence,
@@ -553,7 +586,7 @@ describe("Mobile ordered assistant transcript projection", () => {
       {
         method: "item/delta",
         params: {
-          serverId: "app-server-1",
+          serverId: appServerId,
           threadId: "thread-1",
           turnId,
           sequence: 3,
@@ -618,7 +651,7 @@ describe("Mobile ordered assistant transcript projection", () => {
       blocks: [],
     };
     const context = (sequence: number) => ({
-      serverId: "app-server-1",
+      serverId: appServerId,
       threadId: "thread-1",
       turnId,
       sequence,
@@ -661,6 +694,8 @@ describe("Mobile ordered assistant transcript projection", () => {
         return { ...(result as object), thread: activeThread } as T;
       return result;
     }) as never;
+    // The fresh first page proves the persisted answer while live notices remain local.
+    withObservedHistory(reconnectClient, "c".repeat(64));
     const connector = vi
       .fn()
       .mockResolvedValueOnce(firstClient as never)
@@ -757,7 +792,7 @@ describe("Mobile ordered assistant transcript projection", () => {
       threadId: "thread-1",
     });
     const context = (sequence: number) => ({
-      serverId: "app-server-1",
+      serverId: appServerId,
       threadId: "thread-1",
       turnId: "turn-shared-item",
       sequence,
@@ -912,7 +947,7 @@ describe("Mobile ordered assistant transcript projection", () => {
       threadId: "thread-1",
     });
     const context = (sequence: number) => ({
-      serverId: "app-server-1",
+      serverId: appServerId,
       threadId: "thread-1",
       turnId: "turn-thinking-first",
       sequence,
@@ -986,7 +1021,7 @@ describe("Mobile ordered assistant transcript projection", () => {
       threadId: "thread-1",
     });
     const legacyContext = {
-      serverId: "app-server-legacy",
+      serverId: appServerId,
       threadId: "thread-1",
       turnId: "turn-legacy",
     };
@@ -1055,7 +1090,7 @@ describe("Mobile ordered assistant transcript projection", () => {
       threadId: "thread-1",
     });
     const context = (sequence: number) => ({
-      serverId: "app-server-1",
+      serverId: appServerId,
       threadId: "thread-1",
       turnId: "turn-late-activity",
       sequence,
@@ -1178,7 +1213,7 @@ describe("Mobile ordered assistant transcript projection", () => {
     const duplicateLiveTail = {
       method: "item/delta",
       params: {
-        serverId: "app-server-1",
+        serverId: appServerId,
         threadId: "thread-1",
         turnId: "turn-reconnect",
         sequence: 12,
@@ -1190,6 +1225,8 @@ describe("Mobile ordered assistant transcript projection", () => {
       [failedHistory, persistedCurrent],
       [duplicateLiveTail],
     );
+    // This reconnect tests proven history coverage against the same attempt's live tail.
+    withObservedHistory(reconnectClient, "c".repeat(64));
     const connector = vi
       .fn()
       .mockResolvedValueOnce(firstClient as never)
@@ -1201,7 +1238,7 @@ describe("Mobile ordered assistant transcript projection", () => {
       threadId: "thread-1",
     });
     const context = (sequence: number, attemptId?: string) => ({
-      serverId: "app-server-1",
+      serverId: appServerId,
       threadId: "thread-1",
       turnId: "turn-reconnect",
       sequence,

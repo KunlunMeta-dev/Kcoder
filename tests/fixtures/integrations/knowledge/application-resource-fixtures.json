@@ -1,0 +1,97 @@
+{
+  "AutomationApplicationSelectionParams": {
+    "valid": [
+      {
+        "name": "fixed_original_source_resource_and_explicit_read_consent",
+        "value": {
+          "source": {
+            "sourceRef": {
+              "id": "fixture-native-source",
+              "revision": "native-source-v1"
+            },
+            "accountRef": null
+          },
+          "resourceUri": "mailbox://fixture/inbox",
+          "readConsentRef": "explicit-resource-read-consent"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing_explicit_read_consent",
+        "value": {
+          "source": {
+            "sourceRef": {
+              "id": "fixture-native-source",
+              "revision": "native-source-v1"
+            },
+            "accountRef": null
+          },
+          "resourceUri": "mailbox://fixture/inbox"
+        }
+      },
+      {
+        "name": "json_approved_is_not_resource_read_authority",
+        "value": {
+          "source": {
+            "sourceRef": {
+              "id": "fixture-native-source",
+              "revision": "native-source-v1"
+            },
+            "accountRef": null
+          },
+          "resourceUri": "mailbox://fixture/inbox",
+          "readConsentRef": "explicit-resource-read-consent",
+          "approved": true
+        }
+      }
+    ]
+  },
+  "AutomationApplicationSelectionReceipt": {
+    "valid": [
+      {
+        "name": "resource_selection_returns_fixed_refs_without_body_or_credentials",
+        "value": {
+          "owner": {
+            "accountId": "fixture-account",
+            "targetId": "fixture-target",
+            "workspaceId": null
+          },
+          "sourceRef": "application-events-fixture",
+          "selectionRevision": "selection-v1",
+          "source": {
+            "sourceRef": {
+              "id": "fixture-native-source",
+              "revision": "native-source-v1"
+            },
+            "accountRef": null
+          },
+          "resourceRef": "application-resource-fixture"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "resource_receipt_never_contains_event_body",
+        "value": {
+          "owner": {
+            "accountId": "fixture-account",
+            "targetId": "fixture-target",
+            "workspaceId": null
+          },
+          "sourceRef": "application-events-fixture",
+          "selectionRevision": "selection-v1",
+          "source": {
+            "sourceRef": {
+              "id": "fixture-native-source",
+              "revision": "native-source-v1"
+            },
+            "accountRef": null
+          },
+          "resourceRef": "application-resource-fixture",
+          "body": "untrusted"
+        }
+      }
+    ]
+  }
+}

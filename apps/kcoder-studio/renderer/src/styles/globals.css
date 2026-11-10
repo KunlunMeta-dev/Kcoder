@@ -3,6 +3,10 @@
 @tailwind utilities;
 
 :root {
+  --studio-page-gutter: 20px;
+  --studio-card-inset: 20px;
+  --studio-card-gap: 16px;
+  --studio-page-column-width: 62.4rem;
   color-scheme: light;
   --color-bg-base: 255 255 255;
   --color-bg-surface: 247 247 248;
@@ -107,6 +111,13 @@
   --duration-slow: 240ms;
   /* DESIGN.md 8: default CSS transitions are 150ms with this curve. */
   --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  /* Restrained control and card elevation, shared across the integration workspaces. */
+  --shadow-control: inset 0 1px 0 rgb(255 255 255 / 0.8), 0 1px 2px rgb(0 0 0 / 0.05);
+  --shadow-control-hover: inset 0 1px 0 rgb(255 255 255 / 0.85), 0 2px 4px -1px rgb(0 0 0 / 0.09);
+  --shadow-control-inverse: inset 0 1px 0 rgb(255 255 255 / 0.14), 0 1px 2px rgb(0 0 0 / 0.14);
+  --shadow-control-pressed: inset 0 1px 2px rgb(0 0 0 / 0.08);
+  --shadow-card: inset 0 1px 0 rgb(255 255 255 / 0.8), 0 2px 4px -1px rgb(0 0 0 / 0.04);
+  --shadow-card-hover: inset 0 1px 0 rgb(255 255 255 / 0.9), 0 4px 8px -2px rgb(0 0 0 / 0.08);
   --z-chrome: 20;
   --z-titlebar: 15;
   --z-popover: 40;
@@ -232,6 +243,39 @@
   --color-reasoning-ultra-end: 192 132 252;
   --color-reasoning-ultra-text: 192 132 252;
   --color-reasoning-contrast: 255 255 255;
+  --shadow-control: inset 0 1px 0 rgb(255 255 255 / 0.06), 0 1px 2px rgb(0 0 0 / 0.16);
+  --shadow-control-hover: inset 0 1px 0 rgb(255 255 255 / 0.08), 0 2px 4px -1px rgb(0 0 0 / 0.24);
+  --shadow-control-inverse: inset 0 1px 0 rgb(255 255 255 / 0.5), 0 1px 2px rgb(0 0 0 / 0.16);
+  --shadow-control-pressed: inset 0 1px 2px rgb(0 0 0 / 0.16);
+  --shadow-card: inset 0 1px 0 rgb(255 255 255 / 0.04), 0 2px 4px -1px rgb(0 0 0 / 0.14);
+  --shadow-card-hover: inset 0 1px 0 rgb(255 255 255 / 0.06), 0 4px 8px -2px rgb(0 0 0 / 0.22);
+}
+
+@layer components {
+  .workbench-card {
+    min-width: 0;
+    border: 1px solid rgb(var(--color-text-primary) / 0.08);
+    border-radius: var(--radius-2xl);
+    background: rgb(var(--color-bg-base));
+    box-shadow: var(--shadow-card);
+  }
+
+  .workbench-card-interactive {
+    transition:
+      border-color var(--duration-base) var(--ease-standard),
+      box-shadow var(--duration-base) var(--ease-standard);
+  }
+
+  .workbench-card-interactive:focus-within {
+    border-color: rgb(var(--color-text-primary) / 0.18);
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .workbench-card-interactive:hover {
+      border-color: rgb(var(--color-text-primary) / 0.16);
+      box-shadow: var(--shadow-card-hover);
+    }
+  }
 }
 
 [data-sidebar-translucent='false'] {
@@ -265,12 +309,6 @@ body {
   background-color: rgb(var(--color-bg-base));
   color: rgb(var(--color-text-primary));
   overflow: hidden;
-}
-
-html[data-system-drag-panel='true'],
-html[data-system-drag-panel='true'] body,
-html[data-system-drag-panel='true'] #root {
-  background: transparent;
 }
 
 button,
@@ -455,12 +493,6 @@ button:disabled {
     }
   }
 
-  :root[data-reduce-motion='true'] {
-    .context-usage-compact-trigger:hover:not(:disabled)::before {
-      animation: none;
-    }
-  }
-
   @keyframes local-skill-caret-blink {
     0%,
     49% {
@@ -519,14 +551,6 @@ button:disabled {
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     animation: waiting-thinking-text 1.6s linear infinite;
-  }
-
-  :root[data-reduce-motion='true'] {
-    .tool-activity-shimmer {
-      background: none;
-      color: rgb(var(--color-text-secondary));
-      -webkit-text-fill-color: currentColor;
-    }
   }
 
   .file-change-delta-number {
@@ -666,14 +690,6 @@ button:disabled {
 
     100% {
       transform: translateX(var(--file-change-stat-x)) scaleY(1);
-    }
-  }
-
-  :root[data-reduce-motion='true'] {
-    .file-change-rolling-value.is-rolling,
-    .file-change-delta-badge,
-    .file-change-stat-block {
-      animation: none;
     }
   }
 
@@ -838,26 +854,6 @@ button:disabled {
 
   .local-runtime-step-dot {
     animation: local-runtime-step-dot 1.15s ease-in-out infinite;
-  }
-
-  :root[data-reduce-motion='true'] {
-    .local-runtime-setup-card,
-    .local-runtime-cursor,
-    .local-runtime-progress-track,
-    .local-runtime-sparkle,
-    .local-runtime-step-dot {
-      animation: none;
-    }
-
-    .local-runtime-setup-card {
-      opacity: 1;
-      transform: translate3d(var(--local-runtime-card-to-x), var(--local-runtime-card-to-y), 0)
-        rotate(var(--local-runtime-card-to-rotate));
-    }
-
-    .local-runtime-cursor {
-      opacity: 0;
-    }
   }
 
   .z-chrome {
@@ -1049,13 +1045,6 @@ label:has(> input[type='checkbox']:not(:disabled)) {
     min-height: 44px;
   }
 }
-:root[data-reduce-motion='true'] {
-  input[type='checkbox'],
-  input[type='checkbox']::before,
-  .checkbox-option {
-    transition: none;
-  }
-}
 @media (forced-colors: active) {
   input[type='checkbox'] {
     appearance: auto;
@@ -1068,4 +1057,71 @@ label:has(> input[type='checkbox']:not(:disabled)) {
   .checkbox-option:has(input:checked) {
     border-color: Highlight;
   }
+}
+
+/* Page surfaces share insets; controls and canvas internals keep their own density. */
+.studio-page-gutter {
+  padding-inline: var(--studio-page-gutter);
+  /* Classic (Windows) scrollbars must not change the content width when a
+     page starts or stops overflowing during loading or refresh. */
+  scrollbar-gutter: stable;
+}
+.studio-page-column {
+  width: 100%;
+  max-width: calc(var(--studio-page-column-width) + var(--studio-page-gutter) + var(--studio-page-gutter));
+  margin-inline: auto;
+  padding-inline: var(--studio-page-gutter);
+}
+.studio-card,
+.studio-card-spacing,
+.workbench-card {
+  min-width: 0;
+  box-sizing: border-box;
+  margin-block: 0;
+}
+.studio-card-spacing,
+.studio-card-inset,
+.workbench-card {
+  padding: var(--studio-card-inset);
+}
+.studio-card-heading {
+  padding: var(--studio-card-inset);
+}
+.studio-card-body {
+  padding-inline: var(--studio-card-inset);
+  padding-bottom: var(--studio-card-inset);
+}
+.studio-card-stack {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--studio-card-gap);
+}
+:is(.grid, .flex):has(> :is(.studio-card-spacing, .studio-card, .workbench-card)) {
+  gap: var(--studio-card-gap);
+}
+:is(.grid, .flex, .studio-card-stack):has(
+    > :is(.studio-card-spacing, .studio-card, .workbench-card)
+  )
+  > :not([hidden]) {
+  margin-block: 0;
+}
+.studio-card-stack > :not([hidden]) {
+  margin-block: 0;
+}
+:not(.grid):not(.flex):not(.studio-card-stack)
+  > :not([hidden])
+  + :is(.studio-card-spacing, .studio-card, .workbench-card),
+:not(.grid):not(.flex):not(.studio-card-stack)
+  > :is(.studio-card-spacing, .studio-card, .workbench-card)
+  + :not([hidden]) {
+  margin-block-start: var(--studio-card-gap);
+}
+[class*='space-y-']:not(.grid):not(.flex):not(.studio-card-stack):has(
+    > :is(.studio-card-spacing, .studio-card, .workbench-card)
+  )
+  > :not([hidden])
+  ~ :not([hidden]) {
+  margin-block-start: var(--studio-card-gap);
+  margin-block-end: 0;
 }

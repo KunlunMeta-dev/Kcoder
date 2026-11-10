@@ -1,8 +1,13 @@
+import { ConversationV3Background } from "@/features/interface/ConversationV3";
+import { CachedSessionView } from "./CachedSessionView";
+import { KeyboardSafeView } from "@/components/keyboard-safe-view";
+import { useSessionTranscriptCache } from "./useSessionTranscriptCache";
 import { WorkspaceOperationBookkeeping } from "@/features/forms/WorkspaceOperationBookkeeping";
 import { t } from "@/i18n";
 import { useLocale } from "@/i18n/use-locale";
 import { ChangesPanel } from "@/components/changes-panel";
 import { MobileDrawer } from "@/components/mobile-drawer";
+import { selectMobileConnectionStatusProps } from "@/components/connection-status-presentation";
 import { EmptyState } from "@/components/ui";
 import {
   BrowserPanel,
@@ -18,10 +23,9 @@ import { threadListScopeKey } from "@/runtime/thread-list-projection";
 import { removeWorkspaceState } from "@/storage/workspace-preferences";
 import { workspaceAttachmentPathsForThreadDeletion } from "@/storage/workspace-attachment-paths";
 import { Bot } from "lucide-react-native";
+import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
   Pressable,
   Text,
   View,
@@ -32,11 +36,27 @@ import { TaskMenu } from "./TaskMenu";
 import { PanelMenu, RetainedPanel } from "./TaskPanels";
 import { useTaskAppearance } from "./taskStyles";
 import { useTaskScreen } from "./useTaskScreen";
+import { useInterfaceVersion } from "@/storage/interface-version";
 
 export function TaskScreen() {
   useLocale();
+  const v3 = useInterfaceVersion() === "v3";
   const { styles, colors } = useTaskAppearance();
   const model = useTaskScreen();
+  const draftFlushRef = useRef<(() => Promise<void>) | null>(null);
+  const [navigationError, setNavigationError] = useState<{ owner: string; text: string } | null>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [subagentsOpenRequest, setSubagentsOpenRequest] = useState<{ owner: string; token: object } | undefined>();
+  const [permissionOpenRequest, setPermissionOpenRequest] = useState<{ owner: string; token: object } | undefined>();
+  const [expertOpenRequest, setExpertOpenRequest] = useState<{ owner: string; token: object } | undefined>();
+  const [quickPhrasesOpenRequest, setQuickPhrasesOpenRequest] = useState<{ owner: string; token: object } | undefined>();
+  const [planOpenRequest, setPlanOpenRequest] = useState<{ owner: string; token: object } | undefined>();
+  useEffect(() => setPlanOpenRequest(undefined), [model.workspaceOwnerKey]);
+  useEffect(() => setPermissionOpenRequest(undefined), [model.workspaceOwnerKey]);
+  useEffect(() => setExpertOpenRequest(undefined), [model.workspaceOwnerKey]);
+  useEffect(() => setQuickPhrasesOpenRequest(undefined), [model.workspaceOwnerKey]);
+  useEffect(() => setSubagentsOpenRequest(undefined), [model.workspaceOwnerKey]);
+  useEffect(() => setSearchOpen(false), [model.workspaceOwnerKey]);
   const {
     params,
     router,
@@ -78,10 +98,12 @@ export function TaskScreen() {
     fileOpenRequests,
     workspaceState,
     workspaceStorageScope,
+    workspaceOwnerKey,
     workspaceStateHydrated,
     workspaceStateError,
     retryWorkspaceState,
     selectPanel,
+    persistWorkspaceRecentFile,
     persistComposerDraft,
     persistQueuedMessages,
     persistQueueCommit,
@@ -92,8 +114,62 @@ export function TaskScreen() {
     closePanel,
     openWorkspaceFile,
     routeError,
+    interactionRouteSourceAgentFocus,
   } = model;
-  if (!routeError && workspaceStateError) {
+  const navigate = async (destination: "projects" | "history" | "inbox" | "settings") => {
+    if (!model.ownsWorkspace() || !isFocused || !profileReady || !activeProfile) return;
+    try { await draftFlushRef.current?.(); }
+    catch (error) {
+      if (model.ownsWorkspace()) setNavigationError({ owner: model.workspaceOwnerKey, text: error instanceof Error ? error.message : String(error) });
+      return;
+    }
+    if (!model.ownsWorkspace()) return;
+    setNavigationError(null);
+    if (destination === "settings") router.push("/settings");
+    else if (destination === "history") router.push({ pathname: "/sessions", params: { profileId: activeProfile.id } });
+    else router.push({ pathname: destination === "inbox" ? "/h/[profileId]/inbox" : "/h/[profileId]", params: { profileId: activeProfile.id } });
+  };
+  const navigation = { projects: () => navigate("projects"), history: () => navigate("history"),
+    inbox: () => navigate("inbox"), settings: () => navigate("settings") };
+  const drawerConnectionStatusProps = selectMobileConnectionStatusProps(appRuntime);
+  const transcriptCache = useSessionTranscriptCache({ profile: activeProfile, server,
+    serverId: params.serverId, threadId: params.threadId, cwd: params.cwd,
+    enabled: profileReady && isFocused && !demo, presence: model.threadPresence,
+    workspacePresence: model.workspacePresence,
+    reauthorizationRequired: appRuntime.reauthorizationRequired, task });
+  useEffect(() => {
+    if (!task && transcriptCache.workspaceAbsenceConfirmed) model.exitToConfirmedWorkspaceAbsence();
+  }, [model.workspaceOwnerKey, model.exitToConfirmedWorkspaceAbsence, task, transcriptCache.workspaceAbsenceConfirmed]);
+  useEffect(() => {
+    if (!task && transcriptCache.absenceConfirmed) model.exitToConfirmedAbsence();
+  }, [model.workspaceOwnerKey, model.exitToConfirmedAbsence, task, transcriptCache.absenceConfirmed]);
+  if (!task && transcriptCache.workspaceAbsenceConfirmed) return (
+    <View style={[styles.root, styles.center, { paddingTop: insets.top }]}>
+      <EmptyState icon={<Bot size={44} color={colors.red} />}
+        title={t("task.confirmed_workspace_absent_title")} body={t("task.confirmed_workspace_absent_body")} />
+      <Pressable onPress={model.exitToConfirmedWorkspaceAbsence} style={styles.backTextButton} accessibilityRole="button">
+        <Text style={styles.backText}>{t("task.back_to_gateway")}</Text>
+      </Pressable>
+    </View>
+  );
+  if (!task && transcriptCache.absenceConfirmed) return (
+    <View style={[styles.root, styles.center, { paddingTop: insets.top }]}>
+      <EmptyState icon={<Bot size={44} color={colors.red} />}
+        title={t("task.confirmed_absent_title")} body={t("task.confirmed_absent_body")} />
+      <Pressable onPress={goBack} style={styles.backTextButton} accessibilityRole="button">
+        <Text style={styles.backText}>{t("task.back_to_task_list")}</Text>
+      </Pressable>
+    </View>
+  );
+  if (!task && transcriptCache.cached) return <CachedSessionView cached={transcriptCache.cached}
+    navigation={navigation}
+    owner={transcriptCache.displayOwner} onBack={goBack} topInset={insets.top} bottomInset={insets.bottom}
+    offline={!model.resumePending && Boolean(loadError || appRuntime.error)}
+    failure={loadError ?? appRuntime.error} draftRecoveryError={workspaceStateError}
+    onRetryDraftRecovery={retryWorkspaceState} composerDraft={workspaceStateHydrated ? workspaceState.composerDraft ?? "" : ""}
+    showDisabledTaskActions onRetry={model.retryTaskRecovery}
+    initialAnchor={transcriptCache.initialAnchor} onReadAnchor={transcriptCache.readAnchor} />;
+  if (!task && !routeError && workspaceStateError) {
     return (
       <View style={[styles.root, styles.center, { paddingTop: insets.top }]}>
         <EmptyState
@@ -136,34 +212,37 @@ export function TaskScreen() {
       </View>
     );
   }
-  if (!workspaceStateHydrated) {
-    return (
-      <View style={[styles.root, styles.center, { paddingTop: insets.top }]}>
-        <ActivityIndicator color={colors.textMuted} />
-        <Text style={styles.loadingWorkspaceLabel}>
-          {t("task.restoring_workspace")}
-        </Text>
-      </View>
-    );
-  }
-  // Android adjustResize already resizes this root; KAV can retain the hide event's old frame.
   return (
-    <KeyboardAvoidingView
+    <KeyboardSafeView
       style={[styles.root, { paddingTop: insets.top }]}
-      behavior={
-        Platform.OS === "ios" ? "padding" : undefined
-      }
-      keyboardVerticalOffset={0}
     >
+      <ConversationV3Background />
       <TaskHeader
+        navigation={navigation}
+        onSearch={() => setSearchOpen(open => !open)}
+        onWorkspace={workspaceStateHydrated && activePanelId === "agent" ? () => setTabSwitcherOpen(true) : undefined}
         task={task}
         onBack={goBack}
-        onMenu={openDrawer}
-        onMore={() => setTaskMenuOpen(true)}
-        onWorkspace={
-          activePanelId === "agent" ? () => setTabSwitcherOpen(true) : undefined
-        }
+        onMenu={workspaceStateHydrated ? openDrawer : undefined}
+        onMore={workspaceStateHydrated ? () => setTaskMenuOpen(true) : undefined}
+        onNew={workspaceStateHydrated && activeProfile && server && !demo ? () => {
+          if (!model.ownsWorkspace()) return;
+          router.push({ pathname: "/new", params: { profileId: params.profileId, serverId: server.id, cwd: task.getSnapshot().cwd } });
+        } : undefined}
       />
+      {!workspaceStateHydrated ? (
+        <View testID="task-workspace-recovery" accessibilityRole={workspaceStateError ? "alert" : undefined}>
+          <Text style={styles.loadingWorkspaceLabel}>
+            {workspaceStateError ?? t("task.restoring_workspace")}
+          </Text>
+          {workspaceStateError ? (
+            <Pressable onPress={retryWorkspaceState} accessibilityRole="button" style={styles.backTextButton}>
+              <Text style={styles.backText}>{t("task.retry_workspace_recovery")}</Text>
+            </Pressable>
+          ) : <ActivityIndicator size="small" color={colors.textMuted} />}
+        </View>
+      ) : null}
+      {workspaceStateHydrated ? <>
       <WorkspaceOperationBookkeeping profile={activeProfile} server={server} expectedResult={params.cwd} enabled={profileReady && !appRuntime.loading && !demo} />
       <WorkspaceTabSwitcher
         hideBar={activePanelId === "agent"}
@@ -181,8 +260,22 @@ export function TaskScreen() {
           {t("task.retained_other_scope_draft")}
         </Text>
       ) : null}
-      <RetainedPanel active={activePanelId === "agent"}>
-        <AgentPanel
+      </> : null}
+      <RetainedPanel key="agent-history" active={!workspaceStateHydrated || activePanelId === "agent"}>
+        {navigationError?.owner === model.workspaceOwnerKey ? <Text accessibilityRole="alert" style={styles.attachmentError}>{navigationError.text}</Text> : null}
+        <AgentPanel searchOpen={searchOpen} onSearchClose={() => setSearchOpen(false)}
+          planOpenRequest={planOpenRequest?.owner === model.workspaceOwnerKey ? planOpenRequest.token : undefined}
+          draftFlushRef={draftFlushRef}
+          subagentsOpenRequest={subagentsOpenRequest?.owner === model.workspaceOwnerKey ? subagentsOpenRequest.token : undefined}
+          permissionOpenRequest={permissionOpenRequest?.owner === model.workspaceOwnerKey ? permissionOpenRequest.token : undefined}
+          expertOpenRequest={expertOpenRequest?.owner === model.workspaceOwnerKey ? expertOpenRequest.token : undefined}
+          quickPhrasesOpenRequest={quickPhrasesOpenRequest?.owner === model.workspaceOwnerKey ? quickPhrasesOpenRequest.token : undefined}
+          key={model.workspaceOwnerKey}
+          displayOwner={transcriptCache.displayOwner}
+          initialReadAnchor={transcriptCache.initialAnchor}
+          onReadAnchor={transcriptCache.readAnchor}
+          workspaceReady={workspaceStateHydrated}
+          interactionRouteSourceAgentFocus={interactionRouteSourceAgentFocus}
           task={task}
           profile={activeProfile ?? undefined}
           server={server}
@@ -205,6 +298,7 @@ export function TaskScreen() {
           }}
         />
       </RetainedPanel>
+      {workspaceStateHydrated ? <>
       {panels
         .filter(
           (panel) => panel.kind === "changes" && mountedPanelIds.has(panel.id),
@@ -282,10 +376,12 @@ export function TaskScreen() {
             bottomInset={insets.bottom}
           >
             <FilesPanel
+              ownerKey={workspaceOwnerKey}
               task={task}
               demo={demo}
               initialDirectory={panel.directoryPath}
               initialDraft={panel.fileDraft}
+              initialRecentFiles={workspaceState.recentFiles}
               openFileRequest={fileOpenRequests[panel.id]}
               onDirtyChange={(dirty) =>
                 setDirtyFilePanelIds((current) => {
@@ -305,6 +401,9 @@ export function TaskScreen() {
               onDraftChange={(fileDraft) =>
                 updatePanel(panel.id, { fileDraft })
               }
+              onRecentFileOpened={(path, root) =>
+                persistWorkspaceRecentFile(root, path)
+              }
             />
           </RetainedPanel>
         ))}
@@ -315,6 +414,7 @@ export function TaskScreen() {
           onDismissStart={dismissDrawerWork}
           profileId={params.profileId}
           profile={activeProfile}
+          {...drawerConnectionStatusProps}
           servers={appRuntime.servers}
           threads={drawerThreads}
           workspaceOptions={drawerWorkspaceOptions}
@@ -324,6 +424,14 @@ export function TaskScreen() {
           hasMore={drawerHasMore}
           onLoadServer={loadDrawerServer}
           onLoadProjects={loadDrawerProjects}
+          workspaceHistoryOwner={workspaceOwnerKey}
+          canRefreshWorkspaceHistory={(target) => Boolean(
+            profileReady && isFocused && activeProfile?.id === params.profileId && model.ownsWorkspace() &&
+            appRuntime.servers.some((candidate) => candidate.id === target.id && JSON.stringify(candidate) === JSON.stringify(target)),
+          )}
+          onWorkspaceHistoryReady={(serverId) => {
+            if (model.ownsWorkspace()) void loadDrawerServer(serverId, false);
+          }}
           demo={demo}
           liveTask={task}
           liveTaskServerId={params.serverId}
@@ -390,6 +498,30 @@ export function TaskScreen() {
         task={task}
         demo={demo}
         onClose={() => setTaskMenuOpen(false)}
+        onPlan={v3 && workspaceStateHydrated ? () => {
+          if (!model.ownsWorkspace()) return;
+          selectPanel({ id: "agent", kind: "agent", title: task.getSnapshot().title });
+          setPlanOpenRequest({ owner: model.workspaceOwnerKey, token: {} });
+        } : undefined}
+        onPermission={v3 && workspaceStateHydrated ? () => {
+          if (!model.ownsWorkspace()) return;
+          selectPanel({ id: "agent", kind: "agent", title: task.getSnapshot().title });
+          setPermissionOpenRequest({ owner: model.workspaceOwnerKey, token: {} });
+        } : undefined}
+        onExpert={!demo && workspaceStateHydrated ? () => {
+          if (!model.ownsWorkspace()) return;
+          selectPanel({ id: "agent", kind: "agent", title: task.getSnapshot().title });
+          setExpertOpenRequest({ owner: model.workspaceOwnerKey, token: {} });
+        } : undefined}
+        onSearch={() => { setTaskMenuOpen(false); selectPanel({ id: "agent", kind: "agent", title: task.getSnapshot().title }); setSearchOpen(true); }}
+        onWorkspace={() => { setTaskMenuOpen(false); setTabSwitcherOpen(true); }}
+        onQuickPhrases={() => {
+          if (!model.ownsWorkspace() || !task.getSnapshot().connected || task.getSnapshot().configurationReady === false || task.getSnapshot().archivedAt) return;
+          setTaskMenuOpen(false);
+          selectPanel({ id: "agent", kind: "agent", title: task.getSnapshot().title });
+          setQuickPhrasesOpenRequest({ owner: model.workspaceOwnerKey, token: {} });
+        }}
+        onSubagents={() => { setTaskMenuOpen(false); setSubagentsOpenRequest({ owner: model.workspaceOwnerKey, token: {} }); }}
         onArchived={() => {
           if (!model.ownsWorkspace()) return;
           if (taskRuntimeRegistry.get(params.profileId, params.serverId, params.threadId) === task) taskRuntimeRegistry.remove(
@@ -404,9 +536,13 @@ export function TaskScreen() {
         }}
         onDeleted={async () => {
           if (!model.ownsWorkspace()) return;
-          // The runtime retained a cleanup ticket before remote deletion. Local
-          // cleanup errors cannot turn a completed deletion into a UI failure.
-          void removeWorkspaceState(params.profileId, params.serverId, params.threadId, workspaceStorageScope).catch(() => {});
+          // Remote deletion is already confirmed. Keep this menu open and report
+          // local persistence failure instead of implying the cleanup succeeded.
+          try {
+            await removeWorkspaceState(params.profileId, params.serverId, params.threadId, workspaceStorageScope);
+          } catch {
+            throw new Error(t("task.remote_delete_confirmed_local_cleanup_failed"));
+          }
           if (taskRuntimeRegistry.get(params.profileId, params.serverId, params.threadId) === task) taskRuntimeRegistry.remove(
             params.profileId,
             params.serverId,
@@ -424,6 +560,7 @@ export function TaskScreen() {
         onClose={() => setPanelMenuOpen(false)}
         onAdd={addPanel}
       />
-    </KeyboardAvoidingView>
+      </> : null}
+    </KeyboardSafeView>
   );
 }

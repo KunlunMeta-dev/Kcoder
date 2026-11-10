@@ -28,11 +28,48 @@ fn tool(client: McpClient) -> McpTool {
         "fixture",
         Arc::new(tokio::sync::Mutex::new(client)),
         McpToolDefinition {
+            meta: None,
             name: "effect".into(),
             description: String::new(),
             input_schema: json!({}),
         },
     )
+}
+
+#[tokio::test]
+async fn configured_server_working_directory_is_applied_before_handshake_and_policy_denies_calls() {
+    let root = tempfile::tempdir().unwrap();
+    let cwd = root.path().join("working directory");
+    std::fs::create_dir(&cwd).unwrap();
+    let fixture = std::path::PathBuf::from(std::env::var_os("KCODER_WORKSPACE_ROOT").unwrap())
+        .join("crates/kcoder_mcp/tests/fixtures/lifecycle_server.py");
+    let config:kcoder_mcp::McpServerConfig=serde_json::from_value(json!({"name":"owned-policy-fixture","command":"python3","args":[fixture,"cwd",root.path()],"policy":{"cwd":cwd,"enabled_tools":[]}})).unwrap();
+    let (handle, definitions) = kcoder_mcp::connect_server(&config).await.unwrap();
+    assert!(definitions.is_empty());
+    assert_eq!(
+        std::fs::read_to_string(root.path().join("cwd")).unwrap(),
+        cwd.canonicalize().unwrap().to_string_lossy()
+    );
+    assert!(
+        handle
+            .lock()
+            .await
+            .call_tool("effect", json!({}))
+            .await
+            .is_err()
+    );
+    assert!(!root.path().join("called").exists());
+    handle.lock().await.close();
+}
+
+#[tokio::test]
+async fn missing_required_values_prevent_even_starting_the_configured_process() {
+    let root = tempfile::tempdir().unwrap();
+    let fixture = std::path::PathBuf::from(std::env::var_os("KCODER_WORKSPACE_ROOT").unwrap())
+        .join("crates/kcoder_mcp/tests/fixtures/lifecycle_server.py");
+    let config:kcoder_mcp::McpServerConfig=serde_json::from_value(json!({"name":"owned-policy-fixture","command":"python3","args":[fixture,"cwd",root.path()],"policy":{"required_env":["PRIVATE_INPUT"]}})).unwrap();
+    assert!(kcoder_mcp::connect_server(&config).await.is_err());
+    assert!(!root.path().join("launches.jsonl").exists());
 }
 
 async fn wait_file(path: &Path) {
@@ -61,6 +98,39 @@ fn receipt(output: &kcoder_tools::ToolOutput) -> Value {
 }
 
 #[tokio::test]
+async fn revoked_session_tools_refuse_calls_and_explicit_close_retires_cloned_handles() {
+    let directory = tempfile::tempdir().unwrap();
+    let handle = Arc::new(tokio::sync::Mutex::new(
+        client("effect", directory.path()).await,
+    ));
+    let lease = tokio_util::sync::CancellationToken::new();
+    let tool = McpTool::new(
+        "fixture",
+        handle.clone(),
+        McpToolDefinition {
+            meta: None,
+            name: "effect".into(),
+            description: String::new(),
+            input_schema: json!({}),
+        },
+    )
+    .with_session_lease(lease.clone());
+    lease.cancel();
+    let output = tool
+        .call(
+            json!({}),
+            &ToolContext::new(kcoder_state::AppState::new(directory.path())),
+        )
+        .await
+        .unwrap();
+    assert!(output.is_error);
+    assert!(!tool.is_model_visible());
+    assert!(!directory.path().join("called").exists());
+    handle.lock().await.close();
+    assert!(handle.lock().await.list_tools().await.is_err());
+}
+
+#[tokio::test]
 async fn pre_cancelled_context_does_not_send_business_request() {
     let directory = tempfile::tempdir().unwrap();
     let tool = tool(client("effect", directory.path()).await);
@@ -82,6 +152,7 @@ async fn sent_cancel_is_unknown_and_does_not_replay_or_close_shared_connection()
         "fixture",
         handle.clone(),
         McpToolDefinition {
+            meta: None,
             name: "effect".into(),
             description: String::new(),
             input_schema: json!({}),
@@ -185,6 +256,7 @@ async fn queued_cancel_does_not_wait_for_or_dispatch_on_shared_connection() {
         "fixture",
         handle.clone(),
         McpToolDefinition {
+            meta: None,
             name: "effect".into(),
             description: String::new(),
             input_schema: json!({}),

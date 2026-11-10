@@ -38,6 +38,30 @@ describe('createHttpClient', () => {
     })
   })
 
+  test('cancels a POST using its own signal without cancelling a peer request', async () => {
+    fetchMock.mockImplementation(
+      (_url: string, options: RequestInit) =>
+        new Promise((resolve, reject) => {
+          if (!options.signal)
+            return resolve({ ok: true, status: 200, json: async () => ({ ok: true }) })
+          options.signal.addEventListener(
+            'abort',
+            () => reject(new DOMException('Aborted', 'AbortError')),
+            { once: true }
+          )
+        })
+    )
+    const client = createHttpClient({ baseUrl: '/api' })
+    const controller = new AbortController()
+    const pending = client.post('/attachments/upload', new FormData(), {
+      signal: controller.signal,
+    })
+    const rejected = expect(pending).rejects.toMatchObject({ name: 'AbortError' })
+    controller.abort()
+    await rejected
+    await expect(client.get('/peer')).resolves.toEqual({ ok: true })
+  })
+
   test('sends patch requests through the configured authenticated backend', async () => {
     fetchMock.mockResolvedValueOnce({
       ok: true,
@@ -238,7 +262,7 @@ describe('createHttpClient', () => {
     })
   })
 
-  test('clears token and redirects to login on 401', async () => {
+  test('reports 401 without changing browser login or navigation', async () => {
     localStorage.setItem('auth_token', 'token-1')
     window.history.pushState({}, '', '/current?x=1')
     fetchMock.mockResolvedValueOnce({
@@ -249,32 +273,25 @@ describe('createHttpClient', () => {
 
     const client = createHttpClient({ baseUrl: '/api' })
 
-    await expect(client.get('/users/me')).rejects.toMatchObject<ApiError>({
-      status: 401,
-    })
-    expect(localStorage.getItem('auth_token')).toBeNull()
-    expect(sessionStorage.getItem('postLoginRedirectPath')).toBe('/current?x=1')
-    expect(window.location.pathname).toBe('/login')
+    await expect(client.get('/users/me')).rejects.toMatchObject<ApiError>({ status: 401 })
+    expect(localStorage.getItem('auth_token')).toBe('token-1')
+    expect(window.location.pathname).toBe('/current')
   })
 
-  test('can disable login redirects for anonymous 401 handshakes', async () => {
-    localStorage.setItem('auth_token', 'token-1')
-    window.history.pushState({}, '', '/login')
-    fetchMock.mockResolvedValueOnce({
-      ok: false,
-      status: 401,
-      text: async () => JSON.stringify({ detail: 'Unauthorized' }),
-    })
-
-    const client = createHttpClient({ baseUrl: '/api' })
-
-    await expect(
-      client.get('/users/me', { redirectOnUnauthorized: false })
-    ).rejects.toMatchObject<ApiError>({
-      status: 401,
-    })
-    expect(localStorage.getItem('auth_token')).toBe('token-1')
-    expect(sessionStorage.getItem('postLoginRedirectPath')).toBeNull()
-    expect(window.location.pathname).toBe('/login')
+  test('uses the Gateway cookie without sending a legacy bearer from local storage', async () => {
+    localStorage.setItem('auth_token', 'legacy')
+    const meta = document.createElement('meta')
+    meta.name = 'kcoder-rpc-token'
+    meta.content = 'cookie-auth'
+    document.head.appendChild(meta)
+    try {
+      fetchMock.mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({}) })
+      await createHttpClient({ baseUrl: '/g/example/api' }).get('/servers')
+      expect(fetchMock).toHaveBeenCalledWith('/g/example/api/servers', expect.objectContaining({
+        headers: { 'Content-Type': 'application/json' },
+      }))
+    } finally {
+      meta.remove()
+    }
   })
 })

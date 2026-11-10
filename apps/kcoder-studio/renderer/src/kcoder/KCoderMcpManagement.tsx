@@ -1,14 +1,16 @@
 import { McpInstallForm } from './McpInstallForm'
 import { McpClientAuthorizationForm } from './McpClientAuthorizationForm'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { requestLocalExecutor } from '@/tauri/localExecutor'
+import { requestLocalExecutor } from '@/host/localExecutor'
 import { useTranslation } from '@/hooks/useTranslation'
 import { openExternalUrl } from '@/lib/external-links'
 import { Network } from 'lucide-react'
+import { Switch } from '@/components/ui/switch'
 
 interface McpServer {
   name: string
   transport: string
+  enabled?: boolean
   pluginId?: string
   /** Reported by the runtime; resolved through AUTHORIZATION_LABEL_KEYS. */
   authorization: string
@@ -59,7 +61,11 @@ function authorizationNeedsLogin(value: string): boolean {
   return (AUTHORIZATION_STATES_REQUIRING_LOGIN as readonly string[]).includes(value)
 }
 
-export function KCoderMcpManagement({
+export function KCoderMcpManagement(props: Props) {
+  return <McpManagementContent key={JSON.stringify([props.deviceId, props.workspacePath])} {...props} />
+}
+
+function McpManagementContent({
   deviceId,
   workspacePath,
   query = '',
@@ -69,11 +75,13 @@ export function KCoderMcpManagement({
   const [servers, setServers] = useState<McpServer[]>([])
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [loaded, setLoaded] = useState(false)
   const [removeConfirmation, setRemoveConfirmation] = useState<string | null>(null)
   const [pending, setPending] = useState<Record<string, string>>({})
   const [authorizationLinks, setAuthorizationLinks] = useState<Record<string, string>>({})
   const flows = useRef<Record<string, string>>({})
   const mounted = useRef(false)
+  const scope = useRef(0)
   const request = useCallback(
     <T,>(method: string, params: Record<string, unknown> = {}) =>
       requestLocalExecutor<T>('runtime.plugins.request', {
@@ -85,13 +93,16 @@ export function KCoderMcpManagement({
     [deviceId, workspacePath]
   )
   const reload = useCallback(async () => {
+    const generation = scope.current
     const result = await request<{ servers: McpServer[] }>('mcp/list')
-    if (mounted.current) {
+    if (mounted.current && generation === scope.current) {
       setServers(result.servers)
+      setLoaded(true)
       onInventoryCount?.(result.servers.length)
     }
   }, [request, onInventoryCount])
   useEffect(() => {
+    scope.current += 1
     mounted.current = true
     void reload().catch(value => {
       if (mounted.current) setError(String(value))
@@ -129,6 +140,7 @@ export function KCoderMcpManagement({
     window.addEventListener('kcoder:mcp-refresh', refresh)
     window.addEventListener('kcoder:mcp-authorization-changed', changed)
     return () => {
+      scope.current += 1
       mounted.current = false
       window.removeEventListener('kcoder:mcp-authorization-changed', changed)
       window.removeEventListener('kcoder:mcp-refresh', refresh)
@@ -138,6 +150,40 @@ export function KCoderMcpManagement({
       flows.current = {}
     }
   }, [reload, request, t])
+  const toggle = async (server: McpServer, enabled: boolean) => {
+    const generation = scope.current
+    setBusy(true)
+    setError('')
+    try {
+      await request('mcp/setEnabled', { name: server.name, pluginId: server.pluginId, enabled })
+      if (!mounted.current || generation !== scope.current) return
+      await reload()
+      window.dispatchEvent(new Event('kcoder:tools-catalog-invalidated'))
+    } catch (value) {
+      if (mounted.current && generation === scope.current) setError(value instanceof Error ? value.message : String(value))
+    } finally {
+      if (mounted.current && generation === scope.current) setBusy(false)
+    }
+  }
+  const enableSearch = async () => {
+    const generation = scope.current
+    setBusy(true)
+    setError('')
+    try {
+      await request('mcp/install', { config: { name: 'searxng', transport: 'searxng' } })
+      await request('mcp/setEnabled', { name: 'searxng', enabled: true })
+      if (!mounted.current || generation !== scope.current) return
+      await reload()
+      window.dispatchEvent(new Event('kcoder:tools-catalog-invalidated'))
+    } catch (value) {
+      if (mounted.current && generation === scope.current) {
+        setError(value instanceof Error ? value.message : String(value))
+        await reload().catch(() => {})
+      }
+    } finally {
+      if (mounted.current && generation === scope.current) setBusy(false)
+    }
+  }
   const act = async (
     server: McpServer,
     action: 'login' | 'logout' | 'cancel' | 'remove',
@@ -197,6 +243,17 @@ export function KCoderMcpManagement({
   )
   return (
     <section data-testid="kcoder-mcp-management" className="flex flex-col gap-3">
+      {loaded && !servers.some(server => server.name === 'searxng' && !server.pluginId) &&
+        `searxng ${t('workbench.mcp_searxng_title')}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()) && (
+        <article className="studio-card-spacing flex items-center gap-4 rounded-xl border border-border/60 bg-background">
+          <Network className="size-6 shrink-0 text-focus" aria-hidden="true" />
+          <div className="min-w-0 flex-1">
+            <h2 className="text-sm font-semibold">{t('workbench.mcp_searxng_title')}</h2>
+            <p className="mt-1 text-xs text-text-muted">{t('workbench.mcp_searxng_description')}</p>
+          </div>
+          <Switch checked={false} disabled={busy} onCheckedChange={value => { if (value) void enableSearch() }} aria-label={t('workbench.mcp_toggle', { name: 'searxng' })} data-testid="kcoder-searxng-enable" />
+        </article>
+      )}
       <McpInstallForm
         disabled={busy}
         install={async config => {
@@ -213,6 +270,7 @@ export function KCoderMcpManagement({
           }
         }}
       />
+      <p className="text-xs text-text-muted">{t('workbench.mcp_activation_help')}</p>
       {error && (
         <p role="alert" className="break-words text-sm text-text-secondary">
           {error}
@@ -229,24 +287,27 @@ export function KCoderMcpManagement({
       {filteredServers.map(server => {
         const key = identity(server)
         const waiting = pending[key]
-        const canLogin = authorizationNeedsLogin(server.authorization)
+        const enabled = server.enabled !== false
+        const canLogin = enabled && authorizationNeedsLogin(server.authorization)
         return (
           <article
             key={key}
-            className="flex flex-wrap items-center gap-5 rounded-xl border border-border/60 bg-background px-4 py-4"
+            className="studio-card-spacing flex flex-wrap items-center gap-5 rounded-xl border border-border/60 bg-background"
           >
             <span className="flex size-[60px] shrink-0 items-center justify-center rounded-xl bg-surface text-focus">
               <Network className="size-7" aria-hidden="true" />
             </span>
             <div className="min-w-0 flex-1">
-              <h2 className="break-all text-lg font-semibold">{server.name}</h2>
+              <h2 className="break-all text-sm font-semibold">{server.name}</h2>
               <p className="break-all text-xs text-text-muted">
                 {server.pluginId ?? t('workbench.mcp_standalone')} · {server.transport}
               </p>
+              {server.transport === 'searxng' && <p className="mt-1 text-xs text-text-muted">{t('workbench.mcp_searxng_description')}</p>}
               <p role="status" className="text-sm text-text-secondary">
                 {t(
                   waiting
                     ? 'workbench.mcp_status_pending'
+                    : !enabled ? 'workbench.mcp_disabled'
                     : authorizationLabelKey(server.authorization)
                 )}
               </p>
@@ -255,7 +316,7 @@ export function KCoderMcpManagement({
                 className="mt-1 text-xs text-text-muted"
               >
                 {t(
-                  server.lastConnectionAttempt === 'ready'
+                  !enabled ? 'workbench.mcp_disabled_connection' : server.lastConnectionAttempt === 'ready'
                     ? 'workbench.mcp_connection_ready'
                     : server.lastConnectionAttempt === 'unavailable'
                       ? 'workbench.mcp_connection_unavailable'
@@ -265,6 +326,14 @@ export function KCoderMcpManagement({
                 )}
               </p>
             </div>
+            <Switch
+              checked={enabled}
+              disabled={busy || Boolean(waiting)}
+              onCheckedChange={value => void toggle(server, value)}
+              aria-label={t('workbench.mcp_toggle', { name: server.name })}
+              data-testid="kcoder-mcp-toggle"
+              className="shrink-0"
+            />
             {waiting && (
               <a
                 className={button}
@@ -318,7 +387,7 @@ export function KCoderMcpManagement({
               <div
                 role="alertdialog"
                 aria-label={t('workbench.mcp_remove')}
-                className="w-full rounded-lg border border-border p-3"
+                className="studio-card-spacing w-full rounded-lg border border-border"
               >
                 <p>{t('workbench.mcp_remove_prompt', { name: server.name })}</p>
                 <button

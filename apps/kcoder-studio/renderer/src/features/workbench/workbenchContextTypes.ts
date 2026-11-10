@@ -36,6 +36,7 @@ import type {
   RuntimeSubagentArtifactRequest,
   RuntimeSubagentArtifactResponse,
   RuntimeTaskAddress,
+  RuntimeTaskCancelRequest,
   RuntimeTaskForkTarget,
   RuntimeProjectAppearanceRequest,
   RuntimeProjectPinRequest,
@@ -149,6 +150,7 @@ export interface WorkbenchContextValue {
     isAttachmentReadyToSend: boolean
     setSelectedModel: (model: UnifiedModel | null) => void
     setSelectedModelAndOptions?: (model: UnifiedModel, options: ModelOptions) => void
+    queueActiveTurnModelSelection?: (model: UnifiedModel) => Promise<boolean>
     setSelectedModelOption: (optionId: string, value: string) => void
     getSelectedModel?: () => UnifiedModel | null
     isSelectedModelUnavailable?: () => boolean
@@ -181,14 +183,18 @@ export interface WorkbenchContextValue {
     label?: string,
     projectRoots?: string[]
   ) => Promise<void>
+  switchStudioWorkMode?: (mode: import('./studioWorkMode').StudioWorkMode) => void
   startNewChat: () => void
   startNewSkillChat: (
     skillNames: string[],
     options?: { allowLocalSkills?: boolean }
   ) => Promise<boolean>
+  startExpertTask?: (expert: Omit<import('@/types/workbench').ExpertTaskDraft, 'draftKey'>) => void
+  selectDraftExpert?: import('@/types/workbench').SelectDraftExpert
   startStandaloneChat: () => void
   startNewProjectChat: (projectId: number) => void
-  openRuntimeTask: (address: RuntimeTaskAddress) => Promise<void>
+  openRuntimeTask: (address: RuntimeTaskAddress, options?: { navigate?: boolean }) => Promise<void>
+  appendRuntimeTaskDraft?: (address: RuntimeTaskAddress, text: string) => boolean
   searchRuntimeWork: (request: RuntimeWorkSearchRequest) => Promise<RuntimeWorkSearchResponse>
   loadRuntimeTranscriptForPane: RuntimeTranscriptLoader
   subscribeRuntimeTaskStream: (
@@ -330,7 +336,7 @@ export interface WorkbenchContextValue {
   ) => Promise<boolean>
   editLastUserMessage: (request: RuntimeRollbackRequest) => Promise<boolean>
   cancelRuntimePaneTask: (
-    address: RuntimeTaskAddress,
+    address: RuntimeTaskCancelRequest,
     options?: RuntimePaneActionOptions
   ) => Promise<boolean>
   sendCurrentInput: (

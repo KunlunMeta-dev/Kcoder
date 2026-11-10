@@ -25,7 +25,7 @@ it("old exchange does not opt in or persist seed; bootstrap exchange opts in and
   const fetcher = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response(JSON.stringify({ accessToken: "synthetic-session", expiresAt: Date.now() + 60_000,
     capabilities: { mobileInitialServersV1: true }, initialServers: { version: 1, servers: [server] } }),
     { status: 200, headers: { "content-type": "application/json" } }));
-  vi.stubGlobal("fetch", fetcher); vi.stubGlobal("document", {});
+  vi.stubGlobal("fetch", fetcher); vi.stubGlobal("document", {}); vi.stubGlobal("location", { protocol: "http:" });
   const old = await exchangeMobileSession("http://gateway.test", "synthetic-token");
   expect(JSON.parse(String(fetcher.mock.calls[0][1]?.body)).requestInitialServers).toBeUndefined();
   expect(old).not.toHaveProperty("initialServers");
@@ -38,6 +38,7 @@ it("old exchange does not opt in or persist seed; bootstrap exchange opts in and
 it.each([{ initialServers: [] }, { initialServers: undefined }, { initialServers: { version: 2, servers: [] } },
   { initialServers: { version: 1, servers: "bad" } }])("bad or future advertised seed falls back without discarding a valid profile", async ({ initialServers }) => {
   vi.stubGlobal("document", {});
+  vi.stubGlobal("location", { protocol: "http:" });
   vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ accessToken: "synthetic-session", expiresAt: Date.now() + 60_000,
     capabilities: { mobileInitialServersV1: true }, initialServers }), { status: 200 })));
   const result = await exchangeMobileSessionWithBootstrap("http://gateway.test", "synthetic-token");

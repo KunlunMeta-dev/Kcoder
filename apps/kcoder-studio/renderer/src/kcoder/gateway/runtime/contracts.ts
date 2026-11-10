@@ -2,6 +2,7 @@ import { GatewayRpcError, type GatewayServer } from '../../gatewayRpc'
 import type { GatewayClient } from '../../gatewayRuntimeTypes'
 import { type ModelSelectionMode } from '../../modelSelectionMode'
 import { type ThreadRunActivity, type ThreadRunSummary } from '../../threadRunSummary'
+import type { RuntimeGoalStatus, RuntimeGoalStatusObservation } from '@/types/api'
 
 export const EXECUTOR_EVENT = 'local-executor:event'
 
@@ -33,12 +34,18 @@ export function serverIdFromRuntimeProjectKey(
   return null
 }
 
-export function runtimeTaskId(server: Pick<GatewayServer, 'id' | 'runtime'>, threadId: string): string {
+export function runtimeTaskId(
+  server: Pick<GatewayServer, 'id' | 'runtime'>,
+  threadId: string
+): string {
   // First-release server configuration had no runtime field; treat old configuration and test fixtures as KCoder.
   return `${server.runtime ?? 'kcoder'}:${server.id}:${threadId}`
 }
 
 export interface GatewayTask {
+  channelTaskSource?: import('../../../../../shared/generated/contracts').ChannelTaskSource
+  agentDefinition?: import('../../../../../shared/generated/contracts').AgentTaskBinding
+  studioWorkMode?: import('@/types/studioWorkMode').StudioWorkMode
   scheduled?: boolean
   ephemeral?: boolean
   serverId: string
@@ -53,12 +60,29 @@ export interface GatewayTask {
   modelSelectionMode?: ModelSelectionMode
   persisted: boolean
   running: boolean
+  turnStatus?: 'inProgress' | 'completed' | 'interrupted' | 'failed'
+  completedAt?: number
   /** Authoritative activity derived from the server run summary (S1/S4). */
   runActivity?: ThreadRunActivity
   runSummary?: ThreadRunSummary
+  goalStatus?: RuntimeGoalStatus | null
+  goalStatusObservation?: RuntimeGoalStatusObservation
   createdAt: number
   updatedAt: number
-  runtimeHandle: { threadId: string }
+  runtimeHandle: {
+    threadId: string
+    agentDefinition?: import('../../../../../shared/generated/contracts').AgentTaskBinding
+    studioWorkMode?: import('@/types/studioWorkMode').StudioWorkMode
+    memoryTaskSnapshot?: {
+      snapshotId: string | null
+      threadId: string
+      turnId: string
+      attemptId: string
+      serverInstanceId: string
+      retiredServerInstances?: string[]
+      sequence: number
+    }
+  }
   parent?: { taskId: string; threadId: string; lastTurnId: string }
 }
 
@@ -145,10 +169,13 @@ export interface InterruptedGatewayBackgroundTool {
 }
 
 export interface PendingGatewayQuestion {
+  presentationSubtaskId?: string
   client: GatewayClient
+  connectionId?: string
   requestId: number
   taskId: string
   turnId: string
+  appServerEpoch?: string
   block: Record<string, unknown>
   renderPayload: Record<string, unknown>
   approvalId?: string

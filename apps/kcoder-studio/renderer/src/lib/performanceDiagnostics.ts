@@ -1,9 +1,8 @@
-import { invoke } from '@tauri-apps/api/core'
-import { isTauriRuntime } from './runtime-environment'
+import { invoke } from '@/lib/runtime-commands'
+import { isDiagnosticEnabled, setDiagnosticEnabled } from './diagnosticPreferences'
+import { isGatewayRuntime } from './runtime-environment'
 
-const PERFORMANCE_DIAGNOSTICS_STORAGE_KEY = 'wework:perf-debug'
-const PERFORMANCE_DIAGNOSTICS_QUERY_PARAM = 'weworkPerf'
-const PROCESS_SNAPSHOT_COMMAND = 'get_wework_process_snapshot'
+const PROCESS_SNAPSHOT_COMMAND = 'get_process_diagnostics_snapshot'
 const TOGGLE_SHORTCUT_KEY = 'P'
 const MAX_EVENTS = 300
 const SAMPLE_INTERVAL_MS = 5000
@@ -89,31 +88,25 @@ let processDiagnosticsInFlight: Promise<ProcessDiagnosticsSnapshot | null> | nul
 let processDiagnosticsWarned = false
 
 export function isPerformanceDiagnosticsEnabled(): boolean {
-  const queryValue = new URLSearchParams(window.location.search).get(
-    PERFORMANCE_DIAGNOSTICS_QUERY_PARAM
-  )
+  const query = new URLSearchParams(window.location.search)
+  const queryValue = query.get('kcoderPerf') ?? query.get('weworkPerf')
   if (queryValue === '1' || queryValue === 'true') {
-    localStorage.setItem(PERFORMANCE_DIAGNOSTICS_STORAGE_KEY, '1')
+    setPerformanceDiagnosticsEnabled(true)
     return true
   }
   if (queryValue === '0' || queryValue === 'false') {
-    localStorage.removeItem(PERFORMANCE_DIAGNOSTICS_STORAGE_KEY)
+    setPerformanceDiagnosticsEnabled(false)
     return false
   }
 
   return (
-    localStorage.getItem(PERFORMANCE_DIAGNOSTICS_STORAGE_KEY) === '1' ||
+    isDiagnosticEnabled('perf-debug') ||
     import.meta.env.VITE_KCODER_STUDIO_PERF_DEBUG === '1'
   )
 }
 
 export function setPerformanceDiagnosticsEnabled(enabled: boolean) {
-  if (enabled) {
-    localStorage.setItem(PERFORMANCE_DIAGNOSTICS_STORAGE_KEY, '1')
-    return
-  }
-
-  localStorage.removeItem(PERFORMANCE_DIAGNOSTICS_STORAGE_KEY)
+  setDiagnosticEnabled('perf-debug', enabled)
 }
 
 export function isPerformanceDiagnosticsShortcut(event: KeyboardEvent): boolean {
@@ -145,7 +138,7 @@ export function installPerformanceDiagnostics(): PerformanceDiagnosticsControlle
       events.shift()
     }
     if (type !== 'sample') {
-      console.warn('[Wework perf]', type, data)
+      console.warn('[KCoder perf]', type, data)
     }
   }
 
@@ -185,7 +178,7 @@ export function installPerformanceDiagnostics(): PerformanceDiagnosticsControlle
   installEventLoopLagSampler(pushEvent, cleanupCallbacks)
 
   console.info(
-    '[Wework perf] diagnostics enabled. Use window.__KCODER_STUDIO_PERF__.snapshot() to inspect current state.'
+    '[KCoder perf] diagnostics enabled. Use window.__KCODER_STUDIO_PERF__.snapshot() to inspect current state.'
   )
   return controller
 }
@@ -229,7 +222,7 @@ function installLongTaskObserver(
     observer.observe({ type: 'longtask', buffered: true })
     cleanupCallbacks.push(() => observer.disconnect())
   } catch (error) {
-    console.warn('[Wework perf] long task observer unavailable', error)
+    console.warn('[KCoder perf] long task observer unavailable', error)
   }
 }
 
@@ -254,7 +247,7 @@ function installPeriodicSampler(
 }
 
 function installProcessDiagnosticsSampler(cleanupCallbacks: Array<() => void>) {
-  if (!isTauriRuntime()) return
+  if (!isGatewayRuntime()) return
 
   void refreshProcessDiagnostics()
   const timer = window.setInterval(() => {
@@ -263,18 +256,19 @@ function installProcessDiagnosticsSampler(cleanupCallbacks: Array<() => void>) {
   cleanupCallbacks.push(() => window.clearInterval(timer))
 }
 
-function refreshProcessDiagnostics(): Promise<ProcessDiagnosticsSnapshot | null> {
-  if (!isTauriRuntime()) return Promise.resolve(null)
+export function refreshProcessDiagnostics(): Promise<ProcessDiagnosticsSnapshot | null> {
+  if (!isGatewayRuntime()) return Promise.resolve(null)
   if (processDiagnosticsInFlight) return processDiagnosticsInFlight
 
   processDiagnosticsInFlight = invoke<ProcessDiagnosticsSnapshot>(PROCESS_SNAPSHOT_COMMAND)
     .then(snapshot => {
-      latestProcessDiagnostics = snapshot
-      return snapshot
+      // A Gateway without a native process sampler returns only an empty process list.
+      latestProcessDiagnostics = Array.isArray(snapshot?.groups) ? snapshot : null
+      return latestProcessDiagnostics
     })
     .catch(error => {
       if (!processDiagnosticsWarned) {
-        console.warn('[Wework perf] process diagnostics unavailable', error)
+        console.warn('[KCoder perf] process diagnostics unavailable', error)
         processDiagnosticsWarned = true
       }
       return null

@@ -19,7 +19,23 @@ use tokio_tungstenite::{
     tungstenite::{Message, protocol::WebSocketConfig},
 };
 
-use super::MAX_DEVICE_RESULT_BYTES;
+use kcoder_host_transport::protocol_io::MAX_DEVICE_RESULT_BYTES;
+use kcoder_native_scope::NativeIntegrationContext;
+#[cfg(target_os = "linux")]
+#[path = "browser/process_owner.rs"]
+mod process_owner;
+#[cfg(windows)]
+#[path = "browser/process_owner_windows.rs"]
+mod process_owner_windows;
+#[path = "browser/profile_binding.rs"]
+mod profile_binding;
+#[path = "../internal/browser/profile_catalog.rs"]
+mod profile_catalog;
+use profile_binding::BrowserProfileBinding;
+pub use profile_catalog::handle_request as handle_profile_request;
+
+#[path = "../internal/browser/requests.rs"]
+pub mod requests;
 
 const MAX_BROWSER_SESSIONS: usize = 4;
 const MAX_BROWSER_FRAME_BYTES: usize = 1_200_000;
@@ -50,12 +66,14 @@ struct BrowserSession {
     cdp_session_id: String,
     target_id: String,
     process: OwnedChromiumProcess,
-    _profile: tempfile::TempDir,
+    _profile: Option<tempfile::TempDir>,
     next_command_id: u64,
     width: u32,
     height: u32,
     history: Vec<String>,
     history_index: usize,
+    control_revision: u64,
+    control_mode: kcoder_app_protocol::browser_profiles::BrowserControlMode,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -73,9 +91,18 @@ struct OwnedChromiumProcess {
     #[cfg(unix)]
     pgid: i32,
     terminated: bool,
+    profile_binding: Option<BrowserProfileBinding>,
+    #[cfg(target_os = "linux")]
+    linux_owner: Option<kcoder_process_supervisor::linux_stdio::StdioOwnerGuard>,
 }
 
 impl OwnedChromiumProcess {
+    fn verify_profile(&self) -> Result<()> {
+        if let Some(binding) = &self.profile_binding {
+            binding.verify()?;
+        }
+        Ok(())
+    }
     #[cfg(not(windows))]
     fn new(child: Child) -> Self {
         #[cfg(unix)]
@@ -88,6 +115,9 @@ impl OwnedChromiumProcess {
             #[cfg(unix)]
             pgid,
             terminated: false,
+            profile_binding: None,
+            #[cfg(target_os = "linux")]
+            linux_owner: None,
         }
     }
 
@@ -96,6 +126,7 @@ impl OwnedChromiumProcess {
         Self {
             child,
             terminated: false,
+            profile_binding: None,
         }
     }
 
@@ -116,6 +147,18 @@ impl OwnedChromiumProcess {
 
     async fn terminate(&mut self) -> Result<()> {
         if self.terminated {
+            if let Some(binding) = &mut self.profile_binding {
+                binding.finish_after_termination()?;
+            }
+            return Ok(());
+        }
+        let child_done = self.child.try_wait()?.is_some();
+        let tree_done = self.tree_terminated(child_done);
+        if child_done && tree_done {
+            self.terminated = true;
+            if let Some(binding) = &mut self.profile_binding {
+                binding.finish_after_termination()?;
+            }
             return Ok(());
         }
         self.signal_process_tree();
@@ -126,29 +169,39 @@ impl OwnedChromiumProcess {
         #[cfg(windows)]
         {
             let deadline = tokio::time::Instant::now() + BROWSER_PROCESS_SHUTDOWN_TIMEOUT;
-            while self.child.try_wait()?.is_none() && tokio::time::Instant::now() < deadline {
+            while !(self.child.try_wait()?.is_some() && self.tree_terminated(true))
+                && tokio::time::Instant::now() < deadline
+            {
                 tokio::time::sleep(std::time::Duration::from_millis(10)).await;
             }
             anyhow::ensure!(
-                self.child.try_wait()?.is_some(),
+                self.child.try_wait()?.is_some() && self.tree_terminated(true),
                 "Chromium Job did not terminate within the shutdown bound"
             );
         }
         #[cfg(unix)]
         {
             let deadline = tokio::time::Instant::now() + BROWSER_PROCESS_SHUTDOWN_TIMEOUT;
-            while process_group_exists(self.pgid) && tokio::time::Instant::now() < deadline {
+            while !self.tree_terminated(true) && tokio::time::Instant::now() < deadline {
                 tokio::time::sleep(std::time::Duration::from_millis(10)).await;
             }
-            if process_group_exists(self.pgid) {
+            if !self.tree_terminated(true) {
                 anyhow::bail!("Chromium process group did not terminate within the shutdown bound")
             }
         }
         self.terminated = true;
+        if let Some(binding) = &mut self.profile_binding {
+            binding.finish_after_termination()?;
+        }
         Ok(())
     }
 
     fn signal_process_tree(&mut self) {
+        #[cfg(target_os = "linux")]
+        if let Some(owner) = &self.linux_owner {
+            owner.request_stop();
+            return;
+        }
         #[cfg(unix)]
         unsafe {
             libc::kill(-self.pgid, libc::SIGKILL);
@@ -158,28 +211,58 @@ impl OwnedChromiumProcess {
         #[cfg(windows)]
         let _ = self.child.kill();
     }
+
+    fn tree_terminated(&self, child_done: bool) -> bool {
+        #[cfg(windows)]
+        if let Some(binding) = &self.profile_binding {
+            // A missing/dead helper is not proof. This reads only the original
+            // pinned completion file and exact durable use identity.
+            return child_done && binding.cleanup_confirmed().unwrap_or(false);
+        }
+        #[cfg(target_os = "linux")]
+        if self.linux_owner.is_some() {
+            return child_done;
+        }
+        #[cfg(unix)]
+        {
+            !process_group_exists(self.pgid)
+        }
+        #[cfg(not(unix))]
+        {
+            child_done
+        }
+    }
 }
 
 impl Drop for OwnedChromiumProcess {
     fn drop(&mut self) {
         if self.terminated {
+            if let Some(binding) = &mut self.profile_binding {
+                let _ = binding.finish_after_termination();
+            }
             return;
         }
         self.signal_process_tree();
         let deadline = std::time::Instant::now() + BROWSER_PROCESS_SHUTDOWN_TIMEOUT;
-        loop {
+        let cleanup_confirmed = loop {
             let child_done = self.child.try_wait().ok().flatten().is_some();
-            #[cfg(unix)]
-            let tree_done = !process_group_exists(self.pgid);
-            #[cfg(not(unix))]
-            let tree_done = child_done;
-            if child_done && tree_done || std::time::Instant::now() >= deadline {
-                break;
+            let tree_done = self.tree_terminated(child_done);
+            if child_done && tree_done {
+                break true;
+            }
+            if std::time::Instant::now() >= deadline {
+                break false;
             }
             std::thread::sleep(std::time::Duration::from_millis(10));
+        };
+        if cleanup_confirmed
+            && let Some(binding) = &mut self.profile_binding
+            && binding.finish_after_termination().is_err()
+        {
+            tracing::warn!("browser profile cleanup remains unconfirmed");
         }
         #[cfg(unix)]
-        if process_group_exists(self.pgid) {
+        if !self.tree_terminated(cleanup_confirmed) {
             tracing::error!(
                 pgid = self.pgid,
                 "Chromium process group remained alive after bounded Drop cleanup"
@@ -194,9 +277,10 @@ fn process_group_exists(pgid: i32) -> bool {
     result == 0 || std::io::Error::last_os_error().raw_os_error() != Some(libc::ESRCH)
 }
 
-pub(super) struct BrowserRegistry {
+pub struct BrowserRegistry {
     sessions: HashMap<String, BrowserSession>,
     next_browser_id: u64,
+    profile_starts: HashMap<String, (String, Option<BrowserStartResult>)>,
 }
 
 impl Default for BrowserRegistry {
@@ -206,70 +290,154 @@ impl Default for BrowserRegistry {
 }
 
 impl BrowserRegistry {
-    pub(super) fn resource_count(&self) -> usize {
+    pub fn resource_count(&self) -> usize {
         self.sessions.len()
     }
 
-    pub(super) fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             sessions: HashMap::new(),
             next_browser_id: 1,
+            profile_starts: HashMap::new(),
         }
     }
 
-    pub(super) async fn start(
+    pub async fn start(
         &mut self,
         engine_session_id: &str,
         params: BrowserStartParams,
+        native: Option<&NativeIntegrationContext>,
     ) -> Result<BrowserStartResult> {
+        let operation = if let Some(selection) = &params.profile {
+            let native = native.context("BROWSER_PROFILE_SESSION_UNAVAILABLE")?;
+            native.validate_scope(&selection.scope)?;
+            anyhow::ensure!(
+                !selection.operation_id.is_empty()
+                    && selection.operation_id.len() <= 128
+                    && selection
+                        .operation_id
+                        .bytes()
+                        .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_'),
+                "BROWSER_PROFILE_OPERATION_INVALID"
+            );
+            use sha2::Digest;
+            let intent = format!("{:x}", sha2::Sha256::digest(serde_json::to_vec(&params)?));
+            if let Some((original, result)) = self.profile_starts.get(&selection.operation_id) {
+                anyhow::ensure!(*original == intent, "BROWSER_PROFILE_OPERATION_CONFLICT");
+                let result = result
+                    .as_ref()
+                    .context("BROWSER_PROFILE_START_UNCONFIRMED")?;
+                anyhow::ensure!(
+                    self.sessions.contains_key(&result.session_id),
+                    "BROWSER_PROFILE_OPERATION_CLOSED"
+                );
+                self.sessions
+                    .get(&result.session_id)
+                    .unwrap()
+                    .process
+                    .verify_profile()?;
+                return Ok(result.clone());
+            }
+            anyhow::ensure!(
+                self.profile_starts.len() < 1024,
+                "BROWSER_PROFILE_OPERATION_LIMIT"
+            );
+            Some((selection.operation_id.clone(), intent))
+        } else {
+            None
+        };
+        if let Some((operation, intent)) = &operation {
+            self.profile_starts
+                .insert(operation.clone(), (intent.clone(), None));
+        }
+        let binding = params
+            .profile
+            .as_ref()
+            .map(|selection| {
+                BrowserProfileBinding::capture(
+                    native.context("BROWSER_PROFILE_SESSION_UNAVAILABLE")?,
+                    selection,
+                    &operation
+                        .as_ref()
+                        .context("BROWSER_PROFILE_OPERATION_REQUIRED")?
+                        .1,
+                )
+            })
+            .transpose()?;
         let result = browser_start(
             engine_session_id,
             self.next_browser_id,
             params,
             &mut self.sessions,
+            binding,
         )
         .await;
         if result.is_ok() {
             self.next_browser_id = self.next_browser_id.saturating_add(1);
         }
+        if let (Some((operation, intent)), Ok(result)) = (operation, &result) {
+            self.profile_starts
+                .insert(operation, (intent, Some(result.clone())));
+        }
         result
     }
 
-    pub(super) async fn screenshot(
+    pub async fn screenshot(
         &mut self,
         params: BrowserSessionParams,
     ) -> Result<BrowserScreenshotResult> {
         browser_screenshot(&mut self.sessions, &params.session_id).await
     }
 
-    pub(super) async fn action(
-        &mut self,
-        params: BrowserActionParams,
-    ) -> Result<BrowserActionResult> {
+    pub async fn action(&mut self, params: BrowserActionParams) -> Result<BrowserActionResult> {
+        profile_binding::authorize_automation(self.sessions.get(&params.session_id))?;
         browser_action(&mut self.sessions, params).await
     }
 
-    pub(super) async fn evaluate(
+    pub async fn evaluate(
         &mut self,
         params: BrowserEvaluateParams,
     ) -> Result<BrowserEvaluateResult> {
+        profile_binding::authorize_automation(self.sessions.get(&params.session_id))?;
         browser_evaluate(&mut self.sessions, params).await
     }
 
-    pub(super) async fn close(
+    pub async fn handoff(
+        &mut self,
+        params: kcoder_app_protocol::browser_profiles::BrowserHandoffParams,
+    ) -> Result<kcoder_app_protocol::browser_profiles::BrowserHandoffState> {
+        profile_binding::handoff(&mut self.sessions, params).await
+    }
+
+    pub async fn control_read(
         &mut self,
         params: BrowserSessionParams,
-    ) -> Result<BrowserCloseResult> {
+    ) -> Result<kcoder_app_protocol::browser_profiles::BrowserHandoffState> {
+        profile_binding::control_read(&mut self.sessions, params).await
+    }
+
+    pub async fn human_action(
+        &mut self,
+        params: kcoder_app_protocol::browser_profiles::BrowserHumanActionParams,
+    ) -> Result<BrowserActionResult> {
+        profile_binding::authorize_human(
+            self.sessions.get(&params.action.session_id),
+            params.expected_revision,
+        )?;
+        browser_action(&mut self.sessions, params.action).await
+    }
+
+    pub async fn close(&mut self, params: BrowserSessionParams) -> Result<BrowserCloseResult> {
         let Some(mut session) = self.sessions.remove(&params.session_id) else {
             return Ok(BrowserCloseResult { closed: false });
         };
-        session.process.terminate().await?;
+        profile_binding::close_owned_session(&mut session).await?;
         Ok(BrowserCloseResult { closed: true })
     }
 
-    pub(super) async fn shutdown_all(&mut self) {
+    pub async fn shutdown_all(&mut self) {
         for (_, mut session) in self.sessions.drain() {
-            if let Err(error) = session.process.terminate().await {
+            if let Err(error) = profile_binding::close_owned_session(&mut session).await {
                 tracing::warn!(%error, "failed to terminate Chromium process tree");
             }
         }
@@ -311,6 +479,7 @@ async fn browser_cdp_command(
     method: &str,
     params: Value,
 ) -> Result<Value> {
+    session.process.verify_profile()?;
     browser_cdp_command_raw(
         &mut session.socket,
         &mut session.next_command_id,
@@ -896,9 +1065,12 @@ fn bundled_chromium_candidates(
     };
     let mut candidates = vec![directory.join(relative)];
     if !windows {
-        candidates.push(directory.join(
-            "chrome/chrome-mac-x64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing",
-        ));
+        let mac_browser = if cfg!(target_arch = "aarch64") {
+            "chrome/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing"
+        } else {
+            "chrome/chrome-mac-x64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing"
+        };
+        candidates.push(directory.join(mac_browser));
     }
     if !windows && let Some(prefix) = directory.parent() {
         candidates.push(prefix.join("lib/kcoder").join(relative));
@@ -1015,11 +1187,11 @@ fn browser_launch_preflight_from_candidates(
     })
 }
 
-pub(super) fn browser_sessions_available() -> bool {
+pub fn browser_sessions_available() -> bool {
     browser_preflight_result().available
 }
 
-pub(super) fn browser_preflight_result() -> kcoder_app_protocol::BrowserPreflightResult {
+pub fn browser_preflight_result() -> kcoder_app_protocol::BrowserPreflightResult {
     match browser_launch_preflight() {
         Ok(_) => kcoder_app_protocol::BrowserPreflightResult {
             available: true,
@@ -1040,6 +1212,7 @@ async fn browser_start(
     sequence: u64,
     params: BrowserStartParams,
     sessions: &mut HashMap<String, BrowserSession>,
+    mut binding: Option<BrowserProfileBinding>,
 ) -> Result<BrowserStartResult> {
     if sessions.len() >= MAX_BROWSER_SESSIONS {
         anyhow::bail!("browser session limit reached")
@@ -1051,10 +1224,26 @@ async fn browser_start(
         executable: chromium,
         sandbox_disabled,
     } = browser_launch_preflight()?;
-    let profile = tempfile::Builder::new()
-        .prefix("kcoder-studio-chromium-")
-        .tempdir()
-        .context("failed to create private Chromium profile")?;
+    let profile = if binding.is_none() {
+        Some(
+            tempfile::Builder::new()
+                .prefix("kcoder-studio-chromium-")
+                .tempdir()
+                .context("failed to create private Chromium profile")?,
+        )
+    } else {
+        None
+    };
+    if let Some(binding) = &binding {
+        binding.verify()?;
+    }
+    let user_data = binding
+        .as_ref()
+        .map(|binding| binding.path())
+        .or_else(|| profile.as_ref().map(|profile| profile.path()))
+        .context("browser profile unavailable")?;
+    let profile_summary = binding.as_ref().map(|binding| binding.profile().clone());
+    let user_data_chars = user_data.to_string_lossy().chars().count();
     if sandbox_disabled {
         tracing::warn!(
             "headless Chromium sandbox is explicitly disabled; only use this in an isolated test environment"
@@ -1068,14 +1257,24 @@ async fn browser_start(
         // Model processes may inherit HTTP(S)_PROXY, but the managed development browser must connect directly and deterministically to loopback/Tailscale targets.
         "--no-proxy-server".to_owned(),
         "--remote-debugging-port=0".to_owned(),
-        format!("--user-data-dir={}", profile.path().display()),
+        format!("--user-data-dir={}", user_data.display()),
         format!("--window-size={width},{height}"),
         "about:blank".to_owned(),
     ];
     if sandbox_disabled {
         chromium_args.push("--no-sandbox".to_owned());
     }
-    #[cfg(not(windows))]
+    #[cfg(target_os = "linux")]
+    let mut process = process_owner::spawn(
+        &chromium,
+        &chromium_args,
+        binding
+            .as_mut()
+            .map(BrowserProfileBinding::take_cleanup_receipt)
+            .transpose()?,
+    )
+    .await?;
+    #[cfg(not(any(windows, target_os = "linux")))]
     let child = {
         let mut command = Command::new(&chromium);
         command
@@ -1098,26 +1297,33 @@ async fn browser_start(
             .context("failed to start headless Chromium")?
     };
     #[cfg(windows)]
-    let child = {
-        let spec = SpawnSpec {
-            executable: chromium,
-            cwd: std::env::current_dir()?,
-            args: chromium_args.into_iter().map(Into::into).collect(),
-            env: std::env::vars_os().collect(),
-        };
-        SupervisedChild::spawn(
-            spec,
-            &locate_supervisor_or_sibling("KCODER_PROCESS_SUPERVISOR_BIN")?,
-        )
-        .context("failed to start headless Chromium through the Windows supervisor")?
+    let mut process = {
+        let receipt = binding
+            .as_mut()
+            .map(BrowserProfileBinding::take_cleanup_receipt)
+            .transpose()?;
+        if let Some(binding) = &mut binding {
+            // Any uncertain launch stays busy until its original receipt. Never
+            // treat an error/absent PID as a not-started browser operation.
+            binding.mark_started();
+        }
+        process_owner_windows::spawn(&chromium, &chromium_args, receipt)?
     };
+    #[cfg(not(any(windows, target_os = "linux")))]
     let mut process = OwnedChromiumProcess::new(child);
+    if let Some(binding) = &mut binding {
+        binding.mark_started();
+    }
+    process.profile_binding = binding;
+    if let Some(binding) = &process.profile_binding {
+        binding.verify()?;
+    }
     let stderr = process
         .take_stderr()
         .context("Chromium stderr is unavailable")?;
     let mut lines = BufReader::new(stderr).lines();
+    let mut startup_errors = VecDeque::new();
     let browser_ws = tokio::time::timeout(std::time::Duration::from_secs(10), async {
-        let mut startup_errors = VecDeque::new();
         while let Some(line) = lines.next_line().await? {
             if let Some(value) = line.split("DevTools listening on ").nth(1) {
                 return Ok::<_, anyhow::Error>(value.trim().to_owned());
@@ -1129,11 +1335,26 @@ async fn browser_start(
         }
         anyhow::bail!(
             "Chromium exited before publishing its DevTools endpoint: {}",
-            startup_errors.into_iter().collect::<Vec<_>>().join(" | ")
+            startup_errors
+                .iter()
+                .cloned()
+                .collect::<Vec<_>>()
+                .join(" | ")
         )
     })
     .await
-    .context("timed out starting headless Chromium")??;
+    .with_context(|| {
+        format!(
+            "timed out starting headless Chromium (profile path chars: {}, owner exited: {}): {}",
+            user_data_chars,
+            process.child.try_wait().ok().flatten().is_some(),
+            startup_errors
+                .iter()
+                .cloned()
+                .collect::<Vec<_>>()
+                .join(" | ")
+        )
+    })??;
     tokio::spawn(async move { while let Ok(Some(_)) = lines.next_line().await {} });
     reqwest::Url::parse(&browser_ws).context("invalid Chromium DevTools endpoint")?;
     let websocket_config = WebSocketConfig::default()
@@ -1187,6 +1408,8 @@ async fn browser_start(
         height,
         history: vec![url.clone()],
         history_index: 0,
+        control_revision: 1,
+        control_mode: kcoder_app_protocol::browser_profiles::BrowserControlMode::Automation,
     };
     browser_cdp_command(&mut session, "Page.bringToFront", json!({})).await?;
     for initial_target_id in initial_target_ids {
@@ -1204,6 +1427,7 @@ async fn browser_start(
         width,
         height,
         sandbox_disabled,
+        profile: profile_summary,
     })
 }
 
@@ -1371,7 +1595,15 @@ async fn browser_dispatch_shortcut(
     (result, true)
 }
 
-async fn browser_action(
+// Keep the action future's polling code in the browser crate.
+fn browser_action(
+    sessions: &mut HashMap<String, BrowserSession>,
+    params: BrowserActionParams,
+) -> futures::future::BoxFuture<'_, Result<BrowserActionResult>> {
+    Box::pin(browser_action_inner(sessions, params))
+}
+
+async fn browser_action_inner(
     sessions: &mut HashMap<String, BrowserSession>,
     params: BrowserActionParams,
 ) -> Result<BrowserActionResult> {
@@ -1647,12 +1879,14 @@ mod tests {
             cdp_session_id: "page".into(),
             target_id: "target".into(),
             process: OwnedChromiumProcess::new(child),
-            _profile: tempfile::tempdir().unwrap(),
+            _profile: Some(tempfile::tempdir().unwrap()),
             next_command_id: 0,
             width: 800,
             height: 600,
             history: Vec::new(),
             history_index: 0,
+            control_revision: 1,
+            control_mode: kcoder_app_protocol::browser_profiles::BrowserControlMode::Automation,
         }
     }
 
@@ -1919,12 +2153,14 @@ mod tests {
                 cdp_session_id: "original-session".into(),
                 target_id: "original".into(),
                 process: OwnedChromiumProcess::new(child),
-                _profile: tempfile::tempdir().unwrap(),
+                _profile: Some(tempfile::tempdir().unwrap()),
                 next_command_id: 0,
                 width: 800,
                 height: 600,
                 history: vec!["https://original.invalid/".into()],
                 history_index: 0,
+                control_revision: 1,
+                control_mode: kcoder_app_protocol::browser_profiles::BrowserControlMode::Automation,
             };
             let result = browser_replace_target(&mut session, "https://fixture.invalid/").await;
             assert_eq!(result.is_err(), close_failure);
@@ -1985,12 +2221,14 @@ mod tests {
             cdp_session_id: "original-session".into(),
             target_id: "original".into(),
             process: OwnedChromiumProcess::new(child),
-            _profile: tempfile::tempdir().unwrap(),
+            _profile: Some(tempfile::tempdir().unwrap()),
             next_command_id: 0,
             width: 800,
             height: 600,
             history: vec!["https://original.invalid/".into()],
             history_index: 0,
+            control_revision: 1,
+            control_mode: kcoder_app_protocol::browser_profiles::BrowserControlMode::Automation,
         };
         let result = browser_replace_target(&mut session, "https://fixture.invalid/").await;
         assert!(result.is_err());
@@ -2129,7 +2367,11 @@ mod tests {
             bundled_chromium_candidates(&binary, false),
             vec![
                 directory.join("chrome/chrome-linux64/chrome"),
-                directory.join("chrome/chrome-mac-x64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing"),
+                directory.join(if cfg!(target_arch = "aarch64") {
+                    "chrome/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing"
+                } else {
+                    "chrome/chrome-mac-x64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing"
+                }),
                 root.path().join("lib/kcoder/chrome/chrome-linux64/chrome"),
             ]
         );
@@ -2344,14 +2586,6 @@ mod tests {
             error
                 .to_string()
                 .contains("failed to locate executable Chromium")
-        );
-    }
-
-    #[test]
-    fn browser_launch_preflight_matches_server_capability() {
-        assert_eq!(
-            super::super::server_capabilities(false).experimental["browserSessions"],
-            browser_launch_preflight().is_ok(),
         );
     }
 
@@ -2586,11 +2820,17 @@ mod tests {
     async fn failed_browser_start_does_not_advance_session_id() {
         let mut registry = BrowserRegistry::new();
         let params = BrowserStartParams {
+            profile: None,
             url: "file:///tmp/index.html".into(),
             width: 1024,
             height: 720,
         };
-        assert!(registry.start("engine-session", params).await.is_err());
+        assert!(
+            registry
+                .start("engine-session", params, None)
+                .await
+                .is_err()
+        );
         assert_eq!(registry.next_browser_id, 1);
         assert!(registry.sessions.is_empty());
     }

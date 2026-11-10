@@ -10,6 +10,7 @@ import {
   hasHiddenRuntimeSidebarTaskItems,
   RUNTIME_PROJECT_TASK_PREVIEW_LIMIT,
 } from './runtimeTaskSidebarHelpers'
+import { resetRuntimeTaskOrderTimes } from '@/features/workbench/runtimeTaskLifecycle/workListProjection'
 
 describe('runtimeTaskSidebarHelpers', () => {
   test('labels KCoder runtime tasks with the product name', () => {
@@ -223,5 +224,30 @@ describe('runtimeTaskSidebarHelpers', () => {
     ])
     expect(hasHiddenRuntimeSidebarTaskItems(items)).toBe(false)
     expect(hasExpandedRuntimeSidebarTaskItems(items)).toBe(false)
+  })
+})
+
+describe('sidebar order while tasks run', () => {
+  const workspace = (tasks: Array<Record<string, unknown>>) =>
+    [
+      { deviceId: 'order-device', workspacePath: '/w', tasks },
+    ] as unknown as RuntimeDeviceWorkspace[]
+  const order = (tasks: Array<Record<string, unknown>>) =>
+    getRuntimeSidebarTaskItems(workspace(tasks)).map(item => item.task.taskId)
+
+  test('streamed updates do not move a running task; it re-sorts once it stops', () => {
+    resetRuntimeTaskOrderTimes()
+    const older = { taskId: 'older', updatedAt: '2026-11-04T10:00:00Z', running: true }
+    const newer = { taskId: 'newer', updatedAt: '2026-11-04T10:05:00Z' }
+    expect(order([older, newer])).toEqual(['newer', 'older'])
+    // The running task streams an update that is newer than every other task.
+    expect(order([{ ...older, updatedAt: '2026-11-04T10:10:00Z' }, newer])).toEqual([
+      'newer',
+      'older',
+    ])
+    // Once it finishes, its real time applies.
+    expect(
+      order([{ ...older, running: false, completedAt: '2026-11-04T10:11:00Z' }, newer])
+    ).toEqual(['older', 'newer'])
   })
 })

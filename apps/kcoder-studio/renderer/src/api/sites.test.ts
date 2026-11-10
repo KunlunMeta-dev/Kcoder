@@ -53,7 +53,6 @@ describe('createSitesApi', () => {
 
     const api = createSitesApi('http://127.0.0.1:9100/api', {
       getToken: () => 'cloud-secret',
-      redirectOnUnauthorized: false,
     })
     await api.listSites({ offset: 0, limit: 20 })
 

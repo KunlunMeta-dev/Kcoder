@@ -1,38 +1,56 @@
+import { NativeWebSources } from "./NativeWebSources";
 import { t } from "@/i18n";
 import { useLocale } from "@/i18n/use-locale";
 import { BoundedOutput } from "@/components/output-disclosure";
+import { runtimeErrorSummary } from "@/components/runtime-error";
 import { type ChatMessage, type FileChangesView } from "@/runtime/task-runtime";
 import {
   ArrowUp,
-  Check,
-  ChevronDown,
   ChevronRight,
   GitCompareArrows,
-  ListTodo,
   ShieldCheck,
   Wrench,
 } from "lucide-react-native";
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
 import { useTaskAppearance } from "./taskStyles";
+import { TranscriptDisclosureHeader } from "./TranscriptDisclosure";
+import { resolveDisclosureExpanded, toggleDisclosureChoice } from "./disclosure-state";
+import { getAppPreferencesSnapshot, subscribeAppPreferences } from "@/storage/app-preferences";
+import { useInterfaceVersion } from "@/storage/interface-version";
+
+export { TodoCard } from "./TaskPlanCard";
 
 export function InteractionSummaryCard({
   summary,
+  compact = false,
 }: {
   summary: NonNullable<ChatMessage["interactionSummaries"]>[number];
+  compact?: boolean;
 }) {
   const { styles, colors } = useTaskAppearance();
+  const v3 = useInterfaceVersion() === "v3";
+  const [promptExpanded, setPromptExpanded] = useState(false);
+  const collapsiblePrompt = v3 && compact && Boolean(summary.prompt && summary.prompt.length > 160);
   return (
     <View
       testID={`interaction-summary-${summary.id}`}
-      style={styles.timelineCard}
+      style={compact ? styles.processingSummary : styles.timelineCard}
     >
-      <View style={styles.timelineHeader}>
+      <View
+        style={compact ? styles.processingSummaryHeader : styles.timelineHeader}
+      >
         <ShieldCheck size={15} color={colors.green} />
         <View style={styles.toolCopy}>
           <Text style={styles.timelineTitle}>{summary.header}</Text>
           {summary.prompt ? (
-            <Text selectable style={styles.timelineDetail}>
+            <Text testID={`interaction-summary-prompt-${summary.id}`} selectable
+              numberOfLines={collapsiblePrompt && !promptExpanded ? 2 : undefined}
+              accessibilityRole={collapsiblePrompt ? "button" : undefined}
+              accessibilityState={collapsiblePrompt ? { expanded: promptExpanded } : undefined}
+              accessibilityHint={collapsiblePrompt ? t(promptExpanded ? "task.hide_technical_details" : "task.view_technical_details") : undefined}
+              onPress={collapsiblePrompt ? () => setPromptExpanded(value => !value) : undefined}
+              style={styles.timelineDetail}>
               {summary.prompt}
             </Text>
           ) : null}
@@ -45,75 +63,14 @@ export function InteractionSummaryCard({
   );
 }
 
-export function TodoCard({
-  todos,
-}: {
-  todos: NonNullable<ChatMessage["todos"]>;
-}) {
-  useLocale();
-  const { styles, colors } = useTaskAppearance();
-  const [expanded, setExpanded] = useState(false);
-  const completed = todos.filter(
-    (todo) => todo.status === "completed" || todo.status === "cancelled",
-  ).length;
-  const next =
-    todos.find((todo) => todo.status === "in_progress") ??
-    todos.find((todo) => todo.status === "pending");
-  return (
-    <View testID="todo-card" style={styles.timelineCard}>
-      <Pressable
-        accessibilityRole="button"
-        aria-expanded={expanded}
-        accessibilityState={{ expanded }}
-        onPress={() => setExpanded((value) => !value)}
-        style={styles.timelineHeader}
-      >
-        <ListTodo size={15} color={colors.blue} />
-        <View style={styles.toolCopy}>
-          <Text style={styles.timelineTitle}>
-            {t("task.task_list")}
-            {completed}/{todos.length}
-          </Text>
-          {!expanded && next ? (
-            <Text numberOfLines={1} style={styles.timelineDetail}>
-              {next.content}
-            </Text>
-          ) : null}
-        </View>
-        {expanded ? (
-          <ChevronDown size={15} color={colors.textDim} />
-        ) : (
-          <ChevronRight size={15} color={colors.textDim} />
-        )}
-      </Pressable>
-      {expanded ? (
-        <View style={styles.todoList}>
-          {todos.map((todo, index) => {
-            const done =
-              todo.status === "completed" || todo.status === "cancelled";
-            return (
-              <View key={`${todo.content}-${index}`} style={styles.todoRow}>
-                <View style={[styles.todoDot, done && styles.todoDotDone]}>
-                  {done ? <Check size={11} color={colors.background} /> : null}
-                </View>
-                <Text style={[styles.todoText, done && styles.todoTextDone]}>
-                  {todo.content}
-                </Text>
-              </View>
-            );
-          })}
-        </View>
-      ) : null}
-    </View>
-  );
-}
-
 export function ActivityCard({
   activity,
   onSteer,
+  handledFailureDetail,
 }: {
   activity: NonNullable<ChatMessage["activities"]>[number];
   onSteer?: (message: string) => Promise<boolean>;
+  handledFailureDetail?: string;
 }) {
   useLocale();
   const { styles, colors } = useTaskAppearance();
@@ -121,6 +78,9 @@ export function ActivityCard({
   const [draft, setDraft] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [errorDetailsVisible, setErrorDetailsVisible] = useState(false);
+  const detail = activity.status === "failed" && activity.detail ? runtimeErrorSummary(activity.detail) : activity.detail;
+  const detailHandled = activity.status === "failed" && activity.detail === handledFailureDetail;
   const tone =
     activity.status === "failed"
       ? colors.red
@@ -147,11 +107,15 @@ export function ActivityCard({
         <View style={[styles.activityDot, { backgroundColor: tone }]} />
         <View style={styles.toolCopy}>
           <Text style={styles.activityLabel}>{activity.label}</Text>
-          {activity.detail ? (
+          {activity.detail && !detailHandled ? (
             <Text selectable style={styles.timelineDetail}>
-              {activity.detail}
+              {errorDetailsVisible ? activity.detail : detail}
             </Text>
           ) : null}
+          {activity.detail && !detailHandled && detail !== activity.detail ? <Pressable accessibilityRole="button"
+            accessibilityState={{ expanded: errorDetailsVisible }} onPress={() => setErrorDetailsVisible(value => !value)} style={styles.errorDetailsButton}>
+            <Text style={styles.errorDetailsText}>{t(errorDetailsVisible ? "task.hide_technical_details" : "task.view_technical_details")}</Text>
+          </Pressable> : null}
           {steerLabel ? (
             <Text testID="subagent-steer-status" style={styles.timelineDetail}>
               {steerLabel}
@@ -261,62 +225,70 @@ export function ToolCallCard({
   tool: NonNullable<ChatMessage["tools"]>[number];
 }) {
   useLocale();
+  const v3 = useInterfaceVersion() === "v3";
   const { styles, colors } = useTaskAppearance();
-  const [expanded, setExpanded] = useState(false);
+  const preferences = useSyncExternalStore(
+    subscribeAppPreferences,
+    getAppPreferencesSnapshot,
+    getAppPreferencesSnapshot,
+  );
+  const [defaultExpanded] = useState(() => !preferences.toolsCollapsedByDefault);
+  const [userExpanded, setUserExpanded] = useState<boolean | null>(null);
+  const expanded = resolveDisclosureExpanded(userExpanded, defaultExpanded);
   const hasDetails = tool.input !== undefined || tool.output !== undefined;
+  const toolLabel = /^web_?search$/i.test(tool.name) ? t("web_sources.search") : /^web_?fetch$/i.test(tool.name) ? t("web_sources.fetch") : tool.name;
+  const cancelled =
+    tool.status === "unknown" &&
+    /^(?:cancelled|canceled)$/i.test(tool.rawStatus?.trim() ?? "");
+  const statusLabel = tool.status === "running"
+    ? t("task.running")
+    : tool.status === "failed"
+      ? t("task.failed")
+      : cancelled
+        ? t("task.cancelled")
+        : tool.status === "unknown"
+          ? t("task.unknown")
+          : t("task.completed");
+  const statusTone = tool.status === "failed" ? colors.red : tool.status === "running" || tool.status === "unknown" && !cancelled
+    ? colors.yellow : cancelled ? colors.textDim : colors.green;
   return (
     <View
       testID={`tool-call-${encodeURIComponent(tool.id)}`}
       style={styles.tool}
     >
-      <Pressable
+      <TranscriptDisclosureHeader
         testID={`tool-call-toggle-${encodeURIComponent(tool.id)}`}
+        label={`${toolLabel}. ${statusLabel}`}
         disabled={!hasDetails}
-        accessibilityRole="button"
-        aria-expanded={hasDetails ? expanded : undefined}
-        accessibilityState={{
-          expanded: hasDetails ? expanded : undefined,
-          disabled: !hasDetails,
-        }}
-        onPress={() => setExpanded((value) => !value)}
-        style={styles.toolHeader}
+        expanded={expanded}
+        onPress={() => setUserExpanded((value) => toggleDisclosureChoice(value, defaultExpanded))}
+        icon={
+          v3 ? <View testID={`tool-status-${encodeURIComponent(tool.id)}`} style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: statusTone }} /> : <Wrench
+            size={20}
+            color={
+              tool.status === "failed"
+                ? colors.red
+                : tool.status === "running"
+                  ? colors.yellow
+                  : colors.textMuted
+            }
+          />
+        }
       >
-        <Wrench
-          size={15}
-          color={
-            tool.status === "failed"
-              ? colors.red
-              : tool.status === "running"
-                ? colors.yellow
-                : colors.textMuted
-          }
-        />
         <View style={styles.toolCopy}>
-          <Text style={styles.toolName}>{tool.name}</Text>
+          <Text style={styles.toolName}>{toolLabel}</Text>
         </View>
         <Text
           style={[
             styles.toolStatus,
             tool.status === "running" && styles.toolRunning,
             tool.status === "failed" && styles.toolFailed,
+            v3 && { color: statusTone },
           ]}
         >
-          {tool.status === "running"
-            ? t("task.running")
-            : tool.status === "failed"
-              ? t("task.failed")
-              : tool.status === "unknown"
-                ? t("task.unknown")
-                : t("task.completed")}
+          {statusLabel}
         </Text>
-        {hasDetails ? (
-          expanded ? (
-            <ChevronDown size={15} color={colors.textDim} />
-          ) : (
-            <ChevronRight size={15} color={colors.textDim} />
-          )
-        ) : null}
-      </Pressable>
+      </TranscriptDisclosureHeader>
       {expanded ? (
         <View style={styles.toolDetails}>
           {tool.input !== undefined ? (
@@ -333,6 +305,7 @@ export function ToolCallCard({
           ) : null}
         </View>
       ) : null}
+      {tool.webSources ? <NativeWebSources receipt={tool.webSources} /> : null}
     </View>
   );
 }

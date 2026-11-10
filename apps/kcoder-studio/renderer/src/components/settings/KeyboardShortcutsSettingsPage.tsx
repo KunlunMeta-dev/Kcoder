@@ -1,4 +1,5 @@
 import { CornerDownLeft, Loader2, RotateCcw, Search, Trash2 } from 'lucide-react'
+import { useRetainedPageActive } from '@/components/layout/retainedPageState'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { createLocalAppServices } from '@/api/local/localServices'
@@ -96,7 +97,12 @@ function commandDescriptionFallback(command: string): string {
 
 function KeybindingPill({ value }: { value: string }) {
   const { t } = useTranslation('common')
-  const displayValue = value === 'Mouse Back' ? t('workbench.keyboard_mouse_back') : value === 'Mouse Forward' ? t('workbench.keyboard_mouse_forward') : value
+  const displayValue =
+    value === 'Mouse Back'
+      ? t('workbench.keyboard_mouse_back')
+      : value === 'Mouse Forward'
+        ? t('workbench.keyboard_mouse_forward')
+        : value
   return (
     <span className="inline-flex min-h-7 items-center rounded-full bg-muted px-2.5 text-sm font-medium leading-[18px] text-text-secondary">
       {displayValue.split('+').map((part, index) => (
@@ -229,8 +235,16 @@ export function KeyboardShortcutsSettingsPage() {
     }
   }, [loadAttempt, t])
 
+  // A retained (hidden) settings page must not keep capturing keystrokes.
+  const pageActive = useRetainedPageActive()
+  const [wasPageActive, setWasPageActive] = useState(pageActive)
+  if (wasPageActive !== pageActive) {
+    setWasPageActive(pageActive)
+    if (!pageActive) setRecordingCommand(null)
+  }
+
   useEffect(() => {
-    if (!recordingCommand) return undefined
+    if (!recordingCommand || !pageActive) return undefined
 
     const handleKeyDown = (event: KeyboardEvent) => {
       event.preventDefault()
@@ -249,7 +263,7 @@ export function KeyboardShortcutsSettingsPage() {
 
     window.addEventListener('keydown', handleKeyDown, true)
     return () => window.removeEventListener('keydown', handleKeyDown, true)
-  }, [recordingCommand, saveOverride])
+  }, [pageActive, recordingCommand, saveOverride])
 
   return (
     <SettingsPage data-testid="keyboard-shortcuts-settings-page">
@@ -303,7 +317,7 @@ export function KeyboardShortcutsSettingsPage() {
             {t('workbench.keyboard_shortcuts_saved')}
           </p>
         )}
-        <div className="overflow-hidden rounded-lg border border-border">
+        <div className="studio-card overflow-hidden rounded-lg border border-border">
           {filteredCommands.map(item => {
             const labels = COMMAND_LABELS[item.command]
             const currentKey = bindings[item.command]

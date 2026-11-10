@@ -1,10 +1,8 @@
 //! Quote-aware shell syntax, invocation parsing, nested commands, and delegated prefix checks.
 
-use super::*;
-
 /// Retain only unquoted text at the shell-syntax layer. Quoted bodies and comments
 /// may contain source such as `|| true` or `set +e`; they do not show that the command suppresses failures.
-pub(super) fn shell_unquoted_syntax(command: &str) -> String {
+pub fn shell_unquoted_syntax(command: &str) -> String {
     let mut syntax = String::with_capacity(command.len());
     let mut single_quote = false;
     let mut double_quote = false;
@@ -60,14 +58,14 @@ pub(super) fn shell_unquoted_syntax(command: &str) -> String {
     syntax
 }
 
-pub(super) fn shell_has_unquoted_sequence(syntax: &str, needle: &str) -> bool {
+pub fn shell_has_unquoted_sequence(syntax: &str, needle: &str) -> bool {
     syntax
         .as_bytes()
         .windows(needle.len())
         .any(|window| window == needle.as_bytes())
 }
 
-pub(super) fn shell_has_unquoted_pipe(command: &str) -> bool {
+pub fn shell_has_unquoted_pipe(command: &str) -> bool {
     let mut single_quote = false;
     let mut double_quote = false;
     let mut escaped = false;
@@ -90,13 +88,13 @@ pub(super) fn shell_has_unquoted_pipe(command: &str) -> bool {
     false
 }
 
-pub(super) fn shell_has_unquoted_control_operator(command: &str) -> bool {
+pub fn shell_has_unquoted_control_operator(command: &str) -> bool {
     shell_has_unquoted_character(command, |character| {
         matches!(character, ';' | '\n' | '|' | '&')
     })
 }
 
-pub(super) fn shell_has_command_substitution(command: &str) -> bool {
+pub fn shell_has_command_substitution(command: &str) -> bool {
     let mut single_quote = false;
     let mut double_quote = false;
     let mut escaped = false;
@@ -121,7 +119,7 @@ pub(super) fn shell_has_command_substitution(command: &str) -> bool {
     false
 }
 
-pub(super) fn shell_has_unquoted_variable_expansion(command: &str) -> bool {
+pub fn shell_has_unquoted_variable_expansion(command: &str) -> bool {
     let mut single_quote = false;
     let mut double_quote = false;
     let mut escaped = false;
@@ -144,10 +142,7 @@ pub(super) fn shell_has_unquoted_variable_expansion(command: &str) -> bool {
     false
 }
 
-pub(super) fn shell_has_unquoted_character(
-    command: &str,
-    predicate: impl Fn(char) -> bool,
-) -> bool {
+pub fn shell_has_unquoted_character(command: &str, predicate: impl Fn(char) -> bool) -> bool {
     let mut single_quote = false;
     let mut double_quote = false;
     let mut escaped = false;
@@ -170,7 +165,7 @@ pub(super) fn shell_has_unquoted_character(
     false
 }
 
-pub(super) fn shell_has_unquoted_output_redirection(command: &str) -> bool {
+pub fn shell_has_unquoted_output_redirection(command: &str) -> bool {
     let characters = command.chars().collect::<Vec<_>>();
     let mut single_quote = false;
     let mut double_quote = false;
@@ -234,13 +229,13 @@ pub(super) fn shell_has_unquoted_output_redirection(command: &str) -> bool {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) struct ShellCommandInvocation {
-    pub(super) program: String,
-    pub(super) args: Vec<String>,
+pub struct ShellCommandInvocation {
+    pub program: String,
+    pub args: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) enum DockerExecNestedCommand {
+pub enum DockerExecNestedCommand {
     Shell(String),
     Direct(ShellCommandInvocation),
 }
@@ -249,7 +244,7 @@ pub(super) enum DockerExecNestedCommand {
 /// tests may live inside a task container while the host Bash exit code still
 /// equals the container command's exit code. Auditing only the outer `docker`
 /// would make machine gates misclassify a real pytest run as no test execution.
-pub(super) fn docker_exec_nested_command(
+pub fn docker_exec_nested_command(
     invocation: &ShellCommandInvocation,
 ) -> Option<DockerExecNestedCommand> {
     let program = invocation
@@ -303,45 +298,16 @@ pub(super) fn docker_exec_nested_command(
     }))
 }
 
-pub(super) fn test_command_invocations(command: &str) -> Vec<ShellCommandInvocation> {
-    test_command_invocations_inner(command, 0)
-}
-
-pub(super) fn test_command_invocations_inner(
-    command: &str,
-    depth: usize,
-) -> Vec<ShellCommandInvocation> {
-    let mut tests = Vec::new();
-    for invocation in shell_command_invocations(command) {
-        if test_invocation(&invocation) {
-            tests.push(invocation.clone());
-        }
-        if depth >= 4 {
-            continue;
-        }
-        match docker_exec_nested_command(&invocation) {
-            Some(DockerExecNestedCommand::Shell(command)) => {
-                tests.extend(test_command_invocations_inner(&command, depth + 1));
-            }
-            Some(DockerExecNestedCommand::Direct(command)) if test_invocation(&command) => {
-                tests.push(command);
-            }
-            _ => {}
-        }
-    }
-    tests
-}
-
 /// Treat only the first command word after a shell control operator as a program,
 /// avoiding false execution matches for `find -name install` or paths containing `patch`.
-pub(super) fn shell_command_invocations(command: &str) -> Vec<ShellCommandInvocation> {
+pub fn shell_command_invocations(command: &str) -> Vec<ShellCommandInvocation> {
     split_unquoted_shell_segments(command)
         .into_iter()
         .filter_map(|segment| shell_segment_invocation(&segment))
         .collect()
 }
 
-pub(super) fn split_unquoted_shell_segments(command: &str) -> Vec<String> {
+pub fn split_unquoted_shell_segments(command: &str) -> Vec<String> {
     let mut segments = Vec::new();
     let mut current = String::new();
     let mut single_quote = false;
@@ -451,7 +417,7 @@ pub(super) fn shell_segment_invocation(segment: &str) -> Option<ShellCommandInvo
 /// Parse simple shell words for verifier auditing while preserving spaces inside
 /// quotes and Python `-c` bodies. Fail closed on unclosed quotes; an earlier guard
 /// continues to reject complex shell syntax.
-pub(crate) fn shell_words(command: &str) -> Option<Vec<String>> {
+pub fn shell_words(command: &str) -> Option<Vec<String>> {
     let mut words = Vec::new();
     let mut current = String::new();
     let mut single_quote = false;
@@ -506,7 +472,7 @@ pub(super) fn shell_redirection_token(token: &str) -> bool {
             .is_some_and(|(prefix, _)| prefix.chars().all(|character| character.is_ascii_digit()))
 }
 
-pub(super) fn scoped_shell_command_is_read_only(command: &str) -> bool {
+pub fn scoped_shell_command_is_read_only(command: &str) -> bool {
     super::read_only::shell_command_is_read_only(command)
 }
 
@@ -621,4 +587,61 @@ pub(super) fn delegated_shell_segments(command: &str) -> Option<Vec<String>> {
 
 pub(super) fn scoped_shell_segment_is_read_only(segment: &str) -> bool {
     super::read_only::shell_segment_is_read_only(segment)
+}
+
+pub fn command_explicitly_masks_failure(command: &str) -> bool {
+    command_explicitly_masks_failure_inner(command, 0)
+}
+
+fn command_explicitly_masks_failure_inner(command: &str, depth: usize) -> bool {
+    let syntax = shell_unquoted_syntax(command);
+    let compact = syntax.split_whitespace().collect::<Vec<_>>().join(" ");
+    let trimmed = compact.trim();
+    let invocations = shell_command_invocations(command);
+    let syntax_invocations = shell_command_invocations(&syntax);
+
+    if shell_has_unquoted_sequence(&syntax, "||")
+        || split_unquoted_shell_segments(&syntax)
+            .iter()
+            .any(|segment| segment.trim_start().starts_with("! "))
+        || syntax_invocations.iter().any(|invocation| {
+            invocation.program.rsplit(['/', '\\']).next() == Some("set")
+                && invocation.args.iter().any(|argument| argument == "+e")
+        })
+        || trimmed.ends_with("; true")
+        || trimmed.ends_with("; /bin/true")
+        || trimmed.ends_with("; :")
+        || trimmed.ends_with("; exit 0")
+    {
+        return true;
+    }
+
+    // `bash -c 'pytest ... || true'` hides a control operator in an argument. Recurse
+    // through at most four layers to cover common wrappers without allowing hostile nesting to consume the stack.
+    depth < 4
+        && invocations.iter().any(|invocation| {
+            let program = invocation
+                .program
+                .rsplit(['/', '\\'])
+                .next()
+                .unwrap_or(invocation.program.as_str());
+            matches!(program, "bash" | "sh" | "dash" | "zsh" | "ksh")
+                && invocation
+                    .args
+                    .windows(2)
+                    .find(|window| window[0] == "-c")
+                    .is_some_and(|window| {
+                        command_explicitly_masks_failure_inner(&window[1], depth + 1)
+                    })
+        })
+}
+
+pub fn command_may_mask_failure(command: &str) -> bool {
+    let syntax = shell_unquoted_syntax(command);
+    command_explicitly_masks_failure(command)
+        || syntax
+            .split([';', '\n'])
+            .collect::<Vec<_>>()
+            .windows(2)
+            .any(|parts| parts[0].contains('|') && !parts[1].trim().is_empty())
 }

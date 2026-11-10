@@ -66,11 +66,9 @@ pub(crate) fn sync_locked(cwd: &Path, change_name: &str) -> Result<SyncReport> {
             return Err(error).with_context(|| format!("failed to read {}", base_path.display()));
         }
     };
-    let base: BaseSnapshot = base_before
-        .as_deref()
-        .map(serde_json::from_slice)
-        .transpose()?
-        .unwrap_or_default();
+    let base = crate::fingerprint::decode_change_base(&change_dir, base_before.as_deref())?;
+    let guard_errors = crate::project_knowledge::source_guard_errors(cwd, &base.knowledge_sources)?;
+    anyhow::ensure!(guard_errors.is_empty(), "{}", guard_errors.join("; "));
     let base_map = base_map(&base);
     let deltas_with_paths = load_deltas_with_contents(&change_dir)?;
     let delta_inputs: Vec<_> = deltas_with_paths
@@ -177,7 +175,8 @@ pub(crate) fn sync_locked(cwd: &Path, change_name: &str) -> Result<SyncReport> {
                 Some(original.as_bytes()),
             )?);
         }
-        let snapshot = BaseSnapshot::from_specs(&current_specs);
+        let mut snapshot = BaseSnapshot::from_specs(&current_specs);
+        snapshot.knowledge_sources = base.knowledge_sources.clone();
         prepared.push(crate::archive_transaction::prepare_expected(
             &specs_dir,
             base_path.strip_prefix(&specs_dir)?,

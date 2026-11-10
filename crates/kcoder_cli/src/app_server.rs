@@ -10,28 +10,28 @@ use async_trait::async_trait;
 use fs2::FileExt;
 use futures::StreamExt;
 use kcoder_app_protocol::{
-    AgentArtifactReadParams, AgentListParams, AgentListResult, AgentSteerAppliedParams,
-    AgentSteerParams, AgentSteerResult, AgentSteerStatus, AgentSummary, ApprovalAction,
-    ApprovalDecision, ApprovalRequestParams, ApprovalResolvedParams, ApprovalResponse,
-    AttachmentDeleteParams, AttachmentReadChunkParams, AttachmentReadParams, AttachmentSaveParams,
-    AttachmentUploadCancelParams, AttachmentUploadChunkParams, AttachmentUploadFinishParams,
-    AttachmentUploadStartParams, BrowserActionParams, BrowserEvaluateParams, BrowserSessionParams,
-    BrowserStartParams, DeviceExecuteParams, DeviceExecuteResult, ImplementationInfo,
-    InitializeParams, InitializeResult, JSONRPC_VERSION, MetadataUpdate, PROTOCOL_VERSION,
-    Question, QuestionOption, QuestionRequestParams, QuestionResolvedParams, QuestionResponse,
-    ServerCapabilities, SettingsTemplateBinding, SettingsTemplateDefaultParams,
-    SettingsTemplateDeleteParams, SettingsTemplateReadParams, SettingsTemplateSaveParams,
-    StorageCleanParams, THREAD_METADATA_SCHEMA, TerminalAttachParams, TerminalCloseParams,
-    TerminalListParams, TerminalResizeParams, TerminalStartParams, TerminalWriteParams, Thread,
-    ThreadCompactParams, ThreadCompactResult, ThreadDeleteParams, ThreadDeleteResult,
-    ThreadForkParams, ThreadForkResult, ThreadGoal, ThreadGoalClearResult, ThreadGoalEvent,
-    ThreadGoalGetResult, ThreadGoalHistoryResult, ThreadGoalParams, ThreadGoalSetParams,
-    ThreadGoalSetResult, ThreadListParams, ThreadMessage, ThreadMetadata,
-    ThreadMetadataUpdateParams, ThreadMetadataUpdateResult, ThreadParent, ThreadReadParams,
-    ThreadReadResult, ThreadRollbackParams, ThreadRollbackResult, ThreadStartParams,
-    TurnFileChangesPolicy, TurnStartParams, method,
+    AgentArtifactReadParams, AgentListParams, AgentListResult, AgentSteerParams, AgentSteerResult,
+    AgentSteerStatus, AgentSummary, ApprovalAction, ApprovalDecision, ApprovalRequestParams,
+    ApprovalResolvedParams, ApprovalResponse, AttachmentDeleteParams, AttachmentReadChunkParams,
+    AttachmentReadParams, AttachmentSaveParams, AttachmentUploadCancelParams,
+    AttachmentUploadChunkParams, AttachmentUploadFinishParams, AttachmentUploadStartParams,
+    BrowserActionParams, BrowserEvaluateParams, BrowserSessionParams, BrowserStartParams,
+    DeviceExecuteParams, DeviceExecuteResult, ImplementationInfo, InitializeParams,
+    InitializeResult, JSONRPC_VERSION, MetadataUpdate, PROTOCOL_VERSION, Question, QuestionOption,
+    QuestionRequestParams, QuestionResolvedParams, QuestionResponse, ServerCapabilities,
+    SettingsTemplateBinding, SettingsTemplateDefaultParams, SettingsTemplateDeleteParams,
+    SettingsTemplateReadParams, SettingsTemplateSaveParams, StorageCleanParams,
+    THREAD_METADATA_SCHEMA, TerminalAttachParams, TerminalCloseParams, TerminalListParams,
+    TerminalResizeParams, TerminalStartParams, TerminalWriteParams, Thread, ThreadCompactParams,
+    ThreadCompactResult, ThreadDeleteParams, ThreadDeleteResult, ThreadForkParams,
+    ThreadForkResult, ThreadGoal, ThreadGoalClearResult, ThreadGoalEvent, ThreadGoalGetResult,
+    ThreadGoalHistoryResult, ThreadGoalParams, ThreadGoalSetParams, ThreadGoalSetResult,
+    ThreadListParams, ThreadMessage, ThreadMetadataUpdateParams, ThreadMetadataUpdateResult,
+    ThreadParent, ThreadReadParams, ThreadReadResult, ThreadRollbackParams, ThreadRollbackResult,
+    ThreadStartParams, TurnFileChangesPolicy, TurnStartParams, method,
 };
-use kcoder_engine::{BackgroundJobEvent, EngineEvent, QueryEngine};
+use kcoder_engine::{EngineEvent, QueryEngine};
+use kcoder_mcp_app_storage::{ledger as mcp_apps_ledger, resources as mcp_apps_resources};
 use kcoder_permissions::{PermissionPrompt, PermissionRequestContext, PermissionResponse};
 use kcoder_state::{
     AgentMessageStatus, Goal, GoalMode, GoalStatus, GoalVerificationKind, GoalVerifierSelection,
@@ -47,266 +47,173 @@ use std::sync::Arc;
 use std::sync::Mutex as StdMutex;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use tokio::io::{AsyncWriteExt, BufReader};
+use tokio::io::AsyncWriteExt;
+#[cfg(test)]
+use tokio::io::BufReader;
 use tokio::sync::{Mutex, mpsc, oneshot};
 use tokio_util::sync::CancellationToken;
-use walkdir::WalkDir;
 
 mod agent_artifacts;
-mod attachment_retention;
+use kcoder_attachment_retention::{
+    self as attachment_retention, acceptance::TurnClientMessageArtifact,
+};
 mod attachment_retention_dispatch;
 mod attachments;
-mod browser;
 mod computer_use_status;
 mod config_templates;
-mod cron_processor;
+mod connection_input;
+mod cron_dispatch;
+use cron_dispatch as cron_processor;
+#[cfg(test)]
+mod ct85_test_support;
+#[cfg(any(windows, test))]
+mod desktop_attachment;
 #[cfg(any(windows, test))]
 mod desktop_notifications;
 mod desktop_recovery;
 #[cfg(windows)]
 mod desktop_turn;
+#[cfg(test)]
 mod engine_factory;
-mod failed_turn;
+#[cfg(not(test))]
+#[path = "app_server/engine_factory/host.rs"]
+mod engine_factory;
+mod execution_defaults;
 mod git;
 mod goal_lifecycle;
+#[path = "app_server/history_catalog_adapter.rs"]
 mod history_catalog;
+#[path = "app_server/history_refresh_adapter.rs"]
 mod history_refresh_processor;
 mod hook_configuration;
 mod indexed_read_gate;
 mod indexed_transcript;
-mod knowledge_archive;
-mod knowledge_archive_owner;
+mod input_lifetime;
+mod integration_requests;
+mod integrations;
+#[cfg(test)]
+#[path = "../../kcoder_config/src/test_isolated_profile.rs"]
+mod isolated_test_profile;
+mod session_lifetime;
+mod web_search;
+pub(crate) use integrations::core::remote_delegations::original_read::entry as run_native_remote_read;
+pub(crate) use integrations::knowledge::run_shared_publication_read_helper;
+pub(crate) use integrations::office::run_read_worker as run_office_read_worker;
+mod continuous_work_admission;
+use kcoder_foreground_work::{continuous_work_mutation, continuous_work_read};
+use kcoder_knowledge_rpc::{knowledge_archive, knowledge_requests};
+mod knowledge_catalog_dispatch;
 mod knowledge_directory;
 mod knowledge_documents;
-mod knowledge_image_imports;
-mod knowledge_job_runner;
-mod knowledge_job_scheduler;
-mod knowledge_model;
-mod knowledge_requests;
+use kcoder_knowledge_rpc::knowledge_image_imports;
+use kcoder_knowledge_rpc::knowledge_job_runner;
+use kcoder_knowledge_rpc::knowledge_job_scheduler;
+use kcoder_knowledge_rpc::knowledge_model;
 mod knowledge_transfer;
-pub(crate) mod knowledge_worker;
-mod knowledge_worker_model;
+pub(crate) use kcoder_knowledge_rpc::knowledge_worker;
+use kcoder_knowledge_rpc::knowledge_worker_authority;
+use kcoder_knowledge_rpc::knowledge_worker_model;
+use kcoder_mcp_app_runtime::mcp_apps_registry;
+mod mcp_apps_rpc;
+use kcoder_mcp_app_runtime::mcp_apps_runtime;
+use kcoder_mcp_app_runtime::mcp_apps_tool;
 mod mcp_authorization_processor;
-mod mcp_configuration;
+use kcoder_plugin_rpc::mcp_configuration;
 mod mcp_processor;
+mod migration_host;
+use kcoder_migration_rpc::{self as migration_processor, migration_source_authority};
+mod observed_transcript;
 mod plugin_processor;
-mod private_files;
-mod project_automations;
-mod protocol_io;
+use kcoder_host_transport::protocol_io::{self, MAX_DEVICE_RESULT_BYTES};
+use kcoder_project_automation::project_automations;
+use kcoder_turn_evidence::private_files;
 mod provider_probe;
 mod provider_settings;
-mod recent_error;
-mod resources_processor;
+use kcoder_turn_lifecycle::recent_error;
+#[cfg(test)]
+mod recent_error_consumer_tests;
+use kcoder_app_events::request_origin;
+use kcoder_app_events::resident_turn::{ActiveTurn, ResidentTurnState};
+use kcoder_host_transport::metadata::resources_processor;
 mod resume_history;
-mod session_configuration;
+use kcoder_session_configuration as session_configuration;
+#[cfg(test)]
+mod session_mcp;
+#[cfg(not(test))]
+use kcoder_engine_factory::app_server::session_mcp;
 mod skill_processor;
-mod snapshot_leases;
-mod storage_diagnostics;
-mod storage_scans;
-mod terminal;
-mod thread_creations;
-mod thread_list_snapshots;
+use kcoder_cli_storage::storage_diagnostics;
+use kcoder_cli_storage::storage_scans;
+use kcoder_workspace_resources::snapshots::snapshot_leases;
+mod studio_presentation;
+use kcoder_cli_storage::thread_list_snapshots;
+use kcoder_host_transport::task_spawn;
+use kcoder_turn_lifecycle::thread_creations;
+use kcoder_workspace_resources::{terminal, workspace_io, workspace_revision};
 mod thread_runtime;
 mod thread_stream_context;
-mod tool_images;
+use kcoder_transcript::tool_images;
 mod tools_catalog;
 mod tracked_history_list;
-mod transcript_artifact_journal;
+use kcoder_cli_storage::transcript_artifact_journal;
+use kcoder_transcript::transcript_window;
+use kcoder_transcript_observation as transcript_observation_artifacts;
+use kcoder_turn_lifecycle::turn_admissions;
 #[cfg(test)]
-mod transcript_context_oracle;
-mod transcript_window;
-mod turn_admissions;
-mod turn_attempts;
-mod turn_execution;
+mod turn_admissions_consumer_tests;
+use kcoder_turn_lifecycle::turn_attempts;
+#[cfg(test)]
+mod turn_attempts_consumer_tests;
+use kcoder_app_events::turn_execution;
 mod turn_file_changes_settings;
 mod turn_receipts;
 mod usage_processor;
+mod widgets_dispatch;
 mod workflow_canvas;
-mod workspace_fs;
-mod workspace_io;
-mod workspace_revision;
-mod workspace_text_revision;
 mod workspace_upload;
 
 use attachments::{
     AttachmentDirectories, attachment_read, attachment_read_chunk, attachment_save,
     attachment_upload_cancel, attachment_upload_chunk, attachment_upload_finish,
-    attachment_upload_start, clone_fork_attachments, materialize_turn_attachments,
-    model_message_from_materialized_prompt, split_history_attachment_envelope,
+    attachment_upload_start, clone_fork_attachments,
 };
-use browser::BrowserRegistry;
 use config_templates::{resolve_session_template, user_template_store};
 pub(super) use engine_factory::AppServerEngineFactory;
-use git::{
-    ensure_bare_snapshot_layout, git_branch_diff, git_branch_diff_shortstat, git_last_commit_diff,
-    git_working_diff, run_git_command, run_git_command_with_auth, run_git_command_with_index,
-    run_git_command_with_index_and_stdin, run_git_command_with_private_repository,
-    run_git_command_with_stdin,
-};
-use plugin_processor::PluginProcessor;
+use git::run_git_command;
+#[cfg(test)]
+use git::{run_git_command_with_private_repository, run_git_command_with_stdin};
+use kcoder_browser::{self as browser, BrowserRegistry};
+use kcoder_plugin_rpc::PluginProcessor;
 mod turn_permissions;
 use private_files::{ensure_private_artifact_directory, hex_sha256, write_private_artifact_file};
 use protocol_io::{
     JsonRpcLine, browser_success_response, error_response, notification, send, success_response,
 };
 #[cfg(test)]
-use protocol_io::{MAX_ERROR_MESSAGE_BYTES, MAX_JSONRPC_LINE_BYTES, read_bounded_jsonrpc_line};
-use terminal::{
-    TerminalRegistry, TerminalRegistryGuard, attach as terminal_attach, close as terminal_close,
-    list as terminal_list, resize as terminal_resize, start as terminal_start,
-    write as terminal_write,
-};
+use protocol_io::{MAX_ERROR_MESSAGE_BYTES, MAX_JSONRPC_LINE_BYTES};
+
+#[cfg(test)]
+async fn read_bounded_jsonrpc_line<R: tokio::io::AsyncBufRead + Unpin>(
+    reader: &mut R,
+) -> anyhow::Result<Option<JsonRpcLine>> {
+    protocol_io::JsonRpcLineState::default().read(reader).await
+}
+use terminal::{TerminalRegistry, TerminalRegistryGuard};
 use thread_runtime::{ThreadManager, ThreadRuntime};
-use workspace_fs::{
-    MAX_WORKSPACE_TEXT_BYTES, create_directory as workspace_create_directory,
-    create_text_file as workspace_create_text_file,
-    create_workspace_directory as workspace_create_workspace_directory,
-    delete_entry as workspace_delete_entry, list_directories as workspace_list_directories,
-    path as workspace_path, read_file_chunk as workspace_read_file_chunk,
-    read_text_file as workspace_read_text_file, rename_entry as workspace_rename_entry,
-    tree as workspace_tree, write_text_file as workspace_write_text_file,
-};
 
 const OUTBOUND_CAPACITY: usize = 512;
 const OUTBOUND_FRAME_LIMIT_BYTES: usize = 1_900_000;
 const OUTBOUND_FRAME_LIMIT_CODE: i64 = -32045;
 const NOT_INITIALIZED: i64 = -32002;
 const TURN_ALREADY_RUNNING: i64 = -32003;
-const MAX_GIT_OUTPUT_BYTES: usize = 5 * 1024 * 1024;
-const MAX_TURN_FILE_CHANGES_BYTES: usize = 20 * 1024 * 1024;
-const MAX_TURN_FILE_CHANGES_REVIEW_BYTES: usize = 1_800_000;
-const MAX_DEVICE_RESULT_BYTES: usize = 1_800_000;
-const MAX_TRANSCRIPT_MESSAGE_BYTES: usize = 64 * 1024;
-const MAX_TRANSCRIPT_RESPONSE_BYTES: usize = 1_500_000;
-const MAX_THREAD_METADATA_BYTES: u64 = 64 * 1024;
-const THREAD_METADATA_FILE: &str = "thread-metadata.json";
-const THREAD_LIFECYCLE_LOCK_DIRECTORY: &str = ".thread-lifecycle-locks";
-const DEFAULT_APPROVAL_RESPONSE_TIMEOUT: Duration = Duration::from_secs(5 * 60);
+#[cfg(test)]
+use kcoder_transcript::MAX_TRANSCRIPT_MESSAGE_BYTES;
+const MAX_TRANSCRIPT_RESPONSE_BYTES: usize =
+    kcoder_transcript::tool_images::TRANSCRIPT_RESPONSE_BYTES;
 const BACKGROUND_PUMP_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(2);
 const ACTIVE_TURN_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(2);
-#[cfg(debug_assertions)]
-const E2E_APPROVAL_TIMEOUT_ENV: &str = "KCODER_E2E_APPROVAL_TIMEOUT_MS";
 
-#[derive(Debug)]
-struct GitTreeSnapshot {
-    tree: String,
-    backend: GitSnapshotBackend,
-    // The isolated-before snapshot owns cleanup, so object storage is released even if the event stream returns before finalize.
-    _private_repository_cleanup: Option<RemovePrivateDirectoryOnDrop>,
-}
-
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-enum GitSnapshotBackend {
-    #[default]
-    Workspace,
-    Isolated,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct TurnFileChangeItem {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    old_path: Option<String>,
-    path: String,
-    change_type: String,
-    additions: u64,
-    deletions: u64,
-    binary: bool,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct TurnFileChangesArtifact {
-    version: u8,
-    status: String,
-    artifact_id: String,
-    thread_id: String,
-    turn_id: String,
-    workspace_path: String,
-    #[serde(default)]
-    snapshot_backend: GitSnapshotBackend,
-    before_tree: String,
-    after_tree: String,
-    patch_sha256: String,
-    file_count: usize,
-    additions: u64,
-    deletions: u64,
-    files: Vec<TurnFileChangeItem>,
-    created_at: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    reverted_at: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct TurnOutcomeArtifact {
-    version: u8,
-    thread_id: String,
-    turn_id: String,
-    status: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    error: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    provider_failure: Option<kcoder_types::ProviderFailureDetails>,
-    completed_at_ms: u64,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    continuation_context_hash: Option<String>,
-}
-
-/// The attempt that already accepted a continuation of a failed turn (R054, R056).
-///
-/// A lost response or a repeated click must learn the accepted attempt instead of
-/// starting a second one. The receipt is durable and carries the context digest it
-/// was accepted against, so a changed recovery boundary refuses it.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct TurnContinuationArtifact {
-    version: u8,
-    thread_id: String,
-    turn_id: String,
-    context_hash: String,
-    accepted_at_ms: u64,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    retry_operation_id: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct TurnClientMessageArtifact {
-    version: u8,
-    thread_id: String,
-    turn_id: String,
-    client_message_id: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct ApprovalDecisionArtifact {
-    version: u8,
-    artifact_id: String,
-    thread_id: String,
-    turn_id: String,
-    approval_id: String,
-    action: ApprovalAction,
-    reason: String,
-    decision: ApprovalDecision,
-    resolution_reason: String,
-    requested_at_ms: u64,
-    resolved_at_ms: u64,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct ThreadClientMetadata {
-    version: u8,
-    #[serde(default)]
-    revision: u64,
-    thread_id: String,
-    workspace: String,
-    #[serde(default)]
-    fields: BTreeMap<String, Option<String>>,
-    updated_at: String,
-}
-
-#[derive(Debug)]
-struct SessionLease {
-    _file: std::fs::File,
-    session_target: PathBuf,
-}
+use kcoder_cli_storage::session_lease::SessionLease;
 
 enum PreparedThreadResume {
     Resident {
@@ -318,133 +225,108 @@ enum PreparedThreadResume {
         client_turn_count: usize,
         /// Overlay path of the thread's recorded settings template, if it still exists.
         settings_template: Option<PathBuf>,
+        /// Creation-time permission baseline, absent on legacy sessions and template-bound sessions.
+        permission_mode_at_creation: Option<kcoder_config::PermissionMode>,
     },
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(default, rename_all = "camelCase")]
-struct ClientWorktreeSettings {
-    worktree_root: String,
-    resolved_worktree_root: String,
-    auto_cleanup_enabled: bool,
-    keep_count: usize,
-}
-
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
-#[serde(default, rename_all = "camelCase")]
-struct ClientManagedWorktree {
-    worktree_id: String,
-    path: String,
-    repository_name: String,
-    source_path: Option<String>,
-    permanent: bool,
-    revision: u64,
-    base_commit: Option<String>,
-    lease_key: String,
-    created_at: u64,
-    updated_at: u64,
-    snapshot_ref: Option<String>,
-    snapshot_commit: Option<String>,
-    snapshot_at: Option<u64>,
-    git_common_dir: Option<String>,
-    archived_conversations: Vec<ClientWorktreeConversation>,
-    state: String,
-    last_error: Option<String>,
-}
-
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
-#[serde(default, rename_all = "camelCase")]
-struct ClientWorktreeConversation {
-    device_id: String,
-    task_id: String,
-    thread_id: String,
-    workspace_path: String,
-    title: String,
-    model: Option<String>,
-    created_at: u64,
-    updated_at: u64,
-}
-
-struct ClientWorktreeSnapshot {
-    reference: String,
-    commit: String,
-    git_common_dir: String,
-    created_at: u64,
-}
-
-#[derive(Clone, Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct ClientWorktreeArchivePreview {
-    path: String,
-    state: String,
-    revision: u64,
-    content_token: Option<String>,
-    dirty: bool,
-    untracked_file_count: usize,
-    ignored_entry_count: usize,
-    dirty_submodule_count: usize,
-    nested_repository_count: usize,
-    baseline_known: bool,
-    commits_since_creation: Option<u64>,
-    requires_confirmation: bool,
-    archive_allowed: bool,
-    blocking_reasons: Vec<String>,
-}
-
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
-#[serde(default, rename_all = "camelCase")]
-struct ClientWorktreeState {
-    version: u64,
-    settings: ClientWorktreeSettings,
-    records: BTreeMap<String, ClientManagedWorktree>,
-}
-
-struct ClientWorktreeStore {
-    state_path: PathBuf,
-    lock_path: PathBuf,
-    default_root: PathBuf,
-}
-
-/// The app-server holds a shared workspace lease for its full lifetime. Worktree
-/// archival must first obtain an exclusive lease on the same path so one process
-/// cannot delete a working directory still used by another client.
-pub(crate) struct WorkspaceRuntimeLease {
-    _file: std::fs::File,
-}
-
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
-#[serde(default, rename_all = "camelCase")]
-struct ClientWorkspaceRecord {
-    workspace_path: String,
-    label: String,
-    project_key: String,
-    roots: Vec<String>,
-    pinned: bool,
-    pinned_order: Option<usize>,
-    appearance: Value,
-    active: bool,
-    created_at: u64,
-    updated_at: u64,
-}
-
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
-#[serde(default, rename_all = "camelCase")]
-struct ClientWorkspaceState {
-    version: u64,
-    root_project_pinned: Option<bool>,
-    project_order: Vec<String>,
-    records: BTreeMap<String, ClientWorkspaceRecord>,
-    pinned_tasks: Vec<String>,
-    task_orders: BTreeMap<String, Vec<String>>,
-}
-
-struct ClientWorkspaceStore {
-    state_path: PathBuf,
-    lock_path: PathBuf,
 }
 
 #[derive(Debug, Default)]
 struct ConnectionState {
+    /// Set only by the connection owner for the actual selected input branch.
+    request_origin: request_origin::RequestOrigin,
+    continuous_work_read_v1: bool,
+    continuous_work_partial_list_v1: bool,
+    /// Draft durable input acceptance (`work/input/*`); never implies consumption.
+    continuous_work_input_v1: bool,
+    /// Draft control submission (`work/control`); never implies a settled resource.
+    continuous_work_control_v1: bool,
+    web_search_status_v1: bool,
+    web_search_probe_v1: bool,
+    web_search_diagnostics: web_search::SearchDiagnostics,
+    #[cfg(target_os = "linux")]
+    native_acp_receiver_closed:
+        integrations::core::remote_delegations::receiver_acp_binding::ReceiverConnectionGuard,
+    #[cfg(target_os = "linux")]
+    native_acp_receiver_binding: Option<
+        Arc<integrations::core::remote_delegations::receiver_acp_binding::NativeAcpReceiverBinding>,
+    >,
+    #[cfg(target_os = "linux")]
+    native_acp_receiver_owner: Arc<
+        StdMutex<
+            Option<
+                Arc<
+                    integrations::core::remote_delegations::receiver_acp_binding::ReceiverTaskOwner,
+                >,
+            >,
+        >,
+    >,
+    native_remote_host_client: Option<
+        Arc<integrations::core::remote_delegations::transport::host_client::NativeRemoteHostClient>,
+    >,
+    agent_exact_control_v1: bool,
+    agent_exact_continuation_v1: bool,
+    source_management_owner: Arc<()>,
+    // An authenticated transport client cannot terminate the shared host.
+    client_transport_only: bool,
+    // Normal stdio is the actual app-server, never a carrier frontend.
+    direct_task_stdio: bool,
+    session_lifetime_v1: bool,
+    native_runtime_thread_initializer:
+        Option<Arc<integrations::core::runtime_driver::NativeRuntimeThreadInitializer>>,
+    integration_model_policies_v1: bool,
+    integration_model_health_v1: bool,
+    integration_model_usage_v1: bool,
+    integration_model_policy_settings_v1: bool,
+    integration_remote_operation_control_v1: bool,
+    integration_task_workspace_v1: bool,
+    integration_task_workspace_capability_scope_v1: bool,
+    integration_task_capability_scope_directory_v1: bool,
+    integration_task_capability_source_choices_v1: bool,
+    integration_task_capability_scope_v1: bool,
+    integration_task_resource_bindings_v1: bool,
+    integration_connectivity_v1: bool,
+    native_scope_host:
+        Option<Arc<integrations::core::service_leases::scope_host::NativeScopeHostBootstrap>>,
+    integration_connectivity:
+        Arc<integrations::connectivity::main_rpc::NativeConnectivityMainService>,
+    integration_connectivity_resources: Option<
+        Arc<integrations::connectivity::installed_resources::NativeConnectivityStartupBinding>,
+    >,
+    native_source_dispatch: bool,
+    native_source_accepted:
+        Option<Arc<integrations::core::runtime_driver::NativeRuntimeAcceptedObserver>>,
+    integration_task_capability_scope: Arc<
+        integrations::connectivity::task_capability_scope_runtime::NativeTaskCapabilityScopeRuntime,
+    >,
+    integration_task_workspace:
+        Arc<StdMutex<integrations::core::task_workspace::NativeTaskWorkspaceReader>>,
+    integration_office_v1: bool,
+    integration_office_export_ack_v1: bool,
+    integration_office_export_receipt_v1: bool,
+    integration_office_settings_v1: bool,
+    integration_office_transfers: Arc<integrations::office::native_assets::NativeOfficeTransfers>,
+    integration_office_resources:
+        Option<Arc<integrations::office::startup_binding::NativeOfficeStartupBinding>>,
+    integration_runtime: Option<integrations::core::runtime_pump::NativeRuntimeClient>,
+    integration_context: Option<integrations::core::NativeIntegrationContext>,
+    integration_memory_v1: bool,
+    integration_knowledge_settings_v1: bool,
+    integration_connectivity_settings_v1: bool,
+    browser_profiles_v1: bool,
+    browser_profile_sessions_v1: bool,
+    integration_memory: Option<integrations::core::NativeMemoryService>,
+    integration_knowledge_v1: bool,
+    integration_automation_v1: bool,
+    integration_automation_task_models_v1: bool,
+    integration_automation_period_budgets_v1: bool,
+    integration_knowledge: Arc<Mutex<integrations::knowledge::NativeKnowledgeRpc>>,
+    integration_operations_v1: bool,
+    integration_task_state_v1: bool,
+    native_code_services_v1: bool,
+    integration_operations: Option<integrations::core::NativeOperations>,
+    temporary_mcp_cleanup: tokio::task::JoinSet<Result<()>>,
+    client_questions: bool,
+    input_ended: CancellationToken,
     agent_streams: agent_conversation::AgentConversationSubscriptions,
     desktop_recovery_tasks: tokio::task::JoinSet<Option<desktop_recovery::ReadyRecovery>>,
     desktop_recovery_ready: std::collections::VecDeque<desktop_recovery::ReadyRecovery>,
@@ -453,58 +335,45 @@ struct ConnectionState {
     computer_use_session_authorization_v1: bool,
     knowledge_tasks: tokio::task::JoinSet<()>,
     knowledge_rpc_tasks: tokio::task::JoinSet<()>,
+    continuous_work_read_tasks: tokio::task::JoinSet<()>,
+    continuous_work_mutation_tasks: tokio::task::JoinSet<()>,
+    wiki_rpc_tasks: tokio::task::JoinSet<()>,
+    #[cfg(target_os = "linux")]
+    native_interrupts: turn_interrupt::NativeInterruptJobs,
     initialized: bool,
+    agent_definitions_v1: bool,
+    agent_turn_configuration_v1: bool,
+    studio_work_modes_v1: bool,
+    inline_widgets_v1: bool,
+    isolated_widgets_v1: bool,
+    mcp_apps_v1: bool,
+    mcp_apps: Arc<Mutex<mcp_apps_runtime::McpAppsRuntime>>,
+    mcp_app_registry: Arc<mcp_apps_registry::AppRegistry>,
+    mcp_app_tasks: tokio::task::JoinSet<()>,
+    mcp_app_operations: Arc<StdMutex<HashMap<String, usize>>>,
+    mcp_app_pending_approvals: PendingApprovalResponses,
+    mcp_app_pending_questions: PendingQuestionResponses,
     tool_profiles_v1: bool,
     tool_path_preview_v1: bool,
     /// Set when the client negotiated `threadRunSummaryV1`; only then may thread
     /// snapshots carry the richer run status and `runSummary` payload.
     run_summary_v1: bool,
+    thread_runtime_handoff_v1: bool,
+    /// Snapshot identities are opt-in; legacy strict page parsers see unchanged responses.
+    transcript_snapshot_v1: bool,
+    transcript_observation_v1: bool,
     stream_context_v1: bool,
     /// Set when the client negotiated `interactionBindingV1`; replies must then
     /// name the interaction they answer.
     interaction_binding_v1: bool,
-}
-
-struct ActiveTurn {
-    handle: tokio::task::JoinHandle<()>,
-    cancel: CancellationToken,
-    thread_id: String,
-    turn_id: String,
-}
-
-#[derive(Clone)]
-struct BackgroundTurnProjection {
-    thread_id: String,
-    turn_id: String,
-    projection: Arc<Mutex<StreamProjection>>,
-}
-
-#[derive(Default)]
-struct BackgroundProjectionState {
-    active: Option<BackgroundTurnProjection>,
-    jobs: HashMap<String, BackgroundTurnProjection>,
-    tool_calls: HashMap<String, BackgroundTurnProjection>,
-    job_tools: HashMap<String, String>,
-    pending: HashMap<String, Vec<EngineEvent>>,
-    associated_jobs: HashSet<String>,
-    terminal_jobs: HashSet<String>,
-    current_runs: HashMap<String, String>,
-    last_contexts: HashMap<String, BackgroundTurnProjection>,
-    forwarded_events: HashSet<String>,
-    forwarded_order: std::collections::VecDeque<String>,
-    steer_response_gates: HashMap<String, AgentSteerResponseGate>,
-    steer_correlations: HashMap<String, AgentSteerCorrelation>,
-}
-
-#[derive(Default)]
-struct AgentSteerResponseGate {
-    client_message_id: Option<String>,
-    deferred_applied: Vec<(Option<BackgroundTurnProjection>, EngineEvent)>,
-}
-
-struct AgentSteerCorrelation {
-    agent_id: String,
-    client_message_id: Option<String>,
+    /// Async questions are exposed only to clients which explicitly negotiated them.
+    async_user_questions_v1: bool,
+    interaction_status_read_v1: bool,
+    approval_tool_call_identity_v1: bool,
+    temporary_mcp_servers_v1: bool,
+    /// Presence is enabled only when offered by the client and supported on Linux.
+    thread_presence_read_v1: bool,
+    thread_goal_status_batch_v1: bool,
 }
 
 struct BackgroundEventPump {
@@ -515,166 +384,24 @@ struct BackgroundEventPump {
 struct BackgroundFollowupScheduler {
     cancel: CancellationToken,
     handle: tokio::task::JoinHandle<()>,
+    engine: Option<Arc<StdMutex<background_scheduler::SchedulerEngine>>>,
 }
 
 #[derive(Default)]
 struct BackgroundFollowupState {
+    session_activity: session_lifetime::SessionActivity,
+    client_lifetime: StdMutex<Option<input_lifetime::ClientInputLifetime>>,
     client_turn_count: thread_runtime::ClientTurnCounter,
-    queue: Mutex<BackgroundFollowupQueue>,
-    notify: tokio::sync::Notify,
+    delivery: Arc<BackgroundFollowups>,
     goals: StdMutex<goal_lifecycle::GoalLifecycle>,
 }
 
-#[derive(Default)]
-struct BackgroundFollowupQueue {
-    pending: BTreeMap<String, String>,
-    /// `(agent id, run_started_at_ms)`. A respawned agent (`SendMessage`)
-    /// starts a fresh run and must be able to wake the thread again. The
-    /// field type mirrors `Task::run_started_at_ms` (`Option<u64>`,
-    /// `kcoder_state/src/model.rs:180`) so call sites pass it through
-    /// without conversion.
-    claimed_terminal_ids: HashSet<(String, Option<u64>)>,
-}
+impl std::ops::Deref for BackgroundFollowupState {
+    type Target = BackgroundFollowups;
 
-#[derive(Clone)]
-struct QuestionContext {
-    server_id: String,
-    thread_id: String,
-    turn_id: String,
-}
-
-type PendingQuestionResponses =
-    Arc<StdMutex<HashMap<u64, oneshot::Sender<std::result::Result<QuestionResponse, String>>>>>;
-
-type PendingApprovalResponses =
-    Arc<StdMutex<HashMap<u64, oneshot::Sender<std::result::Result<ApprovalResponse, String>>>>>;
-
-#[derive(Clone)]
-struct ApprovalContext {
-    server_id: String,
-    thread_id: String,
-    turn_id: String,
-}
-
-/// Foreground execution and interaction state for one resident thread.
-///
-/// These fields must remain one ownership unit with the thread runtime. Sharing
-/// them at workspace scope would make turns on different threads reject each other
-/// or route questions, approvals, and interrupts to the wrong turn.
-#[derive(Clone)]
-struct ResidentTurnState {
-    desktop_grant: Arc<StdMutex<desktop_recovery::DesktopGrantState>>,
-    /// Terminal answers and outstanding interactions of the owning connection.
-    interaction_receipts: Arc<StdMutex<InteractionReceipts>>,
-    accepting_turns: Arc<AtomicBool>,
-    running: Arc<AtomicBool>,
-    activity_gate: Arc<Mutex<()>>,
-    active_turn: Arc<Mutex<Option<ActiveTurn>>>,
-    question_context: Arc<StdMutex<Option<QuestionContext>>>,
-    pending_questions: PendingQuestionResponses,
-    approval_context: Arc<StdMutex<Option<ApprovalContext>>>,
-    pending_approvals: PendingApprovalResponses,
-    permission_prompt: AppServerPermissionPrompt,
-    user_questioner: Arc<dyn UserQuestioner>,
-}
-
-#[derive(Clone)]
-struct AppServerPermissionPrompt {
-    mode: kcoder_config::PermissionMode,
-    outbound_tx: mpsc::Sender<Value>,
-    pending: PendingApprovalResponses,
-    receipts: Arc<StdMutex<InteractionReceipts>>,
-    next_id: Arc<AtomicU64>,
-    context: Arc<StdMutex<Option<ApprovalContext>>>,
-    artifact_dir: Arc<StdMutex<Option<PathBuf>>>,
-    response_timeout: Duration,
-}
-
-/// Outcome of a reply frame (S5/R046).
-enum InteractionReply {
-    /// Delivered to the waiting tool.
-    Delivered,
-    /// A pending interaction matched, but the reply did not name it correctly.
-    Misattributed,
-    /// Nothing pending and nothing recorded for this transport id.
-    Unmatched,
-}
-
-/// Identity fields captured from a parsed reply and required in its response.
-#[derive(Clone, Copy)]
-struct ReplyBinding<'a> {
-    interaction_id: Option<&'a str>,
-    thread_id: Option<&'a str>,
-    turn_id: Option<&'a str>,
-}
-
-/// Upper bound of remembered interaction resolutions per connection.
-const INTERACTION_RECEIPT_LIMIT: usize = 1024;
-
-/// Identity of one interaction the connection is waiting on.
-#[derive(Clone, PartialEq, Eq, Debug)]
-struct InteractionBinding {
-    /// Server-issued interaction id (`approval-…` / `question-…`).
-    interaction_id: String,
-    thread_id: String,
-    turn_id: String,
-}
-
-struct OutstandingInteraction {
-    binding: InteractionBinding,
-    /// The exact request notification, replayed when a reply cannot be attributed.
-    request: Value,
-}
-
-/// Bounded per-connection ledger of interaction resolutions (S5/R046).
-///
-/// Today a client only echoes the JSON-RPC transport id, so a repeated reply
-/// must replay the terminal answer it may have missed. A reply that matches no
-/// pending interaction is never treated as an accepted decision, and is counted
-/// so the drop stays observable instead of silent.
-#[derive(Default)]
-struct InteractionReceipts {
-    resolved: VecDeque<(u64, Value)>,
-    outstanding: HashMap<u64, OutstandingInteraction>,
-    duplicate_replies: u64,
-    unmatched_replies: u64,
-    misattributed_replies: u64,
-}
-
-#[derive(Clone)]
-struct AppServerQuestioner {
-    outbound_tx: mpsc::Sender<Value>,
-    pending: PendingQuestionResponses,
-    receipts: Arc<StdMutex<InteractionReceipts>>,
-    next_id: Arc<AtomicU64>,
-    context: Arc<StdMutex<Option<QuestionContext>>>,
-}
-
-struct StreamProjection {
-    server_id: String,
-    thread_id: String,
-    turn_id: String,
-    sequence: Arc<AtomicU64>,
-    next_item: u64,
-    item_namespace: String,
-    assistant_item: Option<String>,
-    turn_terminal: bool,
-}
-
-/// Output bound for snapshot path listings (they are NUL-separated paths).
-const SNAPSHOT_PATH_LISTING_BYTES: usize = 8 * 1024 * 1024;
-
-#[derive(Debug)]
-struct RemovePrivateDirectoryOnDrop {
-    path: PathBuf,
-    _lease: std::fs::File,
-}
-
-#[derive(Debug)]
-struct RemovePrivateFileOnDrop(PathBuf);
-
-trait IntoNonEmpty {
-    fn into_non_empty(self) -> Option<String>;
+    fn deref(&self) -> &Self::Target {
+        &self.delivery
+    }
 }
 
 /// Capabilities-gated authoritative run projection for one thread snapshot.
@@ -688,37 +415,12 @@ struct ThreadRunProjection {
     facts: Option<kcoder_app_protocol::ThreadRunFacts>,
 }
 
-#[derive(Default)]
-struct PersistedThreadSnapshotReport {
-    threads: Vec<Value>,
-    issue_count: u64,
-}
+use kcoder_cli_storage::tracked_history_list::PersistedThreadSnapshotReport;
 
 struct MergedHistoryScan {
     candidates: Vec<(String, PathBuf, std::time::SystemTime)>,
     issue_count: u64,
 }
-
-#[derive(Clone)]
-#[cfg_attr(test, derive(serde::Serialize))]
-struct TranscriptToolContext {
-    entry_index: usize,
-    last_reference_index: usize,
-    name: String,
-    input: Value,
-    has_tool_use: bool,
-    output_images: Vec<kcoder_app_protocol::ToolOutputImage>,
-    images_omitted: bool,
-    output: Option<String>,
-    is_error: bool,
-    started_at_ms: u64,
-    completed_at_ms: Option<u64>,
-}
-
-#[derive(Clone, Hash, PartialEq, Eq)]
-struct TranscriptToolId(Arc<str>);
-
-type TranscriptToolContexts = HashMap<TranscriptToolId, Vec<TranscriptToolContext>>;
 
 #[cfg(test)]
 mod tests;
@@ -729,19 +431,25 @@ mod outbound_frame_limit_tests;
 mod goal_requests_support;
 use goal_requests_support::*;
 
-mod interaction_requests;
 use interaction_requests::*;
+use kcoder_app_interactions::interaction_requests;
+use kcoder_app_interactions::*;
 
 mod workspace_registry;
 
 mod connection_state;
 use connection_state::*;
 
-mod notification_projection;
+use kcoder_app_events::notification_projection;
 use notification_projection::*;
 
-mod background_delivery;
 use background_delivery::*;
+use kcoder_app_events::background_delivery;
+#[cfg(test)]
+use kcoder_app_events::{BackgroundFollowupQueue, BackgroundTurnProjection};
+use kcoder_app_events::{BackgroundFollowups, BackgroundProjectionState, StreamProjection};
+mod background_event_pump;
+use background_event_pump::project_managed_background_event;
 
 mod background_scheduler;
 use background_scheduler::*;
@@ -749,21 +457,51 @@ use background_scheduler::*;
 mod response_adapters;
 use response_adapters::*;
 
-mod live_file_progress;
-mod native_file_progress;
-mod worktree_artifacts;
+use kcoder_turn_evidence::live_file_progress;
+use kcoder_turn_evidence::worktree_artifacts;
+#[cfg(test)]
+mod worktree_artifact_test_support;
+use kcoder_turn_evidence::turn_file_capture;
+use kcoder_workspace_resources::snapshots::worktree_capture;
+#[cfg(test)]
+use kcoder_workspace_resources::snapshots::{
+    GitSnapshotBackend, RemovePrivateDirectoryOnDrop, TurnFileChangeItem,
+};
+use kcoder_workspace_resources::snapshots::{
+    GitTreeSnapshot, MAX_TURN_FILE_CHANGES_BYTES, TurnFileChangesArtifact,
+};
+use turn_file_capture::*;
+#[cfg(test)]
+use worktree_artifact_test_support::*;
 use worktree_artifacts::*;
+mod task_comparison;
+use kcoder_task_delivery as task_delivery;
+mod task_delivery_requests;
+use kcoder_turn_evidence::turn_observation_storage;
+use kcoder_turn_evidence::turn_review_evidence;
+use turn_review_evidence::*;
 
-mod device_requests;
 use device_requests::*;
+use kcoder_workspace_resources::device_requests;
 
+mod workspace_dispatch;
 mod workspace_operation_receipts;
 mod workspace_operation_receipts_v2;
-mod workspace_requests;
+use workspace_dispatch as workspace_requests;
 use workspace_requests::*;
 
 mod managed_worktrees;
+use kcoder_workspace_resources::managed_worktrees::{
+    ClientManagedWorktree, ClientWorkspaceRecord, ClientWorkspaceState, ClientWorkspaceStore,
+    ClientWorktreeState, ClientWorktreeStore, app_server_now_ms, valid_artifact_id,
+    validate_worktree_id,
+};
+#[cfg(test)]
+use kcoder_workspace_resources::managed_worktrees::{
+    is_windows_reserved_basename, managed_worktree_target_path,
+};
 use managed_worktrees::*;
+use workspace_registry::{client_workspace_store, client_worktree_store};
 
 mod runtime_configuration;
 use runtime_configuration::*;
@@ -776,15 +514,27 @@ use thread_metadata::*;
 
 mod transcript_projection;
 mod transcript_tool_recovery;
+use kcoder_transcript::{
+    ApprovalDecisionArtifact, TranscriptToolContexts, TurnOutcomeArtifact,
+    extend_transcript_tool_contexts, history_entry_thread_message, truncate_utf8_bytes,
+    validated_history_attempt,
+};
+#[cfg(test)]
+use kcoder_transcript::{
+    apply_turn_client_message_ids, apply_turn_outcome_to_message, apply_turn_outcomes,
+    attach_approval_decision_blocks, attach_turn_file_captures, coalesce_assistant_tool_fragments,
+    transcript_tool_block, transcript_tool_contexts,
+};
 use transcript_projection::*;
 
-mod turn_artifacts;
+use kcoder_turn_lifecycle::turn_artifacts;
 use turn_artifacts::*;
 
 mod server_requests;
 
 mod agent_conversation;
 mod agent_requests;
+mod agent_run_constraint;
 
 mod settings_requests;
 
@@ -800,22 +550,41 @@ mod thread_creation_requests;
 
 mod thread_read_requests;
 
+mod thread_goal_status_batch_requests;
+mod thread_presence_requests;
+
 mod thread_restore_requests;
 
 mod thread_rewind_requests;
 
 mod goal_requests;
 
+mod device_retention_cleanup;
 mod thread_delete_requests;
+mod thread_retention_cleanup;
+mod thread_runtime_handoff_requests;
 
+mod async_question_requests;
+#[path = "app_server/retained_turn_dispatch.rs"]
+mod retained_turn;
+mod task_expert_requests;
+mod turn_interrupt;
 mod turn_requests;
+mod turn_steer_requests;
 
+mod native_component_parent;
+#[path = "app_server/retention_context_host.rs"]
 mod retention_context;
+pub(crate) use integrations::connectivity::installed_resources::NATIVE_CONNECTIVITY_STARTUP_ENV;
+pub(crate) use integrations::office::startup_binding::NATIVE_OFFICE_STARTUP_ENV;
 pub(crate) use retention_context::RetentionLaunchConfiguration;
 mod connection_lifecycle;
-pub(crate) use connection_lifecycle::run_with_retention_parent;
+mod connection_requests;
+mod rpc_connection;
+pub(crate) use connection_lifecycle::run_with_native_launches;
+use kcoder_host_transport::rpc_hub;
 
-pub(crate) use workspace_registry::acquire_app_server_workspace_runtime_lease;
+pub(crate) use kcoder_workspace_resources::managed_worktrees::acquire_app_server_workspace_runtime_lease;
 
 mod rpc_dispatch;
 
@@ -824,3 +593,7 @@ enum DispatchControl {
     Continue,
     Shutdown,
 }
+
+pub(crate) use integrations::core::service_leases::native_code::entry::try_run as try_run_native_code_service;
+
+pub(crate) use integrations::core::service_leases::scope_host::NativeScopeHostBootstrap;

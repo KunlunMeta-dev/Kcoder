@@ -7,6 +7,15 @@ use std::collections::{BTreeSet, HashMap};
 use std::path::Path;
 
 const MAX_MCP_CONFIG_BYTES: u64 = 1024 * 1024;
+pub(crate) const PLUGIN_ROOT_ENVIRONMENT_KEYS: [&str; 7] = [
+    "CLAUDE_PLUGIN_ROOT",
+    "CODEX_PLUGIN_ROOT",
+    "GROK_PLUGIN_ROOT",
+    "CODEBUDDY_PLUGIN_ROOT",
+    "QODER_PLUGIN_ROOT",
+    "TRAE_PLUGIN_ROOT",
+    "PLUGIN_ROOT",
+];
 
 #[derive(Debug, Default, Deserialize)]
 struct RawMcpServerConfig {
@@ -22,6 +31,8 @@ struct RawMcpServerConfig {
     env: HashMap<String, String>,
     #[serde(default)]
     headers: HashMap<String, String>,
+    #[serde(default)]
+    policy: kcoder_types::McpServerPolicy,
 }
 
 pub(crate) fn resolve(
@@ -75,15 +86,7 @@ pub(crate) fn resolve_with_env(
                 .into_iter()
                 .map(|(key, value)| expand(&value).map(|expanded| (key, expanded)))
                 .collect::<Result<HashMap<_, _>, _>>()?;
-            for name in [
-                "CLAUDE_PLUGIN_ROOT",
-                "CODEX_PLUGIN_ROOT",
-                "GROK_PLUGIN_ROOT",
-                "CODEBUDDY_PLUGIN_ROOT",
-                "QODER_PLUGIN_ROOT",
-                "TRAE_PLUGIN_ROOT",
-                "PLUGIN_ROOT",
-            ] {
+            for name in PLUGIN_ROOT_ENVIRONMENT_KEYS {
                 env.insert(name.to_string(), plugin_root.to_string());
             }
             let headers = raw
@@ -125,6 +128,7 @@ pub(crate) fn resolve_with_env(
                 url,
                 env,
                 headers,
+                policy: raw.policy,
             })
         })
         .collect()
@@ -364,6 +368,19 @@ mod tests {
             std::env::var("P09_PRIVATE_LOOKUP_TOKEN").ok().as_deref(),
             Some("synthetic-private-value")
         );
+    }
+
+    #[test]
+    fn native_server_policy_is_not_dropped_during_plugin_contribution_resolution() {
+        let declaration = PluginMcpDeclaration::Inline(
+            json!({"demo":{"command":"node","policy":{"enabled_tools":[],"disabled_tools":["write"],"env_vars":["ACCESS_TOKEN"],"tool_timeout_secs":15}}}),
+        );
+        let configs =
+            resolve_with_env("demo@market", Path::new("/plugin"), &declaration, |_| None).unwrap();
+        assert_eq!(configs[0].policy.enabled_tools, Some(vec![]));
+        assert!(!configs[0].policy.allows("read"));
+        assert_eq!(configs[0].policy.env_vars, vec!["ACCESS_TOKEN"]);
+        assert_eq!(configs[0].policy.tool_timeout_secs, Some(15));
     }
 
     #[test]

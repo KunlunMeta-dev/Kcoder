@@ -1,12 +1,39 @@
 //! Verifier command recognition, workdir/environment guards, scope, and raw-exit rules.
 
-use super::*;
+use super::{command_classification::*, command_syntax::*};
+use std::path::Path;
 
-pub(crate) fn test_like_command(command: &str) -> bool {
+fn test_command_invocations(command: &str) -> Vec<ShellCommandInvocation> {
+    test_command_invocations_inner(command, 0)
+}
+
+fn test_command_invocations_inner(command: &str, depth: usize) -> Vec<ShellCommandInvocation> {
+    let mut tests = Vec::new();
+    for invocation in shell_command_invocations(command) {
+        if test_invocation(&invocation) {
+            tests.push(invocation.clone());
+        }
+        if depth >= 4 {
+            continue;
+        }
+        match docker_exec_nested_command(&invocation) {
+            Some(DockerExecNestedCommand::Shell(command)) => {
+                tests.extend(test_command_invocations_inner(&command, depth + 1));
+            }
+            Some(DockerExecNestedCommand::Direct(command)) if test_invocation(&command) => {
+                tests.push(command);
+            }
+            _ => {}
+        }
+    }
+    tests
+}
+
+pub fn test_like_command(command: &str) -> bool {
     !test_command_invocations(command).is_empty()
 }
 
-pub(crate) fn test_command_signature(command: &str) -> Option<String> {
+pub fn test_command_signature(command: &str) -> Option<String> {
     let invocation = test_command_invocations(command).into_iter().next()?;
     let program = invocation
         .program
@@ -44,7 +71,7 @@ pub(crate) fn test_command_signature(command: &str) -> Option<String> {
     )
 }
 
-pub(crate) fn verification_like_command(command: &str) -> bool {
+pub fn verification_like_command(command: &str) -> bool {
     verification_like_command_inner(command, 0)
 }
 
@@ -111,7 +138,7 @@ pub(super) fn python_interpreter_program(program: &str) -> bool {
 
 /// Recognize only a grep/rg query without wrappers, control operators, or redirection.
 /// Exit 1 with no output means no matches for such a command, not verification failure.
-pub(crate) fn read_only_search_no_match_command(command: &str) -> bool {
+pub fn read_only_search_no_match_command(command: &str) -> bool {
     if shell_has_unquoted_control_operator(command)
         || shell_has_unquoted_redirection(command)
         || shell_has_command_substitution(command)
@@ -137,7 +164,7 @@ pub(crate) fn read_only_search_no_match_command(command: &str) -> bool {
 /// Treat only directly executed inline Python checks as behavior probes. Text
 /// searches, diffs, and ordinary inspection commands cannot prove that a candidate
 /// patch changed runtime behavior.
-pub(crate) fn behavior_probe_command(command: &str) -> bool {
+pub fn behavior_probe_command(command: &str) -> bool {
     if test_like_command(command)
         || shell_has_unquoted_pipe(command)
         || command_may_mask_failure(command)
@@ -266,7 +293,7 @@ pub(super) fn behavior_probe_python_code_is_safe(code: &str) -> bool {
     true
 }
 
-pub(crate) fn behavior_probe_command_signature(command: &str) -> Option<String> {
+pub fn behavior_probe_command_signature(command: &str) -> Option<String> {
     behavior_probe_command(command).then(|| command.trim().to_string())
 }
 
@@ -276,7 +303,7 @@ pub(crate) fn behavior_probe_command_signature(command: &str) -> Option<String> 
 /// arbitrary build shell. The command must directly invoke tracked Python
 /// `setup.py build_ext --inplace`; only parallelism and rebuild behavior may vary.
 /// Wrappers, environment assignments, path arguments, pipelines, redirection, and control operators are rejected.
-pub(crate) fn verifier_native_build_command_signature(command: &str) -> Option<String> {
+pub fn verifier_native_build_command_signature(command: &str) -> Option<String> {
     if shell_has_unquoted_control_operator(command)
         || shell_has_unquoted_redirection(command)
         || shell_has_command_substitution(command)
@@ -337,7 +364,7 @@ pub(crate) fn verifier_native_build_command_signature(command: &str) -> Option<S
     inplace.then(|| command.trim().to_string())
 }
 
-pub(super) fn verifier_native_build_execution_rejection(
+pub fn verifier_native_build_execution_rejection(
     verifier_native_build: bool,
     run_in_background: bool,
 ) -> Option<String> {
@@ -350,7 +377,7 @@ pub(super) fn verifier_native_build_execution_rejection(
 /// Bash `workdir` is the sole source of verifier execution provenance. Commands
 /// may not change directories again or point test selectors at absolute paths;
 /// otherwise recorded Candidate/Baseline provenance would diverge from the actual execution directory.
-pub(super) fn verifier_workdir_command_rejection(command: &str) -> Option<String> {
+pub fn verifier_workdir_command_rejection(command: &str) -> Option<String> {
     let invocations = shell_command_invocations(command);
     let dynamic_or_compound_shell = shell_has_command_substitution(command)
         || shell_has_unquoted_variable_expansion(command)
@@ -627,7 +654,7 @@ pub(super) fn verifier_overrides_protected_environment(command: &str) -> bool {
         })
 }
 
-pub(crate) fn test_command_has_narrow_scope(command: &str) -> bool {
+pub fn test_command_has_narrow_scope(command: &str) -> bool {
     test_command_invocations(command)
         .iter()
         .any(test_invocation_has_narrow_scope)
@@ -765,7 +792,7 @@ pub(super) fn test_invocation_has_narrow_scope(invocation: &ShellCommandInvocati
 
 /// Reject commands that only collect, list, show help, or perform setup without
 /// running test bodies. Such runner meta-commands often exit 0 but cannot serve as Goal Pro completion evidence.
-pub(crate) fn test_command_skips_execution(command: &str) -> bool {
+pub fn test_command_skips_execution(command: &str) -> bool {
     shell_command_invocations(command)
         .iter()
         .filter(|invocation| test_invocation(invocation))
@@ -835,7 +862,7 @@ pub(super) fn test_invocation_skips_execution(invocation: &ShellCommandInvocatio
             && args.iter().any(|argument| argument == "-m"))
 }
 
-pub(crate) fn test_command_preserves_raw_exit(command: &str) -> bool {
+pub fn test_command_preserves_raw_exit(command: &str) -> bool {
     if shell_has_unquoted_pipe(command) || command_may_mask_failure(command) {
         return false;
     }
@@ -864,9 +891,9 @@ pub(super) fn invocation_preserves_target_test_exit(invocation: &ShellCommandInv
     }
 }
 
-pub(crate) fn verifier_test_command_rejection(
+pub fn test_command_rejection(
     command: &str,
-    minimum_scope: Option<GoalProTestScope>,
+    require_target_suite: bool,
     require_raw_exit_code: bool,
 ) -> Option<String> {
     if !test_like_command(command) {
@@ -878,9 +905,7 @@ pub(crate) fn verifier_test_command_rejection(
                 .to_string(),
         );
     }
-    if minimum_scope == Some(GoalProTestScope::TargetSuite)
-        && test_command_has_narrow_scope(command)
-    {
+    if require_target_suite && test_command_has_narrow_scope(command) {
         return Some(
             "Goal Pro verifier test guard rejected this incomplete or narrowly selected command before execution. The configured `target_suite` scope does not accept fail-fast options (`-x`, `--exitfirst`, `--maxfail`), `-k`, markers, `::test`, test-name filters, or a single Cargo test filter. Run the affected target test module or suite to completion without those selectors."
                 .to_string(),
@@ -889,7 +914,7 @@ pub(crate) fn verifier_test_command_rejection(
     None
 }
 
-pub(super) fn verifier_baseline_command_rejection(
+pub fn verifier_baseline_command_rejection(
     command: &str,
     invocation_cwd: &Path,
     baseline_root: Option<&Path>,

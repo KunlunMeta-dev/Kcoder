@@ -103,6 +103,8 @@ describe("TaskRuntime stop confirmation review", () => {
     const recovered = new FakeClient([]);
     const initialRequest = initial.request.bind(initial);
     initial.request = vi.fn(async (method: string, params: JsonRecord = {}) => {
+      if (method === "thread/resume") return { thread: activeThread("idle") } as never;
+      if (method === "thread/read") return { thread: activeThread("idle"), messages: [] } as never;
       if (method === "turn/interrupt") throw new MobileRpcError("timeout");
       return initialRequest(method, params);
     }) as never;

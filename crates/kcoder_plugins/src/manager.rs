@@ -112,6 +112,19 @@ impl PluginManager {
         Self::open_default_for_cwd_with_settings(cwd, paths, settings)
     }
 
+    /// Inspect one explicit native profile without changing process environment or starting plugins.
+    pub fn open_for_profile(
+        cwd: &Path,
+        config_dir: &Path,
+        settings: PluginsSettings,
+    ) -> Result<Self> {
+        Self::open_default_for_cwd_with_settings(
+            cwd,
+            ConfigPaths::with_config_dir(cwd, config_dir.to_path_buf()),
+            settings,
+        )
+    }
+
     fn open_default_for_cwd_with_settings(
         cwd: &Path,
         paths: ConfigPaths,

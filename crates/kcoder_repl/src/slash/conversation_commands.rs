@@ -771,12 +771,12 @@ impl SlashCommand for RewindCommand {
                             outcome.removed
                         ));
                         // Rebuild the visible transcript from the engine's
-                        // own message state — the same source the model sees —
-                        // so the display always matches the truncated context
+                        // authoritative message state and native presentation metadata
+                        // so the display matches the truncated context
                         // (no disk read, no flusher timing, works without a
                         // history path).
-                        let messages = engine.state.messages();
-                        app.replace_transcript_from_history(&messages);
+                        let messages = crate::web_sources::messages_for_state(&engine.state);
+                        app.replace_web_history(&messages);
                     }
                     _ => {}
                 }

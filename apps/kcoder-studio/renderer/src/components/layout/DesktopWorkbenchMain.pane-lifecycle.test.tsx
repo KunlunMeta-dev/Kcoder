@@ -149,6 +149,9 @@ describe('DesktopWorkbenchLayout', () => {
     await waitFor(() => expect(startDeviceTerminalSessionMock).toHaveBeenCalledTimes(1))
     await userEvent.click(tabs[0])
     await waitFor(() => expect(startDeviceTerminalSessionMock).toHaveBeenCalledTimes(2))
+    expect(JSON.parse(localStorage.getItem(
+      'kcoder.workspace.bottom-terminal-tabs.v1:workspace:12:workspace-cloud-device:/workspace/project:current_workspace'
+    ) ?? '{}')).toMatchObject({ activeTabId: 'terminal-1' })
   })
 
   test('opens a local project terminal when a project is selected without an active task', async () => {

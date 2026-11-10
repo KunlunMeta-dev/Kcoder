@@ -37,6 +37,39 @@ env:
   RUSTDOCFLAGS: -D warnings
 
 jobs:
+  searxng-runtime:
+    name: Bundled SearXNG / ${{ matrix.platform }}
+    if: github.event_name != 'workflow_dispatch' || inputs.tier == 'full'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            platform: linux-x64
+          - runner: windows-latest
+            platform: win-x64
+          - runner: macos-15-intel
+            platform: mac-x64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install pinned build-only runtime resolver
+        run: python -m pip install uv==0.12.17
+      - name: Search launcher proxy precedence and build resources
+        run: |
+          python -m unittest discover -s scripts/searxng -p test_launch.py
+          python -m unittest discover -s scripts/searxng -p test_prepare.py
+      - name: Prepare sealed native search service
+        run: python scripts/searxng/prepare.py --platform ${{ matrix.platform }} --destination target/runtime/searxng/${{ matrix.platform }}
+      - name: Verify cached runtime inventory
+        run: python scripts/searxng/prepare.py --platform ${{ matrix.platform }} --destination target/runtime/searxng/${{ matrix.platform }}
+      - name: Real search service with an owned offline source and owner cancellation
+        run: python scripts/searxng/test_runtime.py --runtime target/runtime/searxng/${{ matrix.platform }}
+
   relay:
     name: Multi-Gateway relay contracts
     if: github.event_name != 'workflow_dispatch' || inputs.tier == 'full'
@@ -146,6 +179,33 @@ jobs:
         run: npm --prefix apps/kcoder-studio test
       - name: E2E harness, registration and cleanup contracts
         run: npm --prefix apps/kcoder-studio run test:e2e:harness
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+      - name: Install pinned external ACP acceptance client in an isolated environment
+        run: |
+          python -m venv "${{ runner.temp }}/acp-toad"
+          "${{ runner.temp }}/acp-toad/bin/python" -m pip install -r crates/kcoder_cli/tests/acp/toad-requirements.txt
+      - name: Prepare bundled search for the actual CLI ownership acceptance
+        run: |
+          python -m pip install uv==0.12.17
+          python scripts/searxng/prepare.py --platform linux-x64 --destination target/runtime/searxng/linux-x64
+      - name: Actual managed search startup, discovery and new-conversation activation
+        env:
+          KCODER_TEST_SEARXNG_RUNTIME: ${{ github.workspace }}/target/runtime/searxng/linux-x64
+        run: cargo test --locked -p kcoder_cli --test app_server_stdio bundled_searxng_starts_through_the_actual_owned_cli_and_obeys_activation -- --ignored
+      - name: Actual Toad ACP client, permissions and cancellation
+        env:
+          KCODER_ACP_TOAD_PYTHON: ${{ runner.temp }}/acp-toad/bin/python
+          KCODER_TEST_ACP_TOAD: '1'
+        run: cargo run --locked -p kcoder_test_runner -- --tier platform --suite acp-toad-application --consent acp-toad-application
+      - name: Upload ACP client acceptance receipts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: acp-toad-client
+          path: target/test-runs/project/
+          retention-days: 7
 
   python-runtime:
     name: Python desktop, account and deployment helpers
@@ -178,7 +238,9 @@ jobs:
           sudo chmod 755 /usr/local /usr/local/bin
           sudo install -m 755 target/debug/kcoder /usr/local/bin/kcoder
       - name: Desktop worker adapter unit tests
-        run: python3 -m unittest discover -s scripts/computer-use -p 'test_*.py' -v
+        run: |
+          python3 -m pip install --only-binary=:all: pillow==12.3.0
+          python3 -m unittest discover -s scripts/computer-use -p 'test_*.py' -v
       - name: Install owned loopback SSH fixture prerequisites
         run: |
           sudo apt-get update
@@ -232,7 +294,12 @@ jobs:
           if ($invalid.Count) { throw ($invalid -join "`n") }
           Write-Output "PowerShell syntax: $($scripts.Count) files passed"
       - name: Owned temporary installation and rollback contracts
-        run: ./scripts/tests/windows-package-transaction.ps1
+        run: |
+          ./scripts/tests/windows-package-transaction.ps1
+          ./scripts/tests/windows-cli-release-transaction.ps1
+          $helper = './apps/kcoder-studio/desktop/windows-shell/close-installed-processes.ps1'
+          ./apps/kcoder-studio/desktop/windows-shell-close-processes.test.ps1 -Helper $helper
+          ./apps/kcoder-studio/desktop/windows-shell-stop-tasks.test.ps1 -Helper $helper
 
   android-native:
     name: Android native compilation
@@ -290,8 +357,8 @@ jobs:
           node --input-type=module <<'EOF'
           import { appendFileSync } from 'node:fs';
           const targets = {
-            'linux-desktop': 'tauri-native-file-read',
-            'macos-desktop': 'tauri-native-file-read',
+            'linux-desktop': 'electron-workspace-file-upload',
+            'macos-desktop': 'electron-workspace-file-upload',
             'windows-desktop': 'windows-computer-use',
           };
           const mapping = JSON.parse(process.env.RUNNERS || '{}');
@@ -313,7 +380,7 @@ jobs:
     env:
       COREPACK_ENABLE_AUTO_PIN: '0'
       KCODER_E2E_KCODER_BIN: ${{ vars.KCODER_E2E_KCODER_BIN }}
-      KCODER_E2E_TAURI_BIN: ${{ vars.KCODER_E2E_TAURI_BIN }}
+      KCODER_E2E_ELECTRON_BIN: ${{ vars.KCODER_E2E_ELECTRON_BIN }}
       KCODER_E2E_PACKAGED_DIR: ${{ vars.KCODER_E2E_PACKAGED_DIR }}
       KCODER_E2E_REQUIRE_CHROMIUM_SANDBOX: '1'
       pnpm_config_verify_deps_before_run: error
@@ -541,7 +608,6 @@ jobs:
             libdbus-1-dev \
             pkg-config \
             librsvg2-dev \
-            libwebkit2gtk-4.1-dev \
             patchelf \
             ripgrep
 
@@ -616,8 +682,9 @@ jobs:
             libdbus-1-dev \
             pkg-config \
             librsvg2-dev \
-            libwebkit2gtk-4.1-dev \
-            patchelf
+            patchelf \
+            xvfb \
+            openssh-server
 
       - name: Install JavaScript and browser dependencies
         env:
@@ -631,6 +698,55 @@ jobs:
           npm --prefix tools/tui-lab ci
           npm --prefix tools/tui-lab exec -- playwright install --with-deps chromium
           pnpm --dir apps/kcoder-studio/renderer exec playwright install --with-deps chromium
+
+      - name: Widget rendering, process and target domain acceptance
+        env:
+          PLAYWRIGHT_BROWSERS_PATH: ${{ runner.temp }}/ms-playwright
+          KCODER_E2E_CHROMIUM_NO_SANDBOX: '0'
+          KCODER_E2E_REQUIRE_CHROMIUM_SANDBOX: '1'
+        run: |
+          # These owned Linux probes do not enable production Linux isolated HTML.
+          node apps/kcoder-studio/node_modules/electron/install.js
+          test "$(cat apps/kcoder-studio/node_modules/electron/dist/version)" = '42.3.3'
+          KCODER_E2E_CHROMIUM_BIN="$(node --input-type=module -e 'import { chromium } from "./apps/kcoder-studio/renderer/node_modules/@playwright/test/index.mjs"; console.log(chromium.executablePath())')"
+          export KCODER_E2E_CHROMIUM_BIN
+          test -x "$KCODER_E2E_CHROMIUM_BIN"
+          cargo build --locked -p kcoder_cli --bin kcoder
+          pnpm --dir apps/kcoder-studio/renderer build
+          for suite in widget-managed-rendering widget-isolation-boundaries electron-widget-resources electron-widget-isolation; do
+            node "apps/kcoder-studio/e2e/suites/browser/$suite.e2e.mjs"
+          done
+          node apps/kcoder-studio/e2e/suites/browser/widget-completed-workbench-scroll.e2e.mjs
+          node apps/kcoder-studio/e2e/suites/browser/widget-completed-workbench-scroll.e2e.mjs --failed-chart
+          node apps/kcoder-studio/e2e/suites/browser/widget-completed-workbench-scroll.e2e.mjs --libraries
+          node apps/kcoder-studio/e2e/suites/browser/widget-completed-workbench-scroll.e2e.mjs --lifecycle
+          node apps/kcoder-studio/e2e/suites/browser/widget-completed-workbench-scroll.e2e.mjs --readiness
+          node apps/kcoder-studio/e2e/suites/gateway/kworker-widget-runtime-targets.e2e.mjs
+          node apps/kcoder-studio/renderer/e2e/harness/run-playwright.mjs test e2e/tests/widget-scroll.spec.ts e2e/tests/plugin-skill-layout.spec.ts
+          node apps/kcoder-studio/renderer/e2e/harness/run-playwright.mjs test e2e/tests/reference-panels.spec.ts --grep 'Studio work mode'
+
+      - name: Upload bounded widget domain receipts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-widget-domain-records
+          path: |
+            target/test/apps/kcoder-studio/e2e/suites/browser/widget-managed-rendering.e2e.mjs/**/manifest.json
+            target/test/apps/kcoder-studio/e2e/suites/browser/widget-managed-rendering.e2e.mjs/**/artifacts/*.json
+            target/test/apps/kcoder-studio/e2e/suites/browser/widget-completed-workbench-scroll.e2e.mjs/**/manifest.json
+            target/test/apps/kcoder-studio/e2e/suites/browser/widget-completed-workbench-scroll.e2e.mjs/**/artifacts/*.json
+            target/test/apps/kcoder-studio/e2e/suites/browser/widget-isolation-boundaries.e2e.mjs/**/manifest.json
+            target/test/apps/kcoder-studio/e2e/suites/browser/widget-isolation-boundaries.e2e.mjs/**/artifacts/*.json
+            target/test/apps/kcoder-studio/e2e/suites/browser/electron-widget-resources.e2e.mjs/**/manifest.json
+            target/test/apps/kcoder-studio/e2e/suites/browser/electron-widget-resources.e2e.mjs/**/artifacts/*.json
+            target/test/apps/kcoder-studio/e2e/suites/browser/electron-widget-isolation.e2e.mjs/**/manifest.json
+            target/test/apps/kcoder-studio/e2e/suites/browser/electron-widget-isolation.e2e.mjs/**/artifacts/*.json
+            target/test/apps/kcoder-studio/e2e/suites/gateway/kworker-widget-runtime-targets.e2e.mjs/**/manifest.json
+            target/test/apps/kcoder-studio/e2e/suites/gateway/kworker-widget-runtime-targets.e2e.mjs/**/artifacts/*.json
+            target/test/apps/kcoder-studio/renderer/e2e/harness/run-playwright.mjs/**/manifest.json
+            target/test/apps/kcoder-studio/renderer/e2e/harness/run-playwright.mjs/**/artifacts/playwright-results.json
+          if-no-files-found: ignore
+          retention-days: 5
 
       - name: Run full matrix
         env:
@@ -757,6 +873,9 @@ jobs:
       - name: Native Windows process supervisor acceptance
         run: cargo test -p kcoder_process_supervisor --all-targets -- --test-threads=1
 
+      - name: Native Windows private stdio MCP Jobs, isolation and cleanup receipts
+        run: cargo test --locked -p kcoder_mcp owned_windows_stdio_sessions_are_isolated_and_exit_receipts_include_descendants -- --nocapture --test-threads=1
+
       - name: Native Windows Specs process adapter acceptance
         run: cargo test -p kcoder_specs windows_adapter -- --test-threads=1
 
@@ -782,17 +901,45 @@ jobs:
       - name: Windows Studio harness and nested-process cleanup
         run: npm --prefix apps/kcoder-studio run test:e2e:harness
 
+      - name: Install the pinned native Electron widget runtime
+        shell: pwsh
+        run: |
+          node apps/kcoder-studio/node_modules/electron/install.js
+          if ($LASTEXITCODE -ne 0) { throw "Pinned Electron installation failed" }
+          $widgetElectronVersion = (Get-Content apps/kcoder-studio/node_modules/electron/dist/version -Raw).Trim()
+          if ($widgetElectronVersion -ne '42.3.3') { throw "Unverified Electron widget runtime: $widgetElectronVersion" }
+
+      - name: Native widget production IPC and owner isolation
+        shell: pwsh
+        env:
+          KCODER_E2E_REQUIRE_CHROMIUM_SANDBOX: '1'
+        run: |
+          if ($env:KCODER_E2E_CHROMIUM_NO_SANDBOX -eq '1') { throw 'Native widget CI must keep the OS sandbox enabled' }
+          node apps/kcoder-studio/e2e/run-all.mjs --model-independent --suite electron-widget-controller
+          if ($LASTEXITCODE -ne 0) { throw 'Native widget IPC/ownership acceptance failed' }
+
+      - name: Upload bounded native widget receipts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-widget-isolation-records
+          path: |
+            target/test/apps/kcoder-studio/e2e/suites/browser/electron-widget-controller.e2e.mjs/**/manifest.json
+            target/test/apps/kcoder-studio/e2e/suites/browser/electron-widget-controller.e2e.mjs/**/artifacts/*.json
+          if-no-files-found: ignore
+          retention-days: 5
+
       - name: Native CLI compile contract
-        run: cargo check -p kcoder_cli --all-targets
+        run: cargo check -p kcoder_cli -p kcoder_cli_runtime -p kcoder_session_configuration -p kcoder_browser -p kcoder_attachment_retention -p kcoder_migration_rpc -p kcoder_workspace_resources -p kcoder_native_journal -p kcoder_knowledge_rpc -p kcoder_cli_headless -p kcoder_cli_support -p kcoder_connectivity_storage -p kcoder_transcript -p kcoder_attachments --all-targets
 
       - name: Native CLI attachment reparse-point rejection
-        run: cargo test -p kcoder_cli --bin kcoder app_server::attachments::tests::windows_reparse_replacement_fails_materialization_without_reading_outside -- --exact
+        run: cargo test -p kcoder_attachments --lib tests::windows_reparse_replacement_fails_materialization_without_reading_outside -- --exact
 
       - name: Native CLI attachment owner lock contract
-        run: cargo test -p kcoder_cli --bin kcoder app_server::attachments::tests::attachment_owner_os_lock_survives_peer_scavenging_and_releases_after_crash -- --exact
+        run: cargo test -p kcoder_attachments --lib tests::attachment_owner_os_lock_survives_peer_scavenging_and_releases_after_crash -- --exact
 
       - name: Native CLI private artifact capability and ACL contract
-        run: cargo test -p kcoder_cli --bin kcoder app_server::private_files::tests -- --test-threads=1
+        run: cargo test -p kcoder_cli_runtime --lib app_server::private_files::tests -- --test-threads=1
 
       - name: Native Windows plugin store transaction and DACL contract
         run: cargo test -p kcoder_plugins store::tests::local_install_update_and_uninstall_preserve_data_by_default -- --exact --test-threads=1

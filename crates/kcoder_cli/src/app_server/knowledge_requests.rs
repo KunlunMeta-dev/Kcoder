@@ -5,7 +5,7 @@ use kcoder_knowledge::{KnowledgeCatalog, KnowledgeScope};
 use serde_json::{Value, json};
 use std::path::Path;
 
-pub(super) fn supports(method: &str) -> bool {
+pub fn supports(method: &str) -> bool {
     matches!(
         method,
         km::IMAGE_IMPORT_LIST
@@ -49,7 +49,7 @@ pub(super) fn supports(method: &str) -> bool {
     )
 }
 
-pub(super) fn settings(path: &Path) -> Result<kcoder_config::KnowledgeSettings> {
+pub fn settings(path: &Path) -> Result<kcoder_config::KnowledgeSettings> {
     let document = kcoder_config::read_settings_file(path)?;
     Ok(serde_json::from_value(
         document
@@ -58,10 +58,10 @@ pub(super) fn settings(path: &Path) -> Result<kcoder_config::KnowledgeSettings> 
             .unwrap_or_else(|| json!({})),
     )?)
 }
-pub(super) fn enabled(path: &Path) -> Result<bool> {
+pub fn enabled(path: &Path) -> Result<bool> {
     Ok(settings(path)?.is_available())
 }
-pub(super) fn organization_enabled(path: &Path) -> Result<bool> {
+pub fn organization_enabled(path: &Path) -> Result<bool> {
     Ok(settings(path)?.can_organize())
 }
 fn status(path: &Path) -> Result<Value> {
@@ -73,7 +73,7 @@ fn status(path: &Path) -> Result<Value> {
     }))
 }
 
-pub(super) fn request(path: &Path, method: &str, params: Value) -> Result<Value> {
+pub fn request(path: &Path, method: &str, params: Value) -> Result<Value> {
     if matches!(method, km::IMAGE_IMPORT_LIST | km::IMAGE_IMPORT_CANCEL) {
         if !path
             .parent()
@@ -611,21 +611,8 @@ mod tests {
     }
 }
 
-pub(super) fn open_catalog(path: &Path) -> Result<(KnowledgeCatalog, KnowledgeScope)> {
-    let profile = path
-        .parent()
-        .context("knowledge profile storage unavailable")?
-        .canonicalize()?;
-    let principal = match std::env::var("KCODER_ACCOUNT_PRINCIPAL_ID") {
-        Ok(value) => uuid::Uuid::parse_str(&value)
-            .context("invalid host account identity")?
-            .to_string(),
-        Err(std::env::VarError::NotPresent) => format!("profile:{}", profile.display()),
-        Err(error) => return Err(error.into()),
-    };
-    // Plain SSH compatibility is single-user by profile. Account mode gets a
-    // stable principal from the trusted launcher and its private worker home.
-    let scope = KnowledgeScope::from_authenticated_host(&principal, "execution-host")?;
+pub fn open_catalog(path: &Path) -> Result<(KnowledgeCatalog, KnowledgeScope)> {
+    let (profile, scope) = catalog_scope_for_profile(path)?;
     let root = profile.join("knowledge");
     std::fs::create_dir_all(&root)?;
     kcoder_config::set_user_only_dir_permissions(&root)?;
@@ -633,9 +620,22 @@ pub(super) fn open_catalog(path: &Path) -> Result<(KnowledgeCatalog, KnowledgeSc
     Ok((store, scope))
 }
 
+/// Existing authenticated host identity only; this getter creates no catalog or objects.
+pub use crate::publication_reader::catalog_scope_for_profile;
+
 #[cfg(test)]
 mod independent_modes {
     use super::*;
+    #[test]
+    fn legacy_scope_observation_does_not_initialize_a_catalog() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let before = std::fs::read_dir(temp.path())?.count();
+        let (profile, _scope) = catalog_scope_for_profile(&temp.path().join("settings.json"))?;
+        assert_eq!(profile, temp.path().canonicalize()?);
+        assert_eq!(std::fs::read_dir(temp.path())?.count(), before);
+        assert!(!profile.join("knowledge").exists());
+        Ok(())
+    }
     #[test]
     fn retrieval_and_organization_are_independent_and_only_organization_off_pauses() -> Result<()> {
         let dir = tempfile::tempdir()?;

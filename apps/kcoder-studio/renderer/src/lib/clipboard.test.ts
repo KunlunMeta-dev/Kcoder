@@ -1,13 +1,8 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 import { copyTextToClipboard } from './clipboard'
-import { isNativeTauriHost } from './runtime-environment'
-import { copyLocalExecutorDebugInfo } from '@/tauri/localExecutor'
 
-vi.mock('./runtime-environment', () => ({ isNativeTauriHost: vi.fn(() => false) }))
-vi.mock('@/tauri/localExecutor', () => ({ copyLocalExecutorDebugInfo: vi.fn() }))
 beforeEach(() => {
   vi.clearAllMocks()
-  vi.mocked(isNativeTauriHost).mockReturnValue(false)
   vi.stubGlobal('navigator', {
     clipboard: { writeText: vi.fn().mockRejectedValue(new Error('denied')) },
   })
@@ -29,7 +24,6 @@ test('Gateway fallback copies the exact text and restores focus without invoking
   Object.defineProperty(document, 'execCommand', { value: copy, configurable: true })
   await copyTextToClipboard('  exact text\n')
   expect(copy).toHaveBeenCalledWith('copy')
-  expect(copyLocalExecutorDebugInfo).not.toHaveBeenCalled()
   expect(document.activeElement).toBe(input)
   expect(document.querySelector('textarea')).toBeNull()
 })
@@ -40,8 +34,10 @@ test('a rejected fallback is not a copied success and still removes the temporar
   expect(document.querySelector('textarea')).toBeNull()
 })
 
-test('an actual Tauri host keeps its native clipboard fallback', async () => {
-  vi.mocked(isNativeTauriHost).mockReturnValue(true)
-  await copyTextToClipboard('native')
-  expect(copyLocalExecutorDebugInfo).toHaveBeenCalledWith('native')
+test('uses the secure clipboard API when it succeeds', async () => {
+  const copy = vi.fn().mockResolvedValue(undefined)
+  vi.stubGlobal('navigator', { clipboard: { writeText: copy } })
+  await copyTextToClipboard('exact text')
+  expect(copy).toHaveBeenCalledWith('exact text')
+  expect(document.querySelector('textarea')).toBeNull()
 })

@@ -12,6 +12,7 @@ fn artifact_engine() -> (tempfile::TempDir, QueryEngine) {
 
 fn read_params(agent_id: &str) -> AgentArtifactReadParams {
     AgentArtifactReadParams {
+        expected_background_run: None,
         thread_id: "thread-1".to_string(),
         agent_id: agent_id.to_string(),
         kind: None,

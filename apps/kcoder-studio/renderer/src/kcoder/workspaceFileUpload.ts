@@ -1,4 +1,4 @@
-import { requestLocalExecutor } from '@/tauri/localExecutor'
+import { requestLocalExecutor } from '@/host/localExecutor'
 import i18n from '@/i18n'
 import { captureAccountContextRevision } from './accountContextEvents'
 import type { WorkspaceFileApi, WorkspaceUploadResult } from '@/types/workspace-files'

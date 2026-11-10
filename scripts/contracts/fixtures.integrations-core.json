@@ -1,0 +1,1151 @@
+{
+  "IntegrationScope": {
+    "valid": [
+      {
+        "name": "native-structural-example",
+        "value": {
+          "accountId": "fixture-account",
+          "targetId": "fixture-target",
+          "workspaceId": null,
+          "identityGeneration": "fixture-auth-1",
+          "targetRevision": "fixture-target-1"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-caller-authority-field",
+        "value": {
+          "accountId": "fixture-account",
+          "targetId": "fixture-target",
+          "workspaceId": null,
+          "identityGeneration": "fixture-auth-1",
+          "targetRevision": "fixture-target-1",
+          "callerAuthority": true
+        }
+      },
+      {
+        "name": "missing-required-null-workspace",
+        "value": {
+          "accountId": "fixture-account",
+          "targetId": "fixture-target",
+          "identityGeneration": "fixture-auth-1",
+          "targetRevision": "fixture-target-1"
+        }
+      }
+    ]
+  },
+  "IntegrationOwner": {
+    "valid": [
+      {
+        "name": "native-structural-example",
+        "value": {
+          "accountId": "fixture-account",
+          "targetId": "fixture-target",
+          "workspaceId": null
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-caller-authority-field",
+        "value": {
+          "accountId": "fixture-account",
+          "targetId": "fixture-target",
+          "workspaceId": null,
+          "callerAuthority": true
+        }
+      }
+    ]
+  },
+  "IntegrationRequest": {
+    "valid": [
+      {
+        "name": "native-structural-example",
+        "value": {
+          "contractVersion": "parallel-v1",
+          "requestId": "request-1",
+          "scope": {
+            "accountId": "fixture-account",
+            "targetId": "fixture-target",
+            "workspaceId": null,
+            "identityGeneration": "fixture-auth-1",
+            "targetRevision": "fixture-target-1"
+          },
+          "timeoutMs": 10000,
+          "payload": {}
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-caller-authority-field",
+        "value": {
+          "contractVersion": "parallel-v1",
+          "requestId": "request-1",
+          "scope": {
+            "accountId": "fixture-account",
+            "targetId": "fixture-target",
+            "workspaceId": null,
+            "identityGeneration": "fixture-auth-1",
+            "targetRevision": "fixture-target-1"
+          },
+          "timeoutMs": 10000,
+          "payload": {},
+          "callerAuthority": true
+        }
+      },
+      {
+        "name": "unknown-version",
+        "value": {
+          "contractVersion": "unregistered-v2",
+          "requestId": "request-1",
+          "scope": {
+            "accountId": "fixture-account",
+            "targetId": "fixture-target",
+            "workspaceId": null,
+            "identityGeneration": "fixture-auth-1",
+            "targetRevision": "fixture-target-1"
+          },
+          "timeoutMs": 10000,
+          "payload": {}
+        }
+      }
+    ]
+  },
+  "IntegrationReply": {
+    "valid": [
+      {
+        "name": "native-structural-example",
+        "value": {
+          "contractVersion": "parallel-v1",
+          "requestId": "request-1",
+          "status": "completed",
+          "operationId": null,
+          "entityRevision": null,
+          "observedAt": "2026-10-24T00:00:00Z",
+          "result": {
+            "state": "running"
+          },
+          "error": null
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-caller-authority-field",
+        "value": {
+          "contractVersion": "parallel-v1",
+          "requestId": "request-1",
+          "status": "completed",
+          "operationId": null,
+          "entityRevision": null,
+          "observedAt": "2026-10-24T00:00:00Z",
+          "result": {
+            "state": "running"
+          },
+          "error": null,
+          "callerAuthority": true
+        }
+      },
+      {
+        "name": "missing-result-is-not-null",
+        "value": {
+          "contractVersion": "parallel-v1",
+          "requestId": "request-1",
+          "status": "completed",
+          "operationId": null,
+          "entityRevision": null,
+          "observedAt": "2026-10-24T00:00:00Z",
+          "error": null
+        }
+      }
+    ]
+  },
+  "IntegrationError": {
+    "valid": [
+      {
+        "name": "native-structural-example",
+        "value": {
+          "code": "RESOURCE_DENIED",
+          "recovery": "request_authorization",
+          "messageKey": "integrations.resourceDenied"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-caller-authority-field",
+        "value": {
+          "code": "RESOURCE_DENIED",
+          "recovery": "request_authorization",
+          "messageKey": "integrations.resourceDenied",
+          "callerAuthority": true
+        }
+      }
+    ]
+  },
+  "IntegrationOperationReceipt": {
+    "valid": [
+      {
+        "name": "native-structural-example",
+        "value": {
+          "operationId": "operation-1",
+          "scope": {
+            "accountId": "fixture-account",
+            "targetId": "fixture-target",
+            "workspaceId": null,
+            "identityGeneration": "fixture-auth-1",
+            "targetRevision": "fixture-target-1"
+          },
+          "port": "P-RUNTIME",
+          "method": "acceptTask",
+          "revision": 1,
+          "phase": "unknown",
+          "createdAtMs": 1792800000000,
+          "updatedAtMs": 1792800000000,
+          "entityRef": null,
+          "error": {
+            "code": "RESOURCE_DENIED",
+            "recovery": "request_authorization",
+            "messageKey": "integrations.resourceDenied"
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-caller-authority-field",
+        "value": {
+          "operationId": "operation-1",
+          "scope": {
+            "accountId": "fixture-account",
+            "targetId": "fixture-target",
+            "workspaceId": null,
+            "identityGeneration": "fixture-auth-1",
+            "targetRevision": "fixture-target-1"
+          },
+          "port": "P-RUNTIME",
+          "method": "acceptTask",
+          "revision": 1,
+          "phase": "unknown",
+          "createdAtMs": 1792800000000,
+          "updatedAtMs": 1792800000000,
+          "entityRef": null,
+          "error": {
+            "code": "RESOURCE_DENIED",
+            "recovery": "request_authorization",
+            "messageKey": "integrations.resourceDenied"
+          },
+          "callerAuthority": true
+        }
+      }
+    ]
+  },
+  "IntegrationPolicyEvaluation": {
+    "valid": [
+      {
+        "name": "native-structural-example",
+        "value": {
+          "decision": "unknown",
+          "policyRevision": "fixture-policy-1",
+          "reasonCode": "AUTHORITY_UNAVAILABLE"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-caller-authority-field",
+        "value": {
+          "decision": "unknown",
+          "policyRevision": "fixture-policy-1",
+          "reasonCode": "AUTHORITY_UNAVAILABLE",
+          "callerAuthority": true
+        }
+      }
+    ]
+  },
+  "IntegrationRuntimeAcceptance": {
+    "valid": [
+      {
+        "name": "native-structural-example",
+        "value": {
+          "threadId": "fixture-thread",
+          "turnId": "fixture-turn",
+          "state": "running"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-caller-authority-field",
+        "value": {
+          "threadId": "fixture-thread",
+          "turnId": "fixture-turn",
+          "state": "running",
+          "callerAuthority": true
+        }
+      }
+    ]
+  },
+  "IntegrationRuntimeTask": {
+    "valid": [
+      {
+        "name": "native-structural-example",
+        "value": {
+          "threadId": "fixture-thread",
+          "turnId": "fixture-turn",
+          "state": "waiting_for_user",
+          "pendingInteractions": [
+            {
+              "interactionId": "question-1",
+              "revision": "1",
+              "kind": "question",
+              "prompt": "选择获准的交付目标。"
+            }
+          ]
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-caller-authority-field",
+        "value": {
+          "threadId": "fixture-thread",
+          "turnId": "fixture-turn",
+          "state": "waiting_for_user",
+          "pendingInteractions": [
+            {
+              "interactionId": "question-1",
+              "revision": "1",
+              "kind": "question",
+              "prompt": "选择获准的交付目标。"
+            }
+          ],
+          "callerAuthority": true
+        }
+      }
+    ]
+  },
+  "IntegrationEntityRef": {
+    "valid": [
+      {
+        "name": "native-structural-example",
+        "value": {
+          "kind": "artifact",
+          "id": "fixture-artifact",
+          "revision": "1"
+        }
+      },
+      {
+        "name": "controlled-native-input-reference",
+        "value": {
+          "kind": "input",
+          "id": "accepted-native-input",
+          "revision": "1"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-caller-authority-field",
+        "value": {
+          "kind": "artifact",
+          "id": "fixture-artifact",
+          "revision": "1",
+          "callerAuthority": true
+        }
+      }
+    ]
+  },
+  "IntegrationScopeReadParams": {
+    "valid": [
+      {
+        "name": "empty-native-scope-read",
+        "value": {}
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-caller-owner-selection",
+        "value": {
+          "accountId": "caller-selected"
+        }
+      }
+    ]
+  },
+  "IntegrationMemoryMethod": {
+    "valid": [
+      {
+        "name": "registered-memory-read",
+        "value": "integrations/memory/list"
+      },
+      {
+        "name": "registered-memory-forget",
+        "value": "integrations/memory/forget"
+      },
+      {
+        "name": "readonly-thread-memory-snapshot",
+        "value": "integrations/memory/readTaskSnapshot"
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown-mutation",
+        "value": "integrations/memory/reset"
+      }
+    ]
+  },
+  "IntegrationPort": {
+    "valid": [
+      {
+        "name": "known-runtime-port",
+        "value": "P-RUNTIME"
+      },
+      {
+        "name": "known-automation-port",
+        "value": "P-AUTOMATION"
+      }
+    ],
+    "invalid": [
+      {
+        "name": "not-a-trusted-generic-invoker",
+        "value": "P-SHELL"
+      }
+    ]
+  },
+  "IntegrationOperationReadResult": {
+    "valid": [
+      {
+        "name": "no-original-receipt-observed",
+        "value": {
+          "receipt": null
+        }
+      },
+      {
+        "name": "original-receipt-observed",
+        "value": {
+          "receipt": {
+            "operationId": "operation-1",
+            "scope": {
+              "accountId": "fixture-account",
+              "targetId": "fixture-target",
+              "workspaceId": null,
+              "identityGeneration": "fixture-auth-1",
+              "targetRevision": "fixture-target-1"
+            },
+            "port": "P-RUNTIME",
+            "method": "acceptTask",
+            "revision": 1,
+            "phase": "unknown",
+            "createdAtMs": 1792800000000,
+            "updatedAtMs": 1792800000000,
+            "entityRef": null,
+            "error": {
+              "code": "RESOURCE_DENIED",
+              "recovery": "request_authorization",
+              "messageKey": "integrations.resourceDenied"
+            }
+          }
+        }
+      },
+      {
+        "name": "unsubmitted-input-keeps-original-unknown-receipt",
+        "value": {
+          "receipt": {
+            "operationId": "operation-1",
+            "scope": {
+              "accountId": "fixture-account",
+              "targetId": "fixture-target",
+              "workspaceId": null,
+              "identityGeneration": "fixture-auth-1",
+              "targetRevision": "fixture-target-1"
+            },
+            "port": "P-RUNTIME",
+            "method": "acceptTask",
+            "revision": 1,
+            "phase": "unknown",
+            "createdAtMs": 1792800000000,
+            "updatedAtMs": 1792800000000,
+            "entityRef": null,
+            "error": {
+              "code": "RESOURCE_DENIED",
+              "recovery": "request_authorization",
+              "messageKey": "integrations.resourceDenied"
+            }
+          },
+          "unsubmittedInput": {
+            "operationId": "operation-1",
+            "operationRevision": 1,
+            "threadId": "original-thread"
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing-is-not-null",
+        "value": {}
+      },
+      {
+        "name": "wrong-receipt-type",
+        "value": {
+          "receipt": "unverified"
+        }
+      },
+      {
+        "name": "unsubmitted-input-cannot-carry-authority",
+        "value": {
+          "receipt": null,
+          "unsubmittedInput": {
+            "operationId": "operation-1",
+            "operationRevision": 1,
+            "threadId": "original-thread",
+            "authorized": true
+          }
+        }
+      }
+    ]
+  },
+  "IntegrationRuntimeReadTaskParams": {
+    "valid": [
+      {
+        "name": "exact-original-turn",
+        "value": {
+          "threadId": "original-thread",
+          "turnId": "original-turn"
+        }
+      },
+      {
+        "name": "exact-native-task",
+        "value": {
+          "taskId": "original-task"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "no-path-selection",
+        "value": {
+          "path": "synthetic-private-path"
+        }
+      }
+    ]
+  },
+  "IntegrationOperationReadParams": {
+    "valid": [
+      {
+        "name": "lookup-original-operation-only",
+        "value": {
+          "operationId": "operation-1"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "no-recovery-without-original-id",
+        "value": {}
+      },
+      {
+        "name": "caller-cannot-choose-receipt-path",
+        "value": {
+          "operationId": "operation-1",
+          "path": "synthetic-private"
+        }
+      }
+    ]
+  },
+  "IntegrationRevisionRef": {
+    "valid": [
+      {
+        "name": "native-structural-example",
+        "value": {
+          "id": "delegation-one",
+          "revision": "1"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-caller-authority-or-unknown-enum",
+        "value": {
+          "id": "delegation-one",
+          "revision": "1",
+          "callerAuthority": true
+        }
+      }
+    ]
+  },
+  "IntegrationDelegationPurpose": {
+    "valid": [
+      {
+        "name": "native-structural-example",
+        "value": "channel_binding"
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-caller-authority-or-unknown-enum",
+        "value": "caller-approved-anything"
+      }
+    ]
+  },
+  "IntegrationDelegationAction": {
+    "valid": [
+      {
+        "name": "native-structural-example",
+        "value": "runtime.acceptTask"
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-caller-authority-or-unknown-enum",
+        "value": "caller-approved-anything"
+      }
+    ]
+  },
+  "IntegrationDelegationPrepareParams": {
+    "valid": [
+      {
+        "name": "native-structural-example",
+        "value": {
+          "purpose": "channel_binding",
+          "connectionId": "connection-one",
+          "observedSubjectRef": {
+            "id": "observed-one",
+            "revision": "1"
+          },
+          "actions": [
+            "runtime.acceptTask",
+            "runtime.readTask"
+          ],
+          "resourceRefs": [
+            {
+              "kind": "connection",
+              "id": "connection-one",
+              "revision": "1"
+            }
+          ],
+          "expiresInMs": 10000
+        }
+      },
+      {
+        "name": "explicit-until-revoked-structural-only",
+        "value": {
+          "purpose": "channel_binding",
+          "connectionId": "connection-one",
+          "observedSubjectRef": {
+            "id": "observed-one",
+            "revision": "1"
+          },
+          "actions": [
+            "runtime.acceptTask",
+            "runtime.readTask"
+          ],
+          "resourceRefs": [
+            {
+              "kind": "connection",
+              "id": "connection-one",
+              "revision": "1"
+            }
+          ],
+          "expiresInMs": null
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-caller-authority-or-unknown-enum",
+        "value": {
+          "purpose": "channel_binding",
+          "connectionId": "connection-one",
+          "observedSubjectRef": {
+            "id": "observed-one",
+            "revision": "1"
+          },
+          "actions": [
+            "runtime.acceptTask",
+            "runtime.readTask"
+          ],
+          "resourceRefs": [
+            {
+              "kind": "connection",
+              "id": "connection-one",
+              "revision": "1"
+            }
+          ],
+          "expiresInMs": 10000,
+          "callerAuthority": true
+        }
+      },
+      {
+        "name": "reject-executionScope",
+        "value": {
+          "purpose": "channel_binding",
+          "connectionId": "connection-one",
+          "observedSubjectRef": {
+            "id": "observed-one",
+            "revision": "1"
+          },
+          "actions": [
+            "runtime.acceptTask",
+            "runtime.readTask"
+          ],
+          "resourceRefs": [
+            {
+              "kind": "connection",
+              "id": "connection-one",
+              "revision": "1"
+            }
+          ],
+          "expiresInMs": 10000,
+          "executionScope": true
+        }
+      },
+      {
+        "name": "reject-trusted",
+        "value": {
+          "purpose": "channel_binding",
+          "connectionId": "connection-one",
+          "observedSubjectRef": {
+            "id": "observed-one",
+            "revision": "1"
+          },
+          "actions": [
+            "runtime.acceptTask",
+            "runtime.readTask"
+          ],
+          "resourceRefs": [
+            {
+              "kind": "connection",
+              "id": "connection-one",
+              "revision": "1"
+            }
+          ],
+          "expiresInMs": 10000,
+          "trusted": true
+        }
+      },
+      {
+        "name": "reject-publicKey",
+        "value": {
+          "purpose": "channel_binding",
+          "connectionId": "connection-one",
+          "observedSubjectRef": {
+            "id": "observed-one",
+            "revision": "1"
+          },
+          "actions": [
+            "runtime.acceptTask",
+            "runtime.readTask"
+          ],
+          "resourceRefs": [
+            {
+              "kind": "connection",
+              "id": "connection-one",
+              "revision": "1"
+            }
+          ],
+          "expiresInMs": 10000,
+          "publicKey": true
+        }
+      },
+      {
+        "name": "reject-approval-delegation",
+        "value": {
+          "purpose": "channel_binding",
+          "connectionId": "connection-one",
+          "observedSubjectRef": {
+            "id": "observed-one",
+            "revision": "1"
+          },
+          "actions": [
+            "approval.respond"
+          ],
+          "resourceRefs": [
+            {
+              "kind": "connection",
+              "id": "connection-one",
+              "revision": "1"
+            }
+          ],
+          "expiresInMs": 10000
+        }
+      }
+    ]
+  },
+  "IntegrationDelegationStatus": {
+    "valid": [
+      {
+        "name": "native-structural-example",
+        "value": "active"
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-caller-authority-or-unknown-enum",
+        "value": "caller-approved-anything"
+      }
+    ]
+  },
+  "IntegrationDelegationView": {
+    "valid": [
+      {
+        "name": "native-structural-example",
+        "value": {
+          "delegationRef": {
+            "id": "delegation-one",
+            "revision": "1"
+          },
+          "status": "active",
+          "expiresAtMs": 10000,
+          "policyRevision": "native-policy-one"
+        }
+      },
+      {
+        "name": "explicit-until-revoked-structural-only",
+        "value": {
+          "delegationRef": {
+            "id": "delegation-one",
+            "revision": "1"
+          },
+          "status": "active",
+          "expiresAtMs": null,
+          "policyRevision": "native-policy-one"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-caller-authority-or-unknown-enum",
+        "value": {
+          "delegationRef": {
+            "id": "delegation-one",
+            "revision": "1"
+          },
+          "status": "active",
+          "expiresAtMs": 10000,
+          "policyRevision": "native-policy-one",
+          "callerAuthority": true
+        }
+      }
+    ]
+  },
+  "IntegrationDelegationReadParams": {
+    "valid": [
+      {
+        "name": "native-structural-example",
+        "value": {
+          "delegationId": "delegation-one"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-caller-authority-or-unknown-enum",
+        "value": {
+          "delegationId": "delegation-one",
+          "callerAuthority": true
+        }
+      }
+    ]
+  },
+  "IntegrationDelegationReadResult": {
+    "valid": [
+      {
+        "name": "native-structural-example",
+        "value": {
+          "delegation": null
+        }
+      },
+      {
+        "name": "existing-delegation",
+        "value": {
+          "delegation": {
+            "delegationRef": {
+              "id": "delegation-one",
+              "revision": "1"
+            },
+            "status": "active",
+            "expiresAtMs": 10000,
+            "policyRevision": "native-policy-one"
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-caller-authority-or-unknown-enum",
+        "value": {
+          "delegation": null,
+          "callerAuthority": true
+        }
+      },
+      {
+        "name": "missing-required-null-delegation",
+        "value": {}
+      }
+    ]
+  },
+  "IntegrationDelegationRevokeResult": {
+    "valid": [
+      {
+        "name": "native-structural-example",
+        "value": {
+          "delegationRef": {
+            "id": "delegation-one",
+            "revision": "2"
+          },
+          "status": "revoked",
+          "cancellationRequested": false,
+          "cancellationSettled": false
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-caller-authority-or-unknown-enum",
+        "value": {
+          "delegationRef": {
+            "id": "delegation-one",
+            "revision": "2"
+          },
+          "status": "revoked",
+          "cancellationRequested": false,
+          "cancellationSettled": false,
+          "callerAuthority": true
+        }
+      }
+    ]
+  },
+  "IntegrationKnowledgeMethod": {
+    "valid": [
+      {
+        "name": "listPublications",
+        "value": "integrations/knowledge/listPublications"
+      },
+      {
+        "name": "listPublicationHistory",
+        "value": "integrations/knowledge/listPublicationHistory"
+      },
+      {
+        "name": "listAdoptions",
+        "value": "integrations/knowledge/listAdoptions"
+      },
+      {
+        "name": "resolvePublication",
+        "value": "integrations/knowledge/resolvePublication"
+      },
+      {
+        "name": "retrieveKnowledge",
+        "value": "integrations/knowledge/retrieveKnowledge"
+      },
+      {
+        "name": "readCitation",
+        "value": "integrations/knowledge/readCitation"
+      },
+      {
+        "name": "readPublicationSources",
+        "value": "integrations/knowledge/readPublicationSources"
+      },
+      {
+        "name": "publishKnowledge",
+        "value": "integrations/knowledge/publishKnowledge"
+      },
+      {
+        "name": "revokePublication",
+        "value": "integrations/knowledge/revokePublication"
+      },
+      {
+        "name": "adoptPublication",
+        "value": "integrations/knowledge/adoptPublication"
+      },
+      {
+        "name": "setAdoptionEnabled",
+        "value": "integrations/knowledge/setAdoptionEnabled"
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown-private-port",
+        "value": "integrations/knowledge/evaluatePolicy"
+      },
+      {
+        "name": "wrong-type",
+        "value": {
+          "method": "integrations/knowledge/listPublications"
+        }
+      }
+    ]
+  },
+  "IntegrationAutomationMethod": {
+    "valid": [
+      {
+        "name": "listTemplates",
+        "value": "integrations/automation/listTemplates"
+      },
+      {
+        "name": "previewSubscription",
+        "value": "integrations/automation/previewSubscription"
+      },
+      {
+        "name": "listSubscriptions",
+        "value": "integrations/automation/listSubscriptions"
+      },
+      {
+        "name": "listAutomationRuns",
+        "value": "integrations/automation/listAutomationRuns"
+      },
+      {
+        "name": "readAutomationRun",
+        "value": "integrations/automation/readAutomationRun"
+      },
+      {
+        "name": "readAutomationArtifacts",
+        "value": "integrations/automation/readAutomationArtifacts"
+      },
+      {
+        "name": "readAutomationClaims",
+        "value": "integrations/automation/readAutomationClaims"
+      },
+      {
+        "name": "saveSubscription",
+        "value": "integrations/automation/saveSubscription"
+      },
+      {
+        "name": "setSubscriptionEnabled",
+        "value": "integrations/automation/setSubscriptionEnabled"
+      },
+      {
+        "name": "removeSubscription",
+        "value": "integrations/automation/removeSubscription"
+      },
+      {
+        "name": "hideAutomationRun",
+        "value": "integrations/automation/hideAutomationRun"
+      },
+      {
+        "name": "cancelAutomationRun",
+        "value": "integrations/automation/cancelAutomationRun"
+      },
+      {
+        "name": "cancelAutomationDelivery",
+        "value": "integrations/automation/cancelAutomationDelivery"
+      },
+      {
+        "name": "reconcileAutomationDelivery",
+        "value": "integrations/automation/reconcileAutomationDelivery"
+      },
+      {
+        "name": "explicit-native-file-selection",
+        "value": "integrations/automation/selectFileEventSource"
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown-private-port",
+        "value": "integrations/automation/evaluatePolicy"
+      },
+      {
+        "name": "wrong-type",
+        "value": {
+          "method": "integrations/automation/listTemplates"
+        }
+      }
+    ]
+  },
+  "IntegrationTaskStateReadParams": {
+    "valid": [
+      {
+        "name": "original-owned-task-example",
+        "value": {
+          "requestId": "read-original-state",
+          "scope": {
+            "accountId": "fixture-account",
+            "targetId": "fixture-target",
+            "workspaceId": null,
+            "identityGeneration": "fixture-auth-1",
+            "targetRevision": "fixture-target-1"
+          },
+          "reference": {
+            "threadId": "original-thread",
+            "turnId": "original-turn"
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-caller-authority-field",
+        "value": {
+          "requestId": "read-original-state",
+          "scope": {
+            "accountId": "fixture-account",
+            "targetId": "fixture-target",
+            "workspaceId": null,
+            "identityGeneration": "fixture-auth-1",
+            "targetRevision": "fixture-target-1"
+          },
+          "reference": {
+            "threadId": "original-thread",
+            "turnId": "original-turn"
+          },
+          "approved": true
+        }
+      }
+    ]
+  },
+  "IntegrationTaskStateObservation": {
+    "valid": [
+      {
+        "name": "original-owned-task-example",
+        "value": {
+          "scope": {
+            "accountId": "fixture-account",
+            "targetId": "fixture-target",
+            "workspaceId": null,
+            "identityGeneration": "fixture-auth-1",
+            "targetRevision": "fixture-target-1"
+          },
+          "operationId": "original-operation",
+          "entityId": "original-operation",
+          "sequence": 7,
+          "revision": 7,
+          "observedAtMs": 1234,
+          "snapshot": false,
+          "reference": {
+            "threadId": "original-thread",
+            "turnId": "original-turn"
+          },
+          "state": "running"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-caller-authority-field",
+        "value": {
+          "scope": {
+            "accountId": "fixture-account",
+            "targetId": "fixture-target",
+            "workspaceId": null,
+            "identityGeneration": "fixture-auth-1",
+            "targetRevision": "fixture-target-1"
+          },
+          "operationId": "original-operation",
+          "entityId": "original-operation",
+          "sequence": 7,
+          "revision": 7,
+          "observedAtMs": 1234,
+          "snapshot": false,
+          "reference": {
+            "threadId": "original-thread",
+            "turnId": "original-turn"
+          },
+          "state": "running",
+          "approved": true
+        }
+      }
+    ]
+  }
+}

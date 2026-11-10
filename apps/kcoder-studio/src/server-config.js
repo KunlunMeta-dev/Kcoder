@@ -1,5 +1,9 @@
+import { nativeComponentImageEnvironmentKey } from './integrations/native-component-image.mjs';
+import { nativeConnectivityEnvironmentKey, nativeConnectivitySpawnEnvironment } from './integrations/connectivity/resource-host.mjs';
+import { captureNativeOfficeStartupConfiguration, nativeOfficeEnvironmentKey, nativeOfficeSpawnEnvironment } from './integrations/office/resource-host.mjs';
 import { readFile } from "node:fs/promises";
 import { resolve, posix, win32 } from "node:path";
+import { remoteTargetPlatform, validateRemoteExecutable, validateRemoteWorkspace, remoteSshCommand } from './remotes/ssh-launch.mjs';
 
 const SAFE_ID = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/;
 const SAFE_HOST = /^[a-zA-Z0-9][a-zA-Z0-9.:%_-]{0,252}$/;
@@ -102,21 +106,29 @@ export function normalizeServer(entry, defaults) {
   }
 
   const host = requiredString(entry.host, `host for ${id}`, 253);
+  const remotePlatform = entry.remotePlatform === undefined ? undefined : remoteTargetPlatform(entry.remotePlatform);
+  const windowsRemote = remotePlatform === 'windows';
+  if (windowsRemote && security) throw new Error('Windows account-entry targets are not supported');
   if (!SAFE_HOST.test(host) || host.startsWith("-")) throw new Error(`invalid SSH host for ${id}`);
   const user = optionalString(entry.user, 64);
   if (user && !/^[a-zA-Z0-9._-]+$/.test(user)) throw new Error(`invalid SSH user for ${id}`);
   const port = entry.port === undefined ? undefined : Number(entry.port);
   if (port !== undefined && (!Number.isInteger(port) || port < 1 || port > 65535)) throw new Error(`invalid SSH port for ${id}`);
   const command = security ? 'kcoder-account' : optionalString(entry.command, 512) || "kcoder";
-  if (!SAFE_COMMAND.test(command)) throw new Error(`invalid remote command for ${id}`);
+  if (windowsRemote) validateRemoteExecutable(command, remotePlatform);
+  else if (!SAFE_COMMAND.test(command)) throw new Error(`invalid remote command for ${id}`);
   const remoteCwd = optionalString(entry.workspace, 2048)
     || optionalString(entry.workspacePath, 2048);
-  if (remoteCwd && !security && !SAFE_COMMAND.test(remoteCwd)) throw new Error(`invalid remote workspace for ${id}`);
-  if (remoteCwd && !posix.isAbsolute(remoteCwd)) throw new Error(`remote workspace must be absolute for ${id}`);
+  if (windowsRemote && remoteCwd) validateRemoteWorkspace(remoteCwd, remotePlatform);
+  else {
+    if (remoteCwd && !security && !SAFE_COMMAND.test(remoteCwd)) throw new Error(`invalid remote workspace for ${id}`);
+    if (remoteCwd && !posix.isAbsolute(remoteCwd)) throw new Error(`remote workspace must be absolute for ${id}`);
+  }
   const settingsFile = optionalString(entry.settingsFile, 2048);
-  if (settingsFile && !SAFE_COMMAND.test(settingsFile)) throw new Error(`invalid remote settings file for ${id}`);
+  if (windowsRemote && settingsFile) validateRemoteWorkspace(settingsFile, remotePlatform);
+  else if (settingsFile && !SAFE_COMMAND.test(settingsFile)) throw new Error(`invalid remote settings file for ${id}`);
   const acceptNewHostKey = optionalBoolean(entry.acceptNewHostKey, `acceptNewHostKey for ${id}`);
-  return { id, label, description, runtime, transport, host, user, port, command, remoteCwd, settingsFile, profile, chromiumBin, chromiumNoSandbox, acceptNewHostKey, ...(security ? { security } : {}) };
+  return { id, label, description, runtime, transport, host, user, port, command, remoteCwd, settingsFile, profile, chromiumBin, chromiumNoSandbox, acceptNewHostKey, ...(remotePlatform ? { remotePlatform } : {}), ...(security ? { security } : {}) };
 }
 
 /**
@@ -168,6 +180,7 @@ export function publicServer(server) {
       user: server.user,
       port: server.port,
       acceptNewHostKey: server.acceptNewHostKey,
+      ...(server.remotePlatform ? { remotePlatform: server.remotePlatform } : {}),
     } : {}),
   };
 }
@@ -215,16 +228,19 @@ export function storedServer(server) {
     ...(server.chromiumBin ? { chromiumBin: server.chromiumBin } : {}),
     ...(server.chromiumNoSandbox ? { chromiumNoSandbox: true } : {}),
     ...(server.acceptNewHostKey ? { acceptNewHostKey: true } : {}),
+    ...(server.remotePlatform ? { remotePlatform: server.remotePlatform } : {}),
   });
 }
 
-export function launchSpec(server, { scenario = "", workspacePath, platform = process.platform, retentionParentV1 = false } = {}) {
-  const paths = server.transport === "ssh" || platform !== "win32" ? posix : win32;
+export function launchSpec(server, { scenario = "", workspacePath, platform = process.platform, retentionParentV1 = false,
+  migrationSourceParentV1 = false, migrationSourceTransferParentLaunchV1 = false } = {}) {
+  const windowsRemote = server.transport === 'ssh' && remoteTargetPlatform(server.remotePlatform) === 'windows';
+  const paths = windowsRemote || (server.transport !== 'ssh' && platform === 'win32') ? win32 : posix;
   if (scenario && !SAFE_ID.test(scenario)) throw new Error("invalid app-server scenario");
   if (workspacePath !== undefined && (typeof workspacePath !== "string" || workspacePath.length === 0 || workspacePath.length > 2048 || !paths.isAbsolute(workspacePath))) {
     throw new Error("invalid task workspace");
   }
-  if (server.transport === "ssh" && workspacePath && !server.security && !SAFE_COMMAND.test(workspacePath)) {
+  if (server.transport === "ssh" && workspacePath && !server.security && !windowsRemote && !SAFE_COMMAND.test(workspacePath)) {
     throw new Error("invalid remote task workspace");
   }
   const appArgs = [];
@@ -236,6 +252,16 @@ export function launchSpec(server, { scenario = "", workspacePath, platform = pr
   appArgs.push("app-server");
   if (scenario) appArgs.push("--scenario", scenario);
   if (typeof retentionParentV1 !== "boolean") throw new Error("invalid retention parent launch option");
+  if (typeof migrationSourceParentV1 !== 'boolean' || typeof migrationSourceTransferParentLaunchV1 !== 'boolean') {
+    throw new Error('invalid migration source parent launch option');
+  }
+  if (migrationSourceParentV1) {
+    if (!migrationSourceTransferParentLaunchV1) throw new Error('migration source parent launch was not negotiated');
+    if (server.security || retentionParentV1 || server.runtime !== 'kcoder') throw new Error('migration source local parent is not valid for this target');
+    // This option belongs only to a dedicated, negotiated migration broker.
+    // Ordinary sessions and managed-account launch contracts retain their argv.
+    appArgs.push('--migration-source-parent-local-v1');
+  }
   if (retentionParentV1 && !server.security) {
     if (server.transport === "local" && platform !== "linux") throw new Error("retention parent unavailable on this platform");
     appArgs.push("--retention-parent-v1", "local-os");
@@ -260,7 +286,10 @@ export function launchSpec(server, { scenario = "", workspacePath, platform = pr
   if (Object.keys(childEnv).length) {
     args.push("env", ...Object.entries(childEnv).map(([name, value]) => `${name}=${value}`));
   }
-  args.push(server.command, ...(server.security ? [] : appArgs));
+  if (windowsRemote) {
+    if (server.security || Object.keys(childEnv).length) throw new Error('Windows SSH startup requires its supported native environment');
+    args.push(...remoteSshCommand(server.command, appArgs, 'windows'));
+  } else args.push(server.command, ...(server.security ? [] : appArgs));
   return {
     command: "ssh", args, cwd: undefined,
     // Win32 OpenSSH requires overlapped pipe handles to read Node child stdin.
@@ -286,14 +315,47 @@ export function workspaceReceiptParentAttempt(target, platform = process.platfor
   );
 }
 
-export function appServerEnvironment(baseEnv, overrides = {}, parentMode) {
+// Local component ownership is separate from retained-receipt/migration support.
+export function nativeComponentParentAttempt(target, platform = process.platform) {
+  return workspaceReceiptParentAttempt(target, platform) || (platform === 'darwin'
+    && target.runtime === 'kcoder' && target.transport === 'local' && !target.security);
+}
+
+/** Consume native launch input once before ordinary Gateway children can inherit it. */
+export async function captureGatewayNativeOfficeStartup(environment = process.env) {
+  const raw = environment[nativeOfficeEnvironmentKey];
+  for (const name of Object.keys(environment)) {
+    if ([PRIVATE_RETENTION_PARENT_ENV_V1, "KCODER_PRIVATE_RETENTION_VERIFIER_V1", nativeOfficeEnvironmentKey].includes(name.toUpperCase())) delete environment[name];
+  }
+  if (!raw) return null;
+  try {
+    return await captureNativeOfficeStartupConfiguration(raw);
+  } catch {
+    console.warn("OFFICE_NATIVE_UNAVAILABLE");
+    return null;
+  }
+}
+
+export function appServerEnvironment(baseEnv, overrides = {}, parentMode, revocationVerifier, nativeOfficeBinding, nativeConnectivityBinding) {
   if (parentMode !== undefined && parentMode !== "localOs") throw new Error("invalid internal parent mode");
   const childEnv = { ...baseEnv, ...overrides };
   for (const name of Object.keys(childEnv)) {
-    if (name.startsWith("KCODER_STUDIO_") || name === "ELECTRON_RUN_AS_NODE" || name.toUpperCase() === PRIVATE_RETENTION_PARENT_ENV_V1) delete childEnv[name];
+    if ([nativeOfficeEnvironmentKey,nativeConnectivityEnvironmentKey,nativeComponentImageEnvironmentKey].includes(name.toUpperCase()) || name.startsWith("KCODER_STUDIO_") || name === "ELECTRON_RUN_AS_NODE" || [PRIVATE_RETENTION_PARENT_ENV_V1, "KCODER_PRIVATE_RETENTION_VERIFIER_V1"].includes(name.toUpperCase())) delete childEnv[name];
   }
   if (parentMode === "localOs") {
     childEnv[PRIVATE_RETENTION_PARENT_ENV_V1] = "v1." + Buffer.from(JSON.stringify({ version: 1, mode: "localOs" })).toString("base64url");
+    if (revocationVerifier) {
+      if (revocationVerifier.version !== 1 || !/^[0-9a-f]{64}$/.test(revocationVerifier.gatewayNamespaceId) || !/^[0-9a-f]{64}$/.test(revocationVerifier.key)) throw new Error("invalid private retention verifier");
+      childEnv.KCODER_PRIVATE_RETENTION_VERIFIER_V1 = "v1." + Buffer.from(JSON.stringify(revocationVerifier)).toString("base64url");
+    }
+  }
+  if (nativeOfficeBinding !== undefined && nativeOfficeBinding !== null) {
+    if (parentMode !== "localOs" || !revocationVerifier) throw new Error("Office requires the verified native parent launch");
+    Object.assign(childEnv, nativeOfficeSpawnEnvironment(nativeOfficeBinding));
+  }
+  if (nativeConnectivityBinding !== undefined && nativeConnectivityBinding !== null) {
+    if (parentMode !== "localOs" || !revocationVerifier) throw new Error("Connectivity requires the verified native parent launch");
+    Object.assign(childEnv, nativeConnectivitySpawnEnvironment(nativeConnectivityBinding));
   }
   return childEnv;
 }
@@ -314,4 +376,15 @@ function optionalBoolean(value, name) {
   if (value === undefined || value === null) return false;
   if (typeof value !== "boolean") throw new Error(`${name} must be a boolean`);
   return value;
+}
+
+
+export function hasFullServerAccess(session, servers) {
+  return Boolean(session?.allowedServerIds && servers.every(target => session.allowedServerIds.has(target.id)));
+}
+
+export function reconcileServerAccess(session, previousIds, currentIds) {
+  return previousIds.every(id => session.allowedServerIds?.has(id))
+    ? new Set(currentIds)
+    : new Set(currentIds.filter(id => session.allowedServerIds?.has(id)));
 }

@@ -91,7 +91,7 @@ export function TodoOverview({
               <article
                 key={entry.state}
                 data-testid={`todo-overview-metric-${entry.state}`}
-                className="rounded-lg border border-border bg-surface p-3"
+                className="studio-card-spacing rounded-lg border border-border bg-surface"
               >
                 <div className="flex items-center gap-2 text-xs font-medium text-text-secondary">
                   <span className="h-2 w-2 rounded-full" style={{ backgroundColor: entry.color }} />
@@ -107,7 +107,7 @@ export function TodoOverview({
         </section>
 
         <section className="grid min-h-[330px] grid-cols-[minmax(0,1fr)_320px] gap-3">
-          <div className="overflow-hidden rounded-lg border border-border bg-surface">
+          <div className="studio-card overflow-hidden rounded-lg border border-border bg-surface">
             <header className="flex h-11 items-center justify-between border-b border-border px-3.5">
               <h2 className="text-xs font-semibold text-text-primary">
                 {t('todo.recent_work_items', '最近工作项')}
@@ -180,7 +180,7 @@ export function TodoOverview({
           </div>
 
           <div className="flex flex-col gap-3">
-            <section className="rounded-lg border border-border bg-surface p-3.5">
+            <section className="studio-card-spacing rounded-lg border border-border bg-surface">
               <h2 className="text-xs font-semibold text-text-primary">
                 {t('todo.responsible_people', '负责人')}
               </h2>
@@ -202,7 +202,7 @@ export function TodoOverview({
               </div>
             </section>
 
-            <section className="min-h-0 flex-1 rounded-lg border border-border bg-surface p-3.5">
+            <section className="studio-card-spacing min-h-0 flex-1 rounded-lg border border-border bg-surface">
               <h2 className="text-xs font-semibold text-text-primary">
                 {t('todo.recent_activity', '最近运行动态')}
               </h2>

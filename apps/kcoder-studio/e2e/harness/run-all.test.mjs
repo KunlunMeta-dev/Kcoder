@@ -3,6 +3,33 @@ import { EventEmitter } from "node:events";
 import test from "node:test";
 import { prepareSuiteArtifacts, runNode, runSuites } from "../run-all.mjs";
 
+test('frozen Windows migration acceptance does not rebuild unrelated source artifacts', async () => {
+  await prepareSuiteArtifacts(['suites/gateway/windows-migration.e2e.mjs'], {
+    run: async () => assert.fail('a frozen Windows installer must retain its actual binaries'),
+  });
+});
+
+test('Windows migration child receives only explicit frozen package inputs', async () => {
+  const expected = { KCODER_E2E_WINDOWS_PAYLOAD_ARCHIVE: '/owned/app.7z',
+    KCODER_E2E_WINDOWS_PAYLOAD_SHA256: 'c'.repeat(64), KCODER_E2E_WINDOWS_SSH_TARGET: 'owned-host',
+    KCODER_E2E_WINDOWS_NODE: 'D:\\Node\\node.exe', KCODER_E2E_WINDOWS_PROBE_PARENT: 'D:\\',
+    KCODER_E2E_WINDOWS_EXPECTED_COMMIT: 'a'.repeat(40), KCODER_E2E_WINDOWS_EXPECTED_CLI_SHA256: 'b'.repeat(64),
+    AWS_SECRET_ACCESS_KEY: 'must-not-pass' };
+  const child = new EventEmitter(); child.pid = 4242;
+  let environment;
+  const result = runNode('suites/gateway/windows-migration.e2e.mjs', { environment: expected,
+    buildEnvironment: names => Object.fromEntries(names.filter(name => expected[name]).map(name => [name, expected[name]])),
+    spawnChild: (_command, _args, options) => { environment = options.env; return child; },
+    identityFactory: () => ({ pid: 4242 }), signalTarget: new EventEmitter(), treeAlive: async () => false });
+  child.emit('exit', 0, null); assert.equal(await result, 0);
+  for (const [name, value] of Object.entries(expected))
+    assert.equal(environment[name], name === 'AWS_SECRET_ACCESS_KEY' ? undefined : value);
+});
+
+test("native widget IPC fixture needs its recorded production sources, not an unrelated CLI/renderer rebuild", async () => {
+  await prepareSuiteArtifacts(["suites/browser/electron-widget-controller.e2e.mjs"], { run: async () => assert.fail("unrelated artifact build in native widget acceptance") });
+});
+
 test("prepares current Rust and renderer artifacts before running suites", async () => {
   const commands = [];
   await prepareSuiteArtifacts(["suites/mobile/mobile-real-thread-lifecycle.e2e.mjs"], {
@@ -153,6 +180,17 @@ test("CA suite prepares only its owned probe and respects an explicit existing b
   assert.deepEqual(commands, [["cargo", ["build", "-p", "kcoder_plugins", "--example", "plugin_target_ca_probe"]]]);
   await prepareSuiteArtifacts([suite], { run, environment: { KCODER_E2E_PLUGIN_CA_PROBE_BIN: "/owned/probe" } });
   assert.equal(commands.length, 1);
+});
+
+test("migration acceptance builds its native legacy fixture unless a fixed helper is supplied", async () => {
+  const commands = [];
+  const run = async (command, args) => commands.push([command, args]);
+  const suite = "suites/browser/migration.e2e.mjs";
+  await prepareSuiteArtifacts([suite], { run, environment: {} });
+  assert.ok(commands.some(([command, args]) => command === "cargo" && args.includes("history_reinterpretation_fixture")));
+  commands.length = 0;
+  await prepareSuiteArtifacts([suite], { run, environment: { KCODER_MIGRATION_FIXTURE_BINARY: "/owned/frozen-helper" } });
+  assert.ok(!commands.some(([, args]) => args.includes("history_reinterpretation_fixture")));
 });
 
 test("Windows identity requirements and the CA probe reach only their suite child", async () => {

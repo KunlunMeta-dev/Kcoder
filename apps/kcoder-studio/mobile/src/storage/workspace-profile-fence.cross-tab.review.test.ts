@@ -15,6 +15,15 @@ const shared = vi.hoisted(() => ({
   failProfileIndexRead: false,
   lockTails: new Map<string, Promise<void>>(),
   activeLocks: new Set<string>(),
+  stateReadKey: null as string | null,
+  stateReadGate: null as null | { promise: Promise<void>; release(): void; entered: number },
+  stateReadObservations: [] as Array<{ key: string; locked: boolean }>,
+  stateWriteKey: null as string | null,
+  stateWriteGate: null as null | { promise: Promise<void>; entered(): void },
+  failSetItemKey: null as string | null,
+  failSetItemCount: 0,
+  stateLockName: null as string | null,
+  onStateLockQueued: null as null | (() => void),
   cleanupGate: null as null | { wait: Promise<void>; entered(snapshot: string[]): void; calls: number; skip: number },
   onRpcSent: null as null | (() => void),
   heldRpc: null as null | { method: string; params: Record<string, unknown>; fencedAtDispatch: boolean; reply(): void },
@@ -35,8 +44,33 @@ vi.mock("@react-native-async-storage/async-storage", () => ({ default: {
     }
     return snapshot;
   },
-  getItem: async (key: string) => shared.asyncValues.get(key) ?? null,
-  setItem: async (key: string, value: string) => { shared.asyncValues.set(key, value); },
+  getItem: async (key: string) => {
+    if (key === shared.stateReadKey) {
+      const lockName = "kcoder-mobile:workspace-state:" + key;
+      const locked = shared.activeLocks.has(lockName);
+      shared.stateReadObservations.push({ key, locked });
+      const gate = shared.stateReadGate;
+      if (!locked && gate) {
+        gate.entered += 1;
+        if (gate.entered >= 2) gate.release();
+        await gate.promise;
+      }
+    }
+    return shared.asyncValues.get(key) ?? null;
+  },
+  setItem: async (key: string, value: string) => {
+    if (key === shared.stateWriteKey && shared.stateWriteGate) {
+      const gate = shared.stateWriteGate;
+      shared.stateWriteGate = null;
+      gate.entered();
+      await gate.promise;
+    }
+    if (key === shared.failSetItemKey && shared.failSetItemCount > 0) {
+      shared.failSetItemCount -= 1;
+      throw new Error("injected tombstone setItem failure");
+    }
+    shared.asyncValues.set(key, value);
+  },
   removeItem: async (key: string) => { shared.asyncValues.delete(key); },
   multiRemove: async (keys: string[]) => { for (const key of keys) shared.asyncValues.delete(key); },
 } }));
@@ -88,6 +122,10 @@ function installSharedWebLocks(): void {
     _options: { mode: "exclusive" },
     operation: () => Promise<T>,
   ): Promise<T> => {
+    if (name === shared.stateLockName && shared.activeLocks.has(name)) {
+      shared.onStateLockQueued?.();
+      shared.onStateLockQueued = null;
+    }
     const previous = shared.lockTails.get(name) ?? Promise.resolve();
     let release!: () => void;
     const turn = new Promise<void>((resolve) => { release = resolve; });
@@ -270,6 +308,15 @@ afterEach(() => {
   shared.failProfileIndexRead = false;
   shared.lockTails.clear();
   shared.activeLocks.clear();
+  shared.stateReadKey = null;
+  shared.stateReadGate = null;
+  shared.stateReadObservations = [];
+  shared.stateWriteKey = null;
+  shared.stateWriteGate = null;
+  shared.failSetItemKey = null;
+  shared.failSetItemCount = 0;
+  shared.stateLockName = null;
+  shared.onStateLockQueued = null;
   shared.onRpcSent = null;
   shared.heldRpc = null;
   shared.rpcMethods = [];
@@ -463,4 +510,284 @@ it("keeps a dispatched V2 receipt charged while unknown and permits removal only
     await operation?.catch(() => {});
     await removal?.catch(() => {});
   }
+});
+
+it("merges recent files from current persisted state across independent tab modules", async () => {
+  installSharedWebLocks();
+  const tabA = await loadRealm();
+  const tabB = await loadRealm();
+  const profile = makeProfile();
+  await tabA.profileStore.persistProfiles([profile], profile.id);
+  const profileB = (await tabB.profileStore.loadProfiles()).profiles[0]!;
+  const serverA = { ...server, workspacePath: "/private/review-workspace" };
+  const serverB = { ...serverA };
+  const scopeA = tabA.workspace.workspaceStateAuthorizationScope(profile, serverA);
+  const scopeB = tabB.workspace.workspaceStateAuthorizationScope(profileB, serverB);
+  const identityA = tabA.fence.captureWorkspaceProfileIdentity(profile);
+  const identityB = tabB.fence.captureWorkspaceProfileIdentity(profileB);
+  const key = tabA.workspace.workspaceStateStorageKey(profile.id, server.id, "thread-recent-review", scopeA);
+  const release = deferred<void>();
+  shared.stateReadKey = key;
+  shared.stateReadGate = { promise: release.promise, release: release.resolve, entered: 0 };
+
+  await Promise.all([
+    tabA.workspace.saveWorkspaceRecentFile(
+      profile.id,
+      server.id,
+      "thread-recent-review",
+      serverA.workspacePath,
+      "/private/review-workspace/first.ts",
+      scopeA,
+      identityA,
+    ),
+    tabB.workspace.saveWorkspaceRecentFile(
+      profileB.id,
+      serverB.id,
+      "thread-recent-review",
+      serverB.workspacePath,
+      "/private/review-workspace/second.ts",
+      scopeB,
+      identityB,
+    ),
+  ]);
+
+  expect(shared.stateReadGate?.entered).toBe(0);
+  expect(shared.stateReadObservations.length).toBeGreaterThanOrEqual(2);
+  expect(shared.stateReadObservations.every(observation => observation.locked)).toBe(true);
+  expect(JSON.parse(shared.asyncValues.get(key)!).recentFiles).toEqual([
+    "/private/review-workspace/second.ts",
+    "/private/review-workspace/first.ts",
+  ]);
+});
+
+it("keeps a recent-file write from resurrecting state after a queued cross-tab delete", async () => {
+  installSharedWebLocks();
+  const tabA = await loadRealm();
+  const tabB = await loadRealm();
+  const profile = makeProfile();
+  await tabA.profileStore.persistProfiles([profile], profile.id);
+  const profileB = (await tabB.profileStore.loadProfiles()).profiles[0]!;
+  const scope = tabA.workspace.workspaceStateAuthorizationScope(profile, server);
+  const identity = tabA.fence.captureWorkspaceProfileIdentity(profile);
+  const key = tabA.workspace.workspaceStateStorageKey(profile.id, server.id, "thread-delete-recent", scope);
+  const stateWriteEntered = deferred<void>();
+  const releaseWrite = deferred<void>();
+  shared.stateWriteKey = key;
+  shared.stateWriteGate = { promise: releaseWrite.promise, entered: stateWriteEntered.resolve };
+  shared.stateLockName = `kcoder-mobile:workspace-state:${key}`;
+
+  const writer = tabA.workspace.saveWorkspaceRecentFile(
+    profile.id,
+    server.id,
+    "thread-delete-recent",
+    server.workspacePath,
+    `${server.workspacePath}/src/recent.ts`,
+    scope,
+    identity,
+  );
+  const queuedDelete = deferred<void>();
+  shared.onStateLockQueued = queuedDelete.resolve;
+  let removal: Promise<void> | undefined;
+  try {
+    await within(stateWriteEntered.promise, 1_500);
+    removal = tabB.workspace.removeWorkspaceState(profileB.id, server.id, "thread-delete-recent", scope);
+    await within(queuedDelete.promise, 1_500);
+  } finally {
+    releaseWrite.resolve();
+  }
+  await Promise.all([writer, removal]);
+
+  const tombstoneKey = `${key}:removed:v1`;
+  expect(shared.asyncValues.get(tombstoneKey)).toBe("1");
+  expect(shared.asyncValues.has(key)).toBe(false);
+  expect(shared.asyncValues.get(tombstoneKey)).not.toContain("recent.ts");
+
+  const reloadedTab = await loadRealm();
+  expect(await reloadedTab.workspace.loadWorkspaceState(profile.id, server.id, "thread-delete-recent", scope))
+    .toEqual({ activeTab: "agent" });
+  await expect(tabA.workspace.saveWorkspaceState(
+    profile.id,
+    server.id,
+    "thread-delete-recent",
+    { composerDraft: "stale tab" },
+    scope,
+    identity,
+  )).resolves.toEqual({ activeTab: "agent" });
+  expect(shared.asyncValues.has(key)).toBe(false);
+});
+
+it("rejects a delete when its tombstone write fails, then a successful retry fences stale tabs", async () => {
+  installSharedWebLocks();
+  const tabA = await loadRealm();
+  const tabB = await loadRealm();
+  const profile = makeProfile();
+  await tabA.profileStore.persistProfiles([profile], profile.id);
+  const profileB = (await tabB.profileStore.loadProfiles()).profiles[0]!;
+  const scope = tabA.workspace.workspaceStateAuthorizationScope(profile, server);
+  const identity = tabA.fence.captureWorkspaceProfileIdentity(profile);
+  const key = tabA.workspace.workspaceStateStorageKey(profile.id, server.id, "thread-marker-write-failure", scope);
+  const tombstoneKey = `${key}:removed:v1`;
+  const markerWriteEntered = deferred<void>();
+  const releaseMarkerWrite = deferred<void>();
+  shared.stateWriteKey = tombstoneKey;
+  shared.stateWriteGate = { promise: releaseMarkerWrite.promise, entered: markerWriteEntered.resolve };
+  shared.failSetItemKey = tombstoneKey;
+  shared.failSetItemCount = 1;
+  shared.stateLockName = `kcoder-mobile:workspace-state:${key}`;
+
+  let removeReportedSuccess = false;
+  const removal = tabB.workspace.removeWorkspaceState(profileB.id, server.id, "thread-marker-write-failure", scope)
+    .then(() => { removeReportedSuccess = true; });
+  const removalOutcome = removal.then(() => null, error => error);
+  const queuedWriter = deferred<void>();
+  let staleWriter: Promise<unknown> | undefined;
+  try {
+    await within(markerWriteEntered.promise, 1_500);
+    shared.onStateLockQueued = queuedWriter.resolve;
+    staleWriter = tabA.workspace.saveWorkspaceRecentFile(
+      profile.id,
+      server.id,
+      "thread-marker-write-failure",
+      server.workspacePath,
+      `${server.workspacePath}/src/late.ts`,
+      scope,
+      identity,
+    );
+    await within(queuedWriter.promise, 1_500);
+  } finally {
+    releaseMarkerWrite.resolve();
+  }
+
+  const removalError = await removalOutcome;
+  expect(removalError).toBeInstanceOf(Error);
+  expect((removalError as Error).message).toContain("injected tombstone setItem failure");
+  expect(removeReportedSuccess).toBe(false);
+  await staleWriter;
+  expect(shared.asyncValues.has(tombstoneKey)).toBe(false);
+  expect(JSON.parse(shared.asyncValues.get(key)!).recentFiles).toEqual([`${server.workspacePath}/src/late.ts`]);
+
+  shared.failSetItemKey = null;
+  shared.failSetItemCount = 0;
+  await tabB.workspace.removeWorkspaceState(profileB.id, server.id, "thread-marker-write-failure", scope);
+  expect(shared.asyncValues.get(tombstoneKey)).toBe("1");
+  expect(shared.asyncValues.has(key)).toBe(false);
+
+  await expect(tabA.workspace.saveWorkspaceRecentFile(
+    profile.id,
+    server.id,
+    "thread-marker-write-failure",
+    server.workspacePath,
+    `${server.workspacePath}/src/after-retry.ts`,
+    scope,
+    identity,
+  )).resolves.toEqual({ activeTab: "agent" });
+  expect(shared.asyncValues.has(key)).toBe(false);
+});
+
+it("serializes legacy migration against cross-tab deletion and preserves the tombstone", async () => {
+  installSharedWebLocks();
+  const tabA = await loadRealm();
+  const tabB = await loadRealm();
+  const profile = makeProfile();
+  await tabA.profileStore.persistProfiles([profile], profile.id);
+  const legacyKey = `kcoder-studio:mobile-workspace-state:v2:${encodeURIComponent(profile.id)}:${encodeURIComponent(server.id)}:thread-migrate-delete`;
+  const stateKey = tabA.workspace.workspaceStateStorageKey(profile.id, server.id, "thread-migrate-delete");
+  shared.asyncValues.set(legacyKey, JSON.stringify({ activeTab: "files", composerDraft: "legacy draft" }));
+  const migrationEntered = deferred<void>();
+  const releaseMigration = deferred<void>();
+  shared.stateWriteKey = stateKey;
+  shared.stateWriteGate = { promise: releaseMigration.promise, entered: migrationEntered.resolve };
+  shared.stateLockName = `kcoder-mobile:workspace-state:${stateKey}`;
+
+  const migration = tabA.workspace.loadWorkspaceState(profile.id, server.id, "thread-migrate-delete");
+  const queuedDelete = deferred<void>();
+  shared.onStateLockQueued = queuedDelete.resolve;
+  let removal: Promise<void> | undefined;
+  try {
+    await within(migrationEntered.promise, 1_500);
+    removal = tabB.workspace.removeWorkspaceState(profile.id, server.id, "thread-migrate-delete");
+    await within(queuedDelete.promise, 1_500);
+  } finally {
+    releaseMigration.resolve();
+  }
+  await Promise.all([migration, removal]);
+
+  expect(shared.asyncValues.get(`${stateKey}:removed:v1`)).toBe("1");
+  expect(shared.asyncValues.has(stateKey)).toBe(false);
+  expect(shared.asyncValues.has(legacyKey)).toBe(false);
+  const reloadedTab = await loadRealm();
+  expect(await reloadedTab.workspace.loadWorkspaceState(profile.id, server.id, "thread-migrate-delete"))
+    .toEqual({ activeTab: "agent" });
+});
+
+it("blocks a legacy migration queued after the cross-tab delete marker", async () => {
+  installSharedWebLocks();
+  const tabA = await loadRealm();
+  const tabB = await loadRealm();
+  const profile = makeProfile();
+  await tabA.profileStore.persistProfiles([profile], profile.id);
+  const legacyKey = `kcoder-studio:mobile-workspace-state:v2:${encodeURIComponent(profile.id)}:${encodeURIComponent(server.id)}:thread-delete-before-migration`;
+  const stateKey = tabA.workspace.workspaceStateStorageKey(profile.id, server.id, "thread-delete-before-migration");
+  const tombstoneKey = `${stateKey}:removed:v1`;
+  shared.asyncValues.set(legacyKey, JSON.stringify({ activeTab: "files", composerDraft: "legacy draft" }));
+  const markerWriteEntered = deferred<void>();
+  const releaseMarkerWrite = deferred<void>();
+  shared.stateWriteKey = tombstoneKey;
+  shared.stateWriteGate = { promise: releaseMarkerWrite.promise, entered: markerWriteEntered.resolve };
+  shared.stateLockName = `kcoder-mobile:workspace-state:${stateKey}`;
+
+  const removal = tabB.workspace.removeWorkspaceState(profile.id, server.id, "thread-delete-before-migration");
+  const queuedMigration = deferred<void>();
+  let migration: Promise<unknown> | undefined;
+  try {
+    await within(markerWriteEntered.promise, 1_500);
+    shared.onStateLockQueued = queuedMigration.resolve;
+    migration = tabA.workspace.loadWorkspaceState(profile.id, server.id, "thread-delete-before-migration");
+    await within(queuedMigration.promise, 1_500);
+  } finally {
+    releaseMarkerWrite.resolve();
+  }
+  await Promise.all([removal, migration]);
+
+  expect(shared.asyncValues.get(tombstoneKey)).toBe("1");
+  expect(shared.asyncValues.has(stateKey)).toBe(false);
+  expect(shared.asyncValues.has(legacyKey)).toBe(false);
+  await expect(migration).resolves.toEqual({ activeTab: "agent" });
+});
+
+it("isolates scope tombstones and lets profile cleanup reclaim them", async () => {
+  installSharedWebLocks();
+  const tab = await loadRealm();
+  const profile = makeProfile();
+  const otherProfile = makeProfile({ id: "profile-fence-review-sibling" });
+  await tab.profileStore.persistProfiles([profile, otherProfile], profile.id);
+  const scopeA = tab.workspace.workspaceStateAuthorizationScope(profile, server);
+  const scopeB = tab.workspace.workspaceStateAuthorizationScope(profile, { ...server, workspacePath: "/private/other-workspace" });
+  const otherScope = tab.workspace.workspaceStateAuthorizationScope(otherProfile, server);
+  const keyA = tab.workspace.workspaceStateStorageKey(profile.id, server.id, "thread-scope-tombstone", scopeA);
+  const keyB = tab.workspace.workspaceStateStorageKey(profile.id, server.id, "thread-scope-tombstone", scopeB);
+  const otherKey = tab.workspace.workspaceStateStorageKey(otherProfile.id, server.id, "thread-scope-tombstone", otherScope);
+  const otherRetainedKey = tab.workspace.workspaceStateStorageKey(otherProfile.id, server.id, "thread-sibling-retained", otherScope);
+
+  await tab.workspace.saveWorkspaceState(profile.id, server.id, "thread-scope-tombstone", { composerDraft: "scope A" }, scopeA, tab.fence.captureWorkspaceProfileIdentity(profile));
+  await tab.workspace.saveWorkspaceState(profile.id, server.id, "thread-scope-tombstone", { composerDraft: "scope B" }, scopeB, tab.fence.captureWorkspaceProfileIdentity(profile));
+  await tab.workspace.saveWorkspaceState(otherProfile.id, server.id, "thread-scope-tombstone", { composerDraft: "other profile" }, otherScope, tab.fence.captureWorkspaceProfileIdentity(otherProfile));
+  await tab.workspace.saveWorkspaceState(otherProfile.id, server.id, "thread-sibling-retained", { composerDraft: "sibling retained" }, otherScope, tab.fence.captureWorkspaceProfileIdentity(otherProfile));
+  await tab.workspace.removeWorkspaceState(profile.id, server.id, "thread-scope-tombstone", scopeA);
+  await tab.workspace.removeWorkspaceState(otherProfile.id, server.id, "thread-scope-tombstone", otherScope);
+
+  const markerA = `${keyA}:removed:v1`;
+  const markerB = `${keyB}:removed:v1`;
+  const otherMarker = `${otherKey}:removed:v1`;
+  expect(shared.asyncValues.get(markerA)).toBe("1");
+  expect(shared.asyncValues.has(markerB)).toBe(false);
+  expect((await tab.workspace.loadWorkspaceState(profile.id, server.id, "thread-scope-tombstone", scopeB)).composerDraft).toBe("scope B");
+
+  await tab.workspace.removeWorkspaceStatesForProfile(profile.id);
+  expect(shared.asyncValues.has(markerA)).toBe(false);
+  expect(shared.asyncValues.has(keyA)).toBe(false);
+  expect(shared.asyncValues.has(keyB)).toBe(false);
+  expect(shared.asyncValues.get(otherMarker)).toBe("1");
+  expect(shared.asyncValues.has(otherKey)).toBe(false);
+  expect(shared.asyncValues.get(otherRetainedKey)).toContain("sibling retained");
 });

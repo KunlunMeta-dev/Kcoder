@@ -12,22 +12,23 @@ pub(super) async fn dispatch(
 ) -> Result<DispatchControl> {
     match method {
         method::SESSION_MODES => {
-            let result = serde_json::from_value::<kcoder_app_protocol::SessionModesParams>(params)
-                .map_err(anyhow::Error::from)
-                .and_then(|params| {
-                    let selected = match params.thread_id.as_deref() {
-                        Some(id) => thread_manager
-                            .engine(id)
-                            .context("thread is not resident")?,
-                        None => workspace_engine.clone(),
-                    };
-                    let mut result = turn_execution::inspect(&selected);
-                    let thread_id = params.thread_id.unwrap_or_else(|| selected.session_id());
-                    // Reported read-only so a running session can show its bound template.
-                    result.settings_template =
-                        recorded_settings_template_binding(&selected, &thread_id);
-                    Ok(result)
-                });
+            let result =
+                kcoder_app_rpc_codec::decode::<kcoder_app_protocol::SessionModesParams>(params)
+                    .map_err(anyhow::Error::from)
+                    .and_then(|params| {
+                        let selected = match params.thread_id.as_deref() {
+                            Some(id) => thread_manager
+                                .engine(id)
+                                .context("thread is not resident")?,
+                            None => workspace_engine.clone(),
+                        };
+                        let mut result = turn_execution::inspect(&selected);
+                        let thread_id = params.thread_id.unwrap_or_else(|| selected.session_id());
+                        // Reported read-only so a running session can show its bound template.
+                        result.settings_template =
+                            recorded_settings_template_binding(&selected, &thread_id);
+                        Ok(result)
+                    });
             match result {
                 Ok(result) => {
                     send(

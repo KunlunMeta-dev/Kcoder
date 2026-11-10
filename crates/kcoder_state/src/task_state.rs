@@ -1,4 +1,7 @@
 use super::*;
+mod delivery_enqueue;
+#[cfg(test)]
+mod snapshot_tests;
 #[cfg(test)]
 use crate::model::AgentCommandReceipt;
 
@@ -35,6 +38,20 @@ pub(super) fn persistable_delegated_tasks(tasks: &HashMap<String, Task>) -> Hash
         })
         .map(|(id, task)| (id.clone(), task.clone()))
         .collect()
+}
+
+fn task_persistence_snapshot(
+    inner: &AppStateInner,
+) -> (SessionTaskPersistence, HashMap<String, Task>) {
+    let target = SessionTaskPersistence::from_inner(inner);
+    // A history-less session has no sidecar to write; cloning every task
+    // there only extends the State write lock without preserving any data.
+    let tasks = if inner.session_state_path.is_some() {
+        persistable_delegated_tasks(&inner.tasks)
+    } else {
+        HashMap::new()
+    };
+    (target, tasks)
 }
 
 #[cfg(test)]
@@ -107,6 +124,32 @@ mod tests {
         assert_eq!(state.try_task_activity_counts(), None);
         drop(guard);
         assert_eq!(state.try_task_activity_counts(), Some((1, 1)));
+    }
+
+    #[test]
+    fn tool_emitter_counts_ignore_plans_and_output_jobs_but_keep_native_and_legacy_agents() {
+        let root = tempfile::tempdir().unwrap();
+        let state = AppState::new(root.path());
+        state.upsert_task(Task::new("plan", "planning record"));
+        let mut shell = Task::new("shell", "admitted background command");
+        shell.managed = true;
+        shell.status = TaskStatus::Running;
+        shell.output_path = Some(root.path().join("output"));
+        state.upsert_task(shell);
+        assert_eq!(state.try_task_activity_counts(), Some((1, 1)));
+        assert_eq!(state.try_tool_emitter_activity_counts(), Some((0, 0)));
+        state.upsert_task(subagent_task("agent"));
+        let mut workflow = Task::new("workflow", "workflow");
+        workflow.kind = TaskKind::Workflow;
+        state.upsert_task(workflow);
+        let mut legacy = Task::new("legacy", "legacy agent");
+        legacy.parent_session_id = Some(state.session_id());
+        state.upsert_task(legacy);
+        assert_eq!(state.try_tool_emitter_activity_counts(), Some((2, 1)));
+        let guard = state.write_inner();
+        assert_eq!(state.try_tool_emitter_activity_counts(), None);
+        drop(guard);
+        assert_eq!(state.task("shell").unwrap().status, TaskStatus::Running);
     }
 
     fn subagent_task(id: &str) -> Task {
@@ -1716,6 +1759,28 @@ impl AppState {
         Some((pending, running))
     }
 
+    /// Count descendants that can issue further model/tool calls. Planning
+    /// records and already-admitted output-only command jobs are not emitters.
+    /// Legacy agent ownership/transcript markers remain conservative blockers.
+    pub fn try_tool_emitter_activity_counts(&self) -> Option<(usize, usize)> {
+        let inner = self.inner.try_read().ok()?;
+        let mut pending = 0;
+        let mut running = 0;
+        for task in inner.tasks.values().filter(|task| {
+            task.kind != TaskKind::Generic
+                || task.parent_session_id.is_some()
+                || task.agent_kind.is_some()
+                || task.transcript_path.is_some()
+        }) {
+            match task.status {
+                TaskStatus::Pending => pending += 1,
+                TaskStatus::Running => running += 1,
+                _ => {}
+            }
+        }
+        Some((pending, running))
+    }
+
     /// Read routing metadata without cloning task output or transcript payloads.
     pub fn task_kind(&self, id: &str) -> Option<crate::TaskKind> {
         self.read_inner().tasks.get(id).map(|task| task.kind)
@@ -1742,10 +1807,7 @@ impl AppState {
                 task.command_receipt_epoch = existing.command_receipt_epoch;
             }
             inner.tasks.insert(task.id.clone(), task);
-            (
-                SessionTaskPersistence::from_inner(&inner),
-                persistable_delegated_tasks(&inner.tasks),
-            )
+            task_persistence_snapshot(&inner)
         };
         persist_session_tasks(state_path, tasks);
     }
@@ -1761,11 +1823,8 @@ impl AppState {
                 return None;
             }
             let result = update(task);
-            (
-                SessionTaskPersistence::from_inner(&inner),
-                persistable_delegated_tasks(&inner.tasks),
-                result,
-            )
+            let (state_path, tasks) = task_persistence_snapshot(&inner);
+            (state_path, tasks, result)
         };
         persist_session_tasks(state_path, tasks);
         Some(result)
@@ -1781,114 +1840,6 @@ impl AppState {
         message: impl Into<String>,
     ) -> anyhow::Result<Option<AgentDeliveryEnqueueReceipt>> {
         self.enqueue_subagent_delivery_with_client_id(id, message, None)
-    }
-
-    /// The identity and FIFO message commit in the same atomic task transaction.
-    /// Replayed identities do not reopen a closed queue or create another worker.
-    pub fn enqueue_subagent_delivery_with_client_id(
-        &self,
-        id: &str,
-        message: impl Into<String>,
-        client_message_id: Option<&str>,
-    ) -> anyhow::Result<Option<AgentDeliveryEnqueueReceipt>> {
-        let message = message.into();
-        let client_message_id = client_message_id.map(str::to_string);
-        if client_message_id
-            .as_ref()
-            .is_some_and(|id| id.trim().is_empty() || id.len() > 128)
-        {
-            anyhow::bail!("clientMessageId must contain 1..=128 bytes");
-        }
-        if message.trim().is_empty() {
-            anyhow::bail!("sub-agent delivery message must not be empty");
-        }
-        if message.len() > MAX_SUBAGENT_DELIVERY_BYTES {
-            anyhow::bail!(
-                "sub-agent delivery exceeds the {} byte limit",
-                MAX_SUBAGENT_DELIVERY_BYTES
-            );
-        }
-        let receipt = self.transact_task(id, move |task| {
-            let body_sha256 = format!("{:x}", sha2::Sha256::digest(message.as_bytes()));
-            if let Some(client_id) = client_message_id.as_ref() {
-                validate_command_epoch(client_id, task.command_receipt_epoch)?;
-                if let Some(existing) = task.command_receipts.iter().find(|receipt| &receipt.client_message_id == client_id) {
-                    if existing.body_sha256 != body_sha256 {
-                        anyhow::bail!("client_message_payload_conflict");
-                    }
-                    return Ok(Some(AgentDeliveryEnqueueReceipt {
-                        message_id: existing.message_id.clone(),
-                        queue_position: task.message_queue.iter().position(|message| message.message_id == existing.message_id).map_or(0, |index| index + 1),
-                        replayed: true,
-                    }));
-                }
-                if task.command_receipts.len() >= MAX_SUBAGENT_COMMAND_RECEIPTS {
-                    anyhow::bail!("command_receipt_capacity: 256 retained identities; inspect and explicitly archive confirmed command history before sending more");
-                }
-            }
-            task.migrate_legacy_pending_messages();
-            if task.has_delivery_queue_migration_conflict() {
-                anyhow::bail!(
-                    "sub-agent {id} contains both legacy and reliable message queues; refusing to guess FIFO order"
-                );
-            }
-            if !task.accepting_subagent_messages {
-                return Ok(None);
-            }
-            if task.message_queue.len() >= MAX_SUBAGENT_DELIVERY_QUEUE_MESSAGES {
-                anyhow::bail!(
-                    "sub-agent delivery queue is full ({} messages)",
-                    MAX_SUBAGENT_DELIVERY_QUEUE_MESSAGES
-                );
-            }
-            let queued_bytes = task
-                .message_queue
-                .iter()
-                .try_fold(0usize, |total, queued| total.checked_add(queued.body.len()))
-                .ok_or_else(|| anyhow::anyhow!("sub-agent delivery queue byte count overflow"))?;
-            if queued_bytes.saturating_add(message.len()) > MAX_SUBAGENT_DELIVERY_QUEUE_BYTES {
-                anyhow::bail!(
-                    "sub-agent delivery queue exceeds the {} byte limit",
-                    MAX_SUBAGENT_DELIVERY_QUEUE_BYTES
-                );
-            }
-            let queued = QueuedAgentMessage::new(message);
-            let receipt = AgentDeliveryEnqueueReceipt {
-                message_id: queued.message_id.clone(),
-                queue_position: task.message_queue.len().saturating_add(1),
-                replayed: false,
-            };
-            if let Some(client_message_id) = client_message_id {
-                task.command_receipts.push(crate::model::AgentCommandReceipt {
-                    client_message_id,
-                    message_id: queued.message_id.clone(),
-                    body_sha256,
-                    body_summary: queued.body.chars().take(256).collect(),
-                    status: AgentMessageStatus::Queued,
-                    accepted_at_ms: queued.created_at_ms,
-                    applied_at_ms: None,
-                    background_run: task.background_run.clone(),
-                    applied_background_run: None,
-                });
-            }
-            task.message_queue.push(queued);
-            task.updated_at_ms = now_millis();
-            Ok(Some(receipt))
-        })?
-        .flatten();
-        if let Some(receipt) = receipt.as_ref().filter(|receipt| !receipt.replayed) {
-            let task = self.task(id);
-            self.record_orchestrate_runtime_event_after_commit(
-                "message_queued",
-                task.as_ref()
-                    .and_then(|task| task.orchestrate_work_id.as_deref()),
-                None,
-                Some(id),
-                Some(&receipt.message_id),
-                serde_json::json!({"queue_position": receipt.queue_position}),
-            );
-        }
-        Ok(receipt)
     }
 
     pub fn subagent_command_receipt(

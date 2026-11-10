@@ -1,7 +1,8 @@
 use crate::{Tool, ToolContext, ToolError, ToolOutput, clean_schema, parse_input};
 use async_trait::async_trait;
-use chrono::{DateTime, Datelike, Duration as ChronoDuration, Offset, TimeZone, Timelike, Utc};
+use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use fs2::FileExt;
+pub use kcoder_schedule::preview_schedule_after;
 use kcoder_types::ContentBlock;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -19,6 +20,8 @@ use tokio::sync::{Notify, broadcast};
 
 mod delivery;
 mod execution;
+#[cfg(test)]
+mod idle_tests;
 pub use execution::ExecutionRecord;
 
 const STALE_AFTER: ChronoDuration = ChronoDuration::days(7);
@@ -60,6 +63,8 @@ struct CronFile {
     receipts_pruned: u64,
     #[serde(default)]
     confirmed_receipts_pruned: u64,
+    #[serde(default, skip_serializing_if = "std::collections::BTreeSet::is_empty")]
+    deleted_history: std::collections::BTreeSet<(Option<String>, String)>,
 }
 
 fn cron_file_version() -> u32 {
@@ -290,7 +295,7 @@ impl CronScheduler {
             DEFAULT_JITTER_SECONDS
         };
         let jitter_seconds = jitter_seconds.unwrap_or(default_jitter).min(3600);
-        let nominal = next_nominal(&schedule, now)?;
+        let nominal = preview_schedule_after(&schedule, now)?;
         let next_run_at = nominal
             .checked_add_signed(deterministic_jitter(&id, jitter_seconds))
             .ok_or_else(|| "scheduled time is out of range".to_string())?;
@@ -392,7 +397,7 @@ impl CronScheduler {
         let Ok(mut jobs) = self.0.jobs.try_lock() else {
             return Ok(None);
         };
-        let file = lock_jobs(&self.0.path)?;
+        let file = lock_for_idle(&self.0.path)?;
         refresh_jobs(&self.0.path, &mut jobs)?;
         if !jobs.is_empty() {
             return Ok(None);
@@ -472,7 +477,8 @@ impl CronScheduler {
                         return;
                     };
                     loop {
-                        let next_nominal_at = match next_nominal(schedule, nominal_cursor) {
+                        let next_nominal_at = match preview_schedule_after(schedule, nominal_cursor)
+                        {
                             Ok(next) => next,
                             Err(error) => {
                                 tracing::warn!(job_id = %job.id, %error, "failed to advance cron cursor");
@@ -601,7 +607,8 @@ impl CronScheduler {
     }
 }
 
-struct JobsLock(fs::File);
+// A first publisher retains the private absence fence through legacy-store publication.
+struct JobsLock(fs::File, Option<Box<JobsLock>>);
 
 impl Drop for JobsLock {
     fn drop(&mut self) {
@@ -610,10 +617,87 @@ impl Drop for JobsLock {
         if let Err(error) = FileExt::unlock(&self.0) {
             tracing::warn!(%error, "failed to unlock cron store");
         }
+        drop(self.1.take());
+    }
+}
+
+fn store_present(path: &Path) -> Result<bool, String> {
+    match fs::symlink_metadata(path) {
+        Ok(_) => Ok(true),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(error.to_string()),
+    }
+}
+
+fn lock_absent_store(path: &Path) -> Result<JobsLock, String> {
+    let cron = path.parent().ok_or("invalid cron path")?;
+    let project = cron.parent().ok_or("invalid cron path")?;
+    if path.file_name() != Some(OsStr::new("jobs.json"))
+        || cron.file_name() != Some(OsStr::new("cron"))
+        || project.file_name() != Some(OsStr::new(".kcoder"))
+    {
+        return Err("invalid cron store scope".into());
+    }
+    let workspace = dunce::canonicalize(project.parent().ok_or("invalid cron workspace")?)
+        .map_err(|error| error.to_string())?;
+    let private_root = initial_publication_project_dir(&workspace)?.join("runtime-locks");
+    let directory = kcoder_config::PrivateDirectory::open_or_create(&private_root)
+        .map_err(|error| error.to_string())?;
+    let name = OsStr::new("cron-initial-publication.lock");
+    directory
+        .append(name, b"")
+        .map_err(|error| error.to_string())?;
+    let file = directory
+        .open_single_link_regular_file(name)
+        .map_err(|error| error.to_string())?;
+    file.try_lock_exclusive()
+        .map_err(|error| format!("cron store is busy: {error}"))?;
+    Ok(JobsLock(file, None))
+}
+
+fn initial_publication_project_dir(workspace: &Path) -> Result<PathBuf, String> {
+    let project =
+        kcoder_config::Settings::project_data_dir(workspace).map_err(|error| error.to_string())?;
+    // In-process unit tests have no explicit profile and would otherwise
+    // create fences in the developer's real profile. Tests that set one keep it.
+    #[cfg(test)]
+    if std::env::var_os("KCODER_CONFIG_DIR").is_none() && std::env::var_os("KCODER_HOME").is_none()
+    {
+        static PROFILE: std::sync::LazyLock<tempfile::TempDir> = std::sync::LazyLock::new(|| {
+            tempfile::Builder::new()
+                .prefix("kcoder-tools-test-profile-")
+                .tempdir()
+                .expect("create the test profile")
+        });
+        let key = project.file_name().ok_or("invalid cron project key")?;
+        return Ok(PROFILE.path().join("projects").join(key));
+    }
+    Ok(project)
+}
+
+fn lock_for_idle(path: &Path) -> Result<JobsLock, String> {
+    if store_present(path)? {
+        return lock_jobs(path);
+    }
+    let admission = lock_absent_store(path)?;
+    // The first publisher uses this same fence; recheck after acquiring it.
+    if store_present(path)? {
+        lock_jobs_with_admission(path, Some(admission))
+    } else {
+        Ok(admission)
     }
 }
 
 fn lock_jobs(path: &Path) -> Result<JobsLock, String> {
+    let admission = if store_present(path)? {
+        None
+    } else {
+        Some(lock_absent_store(path)?)
+    };
+    lock_jobs_with_admission(path, admission)
+}
+
+fn lock_jobs_with_admission(path: &Path, admission: Option<JobsLock>) -> Result<JobsLock, String> {
     let parent = path.parent().ok_or("invalid cron path")?;
     let parent = std::path::absolute(parent).map_err(|error| error.to_string())?;
     let directory = kcoder_config::PrivateDirectory::open_or_create(&parent)
@@ -626,7 +710,7 @@ fn lock_jobs(path: &Path) -> Result<JobsLock, String> {
         .map_err(|error| error.to_string())?;
     file.try_lock_exclusive()
         .map_err(|error| format!("cron store is busy: {error}"))?;
-    Ok(JobsLock(file))
+    Ok(JobsLock(file, admission.map(Box::new)))
 }
 
 fn read_cron_file(path: &Path) -> Result<Option<CronFile>, String> {
@@ -715,12 +799,31 @@ fn persist_cron_file(path: &Path, file: &CronFile) -> Result<(), String> {
             Err(error) => return Err(error.to_string()),
         }
     }
+    let live_history = file
+        .receipts
+        .iter()
+        .map(|receipt| {
+            (
+                receipt.session_id.clone(),
+                format!(
+                    "cron:{}:{}",
+                    receipt.job_id,
+                    receipt.scheduled_at.to_rfc3339()
+                ),
+            )
+        })
+        .collect::<std::collections::BTreeSet<_>>();
     let bytes = serde_json::to_vec_pretty(&CronFile {
         version: 4,
         jobs: file.jobs.clone(),
         receipts: file.receipts.clone(),
         receipts_pruned: file.receipts_pruned,
         confirmed_receipts_pruned: file.confirmed_receipts_pruned,
+        deleted_history: file
+            .deleted_history
+            .intersection(&live_history)
+            .cloned()
+            .collect(),
     })
     .map_err(|error| error.to_string())?;
     if bytes.len() > 16 * 1024 * 1024 {
@@ -747,149 +850,7 @@ fn deterministic_jitter(id: &str, max_seconds: u64) -> ChronoDuration {
 
 /// Read-only calendar validation and nominal next occurrence. Does not create a job.
 pub fn preview_schedule(schedule: &CronSchedule) -> Result<DateTime<Utc>, String> {
-    next_nominal(schedule, Utc::now())
-}
-
-fn next_nominal(schedule: &CronSchedule, after: DateTime<Utc>) -> Result<DateTime<Utc>, String> {
-    match schedule {
-        CronSchedule::At { at } => {
-            let at = DateTime::parse_from_rfc3339(at)
-                .map_err(|_| "at must be an RFC3339 timestamp".to_string())?
-                .with_timezone(&Utc);
-            if at > after {
-                Ok(at)
-            } else {
-                Err("scheduled time must be in the future".to_string())
-            }
-        }
-        CronSchedule::Every { every_seconds } if *every_seconds > 0 => {
-            let interval = i64::try_from(*every_seconds)
-                .ok()
-                .and_then(ChronoDuration::try_seconds)
-                .ok_or_else(|| "every_seconds is out of range".to_string())?;
-            after
-                .checked_add_signed(interval)
-                .ok_or_else(|| "scheduled time is out of range".to_string())
-        }
-        CronSchedule::Every { .. } => Err("every_seconds must be greater than zero".to_string()),
-        CronSchedule::Cron { expression } => next_cron_minute(expression, after),
-        CronSchedule::ZonedCron {
-            expression,
-            timezone,
-        } => {
-            let timezone = timezone
-                .parse::<chrono_tz::Tz>()
-                .map_err(|_| "invalid IANA timezone".to_string())?;
-            next_cron_minute_in_zone(expression, after, timezone)
-        }
-    }
-}
-
-fn next_cron_minute(expression: &str, after: DateTime<Utc>) -> Result<DateTime<Utc>, String> {
-    next_cron_minute_in_zone(expression, after, chrono_tz::UTC)
-}
-
-fn next_cron_minute_in_zone(
-    expression: &str,
-    after: DateTime<Utc>,
-    timezone: chrono_tz::Tz,
-) -> Result<DateTime<Utc>, String> {
-    let fields = expression.split_whitespace().collect::<Vec<_>>();
-    if fields.len() != 5 {
-        return Err(
-            "cron expression must have 5 fields: minute hour day month weekday".to_string(),
-        );
-    }
-    let bounds = [(0, 59), (0, 23), (1, 31), (1, 12), (0, 7)];
-    let masks = fields
-        .iter()
-        .zip(bounds)
-        .map(|(field, (min, max))| cron_field_mask(field, min, max))
-        .collect::<Result<Vec<_>, _>>()?;
-    let mut cursor = after
-        .with_second(0)
-        .and_then(|value| value.with_nanosecond(0))
-        .unwrap_or(after)
-        .checked_add_signed(ChronoDuration::minutes(1))
-        .ok_or_else(|| "scheduled time is out of range".to_string())?;
-    // Scan absolute instants: nonexistent local minutes are skipped, and both
-    // occurrences of a repeated local minute can match. Keep the existing
-    // all-fields (AND), jitter, idle and missed-run semantics unchanged.
-    for _ in 0..(366 * 24 * 60) {
-        let offset = timezone
-            .offset_from_utc_datetime(&cursor.naive_utc())
-            .fix()
-            .local_minus_utc();
-        let local = cursor
-            .naive_utc()
-            .checked_add_signed(ChronoDuration::seconds(i64::from(offset)))
-            .ok_or_else(|| "scheduled local time is out of range".to_string())?;
-        let values = [
-            local.minute(),
-            local.hour(),
-            local.day(),
-            local.month(),
-            local.weekday().num_days_from_sunday(),
-        ];
-        if masks
-            .iter()
-            .zip(values)
-            .all(|(mask, value)| mask & (1u64 << value) != 0)
-        {
-            return Ok(cursor);
-        }
-        cursor = cursor
-            .checked_add_signed(ChronoDuration::minutes(1))
-            .ok_or_else(|| "scheduled time is out of range".to_string())?;
-    }
-    Err("cron expression has no trigger in the next 366 days".to_string())
-}
-
-fn cron_field_mask(field: &str, min: u32, max: u32) -> Result<u64, String> {
-    let mut mask = 0u64;
-    let number = |text: &str| -> Result<u32, String> {
-        let value = text
-            .parse::<u32>()
-            .map_err(|_| "invalid cron field".to_string())?;
-        if value < min || value > max {
-            return Err("cron field is out of range".to_string());
-        }
-        Ok(value)
-    };
-    for part in field.split(',') {
-        let (range, step) = if let Some((range, step)) = part.split_once('/') {
-            let step = step
-                .parse::<u32>()
-                .map_err(|_| "invalid cron step".to_string())?;
-            if step == 0 {
-                return Err("cron step must be greater than zero".to_string());
-            }
-            (range, step)
-        } else {
-            (part, 1)
-        };
-        let (start, end) = if range == "*" {
-            (min, max)
-        } else if let Some((start, end)) = range.split_once('-') {
-            (number(start)?, number(end)?)
-        } else {
-            let start = number(range)?;
-            (start, if part.contains('/') { max } else { start })
-        };
-        if start > end {
-            return Err("cron range is reversed".to_string());
-        }
-        for value in (start..=end).step_by(step as usize) {
-            let value = if max == 7 && value == 7 { 0 } else { value };
-            mask |= 1u64 << value;
-        }
-    }
-    Ok(mask)
-}
-
-#[cfg(test)]
-fn cron_field_matches(field: &str, value: u32, min: u32, max: u32) -> Result<bool, String> {
-    Ok(cron_field_mask(field, min, max)? & (1u64 << value) != 0)
+    preview_schedule_after(schedule, Utc::now())
 }
 
 #[derive(Debug, Default)]
@@ -1068,6 +1029,8 @@ fn json_output(value: &impl Serialize) -> Result<ToolOutput, ToolError> {
 
 #[cfg(test)]
 mod tests {
+    use chrono::Timelike;
+
     #[test]
     fn idle_reservation_fences_other_scheduler_writes_and_preserves_due_events() {
         let root = tempfile::tempdir().unwrap();
@@ -1280,84 +1243,23 @@ mod tests {
             );
         }
         assert!(
-            next_nominal(
+            preview_schedule_after(
                 &CronSchedule::Every { every_seconds: 1 },
                 DateTime::<Utc>::MAX_UTC
             )
             .is_err()
         );
-        assert!(next_cron_minute("* * * * *", DateTime::<Utc>::MAX_UTC).is_err());
-        assert!(deterministic_jitter("cron-a", u64::MAX) <= ChronoDuration::seconds(3600));
-        assert!(scheduler.list().is_empty());
-    }
-
-    #[test]
-    fn zoned_calendar_keeps_weekdays_month_boundaries_and_dst_instants() {
-        let next = |expression: &str, timezone: &str, after: &str| {
-            next_nominal(
-                &CronSchedule::ZonedCron {
-                    expression: expression.into(),
-                    timezone: timezone.into(),
-                },
-                DateTime::parse_from_rfc3339(after)
-                    .unwrap()
-                    .with_timezone(&Utc),
-            )
-            .unwrap()
-            .to_rfc3339()
-        };
-        assert_eq!(
-            next("30 0 * * 1", "Asia/Tokyo", "2026-09-20T14:00:00Z"),
-            "2026-09-20T15:30:00+00:00"
-        );
-        assert_eq!(
-            next("30 0 * * 1-5", "Asia/Tokyo", "2026-09-20T14:00:00Z"),
-            "2026-09-20T15:30:00+00:00"
-        );
-        assert_eq!(
-            next("30 0 1 * *", "Asia/Tokyo", "2026-09-30T12:00:00Z"),
-            "2026-09-30T15:30:00+00:00"
-        );
-        assert_eq!(
-            next("30 23 1 * *", "America/New_York", "2026-03-01T00:00:00Z"),
-            "2026-03-02T04:30:00+00:00"
-        );
-        assert_eq!(
-            next("10 0 * * *", "Asia/Kathmandu", "2026-09-20T18:00:00Z"),
-            "2026-09-20T18:25:00+00:00"
-        );
-        assert_eq!(
-            next("30 2 * * *", "Europe/Berlin", "2026-03-28T23:00:00Z"),
-            "2026-03-30T00:30:00+00:00"
-        );
-        assert_eq!(
-            next("30 2 * * *", "Europe/Berlin", "2026-10-24T23:00:00Z"),
-            "2026-10-25T00:30:00+00:00"
-        );
-        assert_eq!(
-            next("30 2 * * *", "Europe/Berlin", "2026-10-25T00:30:00Z"),
-            "2026-10-25T01:30:00+00:00"
-        );
-        let legacy: CronSchedule =
-            serde_json::from_value(serde_json::json!({"kind":"cron","expression":"30 0 * * 1"}))
-                .unwrap();
-        assert_eq!(
-            next_nominal(
-                &legacy,
-                DateTime::parse_from_rfc3339("2026-09-20T14:00:00Z")
-                    .unwrap()
-                    .with_timezone(&Utc)
-            )
-            .unwrap()
-            .to_rfc3339(),
-            "2026-09-21T00:30:00+00:00"
-        );
         assert!(
-            serde_json::from_value::<CronSchedule>(
-                serde_json::json!({"kind":"cron","expression":"0 9 * * *","timezone":"Asia/Tokyo"})
+            preview_schedule_after(
+                &CronSchedule::Cron {
+                    expression: "* * * * *".into(),
+                },
+                DateTime::<Utc>::MAX_UTC,
             )
             .is_err()
         );
+        assert!(deterministic_jitter("cron-a", u64::MAX) <= ChronoDuration::seconds(3600));
+        assert!(scheduler.list().is_empty());
     }
 
     #[test]
@@ -1393,25 +1295,6 @@ mod tests {
                 .is_err()
         );
         assert_eq!(scheduler.list().len(), 1);
-    }
-
-    #[test]
-    fn studio_weekday_expression_accepts_ranges_and_validates_every_field() {
-        assert!(cron_field_matches("1-5", 1, 0, 7).unwrap());
-        assert!(cron_field_matches("1-5", 5, 0, 7).unwrap());
-        assert!(!cron_field_matches("1-5", 0, 0, 7).unwrap());
-        assert!(cron_field_matches("10-20/5", 15, 0, 59).unwrap());
-        assert!(!cron_field_matches("10-20/5", 16, 0, 59).unwrap());
-        for invalid in ["5-1", "1-8", "*/0", "1,garbage"] {
-            assert!(cron_field_matches(invalid, 1, 0, 7).is_err());
-        }
-    }
-
-    #[test]
-    fn cron_parser_supports_lists_steps_and_sunday_seven() {
-        assert!(cron_field_matches("*/5", 10, 0, 59).unwrap());
-        assert!(cron_field_matches("1,3,7", 3, 0, 7).unwrap());
-        assert!(cron_field_matches("7", 0, 0, 7).unwrap());
     }
 
     #[test]

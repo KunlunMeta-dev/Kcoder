@@ -38,6 +38,7 @@ import {
   newWorkspacePreferencePrefix,
   newWorkspacePreferencesTestHelpers,
   saveNewWorkspacePreference,
+  loadLastDraftProject, saveLastDraftProject,
 } from "./new-workspace-preferences";
 import { profileStateRemovalTestHelpers } from "./profile-state-removal";
 import { WorkspaceProfileFenceError } from "./workspace-profile-fence";
@@ -46,6 +47,21 @@ import {
   workspacePreferencesTestHelpers,
   workspaceStateAuthorizationScope,
 } from "./workspace-preferences";
+
+it("keeps one last valid project and removes it with the profile", async () => {
+  const gateway = profile(), a = server(), b = server({ id: "second" });
+  seedProfileMetadata(gateway);
+  await saveLastDraftProject(gateway.id, { serverId: a.id, scope: preferenceScope(gateway, a), cwd: "/a" });
+  await saveLastDraftProject(gateway.id, { serverId: b.id, scope: preferenceScope(gateway, b), cwd: "/b" });
+  expect(await loadLastDraftProject(gateway.id, { [a.id]: preferenceScope(gateway, a), [b.id]: preferenceScope(gateway, b) })).toMatchObject({ serverId: b.id, cwd: "/b" });
+  expect([...storage.values.keys()].filter(key => key.endsWith("last-project"))).toHaveLength(1);
+  expect(await loadLastDraftProject(gateway.id, { [a.id]: preferenceScope(gateway, a) })).toBeNull();
+  expect(await loadLastDraftProject(gateway.id, { [b.id]: preferenceScope(gateway, { ...b, host: "different" }) })).toBeNull();
+  seedProfileMetadata({ ...gateway, authorizationGeneration: "renewed" });
+  await expect(loadLastDraftProject(gateway.id, { [b.id]: preferenceScope(gateway, b) })).rejects.toBeInstanceOf(WorkspaceProfileFenceError);
+  await removeWorkspaceStatesForProfile(gateway.id);
+  expect([...storage.values.keys()].some(key => key.startsWith(newWorkspacePreferencePrefix(gateway.id)))).toBe(false);
+});
 
 function profile(overrides: Partial<GatewayProfile> = {}): GatewayProfile {
   return {
@@ -130,12 +146,14 @@ describe("new workspace preference authorization scopes", () => {
       cwd: "/srv/private-a",
       isolation: "worktree",
     });
+    await saveLastDraftProject(profileA.id, { serverId: target.id, scope: scopeA, cwd: "/srv/private-a" });
     const keyA = newWorkspacePreferenceKey(profileA.id, target.id, scopeA);
     const changedScope = preferenceScope(changedProfile, changedServer);
     expect(changedScope).not.toBe(scopeA);
     expect(newWorkspacePreferenceKey(profileA.id, target.id, changedScope)).not.toBe(keyA);
     seedProfileMetadata(changedProfile);
     await expect(loadNewWorkspacePreference(profileA.id, target.id, changedScope)).resolves.toBeNull();
+    await expect(loadLastDraftProject(profileA.id, { [changedServer.id]: changedScope })).resolves.toBeNull();
   });
 
   it("stores separate values for the same profile and server IDs across scopes", async () => {

@@ -1,8 +1,11 @@
+import { taskConnectionStatus } from './taskConnectionStatus'
 import i18n from '@/i18n'
-import { listen } from '@tauri-apps/api/event'
+import { listen } from '@/lib/runtime-events'
 import { describe, expect, test } from 'vitest'
 import { createTestGatewayRuntime, FakeGatewayClient } from './gatewayRuntime.test-support'
 import { KCoderGatewayRuntime as InstalledGatewayRuntime } from './installGatewayRuntime'
+
+const KCODER_PRESENTATION = { version: 1, studioWorkMode: 'kcoder', inlineWidgets: false }
 
 describe('KCoder gateway runtime task isolation', () => {
   test.each([
@@ -389,6 +392,13 @@ describe('KCoder gateway runtime task isolation', () => {
       ]
       const again = new FakeGatewayClient('thread-background-reconnect')
       const clients = [first, resumed, again]
+      for (const client of clients) {
+        const request = client.request.bind(client)
+        client.request = async <T>(method: string, params: Record<string, unknown> = {}) => {
+          if (method === 'gateway/thread/attach') return { changed: true } as T
+          return request<T>(method, params)
+        }
+      }
       let issuedClients = 0
       const runtime = createRuntime('token', {
         loadServers: async () => [
@@ -405,6 +415,9 @@ describe('KCoder gateway runtime task isolation', () => {
       await runtime.request('runtime.tasks.create', {
         taskId: 'background-reconnect',
         executionRequest: { prompt: 'spawn background agent' },
+      })
+      await runtime.request('runtime.tasks.view.attach', {
+        taskId: 'kcoder:local:thread-background-reconnect', viewId: 'background-reconnect',
       })
       first.emitNotification('turn/completed', {
         threadId: 'thread-background-reconnect',
@@ -494,19 +507,7 @@ describe('KCoder gateway runtime task isolation', () => {
       })
       resumed.close()
       await expect.poll(() => again.requests[0]?.method).toBe('thread/resume')
-      const reconnects = received.filter(
-        event =>
-          event.event === 'response.block.created' &&
-          (event.payload.data as { block?: { tool_name?: string } })?.block?.tool_name ===
-            'runtime_reconnecting'
-      )
-      expect(reconnects).toHaveLength(2)
-      expect(new Set(reconnects.map(event => event.payload.subtaskId)).size).toBe(2)
-      for (const event of reconnects) {
-        expect(event.payload.subtaskId).toBe(
-          (event.payload.data as { block: { id: string } }).block.id
-        )
-      }
+      expect(received.some(event => event.event.startsWith('response.block.'))).toBe(false)
       expect(received.filter(event => event.event === 'response.completed')).toHaveLength(1)
       await runtime.dispose()
       await unlisten()
@@ -1251,6 +1252,8 @@ describe('KCoder gateway runtime task isolation', () => {
       payload: {
         taskId: 'kcoder:local:thread-1',
         subtaskId: 'turn-1',
+        turnId: 'turn-1',
+        attemptId: 'turn-1',
         deviceId: 'local',
         data: { delta: 'checking-a' },
       },
@@ -1518,6 +1521,7 @@ describe('KCoder gateway runtime task isolation', () => {
     expect(client.requests.at(-1)).toEqual({
       method: 'turn/start',
       params: {
+        clientPresentation: KCODER_PRESENTATION,
         threadId: 'thread-1',
         input: [{ type: 'text', text: 'replacement' }],
       },
@@ -1555,7 +1559,7 @@ describe('KCoder gateway runtime task isolation', () => {
     })
   })
 
-  test('interrupts the foreground turn but preserves resident background jobs across reconnect', async () => {
+  test('retains the foreground turn and background jobs across a transient socket reconnect', async () => {
     const received: Array<{ event: string; payload: Record<string, unknown> }> = []
     const unlisten = await listen<{ event: string; payload: Record<string, unknown> }>(
       'local-executor:event',
@@ -1593,15 +1597,8 @@ describe('KCoder gateway runtime task isolation', () => {
       method: 'thread/resume',
       params: { threadId: 'thread-reconnect' },
     })
-    expect(received).toContainEqual(
-      expect.objectContaining({
-        event: 'response.failed',
-        payload: expect.objectContaining({
-          taskId: created.taskId,
-          data: { message: 'KCoder app-server 连接已断开，已停止当前任务' },
-        }),
-      })
-    )
+    expect(received.some(event => event.event === 'response.failed')).toBe(false)
+    expect(taskConnectionStatus.read('local', created.taskId)).toBe('reconnecting')
     const sendAfterReconnect = runtime.request('runtime.tasks.send', {
       taskId: created.taskId,
       message: 'after reconnect',
@@ -1613,19 +1610,39 @@ describe('KCoder gateway runtime task isolation', () => {
       accepted: true,
       taskId: created.taskId,
     })
-    expect(
-      second.requests.filter(request => request.method !== 'runtime.context.get').slice(0, 3)
-    ).toEqual([
+    expect(received).toContainEqual({
+      event: 'executor.task_stream_gap',
+      payload: { deviceId: 'local', taskId: created.taskId },
+    })
+    expect(taskConnectionStatus.read('local', created.taskId)).toBeNull()
+    const resumedRequests = second.requests.filter(
+      request => request.method !== 'runtime.context.get'
+    )
+    expect(resumedRequests.slice(0, 2)).toEqual([
       { method: 'thread/resume', params: { threadId: 'thread-reconnect' } },
-      { method: 'agent/list', params: { threadId: 'thread-reconnect' } },
       {
         method: 'turn/start',
         params: {
+          clientPresentation: KCODER_PRESENTATION,
           threadId: 'thread-reconnect',
           input: [{ type: 'text', text: 'after reconnect' }],
         },
       },
     ])
+    await expect
+      .poll(() =>
+        second.requests.some(
+          request =>
+            request.method === 'agent/list' && request.params.threadId === 'thread-reconnect'
+        )
+      )
+      .toBe(true)
+    await expect.poll(() => runtime.pendingAsyncJobs.size).toBe(0)
+    second.emitNotification('item/delta', {
+      threadId: 'thread-reconnect',
+      turnId: 'thread-reconnect-turn',
+      delta: { text: 'suffix after the gap' },
+    })
     second.emitNotification('turn/completed', {
       threadId: 'thread-reconnect',
       turnId: 'thread-reconnect-turn',
@@ -1646,6 +1663,11 @@ describe('KCoder gateway runtime task isolation', () => {
       },
     })
     await new Promise(resolve => setTimeout(resolve, 0))
+    await expect.poll(() => received.filter(event => event.event === 'executor.task_stream_gap'))
+      .toHaveLength(2)
+    const completed = received.find(event => event.event === 'response.completed')
+    expect(completed).toBeDefined()
+    expect(completed?.payload.data).not.toHaveProperty('value')
     second.close()
     await new Promise(resolve => setTimeout(resolve, 0))
     expect(unexpectedThird.requests[0]).toEqual({
@@ -1702,15 +1724,7 @@ describe('KCoder gateway runtime task isolation', () => {
     const unlisten = await listen<{ event: string; payload: Record<string, unknown> }>(
       'local-executor:event',
       event => {
-        const forwarded = event.payload
-        const data = forwarded.payload as Record<string, unknown>
-        const updates = data?.data as Record<string, unknown> | undefined
-        const blockUpdates = updates?.updates as Record<string, unknown> | undefined
-        if (
-          !closedSecond &&
-          forwarded.event === 'response.block.updated' &&
-          blockUpdates?.status === 'done'
-        ) {
+        if (!closedSecond && event.payload.event === 'async-question:refresh') {
           closedSecond = true
           second.close()
         }
@@ -1753,12 +1767,14 @@ describe('KCoder gateway runtime task isolation', () => {
         params: { threadId: 'thread-reconnect-generation' },
       })
     expect(second.requests.some(request => request.method === 'turn/start')).toBe(false)
+    expect(taskConnectionStatus.read('local', created.taskId)).toBe('reconnecting')
 
     releaseThirdResume?.()
     await expect(sendDuringRecovery).resolves.toMatchObject({ accepted: true })
     expect(third.requests.at(-1)).toEqual({
       method: 'turn/start',
       params: {
+        clientPresentation: KCODER_PRESENTATION,
         threadId: 'thread-reconnect-generation',
         input: [{ type: 'text', text: 'send only after the latest recovery' }],
       },

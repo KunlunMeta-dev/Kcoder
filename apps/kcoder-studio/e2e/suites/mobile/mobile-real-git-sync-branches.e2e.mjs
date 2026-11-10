@@ -57,7 +57,8 @@ await runE2E(import.meta.url, {
 
   await connect(page, gateway);
   await createTask(page, "MOBILE_REAL_GIT_SYNC_BRANCHES");
-  await page.getByTestId("workspace-tab-switcher").click();
+  await page.getByTestId("task-more").click();
+  await page.getByTestId("task-menu-workspace").click();
   await page.getByTestId("workspace-tab-changes").click();
   await page.getByTestId("changes-panel").waitFor({ state: "visible", timeout: 30_000 });
   await page.getByLabel("当前分支 main，打开分支菜单").waitFor({ state: "visible", timeout: 30_000 });

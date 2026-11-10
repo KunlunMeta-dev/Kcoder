@@ -13,6 +13,7 @@ The production renderer in this directory connects only to the KCoder Gateway an
 ## Client Capabilities
 
 - The Gateway runtime supports task creation, follow-up turns, persistent session resumption, approvals, questions, and paginated transcripts.
+- Question and approval answers pass the generated `QuestionResponse` structure check before dispatch or marking the card as awaiting confirmation. Malformed maps or items return `interaction_answer_conflict` and retain the original pending card for a corrected answer. Valid empty maps, partial answers and omitted item selections retain the native protocol semantics.
 - Remote terminals are provided through PTY JSON-RPC sessions, with bounded pre-connection output and exit status.
 - The embedded browser is provided through an independent browser channel that supplies CDP frames and input events; it does not describe remote frames as a native WebView.
 - The Electron host only loads the same production renderer, using random loopback sessions, strict CSP, permission denial, and subprocess environment cleanup.

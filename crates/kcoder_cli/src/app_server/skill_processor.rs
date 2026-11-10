@@ -38,11 +38,18 @@ pub(super) async fn set_enabled(
             .any(|skill| skill.name == params.name),
         "Skill is not available on the selected target and workspace"
     );
+    let token = registry
+        .list_catalog()
+        .into_iter()
+        .find(|skill| skill.name == params.name)
+        .and_then(|skill| skill.activation.as_ref())
+        .map(|activation| activation.token.clone());
     tokio::task::spawn_blocking(move || {
-        kcoder_skills::activation::set_enabled(
+        kcoder_skills::activation::set_enabled_for_import(
             &kcoder_config::user_config_dir()?,
             &params.name,
             params.enabled,
+            token.as_deref(),
         )?;
         Ok(kcoder_app_protocol::SkillSetEnabledResult {
             name: params.name,

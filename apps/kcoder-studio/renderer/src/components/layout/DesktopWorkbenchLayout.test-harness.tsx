@@ -49,7 +49,7 @@ const {
   paneSessionMockRef: paneSessionRef,
   nativeDirectoryPickerMocks,
   automationMocks,
-  tauriMenuMocks,
+  desktopMenuMocks,
 } = getDesktopWorkbenchHoistedMocks()
 
 function createPaneStatus({
@@ -733,12 +733,12 @@ beforeEach(() => {
     configurable: true,
     value: 720,
   })
-  tauriMenuMocks.getCurrentWindow.mockReturnValue({
+  desktopMenuMocks.getCurrentWindow.mockReturnValue({
     label: 'main',
     onDragDropEvent: vi.fn().mockResolvedValue(vi.fn()),
   })
-  tauriMenuMocks.menuNew.mockResolvedValue({ popup: tauriMenuMocks.menuPopup })
-  tauriMenuMocks.menuPopup.mockResolvedValue(undefined)
+  desktopMenuMocks.menuNew.mockResolvedValue({ popup: desktopMenuMocks.menuPopup })
+  desktopMenuMocks.menuPopup.mockResolvedValue(undefined)
   document.getElementById(TITLEBAR_ACTIONS_PORTAL_ID)?.remove()
   document.getElementById(TITLEBAR_CENTER_PORTAL_ID)?.remove()
   document.getElementById(TITLEBAR_RIGHT_PANEL_PORTAL_ID)?.remove()

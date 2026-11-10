@@ -1,0 +1,132 @@
+import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
+import { mkdir, readFile, readdir, stat } from 'node:fs/promises';
+import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { startApprovalModelFixture } from '../../harness/approval-model.mjs';
+import { startChromium } from '../../harness/chromium.mjs';
+import { startGateway } from '../../harness/gateway.mjs';
+import { assertRendererBuildFresh } from '../../harness/renderer-build.mjs';
+import { repoRoot, requireExecutable, runE2E, waitFor } from '../../harness/run-context.mjs';
+import { materializeWorkspace } from '../../harness/workspace-fixture.mjs';
+import { waitForSelectedModel } from '../../harness/model-selector.mjs';
+
+await assertRendererBuildFresh();
+await runE2E(import.meta.url,{testId:'exact-native-task-source-catalog-and-explicit-selection',tier:'full-integration',modelPolicy:'One bounded deterministic text turn creates the original Native binding and real owned MCP registration. Explicit public App configuration enables readonly independent source observations; the same fixed task is selected once, then checked after settled disable, exact restoration and same-name changed configuration. No extra model/content/platform/account or Windows claim.',retainSuccessEvidence:true},async context=>{
+  const binary=await requireExecutable(process.env.KCODER_E2E_KCODER_BIN||resolve(repoRoot,'target/debug/kcoder'),'actual Native source choices');
+  const binaryIdentity=await stat(binary),binarySha256=createHash('sha256').update(await readFile(binary)).digest('hex');
+  assert.equal(binarySha256,process.env.KCODER_E2E_KCODER_SHA256??process.env.KCODER_E2E_KCODER_BIN_SHA256,'an explicit frozen normal Native binary SHA is required');assert.equal(binaryIdentity.nlink,1);
+  context.addCleanup('verify immutable source lifecycle native binary',async()=>{const after=await stat(binary);assert.deepEqual([after.dev,after.ino,after.size,after.nlink],[binaryIdentity.dev,binaryIdentity.ino,binaryIdentity.size,1]);assert.equal(createHash('sha256').update(await readFile(binary)).digest('hex'),binarySha256)});
+  const sourcePath=fileURLToPath(import.meta.url),sourceSha256=createHash('sha256').update(await readFile(sourcePath)).digest('hex');
+  context.addCleanup('verify unchanged source lifecycle suite',async()=>assert.equal(createHash('sha256').update(await readFile(sourcePath)).digest('hex'),sourceSha256));
+  const model=await startApprovalModelFixture(context,{responseSteps:({requestNumber})=>{assert.equal(requestNumber,1,'Source selection cannot invoke another model');return[{delta:{content:'ORIGINAL_NATIVE_SOURCE_SETTINGS_READY'}},{finishReason:'stop'}]}});
+  const {path:workspace}=await materializeWorkspace(context,'minimal',{instanceId:'source-settings'}),profile=context.pathInState('profile'),mcp=context.pathInState('mcp');
+  await mkdir(mcp,{recursive:true,mode:0o700});
+  await context.writeStateJson('profile/settings.json',{active_provider:'source-settings',model:'source-settings',permission_mode:'bypass',max_retries:0,session_memory:{enabled:false},integrations:{connectivity:{enabled:true}},
+    providers:{'source-settings':{api_format:'openai_chat_completions',authentication:{mode:'none'},endpoint:model.baseUrl,default_model:'source-settings',context_window_tokens:128000,max_output_tokens:4096,output_headroom_tokens:8192,no_proxy:true,discover_models:false}},
+    mcp_servers:[{name:'owned-server',transport:'stdio',command:'python3',args:[resolve(repoRoot,'crates/kcoder_mcp/tests/fixtures/apps_server.py'),'normal',mcp]}]});
+  const serversFile=await context.writeStateJson('servers.json',[{id:'local',label:'Actual task source settings',transport:'local',command:binary,workspace}]);
+  await mkdir(context.pathInState('gateway-tmp'),{recursive:true,mode:0o700});
+  const gateway=await startGateway(context,{label:'source-settings-gateway',workspace,serversFile,kcoderBin:binary,gatewayRoot:process.env.KCODER_E2E_GATEWAY_ROOT,auth:true,env:{KCODER_CONFIG_DIR:profile,TMPDIR:context.pathInState('gateway-tmp')}});
+  const ownedStages=(await readdir(context.pathInState('gateway-tmp'))).filter(value=>value.startsWith('kcoder-native-channel-resources-'));assert.equal(ownedStages.length,1,'the real source Gateway must own exactly one sealed channel resource stage');
+  const channelManifest=await readFile(context.pathInState('gateway-tmp',ownedStages[0],'component','channel-resource-manifest.json'));
+  await context.writeArtifactJson('actual-source-lifecycle-runtime-pins.json',{binary,binarySha256,binaryBytes:binaryIdentity.size,sourceSha256,channelManifestSha256:createHash('sha256').update(channelManifest).digest('hex'),channelManifest:JSON.parse(channelManifest)});
+  const browser=await startChromium(context),page=await browser.newPage({viewport:{width:1400,height:1000}}),turns=[],completed=[],catalogs=[],writes=[],diagnostics=[],sourceObservations=[],errors=[];
+  page.on('pageerror',error=>errors.push(error.message));
+  page.on('websocket',socket=>{
+    const pending=new Map();
+    socket.on('framesent',event=>{try{const frame=JSON.parse(String(event.payload));if(frame.method)pending.set(String(frame.id),{method:frame.method,request:frame.params})}catch{/* No credentials or raw transport frames. */}});
+    socket.on('framereceived',event=>{try{const frame=JSON.parse(String(event.payload)),request=pending.get(String(frame.id));pending.delete(String(frame.id));
+      if(frame.method==='turn/started')turns.push({threadId:frame.params.threadId,turnId:frame.params.turnId??frame.params.turn.id,attemptId:frame.params.attemptId??frame.params.turn.attemptId});
+      if(frame.method==='turn/completed')completed.push(frame.params);
+      if(request?.method==='integrations/tasks/listTaskSourceChoices')catalogs.push({request:request.request.payload,result:frame.result});
+      if(request?.method==='integrations/tasks/setTaskSources')writes.push({request:request.request,result:frame.result});
+      if(request?.method==='mcp/list')diagnostics.push(frame.result);
+      if(request?.method==='integrations/connectivity/listConnections')sourceObservations.push({status:frame.result?.status,errorCode:frame.result?.error?.code,sourcesState:frame.result?.result?.sourcesState,sources:frame.result?.result?.sources});
+    }catch{/* The real client validates protocol replies. */}});
+  });
+  const control=(method,params)=>page.evaluate(async({method,params})=>await window.__ELECTRON_INTERNALS__.invoke('local_executor_request',{method,params}),{method,params});
+  try{
+    await page.goto(gateway.baseUrl,{waitUntil:'domcontentloaded'});await page.locator('input[name="token"]').fill(gateway.authToken);
+    await Promise.all([page.waitForURL(url=>!url.pathname.startsWith('/login')),page.locator('button[type="submit"]').click()]);
+    const input=page.getByTestId('chat-message-input');await input.waitFor({timeout:30000});
+    await waitForSelectedModel(page,'source-settings');
+    await input.fill('Create one original task for its native source setting; return one sentence.');
+    await waitFor(()=>page.getByTestId('send-message-button').isEnabled(),15000,'original native task submit');await page.getByTestId('send-message-button').click();
+    await waitFor(()=>turns.length===1&&completed.some(item=>(item.turnId??item.turn?.id)===turns[0].turnId),30000,'actual ordinary source task completed');
+    const original=turns[0];assert.ok(original.attemptId);
+    await page.getByTestId('task-workspace-button').click();await page.waitForURL(url=>url.pathname==='/tasks');
+    const tasks=page.getByTestId('native-task-workspace'),select=tasks.getByTestId('task-workspace-thread-select');await select.waitFor();
+    const selected=await waitFor(()=>select.locator('option').evaluateAll((values,id)=>values.find(value=>{try{return JSON.parse(value.value)[0]===id}catch{return false}})?.value,original.threadId),30000,'exact original thread in real task index');
+    await select.selectOption(selected);const records=tasks.getByTestId('task-capability-scope-records');await records.getByRole('button',{name:new RegExp(original.turnId)}).waitFor({timeout:30000});
+    assert.equal(catalogs.length,0,'Saved metadata must not choose a task/catalog implicitly');
+    await records.getByRole('button',{name:new RegExp(original.turnId)}).click();
+    await page.waitForFunction(()=>document.querySelector('[data-testid="task-capability-scope-selected-record"]')?.getAttribute('data-state')==='current',undefined,{timeout:30000});
+    const settings=records.getByTestId('native-task-capability-scope-settings');await settings.getByRole('button',{name:'设置任务工具与资源范围',exact:true}).click();
+    await settings.getByText('owned-server',{exact:true}).waitFor({timeout:15000});
+    const catalogue=await waitFor(()=>catalogs.find(value=>value.result?.status==='completed'),15000,'actual native descriptor catalog');
+    const actualTarget={initialAttempt:original};assert.deepEqual(catalogue.request.target,actualTarget);
+    const descriptor=catalogue.result.result.items.find(value=>value.displayName==='owned-server');assert.ok(descriptor);assert.equal(descriptor.state,'ready');assert.equal(descriptor.accountRef,null);
+    await settings.getByText('安装：未确认',{exact:true}).waitFor();
+    await waitFor(()=>settings.getByRole('button',{name:'设置任务工具与资源范围',exact:true}).isEnabled(),15000,'unobserved first-use diagnostics settle');
+    const scope=await control('runtime.integrations.request',{serverId:'local',workspacePath:workspace,method:'integrations/scope/read',params:{}});
+    const envelope=payload=>({contractVersion:'parallel-v1',requestId:`source-settings-${context.seed}`,scope,timeoutMs:15000,payload});
+    const configured=await control('runtime.integrations.request',{serverId:'local',workspacePath:workspace,method:'integrations/connectivity/prepareConnectionAction',params:{...envelope({action:'save',connectionId:'owned-source-settings-app',kind:'tencent_docs',label:'Owned source settings application',configuration:{mcpServerName:'owned-server'},resourceGrants:[]}),operationId:`source-settings-app-${context.seed}`}});
+    assert.equal(configured.status,'completed',configured.error?.code??'owned application configuration must complete through its original public control');
+    await settings.getByRole('button',{name:'设置任务工具与资源范围',exact:true}).click();
+    await settings.getByText('安装：不适用（直接 MCP）',{exact:true}).waitFor({timeout:15000});
+    await settings.getByText('全局启用：已启用',{exact:true}).waitFor({timeout:15000});
+    await settings.getByText('最近连接：已就绪',{exact:true}).waitFor({timeout:15000});
+    await settings.getByText('实际验证：未验证',{exact:true}).waitFor();
+    assert.ok(diagnostics.some(value=>value.servers?.some(server=>server.name==='owned-server'&&server.lastConnectionAttempt==='ready')),'the UI must use a real native connection observation');
+    await settings.getByRole('radio',{name:'仅使用所选来源',exact:true}).check();await settings.getByRole('checkbox').check();
+    await settings.getByRole('button',{name:'保存任务选择',exact:true}).click();
+    const saved=await waitFor(()=>writes.find(value=>value.result?.status==='completed'&&value.result.result?.operation?.phase==='completed'),15000,'original native source selection committed');
+    assert.deepEqual(saved.request.payload.target,actualTarget);assert.ok(saved.request.operationId);assert.ok(saved.request.expectedRevision);
+    assert.deepEqual(saved.request.payload.params.selection,{mode:'selected',sources:[{sourceRef:descriptor.sourceRef,accountRef:descriptor.accountRef}]});
+    const read=await control('runtime.integrations.request',{serverId:'local',workspacePath:workspace,method:'integrations/tasks/readTaskSources',params:envelope({target:actualTarget,params:{threadId:original.threadId}})});
+    const operation=await control('runtime.integrations.request',{serverId:'local',workspacePath:workspace,method:'integrations/tasks/readTaskSourceOperation',params:envelope({target:actualTarget,operationId:saved.request.operationId})});
+    assert.equal(read.status,'completed');assert.deepEqual(read.result.selection,saved.request.payload.params.selection);assert.equal(operation.result.operation.operationId,saved.request.operationId);assert.equal(operation.result.operation.phase,'completed');
+    const disabled=await control('runtime.plugins.request',{deviceId:'local',workspacePath:workspace,method:'mcp/setEnabled',params:{name:'owned-server',enabled:false}});
+    assert.equal(disabled.enabled,false);assert.equal(disabled.appliesToNewConversations,true);
+    const disabledMcp=await control('runtime.plugins.request',{deviceId:'local',workspacePath:workspace,method:'mcp/list',params:{}});assert.equal(disabledMcp.servers.find(value=>value.name==='owned-server')?.enabled,false);
+    const beforeDisabledCatalog=catalogs.length;
+    await settings.getByRole('button',{name:'设置任务工具与资源范围',exact:true}).click();
+    await waitFor(async()=>catalogs.length>beforeDisabledCatalog&&await settings.getByRole('button',{name:'设置任务工具与资源范围',exact:true}).isEnabled(),15000,'all original disabled-source observations settled');
+    const disabledDescriptor=catalogs.at(-1).result.result.items.find(value=>value.sourceRef.id===descriptor.sourceRef.id);
+    assert.equal(disabledDescriptor.state,'unavailable');assert.equal(disabledDescriptor.reasonCode,'NATIVE_SOURCE_DISABLED');assert.deepEqual(disabledDescriptor.sourceRef,descriptor.sourceRef);assert.deepEqual(disabledDescriptor.accountRef,descriptor.accountRef);
+    await settings.getByText('来源已停用。任务选择不会重新启用它；请在原来源设置中处理。',{exact:true}).waitFor({timeout:15000});
+    const afterDisable=await control('runtime.integrations.request',{serverId:'local',workspacePath:workspace,method:'integrations/tasks/readTaskSources',params:envelope({target:actualTarget,params:{threadId:original.threadId}})});
+    assert.deepEqual(afterDisable.result.selection,read.result.selection,'disabling never rewrites or transfers the fixed task selection');
+    const restored=await control('runtime.plugins.request',{deviceId:'local',workspacePath:workspace,method:'mcp/setEnabled',params:{name:'owned-server',enabled:true}});assert.equal(restored.enabled,true);
+    const beforeRestoredCatalog=catalogs.length;
+    await settings.getByRole('button',{name:'设置任务工具与资源范围',exact:true}).click();
+    await waitFor(async()=>catalogs.length>beforeRestoredCatalog&&await settings.getByRole('button',{name:'设置任务工具与资源范围',exact:true}).isEnabled(),15000,'all original restored-source observations settled');
+    const restoredDescriptor=catalogs.at(-1).result.result.items.find(value=>value.sourceRef.id===descriptor.sourceRef.id);
+    assert.equal(restoredDescriptor.state,'ready');assert.deepEqual(restoredDescriptor.sourceRef,descriptor.sourceRef);assert.deepEqual(restoredDescriptor.accountRef,descriptor.accountRef);
+    await settings.getByText('全局启用：已启用',{exact:true}).waitFor({timeout:15000});
+    const removed=await control('runtime.plugins.request',{deviceId:'local',workspacePath:workspace,method:'mcp/remove',params:{name:'owned-server'}});assert.equal(removed.appliesToNewConversations,true);
+    const replacement=await control('runtime.plugins.request',{deviceId:'local',workspacePath:workspace,method:'mcp/install',params:{config:{name:'owned-server',transport:'stdio',command:'python3',args:[resolve(repoRoot,'crates/kcoder_mcp/tests/fixtures/apps_server.py'),'normal',mcp,'changed-source-generation']}}});assert.equal(replacement.appliesToNewConversations,true);
+    const beforeChangedCatalog=catalogs.length;
+    await settings.getByRole('button',{name:'设置任务工具与资源范围',exact:true}).click();
+    await waitFor(async()=>catalogs.length>beforeChangedCatalog&&await settings.getByRole('button',{name:'设置任务工具与资源范围',exact:true}).isEnabled(),15000,'all changed-source observations settled');
+    const changedDescriptor=catalogs.at(-1).result.result.items.find(value=>value.sourceRef.id===descriptor.sourceRef.id);
+    assert.equal(changedDescriptor.state,'unknown');assert.equal(changedDescriptor.reasonCode,'NATIVE_SOURCE_REGISTRATION_STALE');assert.deepEqual(changedDescriptor.sourceRef,descriptor.sourceRef);assert.deepEqual(changedDescriptor.accountRef,descriptor.accountRef);
+    await settings.getByText('来源配置或账户已变化。请重新发现并明确选择新修订；原选择不会自动转授。',{exact:true}).waitFor();
+    await settings.getByText('全局启用：未确认',{exact:true}).waitFor();
+    const afterSourceChange=await control('runtime.integrations.request',{serverId:'local',workspacePath:workspace,method:'integrations/tasks/readTaskSources',params:envelope({target:actualTarget,params:{threadId:original.threadId}})});assert.deepEqual(afterSourceChange.result.selection,read.result.selection);
+    const staleSelection=await control('runtime.integrations.request',{serverId:'local',workspacePath:workspace,method:'integrations/tasks/setTaskSources',params:{...envelope({target:actualTarget,params:{threadId:original.threadId,selection:read.result.selection}}),operationId:`reject-stale-source-${context.seed}`,expectedRevision:String(afterSourceChange.result.revision)}});
+    assert.equal(staleSelection.status,'completed','a completed port read can contain an unconfirmed mutation');assert.equal(staleSelection.result.operation.phase,'unknown');assert.equal(staleSelection.result.operation.error?.code,'TASK_CAPABILITY_SCOPE_CONTROL_OUTCOME_UNKNOWN');
+    const originalUnknown=await control('runtime.integrations.request',{serverId:'local',workspacePath:workspace,method:'integrations/tasks/readTaskSourceOperation',params:envelope({target:actualTarget,operationId:`reject-stale-source-${context.seed}`})});assert.equal(originalUnknown.result.operation.operationId,staleSelection.result.operation.operationId);assert.equal(originalUnknown.result.operation.phase,'unknown');assert.deepEqual(originalUnknown.result.snapshot,afterSourceChange.result);
+    const afterRejectedSelection=await control('runtime.integrations.request',{serverId:'local',workspacePath:workspace,method:'integrations/tasks/readTaskSources',params:envelope({target:actualTarget,params:{threadId:original.threadId}})});assert.deepEqual(afterRejectedSelection.result,afterSourceChange.result);
+    assert.equal(model.requests.length,1);assert.equal(writes.length,2);assert.equal(writes.filter(value=>value.result?.result?.operation?.phase==='completed').length,1);assert.deepEqual(errors,[]);
+    await settings.scrollIntoViewIfNeeded();await page.screenshot({path:context.pathInArtifacts('actual-task-capability-scope-selection.png'),fullPage:true});
+    await context.writeArtifactJson('actual-task-source-settings-evidence.json',{actualNative:true,binarySha256,originalTuple:original,catalogRevision:catalogue.result.result.catalogRevision,descriptor,
+      selected:read.result.selection,snapshotRevision:read.result.revision,originalOperationId:operation.result.operation.operationId,operationPhase:operation.result.operation.phase,
+      explicitUserSelection:true,sourceWrites:1,sourceSelectionAttempts:2,providerCalls:1,extraProviderCalls:0,contentFetches:0,platformCalls:0,nativeDiagnostics:diagnostics,sourceObservations,
+      lifecycle:{disabled:disabled.enabled,appliesToNewConversations:disabled.appliesToNewConversations,disabledMcp,disabledDescriptor,selectionAfterDisable:afterDisable.result.selection,restored:restored.enabled,restoredDescriptor,changedDescriptor,selectionAfterSourceChange:afterSourceChange.result.selection,staleSelectionStatus:staleSelection.status,staleSelectionPhase:staleSelection.result.operation.phase,staleSelectionError:staleSelection.result.operation.error?.code,originalUnknownOperationRead:originalUnknown.result.operation,selectionUnchangedAfterRejection:afterRejectedSelection.result,settledBeforeAssertions:true,actualBusinessVerification:false},
+      limitations:['Controlled text Provider and actual owned MCP registration prove native selection/provenance and current disable/recovery, not model/platform account quality or schema update.','This is a Linux Gateway/browser acceptance; Windows/Electron native parent remains separate.']});
+    return{exactNativeCatalog:true,explicitUserSourceChoice:true,originalCASOperationReadBack:true,extraModels:0};
+  }catch(error){await context.writeArtifactJson('actual-task-source-settings-failure.json',{error:error.message,errors,turns,completed,catalogs,writes,diagnostics,sourceObservations,modelRequests:model.requests.length,body:(await page.locator('body').innerText().catch(()=>'' )).slice(0,12000)});await page.screenshot({path:context.pathInArtifacts('actual-task-source-settings-failure.png'),fullPage:true}).catch(()=>{});throw error}
+  finally{await page.close()}
+});

@@ -50,6 +50,14 @@ const cloudDesktopExtensionMock = vi.hoisted(() => {
   }
 })
 
+// Layout tests use a controlled task transport, not a real Gateway/Gateway host.
+vi.mock('@/kcoder/taskLifetime', () => ({
+  attachTaskView: vi.fn(async () => ({ attached: true })),
+  releaseTaskView: vi.fn(async () => ({ released: true })),
+  readTaskLifetime: vi.fn(),
+  setTaskLifetime: vi.fn(),
+}))
+
 vi.mock('@extensions/cloud-desktop', () => ({
   cloudDesktopExtension: cloudDesktopExtensionMock,
 }))
@@ -86,7 +94,7 @@ vi.mock('@/lib/native-directory-picker', () => ({
   },
 }))
 
-const tauriMenuMocks = vi.hoisted(() => ({
+const desktopMenuMocks = vi.hoisted(() => ({
   getCurrentWindow: vi.fn(),
   menuNew: vi.fn(),
   menuPopup: vi.fn(),
@@ -96,7 +104,7 @@ const authMocks = vi.hoisted(() => ({
   logout: vi.fn(),
 }))
 
-const tauriEventMocks = vi.hoisted(() => ({
+const runtimeEventMocks = vi.hoisted(() => ({
   listen: vi.fn(),
 }))
 
@@ -262,30 +270,11 @@ vi.mock('@pierre/trees/react', async () => {
   }
 })
 
-vi.mock('@tauri-apps/api/dpi', () => ({
-  LogicalPosition: class LogicalPosition {
-    x: number
-    y: number
 
-    constructor(x: number, y: number) {
-      this.x = x
-      this.y = y
-    }
-  },
-}))
 
-vi.mock('@tauri-apps/api/menu', () => ({
-  Menu: {
-    new: tauriMenuMocks.menuNew,
-  },
-}))
 
-vi.mock('@tauri-apps/api/window', () => ({
-  getCurrentWindow: tauriMenuMocks.getCurrentWindow,
-}))
-
-vi.mock('@tauri-apps/api/event', () => ({
-  listen: tauriEventMocks.listen,
+vi.mock('@/lib/runtime-events', () => ({
+  listen: runtimeEventMocks.listen,
 }))
 
 vi.mock('@/components/chat/MessageTurnNavigation', () => ({
@@ -356,7 +345,7 @@ export function getDesktopWorkbenchHoistedMocks() {
     cloudDesktopExtensionMock,
     nativeDirectoryPickerMocks,
     automationMocks,
-    tauriMenuMocks,
+    desktopMenuMocks,
     authMocks,
   }
 }
@@ -406,9 +395,7 @@ function restoreGlobal({ target, key, descriptor }: GlobalSnapshot) {
 beforeEach(async () => {
   rtlAct = (await import('@testing-library/react')).act
   globalSnapshots = [
-    snapshotGlobal(globalThis, 'isTauri'),
-    snapshotGlobal(window, '__TAURI__'),
-    snapshotGlobal(window, '__TAURI_INTERNALS__'),
+    snapshotGlobal(globalThis, 'isGateway'),
     snapshotGlobal(window, 'innerWidth'),
     snapshotGlobal(window, 'innerHeight'),
     snapshotGlobal(globalThis, 'queueMicrotask'),
@@ -443,10 +430,8 @@ beforeEach(async () => {
   cloudDesktopExtensionMock.available = false
   cloudDesktopExtensionMock.isInternalPageUrl.mockReturnValue(false)
   cloudDesktopExtensionMock.launch.mockResolvedValue(true)
-  tauriEventMocks.listen.mockResolvedValue(vi.fn())
-  delete (globalThis as typeof globalThis & { isTauri?: unknown }).isTauri
-  delete (window as typeof window & { __TAURI__?: unknown }).__TAURI__
-  delete (window as typeof window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__
+  runtimeEventMocks.listen.mockResolvedValue(vi.fn())
+  delete (globalThis as typeof globalThis & { isGateway?: unknown }).isGateway
 })
 
 afterAll(() => {

@@ -4,8 +4,7 @@ import { acknowledgeConfirmedWorkspaceOperation, type WorkspaceOperationReceiptH
 import { useEffect, useMemo, useRef, useState, type SetStateAction } from "react";
 import { useFormOwner, useFormState } from "@/features/forms/form-owner";
 import { threadListScopeKey } from "@/runtime/thread-list-projection";
-import { useLocalSearchParams, useRouter } from "expo-router";
-import { useIsFocused } from "@react-navigation/native";
+import { useIsFocused, useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import {
   ActivityIndicator,
   Dimensions,
@@ -21,16 +20,14 @@ import {
   FolderGit2,
   FolderOpen,
   FolderPlus,
-  Github,
   RotateCcw,
   Search,
   Trash2,
 } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Button, EmptyState, Field } from "@/components/ui";
+import { listWorkspaceCatalog } from "@/runtime/task-runtime/workspaces";
 import {
-  listWorkspaceOptions,
-  listManagedWorktrees,
   openWorkspaceWithReceipt,
   prepareManagedWorktreeWithReceipt,
   previewManagedWorktreeArchive,
@@ -47,15 +44,18 @@ import { backOrReplace, profileHomeHref } from "@/navigation/back-or-replace";
 import { shouldActivateRouteProfile } from "@/state/route-profile-activation";
 import { t } from "@/i18n";
 import { useLocale } from "@/i18n/use-locale";
+import { profileAuthorizationScopeKey } from "@/state/profile-coordinator";
+import { claimNewTaskDraftHandoff, retainNewTaskDraftHandoffProfile, returnNewTaskDraftHandoff, revokeNewTaskDraftHandoff, type NewTaskDraftHandoffHandle, type NewTaskDraftReturn } from "@/navigation/new-task-draft-handoff";
 
-type OpenMode = "open" | "create" | "worktree" | "github";
+type OpenMode = "open" | "create" | "worktree";
 
 export default function OpenProjectRoute() {
   useLocale();
   const { colors } = useTheme();
   const styles = useThemedStyles(makeStyles);
-  const { profileId } = useLocalSearchParams<{ profileId?: string }>();
+  const { profileId, serverId: routedServerId, draftHandoff } = useLocalSearchParams<{ profileId?: string; serverId?: string; draftHandoff?: string }>();
   const router = useRouter();
+  const navigation = useNavigation();
   const isFocused = useIsFocused();
   const insets = useSafeAreaInsets();
   const [compact, setCompact] = useState(false);
@@ -73,8 +73,13 @@ export default function OpenProjectRoute() {
     [runtime.servers, serverId],
   );
   const selectedTargetKey = activeProfile && server ? threadListScopeKey(activeProfile, server) : null;
-  const gatewayScope = activeProfile ? [activeProfile.id, activeProfile.baseUrl, activeProfile.authorizationGeneration, activeProfile.deviceId] : null;
-  const owner = useFormOwner(JSON.stringify([profileId, profileReady, gatewayScope, selectedTargetKey, demo]));
+  const gatewayScope = activeProfile ? profileAuthorizationScopeKey(activeProfile) : null;
+  const owner = useFormOwner(JSON.stringify([profileId, routedServerId, draftHandoff, profileReady, gatewayScope, selectedTargetKey,
+    server?.observationTargetIdentity, server?.accountIdentity?.username, runtime.reauthorizationRequired, demo]));
+  const [draftRestoreNotice, setDraftRestoreNotice] = useFormState<string | null>(owner, null);
+  const draftClaim = useRef<{ owner: typeof owner; handle: NewTaskDraftHandoffHandle } | null>(null);
+  const draftNavigation = useRef({ token: draftHandoff, forwarded: false });
+  if (draftNavigation.current.token !== draftHandoff) draftNavigation.current = { token: draftHandoff, forwarded: false };
   const setServerId = (update: SetStateAction<string>) => {
     if (!owner.isCurrent()) return;
     setSelectedServerId((current) => {
@@ -83,8 +88,35 @@ export default function OpenProjectRoute() {
     });
   };
   const goBack = () => {
-    if (owner.isCurrent()) backOrReplace(router, profileHomeHref(profileId ?? activeProfile?.id));
+    if (owner.isCurrent()) {
+      revokeNewTaskDraftHandoff(draftHandoff);
+      backOrReplace(router, profileHomeHref(profileId ?? activeProfile?.id));
+    }
   };
+  const draftReturnParams = (destination: NewTaskDraftReturn): Record<string, string> => {
+    const result = { ...destination } as Record<string, string>;
+    if (!owner.isCurrent() || !activeProfile || !server) return result;
+    const handle = draftClaim.current?.owner === owner ? draftClaim.current.handle : undefined;
+    const token = returnNewTaskDraftHandoff(handle, activeProfile, server, destination);
+    if (token) { draftNavigation.current.forwarded = true; result.draftHandoff = token; }
+    else { revokeNewTaskDraftHandoff(draftHandoff); if (draftHandoff) { result.draftRestoreFailed = "1"; setDraftRestoreNotice(t("new.draft_restore_unavailable")); } }
+    return result;
+  };
+  useEffect(() => {
+    const unsubscribe = navigation.addListener("removed", () => {
+      if (!draftNavigation.current.forwarded) revokeNewTaskDraftHandoff(draftNavigation.current.token);
+    });
+    return () => queueMicrotask(unsubscribe);
+  }, [navigation]);
+  useEffect(() => {
+    if (!draftHandoff || !hydrated || !owner.isCurrent()) return;
+    if (runtime.reauthorizationRequired || invalidProfile || !activeProfile) { revokeNewTaskDraftHandoff(draftHandoff); draftClaim.current = null; setDraftRestoreNotice(t("new.draft_restore_unavailable")); return; }
+    if (!retainNewTaskDraftHandoffProfile(draftHandoff, activeProfile)) { draftClaim.current = null; setDraftRestoreNotice(t("new.draft_restore_unavailable")); return; }
+    if (!profileReady || runtime.loading || !server) return;
+    const handle = claimNewTaskDraftHandoff(draftHandoff, activeProfile, server);
+    draftClaim.current = handle ? { owner, handle } : null;
+    if (!handle) setDraftRestoreNotice(t("new.draft_restore_unavailable"));
+  }, [owner, hydrated, profileReady, runtime.loading, runtime.reauthorizationRequired, invalidProfile]);
   const [path, setPath] = useFormState(owner, "");
   const [mode, setMode] = useFormState<OpenMode>(owner, "open");
   const [gitRef, setGitRef] = useFormState(owner, "");
@@ -118,8 +150,8 @@ export default function OpenProjectRoute() {
         setError(t("open_project.ready_identity_unverified")); return;
       }
       entry.navigated = true; setPendingOpened(null);
-      router.replace({ pathname: "/new", params: { ...entry.value.params,
-        operationReceiptId: entry.value.receipt.id, operationReceiptVersion: "2", ...(outcome !== "consumed" ? { workspaceBookkeeping: "pending" } : {}) } });
+      router.replace({ pathname: "/new", params: { ...draftReturnParams({ profileId: entry.value.profile.id, serverId: entry.value.server.id, cwd: entry.value.params.cwd, ...entry.value.params,
+        operationReceiptId: entry.value.receipt.id, operationReceiptVersion: "2" }), ...(outcome !== "consumed" ? { workspaceBookkeeping: "pending" } : {}) } });
     } finally { entry.busy = false; setLoading(false); }
   };
 
@@ -127,10 +159,10 @@ export default function OpenProjectRoute() {
   const [deliveryError, setDeliveryError] = useFormState<string | null>(owner, null);
   const [deliveryRevision, setDeliveryRevision] = useFormState(owner, 0);
   useEffect(() => {
-    if (demo || !owner.isCurrent() || !profileReady || !activeProfile || !server || !path.trim() || mode === "github") return;
+    if (demo || !owner.isCurrent() || !profileReady || !activeProfile || !server || !path.trim()) return;
     let cancelled = false; setDeliveryChecking(true); setDeliveryError(null);
     const kind = mode === "worktree" ? "worktree" : mode === "create" ? "create" : "open";
-    void loadWorkspaceOpenDelivery(activeProfile, server, kind, path.trim()).then(confirmed => {
+    void loadWorkspaceOpenDelivery(activeProfile, server, kind, path.trim(), () => !cancelled && owner.isCurrent()).then(confirmed => {
       if (cancelled || !owner.isCurrent()) return;
       if (!confirmed) { setPendingOpened(null); openedContinuation.current = null; return; }
       const value = { receipt: confirmed.receipt, profile: { ...activeProfile }, server: { ...server, ...(server.accountIdentity ? { accountIdentity: { ...server.accountIdentity } } : {}) }, params: { profileId: activeProfile.id, serverId: server.id, cwd: confirmed.path, operationKind: kind, operationSourcePath: path.trim() } };
@@ -149,6 +181,9 @@ export default function OpenProjectRoute() {
     setCatalogRevision((value) => value + 1);
   };
   const serverSignature = runtime.servers.map((item) => item.id).join("\0");
+  const serverIntentKey = JSON.stringify([profileId, routedServerId, draftHandoff, gatewayScope, profileReady]);
+  const serverSelectionIntent = useRef<{ key: string; source: "unselected" | "route" | "manual" | "auto" } | null>(null);
+  if (serverSelectionIntent.current?.key !== serverIntentKey) serverSelectionIntent.current = { key: serverIntentKey, source: "unselected" };
 
   useEffect(() => {
     const update = ({ window }: { window: { height: number } }) =>
@@ -181,7 +216,6 @@ export default function OpenProjectRoute() {
 
   useEffect(() => {
     if (!owner.isCurrent()) return;
-    setServerId("");
     setPath("");
     setWorkspaceOptions([]);
     setManagedWorktrees([]);
@@ -198,14 +232,23 @@ export default function OpenProjectRoute() {
 
   useEffect(() => {
     if (!owner.isCurrent() || !profileReady || runtime.loading) return;
+    const selection = serverSelectionIntent.current!;
+    if (selection.source === "unselected") {
+      const initial = routedServerId ? runtime.servers.find((item) => item.id === routedServerId)?.id ?? ""
+        : runtime.servers.length === 1 ? runtime.servers[0].id : "";
+      selection.source = routedServerId ? "route" : initial ? "auto" : "unselected";
+      setServerId(initial);
+      return;
+    }
+    if (selection.source === "auto" && runtime.servers.length !== 1) { selection.source = "unselected"; setServerId(""); return; }
+    const fallback = !routedServerId && runtime.servers.length === 1 ? runtime.servers[0].id : "";
+    if (fallback && !runtime.servers.some((item) => item.id === serverId)) selection.source = "auto";
     setServerId((current) => {
       if (current && runtime.servers.some((item) => item.id === current))
         return current;
-      const next = runtime.servers[0];
-      setPath(next?.workspacePath ?? "");
-      return next?.id ?? "";
+      return fallback;
     });
-  }, [activeProfile?.id, profileReady, runtime.loading, serverSignature]);
+  }, [activeProfile?.id, profileReady, runtime.loading, serverSignature, serverIntentKey]);
 
   useEffect(() => {
     if (!profileReady || runtime.loading || !activeProfile || !server) {
@@ -225,16 +268,15 @@ export default function OpenProjectRoute() {
       return;
     }
     let cancelled = false;
+    const controller = new AbortController();
+    const unregisterOwnerCleanup = owner.onDispose(() => controller.abort());
     setOptionsLoading(true);
     setOptionsReady(false);
-    void Promise.all([
-      listWorkspaceOptions(activeProfile, server),
-      listManagedWorktrees(activeProfile, server),
-    ])
-      .then(([items, worktrees]) => {
+    void listWorkspaceCatalog(activeProfile, server, { signal: controller.signal })
+      .then(({ options, managedWorktrees }) => {
         if (!cancelled && owner.isCurrent()) {
-          setWorkspaceOptions(items);
-          setManagedWorktrees(worktrees);
+          setWorkspaceOptions(options);
+          setManagedWorktrees(managedWorktrees);
           setPath((current) => current || server.workspacePath || "");
           setOptionsReady(true);
         }
@@ -248,11 +290,14 @@ export default function OpenProjectRoute() {
       });
     return () => {
       cancelled = true;
+      unregisterOwnerCleanup();
+      controller.abort();
     };
   }, [owner, demo, profileReady, runtime.loading, catalogRevision]);
 
   const selectServer = (nextServerId: string) => {
     if (!owner.isCurrent()) return;
+    serverSelectionIntent.current!.source = "manual";
     const next = runtime.servers.find((item) => item.id === nextServerId);
     setServerId(nextServerId);
     setPath(next?.workspacePath ?? "");
@@ -263,13 +308,16 @@ export default function OpenProjectRoute() {
 
   const refreshManagedWorktrees = async () => {
     if (!owner.isCurrent() || !activeProfile || !server || demo) return;
-    const [options, worktrees] = await Promise.all([
-      listWorkspaceOptions(activeProfile, server),
-      listManagedWorktrees(activeProfile, server),
-    ]);
-    if (!owner.isCurrent()) return;
-    setWorkspaceOptions(options);
-    setManagedWorktrees(worktrees);
+    const controller = new AbortController();
+    const unregisterOwnerCleanup = owner.onDispose(() => controller.abort());
+    try {
+      const { options, managedWorktrees } = await listWorkspaceCatalog(activeProfile, server, { signal: controller.signal });
+      if (!owner.isCurrent() || controller.signal.aborted) return;
+      setWorkspaceOptions(options);
+      setManagedWorktrees(managedWorktrees);
+    } finally {
+      unregisterOwnerCleanup();
+    }
   };
 
   const requestArchive = async (worktree: ManagedWorktree) => {
@@ -384,9 +432,9 @@ export default function OpenProjectRoute() {
   const submit = async () => {
     if (
       !owner.isCurrent() || openedContinuation.current?.owner === owner || deliveryChecking || deliveryError || loading || !optionsReady ||
-      mode === "github" ||
       !profileReady ||
       runtime.loading ||
+      runtime.reauthorizationRequired ||
       !activeProfile ||
       !server ||
       !path.trim()
@@ -422,8 +470,9 @@ export default function OpenProjectRoute() {
       } else {
         const bookkeeping = confirmed.receipt ? await acknowledgeConfirmedWorkspaceOperation(confirmed.receipt) : "consumed";
         if (!owner.isCurrent()) return;
-        router.replace({ pathname: "/new", params: { profileId: activeProfile.id, serverId: server.id, cwd: confirmed.path,
-          ...(confirmed.receipt && bookkeeping !== "consumed" ? { workspaceBookkeeping: "pending", operationReceiptId: confirmed.receipt.id, operationKind: mode === "worktree" ? "worktree" : mode === "create" ? "create" : "open", operationSourcePath: path.trim() } : {}) } });
+        router.replace({ pathname: "/new", params: { ...draftReturnParams({ profileId: activeProfile.id, serverId: server.id, cwd: confirmed.path,
+          ...(confirmed.receipt && bookkeeping !== "consumed" ? { operationReceiptId: confirmed.receipt.id, operationKind: mode === "worktree" ? "worktree" : mode === "create" ? "create" : "open", operationSourcePath: path.trim() } : {}) }),
+          ...(confirmed.receipt && bookkeeping !== "consumed" ? { workspaceBookkeeping: "pending" } : {}) } });
       }
     } catch (value) {
       setError(value instanceof Error ? value.message : String(value));
@@ -432,7 +481,7 @@ export default function OpenProjectRoute() {
     }
   };
 
-  const unavailable = !profileReady || runtime.loading;
+  const unavailable = !profileReady || runtime.loading || runtime.reauthorizationRequired;
 
   if (invalidProfile) {
     return (
@@ -442,6 +491,7 @@ export default function OpenProjectRoute() {
       >
         <View style={styles.header}>
           <Pressable
+            testID="open-project-back"
             accessibilityLabel={t("task.back")}
             onPress={goBack}
             style={styles.headerButton}
@@ -467,6 +517,7 @@ export default function OpenProjectRoute() {
     >
       <View style={styles.header}>
         <Pressable
+          testID="open-project-back"
           accessibilityLabel={t("task.back")}
           onPress={goBack}
           style={styles.headerButton}
@@ -503,6 +554,7 @@ export default function OpenProjectRoute() {
         {runtime.servers.map((item) => (
           <Pressable
             key={item.id}
+            testID={`open-project-server-${item.id}`}
             disabled={unavailable}
             onPress={() => selectServer(item.id)}
             style={[styles.server, item.id === serverId && styles.selected]}
@@ -723,8 +775,8 @@ export default function OpenProjectRoute() {
           </View>
         ) : null}
 
-        {mode !== "github" ? (
-          <Field
+        <Field
+            testID="open-project-path"
             label={mode === "worktree" ? t("open_project.git_repository_directory") : t("open_project.directory")}
             value={path}
             onChangeText={setPath}
@@ -733,7 +785,6 @@ export default function OpenProjectRoute() {
             autoCorrect={false}
             placeholder="/path/to/project"
           />
-        ) : null}
 
         <View style={styles.methods}>
           <Pressable
@@ -775,24 +826,6 @@ export default function OpenProjectRoute() {
               <Text style={styles.methodBody}>{t("open_project.create_git_worktree_body")}</Text>
             </View>
           </Pressable>
-          <Pressable
-            disabled={unavailable}
-            onPress={() => {
-              setMode("github");
-              setError(
-                t("open_project.github_unavailable_error"),
-              );
-            }}
-            style={[styles.method, mode === "github" && styles.selected]}
-          >
-            <Github size={19} color={colors.textMuted} />
-            <View style={styles.methodCopy}>
-              <Text style={styles.methodTitle}>{t("open_project.github_clone")}</Text>
-              <Text style={styles.methodBody}>
-                {t("open_project.github_clone_waiting")}
-              </Text>
-            </View>
-          </Pressable>
         </View>
 
         {mode === "worktree" ? (
@@ -806,6 +839,7 @@ export default function OpenProjectRoute() {
             placeholder={t("open_project.git_ref_placeholder")}
           />
         ) : null}
+        {draftRestoreNotice ? <Text testID="new-task-draft-restore-notice" accessibilityRole="alert" style={styles.error}>{draftRestoreNotice}</Text> : null}
         {error ? (
           <Text testID="open-project-error" style={styles.error}>
             {error}
@@ -822,18 +856,17 @@ export default function OpenProjectRoute() {
         ]}
       >
         <Button
+          testID="open-project-submit"
           variant="primary"
           loading={loading}
-          disabled={Boolean(pendingOpened || deliveryError) || deliveryChecking || loading || !optionsReady || unavailable || mode === "github" || !server || !path.trim()}
+          disabled={Boolean(pendingOpened || deliveryError) || deliveryChecking || loading || !optionsReady || unavailable || !server || !path.trim()}
           onPress={() => void submit()}
         >
           {mode === "create"
             ? t("open_project.create_and_open")
             : mode === "worktree"
               ? t("open_project.create_worktree_action")
-              : mode === "github"
-                ? t("open_project.github_clone_pending")
-                : t("open_project.open_project")}
+              : t("open_project.open_project")}
         </Button>
       </View>
     </View>

@@ -52,7 +52,50 @@ pub struct StdioTransport {
     pending_write_offset: usize,
 }
 
+#[cfg(target_os = "linux")]
+pub struct OwnedStdioExit(
+    tokio::io::unix::AsyncFd<kcoder_process_supervisor::linux_stdio::StdioExitHandle>,
+);
+#[cfg(target_os = "linux")]
+impl OwnedStdioExit {
+    pub async fn wait(self) -> Result<()> {
+        let _ready = self
+            .0
+            .readable()
+            .await
+            .context("Owned stdio exit observation failed")?;
+        Ok(())
+    }
+}
+
+#[cfg(windows)]
+pub struct OwnedStdioExit(kcoder_process_supervisor::suspended_child::JobExitHandle);
+#[cfg(windows)]
+impl OwnedStdioExit {
+    pub async fn wait(self) -> Result<()> {
+        while !self.0.is_empty()? {
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
+        Ok(())
+    }
+}
+
 impl StdioTransport {
+    /// Retain worker data until the owned direct child has actually been reaped.
+    #[cfg(not(any(target_os = "linux", windows)))]
+    pub(crate) fn stop_and_reap(mut self, workspace: kcoder_config::PrivateTempDir) {
+        self.process_tree.terminate();
+        let mut retained = std::mem::ManuallyDrop::new(workspace);
+        if let Ok(runtime) = tokio::runtime::Handle::try_current() {
+            runtime.spawn(async move {
+                if self.child.wait().await.is_ok() {
+                    unsafe {
+                        std::mem::ManuallyDrop::drop(&mut retained);
+                    }
+                }
+            });
+        }
+    }
     pub async fn new(
         command: &str,
         args: &[String],
@@ -67,25 +110,104 @@ impl StdioTransport {
         env: &HashMap<String, String>,
         private: bool,
     ) -> Result<Self> {
+        Self::launch(command, args, env, private, None, None).await
+    }
+
+    pub(crate) async fn new_private_in(
+        command: &str,
+        args: &[String],
+        env: &HashMap<String, String>,
+        private: bool,
+        cwd: Option<&std::path::Path>,
+    ) -> Result<Self> {
+        Self::launch(command, args, env, private, None, cwd).await
+    }
+
+    #[cfg(any(target_os = "linux", windows))]
+    pub(crate) async fn new_owned_private(
+        command: &str,
+        args: &[String],
+        env: &HashMap<String, String>,
+        supervisor: &std::path::Path,
+    ) -> Result<(Self, OwnedStdioExit)> {
+        anyhow::ensure!(
+            supervisor.is_absolute(),
+            "Owned stdio host must be absolute"
+        );
+        let transport = Self::launch(command, args, env, true, Some(supervisor), None).await?;
+        #[cfg(target_os = "linux")]
+        let owner = transport
+            .process_tree
+            .owner
+            .as_ref()
+            .context("Owned stdio guard unavailable")?;
+        #[cfg(target_os = "linux")]
+        let monitor = OwnedStdioExit(tokio::io::unix::AsyncFd::new(owner.exit_handle())?);
+        #[cfg(windows)]
+        let monitor = OwnedStdioExit(
+            transport
+                .process_tree
+                .job
+                .as_ref()
+                .context("Owned stdio Job unavailable")?
+                .exit_handle(),
+        );
+        Ok((transport, monitor))
+    }
+
+    async fn launch(
+        command: &str,
+        args: &[String],
+        env: &HashMap<String, String>,
+        private: bool,
+        supervisor: Option<&std::path::Path>,
+        cwd: Option<&std::path::Path>,
+    ) -> Result<Self> {
         let child_env = stdio_child_env(env);
         #[cfg(windows)]
         let program = which::which_in(
             command,
-            child_env.get("PATH").map(std::ffi::OsString::from),
-            std::env::current_dir().context("MCP command working directory is unavailable")?,
+            child_env
+                .iter()
+                .find(|(key, _)| key.eq_ignore_ascii_case("PATH"))
+                .map(|(_, value)| std::ffi::OsString::from(value)),
+            cwd.map(std::path::Path::to_path_buf)
+                .map(Ok)
+                .unwrap_or_else(std::env::current_dir)
+                .context("MCP command working directory is unavailable")?,
         )
         .unwrap_or_else(|_| std::path::PathBuf::from(command));
         #[cfg(not(windows))]
         let program = command;
         // Resolve Windows command shims before spawning; the standard process API retains argv quoting.
+        #[cfg(not(windows))]
+        let program = supervisor.unwrap_or_else(|| std::path::Path::new(&program));
         let mut cmd = tokio::process::Command::new(program);
+        if let Some(cwd) = cwd {
+            cmd.current_dir(cwd);
+        }
+        #[cfg(windows)]
+        let mut job = if supervisor.is_some() {
+            cmd.creation_flags(kcoder_process_supervisor::suspended_child::SUSPENDED_CHILD_FLAGS);
+            Some(kcoder_process_supervisor::suspended_child::SuspendedChildJob::new()?)
+        } else {
+            // A standalone stdio server is also a background process.
+            cmd.creation_flags(0x0800_0000);
+            None
+        };
+        #[cfg(target_os = "linux")]
+        if supervisor.is_some() {
+            cmd.arg(kcoder_process_supervisor::linux_stdio::INTERNAL_STDIO_OWNER_V1)
+                .arg(std::process::id().to_string())
+                .arg(command);
+        }
         cmd.args(args)
             .env_clear()
             .envs(child_env)
             .stdout(std::process::Stdio::piped())
             .stdin(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
-            .kill_on_drop(true);
+            .kill_on_drop(supervisor.is_none());
         #[cfg(unix)]
         cmd.process_group(0);
 
@@ -93,6 +215,45 @@ impl StdioTransport {
             .spawn()
             .with_context(|| format!("failed to spawn MCP server: {}", command))?;
         let child_pid = child.id().context("spawned MCP server has no process ID")?;
+        #[cfg(not(any(target_os = "linux", windows)))]
+        let process_tree = StdioProcessTreeTerminator::new(child_pid);
+        #[cfg(any(target_os = "linux", windows))]
+        let mut process_tree = StdioProcessTreeTerminator::new(child_pid);
+        #[cfg(windows)]
+        if let Some(mut owned_job) = job.take() {
+            let assigned = (|| {
+                let process = child
+                    .raw_handle()
+                    .context("Owned MCP process handle unavailable")?;
+                owned_job.assign_and_resume(unsafe {
+                    std::os::windows::io::BorrowedHandle::borrow_raw(process)
+                })
+            })();
+            if let Err(error) = assigned {
+                process_tree.finished.store(true, Ordering::SeqCst);
+                let _ = child.start_kill();
+                let _ = tokio::time::timeout(std::time::Duration::from_secs(4), child.wait()).await;
+                return Err(error);
+            }
+            process_tree.job = Some(owned_job);
+        }
+        #[cfg(target_os = "linux")]
+        if supervisor.is_some() {
+            match kcoder_process_supervisor::linux_stdio::StdioOwnerGuard::for_child(child_pid) {
+                Ok(owner) => process_tree.owner = Some(owner),
+                Err(error) => {
+                    process_tree.finished.store(true, Ordering::SeqCst);
+                    // The fresh Child has not been polled/reaped, so this PID
+                    // cannot have been reused. TERM lets the helper reap its tree.
+                    unsafe {
+                        libc::kill(child_pid as i32, libc::SIGTERM);
+                    }
+                    let _ =
+                        tokio::time::timeout(std::time::Duration::from_secs(4), child.wait()).await;
+                    return Err(error);
+                }
+            }
+        }
 
         let stdin = child
             .stdin
@@ -108,7 +269,7 @@ impl StdioTransport {
         let stdout_lines = BufReader::new(stdout);
 
         Ok(Self {
-            process_tree: StdioProcessTreeTerminator::new(child_pid),
+            process_tree,
             child,
             stdin,
             stdout_lines,
@@ -143,6 +304,10 @@ impl StdioTransport {
 struct StdioProcessTreeTerminator {
     pid: u32,
     finished: AtomicBool,
+    #[cfg(target_os = "linux")]
+    owner: Option<kcoder_process_supervisor::linux_stdio::StdioOwnerGuard>,
+    #[cfg(windows)]
+    job: Option<kcoder_process_supervisor::suspended_child::SuspendedChildJob>,
 }
 
 impl StdioProcessTreeTerminator {
@@ -150,11 +315,20 @@ impl StdioProcessTreeTerminator {
         Self {
             pid,
             finished: AtomicBool::new(false),
+            #[cfg(windows)]
+            job: None,
+            #[cfg(target_os = "linux")]
+            owner: None,
         }
     }
 
     fn terminate(&self) {
         if self.finished.swap(true, Ordering::SeqCst) {
+            return;
+        }
+        #[cfg(target_os = "linux")]
+        if let Some(owner) = &self.owner {
+            owner.request_stop();
             return;
         }
         #[cfg(unix)]
@@ -165,6 +339,10 @@ impl StdioProcessTreeTerminator {
         }
         #[cfg(windows)]
         {
+            if let Some(job) = &self.job {
+                let _ = job.terminate();
+                return;
+            }
             let _ = std::process::Command::new("taskkill.exe")
                 .args(["/PID", &self.pid.to_string(), "/T", "/F"])
                 .stdout(std::process::Stdio::null())
@@ -175,7 +353,12 @@ impl StdioProcessTreeTerminator {
 
     #[cfg(windows)]
     fn disarm(&self) {
-        self.finished.store(true, Ordering::SeqCst);
+        if self.job.is_some() {
+            // A private Job remains authoritative after its root exits.
+            self.terminate();
+        } else {
+            self.finished.store(true, Ordering::SeqCst);
+        }
     }
 }
 
@@ -198,12 +381,21 @@ impl Drop for StdioTransport {
 
 fn stdio_child_env(configured: &HashMap<String, String>) -> HashMap<String, String> {
     let platform = if cfg!(windows) { "windows" } else { "unix" };
-    let mut env = minimal_process_env_for(platform, |name| std::env::var(name).ok());
-    env.extend(
-        configured
-            .iter()
-            .map(|(key, value)| (key.clone(), value.clone())),
-    );
+    configured_stdio_child_env(platform, configured, |name| std::env::var(name).ok())
+}
+
+fn configured_stdio_child_env(
+    platform: &str,
+    configured: &HashMap<String, String>,
+    get_env: impl Fn(&str) -> Option<String>,
+) -> HashMap<String, String> {
+    let mut env = minimal_process_env_for(platform, get_env);
+    for (key, value) in configured {
+        if platform == "windows" {
+            env.retain(|old, _| !old.eq_ignore_ascii_case(key));
+        }
+        env.insert(key.clone(), value.clone());
+    }
     env
 }
 
@@ -726,6 +918,107 @@ mod tests {
         );
     }
 
+    #[test]
+    fn windows_explicit_environment_overrides_inherited_names_without_case_ambiguity() {
+        let configured = HashMap::from([
+            ("Path".into(), "explicit-search-path".into()),
+            ("systemroot".into(), "explicit-root".into()),
+        ]);
+        let environment = configured_stdio_child_env("windows", &configured, |key| {
+            matches!(key, "PATH" | "SystemRoot").then(|| "inherited".into())
+        });
+        assert_eq!(environment.len(), 2);
+        assert_eq!(environment.get("Path").unwrap(), "explicit-search-path");
+        assert_eq!(environment.get("systemroot").unwrap(), "explicit-root");
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn owned_windows_stdio_sessions_are_isolated_and_exit_receipts_include_descendants() {
+        let directory = tempfile::tempdir().unwrap();
+        let program = which::which("powershell.exe").unwrap();
+        let script = std::path::PathBuf::from(
+            std::env::var_os("KCODER_WORKSPACE_ROOT").expect("current workspace root"),
+        )
+        .join("crates/kcoder_mcp")
+        .join("tests/fixtures/owned-stdio-windows.ps1");
+        let host = std::env::current_exe().unwrap();
+        let mut clients = Vec::new();
+        let mut monitors = Vec::new();
+        for (index, token) in ["alpha-private-fixture", "beta-private-fixture"]
+            .into_iter()
+            .enumerate()
+        {
+            let pid = directory.path().join(format!("private-{index}.pid"));
+            let config = crate::McpServerConfig {
+                name: "same-name".into(),
+                transport: "stdio".into(),
+                command: program.to_string_lossy().into_owned(),
+                args: vec![
+                    "-NoLogo".into(),
+                    "-NoProfile".into(),
+                    "-ExecutionPolicy".into(),
+                    "Bypass".into(),
+                    "-File".into(),
+                    script.to_string_lossy().into_owned(),
+                ],
+                env: HashMap::from([
+                    (
+                        "KCODER_PRIVATE_STDIO_PID".into(),
+                        pid.to_string_lossy().into_owned(),
+                    ),
+                    ("KCODER_PRIVATE_STDIO_TOKEN".into(), token.into()),
+                ]),
+                url: String::new(),
+                headers: HashMap::new(),
+                policy: Default::default(),
+            };
+            let mut monitor = None;
+            let (client, definitions) =
+                crate::connect_owned_session_server(&config, &host, |exit| monitor = Some(exit))
+                    .await
+                    .unwrap();
+            assert_eq!(definitions.len(), 1);
+            assert_eq!(definitions[0].name, "echo");
+            assert!(
+                pid.is_file(),
+                "descendant did not start under the private Job"
+            );
+            let output = client
+                .lock()
+                .await
+                .call_tool("echo", serde_json::json!({}))
+                .await
+                .unwrap();
+            assert!(serde_json::to_string(&output).unwrap().contains(token));
+            clients.push(client);
+            monitors.push(monitor.unwrap());
+        }
+        clients[0].lock().await.close();
+        let first = monitors.remove(0);
+        tokio::time::timeout(std::time::Duration::from_secs(5), first.wait())
+            .await
+            .unwrap()
+            .unwrap();
+        let peer = clients[1]
+            .lock()
+            .await
+            .call_tool("echo", serde_json::json!({}))
+            .await
+            .unwrap();
+        assert!(
+            serde_json::to_string(&peer)
+                .unwrap()
+                .contains("beta-private-fixture"),
+            "closing one private MCP Job affected its peer"
+        );
+        clients[1].lock().await.close();
+        tokio::time::timeout(std::time::Duration::from_secs(5), monitors.remove(0).wait())
+            .await
+            .unwrap()
+            .unwrap();
+    }
+
     #[cfg(unix)]
     #[tokio::test]
     async fn mcp_stderr_invalid_utf8_and_large_line_do_not_block_protocol_stdout() {
@@ -966,10 +1259,10 @@ mod tests {
 
         let child_pid = tokio::time::timeout(std::time::Duration::from_secs(5), async {
             loop {
-                if let Ok(text) = tokio::fs::read_to_string(&pid_path).await {
-                    if let Ok(pid) = text.trim().parse::<u32>() {
-                        break pid;
-                    }
+                if let Ok(text) = tokio::fs::read_to_string(&pid_path).await
+                    && let Ok(pid) = text.trim().parse::<u32>()
+                {
+                    break pid;
                 }
                 tokio::time::sleep(std::time::Duration::from_millis(50)).await;
             }

@@ -1,5 +1,8 @@
 //! Optional first transcript page on an already authorized thread resume.
-use crate::{ThreadMessage, ThreadReadResult, ThreadResumeResult};
+use crate::{
+    ThreadMessage, ThreadReadResult, ThreadResumeResult, ThreadTranscriptObservationV1,
+    ThreadTranscriptSnapshotV1,
+};
 use serde::{Deserialize, Serialize};
 
 pub const CAPABILITY_THREAD_RESUME_HISTORY_PAGE_V1: &str = "threadResumeHistoryPageV1";
@@ -32,6 +35,10 @@ pub struct ThreadResumeHistoryPageV1 {
     pub has_more_before: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub before_cursor: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transcript_snapshot_v1: Option<ThreadTranscriptSnapshotV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transcript_observation_v1: Option<ThreadTranscriptObservationV1>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -64,6 +71,8 @@ impl From<ThreadReadResult> for ThreadResumeResult {
                     range_end: page.range_end,
                     has_more_before: page.has_more_before,
                     before_cursor: page.before_cursor,
+                    transcript_snapshot_v1: page.transcript_snapshot_v1,
+                    transcript_observation_v1: page.transcript_observation_v1,
                 },
             }),
         }
@@ -74,6 +83,26 @@ impl From<ThreadReadResult> for ThreadResumeResult {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn resume_snapshot_is_independent_of_history_availability_and_legacy_shape() {
+        let legacy = json!({"messages":[],"rangeStart":0,"rangeEnd":0,"hasMoreBefore":false});
+        let page: ThreadResumeHistoryPageV1 = serde_json::from_value(legacy.clone()).unwrap();
+        assert!(page.transcript_snapshot_v1.is_none());
+        assert_eq!(serde_json::to_value(page).unwrap(), legacy);
+        for snapshot in [
+            json!({"status":"available","snapshotId":"a".repeat(64),"viewKey":"b".repeat(64)}),
+            json!({"status":"unavailable","code":"unprovenSource"}),
+        ] {
+            let mut value = legacy.clone();
+            value["transcriptSnapshotV1"] = snapshot;
+            let page: ThreadResumeHistoryPageV1 = serde_json::from_value(value.clone()).unwrap();
+            assert_eq!(serde_json::to_value(page).unwrap(), value);
+        }
+        let mut value = legacy;
+        value["transcriptSnapshotV1"] = json!({"status":"unavailable","code":"readFailed"});
+        assert!(serde_json::from_value::<ThreadResumeHistoryPageV1>(value).is_err());
+    }
 
     #[test]
     fn resume_history_contract_preserves_legacy_and_rejects_ambiguous_outcomes() {

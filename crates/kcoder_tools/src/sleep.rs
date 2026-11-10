@@ -132,6 +132,7 @@ mod tests {
             .send(crate::background::BackgroundJobEvent::Failed {
                 id: "workflow-test".into(),
                 error: "workflow_quota".into(),
+                execution_metadata: Vec::new(),
             })
             .unwrap();
         tokio::time::timeout(

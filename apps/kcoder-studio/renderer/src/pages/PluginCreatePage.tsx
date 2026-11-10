@@ -14,7 +14,7 @@ import { useWorkbench } from '@/features/workbench/useWorkbench'
 import { useIsMobile } from '@/hooks/useIsMobile'
 import { useTranslation } from '@/hooks/useTranslation'
 import { navigateTo } from '@/lib/navigation'
-import { isTauriRuntime } from '@/lib/runtime-environment'
+import { isGatewayRuntime } from '@/lib/runtime-environment'
 import { createPluginRouteRuntimeTaskOpener } from './plugin-route-navigation'
 
 export function PluginCreatePage() {
@@ -57,7 +57,7 @@ export function PluginCreatePage() {
   const [searchOpen, setSearchOpen] = useState(false)
   const { sidebarCollapsed, compact, overlayNavigation, drawerOpen, setDrawerOpen, toggleSidebar } =
     usePluginPageNavigation(isMobile)
-  const isTauri = isTauriRuntime()
+  const isGateway = isGatewayRuntime()
   const handleOpenRuntimeTask = createPluginRouteRuntimeTaskOpener(openRuntimeTask)
 
   const handleSelectProject = (projectId: number) => {
@@ -191,13 +191,13 @@ export function PluginCreatePage() {
       <PluginCreateWorkspace
         sidebarCollapsed={sidebarCollapsed && !isMobile}
         topBarLeftActions={
-          !isMobile && sidebarCollapsed && (!isTauri || compact) ? (
+          !isMobile && sidebarCollapsed && (!isGateway || compact) ? (
             <DesktopWindowControls
               sidebarCollapsed
               onToggleSidebar={toggleSidebar}
               onNewChat={handleNewChat}
             />
-          ) : !isMobile && (!isTauri || compact) ? (
+          ) : !isMobile && (!isGateway || compact) ? (
             <DesktopWindowControls sidebarCollapsed={false} onToggleSidebar={toggleSidebar} />
           ) : undefined
         }

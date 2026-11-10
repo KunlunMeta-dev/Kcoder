@@ -9,15 +9,12 @@ rust-version.workspace = true
 
 [dependencies]
 kcoder_config = { path = "../kcoder_config" }
+kcoder_native_delegation = { path = "internal/native_delegation" }
+kcoder_permission_rules = { path = "internal/permission_rules" }
 kcoder_tools = { path = "../kcoder_tools" }
+kcoder_types = { path = "../kcoder_types" }
 async-trait = { workspace = true }
-serde = { workspace = true }
 serde_json = { workspace = true }
-anyhow = { workspace = true }
-thiserror = { workspace = true }
-tracing = { workspace = true }
-tree-sitter = "0.25"
-tree-sitter-bash = "0.25"
 
 [dev-dependencies]
 tokio = { workspace = true }

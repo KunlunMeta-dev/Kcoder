@@ -9,8 +9,22 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import test from 'node:test'
+import { hasFullGatewayBrowserAuthority, isGatewayBrowserAdminRequest } from '../src/gateway-browser-access.js'
 
 const studioRoot = fileURLToPath(new URL('..', import.meta.url))
+
+test('Gateway browser authority requires an explicit browser admin session covering every target', () => {
+  const session = { browserAdmin: true, allowedServerIds: new Set(['local', 'remote']) }
+  assert.equal(hasFullGatewayBrowserAuthority(session, ['local', 'remote']), true)
+  assert.equal(hasFullGatewayBrowserAuthority(session, ['local', 'remote', 'new-target']), false)
+  assert.equal(hasFullGatewayBrowserAuthority({ ...session, browserAdmin: false }, ['local']), false)
+  assert.equal(hasFullGatewayBrowserAuthority({ ...session, deviceId: 'paired-device' }, ['local']), false)
+  assert.equal(hasFullGatewayBrowserAuthority({ ...session, allowedServerIds: ['local'] }, ['local']), false)
+  const request = { headers: {} }
+  assert.equal(isGatewayBrowserAdminRequest(request, session, [{ id: 'local' }], false), false)
+  assert.equal(isGatewayBrowserAdminRequest({ headers: { authorization: 'Bearer token' } }, session, [{ id: 'local' }], true), false)
+  assert.equal(isGatewayBrowserAdminRequest(request, session, [{ id: 'local' }], true), true)
+})
 
 async function unusedPort() {
   const server = createServer()
@@ -47,14 +61,169 @@ function launch(env) {
 }
 
 async function waitForServer(child) {
-  let output = ''
   child.stdout.setEncoding('utf8')
-  for await (const chunk of child.stdout) {
-    output += chunk
-    const match = output.match(/KCoder Studio: (http:\/\/[^\s]+)/)
-    if (match) return match[1]
+  // Returning from a for-await loop destroys the pipe and can crash the real
+  // Gateway with EPIPE on its next diagnostic. Keep owned output draining.
+  return new Promise((resolve, reject) => {
+    let output = ''
+    const cleanup = () => {
+      child.stdout.removeListener('data', onData)
+      child.removeListener('exit', onExit)
+      child.removeListener('error', onError)
+      clearTimeout(timer)
+      child.stdout.resume()
+    }
+    const onData = chunk => {
+      output = (output + chunk).slice(-65536)
+      const match = output.match(/KCoder Studio: (http:\/\/[^\s]+)/)
+      if (match) { cleanup(); resolve(match[1]) }
+    }
+    const onExit = () => { cleanup(); reject(new Error(`Gateway exited before startup: ${output}`)) }
+    const onError = error => { cleanup(); reject(error) }
+    const timer = setTimeout(() => { cleanup(); reject(new Error('Gateway startup timed out')) }, 15000)
+    child.stdout.on('data', onData)
+    child.once('exit', onExit)
+    child.once('error', onError)
+  })
+}
+
+async function startAccountStatusGateway(t, { addBarrierTarget = false } = {}) {
+  const dataDir = await mkdtemp(join(tmpdir(), 'kcoder-account-status-scope-'))
+  const binDir = join(dataDir, 'bin')
+  const store = join(dataDir, 'servers.json')
+  const ssh = join(binDir, 'ssh')
+  const probeLog = join(dataDir, 'probes.log')
+  const barrierRelease = join(dataDir, 'release-status-probe')
+  await mkdir(binDir)
+  await writeFile(probeLog, '')
+  await writeFile(ssh, String.raw`#!/usr/bin/env node
+import { appendFileSync } from 'node:fs';
+import { createInterface } from 'node:readline';
+let username;
+const identities = {
+  alice: { principalId: '0b6cfba4-5f61-4d17-9d92-3d60a1ef2f01', version: '1.2.3', protocol: '2026-07-27' },
+  bob: { principalId: '8a2f6d0e-1c3b-4a5f-9e8d-7b6a5c4d3e2f', version: '9.8.7', protocol: '2026-08-31' },
+};
+createInterface({ input: process.stdin }).on('line', line => {
+  const message = JSON.parse(line);
+  if (!username) {
+    username = message.username;
+    const identity = identities[username];
+    if (!identity) process.exit(2);
+    process.stdout.write(JSON.stringify({ protocol: 'kcoder-account-v1', authenticated: true,
+      username, principalId: identity.principalId, uid: 2001, role: 'user' }) + '\n');
+    return;
   }
-  throw new Error(`gateway exited before startup: ${output}`)
+  if (message.method === 'initialize') {
+    const clientName = message.params?.clientInfo?.name ?? '';
+    appendFileSync(${JSON.stringify(probeLog)}, 'isolated:' + username + ':' + clientName + '\n');
+    const identity = identities[username];
+    const delay = 120;
+    setTimeout(() => process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: message.id, result: {
+      protocolVersion: identity.protocol, serverInfo: { name: 'account-status-test', version: identity.version }, capabilities: {},
+    } }) + '\n'), delay);
+  }
+}).on('close', () => process.exit(0));
+setInterval(() => {}, 1000);
+`, { mode: 0o755 })
+  const servers = [{
+    id: 'isolated', label: 'Isolated', runtime: 'kcoder', transport: 'ssh', host: 'unused.example',
+    security: { identity: { mode: 'kcoder-account' } },
+  }]
+  if (addBarrierTarget) {
+    servers.push({ id: 'peer', label: 'Peer', runtime: 'kcoder', transport: 'ssh', host: 'peer.example',
+      security: { identity: { mode: 'kcoder-account' } } })
+    const barrierCommand = join(dataDir, 'barrier-app-server')
+    await writeFile(barrierCommand, String.raw`#!/usr/bin/env node
+import { appendFileSync, existsSync } from 'node:fs';
+import { createInterface } from 'node:readline';
+createInterface({ input: process.stdin }).on('line', line => {
+  const message = JSON.parse(line);
+  if (message.method !== 'initialize') return;
+  appendFileSync(${JSON.stringify(probeLog)}, 'barrier:initialize\n');
+  const publish = () => {
+    if (!existsSync(${JSON.stringify(barrierRelease)})) { setTimeout(publish, 10); return; }
+    process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: message.id, result: {
+      protocolVersion: '2026-09-30', serverInfo: { name: 'barrier-status-test', version: '3.4.5' }, capabilities: {},
+    } }) + '\n');
+  };
+  publish();
+}).on('close', () => process.exit(0));
+setInterval(() => {}, 1000);
+`, { mode: 0o755 })
+    servers.push({ id: 'barrier', label: 'Barrier', runtime: 'kcoder', transport: 'local',
+      command: barrierCommand, workspace: dataDir })
+  }
+  await writeFile(store, JSON.stringify(servers))
+  const child = launch({
+    KCODER_STUDIO_HOST: '127.0.0.1', KCODER_STUDIO_PORT: '0',
+    KCODER_STUDIO_AUTH_TOKEN: 'test-token', KCODER_STUDIO_SERVERS_STORE: store,
+    PATH: `${binDir}:${process.env.PATH ?? ''}`,
+  })
+  t.after(async () => {
+    if (child.exitCode === null && child.signalCode === null) {
+      child.kill('SIGTERM')
+      await once(child, 'close')
+    }
+    await rm(dataDir, { recursive: true, force: true })
+  })
+  const base = await waitForServer(child)
+  const createMobileSession = async () => {
+    const response = await fetch(`${base}/api/mobile/session`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ token: 'test-token' }),
+    })
+    assert.equal(response.status, 200)
+    return response.json()
+  }
+  const loginAs = async (accessToken, username, targetId = 'isolated') => {
+    const response = await fetch(`${base}/api/servers/${targetId}/account`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${accessToken}`, origin: base, 'content-type': 'application/json' },
+      body: JSON.stringify({ username, password: `test-${username}-password` }),
+    })
+    const payload = await response.json()
+    assert.equal(response.status, 200, JSON.stringify(payload))
+    assert.deepEqual({ authenticated: payload.authenticated, username: payload.identity?.username },
+      { authenticated: true, username })
+  }
+  const readStatus = async accessToken => {
+    const response = await fetch(`${base}/api/servers/status`, { headers: { authorization: `Bearer ${accessToken}` } })
+    assert.equal(response.status, 200)
+    return response.json()
+  }
+  const logout = async (accessToken, targetId = 'isolated') => {
+    const response = await fetch(`${base}/api/servers/${targetId}/account`, {
+      method: 'DELETE',
+      headers: { authorization: `Bearer ${accessToken}`, origin: base, 'content-type': 'application/json' },
+      body: '{}',
+    })
+    assert.equal(response.status, 200)
+    return response.json()
+  }
+  const waitForStatusProbe = async (username, occurrence = 2, targetId = 'isolated') => {
+    const deadline = Date.now() + 3000
+    while (Date.now() < deadline) {
+      const contents = await readFile(probeLog, 'utf8').catch(() => '')
+      const count = contents.split('\n').filter(line => line === `${targetId}:${username}:kcoder-studio-connection-test`).length
+      if (count >= occurrence) return
+      await new Promise(resolve => setTimeout(resolve, 10))
+    }
+    const contents = await readFile(probeLog, 'utf8').catch(() => '<no app-server initialize seen>')
+    throw new Error(`Timed out waiting for ${targetId}/${username} status probe ${occurrence}; log=${contents}`)
+  }
+  const waitForBarrierProbe = async () => {
+    const deadline = Date.now() + 3000
+    while (Date.now() < deadline) {
+      const contents = await readFile(probeLog, 'utf8').catch(() => '')
+      if (contents.split('\n').includes('barrier:initialize')) return
+      await new Promise(resolve => setTimeout(resolve, 10))
+    }
+    const contents = await readFile(probeLog, 'utf8').catch(() => '<no app-server process exit seen>')
+    throw new Error(`Timed out waiting for held barrier status probe; log=${contents}`)
+  }
+  const releaseBarrierProbe = () => writeFile(barrierRelease, '', { flag: 'wx' })
+  return { base, createMobileSession, loginAs, logout, readStatus, waitForStatusProbe, waitForBarrierProbe, releaseBarrierProbe }
 }
 
 test('supports an OS-assigned loopback port for desktop hosts', async t => {
@@ -104,6 +273,8 @@ test('browser login links exchange the Gateway token for a clean, scoped HttpOnl
   const page = await fetch(base, { headers: { cookie, accept: 'text/html' } })
   assert.equal(page.status, 200)
   const accessInfo = await fetch(`${base}/api/gateway/browser-access`, { headers: { cookie } })
+  assert.equal(accessInfo.status, 200)
+  assert.equal(accessInfo.headers.get('cache-control'), 'no-store')
   assert.deepEqual(await accessInfo.json(), {
     token: 'browser-link-secret',
     localBaseUrl: base,
@@ -121,7 +292,8 @@ test('browser login links exchange the Gateway token for a clean, scoped HttpOnl
   assert.equal(publicLogin.statusCode, 303)
   assert.equal(publicLogin.headers.location, '/g/gateway-one/')
   const publicCookie = Array.isArray(publicLogin.headers['set-cookie']) ? publicLogin.headers['set-cookie'][0] : publicLogin.headers['set-cookie']
-  assert.match(publicCookie, /Path=\/g\/gateway-one\//)
+  assert.match(publicCookie, /^__Host-kcoder_studio_session=/)
+  assert.match(publicCookie, /; Path=\/;/)
   assert.match(publicCookie, /; Secure/)
   const publicHome = await new Promise((resolve, reject) => {
     const request = httpRequest({ hostname: '127.0.0.1', port: Number(new URL(base).port), path: '/', headers: { host: 'relay.example', cookie: publicCookie.split(';', 1)[0], accept: 'text/html' } }, response => {
@@ -141,6 +313,64 @@ test('browser login links exchange the Gateway token for a clean, scoped HttpOnl
   assert.equal(invalid.status, 303)
   assert.equal(invalid.headers.get('location'), '/login?linkError=1')
   assert.doesNotMatch(invalid.headers.get('location') ?? '', /wrong-secret/)
+})
+
+test('browser admin access stays separate from Mobile Web cookie and bearer sessions', async t => {
+  const child = launch({
+    KCODER_STUDIO_HOST: '127.0.0.1', KCODER_STUDIO_PORT: '0',
+    KCODER_STUDIO_AUTH_TOKEN: 'browser-admin-secret', KCODER_STUDIO_MOCK: '1',
+  })
+  t.after(() => { if (child.exitCode === null && child.signalCode === null) child.kill('SIGTERM') })
+  const base = await waitForServer(child)
+
+  assert.equal((await fetch(`${base}/login`)).status, 200, 'the ordinary login form remains available')
+  const login = await fetch(`${base}/login`, {
+    method: 'POST', redirect: 'manual',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ token: 'browser-admin-secret' }),
+  })
+  assert.equal(login.status, 303)
+  const browserCookie = (login.headers.get('set-cookie') ?? '').split(';', 1)[0]
+  assert.match(browserCookie, /^kcoder_studio_session=/)
+  assert.equal((await fetch(`${base}/api/gateway/browser-access`, { headers: { cookie: browserCookie } })).status, 200)
+
+  const renewal = await fetch(`${base}/login`, {
+    method: 'POST', redirect: 'manual',
+    headers: { 'content-type': 'application/x-www-form-urlencoded', cookie: browserCookie },
+    body: new URLSearchParams({ token: 'browser-admin-secret', renewSession: '1' }),
+  })
+  assert.equal(renewal.status, 303, 'an existing browser admin session can be renewed')
+  const renewedCookie = (renewal.headers.get('set-cookie') ?? '').split(';', 1)[0]
+  assert.equal(renewedCookie, browserCookie)
+  assert.equal((await fetch(`${base}/api/gateway/browser-access`, { headers: { cookie: renewedCookie } })).status, 200)
+
+  const mobileLogin = await fetch(`${base}/api/mobile/session`, {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ token: 'browser-admin-secret' }),
+  })
+  assert.equal(mobileLogin.status, 200)
+  const mobileSession = await mobileLogin.json()
+  const mobileCookie = (mobileLogin.headers.get('set-cookie') ?? '').split(';', 1)[0]
+  assert.match(mobileCookie, /^kcoder_studio_session=/)
+  assert.equal(mobileSession.accessToken, mobileCookie.slice('kcoder_studio_session='.length))
+
+  const mobileCookieAccess = await fetch(`${base}/api/gateway/browser-access`, { headers: { cookie: mobileCookie } })
+  assert.equal(mobileCookieAccess.status, 403, 'a Mobile Web cookie cannot retrieve the Gateway token')
+  assert.equal(mobileCookieAccess.headers.get('cache-control'), 'no-store')
+  assert.equal((await fetch(`${base}/api/mobile/pairing`, { headers: { cookie: mobileCookie } })).status, 403)
+  const mobileBearer = { authorization: `Bearer ${mobileSession.accessToken}` }
+  assert.equal((await fetch(`${base}/api/gateway/browser-access`, { headers: mobileBearer })).status, 403)
+  assert.equal((await fetch(`${base}/api/mobile/pairing`, { headers: mobileBearer })).status, 403)
+
+  const attemptedPromotion = await fetch(`${base}/login`, {
+    method: 'POST', redirect: 'manual',
+    headers: { 'content-type': 'application/x-www-form-urlencoded', cookie: mobileCookie },
+    body: new URLSearchParams({ token: 'browser-admin-secret', renewSession: '1' }),
+  })
+  assert.equal(attemptedPromotion.status, 303)
+  assert.notEqual((attemptedPromotion.headers.get('set-cookie') ?? '').split(';', 1)[0], mobileCookie)
+  assert.equal((await fetch(`${base}/api/gateway/browser-access`, { headers: { cookie: mobileCookie } })).status, 403,
+    'renewSession never promotes the original Mobile Web session into browser admin')
 })
 
 test('valid SSH-forwarded loopback login links trust only that tunnel authority', async t => {
@@ -411,11 +641,15 @@ async function openAuthorizedWebsocket({ port, bearer, serverId = 'local' }) {
 
 function clientTextFrame(message) {
   const payload = Buffer.from(JSON.stringify(message))
-  assert.ok(payload.length < 126, 'test frame helper only supports short JSON payloads')
+  assert.ok(payload.length <= 0xffff, 'test frame helper payload exceeds the 16-bit frame bound')
+  const head = Buffer.alloc(payload.length < 126 ? 2 : 4)
+  head[0] = 0x81
+  head[1] = 0x80 | (payload.length < 126 ? payload.length : 126)
+  if (payload.length >= 126) head.writeUInt16BE(payload.length, 2)
   const mask = Buffer.from([0x31, 0x42, 0x53, 0x64])
   const masked = Buffer.from(payload)
   for (let index = 0; index < masked.length; index += 1) masked[index] ^= mask[index % 4]
-  return Buffer.concat([Buffer.from([0x81, 0x80 | payload.length]), mask, masked])
+  return Buffer.concat([head, mask, masked])
 }
 
 test('mobile clients can exchange the access token for a bearer session', async t => {
@@ -882,15 +1116,24 @@ test('exchanges the static login token for an HttpOnly session cookie', async t 
     null
   )
   assert.equal(await websocketStatus({ port, cookie, origin: 'http://evil.example' }), null)
-  assert.equal(
-    await websocketStatus({
-      port,
-      cookie,
-      origin: 'https://studio.example',
-      authority: 'studio.example',
-    }),
-    101
-  )
+  assert.equal(await websocketStatus({ port, cookie, origin: 'https://studio.example', authority: 'studio.example' }), null,
+    'the local HTTP cookie cannot authenticate the public HTTPS host')
+  const publicLogin = await new Promise((resolve, reject) => {
+    const body = new URLSearchParams({ token: 'test-token' }).toString()
+    const request = httpRequest({ hostname: '127.0.0.1', port, path: '/login', method: 'POST',
+      headers: { host: 'studio.example', 'content-type': 'application/x-www-form-urlencoded', 'content-length': Buffer.byteLength(body) } }, response => {
+      response.resume()
+      response.on('end', () => resolve(response))
+    })
+    request.once('error', reject)
+    request.end(body)
+  })
+  assert.equal(publicLogin.statusCode, 303)
+  const publicSetCookie = publicLogin.headers['set-cookie'][0]
+  assert.match(publicSetCookie, /^__Host-kcoder_studio_session=/)
+  assert.match(publicSetCookie, /; Path=\/;/)
+  assert.match(publicSetCookie, /; Secure$/)
+  assert.equal(await websocketStatus({ port, cookie: publicSetCookie.split(';', 1)[0], origin: 'https://studio.example', authority: 'studio.example' }), 101)
   assert.equal(
     await websocketStatus({
       port,
@@ -1123,6 +1366,8 @@ test('a missing app-server command fails health quickly and does not wedge gatew
   const response = await fetch(`${base}/api/servers/status`, { headers: { cookie } })
   assert.equal(response.status, 200)
   const payload = await response.json()
+  const runtimePackage = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'))
+  assert.equal(payload.gatewayRuntimeVersion, runtimePackage.version)
   assert.equal(payload.statuses[0].status, 'offline')
   assert.match(payload.statuses[0].error, /ENOENT|spawn|does-not-exist/)
   assert.ok(Date.now() - startedAt < 3_000)
@@ -1139,6 +1384,93 @@ test('a missing app-server command fails health quickly and does not wedge gatew
   } finally {
     clearTimeout(shutdownTimer)
   }
+})
+
+test('server status does not reuse an isolated target account across Gateway owners', async t => {
+  const gateway = await startAccountStatusGateway(t)
+  const aliceSession = await gateway.createMobileSession()
+  const bobSession = await gateway.createMobileSession()
+  await gateway.loginAs(aliceSession.accessToken, 'alice')
+
+  const alice = await gateway.readStatus(aliceSession.accessToken)
+  assert.equal(alice.statuses[0].appServerVersion, '1.2.3')
+  assert.equal(alice.statuses[0].protocolVersion, '2026-07-27')
+
+  const bobBeforeLogin = await gateway.readStatus(bobSession.accessToken)
+  assert.equal(bobBeforeLogin.statuses[0].status, 'offline')
+  assert.match(bobBeforeLogin.statuses[0].error, /需要登录/)
+  assert.equal(bobBeforeLogin.statuses[0].appServerVersion ?? null, null)
+  assert.equal(bobBeforeLogin.statuses[0].protocolVersion ?? null, null)
+
+  await gateway.loginAs(bobSession.accessToken, 'bob')
+  const bob = await gateway.readStatus(bobSession.accessToken)
+  assert.equal(bob.statuses[0].appServerVersion, '9.8.7')
+  assert.equal(bob.statuses[0].protocolVersion, '2026-08-31')
+  const aliceAgain = await gateway.readStatus(aliceSession.accessToken)
+  assert.equal(aliceAgain.statuses[0].appServerVersion, '1.2.3')
+  assert.equal(aliceAgain.statuses[0].protocolVersion, '2026-07-27')
+  assert.doesNotMatch(JSON.stringify([alice, bobBeforeLogin, bob, aliceAgain]), /test-alice-password|test-bob-password/)
+})
+
+test('concurrent status probes keep isolated account health and versions separate', async t => {
+  const gateway = await startAccountStatusGateway(t)
+  const aliceSession = await gateway.createMobileSession()
+  const bobSession = await gateway.createMobileSession()
+  await Promise.all([
+    gateway.loginAs(aliceSession.accessToken, 'alice'),
+    gateway.loginAs(bobSession.accessToken, 'bob'),
+  ])
+
+  const [alice, bob] = await Promise.all([
+    gateway.readStatus(aliceSession.accessToken),
+    gateway.readStatus(bobSession.accessToken),
+  ])
+  assert.equal(alice.statuses[0].appServerVersion, '1.2.3')
+  assert.equal(alice.statuses[0].protocolVersion, '2026-07-27')
+  assert.equal(bob.statuses[0].appServerVersion, '9.8.7')
+  assert.equal(bob.statuses[0].protocolVersion, '2026-08-31')
+  assert.doesNotMatch(JSON.stringify([alice, bob]), /test-alice-password|test-bob-password/)
+})
+
+test('an in-flight status probe cannot cache a prior account generation', async t => {
+  const gateway = await startAccountStatusGateway(t, { addBarrierTarget: true })
+  const session = await gateway.createMobileSession()
+  await gateway.loginAs(session.accessToken, 'alice')
+  await gateway.loginAs(session.accessToken, 'alice', 'peer')
+
+  // The barrier target's held initialize keeps this status HTTP request open
+  // while the isolated account changes generations.
+  let probeSettled = false
+  const oldAccountProbe = gateway.readStatus(session.accessToken).finally(() => { probeSettled = true })
+  await gateway.waitForBarrierProbe()
+  await gateway.logout(session.accessToken, 'isolated')
+  await gateway.loginAs(session.accessToken, 'bob')
+  assert.equal(probeSettled, false, 'The original status response must remain held until the account switch finishes')
+  await gateway.releaseBarrierProbe()
+
+  const oldResult = await oldAccountProbe
+  const staleIsolatedStatus = oldResult.statuses.find(status => status.id === 'isolated')
+  assert.equal(staleIsolatedStatus.status, 'offline')
+  assert.equal(staleIsolatedStatus.appServerVersion, null)
+  assert.equal(staleIsolatedStatus.protocolVersion, null)
+  assert.equal(staleIsolatedStatus.accountIdentity.username, 'bob')
+  assert.match(staleIsolatedStatus.error, /账号状态.*已变更/)
+  const unchangedPeerStatus = oldResult.statuses.find(status => status.id === 'peer')
+  assert.equal(unchangedPeerStatus.status, 'online')
+  assert.equal(unchangedPeerStatus.appServerVersion, '1.2.3')
+  assert.equal(unchangedPeerStatus.protocolVersion, '2026-07-27')
+  assert.equal(unchangedPeerStatus.accountIdentity.username, 'alice')
+  const barrierStatus = oldResult.statuses.find(status => status.id === 'barrier')
+  assert.equal(barrierStatus.appServerVersion, '3.4.5')
+  assert.equal(barrierStatus.protocolVersion, '2026-09-30')
+
+  const currentResult = await gateway.readStatus(session.accessToken)
+  const currentIsolatedStatus = currentResult.statuses.find(status => status.id === 'isolated')
+  assert.equal(currentIsolatedStatus.status, 'online')
+  assert.equal(currentIsolatedStatus.accountIdentity.username, 'bob')
+  assert.equal(currentIsolatedStatus.appServerVersion, '9.8.7')
+  assert.equal(currentIsolatedStatus.protocolVersion, '2026-08-31')
+  assert.doesNotMatch(JSON.stringify(currentIsolatedStatus), /1\.2\.3|2026-07-27|alice/)
 })
 
 test('replacing a runtime target closes its active websocket and app-server child', async t => {
@@ -1190,7 +1522,7 @@ test('replacing a runtime target closes its active websocket and app-server chil
   assert.equal(await stat(`/proc/${appServerPid}`).then(() => true, () => false), false)
 })
 
-test('concurrent first RPC connections share one probing resident app-server', async t => {
+test('uninitialized RPC connections stay exclusive until resident capability is known', { timeout: 15_000 }, async t => {
   const port = await unusedPort()
   const dataDir = await mkdtemp(join(tmpdir(), 'kcoder-studio-resident-singleflight-'))
   const workspace = join(dataDir, 'workspace')
@@ -1198,14 +1530,14 @@ test('concurrent first RPC connections share one probing resident app-server', a
   const command = join(dataDir, 'resident-app-server')
   const pidFile = join(dataDir, 'children.log')
   await mkdir(workspace)
-  await writeFile(command, `#!/usr/bin/env node
+  await writeFile(command, String.raw`#!/usr/bin/env node
 import { appendFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
-appendFileSync(${JSON.stringify(pidFile)}, String(process.pid) + '\\n');
+appendFileSync(${JSON.stringify(pidFile)}, String(process.pid) + '\n');
 const lines = createInterface({ input: process.stdin });
 lines.on('line', line => {
   const request = JSON.parse(line);
-  if (request.method === 'initialize') process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: request.id, result: { protocolVersion: '2026-07-27', serverInfo: { name: 'resident-test' }, capabilities: { experimental: { residentThreads: true } } } }) + '\\n');
+  if (request.method === 'initialize') process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: request.id, result: { protocolVersion: '2026-07-27', serverInfo: { name: 'resident-test' }, capabilities: { experimental: { residentThreads: true } } } }) + '\n');
 });
 setInterval(() => {}, 1000);
 `, { mode: 0o755 })
@@ -1218,8 +1550,16 @@ setInterval(() => {}, 1000);
     KCODER_STUDIO_AUTH_TOKEN: 'test-token',
     KCODER_STUDIO_SERVERS_STORE: store,
   })
+  const gatewayClosed = new Promise(resolve => child.once('close', resolve))
+  const sockets = new Set()
   t.after(async () => {
+    await Promise.all([...sockets].map(socket => new Promise(resolve => {
+      if (socket.readyState === 'closed') { resolve(); return }
+      socket.once('close', resolve)
+      socket.destroy()
+    })))
     if (child.exitCode === null && child.signalCode === null) child.kill('SIGTERM')
+    await gatewayClosed
     await rm(dataDir, { recursive: true, force: true })
   })
   await waitForServer(child)
@@ -1228,15 +1568,49 @@ setInterval(() => {}, 1000);
     method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token: 'test-token' }),
   }).then(value => value.json())
 
-  const first = await openAuthorizedWebsocket({ port, bearer: login.accessToken, serverId: 'resident' })
-  t.after(() => first.destroy())
-  const secondPromise = openAuthorizedWebsocket({ port, bearer: login.accessToken, serverId: 'resident' })
-  first.write(clientTextFrame({ jsonrpc: '2.0', id: 1, method: 'initialize', params: {} }))
-  const second = await secondPromise
-  t.after(() => second.destroy())
+  const readChildPids = async () => (await readFile(pidFile, 'utf8')).trim().split(/\s+/).filter(Boolean)
+  const openConnection = async () => {
+    const socket = await openAuthorizedWebsocket({ port, bearer: login.accessToken, serverId: 'resident' })
+    sockets.add(socket)
+    return socket
+  }
+  const initialize = (socket, id) => new Promise((resolve, reject) => {
+    let bytes = ''
+    const cleanup = () => {
+      clearTimeout(timer)
+      socket.off('data', received)
+    }
+    const timer = setTimeout(() => {
+      cleanup()
+      reject(new Error(`resident initialize ACK missing for connection ${id}`))
+    }, 5000)
+    const received = chunk => {
+      bytes += chunk.toString('utf8')
+      if (bytes.includes(`"id":${id}`) && bytes.includes('resident-test')) {
+        cleanup()
+        resolve()
+      }
+    }
+    socket.on('data', received)
+    socket.write(clientTextFrame({ jsonrpc: '2.0', id, method: 'initialize', params: {
+      protocolVersion: '2026-07-27', clientInfo: { name: 'resident-test-client', version: '1' },
+    } }))
+  })
 
-  const children = (await readFile(pidFile, 'utf8')).trim().split(/\s+/).filter(Boolean)
-  assert.equal(new Set(children).size, 1, `expected one probing app-server, got ${children.join(',')}`)
+  const first = await openConnection()
+  // The second upgrade must complete while the first client has not initialized.
+  const second = await openConnection()
+  await Promise.all([initialize(first, 1), initialize(second, 2)])
+  // Each fixture writes its PID before sending its initialize acknowledgement.
+  const exclusiveChildren = await readChildPids()
+  assert.equal(new Set(exclusiveChildren).size, 2,
+    `expected two exclusive children before capabilities were known, got ${exclusiveChildren.join(',')}`)
+
+  const third = await openConnection()
+  await initialize(third, 3)
+  const childrenAfterThird = await readChildPids()
+  assert.equal(new Set(childrenAfterThird).size, 2,
+    `expected third initialized connection to reuse a resident app-server, got ${childrenAfterThird.join(',')}`)
 })
 
 test('health timeout escalates to SIGKILL and waits for the stubborn child to close', async t => {
@@ -1279,7 +1653,7 @@ test('health timeout escalates to SIGKILL and waits for the stubborn child to cl
 })
 
 
-test('full durable session capacity returns local 429 without invalidating grants', { timeout: 45_000 }, async t => {
+test('full capacity rejects browser and legacy logins while durable pairing evicts the oldest device', { timeout: 45_000 }, async t => {
   const token = 'owned-capacity-fixture-token'
   const child = launch({ KCODER_STUDIO_HOST: '127.0.0.1', KCODER_STUDIO_PORT: '0',
     KCODER_STUDIO_AUTH_TOKEN: token, KCODER_STUDIO_MOCK: '1' })
@@ -1322,17 +1696,28 @@ test('full durable session capacity returns local 429 without invalidating grant
   assert.equal(typeof legacyBody.error, 'string')
   assert.equal(Object.hasOwn(legacyBody, 'accessToken'), false)
   const overflow = await session(true)
-  assert.equal(overflow.status, 429)
-  assert.equal(Object.hasOwn(await overflow.json(), 'accessToken'), false)
-  const active = await fetch(`${base}/api/mobile/devices`, { headers: { authorization: `Bearer ${grants[0].accessToken}` } })
+  assert.equal(overflow.status, 200, 'durable pairing evicts the oldest device to stay within capacity')
+  const replacement = await overflow.json()
+  assert.equal(typeof replacement.accessToken, 'string')
+  assert.equal(new Set([...grants.map(grant => grant.deviceId), replacement.deviceId]).size, 33)
+  const activeGrants = [...grants.slice(1), replacement]
+  const active = await fetch(`${base}/api/mobile/devices`, { headers: { authorization: `Bearer ${grants[1].accessToken}` } })
   assert.equal(active.status, 200)
-  assert.equal((await active.json()).devices.length, 32)
-  for (const grant of grants) {
+  const activeDevices = (await active.json()).devices
+  assert.equal(activeDevices.length, 32)
+  assert.deepEqual(new Set(activeDevices.map(device => device.id)), new Set(activeGrants.map(grant => grant.deviceId)),
+    'only the oldest grant is evicted and the replacement occupies its capacity')
+  assert.ok(!activeDevices.some(device => device.id === grants[0].deviceId))
+  assert.ok(activeGrants.every(grant => activeDevices.some(device => device.id === grant.deviceId)))
+  const evicted = await fetch(`${base}/api/servers`, { headers: { authorization: `Bearer ${grants[0].accessToken}` } })
+  assert.equal(evicted.status, 401, 'the oldest access authorization is revoked')
+  await evicted.arrayBuffer()
+  for (const grant of activeGrants) {
     const accepted = await fetch(`${base}/api/servers`, { headers: { authorization: `Bearer ${grant.accessToken}` } })
-    assert.equal(accepted.status, 200, 'capacity errors must preserve every original grant')
+    assert.equal(accepted.status, 200, 'the other 31 grants and replacement remain usable')
     await accepted.arrayBuffer()
   }
-  for (const grant of grants) {
+  for (const grant of activeGrants) {
     const revoked = await fetch(`${base}/api/mobile/session`, { method: 'DELETE',
       headers: { authorization: `Bearer ${grant.accessToken}` } })
     assert.equal(revoked.status, 204); await revoked.arrayBuffer()
@@ -1378,4 +1763,78 @@ test('failed login at mixed durable capacity preserves the existing host cookie'
   const preserved = await fetch(`${base}/api/servers`, { redirect: 'manual', headers: { cookie } })
   await preserved.arrayBuffer()
   assert.equal(preserved.status, 200, 'failed capacity admission must not evict the existing host session')
+})
+
+
+test('full Gateway mobile authority preserves supported target configuration management', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'kc-mobile-server-admin-'))
+  t.after(() => rm(directory, { recursive: true, force: true }))
+  const store = join(directory, 'servers.json')
+  const child = launch({ KCODER_STUDIO_PORT: '0', KCODER_STUDIO_AUTH_TOKEN: 'server-admin-token',
+    KCODER_STUDIO_MOCK: '1', KCODER_STUDIO_SERVERS_STORE: store,
+    KCODER_PRIVATE_RETENTION_VERIFIER_V1: 'ambient-forgery',
+    kcoder_private_retention_verifier_v1: 'ambient-lowercase-forgery',
+    kcoder_private_retention_parent_v1: 'ambient-parent-forgery' })
+  t.after(() => { if (child.exitCode === null && child.signalCode === null) child.kill('SIGTERM') })
+  const base = await waitForServer(child)
+  const login = await fetch(`${base}/login`, { method: 'POST', redirect: 'manual',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ token: 'server-admin-token' }) })
+  const cookie = (login.headers.get('set-cookie') ?? '').split(';', 1)[0]
+  const pairing = await fetch(`${base}/api/mobile/pairing`, { headers: { cookie } }).then(value => value.json())
+  const mobile = await fetch(`${base}/api/mobile/session`, { method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ token: pairing.token, durableDeviceAuthorization: true }) }).then(value => value.json())
+  assert.equal(typeof mobile.accessToken, 'string')
+  const observed = join(directory, 'custom-environment.json')
+  const custom = join(directory, 'custom-app-server')
+  await writeFile(custom, String.raw`#!/usr/bin/env node
+const fs = require('node:fs');
+fs.writeFileSync(${JSON.stringify(observed)}, JSON.stringify({ verifier: process.env.KCODER_PRIVATE_RETENTION_VERIFIER_V1 ?? null,
+  privateNames: Object.keys(process.env).filter(name => /^kcoder_private_retention_(?:parent|verifier)_v1$/i.test(name)),
+  parent: JSON.parse(Buffer.from(process.env.KCODER_PRIVATE_RETENTION_PARENT_V1.slice(3), 'base64url')) }));
+require('node:readline').createInterface({ input: process.stdin }).on('line', line => {
+ const request = JSON.parse(line);
+ process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: request.id, result: { capabilities: { experimental: { stagedAttachmentRetentionReceiptsV1: true } } } }) + '\n');
+});
+`, { mode: 0o700 })
+  const draft = { id: 'custom-local', label: 'Custom', runtime: 'kcoder', transport: 'local', command: custom, workspace: directory }
+  const headers = { authorization: `Bearer ${mobile.accessToken}`, origin: base, 'content-type': 'application/json' }
+  assert.equal((await fetch(`${base}/api/servers/custom-local`, { method: 'PUT', headers, body: JSON.stringify(draft) })).status, 200)
+  const before = await readFile(store)
+  assert.equal(JSON.parse(before).find(row => row.id === draft.id).command, draft.command)
+  const probe = await fetch(`${base}/api/servers/test`, { method: 'POST', headers, body: JSON.stringify(draft) })
+  assert.equal(probe.status, 200)
+  const probed = await probe.json()
+  assert.equal(probed.ok, true, JSON.stringify(probed))
+  assert.deepEqual(await readFile(store), before, 'testing a target does not alter durable configuration')
+  assert.deepEqual(JSON.parse(await readFile(observed)), { verifier: null, privateNames: ['KCODER_PRIVATE_RETENTION_PARENT_V1'], parent: { version: 1, mode: 'localOs' } },
+    'custom child retains canonical legacy parent declaration, without ambient fields or verifier material')
+  assert.equal((await fetch(`${base}/api/servers`, { headers })).status, 200)
+  assert.equal((await fetch(`${base}/api/servers/custom-local`, { method: 'DELETE', headers })).status, 200)
+  assert.equal(JSON.parse(await readFile(store)).some(row => row.id === draft.id), false)
+})
+
+
+test('concurrent target mutations retain every accepted update and durable JSON', async t => {
+  const port = await unusedPort()
+  const dataDir = await mkdtemp(join(tmpdir(), 'kcoder-concurrent-targets-'))
+  t.after(() => rm(dataDir, { recursive: true, force: true }))
+  const store = join(dataDir, 'servers.json')
+  const child = launch({ KCODER_STUDIO_HOST: '127.0.0.1', KCODER_STUDIO_PORT: String(port),
+    KCODER_STUDIO_AUTH_TOKEN: 'test-token', KCODER_STUDIO_MOCK: '1', KCODER_STUDIO_SERVERS_STORE: store })
+  t.after(() => { if (!child.killed) child.kill('SIGTERM') })
+  await waitForServer(child)
+  const base = `http://127.0.0.1:${port}`
+  const login = await fetch(`${base}/login`, { method: 'POST', redirect: 'manual',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ token: 'test-token' }) })
+  const headers = { cookie: (login.headers.get('set-cookie') ?? '').split(';', 1)[0], origin: base, 'content-type': 'application/json' }
+  const results = await Promise.all(Array.from({ length: 8 }, (_, index) => {
+    const id = `parallel-${index}`
+    return fetch(`${base}/api/servers/${id}`, { method: 'PUT', headers,
+      body: JSON.stringify({ id, label: id, runtime: 'kcoder', transport: 'local', workspace: dataDir, command: '/usr/bin/kcoder' }) })
+  }))
+  for (const response of results) assert.equal(response.status, 200, await response.text())
+  assert.equal(JSON.parse(await readFile(store, 'utf8')).filter(row => row.id.startsWith('parallel-')).length, 8)
+  const removed = await Promise.all([0, 1, 2, 3].map(index => fetch(`${base}/api/servers/parallel-${index}`, { method: 'DELETE', headers })))
+  for (const response of removed) assert.equal(response.status, 200)
+  assert.equal(JSON.parse(await readFile(store, 'utf8')).filter(row => row.id.startsWith('parallel-')).length, 4)
 })

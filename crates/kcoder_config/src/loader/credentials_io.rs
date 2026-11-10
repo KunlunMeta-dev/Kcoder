@@ -44,6 +44,11 @@ impl Serialize for CredentialStore {
                 serde_json::to_value(&self.plugin_credentials)
                     .map_err(serde::ser::Error::custom)?;
         }
+        if !self.imported_credentials.receipts.is_empty() {
+            document[crate::imported_credentials::NAMESPACE] =
+                serde_json::to_value(&self.imported_credentials)
+                    .map_err(serde::ser::Error::custom)?;
+        }
         document.serialize(serializer)
     }
 }
@@ -54,6 +59,17 @@ impl<'de> Deserialize<'de> for CredentialStore {
         D: serde::Deserializer<'de>,
     {
         let mut document = Value::deserialize(deserializer)?;
+        let imported_credentials = match document
+            .as_object_mut()
+            .and_then(|object| object.remove(crate::imported_credentials::NAMESPACE))
+        {
+            Some(value) => serde_json::from_value(value)
+                .map_err(|_| serde::de::Error::custom("invalid imported credential metadata"))?,
+            None => crate::imported_credentials::ImportedCredentialDocument::default(),
+        };
+        imported_credentials
+            .validate()
+            .map_err(serde::de::Error::custom)?;
         let plugin_credentials = match document
             .as_object_mut()
             .and_then(|object| object.remove(crate::plugin_credentials::NAMESPACE))
@@ -105,6 +121,7 @@ impl<'de> Deserialize<'de> for CredentialStore {
             credentials,
             revoked,
             plugin_credentials,
+            imported_credentials,
         })
     }
 }
@@ -159,7 +176,8 @@ impl CredentialStore {
 
     pub fn set_api_key(&mut self, provider: &str, api_key: String) -> Result<()> {
         anyhow::ensure!(
-            provider != crate::plugin_credentials::NAMESPACE,
+            provider != crate::plugin_credentials::NAMESPACE
+                && provider != crate::imported_credentials::NAMESPACE,
             "reserved credential namespace"
         );
         let provider = normalize_provider(provider)?;
@@ -171,7 +189,8 @@ impl CredentialStore {
 
     pub fn remove_api_key(&mut self, provider: &str) -> Result<bool> {
         anyhow::ensure!(
-            provider != crate::plugin_credentials::NAMESPACE,
+            provider != crate::plugin_credentials::NAMESPACE
+                && provider != crate::imported_credentials::NAMESPACE,
             "reserved credential namespace"
         );
         let provider = normalize_provider(provider)?;

@@ -39,12 +39,15 @@ fn an_uncommitted_tool_outcome_refuses_the_continuation_instead_of_rerunning_it(
     let started = server.response(3);
     assert!(started.get("error").is_none(), "{started}");
 
-    // Wait until the side-effecting tool is actually running, then kill the
-    // process before any result can be committed.
+    // A tool proposal precedes native file capture and is not execution.
+    // Wait for the execution boundary before killing an uncommitted result.
     let deadline = Instant::now() + Duration::from_secs(30);
     let tool_started = loop {
         let event = server.next_value(deadline);
-        if event["method"] == "item/started" && event.to_string().contains("tui-lab-busy-wait") {
+        if event["method"] == "item/event"
+            && event["params"]["event"]["type"] == "tool_execution_started"
+            && event["params"]["event"]["id"] == "tui-lab-busy-wait"
+        {
             break true;
         }
     };
@@ -53,9 +56,16 @@ fn an_uncommitted_tool_outcome_refuses_the_continuation_instead_of_rerunning_it(
     server.send(json!({"jsonrpc":"2.0","id":30,"method":"thread/read",
         "params":{"threadId":thread_id.clone(),"limit":50}}));
     let live = server.response(30);
-    assert!(live["result"]["messages"].as_array().unwrap().iter()
-        .filter_map(|m| m["blocks"].as_array()).flatten()
-        .any(|b| b["tool_use_id"] == "tui-lab-busy-wait" && b["status"] == "pending"));
+    assert!(
+        live["result"]["messages"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|m| m["blocks"].as_array())
+            .flatten()
+            .any(|b| b["tool_use_id"] == "tui-lab-busy-wait" && b["status"] == "pending"),
+        "{live}"
+    );
     server.child.kill().unwrap();
     let _ = server.child.wait();
 
@@ -87,12 +97,19 @@ fn an_uncommitted_tool_outcome_refuses_the_continuation_instead_of_rerunning_it(
     assert!(pending["tool_output"].is_null(), "{transcript}");
     assert!(pending["completed_at"].is_null(), "{transcript}");
 
-    server.send(json!({"jsonrpc":"2.0","id":31,"method":"thread/read/indexed",
-        "params":{"threadId":thread_id.clone(),"limit":50}}));
+    server.send(
+        json!({"jsonrpc":"2.0","id":31,"method":"thread/read/indexed",
+        "params":{"threadId":thread_id.clone(),"limit":50}}),
+    );
     let indexed = server.response(31);
-    let recovered = indexed["result"]["messages"].as_array().unwrap().iter()
-        .filter_map(|m| m["blocks"].as_array()).flatten()
-        .find(|b| b["tool_use_id"] == "tui-lab-busy-wait").unwrap();
+    let recovered = indexed["result"]["messages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|m| m["blocks"].as_array())
+        .flatten()
+        .find(|b| b["tool_use_id"] == "tui-lab-busy-wait")
+        .unwrap();
     assert_eq!(recovered["status"], "error", "{indexed}");
     assert!(recovered["tool_output"].is_null());
 

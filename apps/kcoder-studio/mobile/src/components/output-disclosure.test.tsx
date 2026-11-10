@@ -3,8 +3,11 @@ import { createRequire } from "node:module";
 const { renderToStaticMarkup } = createRequire(import.meta.url)("react-dom/server") as {
   renderToStaticMarkup(element: React.ReactNode): string;
 };
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { setLocale } from "@/i18n";
 vi.mock("lucide-react-native", () => ({
+  Lightbulb: () => null,
+  Wrench: () => null,
   ChevronDown: () => null,
   ChevronRight: () => null,
 }));
@@ -15,6 +18,8 @@ import {
 } from "./output-disclosure";
 
 describe("mobile output disclosure", () => {
+  beforeEach(() => setLocale("en"));
+
   it("does not mount expensive or failed tool details until expanded", () => {
     function ExpensiveOutput(): never {
       throw new Error("details must stay unmounted");
@@ -27,6 +32,25 @@ describe("mobile output disclosure", () => {
     expect(html).toContain('aria-expanded="false"');
     expect(html).not.toContain("message-processing-details");
     expect(html).toContain("1");
+  });
+  it("keeps failed, unknown, and canceled counts visible while collapsed", () => {
+    const html = renderToStaticMarkup(
+      <ProcessingDisclosure
+        count={3}
+        title="Tools · 3"
+        running={false}
+        failed={1}
+        unknown={1}
+        cancelled={1}
+      >
+        <span>details</span>
+      </ProcessingDisclosure>,
+    );
+    expect(html).toContain('aria-expanded="false"');
+    expect(html).toContain("1 failed");
+    expect(html).toContain("1 unknown");
+    expect(html).toContain("1 cancelled");
+    expect(html).not.toContain("message-processing-details");
   });
   it("keeps code collapsed on initial render", () => {
     const html = renderToStaticMarkup(

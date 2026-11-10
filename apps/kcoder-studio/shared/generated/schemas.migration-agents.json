@@ -1,0 +1,211 @@
+{
+  "MigrationAgentAdaptation": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "ImportedAgentModel": {
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "description": "An explicit user decision; source aliases never select a native model.",
+            "properties": {
+              "kind": {
+                "enum": [
+                  "inherit"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "target"
+                ],
+                "type": "string"
+              },
+              "model": {
+                "type": "string"
+              },
+              "provider": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "model",
+              "provider"
+            ],
+            "type": "object"
+          }
+        ]
+      }
+    },
+    "properties": {
+      "model": {
+        "$ref": "#/definitions/ImportedAgentModel"
+      },
+      "reviewedSourceSha256": {
+        "type": "string"
+      },
+      "tools": {
+        "description": "Exact canonical native names, narrowed by the source restrictions.",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "model",
+      "reviewedSourceSha256",
+      "tools"
+    ],
+    "title": "MigrationAgentAdaptation",
+    "type": "object"
+  },
+  "MigrationAgentCompatibility": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "MigrationAgentProblem": {
+        "enum": [
+          "budget",
+          "unsupported_semantics",
+          "unsupported_tools",
+          "invalid_definition"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "availableTools": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "canAdapt": {
+        "type": "boolean"
+      },
+      "problem": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/MigrationAgentProblem"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "sourceModelReference": {
+        "type": "boolean"
+      },
+      "sourceSha256": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "availableTools",
+      "canAdapt",
+      "sourceModelReference",
+      "sourceSha256"
+    ],
+    "title": "MigrationAgentCompatibility",
+    "type": "object"
+  },
+  "MigrationAgentPreviewParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "itemId": {
+        "type": "string"
+      },
+      "jobId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "itemId",
+      "jobId"
+    ],
+    "title": "MigrationAgentPreviewParams",
+    "type": "object"
+  },
+  "MigrationAgentPreviewResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "MigrationAgentCompatibility": {
+        "additionalProperties": false,
+        "properties": {
+          "availableTools": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "canAdapt": {
+            "type": "boolean"
+          },
+          "problem": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/MigrationAgentProblem"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sourceModelReference": {
+            "type": "boolean"
+          },
+          "sourceSha256": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "availableTools",
+          "canAdapt",
+          "sourceModelReference",
+          "sourceSha256"
+        ],
+        "type": "object"
+      },
+      "MigrationAgentProblem": {
+        "enum": [
+          "budget",
+          "unsupported_semantics",
+          "unsupported_tools",
+          "invalid_definition"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "compatibility": {
+        "$ref": "#/definitions/MigrationAgentCompatibility"
+      },
+      "itemId": {
+        "type": "string"
+      },
+      "jobId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "compatibility",
+      "itemId",
+      "jobId"
+    ],
+    "title": "MigrationAgentPreviewResult",
+    "type": "object"
+  }
+}

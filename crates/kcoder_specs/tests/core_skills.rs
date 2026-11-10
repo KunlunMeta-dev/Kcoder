@@ -71,7 +71,8 @@ fn spec_init_installs_core_skills_and_path_triggers_protocols() {
 
     kcoder_specs::init(tmp.path()).unwrap();
 
-    let registry = kcoder_skills::SkillRegistry::load(tmp.path()).unwrap();
+    // Validate this installed project fixture without inheriting the runtime user's skill overrides.
+    let registry = kcoder_skills::SkillRegistry::load_project_only(tmp.path()).unwrap();
     assert!(registry.get_active("using-superpowers").is_some());
     assert!(registry.get("test-driven-development").is_some());
     assert!(registry.get("verification-before-completion").is_some());

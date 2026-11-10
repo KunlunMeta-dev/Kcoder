@@ -6,8 +6,16 @@ import type {
 } from '@/types/api'
 import type { RuntimeTranscriptLoader, WorkbenchMessage } from '@/types/workbench'
 
-const CONVERSATION_MENTION_SCHEME = 'wework-conversation://'
-const CONVERSATION_MENTION_PATTERN = /\[\$([^\]]+)]\((wework-conversation:\/\/[^)\n]+)\)/g
+const CONVERSATION_MENTION_SCHEME = 'kcoder-conversation://'
+const LEGACY_CONVERSATION_MENTION_SCHEME = 'wework-conversation://'
+const CONVERSATION_MENTION_PATTERN = /\[\$([^\]]+)]\(((?:kcoder|wework)-conversation:\/\/[^)\n]+)\)/g
+
+export function isConversationMentionUri(value: string): boolean {
+  return (
+    value.startsWith(CONVERSATION_MENTION_SCHEME) ||
+    value.startsWith(LEGACY_CONVERSATION_MENTION_SCHEME)
+  )
+}
 
 export interface ConversationMention {
   title: string
@@ -149,10 +157,13 @@ function appendCandidate(
 }
 
 function parseConversationAddress(reference: string): RuntimeTaskAddress | null {
-  if (!reference.startsWith(CONVERSATION_MENTION_SCHEME)) return null
+  if (!isConversationMentionUri(reference)) return null
+  const scheme = reference.startsWith(CONVERSATION_MENTION_SCHEME)
+    ? CONVERSATION_MENTION_SCHEME
+    : LEGACY_CONVERSATION_MENTION_SCHEME
   try {
     const value = JSON.parse(
-      decodeURIComponent(reference.slice(CONVERSATION_MENTION_SCHEME.length))
+      decodeURIComponent(reference.slice(scheme.length))
     ) as Partial<RuntimeTaskAddress>
     if (typeof value.deviceId !== 'string' || typeof value.taskId !== 'string') return null
     return {

@@ -279,7 +279,7 @@ mod tests {
         let mut settings = Settings {
             max_tokens: Some(65_536),
             api_format: Some(ApiFormat::OpenaiChatCompletions),
-            ..Settings::default()
+            ..crate::test_support::fixture_settings()
         };
         settings
             .provider_extra_body

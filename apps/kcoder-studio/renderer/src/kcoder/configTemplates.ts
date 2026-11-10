@@ -1,4 +1,4 @@
-import { requestLocalExecutor } from '@/tauri/localExecutor'
+import { requestLocalExecutor } from '@/host/localExecutor'
 
 /** One saved session settings template as shown in the settings catalog. */
 export interface SettingsTemplateSummary {

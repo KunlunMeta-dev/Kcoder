@@ -6,14 +6,23 @@ param(
     [string]$PinnedRoot = (Join-Path $env:APPDATA 'Microsoft\Internet Explorer\Quick Launch\User Pinned')
 )
 $ErrorActionPreference = 'Stop'
+function Test-OrdinaryPath([string]$Path) {
+    $item = Get-Item -LiteralPath $Path -Force
+    while ($item) {
+        if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) { return $false }
+        $item = if ($item.PSIsContainer) { $item.Parent } else { $item.Directory }
+    }
+    return $true
+}
 if ([IO.Path]::GetFileName($ExecutableName) -ne $ExecutableName -or !$ExecutableName.EndsWith('.exe',[StringComparison]::OrdinalIgnoreCase)) { throw 'Invalid executable filename' }
 $exe = [IO.Path]::GetFullPath((Join-Path $InstallDir $ExecutableName))
 $resource = Join-Path $InstallDir 'resources\shell'
 $source = Join-Path $resource 'icon.ico'
 if (!(Test-Path -LiteralPath $exe -PathType Leaf)) { throw 'Installed KCoder executable is missing' }
+if (!(Test-Path -LiteralPath $source -PathType Leaf) -or !(Test-OrdinaryPath $source)) { throw 'Packaged Shell icon is missing or unsafe' }
 $hash = (Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash.ToLowerInvariant()
 $icon = Join-Path $resource "kcoder-$hash.ico"
-if (!(Test-Path -LiteralPath $icon)) { Copy-Item -LiteralPath $source -Destination $icon }
+if (!(Test-Path -LiteralPath $icon -PathType Leaf) -or !(Test-OrdinaryPath $icon)) { throw 'Packaged content-addressed Shell icon is missing or unsafe' }
 if ((Get-FileHash -LiteralPath $icon -Algorithm SHA256).Hash.ToLowerInvariant() -ne $hash) {
     throw 'Installed Shell icon content does not match the package'
 }
@@ -26,14 +35,6 @@ public static class KCoderShortcutNotification {
 }
 '@
 $paths = @(@($DesktopLink, $StartMenuLink) | Where-Object { $_ })
-function Test-OrdinaryPath([string]$Path) {
-    $item = Get-Item -LiteralPath $Path -Force
-    while ($item) {
-        if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) { return $false }
-        $item = if ($item.PSIsContainer) { $item.Parent } else { $item.Directory }
-    }
-    return $true
-}
 # Only inspect the user's existing pinned links; never create or remove pinned entries.
 if ((Test-Path -LiteralPath $PinnedRoot -PathType Container) -and (Test-OrdinaryPath $PinnedRoot)) {
     $directories = New-Object 'System.Collections.Generic.Queue[string]'

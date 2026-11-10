@@ -3,7 +3,10 @@ import { type ThreadGoal } from "@/runtime/task-runtime";
 
 export function taskOpenError(value: unknown): string {
   const message = value instanceof Error ? value.message : String(value);
-  if (/lease|already.*(?:active|running)|another.*client/i.test(message)) {
+  if (
+    message === "thread is already active in another Gateway client" ||
+    /^session is already active in another app-server: .+$/.test(message)
+  ) {
     return t("task.this_task_is_running_in_another_client_stop");
   }
   if (/session.*(?:expired|invalid)|authentication/i.test(message))

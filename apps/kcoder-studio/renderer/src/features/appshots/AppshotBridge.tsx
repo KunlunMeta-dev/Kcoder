@@ -1,12 +1,12 @@
 import { useEffect } from 'react'
 import { useWorkbench } from '@/features/workbench/useWorkbench'
-import { subscribeToAppshots } from '@/tauri/appshots'
+import { subscribeToAppshots } from '@/host/appshots'
 
 interface AppshotBridgeProps {
-  onOpenWework: () => void
+  onOpenStudio: () => void
 }
 
-export function AppshotBridge({ onOpenWework }: AppshotBridgeProps) {
+export function AppshotBridge({ onOpenStudio }: AppshotBridgeProps) {
   const { addExistingAttachment } = useWorkbench().projectChat
 
   useEffect(() => {
@@ -15,7 +15,7 @@ export function AppshotBridge({ onOpenWework }: AppshotBridgeProps) {
 
     subscribeToAppshots(attachments => {
       if (!active) return
-      onOpenWework()
+      onOpenStudio()
       attachments.forEach(attachment => addExistingAttachment(attachment))
     })
       .then(dispose => {
@@ -33,7 +33,7 @@ export function AppshotBridge({ onOpenWework }: AppshotBridgeProps) {
       active = false
       unlisten?.()
     }
-  }, [addExistingAttachment, onOpenWework])
+  }, [addExistingAttachment, onOpenStudio])
 
   return null
 }

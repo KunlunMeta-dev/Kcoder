@@ -119,8 +119,21 @@ impl QueryEngine {
     }
 
     pub(crate) fn effective_user_questioner(&self) -> Arc<dyn UserQuestioner> {
-        if self.permission_mode_suppresses_user_elicitation() {
-            Arc::new(YoloUserQuestioner)
+        if self.unattended_input || self.agent_depth() > 0 || self.subagent_system_prompt.is_some()
+        {
+            // A host callback cannot grant delegated workers direct user interaction.
+            Arc::new(kcoder_tools::DenyAllUserQuestioner)
+        } else if !self.client_questions_supported
+            && !self.async_user_questions_main_task_supported()
+        {
+            Arc::new(kcoder_tools::DenyAllUserQuestioner)
+        } else if self.permission_mode_suppresses_user_elicitation() {
+            Arc::new(YoloUserQuestioner {
+                async_questioner: self
+                    .async_user_questions_main_task_supported()
+                    .then(|| Arc::clone(&self.user_questioner)),
+                allow_internal_auto_answers: self.client_questions_supported,
+            })
         } else {
             Arc::clone(&self.user_questioner)
         }
@@ -146,6 +159,10 @@ impl QueryEngine {
             "settings_persistence_target",
         )
         .clone();
+        anyhow::ensure!(
+            !matches!(target, SettingsPersistenceTarget::ReadOnlyUserFile(_)),
+            "SETTINGS_PERSISTENCE_READ_ONLY"
+        );
         let SettingsPersistenceTarget::UserFile(path) = target else {
             anyhow::bail!("permission persistence is disabled for this engine");
         };

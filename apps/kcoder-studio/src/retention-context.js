@@ -61,9 +61,9 @@ export function registerMobileDeviceGrantState({ families, payload, allowedServe
   family.retentionNamespaceId = payload.retentionNamespaceId;
   family.expiresAt = payload.wsLeaseExpiresAt;
   const session = { expiresAt: payload.wsLeaseExpiresAt, accessExpiresAt: payload.expiresAt,
-    deviceId: payload.deviceId, authorizationGeneration: payload.authorizationGeneration,
+    deviceId: payload.deviceId, authorizationGeneration: payload.authorizationGeneration, surface: payload.surface,
     stableLoginOwner: payload.stableLoginOwner, allowedServerIds: new Set(allowedServerIds) };
-  const { stableLoginOwner, wsLeaseExpiresAt, retentionNamespaceId, ...publicPayload } = payload;
+  const { stableLoginOwner, wsLeaseExpiresAt, retentionNamespaceId, surface, ...publicPayload } = payload;
   return { family, session, publicPayload: { ...publicPayload, wsLeaseExpiresAt } };
 }
 
@@ -191,6 +191,50 @@ export function injectWorkspaceReceiptAuthority(message, authority) {
   if (!message.params || typeof message.params !== 'object' || Array.isArray(message.params) ||
       Object.hasOwn(message.params, 'deviceId') || Object.hasOwn(message.params, 'workspaceAccount') ||
       Object.hasOwn(message.params, 'workspaceTargetId')) throw new RetentionAuthorityError(-32602);
+  return { ...message, [PRIVATE_RETENTION_FIELD]: privateEnvelope(authority) };
+}
+
+const retainedAtom = value => typeof value === 'string' && value.length > 0 &&
+  Buffer.byteLength(value, 'utf8') <= 256 && !/\p{Cc}/u.test(value);
+
+export const isRetainedTurn = message => message?.method === 'turn/start' &&
+  message.params?.retention !== undefined && message.params.retention !== null;
+
+// Turn references carry no authority. The private launch and current Gateway
+// grant supply the same full envelope used by the retained upload producer.
+export function injectRetainedTurnAuthority(message, authority) {
+  if (!isRetainedTurn(message)) return message;
+  if (hasReservedRetentionFields(message) || !objectWithKeys(message, ['jsonrpc', 'id', 'method', 'params'])) throw new RetentionAuthorityError(-32602);
+  if (!authority || message.jsonrpc !== '2.0' ||
+      !(typeof message.id === 'string' || (Number.isSafeInteger(message.id) && message.id >= 0))) throw new RetentionAuthorityError();
+  const params = message.params;
+  const retention = params.retention;
+  if (!retainedAtom(params.threadId) || !retainedAtom(params.clientMessageId) || params.resubmit === true ||
+      params.retryFromTurnId !== undefined || params.retryOperationId !== undefined ||
+      !objectWithKeys(retention, ['references', 'attachments']) ||
+      !Array.isArray(retention.references) || retention.references.length < 1 || retention.references.length > 32 ||
+      !Array.isArray(retention.attachments) || retention.attachments.length < 1 || retention.attachments.length > 32) throw new RetentionAuthorityError(-32602);
+  const receipts = new Set(), entries = new Set(), described = new Set();
+  for (const reference of retention.references) {
+    if (!objectWithKeys(reference, ['retentionId', 'expectedRevision', 'entryIds']) ||
+        !operationId(reference.retentionId) || !positive(reference.expectedRevision) ||
+        receipts.has(reference.retentionId) || !Array.isArray(reference.entryIds) || reference.entryIds.length < 1) throw new RetentionAuthorityError(-32602);
+    receipts.add(reference.retentionId);
+    for (const entry of reference.entryIds) {
+      if (!retainedAtom(entry) || entries.has(entry) || entries.size >= 32) throw new RetentionAuthorityError(-32602);
+      entries.add(entry);
+    }
+  }
+  for (const attachment of retention.attachments) {
+    if (!objectWithKeys(attachment, ['entryId', 'filename', 'mimeType']) ||
+        !entries.has(attachment.entryId) || described.has(attachment.entryId) ||
+        typeof attachment.filename !== 'string' || attachment.filename.length < 1 ||
+        Buffer.byteLength(attachment.filename) > 255 || /[\p{Cc}/\\]/u.test(attachment.filename) ||
+        typeof attachment.mimeType !== 'string' || attachment.mimeType.length > 255 ||
+        !/^[a-zA-Z0-9!#$&^_.+-]+\/[a-zA-Z0-9!#$&^_.+-]+$/.test(attachment.mimeType)) throw new RetentionAuthorityError(-32602);
+    described.add(attachment.entryId);
+  }
+  if (described.size !== entries.size) throw new RetentionAuthorityError(-32602);
   return { ...message, [PRIVATE_RETENTION_FIELD]: privateEnvelope(authority) };
 }
 

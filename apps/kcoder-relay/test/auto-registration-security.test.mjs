@@ -81,11 +81,11 @@ function parseJson(response) {
   return JSON.parse(response.body.toString('utf8'));
 }
 
-function staticGateway(id, secret, pairingToken) {
+function staticGateway(id, secret, gatewaySecret) {
   return {
     id,
     secret,
-    pairingToken,
+    gatewaySecret,
     maxConnections: 128,
     maxBytesPerWindow: 64 * 1024 * 1024,
     trafficWindowMs: 60_000,
@@ -98,11 +98,11 @@ test('registration key cannot become a pairing credential or retrieve an existin
   const registrationKey = token();
   const relay = await startFixture(t, registrationStoreFile, registrationKey);
   const enrollmentToken = token();
-  const pairingToken = token();
+  const gatewaySecret = token();
   const createdResponse = await httpCall({
     port: relay.controlPort,
     key: registrationKey,
-    body: { enrollmentToken, pairingToken },
+    body: { enrollmentToken, gatewaySecret },
   });
   assert.equal(createdResponse.status, 201);
   const created = parseJson(createdResponse);
@@ -110,32 +110,32 @@ test('registration key cannot become a pairing credential or retrieve an existin
   const keyAsPairing = await httpCall({
     port: relay.controlPort,
     key: registrationKey,
-    body: { enrollmentToken: token(), pairingToken: registrationKey },
+    body: { enrollmentToken: token(), gatewaySecret: registrationKey },
   });
   assert.equal(keyAsPairing.status, 400);
 
   const keyAsProof = await httpCall({
     port: relay.controlPort,
     key: registrationKey,
-    body: { enrollmentToken: registrationKey, pairingToken: token() },
+    body: { enrollmentToken: registrationKey, gatewaySecret: token() },
   });
   assert.equal(keyAsProof.status, 400);
 
   const sameProofDifferentPair = await httpCall({
     port: relay.controlPort,
     key: registrationKey,
-    body: { enrollmentToken, pairingToken: token() },
+    body: { enrollmentToken, gatewaySecret: token() },
   });
   assert.equal(sameProofDifferentPair.status, 401);
 
   const newProofExistingPair = await httpCall({
     port: relay.controlPort,
     key: registrationKey,
-    body: { enrollmentToken: token(), pairingToken },
+    body: { enrollmentToken: token(), gatewaySecret },
   });
   assert.equal(newProofExistingPair.status, 409);
 
-  const duplicateFieldBody = `{"enrollmentToken":"${token()}","enrollmentToken":"${token()}","pairingToken":"${token()}"}`;
+  const duplicateFieldBody = `{"enrollmentToken":"${token()}","enrollmentToken":"${token()}","gatewaySecret":"${token()}"}`;
   const duplicateField = await httpCall({
     port: relay.controlPort,
     key: registrationKey,
@@ -166,12 +166,12 @@ test('registration key cannot become a pairing credential or retrieve an existin
 test('startup rejects registration-key credential overlap and static/durable pairing collisions', async t => {
   const directory = await privateDirectory(t);
   const registrationKey = token();
-  const staticPairingToken = token();
+  const staticGatewaySecret = token();
   const staticSecret = token();
 
   for (const [label, key, gateway] of [
-    ['static control secret', staticSecret, staticGateway('static-a', staticSecret, staticPairingToken)],
-    ['static pairing token', staticPairingToken, staticGateway('static-b', staticSecret, staticPairingToken)],
+    ['static control secret', staticSecret, staticGateway('static-a', staticSecret, staticGatewaySecret)],
+    ['static pairing token', staticGatewaySecret, staticGateway('static-b', staticSecret, staticGatewaySecret)],
   ]) {
     await assert.rejects(
       startRelay({
@@ -189,7 +189,7 @@ test('startup rejects registration-key credential overlap and static/durable pai
 
   const persistedSecretPath = join(directory, 'persisted-secret.json');
   const secretStore = await openRegistrationStore({ path: persistedSecretPath });
-  const persistedSecret = await secretStore.register({ enrollmentToken: token(), pairingToken: token() });
+  const persistedSecret = await secretStore.register({ enrollmentToken: token(), gatewaySecret: token() });
   await secretStore.close();
   await assert.rejects(startRelay({
     gateways: [],
@@ -202,7 +202,7 @@ test('startup rejects registration-key credential overlap and static/durable pai
 
   const persistedPairingPath = join(directory, 'persisted-pairing.json');
   const pairingStore = await openRegistrationStore({ path: persistedPairingPath });
-  await pairingStore.register({ enrollmentToken: token(), pairingToken: registrationKey });
+  await pairingStore.register({ enrollmentToken: token(), gatewaySecret: registrationKey });
   await pairingStore.close();
   await assert.rejects(startRelay({
     gateways: [],
@@ -217,11 +217,11 @@ test('startup rejects registration-key credential overlap and static/durable pai
   const duplicateStore = await openRegistrationStore({ path: duplicatePairingPath });
   const persistedDuplicate = await duplicateStore.register({
     enrollmentToken: token(),
-    pairingToken: staticPairingToken,
+    gatewaySecret: staticGatewaySecret,
   });
   await duplicateStore.close();
   await assert.rejects(startRelay({
-    gateways: [staticGateway('static-c', staticSecret, staticPairingToken)],
+    gateways: [staticGateway('static-c', staticSecret, staticGatewaySecret)],
     sharedHosts: [SHARED_HOST],
     registrationKey,
     registrationStoreFile: duplicatePairingPath,
@@ -234,14 +234,14 @@ test('startup rejects registration-key credential overlap and static/durable pai
 
   const staticCollisionPath = join(directory, 'static-collision.json');
   const relay = await startFixture(t, staticCollisionPath, registrationKey, [
-    staticGateway('static-d', staticSecret, staticPairingToken),
+    staticGateway('static-d', staticSecret, staticGatewaySecret),
   ]);
   const collision = await httpCall({
     port: relay.controlPort,
     key: registrationKey,
-    body: { enrollmentToken: token(), pairingToken: staticPairingToken },
+    body: { enrollmentToken: token(), gatewaySecret: staticGatewaySecret },
   });
-  assert.equal(collision.status, 409, 'fresh proof cannot claim an existing static Gateway pairing token');
+  assert.equal(collision.status, 409, 'fresh proof cannot claim an existing static Gateway internal secret');
   await relay.close();
   const emptyStore = await openRegistrationStore({ path: staticCollisionPath });
   assert.deepEqual(emptyStore.list(), []);
@@ -251,7 +251,7 @@ test('startup rejects registration-key credential overlap and static/durable pai
 test('registration proof and shared key stay out of the cached identity, pairing link, and control credentials', async t => {
   const directory = await privateDirectory(t);
   const registrationKey = token();
-  const pairingToken = token();
+  const gatewaySecret = token();
   const assignedId = 'assigned-gateway-0123456789';
   const assignedSecret = token();
   const identityFile = join(directory, 'client-identity.json');
@@ -276,7 +276,7 @@ test('registration proof and shared key stay out of the cached identity, pairing
   const client = await startRegisteredClient({
     url: relayUrl,
     registrationKey,
-    pairingToken,
+    gatewaySecret,
     identityFile,
     gateway: 'http://127.0.0.1:4186',
     allowInsecure: true,
@@ -286,7 +286,7 @@ test('registration proof and shared key stay out of the cached identity, pairing
       return new Response(JSON.stringify({
         id: assignedId,
         secret: assignedSecret,
-        pairingToken,
+        gatewaySecret,
         maxConnections: 128,
         maxBytesPerWindow: 64 * 1024 * 1024,
         trafficWindowMs: 60_000,
@@ -314,19 +314,19 @@ test('registration proof and shared key stay out of the cached identity, pairing
   assert.match(cached, new RegExp(assignedId));
   assert.match(cached, new RegExp(assignedSecret));
   assert.doesNotMatch(cached, new RegExp(registrationKey));
-  assert.doesNotMatch(cached, new RegExp(pairingToken));
+  assert.doesNotMatch(cached, new RegExp(gatewaySecret));
   assert.doesNotMatch(cached, /enrollmentToken/);
   assert.doesNotMatch(cached, new RegExp(requestBody.enrollmentToken));
 
   const pairingLink = buildPairingLink({
     publicUrl: 'https://registration-security.example:8451',
-    token: pairingToken,
+    token: gatewaySecret,
     gatewayId: assignedId,
     routeMode: 'path',
     includeGatewayId: true,
   });
   const deepLink = new URL(pairingLink);
-  assert.equal(deepLink.searchParams.get('token'), pairingToken);
+  assert.equal(deepLink.searchParams.get('token'), gatewaySecret);
   assert.equal(deepLink.searchParams.get('gatewayId'), assignedId);
   assert.equal(pairingLink.includes(registrationKey), false);
   assert.equal(pairingLink.includes(assignedSecret), false);

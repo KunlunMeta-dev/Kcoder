@@ -16,7 +16,10 @@ const projectChat = vi.hoisted(() => ({
   setSelectedSkills: vi.fn(),
 }))
 
-vi.mock('@/lib/navigation', () => ({ navigateTo }))
+vi.mock('@/lib/navigation', async importOriginal => ({
+  ...(await importOriginal<typeof import('@/lib/navigation')>()),
+  navigateTo,
+}))
 vi.mock('@/features/workbench/useWorkbench', () => ({
   useWorkbench: () => ({ projectChat, sendCurrentInput }),
 }))

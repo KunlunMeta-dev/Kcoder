@@ -91,6 +91,7 @@ use clap::CommandFactory;
 
 fn cli_for_test() -> Cli {
     Cli {
+        internal_acp_backend: false,
         prompt: None,
         command: None,
         settings_files: Vec::new(),
@@ -365,31 +366,28 @@ fn resolve_resume_history_path_latest_errors_without_sessions() {
 #[test]
 fn provider_kind_parses_settings_values_and_aliases() {
     assert_eq!(
-        ProviderKind::parse_settings_value("openai"),
+        ApiProviderKind::parse("openai"),
         Some(ApiProviderKind::Openai)
     );
     assert_eq!(
-        ProviderKind::parse_settings_value("openai-compatible"),
+        ApiProviderKind::parse("openai-compatible"),
         Some(ApiProviderKind::Local)
     );
+    assert_eq!(ApiProviderKind::parse("vllm"), Some(ApiProviderKind::Local));
     assert_eq!(
-        ProviderKind::parse_settings_value("vllm"),
+        ApiProviderKind::parse("sglang"),
         Some(ApiProviderKind::Local)
     );
+    assert_eq!(ApiProviderKind::parse("minimax"), None);
     assert_eq!(
-        ProviderKind::parse_settings_value("sglang"),
-        Some(ApiProviderKind::Local)
-    );
-    assert_eq!(ProviderKind::parse_settings_value("minimax"), None);
-    assert_eq!(
-        ProviderKind::parse_settings_value("kunlunmeta"),
+        ApiProviderKind::parse("kunlunmeta"),
         Some(ApiProviderKind::Kunlunmeta)
     );
-    assert_eq!(ProviderKind::parse_settings_value("unknown"), None);
+    assert_eq!(ApiProviderKind::parse("unknown"), None);
 }
 
 #[test]
-fn provider_resolution_prefers_cli_then_env_then_settings_then_default() {
+fn provider_resolution_prefers_cli_then_env_then_settings() {
     let settings = Settings {
         provider: Some("grok".to_string()),
         ..Settings::default()
@@ -397,19 +395,19 @@ fn provider_resolution_prefers_cli_then_env_then_settings_then_default() {
 
     assert_eq!(
         resolve_provider_kind(Some("openai"), Some(ApiProviderKind::Local), &settings).unwrap(),
-        ApiProviderKind::Openai
+        Some(ApiProviderKind::Openai)
     );
     assert_eq!(
         resolve_provider_kind(None, Some(ApiProviderKind::Local), &settings).unwrap(),
-        ApiProviderKind::Local
+        Some(ApiProviderKind::Local)
     );
     assert_eq!(
         resolve_provider_kind(None, None, &settings).unwrap(),
-        ApiProviderKind::Grok
+        Some(ApiProviderKind::Grok)
     );
     assert_eq!(
         resolve_provider_kind(None, None, &Settings::default()).unwrap(),
-        ApiProviderKind::Kunlunmeta
+        None
     );
 }
 
@@ -423,7 +421,7 @@ fn custom_provider_uses_configured_api_format_transport() {
 
     assert_eq!(
         resolve_provider_kind(None, None, &settings).unwrap(),
-        ApiProviderKind::Openai
+        Some(ApiProviderKind::Openai)
     );
 }
 
@@ -457,11 +455,11 @@ fn cli_explicit_model_keeps_provider_identity_and_per_model_limits() {
             assert_eq!(
                 resolve_cli_provider_kind(&cli, Some(ApiProviderKind::Anthropic), &settings)
                     .unwrap(),
-                ApiProviderKind::Openai
+                Some(ApiProviderKind::Openai)
             );
         }
     }
-    let mut settings = Settings::default();
+    let mut settings = crate::test_fixtures::settings_with_default_provider();
     settings.providers.remove("openai");
     settings.apply_provider(Some("kunlunmeta")).unwrap();
     assert_eq!(settings.active_provider.as_deref(), Some("kunlunmeta"));
@@ -481,7 +479,7 @@ fn cli_explicit_model_keeps_provider_identity_and_per_model_limits() {
     assert_eq!(settings.model, "legacy-raw-model");
     assert_eq!(
         resolve_cli_provider_kind(&cli, None, &settings).unwrap(),
-        ApiProviderKind::Openai
+        Some(ApiProviderKind::Openai)
     );
 }
 
@@ -898,7 +896,10 @@ fn local_base_url_prefers_cli_over_settings() {
         ..Settings::default()
     };
 
-    assert_eq!(local_base_url(&cli, &settings), "https://cli.example/v1");
+    assert_eq!(
+        local_base_url(&cli, &settings).as_deref(),
+        Some("https://cli.example/v1")
+    );
 }
 
 #[test]
@@ -1058,7 +1059,7 @@ fn auth_import_only_persists_explicitly_mapped_providers() {
     )
     .unwrap();
     let mut settings = Settings::default();
-    let mut profile = settings.providers["kunlunmeta"].clone();
+    let mut profile = kcoder_config::default_active_provider_config();
     profile.credential_env = vec!["DEEPSEEK_API_KEY".to_string()];
     settings
         .providers
@@ -1115,6 +1116,7 @@ fn missing_api_key_message_does_not_recommend_settings_storage() {
 fn signed_out_provider_defers_the_missing_key_error_until_a_request() {
     let provider = SignedOutProvider {
         name: "kunlunmeta",
+        error_type: "missing_api_key",
         error_message: "sign in first".to_string(),
     };
 
@@ -1409,11 +1411,11 @@ fn auth_commands_do_not_resolve_their_provider_as_a_model_transport() {
     // environment selected, so an id that is not a transport cannot fail the command.
     assert_eq!(
         cli_provider_kind(&cli, Some(ApiProviderKind::Openai), &Settings::default()).unwrap(),
-        ApiProviderKind::Openai
+        Some(ApiProviderKind::Openai)
     );
     assert_eq!(
         cli_provider_kind(&cli, None, &Settings::default()).unwrap(),
-        ApiProviderKind::Kunlunmeta
+        None
     );
 }
 
@@ -1457,4 +1459,29 @@ fn wiki_tool_requires_opt_in_and_never_overrides_no_tools() {
             .get("Wiki")
             .is_none()
     );
+}
+
+#[test]
+fn required_inline_skill_is_rejected_before_cli_model_startup() {
+    let temp = tempfile::tempdir().unwrap();
+    let dir = temp.path().join(".kcoder/skills/kworker-visualization");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("SKILL.md"), "---\nname: kworker-visualization\ndescription: Inline fixture\nmetadata:\n  kcoder:\n    requires_tools: [show_widget]\n---\nBODY").unwrap();
+    let registry = SkillRegistry::load_project_only(temp.path()).unwrap();
+    let settings = Settings {
+        permission_mode: PermissionMode::Yolo,
+        ..Settings::default()
+    };
+    let failure = required_skill_preflight(
+        &["kworker-visualization".into()],
+        true,
+        &registry,
+        &default_registry(),
+        &PermissionEngine::from_settings(&settings),
+        temp.path(),
+        true,
+    )
+    .unwrap_err();
+    assert_eq!(failure.reason, "required_skill_capability_unavailable");
+    assert!(failure.remediation.contains("KCoder Studio"));
 }

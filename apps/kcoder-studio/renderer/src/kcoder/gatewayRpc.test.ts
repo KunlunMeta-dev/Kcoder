@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test, vi } from 'vitest'
 import { classifyPluginFailure } from '@/components/plugins/plugin-errors'
 import { navigateGatewayLogin } from './gatewayLoginNavigation'
+import { INTEGRATION_CONTROL_CAPABILITIES } from '../../../shared/integrationControlMethods.mjs'
 import {
   fetchGatewayServers,
   fetchGatewayServersWithHealth,
@@ -108,6 +109,61 @@ describe('KCoder gateway RPC boundary', () => {
     vi.clearAllMocks()
   })
 
+  test('relay-mounted gateways keep HTTP and WebSocket traffic inside their prefix', async () => {
+    const base = document.createElement('meta')
+    base.name = 'kcoder-app-base-path'
+    base.content = '/g/owned-gateway'
+    document.head.appendChild(base)
+    const fetchImpl = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ servers: [] }) })
+    await fetchGatewayServers(fetchImpl as unknown as typeof fetch)
+    expect(fetchImpl).toHaveBeenCalledWith('/g/owned-gateway/api/servers', { cache: 'no-store' })
+    const client = new GatewayRpcClient(
+      'local',
+      'fixture-token',
+      FakeWebSocket as unknown as typeof WebSocket
+    )
+    try {
+      await client.connect()
+      expect(new URL(FakeWebSocket.instances[0].url).pathname).toBe('/g/owned-gateway/rpc')
+    } finally {
+      client.close()
+    }
+  })
+
+  test.each(['runtime', 'browser'] as const)('requests finite integration capabilities and scopes shared conversations to the %s channel', async channel => {
+    const client = new GatewayRpcClient('local', 'fixture-token', FakeWebSocket as unknown as typeof WebSocket, channel)
+    await client.connect()
+    const initialize = FakeWebSocket.instances[0].sent.map(raw => JSON.parse(raw)).find(frame => frame.method === 'initialize')
+    for (const capability of INTEGRATION_CONTROL_CAPABILITIES)
+      expect(initialize.params.capabilities.experimental[capability]).toBe(true)
+    expect(initialize.params.capabilities.experimental.officeWorkspaceV1).toBe(true)
+    expect(initialize.params.capabilities.experimental.gatewaySharedThreadsV1).toBe(channel === 'runtime')
+    client.close()
+  })
+
+  test('SDK management selects an isolated transport and refuses task execution', async () => {
+    const client = new GatewayRpcClient('local', 'fixture-token', FakeWebSocket as unknown as typeof WebSocket)
+    client.useNativeManagementTransport()
+    try {
+      await client.connect()
+      const socket = FakeWebSocket.instances[0]
+      expect(new URL(socket.url).searchParams.get('nativeManagement')).toBe('1')
+      const initialize = socket.sent.map(raw => JSON.parse(raw)).find(frame => frame.method === 'initialize')
+      expect(initialize.params.capabilities.experimental).toMatchObject({
+        gatewaySharedThreadsV1: false, taskSourcesV1: false, threadRuntimeHandoffV1: false,
+      })
+      const sent = socket.sent.length
+      await expect(client.request('thread/start', {})).rejects.toThrow('cannot execute task commands')
+      await expect(client.request('gateway/app-server/restart', { confirm: true })).rejects.toThrow('cannot execute task commands')
+      expect(socket.sent).toHaveLength(sent)
+      FakeWebSocket.autoRespond = true
+      await expect(client.request('gateway/client/detach', { confirm: true, force: false })).resolves.toEqual({})
+      expect(JSON.parse(socket.sent.at(-1)!)).toMatchObject({
+        method: 'gateway/client/detach', params: { confirm: true, force: false },
+      })
+    } finally { client.close() }
+  })
+
   test('an online socket cannot keep a read request pending forever', async () => {
     const client = new GatewayRpcClient(
       'local',
@@ -124,6 +180,45 @@ describe('KCoder gateway RPC boundary', () => {
     expect(failure).toMatchObject({ reason: 'timeout', data: { outcome: 'readOnly' } })
     await request
     expect(FakeWebSocket.instances[0].readyState).toBe(WebSocket.OPEN)
+    client.close()
+  })
+
+  test('Feishu registration keeps its own typed reply projection on the real websocket client', async () => {
+    const client = new GatewayRpcClient(
+      'local',
+      'fixture-token',
+      FakeWebSocket as unknown as typeof WebSocket
+    )
+    await client.connect()
+    const fields = {
+      requestId: 'original-feishu',
+      action: 'create',
+      scope: {
+        accountId: 'owned',
+        targetId: 'target',
+        workspaceId: null,
+        identityGeneration: '1',
+        targetRevision: '1',
+      },
+      connectionRef: { id: 'draft', revision: '1' },
+    }
+    const pending = client.request('integrations/connectivity/feishuRegistration', fields)
+    const socket = FakeWebSocket.instances[0]
+    const sent = socket.sent
+      .map(raw => JSON.parse(raw))
+      .find(frame => frame.method === 'integrations/connectivity/feishuRegistration')
+    const result = {
+      requestId: fields.requestId,
+      connectionRef: fields.connectionRef,
+      phase: 'waiting',
+      verificationUrl: 'https://open.feishu.cn/page/launcher?owned-fixture=1',
+      expiresAtMs: 10000,
+      intervalMs: 5000,
+      appId: null,
+      credential: null,
+    }
+    socket.respond(sent.id, result)
+    await expect(pending).resolves.toEqual(result)
     client.close()
   })
 
@@ -794,19 +889,125 @@ describe('KCoder gateway RPC boundary', () => {
         capabilities: {
           experimental: {
             toolPathPreviewV1: true,
+            migrationHistoryWorkerStateClientV1: true,
             workspaceBinaryRevisionV1: true,
             threadRunSummaryV1: true,
+            threadGoalStatusBatchV1: true,
+            continuousWorkReadV1: true,
+            continuousWorkPartialListV1: true,
             interactionBindingV1: true,
+            interactionStatusReadV1: true,
             turnRetryOperationV1: true,
           },
         },
       },
     })
+    expect((messages[0].params as { capabilities: { experimental: Record<string, unknown> } }).capabilities.experimental).not.toHaveProperty('migrationHistoryWorkerStateV1')
     expect(messages[1]).toMatchObject({ method: 'initialized' })
     expect(client.supportsExperimental('workspaceFiles')).toBe(true)
     expect(client.supportsExperimental('toolPathPreviewV1')).toBe(false)
     expect(client.supportsExperimental('unknown')).toBe(false)
     expect(client.supportsThreadResume()).toBe(true)
+  })
+
+  test('requests on an open socket wait for initialization before sending', async () => {
+    FakeWebSocket.autoInitialize = false
+    FakeWebSocket.autoRespond = true
+    const client = new GatewayRpcClient('local', 'fixture-token', FakeWebSocket as unknown as typeof WebSocket)
+    try {
+      const connection = client.connect()
+      await vi.waitFor(() => expect(FakeWebSocket.instances[0]?.sent.length).toBe(1))
+      const socket = FakeWebSocket.instances[0]
+      const request = client.request('thread/list')
+      await Promise.resolve()
+      expect(socket.sent.map(raw => JSON.parse(raw).method)).toEqual(['initialize'])
+      socket.respond(JSON.parse(socket.sent[0]).id)
+      await connection
+      await request
+      expect(socket.sent.map(raw => JSON.parse(raw).method)).toEqual(['initialize', 'initialized', 'thread/list'])
+    } finally { client.close() }
+  })
+
+  test('keeps transcript snapshot opt-in disabled for a legacy renderer across reconnects', async () => {
+    FakeWebSocket.autoInitialize = false
+    FakeWebSocket.autoRespond = false
+    const client = new GatewayRpcClient(
+      'local',
+      'capability-token',
+      FakeWebSocket as unknown as typeof WebSocket
+    )
+    const serverInitializeResult = {
+      protocolVersion: '2026-07-27',
+      capabilities: {
+        threadResume: true,
+        experimental: { threadTranscriptSnapshotV1: true },
+      },
+    }
+    const legacyReadResult = {
+      thread: { id: 'thread-legacy', title: 'Legacy thread' },
+      messages: [],
+      rangeStart: 0,
+      rangeEnd: 0,
+      hasMoreBefore: false,
+    }
+
+    const firstConnection = client.connect()
+    await vi.waitFor(() => expect(FakeWebSocket.instances).toHaveLength(1))
+    const firstSocket = FakeWebSocket.instances[0]
+    await vi.waitFor(() => expect(firstSocket.readyState).toBe(WebSocket.OPEN))
+    await vi.waitFor(() =>
+      expect(firstSocket.sent.some(raw => JSON.parse(raw).method === 'initialize')).toBe(true)
+    )
+    const firstInitialize = firstSocket.sent
+      .map(raw => JSON.parse(raw))
+      .find(message => message.method === 'initialize')
+    expect(firstInitialize).toBeTruthy()
+    expect(firstInitialize.params.capabilities.experimental).not.toHaveProperty(
+      'threadTranscriptSnapshotV1'
+    )
+    firstSocket.respond(firstInitialize.id, serverInitializeResult)
+    await firstConnection
+    expect(client.supportsExperimental('threadTranscriptSnapshotV1')).toBe(true)
+
+    const legacyRead = client.request('thread/read', { threadId: 'thread-legacy' })
+    await vi.waitFor(() =>
+      expect(firstSocket.sent.some(raw => JSON.parse(raw).method === 'thread/read')).toBe(true)
+    )
+    const firstRead = firstSocket.sent
+      .map(raw => JSON.parse(raw))
+      .find(message => message.method === 'thread/read')
+    expect(firstRead.params).toEqual({ threadId: 'thread-legacy' })
+    expect(firstRead.params).not.toHaveProperty('transcriptSnapshotV1')
+    firstSocket.respond(firstRead.id, legacyReadResult)
+    await expect(legacyRead).resolves.toEqual(legacyReadResult)
+    expect(legacyReadResult).not.toHaveProperty('transcriptSnapshotV1')
+
+    firstSocket.close()
+    const reconnectedRead = client.request('thread/read', { threadId: 'thread-legacy' })
+    await vi.waitFor(() => expect(FakeWebSocket.instances).toHaveLength(2))
+    const secondSocket = FakeWebSocket.instances[1]
+    await vi.waitFor(() => expect(secondSocket.readyState).toBe(WebSocket.OPEN))
+    await vi.waitFor(() =>
+      expect(secondSocket.sent.some(raw => JSON.parse(raw).method === 'initialize')).toBe(true)
+    )
+    const secondInitialize = secondSocket.sent
+      .map(raw => JSON.parse(raw))
+      .find(message => message.method === 'initialize')
+    expect(secondInitialize).toBeTruthy()
+    expect(secondInitialize.params.capabilities.experimental).not.toHaveProperty(
+      'threadTranscriptSnapshotV1'
+    )
+    secondSocket.respond(secondInitialize.id, serverInitializeResult)
+    await vi.waitFor(() =>
+      expect(secondSocket.sent.some(raw => JSON.parse(raw).method === 'thread/read')).toBe(true)
+    )
+    const secondRead = secondSocket.sent
+      .map(raw => JSON.parse(raw))
+      .find(message => message.method === 'thread/read')
+    expect(secondRead.params).toEqual({ threadId: 'thread-legacy' })
+    secondSocket.respond(secondRead.id, legacyReadResult)
+    await expect(reconnectedRead).resolves.toEqual(legacyReadResult)
+    client.close()
   })
 
   test.each([

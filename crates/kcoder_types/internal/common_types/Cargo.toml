@@ -1,0 +1,21 @@
+[package]
+name = "kcoder_common_types"
+description = "Model configuration and native identities shared by the contract crates."
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish = false
+
+[lib]
+path = "../../src/common_types.rs"
+
+[features]
+json-schema = ["dep:schemars"]
+
+[dependencies]
+schemars = { version = "0.8", optional = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }

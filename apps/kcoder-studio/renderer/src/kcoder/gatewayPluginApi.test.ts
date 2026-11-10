@@ -1,9 +1,10 @@
 import { afterEach, expect, test, vi } from 'vitest'
 import { createLocalCodexPluginApi } from '@/api/local/codexPlugins'
-import { requestLocalExecutor } from '@/tauri/localExecutor'
+import { requestLocalExecutor } from '@/host/localExecutor'
+import { installTestTransport } from '@/test/runtime-transport'
 import { GatewayRpcError } from './gatewayRpc'
 
-vi.mock('@/tauri/localExecutor', () => ({
+vi.mock('@/host/localExecutor', () => ({
   requestLocalExecutor: vi.fn(),
   ensureLocalExecutorStarted: vi.fn(),
 }))
@@ -11,6 +12,27 @@ vi.mock('@/tauri/localExecutor', () => ({
 afterEach(() => {
   document.head.innerHTML = ''
   vi.resetAllMocks()
+})
+
+test('legacy marketplace selection migrates and clears when the selection disappears', async () => {
+  installTestTransport(() => null)
+  const currentKey = 'kcoder.plugins.selectedCodexMarketplace'
+  const legacyKey = 'wework.plugins.selectedCodexMarketplace'
+  const marketplace = (name: string) => ({ name, path: `/markets/${name}`, plugins: [] })
+  localStorage.setItem(legacyKey, 'saved')
+  vi.mocked(requestLocalExecutor)
+    .mockResolvedValueOnce({ marketplaces: [marketplace('first'), marketplace('saved')] })
+    .mockResolvedValueOnce({ marketplaces: [] })
+    .mockResolvedValueOnce({})
+    .mockResolvedValueOnce({ marketplaces: [] })
+    .mockResolvedValueOnce({ marketplaces: [] })
+
+  const api = createLocalCodexPluginApi()
+  expect((await api.readState()).selectedMarketplaceId).toBe('saved')
+  expect(localStorage.getItem(currentKey)).toBe('saved')
+  await api.deleteMarketplace('saved')
+  expect(localStorage.getItem(currentKey)).toBeNull()
+  expect(localStorage.getItem(legacyKey)).toBeNull()
 })
 
 test('successful plugin mutations invalidate presentation but failures do not', async () => {
@@ -606,4 +628,11 @@ test('icon request bursts preserve the four-request limit and release slots afte
   expect(await Promise.all(reads)).toEqual([null, ...Array(8).fill('https://icons.test/ok.svg')])
   expect(peak).toBe(4)
   expect(active).toBe(0)
+})
+
+
+test('provider revocation requires explicit Native support without treating metadata as permission', async () => {
+  const { PLUGIN_RPC_METHODS, requiredPluginCapabilities } = await import('./gatewayPluginApi')
+  expect(PLUGIN_RPC_METHODS.has('mcp/providerRevocation')).toBe(true)
+  expect(requiredPluginCapabilities('mcp/providerRevocation', {action:'read'})).toEqual(['mcpProviderRevocationV1'])
 })

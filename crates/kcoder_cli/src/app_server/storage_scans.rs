@@ -8,7 +8,7 @@ use std::{
 use tokio_util::sync::CancellationToken;
 
 #[derive(Default)]
-pub(super) struct StorageScans {
+pub struct StorageScans {
     entries: Arc<Mutex<HashMap<String, Entry>>>,
     parent: CancellationToken,
 }
@@ -19,7 +19,7 @@ struct Entry {
     created: Instant,
 }
 
-pub(super) struct StorageScan {
+pub struct StorageScan {
     pub token: CancellationToken,
     id: String,
     entries: Arc<Mutex<HashMap<String, Entry>>>,

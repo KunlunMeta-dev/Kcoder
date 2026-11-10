@@ -489,3 +489,13 @@ test("explicit protocol comparisons use an in-memory credential alias and retain
     await approved.finish("passed", { ok: true });
   }
 });
+
+test("office environment-only credentials never inspect or link an approved credential path", async () => {
+  const context = await RunContext.create(import.meta.url, { testId: "office-env-only-credential" });
+  try {
+    const model = { provider: "target", providerConfig, configDir: context.pathInState("absent-approved-store"), credentialEnv: ["OFFICE_PROTECTED_KEY"] };
+    const isolated = await realModel.prepareIsolatedRealModelConfig(context, model, { env: { OFFICE_PROTECTED_KEY: "SYNTHETIC_ENV_ONLY_KEY" }, credentialSource: "environment-only" });
+    await assert.rejects(access(resolve(isolated.configDir, "credentials.json")), { code: "ENOENT" });
+    assert.equal(context.redactValue("SYNTHETIC_ENV_ONLY_KEY"), "[REDACTED]");
+  } finally { await context.finish("passed", {ok:true}); }
+});

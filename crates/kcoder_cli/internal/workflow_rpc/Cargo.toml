@@ -1,0 +1,25 @@
+[package]
+name = "kcoder_workflow_rpc"
+description = "Workflow Canvas library and observation RPCs for a selected profile."
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+anyhow.workspace = true
+kcoder_app_protocol = { path = "../../../kcoder_app_protocol" }
+kcoder_types = { path = "../../../kcoder_types" }
+kcoder_workflow = { path = "../../../kcoder_workflow" }
+kcoder_workflow_observations = { path = "../../../kcoder_tools/internal/workflow_observations" }
+serde.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lib]
+path = "../../src/internal/workflow_rpc/lib.rs"

@@ -13,13 +13,13 @@ afterEach(() => {
 })
 
 test('compact navigation does not persist collapse and restores the wide preference', () => {
-  localStorage.setItem('wework.desktop.sidebar.collapsed', 'false')
+  localStorage.setItem('kcoder.desktop.sidebar.collapsed', 'false')
   resize(1280)
   const { result } = renderHook(() => usePluginPageNavigation(false))
   expect(result.current.sidebarCollapsed).toBe(false)
   act(() => resize(400))
   expect(result.current.sidebarCollapsed).toBe(true)
-  expect(localStorage.getItem('wework.desktop.sidebar.collapsed')).toBe('false')
+  expect(localStorage.getItem('kcoder.desktop.sidebar.collapsed')).toBe('false')
   act(() => {
     expect(requestDesktopSidebarToggle()).toBe(true)
   })
@@ -39,7 +39,9 @@ test('an explicitly collapsed wide sidebar remains collapsed after resizing', ()
   expect(result.current.sidebarCollapsed).toBe(true)
   act(() => result.current.toggleSidebar())
   expect(result.current.sidebarCollapsed).toBe(false)
-  expect(localStorage.getItem('wework.desktop.sidebar.collapsed')).toBe('false')
+  expect(localStorage.getItem('kcoder.desktop.sidebar.collapsed')).toBe('false')
+  const reopened = renderHook(() => usePluginPageNavigation(false))
+  expect(reopened.result.current.sidebarCollapsed).toBe(false)
 })
 
 test('mobile menu handling stays temporary and stops intercepting requests after unmount', () => {
@@ -49,7 +51,7 @@ test('mobile menu handling stays temporary and stops intercepting requests after
   expect(result.current.drawerOpen).toBe(true)
   act(() => resize(410))
   expect(result.current.drawerOpen).toBe(true)
-  expect(localStorage.getItem('wework.desktop.sidebar.collapsed')).toBeNull()
+  expect(localStorage.getItem('kcoder.desktop.sidebar.collapsed')).toBeNull()
   unmount()
   expect(requestDesktopSidebarToggle()).toBe(false)
 })

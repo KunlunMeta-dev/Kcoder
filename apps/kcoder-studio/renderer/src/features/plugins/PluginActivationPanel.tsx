@@ -1,3 +1,4 @@
+import { SettingsSelect } from '@/components/settings/SettingsSelect'
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { useTranslation } from '@/hooks/useTranslation'
 import {
@@ -183,7 +184,7 @@ function ScopedPluginActivationPanel({
       {conversations.length > 0 && (
         <label className="flex flex-wrap items-center gap-2 text-sm text-text-secondary">
           {t('pluginActivation.conversation', 'Check in conversation')}
-          <select
+          <SettingsSelect
             data-testid="plugin-activation-conversation"
             className="min-h-11 max-w-full rounded-lg border border-border bg-surface px-2 md:min-h-8"
             value={taskId}
@@ -199,7 +200,7 @@ function ScopedPluginActivationPanel({
                 {item.title}
               </option>
             ))}
-          </select>
+          </SettingsSelect>
         </label>
       )}
       {!api.readPluginActivation && (

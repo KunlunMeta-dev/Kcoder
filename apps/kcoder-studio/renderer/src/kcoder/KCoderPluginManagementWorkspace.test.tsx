@@ -1,11 +1,19 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { beforeEach, expect, test, vi } from 'vitest'
+import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 import '@/i18n'
 import { createLocalCodexPluginApi } from '@/api/local/codexPlugins'
-import { requestLocalExecutor } from '@/tauri/localExecutor'
+import { requestLocalExecutor } from '@/host/localExecutor'
+import { WorkbenchContext } from '@/features/workbench/useWorkbench'
+import type { WorkbenchContextValue } from '@/features/workbench/workbenchContextTypes'
+import { fetchGatewayServers } from './gatewayRpc'
 import { KCoderPluginManagementWorkspace } from './KCoderPluginManagementWorkspace'
 
-vi.mock('@/tauri/localExecutor', () => ({ requestLocalExecutor: vi.fn() }))
+const { gatewayServers } = vi.hoisted(() => ({ gatewayServers: vi.fn() }))
+vi.mock('./gatewayRpc', async importOriginal => {
+  const actual = await importOriginal<typeof import('./gatewayRpc')>()
+  return { ...actual, fetchGatewayServers: gatewayServers }
+})
+vi.mock('@/host/localExecutor', () => ({ requestLocalExecutor: vi.fn() }))
 vi.mock('@/api/local/codexPlugins', () => ({ createLocalCodexPluginApi: vi.fn() }))
 const readState = vi.fn()
 const listSkills = vi.fn()
@@ -23,6 +31,7 @@ const plugin = {
 }
 beforeEach(() => {
   vi.clearAllMocks()
+  vi.mocked(fetchGatewayServers).mockResolvedValue([])
   vi.mocked(requestLocalExecutor).mockResolvedValue({
     servers: [{ name: 'native-search', transport: 'http', authorization: 'notAuthorized' }],
   })
@@ -49,6 +58,115 @@ beforeEach(() => {
     uninstallInstalledPlugin,
     setSkillEnabled,
   } as unknown as ReturnType<typeof createLocalCodexPluginApi>)
+})
+
+afterEach(() => {
+  document
+    .querySelectorAll('meta[name="kcoder-rpc-token"][content="test-gateway"]')
+    .forEach(node => node.remove())
+})
+
+const gatewayTargets = [
+  {
+    id: 'alpha',
+    label: 'Alpha',
+    description: 'Local target',
+    runtime: 'kcoder' as const,
+    transport: 'local' as const,
+    workspacePath: '/alpha/configured-workspace',
+  },
+  {
+    id: 'beta',
+    label: 'Beta',
+    description: 'SSH target',
+    runtime: 'kcoder' as const,
+    transport: 'ssh' as const,
+    workspacePath: '/beta/configured-workspace',
+  },
+]
+
+function gatewayWorkbench(): WorkbenchContextValue {
+  return {
+    state: {
+      currentRuntimeTask: {
+        deviceId: 'beta',
+        taskId: 'active-task',
+        workspacePath: '/beta/current-task',
+      },
+      currentProject: null,
+      runtimeWork: null,
+      selectedDeviceWorkspaceId: null,
+      standaloneDeviceId: null,
+      standaloneWorkspacePath: null,
+    },
+  } as WorkbenchContextValue
+}
+
+function useGatewayPage() {
+  document.head.insertAdjacentHTML(
+    'beforeend',
+    '<meta name="kcoder-rpc-token" content="test-gateway">'
+  )
+}
+
+test('defaults plugin management to the local host rather than the remote conversation', async () => {
+  useGatewayPage()
+  vi.mocked(fetchGatewayServers).mockResolvedValue(gatewayTargets)
+
+  render(
+    <WorkbenchContext.Provider value={gatewayWorkbench()}>
+      <KCoderPluginManagementWorkspace
+        targetDeviceId="beta"
+        targetWorkspacePath="/beta/current-task"
+      />
+    </WorkbenchContext.Provider>
+  )
+
+  await waitFor(() => expect(screen.getByTestId('kcoder-plugin-target-select')).toHaveValue('alpha'))
+  await waitFor(() => expect(readState).toHaveBeenCalled())
+  expect(createLocalCodexPluginApi).toHaveBeenCalledWith({ deviceId: 'alpha', workspacePath: '/alpha/configured-workspace', isScopeCurrent: expect.any(Function) })
+
+})
+
+test('uses the selected target and never carries another task workspace across targets', async () => {
+  useGatewayPage()
+  vi.mocked(fetchGatewayServers).mockResolvedValue(gatewayTargets)
+
+  render(
+    <WorkbenchContext.Provider value={gatewayWorkbench()}>
+      <KCoderPluginManagementWorkspace
+        targetDeviceId="beta"
+        targetWorkspacePath="/beta/current-task"
+      />
+    </WorkbenchContext.Provider>
+  )
+
+  fireEvent.change(await screen.findByTestId('kcoder-plugin-target-select'), {
+    target: { value: 'alpha' },
+  })
+
+  await screen.findByText('Installed demo')
+  expect(createLocalCodexPluginApi).toHaveBeenCalledWith({
+    deviceId: 'alpha',
+    workspacePath: '/alpha/configured-workspace',
+    isScopeCurrent: expect.any(Function),
+  })
+  expect(screen.getByTestId('kcoder-plugin-current-target')).toHaveTextContent('Beta (beta)')
+  expect(screen.getByTestId('plugins-install-target')).toHaveTextContent(
+    '/alpha/configured-workspace'
+  )
+
+  fireEvent.change(screen.getByTestId('kcoder-plugin-target-select'), {
+    target: { value: 'beta' },
+  })
+  await waitFor(() =>
+    expect(createLocalCodexPluginApi).toHaveBeenLastCalledWith({
+      deviceId: 'beta',
+      workspacePath: '/beta/current-task',
+      isScopeCurrent: expect.any(Function),
+    })
+  )
+  expect(screen.getByTestId('plugins-install-target')).toHaveTextContent('/beta/current-task')
 })
 
 test('skill toggle persists activation while retaining the row and independent plugin ownership', async () => {

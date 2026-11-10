@@ -1,0 +1,1 @@
+CREATE TABLE knowledge_review_receipts(library_id TEXT NOT NULL,job_id TEXT NOT NULL,token TEXT NOT NULL,commit_key TEXT NOT NULL,payload_hash TEXT NOT NULL,accepted INTEGER NOT NULL,checkpoint_json TEXT NOT NULL,PRIMARY KEY(library_id,job_id,token));

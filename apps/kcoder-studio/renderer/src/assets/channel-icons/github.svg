@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="GitHub source">
+  <!-- Neutral repository-branch glyph drawn for KCoder; not a third-party logo. -->
+  <rect x="2" y="2" width="60" height="60" rx="14" fill="#3f3f46"/>
+  <g fill="none" stroke="#ffffff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="22" cy="17" r="5"/>
+    <circle cx="22" cy="47" r="5"/>
+    <circle cx="42" cy="24" r="5"/>
+    <path d="M22 22v20"/>
+    <path d="M42 29c0 8-8 9-14 11-3 1-5 2-6 2"/>
+  </g>
+</svg>

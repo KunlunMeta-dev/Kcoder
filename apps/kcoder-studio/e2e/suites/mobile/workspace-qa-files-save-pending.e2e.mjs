@@ -74,7 +74,8 @@ await runE2E(import.meta.url, {
   await files.getByLabel("保存", { exact: true }).click();
   await waitForHeldRpc(page, "workspace_write_text_file");
   const back = files.getByLabel("返回文件树", { exact: true });
-  await page.getByTestId("workspace-tab-switcher").click();
+  await page.getByTestId("task-more").click();
+  await page.getByTestId("task-menu-workspace").click();
   const closeFilesTab = page.getByLabel("关闭文件 1", { exact: true });
   await closeFilesTab.waitFor({ state: "visible", timeout: 30_000 });
   const filesTabCloseStateWhileWritePending = await inspectInteractionState(closeFilesTab);
@@ -308,7 +309,8 @@ async function createTask(page, prompt) {
 }
 
 async function openFiles(page) {
-  await page.getByTestId("workspace-tab-switcher").click();
+  await page.getByTestId("task-more").click();
+  await page.getByTestId("task-menu-workspace").click();
   await page.getByTestId("workspace-tab-files-1").click();
   await page.getByTestId("files-panel").waitFor({ state: "visible", timeout: 30_000 });
 }

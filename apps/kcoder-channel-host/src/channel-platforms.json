@@ -1,0 +1,314 @@
+{
+  "feishu": {
+    "nameKey": "connectivity.platform.feishu",
+    "transport": "official_websocket",
+    "sdk": "@larksuiteoapi/node-sdk",
+    "sdkVersion": "1.76.0",
+    "credentialFields": [
+      "appId",
+      "appSecret"
+    ],
+    "capabilities": {
+      "private": true,
+      "groupMention": true,
+      "attachments": true,
+      "cards": true,
+      "unsolicitedPush": "permission_required"
+    },
+    "docs": "https://open.feishu.cn/document/uAjLw4CM/ukTMukTMukTM/event-subscription-guide",
+    "identityField": "appId",
+    "configurationFields": [
+      "appId",
+      "locale"
+    ],
+    "credentialField": "appSecret",
+    "authentication": "qr",
+    "runtimeCapabilities": {
+      "text": true,
+      "attachments": false,
+      "cards": false,
+      "streaming": false
+    },
+    "featureFields": {
+      "responseMode": {
+        "type": "enum",
+        "default": "final",
+        "options": [
+          "final"
+        ]
+      },
+      "messageFormat": {
+        "type": "enum",
+        "default": "auto",
+        "options": [
+          "auto",
+          "plain"
+        ]
+      },
+      "showTyping": {
+        "type": "boolean",
+        "default": true
+      }
+    }
+  },
+  "dingtalk": {
+    "nameKey": "connectivity.platform.dingtalk",
+    "transport": "stream_in_rest_out",
+    "sdk": "dingtalk-stream",
+    "sdkVersion": "2.1.5",
+    "credentialFields": [
+      "clientId",
+      "clientSecret"
+    ],
+    "capabilities": {
+      "private": true,
+      "groupMention": true,
+      "attachments": true,
+      "cards": "permission_required",
+      "unsolicitedPush": "permission_required"
+    },
+    "docs": "https://open-dingtalk.github.io/developerpedia/docs/learn/stream/overview/",
+    "identityField": "clientId",
+    "configurationFields": [
+      "clientId",
+      "robotCode"
+    ],
+    "credentialField": "clientSecret",
+    "authentication": "qr",
+    "runtimeCapabilities": {
+      "text": true,
+      "attachments": false,
+      "cards": false,
+      "streaming": false
+    },
+    "additionalSdks": [
+      {
+        "name": "@alicloud/dingtalk",
+        "version": "2.2.58"
+      }
+    ],
+    "featureFields": {
+      "responseMode": {
+        "type": "enum",
+        "default": "final",
+        "options": [
+          "final"
+        ]
+      },
+      "messageFormat": {
+        "type": "enum",
+        "default": "auto",
+        "options": [
+          "auto",
+          "plain"
+        ]
+      }
+    }
+  },
+  "qq": {
+    "nameKey": "connectivity.platform.qq",
+    "transport": "official_gateway_or_webhook",
+    "credentialFields": [
+      "appId",
+      "appSecret"
+    ],
+    "capabilities": {
+      "private": "permission_required",
+      "groupMention": "permission_required",
+      "channel": "permission_required",
+      "attachments": "permission_required",
+      "unsolicitedPush": false
+    },
+    "docs": "https://bot.q.qq.com/wiki/develop/api-v2/",
+    "sdk": "@tencent-connect/qqbot-nodejs",
+    "sdkVersion": "1.0.5",
+    "identityField": "appId",
+    "configurationFields": [
+      "appId",
+      "tenantId",
+      "intents"
+    ],
+    "credentialField": "appSecret",
+    "authentication": "qr",
+    "runtimeCapabilities": {
+      "text": true,
+      "attachments": false,
+      "cards": false,
+      "streaming": false
+    },
+    "additionalSdks": [
+      {
+        "name": "@tencent-connect/qqbot-connector",
+        "version": "1.2.0"
+      }
+    ],
+    "featureFields": {
+      "responseMode": {
+        "type": "enum",
+        "default": "final",
+        "options": [
+          "final"
+        ]
+      },
+      "messageFormat": {
+        "type": "enum",
+        "default": "auto",
+        "options": [
+          "auto",
+          "plain"
+        ]
+      }
+    }
+  },
+  "weixin": {
+    "nameKey": "connectivity.platform.weixin",
+    "transport": "ilink_long_poll",
+    "credentialFields": [
+      "botToken"
+    ],
+    "capabilities": {
+      "private": "qualification_required",
+      "groupMention": false,
+      "attachments": "qualification_required",
+      "unsolicitedPush": "context_required"
+    },
+    "docs": "https://github.com/Tencent/openclaw-weixin/blob/main/docs/protocol_zh_CN.md",
+    "sdk": "@tencent-weixin/openclaw-weixin",
+    "sdkVersion": "2.4.10",
+    "sdkEntry": "./vendor/tencent-openclaw-weixin/api.mjs",
+    "identityField": "accountId",
+    "configurationFields": [
+      "accountId",
+      "apiBase"
+    ],
+    "credentialField": "botToken",
+    "authentication": "qr",
+    "configurationDefaults": {
+      "apiBase": "https://ilinkai.weixin.qq.com"
+    },
+    "runtimeCapabilities": {
+      "text": true,
+      "attachments": false,
+      "cards": false,
+      "streaming": false
+    },
+    "featureFields": {
+      "responseMode": {
+        "type": "enum",
+        "default": "final",
+        "options": [
+          "final"
+        ]
+      },
+      "messageFormat": {
+        "type": "enum",
+        "default": "auto",
+        "options": [
+          "auto",
+          "plain"
+        ]
+      }
+    }
+  },
+  "github": {
+    "nameKey": "connectivity.platform.github",
+    "transport": "rest_poll",
+    "credentialFields": [
+      "token"
+    ],
+    "configurationFields": [
+      "botLogin",
+      "repositories",
+      "pollIntervalSeconds"
+    ],
+    "capabilities": {
+      "private": false,
+      "groupMention": true,
+      "attachments": false,
+      "cards": false,
+      "unsolicitedPush": false
+    },
+    "docs": "https://docs.github.com/en/rest/issues/comments",
+    "identityField": "botLogin",
+    "credentialField": "token",
+    "authentication": "manual",
+    "runtimeCapabilities": {
+      "text": true,
+      "attachments": false,
+      "cards": false,
+      "streaming": false
+    },
+    "sdk": "@octokit/rest",
+    "sdkVersion": "22.0.1",
+    "featureFields": {
+      "responseMode": {
+        "type": "enum",
+        "default": "final",
+        "options": [
+          "final"
+        ]
+      },
+      "messageFormat": {
+        "type": "enum",
+        "default": "auto",
+        "options": [
+          "auto",
+          "plain"
+        ]
+      },
+      "pollIntervalSeconds": {
+        "type": "integer",
+        "default": 60,
+        "minimum": 15,
+        "maximum": 3600
+      }
+    }
+  },
+  "wecom": {
+    "nameKey": "connectivity.platform.wecom",
+    "transport": "official_websocket",
+    "sdk": "@wecom/aibot-node-sdk",
+    "sdkVersion": "1.0.7",
+    "credentialFields": [
+      "botId",
+      "secret"
+    ],
+    "capabilities": {
+      "private": true,
+      "groupMention": true,
+      "attachments": true,
+      "cards": true,
+      "unsolicitedPush": "permission_required"
+    },
+    "docs": "https://github.com/WecomTeam/aibot-node-sdk",
+    "identityField": "botId",
+    "configurationFields": [
+      "botId"
+    ],
+    "credentialField": "secret",
+    "authentication": "qr",
+    "runtimeCapabilities": {
+      "text": true,
+      "attachments": false,
+      "cards": false,
+      "streaming": false
+    },
+    "featureFields": {
+      "responseMode": {
+        "type": "enum",
+        "default": "final",
+        "options": [
+          "final"
+        ]
+      },
+      "messageFormat": {
+        "type": "enum",
+        "default": "auto",
+        "options": [
+          "auto",
+          "plain"
+        ]
+      }
+    }
+  }
+}

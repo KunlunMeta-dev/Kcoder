@@ -1,0 +1,546 @@
+{
+  "McpAppOperationReadParams": [
+    {
+      "decoded": {
+        "connectionId": "cccccccccccccccccccccccccccccccc",
+        "operationId": "operation-1",
+        "revision": 1,
+        "threadId": "thread-1",
+        "widgetId": "waaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "name": "receipt-only",
+      "value": {
+        "connectionId": "cccccccccccccccccccccccccccccccc",
+        "operationId": "operation-1",
+        "revision": 1,
+        "threadId": "thread-1",
+        "widgetId": "waaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    }
+  ],
+  "McpAppOperationStatus": [
+    {
+      "decoded": "prepared",
+      "name": "prepared",
+      "value": "prepared"
+    },
+    {
+      "decoded": "executing",
+      "name": "executing",
+      "value": "executing"
+    },
+    {
+      "decoded": "completed",
+      "name": "completed",
+      "value": "completed"
+    },
+    {
+      "decoded": "denied",
+      "name": "denied",
+      "value": "denied"
+    },
+    {
+      "decoded": "not_sent",
+      "name": "not_sent",
+      "value": "not_sent"
+    },
+    {
+      "decoded": "outcome_unknown",
+      "name": "outcome_unknown",
+      "value": "outcome_unknown"
+    }
+  ],
+  "McpAppReadParams": [
+    {
+      "decoded": {
+        "connectionId": "cccccccccccccccccccccccccccccccc",
+        "revision": 1,
+        "threadId": "thread-1",
+        "widgetId": "waaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "name": "bound-view",
+      "value": {
+        "connectionId": "cccccccccccccccccccccccccccccccc",
+        "revision": 1,
+        "threadId": "thread-1",
+        "widgetId": "waaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    }
+  ],
+  "McpAppReadResult": [
+    {
+      "decoded": {
+        "allowedTools": [
+          "chart",
+          "refresh"
+        ],
+        "csp": {
+          "baseUriDomains": [],
+          "connectDomains": [],
+          "frameDomains": [],
+          "resourceDomains": []
+        },
+        "live": true,
+        "protocolVersion": "2026-01-26",
+        "requestedPermissions": {
+          "camera": false,
+          "clipboardWrite": false,
+          "geolocation": false,
+          "microphone": false
+        },
+        "resourcesEnabled": true,
+        "resultMeta": {
+          "revision": 1
+        },
+        "structuredContent": {
+          "series": [
+            1,
+            2
+          ]
+        },
+        "toolContent": [
+          {
+            "text": "ready",
+            "type": "text"
+          }
+        ],
+        "toolInfo": {
+          "_meta": {
+            "ui": {
+              "resourceUri": "ui://owned/chart",
+              "visibility": [
+                "model",
+                "app"
+              ]
+            }
+          },
+          "description": "Bound chart",
+          "inputSchema": {
+            "type": "object"
+          },
+          "name": "chart"
+        },
+        "toolInput": {},
+        "widget": {
+          "attemptId": "attempt-1",
+          "bytes": 128,
+          "createdAtMs": 1,
+          "executionMode": "isolated_html",
+          "format": "html",
+          "libraries": [],
+          "mcpApp": {
+            "connectionId": "cccccccccccccccccccccccccccccccc",
+            "mimeType": "text/html;profile=mcp-app",
+            "pluginId": null,
+            "resourceUri": "ui://owned/chart",
+            "serverName": "owned",
+            "toolName": "chart"
+          },
+          "revision": 1,
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "summary": "Quarterly sales",
+          "threadId": "thread-1",
+          "title": "Sales",
+          "toolCallId": "call-1",
+          "turnId": "turn-1",
+          "widgetId": "waaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      "name": "live-ui-data",
+      "value": {
+        "allowedTools": [
+          "chart",
+          "refresh"
+        ],
+        "csp": {},
+        "live": true,
+        "protocolVersion": "2026-01-26",
+        "requestedPermissions": {},
+        "resourcesEnabled": true,
+        "resultMeta": {
+          "revision": 1
+        },
+        "structuredContent": {
+          "series": [
+            1,
+            2
+          ]
+        },
+        "toolContent": [
+          {
+            "text": "ready",
+            "type": "text"
+          }
+        ],
+        "toolInfo": {
+          "_meta": {
+            "ui": {
+              "resourceUri": "ui://owned/chart",
+              "visibility": [
+                "model",
+                "app"
+              ]
+            }
+          },
+          "description": "Bound chart",
+          "inputSchema": {
+            "type": "object"
+          },
+          "name": "chart"
+        },
+        "toolInput": {},
+        "widget": {
+          "attemptId": "attempt-1",
+          "bytes": 128,
+          "createdAtMs": 1,
+          "executionMode": "isolated_html",
+          "format": "html",
+          "libraries": [],
+          "mcpApp": {
+            "connectionId": "cccccccccccccccccccccccccccccccc",
+            "mimeType": "text/html;profile=mcp-app",
+            "pluginId": null,
+            "resourceUri": "ui://owned/chart",
+            "serverName": "owned",
+            "toolName": "chart"
+          },
+          "revision": 1,
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "summary": "Quarterly sales",
+          "threadId": "thread-1",
+          "title": "Sales",
+          "toolCallId": "call-1",
+          "turnId": "turn-1",
+          "widgetId": "waaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      }
+    },
+    {
+      "decoded": {
+        "allowedTools": [],
+        "csp": {
+          "baseUriDomains": [],
+          "connectDomains": [],
+          "frameDomains": [],
+          "resourceDomains": []
+        },
+        "live": false,
+        "protocolVersion": "2026-01-26",
+        "requestedPermissions": {
+          "camera": false,
+          "clipboardWrite": false,
+          "geolocation": false,
+          "microphone": false
+        },
+        "resourcesEnabled": false,
+        "resultMeta": {
+          "revision": 1
+        },
+        "structuredContent": {
+          "series": [
+            1,
+            2
+          ]
+        },
+        "toolContent": [
+          {
+            "text": "ready",
+            "type": "text"
+          }
+        ],
+        "toolInput": {},
+        "widget": {
+          "attemptId": "attempt-1",
+          "bytes": 128,
+          "createdAtMs": 1,
+          "executionMode": "isolated_html",
+          "format": "html",
+          "libraries": [],
+          "mcpApp": {
+            "connectionId": "cccccccccccccccccccccccccccccccc",
+            "mimeType": "text/html;profile=mcp-app",
+            "pluginId": null,
+            "resourceUri": "ui://owned/chart",
+            "serverName": "owned",
+            "toolName": "chart"
+          },
+          "revision": 1,
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "summary": "Quarterly sales",
+          "threadId": "thread-1",
+          "title": "Sales",
+          "toolCallId": "call-1",
+          "turnId": "turn-1",
+          "widgetId": "waaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      "name": "historical-ui-data",
+      "value": {
+        "allowedTools": [],
+        "csp": {},
+        "live": false,
+        "protocolVersion": "2026-01-26",
+        "requestedPermissions": {},
+        "resourcesEnabled": false,
+        "resultMeta": {
+          "revision": 1
+        },
+        "structuredContent": {
+          "series": [
+            1,
+            2
+          ]
+        },
+        "toolContent": [
+          {
+            "text": "ready",
+            "type": "text"
+          }
+        ],
+        "toolInput": {},
+        "widget": {
+          "attemptId": "attempt-1",
+          "bytes": 128,
+          "createdAtMs": 1,
+          "executionMode": "isolated_html",
+          "format": "html",
+          "libraries": [],
+          "mcpApp": {
+            "connectionId": "cccccccccccccccccccccccccccccccc",
+            "mimeType": "text/html;profile=mcp-app",
+            "pluginId": null,
+            "resourceUri": "ui://owned/chart",
+            "serverName": "owned",
+            "toolName": "chart"
+          },
+          "revision": 1,
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "summary": "Quarterly sales",
+          "threadId": "thread-1",
+          "title": "Sales",
+          "toolCallId": "call-1",
+          "turnId": "turn-1",
+          "widgetId": "waaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      }
+    }
+  ],
+  "McpAppResourceContentReadParams": [
+    {
+      "decoded": {
+        "connectionId": "cccccccccccccccccccccccccccccccc",
+        "offset": 0,
+        "resourceId": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "revision": 1,
+        "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "threadId": "thread-1",
+        "widgetId": "waaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "name": "immutable-chunk",
+      "value": {
+        "connectionId": "cccccccccccccccccccccccccccccccc",
+        "offset": 0,
+        "resourceId": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "revision": 1,
+        "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "threadId": "thread-1",
+        "widgetId": "waaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    }
+  ],
+  "McpAppResourceContentReadResult": [
+    {
+      "decoded": {
+        "bytes": 100,
+        "dataBase64": "e30=",
+        "nextOffset": 2,
+        "offset": 0,
+        "resourceId": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      },
+      "name": "base64-json-chunk",
+      "value": {
+        "bytes": 100,
+        "dataBase64": "e30=",
+        "nextOffset": 2,
+        "offset": 0,
+        "resourceId": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      }
+    }
+  ],
+  "McpAppResourceReadParams": [
+    {
+      "decoded": {
+        "connectionId": "cccccccccccccccccccccccccccccccc",
+        "revision": 1,
+        "threadId": "thread-1",
+        "uri": "data://owned/report",
+        "widgetId": "waaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "name": "same-peer-resource",
+      "value": {
+        "connectionId": "cccccccccccccccccccccccccccccccc",
+        "revision": 1,
+        "threadId": "thread-1",
+        "uri": "data://owned/report",
+        "widgetId": "waaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    }
+  ],
+  "McpAppResourceReadResult": [
+    {
+      "decoded": {
+        "resource": {
+          "bytes": 100,
+          "contentCount": 1,
+          "encoding": "json",
+          "mimeType": "application/json",
+          "resourceId": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          "uri": "data://owned/report"
+        }
+      },
+      "name": "resource-ref-only",
+      "value": {
+        "resource": {
+          "bytes": 100,
+          "contentCount": 1,
+          "encoding": "json",
+          "mimeType": "application/json",
+          "resourceId": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          "uri": "data://owned/report"
+        }
+      }
+    }
+  ],
+  "McpAppResourceRef": [
+    {
+      "decoded": {
+        "bytes": 100,
+        "contentCount": 1,
+        "encoding": "json",
+        "mimeType": "application/json",
+        "resourceId": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "uri": "data://owned/report"
+      },
+      "name": "retained-result-ref",
+      "value": {
+        "bytes": 100,
+        "contentCount": 1,
+        "encoding": "json",
+        "mimeType": "application/json",
+        "resourceId": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "uri": "data://owned/report"
+      }
+    }
+  ],
+  "McpAppRevokeParams": [
+    {
+      "decoded": {
+        "threadId": "thread-1"
+      },
+      "name": "owned-thread-lifecycle",
+      "value": {
+        "threadId": "thread-1"
+      }
+    }
+  ],
+  "McpAppRevokeResult": [
+    {
+      "decoded": {
+        "revoked": true
+      },
+      "name": "revoked-or-already-closed",
+      "value": {
+        "revoked": true
+      }
+    }
+  ],
+  "McpAppToolCallParams": [
+    {
+      "decoded": {
+        "arguments": {
+          "city": "Shanghai"
+        },
+        "connectionId": "cccccccccccccccccccccccccccccccc",
+        "name": "refresh",
+        "operationId": "operation-1",
+        "revision": 1,
+        "threadId": "thread-1",
+        "widgetId": "waaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "name": "scoped-action",
+      "value": {
+        "arguments": {
+          "city": "Shanghai"
+        },
+        "connectionId": "cccccccccccccccccccccccccccccccc",
+        "name": "refresh",
+        "operationId": "operation-1",
+        "revision": 1,
+        "threadId": "thread-1",
+        "widgetId": "waaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    }
+  ],
+  "McpAppToolCallResult": [
+    {
+      "decoded": {
+        "operationId": "operation-1",
+        "result": {
+          "_meta": {
+            "revision": 1
+          },
+          "content": [
+            {
+              "text": "ready",
+              "type": "text"
+            }
+          ],
+          "structuredContent": {
+            "count": 1
+          }
+        },
+        "resultSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "status": "completed"
+      },
+      "name": "authoritative-result",
+      "value": {
+        "operationId": "operation-1",
+        "result": {
+          "_meta": {
+            "revision": 1
+          },
+          "content": [
+            {
+              "text": "ready",
+              "type": "text"
+            }
+          ],
+          "structuredContent": {
+            "count": 1
+          }
+        },
+        "resultSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "status": "completed"
+      }
+    },
+    {
+      "decoded": {
+        "errorCode": "outcome_unknown",
+        "operationId": "operation-1",
+        "status": "outcome_unknown"
+      },
+      "name": "unresolved-result",
+      "value": {
+        "errorCode": "outcome_unknown",
+        "operationId": "operation-1",
+        "status": "outcome_unknown"
+      }
+    }
+  ]
+}

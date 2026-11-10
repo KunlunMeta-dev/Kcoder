@@ -3,13 +3,13 @@ import { Agent } from 'node:http';
 export const GET_POOL_IDLE_MS = 10_000;
 const unavailable = () => Object.assign(new Error('Relay GET lease unavailable'), { code: 'RELAY_UNAVAILABLE' });
 
-/** At most two independent serial HTTP parsers per exact grant/control generation.
+/** Bounded independent serial HTTP parsers per exact grant/control generation.
  * Prefer an existing idle connection; never pipeline or automatically replay.
  */
 export class GrantGetPool {
   constructor({ validate, createConnection, expiresAt, admitWaiter, releaseWaiter, queueTimeoutMs, maxSockets = 1 }) {
     if (!Number.isSafeInteger(queueTimeoutMs) || queueTimeoutMs < 1 || !Number.isFinite(expiresAt) ||
-        !Number.isSafeInteger(maxSockets) || maxSockets < 1 || maxSockets > 2)
+        !Number.isSafeInteger(maxSockets) || maxSockets < 1 || maxSockets > 16)
       throw new Error('Invalid Relay GET pool budget or expiry');
     this.validate = validate;
     this.admitWaiter = admitWaiter;

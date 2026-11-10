@@ -14,6 +14,15 @@ use kcoder_types::{ChatProtocol, ProviderAuthentication};
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, path::PathBuf};
 
+#[derive(Debug)]
+pub struct MissingSnapshotCredentialAuthority;
+impl std::fmt::Display for MissingSnapshotCredentialAuthority {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("Model snapshot requires a resolved credential authority")
+    }
+}
+impl std::error::Error for MissingSnapshotCredentialAuthority {}
+
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct CredentialBinding {
@@ -63,7 +72,7 @@ fn explicit_key(overrides: &ProviderBuildOverrides, kind: ProviderKind) -> Optio
 }
 
 impl ModelConfiguration {
-    pub(crate) fn snapshot_format(&self, bytes: &[u8]) -> Result<Option<ApiFormat>> {
+    pub fn snapshot_format(&self, bytes: &[u8]) -> Result<Option<ApiFormat>> {
         anyhow::ensure!(
             bytes.len() <= 512 * 1024,
             "Model snapshot exceeds storage limit"
@@ -74,7 +83,7 @@ impl ModelConfiguration {
         Ok(Some(snapshot.format))
     }
 
-    pub(crate) fn refreeze_snapshot(&self, bytes: &[u8], settings: &Settings) -> Result<Vec<u8>> {
+    pub fn refreeze_snapshot(&self, bytes: &[u8], settings: &Settings) -> Result<Vec<u8>> {
         anyhow::ensure!(
             bytes.len() <= 512 * 1024,
             "Model snapshot exceeds storage limit"
@@ -114,7 +123,7 @@ impl ModelConfiguration {
         Ok(bytes)
     }
 
-    pub(crate) fn capture_snapshot(
+    pub fn capture_snapshot(
         &self,
         settings: &Settings,
         provider: &dyn Provider,
@@ -136,10 +145,9 @@ impl ModelConfiguration {
             .and_then(|id| settings.providers.get(id))
             .map(|profile| profile.authentication)
             .unwrap_or_default();
-        anyhow::ensure!(
-            !authentication.is_api_key() || resolved.is_some() || kind == ProviderKind::Local,
-            "Model snapshot requires a resolved credential authority"
-        );
+        if authentication.is_api_key() && resolved.is_none() && kind != ProviderKind::Local {
+            return Err(MissingSnapshotCredentialAuthority.into());
+        }
         let credential = resolved.map(|(selector, value)| CredentialBinding {
             selector,
             credential_file: (value.source == ProviderApiKeySource::CredentialFile)
@@ -199,12 +207,12 @@ impl ModelConfiguration {
     }
 
     #[cfg(test)]
-    pub(crate) fn restore_snapshot(&self, bytes: &[u8]) -> Result<(Settings, Arc<dyn Provider>)> {
+    pub fn restore_snapshot(&self, bytes: &[u8]) -> Result<(Settings, Arc<dyn Provider>)> {
         self.restore_snapshot_with_proxy(bytes, None)
     }
 
     /// Current proxy credentials are supplied in memory and are never written back into the snapshot.
-    pub(crate) fn restore_snapshot_with_proxy(
+    pub fn restore_snapshot_with_proxy(
         &self,
         bytes: &[u8],
         current_proxy: Option<String>,
@@ -212,7 +220,7 @@ impl ModelConfiguration {
         self.restore_snapshot_transport(bytes, current_proxy, false)
     }
 
-    pub(crate) fn restore_snapshot_with_proxy_override(
+    pub fn restore_snapshot_with_proxy_override(
         &self,
         bytes: &[u8],
         proxy_url: &str,
@@ -425,7 +433,7 @@ mod tests {
 
     use clap::Parser;
     use futures::StreamExt;
-    use kcoder_engine::ClientModelConfiguration;
+    use kcoder_api::ClientModelConfiguration;
 
     #[tokio::test]
     async fn rebuild_freezes_semantics_and_revalidates_the_bound_credential() {

@@ -46,7 +46,7 @@ test('remote Electron and ordinary browser never map Gateway-local targets to PC
   expect(openNativeProjectDirectoryPickers).not.toHaveBeenCalled()
 })
 
-test('standalone native Tauri local picker keeps its existing path', async () => {
+test('standalone native Gateway local picker keeps its existing path', async () => {
   const device = { device_id: 'native', device_type: 'local' } as DeviceInfo
   openNativeProjectDirectoryPickers.mockResolvedValue(['/legacy'])
   expect(canUseNativeProjectPickerForDevice(device, true)).toBe(true)

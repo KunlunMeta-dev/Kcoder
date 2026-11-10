@@ -4,6 +4,32 @@ import { KCoderGatewayRuntime as InstalledRuntime } from './installGatewayRuntim
 import { FakeGatewayClient, localGatewayServer } from './gatewayRuntime.test-support'
 
 describe.each([Runtime, InstalledRuntime])('provider model wire identity', RuntimeClass => {
+  test('queues a selected model through the active thread capability', async () => {
+    const client = new FakeGatewayClient('running-model-thread')
+    const runtime = new RuntimeClass('token', {
+      loadServers: async () => [localGatewayServer()],
+      createClient: () => client,
+    })
+    try {
+      const created = (await runtime.request('runtime.tasks.create', {
+        deviceId: 'local',
+        taskId: 'running-model-task',
+        executionRequest: { prompt: 'hello' },
+      })) as { taskId: string }
+      await runtime.request('runtime.tasks.model_switch', {
+        deviceId: 'local',
+        taskId: created.taskId,
+        address: { deviceId: 'local', taskId: created.taskId },
+        model: 'second::model',
+      })
+      expect(
+        client.requests.find(request => request.method === 'thread/model/select')?.params
+      ).toEqual({ threadId: 'running-model-thread', model: 'second::model' })
+    } finally {
+      await runtime.dispose()
+    }
+  })
+
   test('resident conversation model catalogs use the existing thread snapshot', async () => {
     const client = new FakeGatewayClient('resident-model-thread')
     const runtime = new RuntimeClass('token', {

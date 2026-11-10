@@ -60,7 +60,7 @@ fn read_record(directory: &PrivateDirectory, id: &str) -> Result<WorkflowRunSnap
 fn run_status(raw: &str) -> Result<WorkflowRunStatus> {
     WorkflowRunStatus::from_raw(raw).map_err(anyhow::Error::msg)
 }
-pub(crate) fn known_lifecycle(snapshot: &WorkflowRunSnapshot) -> Result<()> {
+pub fn known_lifecycle(snapshot: &WorkflowRunSnapshot) -> Result<()> {
     ensure!(
         run_status(&snapshot.status)?.is_known(),
         "workflow_unknown: run history is read-only"
@@ -295,6 +295,15 @@ impl RunObservation {
             "workflow_quota: run projection too large"
         );
         bounded_write(&self.directory, &name(&state.run_id), &bytes)
+    }
+    pub fn interaction_modified(&self) -> Result<bool> {
+        let state = self.state.lock().unwrap();
+        let current = read_record(&self.directory, &state.run_id)?;
+        ensure!(
+            current.thread_id == state.thread_id && current.resume_count == state.resume_count,
+            "workflow_conflict: observation belongs to another attempt"
+        );
+        Ok(current.interaction_modified)
     }
     pub fn update(&self, f: impl FnOnce(&mut WorkflowRunSnapshot)) -> Result<()> {
         {
@@ -802,3 +811,6 @@ mod tests {
         assert!(output(root, "workflow-fixture", "n1", 0, 0).is_err());
     }
 }
+#[path = "workflow/observations_read.rs"]
+mod observations_read;
+pub use observations_read::{observe_list, observe_read};

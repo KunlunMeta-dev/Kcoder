@@ -1,0 +1,46 @@
+import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
+import {readFile,stat} from 'node:fs/promises';
+import {runE2E,requireExecutable} from '../../harness/run-context.mjs';
+import {startGateway} from '../../harness/gateway.mjs';
+import {startChromium} from '../../harness/chromium.mjs';
+import {startFixtureSite} from '../../harness/fixture-site.mjs';
+import {materializeWorkspace} from '../../harness/workspace-fixture.mjs';
+import {startMigrationNoInferenceFixture,assertNoMigrationInference} from '../../harness/migration-no-inference.mjs';
+import {assertRendererBuildFresh} from '../../harness/renderer-build.mjs';
+await assertRendererBuildFresh();
+await runE2E(import.meta.url,{testId:'browser-account-native-ui-handoff',tier:'full-integration',modelPolicy:'model-independent actual authenticated UI/Gateway/Native Chromium account and handoff flow; no model or real website login'},async context=>{
+ const binary=await requireExecutable(process.env.KCODER_E2E_KCODER_BIN,'explicit current Native');
+ const digest=createHash('sha256').update(await readFile(binary)).digest('hex');assert.equal(digest,process.env.KCODER_E2E_KCODER_BIN_SHA256);assert.equal((await stat(binary)).nlink,1);
+ const chromium=await requireExecutable(process.env.KCODER_E2E_CHROMIUM_BIN,'explicit installed Chromium');
+ const noInference=await startMigrationNoInferenceFixture(context);
+ const {path:workspace}=await materializeWorkspace(context,'minimal');
+ const settings=await context.writeStateJson('profile/settings.json',{active_provider:'fixture',providers:{fixture:{api_format:'openai_chat_completions',authentication:{mode:'none'},endpoint:noInference.baseUrl,default_model:'not-called',context_window_tokens:128000,output_headroom_tokens:512,max_output_tokens:512,no_proxy:true}},max_tokens:512,max_retries:0,memory:{observer_mode:'disabled',structured_enabled:false,legacy_prompt_enabled:false},session_memory:{enabled:false}});
+ const servers=await context.writeStateJson('servers.json',[{id:'local',label:'Owned browser accounts',transport:'local',command:binary,workspace,settingsFile:settings,profile:'fixture',chromiumBin:chromium,chromiumNoSandbox:process.env.KCODER_E2E_CHROMIUM_NO_SANDBOX==='1'}]);
+ const site=await startFixtureSite(context,{title:'Owned browser profile target',marker:'PROFILE_NATIVE_UI'});
+ const gateway=await startGateway(context,{workspace,serversFile:servers,kcoderBin:binary,auth:true,env:{KCODER_CONFIG_DIR:context.pathInState('profile'),KCODER_TRAINING_MODE:'false'}});
+ const browser=await startChromium(context);const page=await browser.newPage({viewport:{width:1440,height:960}});context.addCleanup('close profile UI page',()=>page.close());
+ const methods=[];const errors=[];page.on('pageerror',error=>errors.push(error.message));page.on('websocket',socket=>socket.on('framesent',frame=>{try{const value=JSON.parse(String(frame.payload));if(String(value.method).startsWith('browser/')||String(value.method).startsWith('integrations/browserProfiles/'))methods.push(value.method);}catch{}}));
+ try {
+  await page.goto(gateway.baseUrl,{waitUntil:'domcontentloaded'});await page.locator('input[name="token"]').fill(gateway.authToken);await Promise.all([page.waitForURL(url=>!url.pathname.startsWith('/login')),page.locator('button[type="submit"]').click()]);
+  await page.getByTestId('desktop-sidebar').waitFor();
+  await page.getByTestId('toggle-right-workspace-panel-button').click();await page.getByTestId('right-workspace-browser-option').click();
+  await page.getByTestId('workspace-browser-panel').waitFor();
+  await page.getByRole('button',{name:'浏览器账户',exact:true}).click();const dialog=page.getByTestId('browser-account-dialog');await dialog.waitFor();
+  await dialog.getByText('添加浏览器账户',{exact:true}).click();await dialog.getByLabel('名称',{exact:true}).fill('业务资料账户');await dialog.getByLabel('账户标签（可选）').fill('独立测试登录');await dialog.getByRole('button',{name:'保存账户',exact:true}).click();
+  const account=dialog.getByTestId('browser-account-list').getByRole('button').filter({hasText:'业务资料账户'});await account.waitFor();assert.equal(methods.filter(value=>value==='browser/start').length,0,'saving metadata cannot start browser');await account.click();await dialog.waitFor({state:'hidden'});
+  const address=page.getByTestId('workspace-browser-url-input');await address.fill(site.url);await address.press('Enter');
+  await page.getByTestId('kcoder-remote-browser-surface').waitFor({state:'visible',timeout:30000});
+  await page.getByTestId('workspace-browser-control-status').filter({hasText:'自动化控制'}).waitFor();
+  await page.getByTestId('workspace-browser-handoff').click();await page.getByTestId('workspace-browser-control-status').filter({hasText:'你正在接管'}).waitFor();
+  await page.getByTestId('workspace-browser-handoff').click();await page.getByTestId('workspace-browser-control-status').filter({hasText:'自动化控制'}).waitFor();
+  assert.equal(methods.filter(value=>value==='browser/profile/handoff').length,2);
+  await page.screenshot({path:context.pathInArtifacts('browser-profile-native-ui.png')});
+  await page.getByRole('button',{name:'浏览器账户',exact:true}).click();await dialog.getByRole('button',{name:'临时会话',exact:true}).click();await dialog.waitFor({state:'hidden'});
+  await page.getByTestId('kcoder-remote-browser-surface').waitFor({state:'visible'});assert.equal(await page.getByTestId('workspace-browser-handoff').count(),0);
+  assert.equal(methods.filter(value=>value==='browser/close').length,1,'account switch confirms original browser close');
+  const traffic=assertNoMigrationInference(noInference.requests,'browser account UI creates no model task');assert.deepEqual(errors,[]);
+  await context.writeArtifactJson('browser-profile-native-ui-evidence.json',{nativeSha256:digest,methods,modelInferenceRequests:traffic.inferenceRequests,normalPrewarmRequests:traffic.connectivityRequests,explicitSaveNoLaunch:true,actualHandoffRoundTrip:true,explicitSwitch:true,websiteLogins:0});
+  return {actualNativeUI:true,profileSelection:true,handoff:true,modelInferenceRequests:0,websiteLogins:0};
+ }catch(error){await context.writeArtifactJson('failure-shape.json',{pathname:new URL(page.url()).pathname,methods,errors,surfaces:await page.locator('[data-testid=kcoder-remote-browser-surface]').evaluateAll(nodes=>nodes.map(node=>({style:node.getAttribute('style'),rect:node.getBoundingClientRect().toJSON(),connected:node.dataset.connection,frameReady:node.dataset.frameReady}))),overlays:await page.locator('[role=dialog],[aria-modal=true],[data-embedded-browser-occlusion]').evaluateAll(nodes=>nodes.map(node=>({tag:node.tagName,role:node.getAttribute('role'),hidden:node.getAttribute('aria-hidden'),rect:node.getBoundingClientRect().toJSON()}))),testIds:await page.locator('[data-testid]').evaluateAll(nodes=>[...new Set(nodes.map(node=>node.getAttribute('data-testid')))])});await page.screenshot({path:context.pathInArtifacts('failure.png'),mask:[page.locator('input[name="token"]')]}).catch(()=>{});throw error;}
+});

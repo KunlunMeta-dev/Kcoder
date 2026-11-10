@@ -92,7 +92,7 @@ ENGLISH_RUNTIME_FILES = {
     "crates/kcoder_cli/src/cli_args.rs",
     "crates/kcoder_cli/src/app_server.rs",
 }
-ENGLISH_RUNTIME_PREFIXES = ("crates/kcoder_repl/src/slash/",)
+ENGLISH_RUNTIME_PREFIXES = ("crates/kcoder_repl/src/slash",)
 ENGLISH_RUNTIME_FILES.add(
     "apps/kcoder-studio/mobile/src/components/composer-slash.ts"
 )

@@ -36,11 +36,11 @@ function fixture(initialize = true) {
   };
   const a = client(), b = client();
   if (initialize) {
-    broker.receive(a, JSON.stringify({ id: "init-a", method: "initialize", params: {} }));
+    broker.receive(a, JSON.stringify({ id: "init-a", method: "initialize", params: { protocolVersion: "2026-07-27", clientInfo: { name: "history-refresh-owner-fixture", version: "1" }, capabilities: { experimental: {} } } }));
     broker.routeServerMessage({ id: upstream.at(-1).id, result: {
       capabilities: { experimental: { residentThreads: true } },
     } });
-    broker.receive(b, JSON.stringify({ id: "init-b", method: "initialize", params: {} }));
+    broker.receive(b, JSON.stringify({ id: "init-b", method: "initialize", params: { protocolVersion: "2026-07-27", clientInfo: { name: "history-refresh-owner-fixture", version: "1" }, capabilities: { experimental: {} } } }));
     upstream.length = 0;
     a.messages.length = b.messages.length = 0;
   }

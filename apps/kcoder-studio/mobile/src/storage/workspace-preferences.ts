@@ -1,11 +1,15 @@
+import { metadataStorage, type MetadataAuthority } from "./metadata-authority";
 import { removeWorkspaceOperationRecordsV2, pendingWorkspaceOperationPrefixV2 } from "./pending-workspace-operation-v2";
-import { withWorkspaceProfileWrite, workspaceProfileIdentityFromScope, WorkspaceProfileFenceError, type WorkspaceProfileIdentity } from "./workspace-profile-fence";
-import { withLocalIdentityLock } from "./context-lock";
+import { withWorkspaceProfileMetadata, workspaceProfileIdentityForId, workspaceProfileIdentityForScope, workspaceProfileIdentityFromScope, WorkspaceProfileFenceError, type WorkspaceProfileIdentity } from "./workspace-profile-fence";
+import { withLocalMetadata } from "./context-lock";
+import { t } from "@/i18n";
+import { normalizeTranscriptAction, type TranscriptActionRecord } from "./transcript-action";
 import type { GatewayProfile, KCoderServer } from "@/gateway/types";
 import { pendingWorkspaceOperationPrefix, waitForWorkspaceOperationWrites } from "./pending-workspace-operation";
 import { pendingThreadCreationPrefix, waitForPendingThreadCreationWrites } from "./pending-thread-creation";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { MAX_ATTACHMENT_BYTES } from "@/protocol/attachment-limits";
+import { isPermissionMode, type PermissionMode } from "@/protocol/task-permission-mode";
 import {
   MAX_QUEUED_TASK_MESSAGES,
   MAX_TASK_MESSAGE_CHARACTERS,
@@ -22,6 +26,13 @@ import {
   clearProfileStateRemoval,
   markProfileStateRemoval,
 } from "./profile-state-removal";
+import { isAbsoluteWorkspacePath, safeWorkspacePathRelative } from "./workspace-path";
+import {
+  WORKSPACE_TAB_V1 as LEGACY_STORAGE_PREFIX,
+  WORKSPACE_STATE_V2 as LEGACY_STATE_PREFIX,
+  WORKSPACE_STATE_V3 as STORAGE_PREFIX,
+  parseWorkspaceStateDocument,
+} from "./migrations/workspace-state";
 
 export type WorkspaceTab =
   "agent" | "changes" | "terminal" | "browser" | "files";
@@ -43,6 +54,25 @@ export interface WorkspaceQueuedMessage {
     path: string;
   }>;
   createdAt: number;
+  /** Optional for older queue entries; frozen on their first dispatch attempt. */
+  permissionMode?: PermissionMode;
+}
+
+/** A persisted receipt observation, never permission to resend or synthesize history. */
+export interface WorkspaceSubmissionAcceptedTurn {
+  threadId: string;
+  turnId: string;
+  attemptId?: string;
+}
+
+export function normalizeWorkspaceSubmissionAcceptedTurn(value: unknown): WorkspaceSubmissionAcceptedTurn | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const row = value as Record<string, unknown>;
+  if (Object.keys(row).some(key => !["threadId", "turnId", "attemptId"].includes(key))) return undefined;
+  const identity = (item: unknown): item is string => typeof item === "string" && item.trim() === item && item.length > 0 &&
+    item.length <= 512 && !/\p{Cc}/u.test(item);
+  if (!identity(row.threadId) || !identity(row.turnId) || (row.attemptId !== undefined && !identity(row.attemptId))) return undefined;
+  return { threadId: row.threadId, turnId: row.turnId, ...(typeof row.attemptId === "string" ? { attemptId: row.attemptId } : {}) };
 }
 
 export interface WorkspaceFailedSubmission {
@@ -51,7 +81,10 @@ export interface WorkspaceFailedSubmission {
   attachments: WorkspaceQueuedMessage["attachments"];
   createdAt: number;
   outcome: "failed" | "unknown";
+  acceptedTurn?: WorkspaceSubmissionAcceptedTurn;
   error?: string;
+  /** Preserves the original turn/start payload when retrying this message identity. */
+  permissionMode?: PermissionMode;
 }
 
 export interface WorkspacePanelState {
@@ -65,6 +98,7 @@ export interface WorkspacePanelState {
 }
 
 export interface WorkspaceViewState {
+  transcriptAction?: TranscriptActionRecord;
   activeTab: WorkspaceTab;
   /** Legacy/unscoped drafts are retained but never silently attached to another authorization. */
   retainedOtherScopeState?: boolean;
@@ -76,16 +110,14 @@ export interface WorkspaceViewState {
   browserUrl?: string;
   directoryPath?: string;
   fileDraft?: WorkspaceFileDraft;
+  recentFiles?: string[];
   activePanelId?: string;
   panels?: WorkspacePanelState[];
 }
 
-const LEGACY_STORAGE_PREFIX = "kcoder-studio:mobile-workspace-tab:v1";
-const LEGACY_STATE_PREFIX = "kcoder-studio:mobile-workspace-state:v2";
 const SCOPE_INDEX_PREFIX = "kcoder-studio:mobile-workspace-scope-index:v1";
 export const MAX_WORKSPACE_AUTHORIZATION_SCOPES = 16;
 const scopeIndexTails = new Map<string, Promise<unknown>>();
-const STORAGE_PREFIX = "kcoder-studio:mobile-workspace-state:v3";
 const VALID_TABS = new Set<WorkspaceTab>([
   "agent",
   "changes",
@@ -97,16 +129,39 @@ const MAX_DRAFT_CHARACTERS = 1_000_000;
 // v2 may already contain 12 user panels; v3 migration inserts a fixed Changes panel and must not truncate old drafts.
 const MAX_PANELS = 13;
 const MAX_FAILED_SUBMISSIONS = MAX_QUEUED_TASK_MESSAGES;
+const MAX_RECENT_WORKSPACE_FILES = 20;
 const pendingWrites = new Map<string, Promise<WorkspaceViewState>>();
 const pendingMigrationWrites = new Map<string, Promise<boolean>>();
 const deletedStateKeys = new Set<string>();
 const deletedProfilePrefixes = new Set<string>();
+const REMOVAL_TOMBSTONE_SUFFIX = ":removed:v1";
+
+function removalTombstoneKey(key: string): string {
+  return `${key}${REMOVAL_TOMBSTONE_SUFFIX}`;
+}
 
 function stateKeyIsDeleted(key: string): boolean {
   return (
     deletedStateKeys.has(key) ||
     [...deletedProfilePrefixes].some((prefix) => key.startsWith(prefix))
   );
+}
+
+async function workspaceStateIsDeleted(key: string, authority?: MetadataAuthority): Promise<boolean> {
+  if (stateKeyIsDeleted(key)) return true;
+  return (await metadataStorage(authority).getItem(removalTombstoneKey(key))) !== null;
+}
+
+async function withWorkspaceStateProfileMetadata<T>(
+  profileId: string,
+  authorizationScope: string | undefined,
+  operation: (authority?: MetadataAuthority) => Promise<T>,
+  parent?: MetadataAuthority,
+): Promise<T> {
+  const identity = authorizationScope
+    ? await workspaceProfileIdentityForScope(profileId, authorizationScope, parent)
+    : await workspaceProfileIdentityForId(profileId, parent);
+  return withWorkspaceProfileMetadata(identity, operation, parent);
 }
 
 export function isWorkspaceTab(value: unknown): value is WorkspaceTab {
@@ -117,18 +172,24 @@ async function migrateLegacyWorkspaceState(
   key: string,
   legacyStateKey: string,
   normalized: WorkspaceViewState,
+  profileId: string,
+  authorizationScope?: string,
+  parent?: MetadataAuthority,
 ): Promise<boolean> {
   const existing = pendingMigrationWrites.get(key);
   if (existing) return existing;
   const operation = Promise.resolve().then(async () => {
-    if (stateKeyIsDeleted(key)) return false;
-    await AsyncStorage.setItem(key, JSON.stringify(normalized));
-    if (stateKeyIsDeleted(key)) {
-      await AsyncStorage.removeItem(key);
-      return false;
-    }
-    await AsyncStorage.removeItem(legacyStateKey);
-    return true;
+    if (await workspaceStateIsDeleted(key, parent)) return false;
+    return withWorkspaceStateProfileMetadata(profileId, authorizationScope, async authority => {
+      if (await workspaceStateIsDeleted(key, authority)) return false;
+      await metadataStorage(authority).setItem(key, JSON.stringify(normalized));
+      if (await workspaceStateIsDeleted(key, authority)) {
+        await metadataStorage(authority).removeItem(key);
+        return false;
+      }
+      await metadataStorage(authority).removeItem(legacyStateKey);
+      return true;
+    }, parent);
   });
   pendingMigrationWrites.set(key, operation);
   try {
@@ -156,14 +217,14 @@ export function workspaceTabStorageKey(
 }
 
 function scopeIndexKey(profileId: string, serverId: string, threadId: string): string { return `${SCOPE_INDEX_PREFIX}:${routeStorageSuffix(profileId, serverId, threadId)}`; }
-async function readAuthorizationScopes(key: string): Promise<string[]> {
-  const raw = await AsyncStorage.getItem(key); if (!raw) return [];
+async function readAuthorizationScopes(key: string, authority?: MetadataAuthority): Promise<string[]> {
+  const raw = await metadataStorage(authority).getItem(key); if (!raw) return [];
   const scopes: unknown = JSON.parse(raw);
   if (!Array.isArray(scopes) || scopes.length > MAX_WORKSPACE_AUTHORIZATION_SCOPES || scopes.some(scope => typeof scope !== "string" || scope.length > 32_768)) throw new Error("工作区授权索引无效；已有草稿仍保留");
   return scopes as string[];
 }
-function serializeScopeIndex<T>(key: string, operation: () => Promise<T>): Promise<T> {
-  const result = (scopeIndexTails.get(key) ?? Promise.resolve()).catch(() => {}).then(() => withLocalIdentityLock(`workspace-scope-index:${key}`, operation, false));
+function serializeScopeIndex<T>(key: string, operation: (authority?: MetadataAuthority) => Promise<T>, parent?: MetadataAuthority): Promise<T> {
+  const result = (scopeIndexTails.get(key) ?? Promise.resolve()).catch(() => {}).then(() => withLocalMetadata(`workspace-scope-index:${key}`, operation, parent));
   scopeIndexTails.set(key, result); void result.finally(() => { if (scopeIndexTails.get(key) === result) scopeIndexTails.delete(key); }).catch(() => {}); return result;
 }
 
@@ -276,7 +337,7 @@ export function normalizeWorkspaceViewState(
                   : undefined,
               directoryPath:
                 typeof panel.directoryPath === "string" &&
-                panel.directoryPath.startsWith("/")
+                isAbsoluteWorkspacePath(panel.directoryPath)
                   ? panel.directoryPath
                   : undefined,
               fileDraft: panelDraft,
@@ -359,6 +420,13 @@ export function normalizeWorkspaceViewState(
                 typeof message.createdAt === "number"
                   ? message.createdAt
                   : Date.now(),
+              ...(Object.prototype.hasOwnProperty.call(message, "permissionMode")
+                ? {
+                    permissionMode: isPermissionMode(message.permissionMode)
+                      ? message.permissionMode
+                      : "default",
+                  }
+                : {}),
             },
           ];
         })
@@ -383,6 +451,8 @@ export function normalizeWorkspaceViewState(
           const attachments = normalizeAttachments(submission.attachments);
           if (attachments.length !== submission.attachments.length) return [];
           if (!submission.content.trim() && attachments.length === 0) return [];
+          const acceptedTurn = submission.outcome === "unknown"
+            ? normalizeWorkspaceSubmissionAcceptedTurn(submission.acceptedTurn) : undefined;
           return [
             {
               id: submission.id,
@@ -394,8 +464,12 @@ export function normalizeWorkspaceViewState(
                   ? submission.createdAt
                   : Date.now(),
               outcome: submission.outcome,
+              ...(acceptedTurn ? { acceptedTurn } : {}),
               ...(typeof submission.error === "string"
                 ? { error: submission.error.slice(0, 4_000) }
+                : {}),
+              ...(isPermissionMode(submission.permissionMode)
+                ? { permissionMode: submission.permissionMode }
                 : {}),
             },
           ];
@@ -415,6 +489,7 @@ export function normalizeWorkspaceViewState(
         : undefined,
     queuedMessages,
     failedSubmissions,
+    transcriptAction: normalizeTranscriptAction(raw.transcriptAction),
     composerDraft:
       typeof raw.composerDraft === "string" &&
       raw.composerDraft.length <= 50_000
@@ -425,10 +500,21 @@ export function normalizeWorkspaceViewState(
         ? raw.browserUrl
         : undefined,
     directoryPath:
-      typeof raw.directoryPath === "string" && raw.directoryPath.startsWith("/")
+      typeof raw.directoryPath === "string" && isAbsoluteWorkspacePath(raw.directoryPath)
         ? raw.directoryPath
         : undefined,
     fileDraft: draft,
+    recentFiles:
+      Array.isArray(raw.recentFiles)
+        ? [...new Set(raw.recentFiles.flatMap((path) =>
+            typeof path === "string" &&
+            isAbsoluteWorkspacePath(path) &&
+            path.length <= 4096 &&
+            !/\p{Cc}/u.test(path)
+              ? [path]
+              : [],
+          ))].slice(0, 20)
+        : undefined,
     ...(panels
       ? { panels, activePanelId: activePanelId ?? panels[0]?.id }
       : {}),
@@ -442,50 +528,121 @@ export async function loadWorkspaceState(
   authorizationScope?: string,
 ): Promise<WorkspaceViewState> {
   const key = workspaceStateStorageKey(profileId, serverId, threadId, authorizationScope);
-  if (stateKeyIsDeleted(key)) return { activeTab: "agent" };
-  const stored = await AsyncStorage.getItem(key);
-  if (stateKeyIsDeleted(key)) return { activeTab: "agent" };
+  return withLocalMetadata(`workspace-state:${key}`, authority =>
+    loadWorkspaceStateUnlocked(profileId, serverId, threadId, authorizationScope, key, authority),
+  );
+}
+
+function containsRetainedDraft(raw: string | null): boolean {
+  if (!raw) return false;
+  try {
+    const state = normalizeWorkspaceViewState(JSON.parse(raw));
+    const fileDrafts = [state.fileDraft, ...(state.panels ?? [])
+      .filter(panel => panel.kind === "files").map(panel => panel.fileDraft)];
+    return Boolean(
+      state.composerDraft?.trim() ||
+      state.queuedMessages?.some(message => message.content.trim() || message.attachments.length) ||
+      state.failedSubmissions?.some(message => message.content.trim() || message.attachments.length) ||
+      fileDrafts.some(draft => draft && isAbsoluteWorkspacePath(draft.path)),
+    );
+  } catch {
+    // Inspect only; another authorization's unreadable bytes must remain untouched.
+    return false;
+  }
+}
+
+async function loadWorkspaceStateUnlocked(
+  profileId: string,
+  serverId: string,
+  threadId: string,
+  authorizationScope: string | undefined,
+  key: string,
+  authority?: MetadataAuthority,
+): Promise<WorkspaceViewState> {
+  if (await workspaceStateIsDeleted(key, authority)) return { activeTab: "agent" };
+  const stored = await metadataStorage(authority).getItem(key);
+  if (await workspaceStateIsDeleted(key, authority)) return { activeTab: "agent" };
   if (stored) {
     try {
-      return normalizeWorkspaceViewState(JSON.parse(stored));
+      return normalizeWorkspaceViewState(parseWorkspaceStateDocument(stored));
     } catch {
-      await AsyncStorage.removeItem(key);
+      // Draft-bearing state is authoritative local user data. A failed read
+      // must also fence subsequent save attempts, not silently reset it.
+      throw new Error("workspace_state_corrupt");
     }
   }
   if (authorizationScope) {
-    const legacy = await AsyncStorage.getItem(workspaceStateStorageKey(profileId, serverId, threadId));
-    const scopes = await readAuthorizationScopes(scopeIndexKey(profileId, serverId, threadId));
-    return { activeTab: "agent", ...(legacy || scopes.some(scope => scope !== authorizationScope) ? { retainedOtherScopeState: true } : {}) };
+    const scopes = await readAuthorizationScopes(scopeIndexKey(profileId, serverId, threadId), authority);
+    const retainedKeys = [
+      workspaceStateStorageKey(profileId, serverId, threadId),
+      ...scopes.filter(scope => scope !== authorizationScope)
+        .map(scope => workspaceStateStorageKey(profileId, serverId, threadId, scope)),
+    ];
+    for (const retainedKey of retainedKeys) {
+      if (await workspaceStateIsDeleted(retainedKey, authority)) continue;
+      const retained = await metadataStorage(authority).getItem(retainedKey);
+      if (await workspaceStateIsDeleted(key, authority)) return { activeTab: "agent" };
+      if (!await workspaceStateIsDeleted(retainedKey, authority) && containsRetainedDraft(retained))
+        return { activeTab: "agent", retainedOtherScopeState: true };
+    }
+    return { activeTab: "agent" };
   }
   const legacyStateKey = legacyWorkspaceStateStorageKey(
     profileId,
     serverId,
     threadId,
   );
-  const legacyState = await AsyncStorage.getItem(legacyStateKey);
-  if (stateKeyIsDeleted(key)) return { activeTab: "agent" };
+  const legacyState = await metadataStorage(authority).getItem(legacyStateKey);
+  if (await workspaceStateIsDeleted(key, authority)) return { activeTab: "agent" };
   if (legacyState) {
+    let normalized: WorkspaceViewState | undefined;
     try {
-      const normalized = normalizeWorkspaceViewState(JSON.parse(legacyState));
-      if (await migrateLegacyWorkspaceState(key, legacyStateKey, normalized))
+      normalized = normalizeWorkspaceViewState(parseWorkspaceStateDocument(legacyState));
+    } catch {
+      throw new Error("workspace_state_corrupt");
+    }
+    if (normalized) {
+      if (await migrateLegacyWorkspaceState(key, legacyStateKey, normalized, profileId, undefined, authority))
         return normalized;
       return { activeTab: "agent" };
-    } catch {
-      await AsyncStorage.removeItem(legacyStateKey);
     }
   }
-  const legacy = await AsyncStorage.getItem(
+  const legacy = await metadataStorage(authority).getItem(
     workspaceTabStorageKey(profileId, serverId, threadId),
   );
-  if (stateKeyIsDeleted(key)) return { activeTab: "agent" };
+  if (await workspaceStateIsDeleted(key, authority)) return { activeTab: "agent" };
   return { activeTab: isWorkspaceTab(legacy) ? legacy : "agent" };
 }
 
-export async function saveWorkspaceState(
+function isRecentWorkspaceFilePath(root: string, path: string): boolean {
+  return safeWorkspacePathRelative(root, path) !== null;
+}
+
+function mergeRecentWorkspaceFile(
+  root: string,
+  recentFiles: readonly string[],
+  path: string,
+): string[] {
+  const seen = new Set<string>();
+  const next: string[] = [];
+  for (const candidate of [path, ...recentFiles]) {
+    if (
+      typeof candidate !== "string" ||
+      !isRecentWorkspaceFilePath(root, candidate) ||
+      seen.has(candidate)
+    ) continue;
+    seen.add(candidate);
+    next.push(candidate);
+    if (next.length >= MAX_RECENT_WORKSPACE_FILES) break;
+  }
+  return next;
+}
+
+async function updateWorkspaceState(
   profileId: string,
   serverId: string,
   threadId: string,
-  update: Partial<WorkspaceViewState>,
+  update: (current: WorkspaceViewState) => WorkspaceViewState,
   authorizationScope?: string,
   capturedIdentity?: WorkspaceProfileIdentity,
 ): Promise<WorkspaceViewState> {
@@ -494,31 +651,91 @@ export async function saveWorkspaceState(
   if (authorization.id !== profileId || (scopeIdentity.baseUrl && (authorization.baseUrl !== scopeIdentity.baseUrl || authorization.authorizationGeneration !== scopeIdentity.authorizationGeneration))) throw new WorkspaceProfileFenceError();
   const key = workspaceStateStorageKey(profileId, serverId, threadId, authorizationScope);
   if (stateKeyIsDeleted(key)) return { activeTab: "agent" };
-  const previous =
-    pendingWrites.get(key) ?? loadWorkspaceState(profileId, serverId, threadId, authorizationScope);
-  const operation = previous.then(async (current) => {
-    const next = normalizeWorkspaceViewState({ ...current, ...update });
-    if (stateKeyIsDeleted(key)) return next;
+  const previous = pendingWrites.get(key) ?? Promise.resolve({ activeTab: "agent" as const });
+  // A rejected compare-and-set belongs to its caller, not to the next writer.
+  const operation = previous.catch(() => undefined).then(() => withLocalMetadata("workspace-state:" + key, async stateAuthority => {
+    if (await workspaceStateIsDeleted(key, stateAuthority)) return { activeTab: "agent" as const };
+    const current = await loadWorkspaceStateUnlocked(profileId, serverId, threadId, authorizationScope, key, stateAuthority);
+    if (await workspaceStateIsDeleted(key, stateAuthority)) return { activeTab: "agent" as const };
+    const next = normalizeWorkspaceViewState(update(current));
+    if (await workspaceStateIsDeleted(key, stateAuthority)) return { activeTab: "agent" as const };
+    let persisted = false;
     if (authorizationScope) {
       const indexKey = scopeIndexKey(profileId, serverId, threadId);
-      await serializeScopeIndex(indexKey, () => withWorkspaceProfileWrite(authorization, async () => {
-        const scopes = await readAuthorizationScopes(indexKey);
+      persisted = await serializeScopeIndex(indexKey, scopeAuthority => withWorkspaceProfileMetadata(authorization, async authority => {
+        if (await workspaceStateIsDeleted(key, authority)) return false;
+        const scopes = await readAuthorizationScopes(indexKey, authority);
         if (!scopes.includes(authorizationScope) && scopes.length >= MAX_WORKSPACE_AUTHORIZATION_SCOPES) throw new Error("此任务已保留 16 个授权范围的草稿，请先在原身份下清理不需要的草稿");
-        if (stateKeyIsDeleted(key)) return;
-        if (!scopes.includes(authorizationScope)) await AsyncStorage.setItem(indexKey, JSON.stringify([...scopes, authorizationScope]));
-        await AsyncStorage.setItem(key, JSON.stringify(next));
-      }));
-    } else await withWorkspaceProfileWrite(authorization, async () => {
-      if (!stateKeyIsDeleted(key)) await AsyncStorage.setItem(key, JSON.stringify(next));
-    });
-    return next;
-  });
+        if (await workspaceStateIsDeleted(key, authority)) return false;
+        if (!scopes.includes(authorizationScope)) await metadataStorage(authority).setItem(indexKey, JSON.stringify([...scopes, authorizationScope]));
+        await metadataStorage(authority).setItem(key, JSON.stringify(next));
+        return true;
+      }, scopeAuthority), stateAuthority);
+    } else persisted = await withWorkspaceProfileMetadata(authorization, async authority => {
+      if (await workspaceStateIsDeleted(key, authority)) return false;
+      await metadataStorage(authority).setItem(key, JSON.stringify(next));
+      return true;
+    }, stateAuthority);
+    return persisted ? next : { activeTab: "agent" as const };
+  }));
   pendingWrites.set(key, operation);
   try {
     return await operation;
   } finally {
     if (pendingWrites.get(key) === operation) pendingWrites.delete(key);
   }
+}
+
+export function saveWorkspaceState(
+  profileId: string,
+  serverId: string,
+  threadId: string,
+  update: Partial<WorkspaceViewState>,
+  authorizationScope?: string,
+  capturedIdentity?: WorkspaceProfileIdentity,
+): Promise<WorkspaceViewState> {
+  return updateWorkspaceState(
+    profileId,
+    serverId,
+    threadId,
+    (current) => ({ ...current, ...update }),
+    authorizationScope,
+    capturedIdentity,
+  );
+}
+
+/** Compare-and-set under the existing cross-tab identity lock. No RPC is replayed here. */
+export function updateWorkspaceTranscriptAction(
+  profileId: string, serverId: string, threadId: string,
+  expected: TranscriptActionRecord | undefined, action: TranscriptActionRecord | undefined,
+  authorizationScope: string, capturedIdentity: WorkspaceProfileIdentity,
+): Promise<WorkspaceViewState> {
+  return updateWorkspaceState(profileId, serverId, threadId, current => {
+    if (current.transcriptAction?.id !== expected?.id || current.transcriptAction?.phase !== expected?.phase) throw new Error(t("task.transcript_owner_changed"));
+    return { ...current, transcriptAction: action };
+  }, authorizationScope, capturedIdentity);
+}
+
+export function saveWorkspaceRecentFile(
+  profileId: string,
+  serverId: string,
+  threadId: string,
+  root: string,
+  path: string,
+  authorizationScope?: string,
+  capturedIdentity?: WorkspaceProfileIdentity,
+): Promise<WorkspaceViewState> {
+  return updateWorkspaceState(
+    profileId,
+    serverId,
+    threadId,
+    (current) => ({
+      ...current,
+      recentFiles: mergeRecentWorkspaceFile(root, current.recentFiles ?? [], path),
+    }),
+    authorizationScope,
+    capturedIdentity,
+  );
 }
 
 export async function loadWorkspaceTab(
@@ -582,20 +799,28 @@ export async function removeWorkspaceState(
 ): Promise<void> {
   const stateKey = workspaceStateStorageKey(profileId, serverId, threadId, authorizationScope);
   deletedStateKeys.add(stateKey);
-  const pending = pendingWrites.get(stateKey);
-  const migration = pendingMigrationWrites.get(stateKey);
-  await Promise.all([
-    pending?.catch(() => undefined),
-    migration?.catch(() => false),
-  ]);
-  await AsyncStorage.multiRemove([
-    stateKey,
-    ...(!authorizationScope ? [legacyWorkspaceStateStorageKey(profileId, serverId, threadId), workspaceTabStorageKey(profileId, serverId, threadId)] : []),
-  ]);
-  if (authorizationScope) await serializeScopeIndex(scopeIndexKey(profileId, serverId, threadId), async () => {
-    const indexKey = scopeIndexKey(profileId, serverId, threadId);
-    const scopes = (await readAuthorizationScopes(indexKey)).filter(scope => scope !== authorizationScope);
-    if (scopes.length) await AsyncStorage.setItem(indexKey, JSON.stringify(scopes)); else await AsyncStorage.removeItem(indexKey);
+  await withLocalMetadata(`workspace-state:${stateKey}`, async stateAuthority => {
+    const persistRemoval = async (authority?: MetadataAuthority) => {
+      await metadataStorage(authority).setItem(removalTombstoneKey(stateKey), "1");
+      await metadataStorage(authority).removeItem(stateKey);
+      if (authorizationScope) {
+        const indexKey = scopeIndexKey(profileId, serverId, threadId);
+        const scopes = (await readAuthorizationScopes(indexKey, authority)).filter(scope => scope !== authorizationScope);
+        if (scopes.length) await metadataStorage(authority).setItem(indexKey, JSON.stringify(scopes));
+        else await metadataStorage(authority).removeItem(indexKey);
+      } else {
+        await metadataStorage(authority).multiRemove([
+          legacyWorkspaceStateStorageKey(profileId, serverId, threadId),
+          workspaceTabStorageKey(profileId, serverId, threadId),
+        ]);
+      }
+    };
+    if (authorizationScope) {
+      const indexKey = scopeIndexKey(profileId, serverId, threadId);
+      await serializeScopeIndex(indexKey, scopeAuthority => withWorkspaceStateProfileMetadata(profileId, authorizationScope, persistRemoval, scopeAuthority), stateAuthority);
+    } else {
+      await withWorkspaceStateProfileMetadata(profileId, undefined, persistRemoval, stateAuthority);
+    }
   });
 }
 

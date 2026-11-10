@@ -1,6 +1,7 @@
 //! Runtime requests: extracted from the app-server connection boundary.
 
 use super::*;
+use kcoder_app_rpc_codec as rpc_codec;
 
 /// Resolve an explicitly owned resident; missing scope uses the target profile.
 pub(super) fn selected_provider_engine(
@@ -20,6 +21,53 @@ pub(super) fn selected_provider_engine(
     Ok(engine)
 }
 
+pub(super) async fn select_model_request(
+    id: Value,
+    params: Value,
+    outbound_tx: &mpsc::Sender<Value>,
+    thread_manager: &mut ThreadManager,
+) -> Result<()> {
+    let result = (|| -> Result<Value> {
+        let input: kcoder_app_protocol::ThreadModelSelectionParams =
+            rpc_codec::decode(params.clone())?;
+        input.validate().map_err(anyhow::Error::msg)?;
+        let engine = thread_manager
+            .engine(&input.thread_id)
+            .context("Model selection thread is not resident")?;
+        ensure_active_thread(
+            &engine,
+            thread_manager.lease(&input.thread_id),
+            &input.thread_id,
+        )?;
+        if !thread_manager.is_turn_running(&input.thread_id) {
+            return Ok(rpc_codec::encode(
+                kcoder_app_protocol::ThreadModelSelectionResult {
+                    accepted: false,
+                    model: input.model,
+                    applies_at: "next_turn".into(),
+                },
+            )?);
+        }
+        anyhow::ensure!(
+            engine.supports_in_turn_model_switch(),
+            "This thread does not support in-turn model switching"
+        );
+        engine.queue_client_model_selection_for_boundary(&input.model)?;
+        Ok(rpc_codec::encode(
+            kcoder_app_protocol::ThreadModelSelectionResult {
+                accepted: true,
+                model: input.model,
+                applies_at: "next_tool_result_or_response_boundary".into(),
+            },
+        )?)
+    })();
+    match result {
+        Ok(result) => send(outbound_tx, success_response(id, result)).await?,
+        Err(error) => send(outbound_tx, error_response(id, -32602, &error.to_string())).await?,
+    }
+    Ok(())
+}
+
 #[expect(
     clippy::too_many_arguments,
     reason = "Keep separately borrowed connection and resource owners explicit at the extracted dispatch boundary"
@@ -35,8 +83,11 @@ pub(super) async fn dispatch(
     provider_settings_state: &Result<provider_settings::ProviderSettingsState>,
 ) -> Result<DispatchControl> {
     match method {
+        kcoder_app_protocol::method::THREAD_MODEL_SELECT => {
+            select_model_request(id, params, outbound_tx, thread_manager).await?;
+        }
         method::DEVICE_EXECUTE => {
-            match match serde_json::from_value::<DeviceExecuteParams>(params) {
+            match match rpc_codec::decode::<DeviceExecuteParams>(params) {
                 Ok(params) if params.command_key == "ls_skills" => {
                     let registry = match params.thread_id.as_deref() {
                         Some(thread_id) => thread_manager
@@ -166,6 +217,8 @@ pub(super) async fn dispatch(
                                             configured_model_catalog_response(profiles);
                                         result["activeConfiguration"] =
                                             serde_json::to_value(active)?;
+                                        result["supportsTurnModelSwitch"] =
+                                            Value::Bool(thread.supports_in_turn_model_switch());
                                         success_response(id, result)
                                     }
                                     Err(error) => error_response(id, -32602, &error.to_string()),
@@ -190,11 +243,10 @@ pub(super) async fn dispatch(
             } else {
                 match engine_factory.current_model_profiles() {
                     Ok(profiles) => {
-                        send(
-                            outbound_tx,
-                            success_response(id, configured_model_catalog_response(profiles)),
-                        )
-                        .await?
+                        let mut result = configured_model_catalog_response(profiles);
+                        result["supportsTurnModelSwitch"] =
+                            Value::Bool(workspace_engine.supports_in_turn_model_switch());
+                        send(outbound_tx, success_response(id, result)).await?
                     }
                     Err(error) => {
                         send(outbound_tx, error_response(id, -32602, &error.to_string())).await?

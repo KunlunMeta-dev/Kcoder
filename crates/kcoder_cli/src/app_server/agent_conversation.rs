@@ -1,5 +1,6 @@
 //! Connection-owned, bounded child conversation observers.
 use super::*;
+use crate::app_server::task_spawn::JoinSetExt as _;
 use kcoder_app_protocol::{
     AgentStreamEventParams, AgentStreamSnapshot, AgentStreamSubscribeParams,
     AgentStreamUnsubscribeParams,
@@ -89,14 +90,50 @@ impl AgentConversationSubscriptions {
                 .engine(&params.thread_id)
                 .context("thread/start or thread/resume is required")?;
             ensure_active_thread(&engine, manager.lease(&params.thread_id), &params.thread_id)?;
-            let subscription = engine.subscribe_subagent_conversation(&params.agent_id)?;
+            let exact = params
+                .expected_background_run
+                .as_ref()
+                .map(|expected| {
+                    agent_run_constraint::AgentRunObservation::capture(
+                        &engine,
+                        manager
+                            .lease(&params.thread_id)
+                            .context("agent_exact_run_unavailable")?,
+                        &params.thread_id,
+                        &params.agent_id,
+                        expected,
+                    )
+                })
+                .transpose()?;
+            let subscription = if let Some(expected) = params.expected_background_run.as_ref() {
+                engine
+                    .subscribe_subagent_conversation_for_run(expected)
+                    .map_err(|_| {
+                        anyhow::Error::from(agent_run_constraint::ExactRunUnavailable(
+                            kcoder_app_protocol::AgentStreamCloseReason::OwnerUnavailable,
+                        ))
+                    })?
+            } else {
+                engine.subscribe_subagent_conversation(&params.agent_id)?
+            };
+            if let Some(exact) = &exact {
+                exact.verify(&engine)?;
+            }
             let snapshot = project_snapshot(&params, &subscription.snapshot);
-            Ok((params, subscription, snapshot, engine))
+            Ok((params, subscription, snapshot, engine, exact))
         })();
-        let (params, subscription, snapshot, engine) = match result {
+        let (params, subscription, snapshot, engine, exact) = match result {
             Ok(value) => value,
             Err(error) => {
-                send(outbound, error_response(id, -32025, &error.to_string())).await?;
+                send(
+                    outbound,
+                    error_response(
+                        id,
+                        agent_run_constraint::response_code(&error, -32025),
+                        &error.to_string(),
+                    ),
+                )
+                .await?;
                 return Ok(DispatchControl::Continue);
             }
         };
@@ -107,13 +144,13 @@ impl AgentConversationSubscriptions {
             success_response(id, serde_json::to_value(&snapshot)?),
         )
         .await?;
-        if snapshot.active {
+        if snapshot.active || exact.is_some() {
             let key = params.subscription_id.clone();
             let thread_id = params.thread_id.clone();
             let outbound = outbound.clone();
             let server_id = server_id.to_owned();
-            let handle = self.tasks.spawn(async move {
-                let _ = pump(params, subscription, engine, outbound, server_id).await;
+            let handle = self.tasks.spawn_shared(async move {
+                let _ = pump(params, subscription, engine, outbound, server_id, exact).await;
             });
             self.handles.insert(key, (thread_id, handle));
         }
@@ -135,17 +172,14 @@ fn project_snapshot(
     for (id, started_at) in &snapshot.tool_started_at_ms {
         if let Some(calls) = contexts.get_mut(id.as_str()) {
             for call in calls {
-                call.started_at_ms = *started_at;
+                call.observe_start(*started_at);
             }
         }
     }
     for (id, (name, input)) in &snapshot.tool_inputs {
         if let Some(calls) = contexts.get_mut(id.as_str()) {
             for call in calls {
-                if !call.has_tool_use {
-                    call.name = name.clone();
-                    call.input = input.clone();
-                }
+                call.fill_unrecorded_input(name, input);
             }
         }
     }
@@ -221,7 +255,16 @@ fn history_entry(
     entry: &AgentConversationEntry,
 ) -> kcoder_state::HistoryEntry {
     kcoder_state::HistoryEntry {
-        session_id: snapshot.run_id.clone(),
+        web_sources: entry.web_sources.clone(),
+        history_attempt: entry
+            .web_sources
+            .first()
+            .map(|receipt| receipt.identity.clone()),
+        session_id: entry
+            .web_sources
+            .first()
+            .map(|receipt| receipt.identity.thread_id.clone())
+            .unwrap_or_else(|| snapshot.run_id.clone()),
         timestamp_ms: entry.timestamp_ms,
         uuid: Some(entry.id.clone()),
         parent_uuid: None,
@@ -240,6 +283,7 @@ fn projection(
         snapshot.run_id.clone(),
         Arc::new(AtomicU64::new(snapshot.sequence + 1)),
     );
+    projection.native_child_sources = true;
     projection.next_item = snapshot.next_assistant_item;
     projection.assistant_item = snapshot.active_assistant_item_id.clone();
     projection
@@ -251,15 +295,38 @@ async fn pump(
     engine: QueryEngine,
     outbound: mpsc::Sender<Value>,
     server_id: String,
+    exact: Option<agent_run_constraint::AgentRunObservation>,
 ) -> Result<()> {
     let run_id = subscription.snapshot.run_id.clone();
     let mut projected = projection(&server_id, &params, &subscription.snapshot);
     let mut cursor = subscription.snapshot.sequence;
+    let mut tick = tokio::time::interval(Duration::from_millis(500));
     loop {
         let received = tokio::select! {
             _ = outbound.closed() => return Ok(()),
+            _ = tick.tick(), if exact.is_some() => {
+                if let Some(exact) = &exact && let Err(error) = exact.verify(&engine) {
+                    send(&outbound, notification(kcoder_app_protocol::AGENT_STREAM_CLOSED,
+                        serde_json::to_value(exact.closed(&params.subscription_id,&error))?)).await?;
+                    return Ok(());
+                }
+                continue;
+            },
             received = subscription.receiver.recv() => received,
         };
+        if let Some(exact) = &exact
+            && let Err(error) = exact.verify(&engine)
+        {
+            send(
+                &outbound,
+                notification(
+                    kcoder_app_protocol::AGENT_STREAM_CLOSED,
+                    serde_json::to_value(exact.closed(&params.subscription_id, &error))?,
+                ),
+            )
+            .await?;
+            return Ok(());
+        }
         // Deleting a parent/child invalidates its observer; retained stream data never grants authority.
         if !engine.state.task(&params.agent_id).is_some_and(|task| {
             task.kind == TaskKind::Subagent
@@ -284,7 +351,7 @@ async fn pump(
                     ),
                 )
                 .await?;
-                if !snapshot.active {
+                if !snapshot.active && exact.is_none() {
                     return Ok(());
                 }
                 continue;
@@ -302,7 +369,7 @@ async fn pump(
                     ),
                 )
                 .await?;
-                if !snapshot.active {
+                if !snapshot.active && exact.is_none() {
                     return Ok(());
                 }
                 continue;
@@ -354,7 +421,7 @@ async fn pump(
             )
             .await?;
         }
-        if finished {
+        if finished && exact.is_none() {
             return Ok(());
         }
     }
@@ -366,6 +433,7 @@ mod tests {
     use kcoder_types::{ContentBlock, Message};
     fn params() -> AgentStreamSubscribeParams {
         AgentStreamSubscribeParams {
+            expected_background_run: None,
             thread_id: "parent".into(),
             agent_id: "child".into(),
             subscription_id: "view".into(),
@@ -378,6 +446,7 @@ mod tests {
             active: true,
             status: "running".into(),
             entries: vec![AgentConversationEntry {
+                web_sources: Vec::new(),
                 id: "run-assistant-1".into(),
                 client_message_id: None,
                 timestamp_ms: 10,
@@ -454,6 +523,7 @@ mod tests {
         source.active_assistant_item_id = None;
         source.next_assistant_item = 3;
         source.entries.push(AgentConversationEntry {
+            web_sources: Vec::new(),
             id: "run-assistant-2".into(),
             client_message_id: None,
             timestamp_ms: 30,

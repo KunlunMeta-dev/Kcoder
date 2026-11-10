@@ -33,7 +33,7 @@ import { ComposerModePill, GoalDraftPill } from './GoalDraftPill'
 import { useAutoResizeTextarea } from './useAutoResizeTextarea'
 import { debugComposerEvent, textMetrics } from './composerDebug'
 import { QuickPhraseMenu } from './QuickPhraseMenu'
-import type { QuickPhrase } from '@/tauri/appPreferences'
+import type { QuickPhrase } from '@/host/appPreferences'
 import type { CloudProject } from '@/api/deliveries'
 import { resolveStoredWorkspacePaths } from '@/lib/workspace-path-transfer'
 import type {
@@ -45,6 +45,8 @@ import { applyWorkspacePathTransfer } from './composerPathTransfer'
 interface CompactChatComposerProps {
   modeStatus?: ReactNode
   value: string
+  inputHistory?: readonly string[]
+  inputHistoryScope?: string
   onChange: (value: string) => void
   onSubmit: (submittedValue?: string, options?: ComposerSubmitOptions) => void
   disabled: boolean
@@ -93,6 +95,8 @@ interface CompactChatComposerProps {
 export function CompactChatComposer({
   modeStatus,
   value,
+  inputHistory,
+  inputHistoryScope,
   onChange,
   onSubmit,
   disabled,
@@ -276,6 +280,8 @@ export function CompactChatComposer({
           ].join(' ')}
         >
           <ComposerTextarea
+            inputHistory={inputHistory}
+            inputHistoryScope={inputHistoryScope}
             textareaRef={textareaRef}
             value={value}
             onChange={onChange}

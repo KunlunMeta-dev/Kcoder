@@ -1,3 +1,4 @@
+import { installTestTransport, clearTestTransports } from '@/test/runtime-transport'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
@@ -6,7 +7,7 @@ import {
   RuntimeTaskLifecycleProvider,
   RuntimeTaskLifecycleStore,
 } from '@/features/workbench/runtimeTaskLifecycle'
-import { updateAppPreferences } from '@/tauri/appPreferences'
+import { updateAppPreferences } from '@/host/appPreferences'
 import type { InstalledPlugin, LocalDeviceSkill } from '@/types/api'
 import './i18n'
 import App from './App'
@@ -28,7 +29,7 @@ vi.mock('@/lib/local-terminal', async importOriginal => {
   }
 })
 
-vi.mock('@/tauri/localExecutor', () => ({
+vi.mock('@/host/localExecutor', () => ({
   ensureLocalExecutorStarted: vi
     .fn()
     .mockResolvedValue({ running: true, ready: true, deviceId: 'local-device' }),
@@ -74,6 +75,7 @@ const mockViewport = vi.hoisted(() => ({
 }))
 
 const workbenchValue: WorkbenchContextValue = {
+  services: {},
   state: {
     user: { id: 1, user_name: 'alice', email: 'alice@example.com' },
     defaultTeam: null,
@@ -298,13 +300,7 @@ vi.mock('@/features/auth/useAuth', () => ({
   useAuth: () => ({
     user: { id: 1, user_name: 'alice', email: 'alice@example.com' },
     isLoading: false,
-    adminPasswordSetupRequired: false,
-    adminUsername: 'admin',
-    login: vi.fn(),
     logout: vi.fn(),
-    refresh: vi.fn(),
-    loginWithOidcToken: vi.fn(),
-    setupAdminPassword: vi.fn(),
   }),
 }))
 
@@ -321,7 +317,8 @@ vi.mock('@/features/workbench/WorkbenchProvider', () => ({
   },
 }))
 
-vi.mock('@/features/workbench/useWorkbench', () => ({
+vi.mock('@/features/workbench/useWorkbench', async importOriginal => ({
+  ...await importOriginal<typeof import('@/features/workbench/useWorkbench')>(),
   useWorkbench: () => workbenchValue,
   useWorkbenchPaneContext: () => workbenchValue,
 }))
@@ -668,7 +665,7 @@ describe('App plugins route', () => {
         disconnect() {}
       }
     )
-    delete (window as typeof window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__
+    clearTestTransports()
     localStorage.clear()
     sessionStorage.clear()
     vi.stubEnv('DEV', false)
@@ -697,16 +694,13 @@ describe('App plugins route', () => {
 
     await waitFor(() => expect(window.location.pathname).toBe('/plugins'))
     expect(
-      await screen.findByTestId('plugins-workspace', undefined, { timeout: 3000 })
+      await screen.findByTestId('plugins-workspace', undefined, { timeout: 10000 })
     ).toBeInTheDocument()
     expect(screen.queryByTestId('plugins-sidebar-placeholder')).not.toBeInTheDocument()
-  })
+  }, 15000)
 
   test('shows Sites as unavailable instead of calling a relative API in disconnected local mode', async () => {
-    Object.defineProperty(window, '__TAURI_INTERNALS__', {
-      configurable: true,
-      value: {},
-    })
+    installTestTransport(() => null)
     window.__KCODER_STUDIO_RUNTIME_CONFIG__ = {
       ...window.__KCODER_STUDIO_RUNTIME_CONFIG__,
       runtimeMode: 'local-first',
@@ -728,10 +722,7 @@ describe('App plugins route', () => {
   })
 
   test('loads Sites from the authenticated cloud Backend in local mode', async () => {
-    Object.defineProperty(window, '__TAURI_INTERNALS__', {
-      configurable: true,
-      value: {},
-    })
+    installTestTransport(() => null)
     window.__KCODER_STUDIO_RUNTIME_CONFIG__ = {
       ...window.__KCODER_STUDIO_RUNTIME_CONFIG__,
       runtimeMode: 'local-first',
@@ -841,7 +832,7 @@ describe('App plugins route', () => {
     await waitFor(() => expect(window.location.pathname).toBe('/'))
     expect(localCodexPluginMocks.listInstalledPlugins).toHaveBeenCalledTimes(1)
     expect(workbenchValue.startNewSkillChat).not.toHaveBeenCalled()
-    expect(JSON.parse(sessionStorage.getItem('wework:pending-plugin-trial') ?? '{}')).toMatchObject(
+    expect(JSON.parse(sessionStorage.getItem('kcoder:pending-plugin-trial') ?? '{}')).toMatchObject(
       {
         input: '[$Sites](plugin://sites@openai-bundled) ',
         pluginName: 'Sites',
@@ -893,7 +884,7 @@ describe('App plugins route', () => {
     await waitFor(() => expect(window.location.pathname).toBe('/'))
     expect(localCodexPluginMocks.listSkills).toHaveBeenCalledWith({ forceReload: true })
     expect(workbenchValue.startNewSkillChat).not.toHaveBeenCalled()
-    expect(JSON.parse(sessionStorage.getItem('wework:pending-plugin-trial') ?? '{}')).toMatchObject(
+    expect(JSON.parse(sessionStorage.getItem('kcoder:pending-plugin-trial') ?? '{}')).toMatchObject(
       {
         input: '[$Sites](plugin://sites@openai-bundled) ',
         pluginName: 'Sites',
@@ -921,7 +912,7 @@ describe('App plugins route', () => {
       '/Users/test/.codex/plugins/cache/openai-bundled/sites'
     )
     expect(workbenchValue.startNewSkillChat).not.toHaveBeenCalled()
-    expect(JSON.parse(sessionStorage.getItem('wework:pending-plugin-trial') ?? '{}')).toMatchObject(
+    expect(JSON.parse(sessionStorage.getItem('kcoder:pending-plugin-trial') ?? '{}')).toMatchObject(
       {
         input: '[$Sites](plugin://sites@openai-bundled) ',
         pluginName: 'Sites',
@@ -999,7 +990,7 @@ describe('App plugins route', () => {
       'macos-titlebar-drag-region'
     )
 
-    expect(pluginsDragRegion).toHaveAttribute('data-tauri-drag-region')
+    expect(pluginsDragRegion).toHaveAttribute('data-kcoder-drag-region')
     expect(screen.getByTestId('plugins-topbar-drag-region')).toContainElement(pluginsDragRegion)
     expect(screen.getByTestId('runtime-search-button')).toBeInTheDocument()
     expect(await screen.findByTestId('plugins-workspace')).toBeInTheDocument()
@@ -1020,17 +1011,14 @@ describe('App plugins route', () => {
     await userEvent.click(screen.getByTestId('collapse-sidebar-button'))
 
     expect(screen.getByTestId('expand-sidebar-button')).toBeInTheDocument()
-    expect(screen.getByTestId('plugins-topbar')).toHaveClass('md:pl-6')
+    expect(screen.getByTestId('plugins-topbar')).toHaveClass('h-14', 'px-5')
 
     await userEvent.click(screen.getByTestId('expand-sidebar-button'))
     expect(screen.getByTestId('plugins-button')).toBeInTheDocument()
   })
 
-  test('does not reserve traffic light space on collapsed plugin routes in Tauri', async () => {
-    Object.defineProperty(window, '__TAURI_INTERNALS__', {
-      configurable: true,
-      value: {},
-    })
+  test('does not reserve traffic light space on collapsed plugin routes in Gateway', async () => {
+    installTestTransport(() => null)
     localStorage.setItem('wework.desktop.sidebar.collapsed', 'true')
     window.history.pushState({}, '', '/plugins')
 
@@ -1039,7 +1027,7 @@ describe('App plugins route', () => {
     expect(await screen.findByTestId('plugins-workspace')).toBeInTheDocument()
 
     expect(screen.queryByTestId('chrome-titlebar')).not.toBeInTheDocument()
-    expect(screen.getByTestId('plugins-topbar')).toHaveClass('md:pl-6')
+    expect(screen.getByTestId('plugins-topbar')).toHaveClass('h-14', 'px-5')
     expect(screen.getByTestId('plugins-topbar').style.paddingLeft).toBe('')
   })
 
@@ -1335,7 +1323,7 @@ describe('App plugins route', () => {
     async route => {
       const width = window.innerWidth
       Object.defineProperty(window, 'innerWidth', { value: 400, configurable: true })
-      localStorage.setItem('wework.desktop.sidebar.collapsed', 'false')
+      localStorage.setItem('kcoder.desktop.sidebar.collapsed', 'false')
       window.history.pushState({}, '', route)
       renderApp()
       try {
@@ -1353,7 +1341,7 @@ describe('App plugins route', () => {
         await userEvent.keyboard('{Escape}')
         expect(screen.queryByTestId('mobile-drawer')).toBeNull()
         expect(toggle).toHaveFocus()
-        expect(localStorage.getItem('wework.desktop.sidebar.collapsed')).toBe('false')
+        expect(localStorage.getItem('kcoder.desktop.sidebar.collapsed')).toBe('false')
         Object.defineProperty(window, 'innerWidth', { value: 1280, configurable: true })
         fireEvent.resize(window)
         await waitFor(() => expect(sidebar).toHaveStyle({ width: '240px' }))
@@ -1370,7 +1358,7 @@ describe('App plugins route', () => {
     renderApp()
     await userEvent.click(screen.getByTestId('plugins-button'))
     await screen.findByTestId('plugins-workspace')
-    const preference = localStorage.getItem('wework.desktop.sidebar.collapsed')
+    const preference = localStorage.getItem('kcoder.desktop.sidebar.collapsed')
     try {
       Object.defineProperty(window, 'innerWidth', { value: 400, configurable: true })
       fireEvent.resize(window)
@@ -1378,7 +1366,7 @@ describe('App plugins route', () => {
       fireEvent(window, new Event('resize'))
       dispatchToggleSidebarShortcut()
       await screen.findByTestId('mobile-drawer')
-      expect(localStorage.getItem('wework.desktop.sidebar.collapsed')).toBe(preference)
+      expect(localStorage.getItem('kcoder.desktop.sidebar.collapsed')).toBe(preference)
     } finally {
       Object.defineProperty(window, 'innerWidth', { value: width, configurable: true })
     }

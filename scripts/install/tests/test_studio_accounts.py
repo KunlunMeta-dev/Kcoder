@@ -6,6 +6,7 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
 from studio_accounts import AccountError, AccountStore, password_hash, verify_password
@@ -128,6 +129,34 @@ class AccountTests(unittest.TestCase):
         self.store.set_disabled("operator", True)
         with self.assertRaisesRegex(AccountError, "changed"):
             self.store.administer(admin, {"operation": "export"})
+
+
+    def test_revocation_between_dispatch_and_mutation_cannot_create_an_account(self):
+        actor = self.store.create("operator", PASSWORD, "admin")
+        create = self.store.create
+
+        def revoke_then_create(*args, **kwargs):
+            self.store.revoke_sessions("operator")
+            return create(*args, **kwargs)
+
+        with patch.object(self.store, "create", side_effect=revoke_then_create):
+            with self.assertRaisesRegex(AccountError, "authorization has changed"):
+                self.store.administer(actor, {
+                    "operation": "create", "username": "must-not-exist", "password": PASSWORD,
+                })
+        self.assertNotIn("must-not-exist", {item["username"] for item in self.store.list()})
+
+    def test_revocation_between_dispatch_and_export_cannot_return_password_hashes(self):
+        actor = self.store.create("operator", PASSWORD, "admin")
+        export = self.store.export_bundle
+
+        def revoke_then_export(*args, **kwargs):
+            self.store.revoke_sessions("operator")
+            return export(*args, **kwargs)
+
+        with patch.object(self.store, "export_bundle", side_effect=revoke_then_export):
+            with self.assertRaisesRegex(AccountError, "authorization has changed"):
+                self.store.administer(actor, {"operation": "export"})
 
 
 if __name__ == "__main__":

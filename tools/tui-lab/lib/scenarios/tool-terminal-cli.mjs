@@ -5,6 +5,7 @@ import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
 import { cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { chromium } from '@playwright/test';
 import { parseArgs, browserLaunchOptions } from '../runner-options.mjs';
@@ -20,14 +21,17 @@ const options = parseArgs(['tool-terminal-cli', ...process.argv.slice(2)], { def
 options.timeoutMs = Math.min(options.timeoutMs, 30000);
 const binary = path.resolve(options.commandOverride || path.join(repoRoot, 'target/optimization-bin-06ab/kcoder'));
 const sigintSlice = options.scenario === 'headless-sigint';
-const privateRoot = await mkdtemp('/tmp/kcoder-s01-cli-');
-const runtime = { ...runContextRuntime(), configRoot: privateRoot, configTrustRoot: privateRoot };
+const queuedInterrupt = options.scenario === 'queued-interrupt';
+const tuiOnly = options.scenario === 'tui-only' || queuedInterrupt;
+const privateRoot = await mkdtemp(path.join(os.homedir(), '.kcoder-s01-cli-'));
+const runtime = { ...runContextRuntime(), configRoot: privateRoot, configTrustRoot: os.homedir() };
 const artifacts = await createRunContext({ ...options, description: options.description || 's01-tool-terminal-cli' }, 's01', runtime);
 const json = (name, value) => writeFile(path.join(artifacts.dir, name), JSON.stringify(value, null, 2) + '\n');
 const requests = [], trace = [], processes = [], handles = [], cleanup = [];
 let session, browser, page, failure;
 let currentMode = 'headless';
 const prompts = { success: 'S01_SUCCESS_TOOL', interrupt: 'S01_INTERRUPT_TOOL', followup: 'S01_FOLLOWUP' };
+if (queuedInterrupt) prompts.queued = 'S01_QUEUED_STEER';
 const goalObjective = 'S01 preserve this explicit goal and its progress after user interruption';
 if (sigintSlice) prompts.interrupt += ` Explicitly create a persistent goal: ${goalObjective}; then run the bounded shell fixture.`;
 const toolId = (mode, kind) => `s01-${mode}-${kind}`;
@@ -52,12 +56,12 @@ const server = createServer(async (request, response) => {
       assert.ok(body.tools.some(tool => tool.function.name === 'create_goal'));
       delta = { role: 'assistant', tool_calls: [{ index: 0, id: 's01-headless-goal', type: 'function', function: { name: 'create_goal', arguments: JSON.stringify({ objective: goalObjective }) } }] };
       finish = 'tool_calls';
-    } else if (kind !== 'followup' && !result) {
+    } else if (kind !== 'followup' && kind !== 'queued' && !result) {
       assert.ok(body.tools.some(tool => tool.function.name === 'bash'), 'real registry must advertise bash');
       const command = kind === 'success'
         ? "printf 'S01_ACTUAL_TOOL_SUCCESS\\n'"
-        : "printf '%s\\n' \"$$\" > .s01-tool.pid; printf 'S01_ACTUAL_TOOL_BEGIN\\n'; sleep 4; printf 'S01_UNEXPECTED_TOOL_END\\n'";
-      delta = { role: 'assistant', tool_calls: [{ index: 0, id, type: 'function', function: { name: 'bash', arguments: JSON.stringify({ command, description: `S01 ${kind} real tool`, timeout: 6000, run_in_background: false }) } }] };
+        : `printf '%s\\n' "$$" > .s01-tool.pid; printf 'S01_ACTUAL_TOOL_BEGIN\\n'; sleep ${queuedInterrupt ? 15 : 4}; printf 'S01_UNEXPECTED_TOOL_END\\n'`;
+      delta = { role: 'assistant', tool_calls: [{ index: 0, id, type: 'function', function: { name: 'bash', arguments: JSON.stringify({ command, description: `S01 ${kind} real tool`, timeout: queuedInterrupt ? 20000 : 6000, run_in_background: false }) } }] };
       finish = 'tool_calls';
     } else {
       delta = { role: 'assistant', content: `S01_${currentMode.toUpperCase()}_${kind.toUpperCase()}_FINAL` };
@@ -144,7 +148,7 @@ try {
   const sha256 = createHash('sha256').update(await readFile(binary)).digest('hex');
   const expectedSha = process.env.KCODER_S01_EXPECTED_SHA256 || '11995f0f26977a22a311a3d3bb38bdd9167136507cff1989d0de162951e0a1fb';
   assert.equal(sha256, expectedSha);
-  await json('meta.start.json', { binary, sha256, source: process.env.KCODER_S01_SOURCE_COMMIT || '06ab1814a', buildPreparation: sigintSlice ? 'headless-sigint-product-fix' : 'prep13', realCli: true, provider: 'loopback-only', skill: 'kcoder-tui-lab unavailable; tools/tui-lab AGENTS fallback', tuiOnly: options.scenario === 'tui-only', scopes: sigintSlice ? ['headless single-PID SIGINT', 'CLI-owned tool cleanup', 'durable interrupted terminal', 'resume normal followup'] : ['headless success', 'headless running-tool SIGINT and resume', 'TUI running-tool Escape and next turn'] });
+  await json('meta.start.json', { binary, sha256, source: process.env.KCODER_S01_SOURCE_COMMIT || 'unspecified', buildPreparation: sigintSlice ? 'headless-sigint-product-fix' : queuedInterrupt ? 'queued-interrupt' : 'prep13', realCli: true, provider: 'loopback-only', skill: 'kcoder-tui-lab unavailable; tools/tui-lab AGENTS fallback', tuiOnly, scopes: sigintSlice ? ['headless single-PID SIGINT', 'CLI-owned tool cleanup', 'durable interrupted terminal', 'resume normal followup'] : queuedInterrupt ? ['TUI queued input, Escape and immediate next input'] : ['headless success', 'headless running-tool SIGINT and resume', 'TUI running-tool Escape and next turn'] });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   const settings = { active_provider: 'fixture', credential_store: 'file', permission_mode: 'yolo', max_retries: 0,
     providers: { fixture: { api_format: 'openai_chat_completions', endpoint: `http://127.0.0.1:${server.address().port}/v1`,
@@ -158,7 +162,7 @@ try {
   }
   const headlessWorkspace = path.join(artifacts.dir, 'headless-workspace');
   await cp(defaultWorkspaceTemplate, headlessWorkspace, { recursive: true });
-  if (options.scenario !== 'tui-only') {
+  if (!tuiOnly) {
   if (!sigintSlice) {
   const success = headless(headlessHome, headlessWorkspace, prompts.success);
   await until(() => success.exit !== null, 'headless success exit');
@@ -243,6 +247,11 @@ try {
   const tuiHandle = await toolHandle(artifacts.workspace, 'tui');
   await page.waitForFunction(() => /bash running|Running bash/.test(window.tuiLab.visibleText()), null, { timeout: 2000 });
   await capture('tui-tool-running');
+  if (queuedInterrupt) {
+    await submitTerminalLine(page, prompts.queued);
+    await waitText(prompts.queued);
+    await waitText('Messages to be submitted after next tool call');
+  }
   // Use the existing Kitty-aware Unix/ConPTY adapter; a bare Escape byte is
   // ambiguous while crossterm's keyboard disambiguation mode is enabled.
   trace.push({ name: 'interrupt-input-before', at: new Date().toISOString(), shellAlive: await alive(tuiHandle.pid) });
@@ -251,25 +260,41 @@ try {
   // KCoder's transcript selection active. First Escape clears that selection;
   // the second is the actual turn interruption (app_keyboard.rs).
   await delay(50);
-  await pressTerminalEscape(page, process.platform);
+  if (!(await page.evaluate(() => window.tuiLab.visibleText().includes('Cancelled.')))) {
+    await pressTerminalEscape(page, process.platform);
+  }
   trace.push({ name: 'interrupt-input-after', at: new Date().toISOString(), shellAlive: await alive(tuiHandle.pid) });
   await json('interrupt-timing.json', trace);
   await page.waitForFunction(() => window.tuiLab.visibleText().includes('Cancelled.'), null, { timeout: 1500 });
+  if (queuedInterrupt) await submitTerminalLine(page, prompts.followup);
   await until(async () => !(await alive(tuiHandle.pid)) && !(await Promise.all(tuiHandle.children.map(alive))).some(Boolean), 'TUI Engine cancellation stops tool');
   await delay(250);
   await capture('tui-tool-cancelled');
-  await submitTerminalLine(page, prompts.followup);
+  if (!queuedInterrupt) await submitTerminalLine(page, prompts.followup);
   await waitText('S01_TUI_FOLLOWUP_FINAL');
   await delay(250);
   await capture('tui-followup');
   const finalText = await readFile(path.join(artifacts.dir, 'tui-followup.txt'), 'utf8');
   assert.ok(!/esc interrupt|Writing response|Preparing bash|Running bash/.test(finalText), 'completed next turn must return to idle footer');
   const tuiRequest = requests.findLast(request => request.mode === 'tui' && request.kind === 'followup');
+  if (queuedInterrupt) {
+    const userTexts = tuiRequest.body.messages.filter(message => message.role === 'user').map(message => typeof message.content === 'string' ? message.content : message.content.map(block => block.text || '').join(''));
+    assert.equal(userTexts.filter(text => text.includes(prompts.queued)).length, 1, 'queued input must appear once in the model request');
+    assert.equal(userTexts.filter(text => text.includes(prompts.followup)).length, 1, 'new input must appear once in the model request');
+    assert.ok(userTexts.findIndex(text => text.includes(prompts.queued)) < userTexts.findIndex(text => text.includes(prompts.followup)), 'queued input must precede the new input');
+  }
   const cancelledResult = tuiRequest.body.messages.find(message => message.role === 'tool' && message.tool_call_id === toolId('tui', 'interrupt'));
   assert.ok(cancelledResult && /abort|cancel|interrupt/i.test(JSON.stringify(cancelledResult.content)), 'next real request must contain the interrupted tool result');
-  await json('tui-history.json', await histories(artifacts.configDir));
+  const tuiHistories = await histories(artifacts.configDir);
+  await json('tui-history.json', tuiHistories);
+  if (queuedInterrupt) {
+    const entries = tuiHistories.filter(history => history.file.includes('projects/') && !history.file.endsWith('.exit.jsonl')).flatMap(history => history.text.split('\n').filter(Boolean).map(line => JSON.parse(line)));
+    const userTexts = entries.filter(entry => entry.role === 'user').map(entry => (entry.content || []).map(block => block.text || '').join(''));
+    assert.equal(userTexts.filter(text => text.includes(prompts.queued)).length, 1, 'queued input must be persisted exactly once');
+    assert.equal(userTexts.filter(text => text.includes(prompts.followup)).length, 1, 'new input must be persisted exactly once');
   }
-  await json('assertions.json', { ok: true, headless: options.scenario === 'tui-only' ? { skipped: true } : { toolSuccess: !sigintSlice, actualToolBegin: true, processInterrupted: true, interruptionRepairedOnResume: true, followupDidNotReplayToolEvents: true, gracefulSigintOwnedCleanupAndDurableTerminal: sigintSlice, actualGoalPausedAndOrdinaryResumeDidNotRestart: sigintSlice }, tui: sigintSlice ? { skipped: true, preservedEvidenceRun: '2026-10-04/06-18-24-511-s01-tool-terminal-cli-3523806' } : { toolSuccess: true, actualToolBegin: true, escapeCancelStoppedOwnedTool: true, nextTurnIncludedCancelledResult: true, followupCompleted: true, footerIdle: true }, visualTrace: trace });
+  }
+  await json('assertions.json', { ok: true, headless: tuiOnly ? { skipped: true } : { toolSuccess: !sigintSlice, actualToolBegin: true, processInterrupted: true, interruptionRepairedOnResume: true, followupDidNotReplayToolEvents: true, gracefulSigintOwnedCleanupAndDurableTerminal: sigintSlice, actualGoalPausedAndOrdinaryResumeDidNotRestart: sigintSlice }, tui: sigintSlice ? { skipped: true, preservedEvidenceRun: '2026-10-04/06-18-24-511-s01-tool-terminal-cli-3523806' } : { toolSuccess: true, actualToolBegin: true, escapeCancelStoppedOwnedTool: true, queuedInputCompletedExactlyOnce: queuedInterrupt, nextTurnIncludedCancelledResult: true, followupCompleted: true, footerIdle: true }, visualTrace: trace });
 } catch (error) {
   failure = error;
   await json('failure.json', { error: String(error), stack: error.stack });

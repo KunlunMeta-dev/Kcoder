@@ -37,6 +37,17 @@ class DocumentationContracts(unittest.TestCase):
         store_row = next(line for line in reference.splitlines() if "| `--store` |" in line)
         self.assertNotIn("env_file: Option", store_row)
 
+    def test_cli_reference_includes_scoped_history_subcommands(self):
+        reference = cli_reference()
+        self.assertIn("## HistoryAction", reference)
+        self.assertIn("## HistorySelection", reference)
+        self.assertIn("cli_args/migration_history.rs", reference)
+        self.assertIn("| `--resume-job` |", reference)
+        self.assertIn("| `--target-profile` |", reference)
+        self.assertIn("crates/kcoder_cli/src/internal/migration_client/cli_args.rs", reference)
+        self.assertIn("## MigrationResourceArgs", reference)
+        self.assertIn("| `--resource-max-payload-files` |", reference)
+
     def test_rust_source_braces_ignore_raw_strings_chars_and_nested_comments(self):
         source = '''{ let raw = r##"{ unbalanced"##; let x = '}';
           /* outer { /* nested } */ comment */

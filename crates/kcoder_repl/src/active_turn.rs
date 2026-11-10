@@ -1,5 +1,5 @@
 use crate::subagent_panel::SubagentPanel;
-use crate::tool_format::format_running_tool;
+use crate::tool_format::{format_running_tool, format_tool_use};
 use crate::write_preview::format_write_preview_message;
 use kcoder_engine::WriteInputPreview;
 use kcoder_types::{DisplayMessage, MessageRole};
@@ -13,6 +13,33 @@ pub(crate) struct ActiveCell {
 }
 
 impl ActiveCell {
+    pub(crate) fn settle_unobserved_tools(&mut self) -> bool {
+        let mut changed = false;
+        for entry in &mut self.entries {
+            if let ActiveEntry::Tool(ToolStatus::Running {
+                id,
+                name,
+                input,
+                write_preview,
+            }) = entry
+            {
+                // A completed turn without a receipt cannot establish the tool's outcome.
+                *entry = ActiveEntry::Tool(ToolStatus::Done {
+                    id: id.clone(),
+                    input: input.clone(),
+                    use_text: format_tool_use(name, input),
+                    status_text: format!(
+                        "Tool result unknown: {name} · turn ended before a terminal result was received."
+                    ),
+                    diff_text: None,
+                    write_preview: write_preview.clone(),
+                });
+                changed = true;
+            }
+        }
+        changed
+    }
+
     pub(crate) fn has_running_tool_entries(&self) -> bool {
         self.entries.iter().any(|entry| match entry {
             ActiveEntry::Tool(ToolStatus::Running { .. }) => true,

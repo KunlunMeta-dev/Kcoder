@@ -7,7 +7,7 @@ import {
   getAppPreferences,
   type AppPreferences,
   type QuickPhrase,
-} from '@/tauri/appPreferences'
+} from '@/host/appPreferences'
 
 export function useQuickPhrases(): QuickPhrase[] {
   const { t } = useTranslation('common')

@@ -28,6 +28,7 @@ Completion audit:
 - For every requirement, identify the evidence that would prove completion, then inspect that evidence. Weak, indirect, missing, or merely plausible evidence is not enough.
 - Do not rely on intent, partial progress, memory of earlier work, or a plausible final answer as proof of completion.
 - If the full objective is genuinely complete and no required work remains, call `update_goal` with status `complete`, then give a concise final report.
+- Background work that is still running, a background result that has not arrived yet and an unanswered user question all count as required work; `update_goal` rejects `complete` until they settle.
 
 Blocked audit:
 - Do not call `update_goal` with status `blocked` the first time a blocker appears.

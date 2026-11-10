@@ -5,9 +5,8 @@ import { createRandomUuid } from '@/lib/random-id'
 import type { TurnFileChangesSummary } from '@/types/api'
 
 const MIN_FRAME_HEIGHT = 120
-const MAX_FRAME_HEIGHT = 1200
 const DEFAULT_FRAME_HEIGHT = 480
-const RESIZE_MESSAGE_TYPE = 'wework-inline-visualization-resize'
+const RESIZE_MESSAGE_TYPE = 'kcoder-inline-visualization-resize'
 
 // Codex visualization files are fragments that consume this host contract.
 const CODEX_VISUALIZATION_HOST_STYLES = `
@@ -131,7 +130,7 @@ function useFrameResizeMessages(
       if (event.source !== frameRef.current?.contentWindow) return
       if (!isResizeMessage(event.data, token)) return
       setHeight(
-        Math.min(MAX_FRAME_HEIGHT, Math.max(MIN_FRAME_HEIGHT, Math.ceil(event.data.height)))
+        Math.max(MIN_FRAME_HEIGHT, Math.ceil(event.data.height))
       )
     }
     window.addEventListener('message', handleResize)

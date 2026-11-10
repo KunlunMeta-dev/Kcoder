@@ -21,7 +21,6 @@ import {
   logoutGatewayAccount,
   type GatewayServer,
 } from '@/kcoder/gatewayRpc'
-import { isTauriRuntime } from '@/lib/runtime-environment'
 import { runtimeProjectToProject, runtimeProjectUiId } from '@/lib/runtime-project'
 import { getLocalRuntimeStateDeviceId } from '@/lib/runtime-project-state'
 import type { ProjectWithTasks, RuntimeProjectWork } from '@/types/api'
@@ -59,6 +58,7 @@ import {
 } from './types'
 import { useSidebarArchiveAction, useSidebarTaskPinAction } from './useSidebarActions'
 import { useSidebarWindowFocus } from './useSidebarWindowFocus'
+import { partitionPinnedProjects } from '../../../../../shared/projectPinning'
 
 export function useSidebarModel({
   onHistoryRefreshed,
@@ -116,7 +116,6 @@ export function useSidebarModel({
   onResizeStateChange,
   onPointerEnter,
   onPointerLeave,
-  onToggleSidebar,
   onOpenWorkbench,
   onOpenTodo,
   onOpenApps,
@@ -135,7 +134,6 @@ export function useSidebarModel({
   const defaultWegentBackendUrl = getRuntimeConfig().wegentBackendUrl
   const usesCloudAccount = showCloudConnectionEntry && Boolean(defaultWegentBackendUrl)
   const requiresCloudLogin = usesCloudAccount && !cloud.isConnected
-  const usesOverlayTitlebar = isTauriRuntime()
   const hasAvailableAppUpdate = Boolean(useOptionalAppUpdate()?.availableUpdate)
   const experimentalFeaturesEnabled = useExperimentalFeaturesEnabled()
   const [gatewayAccountTargets, setGatewayAccountTargets] = useState<GatewayServer[]>([])
@@ -282,19 +280,12 @@ export function useSidebarModel({
       })),
     [runtimeWorkByProjectId, sidebarProjects]
   )
-  const pinnedProjects = useMemo(
+  const { pinned: pinnedProjects, regular: regularSortableProjects } = useMemo(
     () =>
-      sortableProjects
-        .filter(({ runtimeProjectWork }) => runtimeProjectWork?.project.pinned)
-        .sort(
-          (left, right) =>
-            (left.runtimeProjectWork?.project.pinnedOrder ?? Number.MAX_SAFE_INTEGER) -
-            (right.runtimeProjectWork?.project.pinnedOrder ?? Number.MAX_SAFE_INTEGER)
-        ),
-    [sortableProjects]
-  )
-  const regularSortableProjects = useMemo(
-    () => sortableProjects.filter(({ runtimeProjectWork }) => !runtimeProjectWork?.project.pinned),
+      partitionPinnedProjects(
+        sortableProjects,
+        ({ runtimeProjectWork }) => runtimeProjectWork?.project
+      ),
     [sortableProjects]
   )
   const chatWorkspaces = useMemo(() => runtimeWork?.chats ?? [], [runtimeWork?.chats])
@@ -629,7 +620,6 @@ export function useSidebarModel({
     hideResizeHandle,
     onPointerEnter,
     onPointerLeave,
-    onToggleSidebar,
     onOpenWorkbench,
     onOpenTodo,
     onOpenApps,
@@ -642,7 +632,6 @@ export function useSidebarModel({
     cloud,
     usesCloudAccount,
     requiresCloudLogin,
-    usesOverlayTitlebar,
     hasAvailableAppUpdate,
     experimentalFeaturesEnabled,
     gatewayAccountTargets,

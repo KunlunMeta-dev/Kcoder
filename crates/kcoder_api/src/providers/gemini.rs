@@ -36,6 +36,7 @@ impl GeminiProvider {
     pub fn new(api_key: impl Into<String>, model: &str) -> Result<Self, ApiErrorKind> {
         Ok(Self {
             client: reqwest::Client::builder()
+                .redirect(reqwest::redirect::Policy::none())
                 .connect_timeout(std::time::Duration::from_secs(DEFAULT_REQUEST_TIMEOUT_SECS))
                 .build()?,
             api_key: api_key.into(),
@@ -83,6 +84,7 @@ impl GeminiProvider {
         // Do not apply a total timeout to a streaming response. Long-running
         // thinking and final text remain bounded by the engine's idle watchdog.
         let mut builder = reqwest::Client::builder()
+            .redirect(reqwest::redirect::Policy::none())
             .connect_timeout(std::time::Duration::from_secs(self.timeout_secs));
         if let Some(proxy_url) = self.proxy_url.as_deref() {
             builder = builder.proxy(reqwest::Proxy::all(proxy_url)?);

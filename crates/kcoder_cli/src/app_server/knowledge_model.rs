@@ -8,7 +8,7 @@ use kcoder_types::{ContentBlock, ContentDelta, Message, MessagesRequest, StreamE
 use std::sync::Arc;
 
 #[derive(Clone)]
-pub(super) struct ProviderWikiModel {
+pub struct ProviderWikiModel {
     pub provider: Arc<dyn Provider>,
     pub model: String,
     pub max_output_tokens: Option<u32>,
@@ -17,7 +17,7 @@ pub(super) struct ProviderWikiModel {
 }
 
 #[derive(Debug)]
-pub(super) struct WikiReportedUsage(pub Option<kcoder_knowledge::WikiTokenUsage>);
+pub struct WikiReportedUsage(pub Option<kcoder_knowledge::WikiTokenUsage>);
 impl std::fmt::Display for WikiReportedUsage {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter.write_str("Wiki model request failed")
@@ -29,7 +29,7 @@ impl WikiModel for ProviderWikiModel {
     fn estimate_input_tokens(&self, input: &WikiModelRequest) -> usize {
         let request = MessagesRequest::new(&self.model, vec![Message::user_text(&input.user)])
             .with_system(&input.system);
-        kcoder_engine::context::TokenCounter::count_request(&request, true).tokens
+        kcoder_api::token_counter::TokenCounter::count_request(&request, true).tokens
     }
 
     fn output_token_budget(&self, suggested: u32) -> Result<u32> {
@@ -78,10 +78,33 @@ impl ProviderWikiModel {
             .complete_with_image_progress(input, None, Some(progress))
             .await
     }
+
+    pub(super) async fn complete_admitted_with_progress(
+        &self,
+        input: WikiModelRequest,
+        limit: u32,
+        progress: &(dyn Fn(usize, usize) -> Result<()> + Send + Sync),
+        admission: &dyn super::knowledge_model_admission::WikiRequestAdmission,
+    ) -> Result<(String, Option<kcoder_knowledge::WikiTokenUsage>)> {
+        self.with_output_limit(&input, limit)?
+            .complete_observed(input, None, Some(progress), Some(admission))
+            .await
+    }
+
+    pub async fn complete_admitted_image_with_progress(
+        &self,
+        input: WikiModelRequest,
+        image: kcoder_types::ImageSource,
+        progress: &(dyn Fn(usize, usize) -> Result<()> + Send + Sync),
+        admission: &dyn super::knowledge_model_admission::WikiRequestAdmission,
+    ) -> Result<(String, Option<kcoder_knowledge::WikiTokenUsage>)> {
+        self.complete_observed(input, Some(image), Some(progress), Some(admission))
+            .await
+    }
     // Thinking shares the output allowance with JSON on Anthropic-compatible APIs.
     // Reserve room in both the request and the caller's context preflight; never
     // change the user's configured effort just to make a small stage fit.
-    pub(super) fn reasoning_headroom(&self) -> u32 {
+    pub fn reasoning_headroom(&self) -> u32 {
         use kcoder_types::ReasoningEffort;
         match self.reasoning.as_ref() {
             None | Some(ReasoningEffort::None) => 0,
@@ -114,21 +137,32 @@ impl ProviderWikiModel {
     ) -> Result<(String, Option<kcoder_knowledge::WikiTokenUsage>)> {
         self.complete_with_image(input, None).await
     }
-    pub(super) async fn complete_with_image(
+    pub async fn complete_with_image(
         &self,
         input: WikiModelRequest,
         image: Option<kcoder_types::ImageSource>,
     ) -> Result<(String, Option<kcoder_knowledge::WikiTokenUsage>)> {
         self.complete_with_image_progress(input, image, None).await
     }
-    pub(super) async fn complete_with_image_progress(
+    pub async fn complete_with_image_progress(
         &self,
         input: WikiModelRequest,
         image: Option<kcoder_types::ImageSource>,
         progress: Option<&(dyn Fn(usize, usize) -> Result<()> + Send + Sync)>,
     ) -> Result<(String, Option<kcoder_knowledge::WikiTokenUsage>)> {
+        self.complete_observed(input, image, progress, None).await
+    }
+
+    async fn complete_observed(
+        &self,
+        input: WikiModelRequest,
+        image: Option<kcoder_types::ImageSource>,
+        progress: Option<&(dyn Fn(usize, usize) -> Result<()> + Send + Sync)>,
+        admission: Option<&dyn super::knowledge_model_admission::WikiRequestAdmission>,
+    ) -> Result<(String, Option<kcoder_knowledge::WikiTokenUsage>)> {
         let mut usage: Option<kcoder_knowledge::WikiTokenUsage> = None;
         let mut final_usage_reported = false;
+        let mut observed = None;
         let result: Result<String> = async {
             let mut content = vec![ContentBlock::Text { text: input.user }];
             if let Some(source) = image {
@@ -139,14 +173,38 @@ impl ProviderWikiModel {
                 .with_system(input.system)
                 .with_max_tokens(requested_tokens)
                 .with_reasoning_effort(self.reasoning.clone());
+            observed = super::knowledge_model_admission::ObservedWikiRequest::reserve(
+                admission, self, &request,
+            )?;
+            if let Some(observed) = observed.as_mut() {
+                observed.dispatch()?;
+            }
             let mut stream = self.provider.stream_messages(request)?;
             let mut text = String::new();
             let mut stopped = false;
             let mut reasoning_bytes = 0usize;
             let mut last_progress = std::time::Instant::now();
 
-            while let Some(event) = stream.next().await {
+            let mut check = tokio::time::interval(std::time::Duration::from_millis(250));
+            loop {
+                let event = if let Some(observed) = observed.as_mut() {
+                    tokio::select! {
+                        biased;
+                        _ = check.tick() => {
+                            observed.check_current()?;
+                            continue;
+                        }
+                        event = stream.next() => event,
+                    }
+                } else {
+                    stream.next().await
+                };
+                let Some(event) = event else { break };
                 let event = event?;
+                if let Some(observed) = observed.as_mut() {
+                    observed.observe(&event)?;
+                    observed.check_current()?;
+                }
                 let reported = match &event {
                     StreamEvent::MessageStart { message } => message.usage.as_ref(),
                     StreamEvent::MessageDelta { delta } => delta.usage.as_ref(),
@@ -242,11 +300,16 @@ impl ProviderWikiModel {
             Ok(text)
         }
         .await;
+        let accounting = observed.map(|observed| observed.finish()).transpose();
         // A start-only usage report does not establish output usage, especially
         // after disconnect/cancellation. Preserve unknown instead of billing zero.
         if !final_usage_reported {
             usage = None;
         }
+        let result = match (result, accounting) {
+            (Ok(text), Ok(_)) => Ok(text),
+            (Err(error), _) | (_, Err(error)) => Err(error),
+        };
         match result {
             Ok(text) => Ok((text, usage)),
             Err(error) => Err(error.context(WikiReportedUsage(usage))),

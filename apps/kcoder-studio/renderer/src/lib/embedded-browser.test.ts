@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest'
-import { invoke } from '@tauri-apps/api/core'
+import { invoke } from '@/lib/runtime-commands'
 import {
   evalEmbeddedBrowserJson,
   listenEmbeddedBrowserOpenRequests,
@@ -9,16 +9,16 @@ import {
 
 const unlistenMock = vi.hoisted(() => vi.fn())
 
-vi.mock('@tauri-apps/api/core', () => ({
+vi.mock('@/lib/runtime-commands', () => ({
   invoke: vi.fn(),
 }))
 
-vi.mock('@tauri-apps/api/event', () => ({
+vi.mock('@/lib/runtime-events', () => ({
   listen: vi.fn().mockResolvedValue(unlistenMock),
 }))
 
 vi.mock('./runtime-environment', () => ({
-  isTauriRuntime: vi.fn(() => true),
+  isGatewayRuntime: vi.fn(() => true),
 }))
 
 const invokeMock = vi.mocked(invoke)
@@ -56,7 +56,7 @@ describe('embedded-browser', () => {
     await expect(evalEmbeddedBrowserJson('window.consume()')).rejects.toThrow('Evaluation failed')
   })
 
-  test('relabels an embedded browser through Tauri', async () => {
+  test('relabels an embedded browser through Gateway', async () => {
     invokeMock.mockResolvedValue(undefined)
 
     await relabelEmbeddedBrowser('workspace-browser-blank-0', 'workspace-browser-task-1')
@@ -76,10 +76,10 @@ describe('embedded-browser', () => {
       label: 'workspace-browser',
       url: 'http://localhost:3000/',
     })
-    expect(requestEmbeddedBrowserOpen('asset://localhost/Users/me/workspace/trend.html')).toBe(true)
+    expect(requestEmbeddedBrowserOpen('https://example.test/trend.html')).toBe(true)
     expect(handler).toHaveBeenCalledWith({
       label: 'workspace-browser',
-      url: 'asset://localhost/Users/me/workspace/trend.html',
+      url: 'https://example.test/trend.html',
     })
     expect(requestEmbeddedBrowserOpen('ftp://localhost/resource')).toBe(false)
     expect(handler).toHaveBeenCalledTimes(2)

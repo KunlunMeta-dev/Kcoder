@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import type { GatewayProfile, KCoderServer } from "@/gateway/types";
+import type { GatewayAuthorizationDenialWitness, GatewayProfile, KCoderServer } from "@/gateway/types";
 import {
   WORKSPACE_READ_V2,
   WORKSPACE_SCOPE_V2,
@@ -386,6 +386,80 @@ it("Native profile fence permits a held open after same-generation credential ro
   }
 });
 
+it("a stale pending-rotation snapshot preserves an auth-denial marker from another realm", async () => {
+  shared.platformOS = "web";
+  installSharedWebLocks();
+  const first = await loadRealm();
+  const second = await loadRealm();
+  const original = makeProfile();
+  await persistNativeSnapshot(first, [original], original.id);
+
+  const rotatingCoordinator = await coordinatorFor(first);
+  const denialCoordinator = await coordinatorFor(second);
+  const scopeKey = first.coordinator.profileAuthorizationScopeKey(original);
+  // DeviceAuthorizationManager captures these snapshots before it enters the
+  // profile-index lock to stage pendingRotationId.
+  const expected = { ...original };
+  const staleStage = { ...original, pendingRotationId: "review-pending-rotation" };
+  const denial = { ...original, reauthorizationRequiredScope: scopeKey } as GatewayProfile;
+
+  const witness: GatewayAuthorizationDenialWitness = {
+    profileId: original.id,
+    baseUrl: original.baseUrl,
+    authMode: original.authMode,
+    authorizationGeneration: original.authorizationGeneration,
+    deviceId: original.deviceId,
+    accessToken: original.accessToken,
+    refreshToken: original.refreshToken,
+  };
+  await denialCoordinator.recordAuthorizationDenial(witness, (profiles, activeId) =>
+    second.profileStore.persistProfiles(profiles, activeId));
+  const staged = await rotatingCoordinator.updateCredentials(expected, staleStage, (profiles, activeId) =>
+    first.profileStore.persistProfiles(profiles, activeId));
+
+  expect(staged?.pendingRotationId).toBe("review-pending-rotation");
+  const restored = await first.profileStore.loadProfiles();
+  expect(restored.profiles[0]).toMatchObject({
+    reauthorizationRequiredScope: scopeKey,
+    pendingRotationId: "review-pending-rotation",
+  });
+  const publicIndex = JSON.parse(shared.secureValues.get(PROFILE_INDEX_KEY)!);
+  expect(publicIndex.profiles[0]).toMatchObject({ reauthorizationRequiredScope: scopeKey });
+  expect(publicIndex.profiles[0]).not.toHaveProperty("accessToken");
+  expect(publicIndex.profiles[0]).not.toHaveProperty("refreshToken");
+});
+
+it("a peer validated renewal clears the marker in the existing profile object", async () => {
+  shared.platformOS = "web";
+  installSharedWebLocks();
+  const first = await loadRealm();
+  const second = await loadRealm();
+  const original = makeProfile();
+  const scopeKey = first.coordinator.profileAuthorizationScopeKey(original);
+  const denied = { ...original, reauthorizationRequiredScope: scopeKey } as GatewayProfile;
+  await persistNativeSnapshot(first, [denied], denied.id);
+
+  const reader = await coordinatorFor(first);
+  await coordinatorFor(second);
+  const retainedRuntimeProfile = reader.getSnapshot().profiles[0];
+  const renewed = {
+    ...original,
+    accessToken: "review-access-renewed",
+    refreshToken: "review-refresh-renewed",
+    expiresAt: Date.now() + 120_000,
+    refreshExpiresAt: Date.now() + 2 * 60 * 60_000,
+  };
+  await persistNativeSnapshot(second, [renewed], renewed.id);
+
+  await reader.synchronize();
+
+  const current = reader.getSnapshot().profiles[0];
+  expect(current).toBe(retainedRuntimeProfile);
+  expect(current.accessToken).toBe("review-access-renewed");
+  expect(current.refreshToken).toBe("review-refresh-renewed");
+  expect(current).not.toHaveProperty("reauthorizationRequiredScope");
+});
+
 it("Native removal preserves an unresolved V2 operation until its exact receipt is consumed", async () => {
   shared.platformOS = "android";
   const realm = await loadRealm();
@@ -572,7 +646,7 @@ it("Web migration returns the new-profile winner when a connection commits first
   }
 });
 
-it("Web migration preserves legacy bytes without Web Locks and migrates after locks become available", async () => {
+it("Web migration preserves legacy bytes without either UA coordination mechanism and migrates after coordination becomes available", async () => {
   shared.platformOS = "web";
   const realm = await loadRealm();
   const legacy = makeProfile({ id: "legacy-profile", baseUrl: "https://gateway.review.invalid/g/legacy" });
@@ -581,7 +655,7 @@ it("Web migration preserves legacy bytes without Web Locks and migrates after lo
   vi.stubGlobal("document", {});
   vi.stubGlobal("navigator", {});
 
-  await expect(realm.profileStore.migrateLegacyWebProfiles()).rejects.toThrow(/Web Locks/);
+  await expect(realm.profileStore.migrateLegacyWebProfiles()).rejects.toThrow("mobile_metadata_coordination_unavailable");
   expect(shared.secureValues.get(LEGACY_WEB_PROFILE_KEY)).toBe(legacyBytes);
   expect(shared.secureValues.has(PROFILE_INDEX_KEY)).toBe(false);
 

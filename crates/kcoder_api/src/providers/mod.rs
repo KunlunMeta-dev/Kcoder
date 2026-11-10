@@ -15,6 +15,8 @@ pub mod grok;
 pub(crate) mod limited;
 pub mod openai;
 mod path_first;
+#[cfg(test)]
+mod redirect_tests;
 mod transport_metrics;
 
 pub use anthropic::AnthropicProvider;
@@ -119,7 +121,7 @@ pub trait Provider: Send + Sync {
 
 pub(crate) fn model_list_url(base_url: &str) -> String {
     let mut base = base_url.trim().trim_end_matches('/').to_string();
-    for suffix in ["/v1/messages", "/chat/completions", "/responses", "/models"] {
+    for suffix in ["/messages", "/chat/completions", "/responses", "/models"] {
         if base.to_ascii_lowercase().ends_with(suffix) {
             base.truncate(base.len() - suffix.len());
             if suffix == "/models" {
@@ -128,7 +130,7 @@ pub(crate) fn model_list_url(base_url: &str) -> String {
             break;
         }
     }
-    if base.to_ascii_lowercase().ends_with("/v1") {
+    if reqwest::Url::parse(&base).is_ok_and(|url| !matches!(url.path(), "" | "/")) {
         format!("{base}/models")
     } else {
         format!("{base}/v1/models")
@@ -176,9 +178,10 @@ pub(crate) fn parse_model_list_json(
         .map(|id| id.strip_prefix("models/").unwrap_or(id).trim())
         .filter(|id| !id.is_empty() && id.len() <= 256 && !id.chars().any(char::is_control))
         .map(ToString::to_string)
+        .collect::<std::collections::BTreeSet<_>>()
+        .into_iter()
         .collect::<Vec<_>>();
     models.sort_by_key(|model| model.to_ascii_lowercase());
-    models.dedup();
     models.truncate(max_models.max(1));
     Ok(models)
 }
@@ -199,10 +202,24 @@ mod model_discovery_tests {
             model_list_url("http://host/v1/messages"),
             "http://host/v1/models"
         );
+        for path in [
+            "/api/paas/v4",
+            "/api/paas/v4/chat/completions",
+            "/api/paas/v4/models",
+        ] {
+            assert_eq!(
+                model_list_url(&format!("https://host{path}")),
+                "https://host/api/paas/v4/models"
+            );
+        }
     }
 
     #[test]
     fn parses_openai_and_gemini_model_lists_conservatively() {
+        assert_eq!(
+            parse_model_list_json(r#"{"data":[{"id":"A"},{"id":"a"},{"id":"A"}]}"#, 10).unwrap(),
+            vec!["A", "a"]
+        );
         assert_eq!(
             parse_model_list_json(r#"{"data":[{"id":"B"},{"id":"a"}]}"#, 10).unwrap(),
             vec!["a", "B"]

@@ -146,7 +146,7 @@ test('both desktop packages include tray controller, preload and native image re
   for (const files of [local.build.files, remote.files]) {
     for (const required of ['desktop/tray-controller.mjs', 'desktop/menu-preload.cjs', 'desktop/download-controller.mjs',
       'desktop/application-menu.mjs', 'desktop/desktop-menu-controller.mjs',
-      'renderer/src-tauri/icons/icon.ico', 'renderer/src-tauri/icons/32x32.png']) {
+      'desktop/icons/icon.ico', 'desktop/icons/32x32.png']) {
       assert.ok(files.includes(required), `missing packaged tray asset ${required}`);
       await access(new URL(`../${required}`, import.meta.url));
     }
@@ -182,5 +182,17 @@ test('unread completion state reaches the taskbar and is cleared after reading o
   f.invoke('state',{language:'zh-CN',activeTaskIds:[],unreadCount:1});
   f.contents.emit('did-start-navigation');
   assert.deepEqual(f.overlays.at(-1),[null,'']);
+  f.controller.dispose();
+});
+
+test('same-document and subframe navigation preserve the unread badge', () => {
+  const f = fixture();
+  f.invoke('state', { language: 'zh-CN', activeTaskIds: [], unreadCount: 3 });
+  const count = f.overlays.length;
+  f.contents.emit('did-start-navigation', { isMainFrame: true, isSameDocument: true });
+  f.contents.emit('did-start-navigation', { isMainFrame: false, isSameDocument: false });
+  assert.equal(f.overlays.length, count);
+  f.contents.emit('did-start-navigation', { isMainFrame: true, isSameDocument: false });
+  assert.deepEqual(f.overlays.at(-1), [null, '']);
   f.controller.dispose();
 });

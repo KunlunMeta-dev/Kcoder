@@ -1,0 +1,47 @@
+[package]
+name = "kcoder_engine_factory"
+description = "Concrete app-server Engine construction with host-owned Native installation."
+version = { workspace = true }
+edition = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+rust-version = { workspace = true }
+publish = false
+
+[lib]
+path = "../../src/internal/engine_factory/lib.rs"
+test = false
+
+[features]
+web-network-test-fixture = ["kcoder_engine/web-network-test-fixture", "kcoder_tools/web-network-test-fixture"]
+
+[dependencies]
+anyhow = { workspace = true }
+dirs = { workspace = true }
+futures = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+kcoder_api = { path = "../../../kcoder_api" }
+kcoder_app_protocol = { path = "../../../kcoder_app_protocol" }
+kcoder_cli_commands = { path = "../cli_commands" }
+kcoder_cli_storage = { path = "../cli_storage" }
+kcoder_config = { path = "../../../kcoder_config" }
+kcoder_engine = { path = "../../../kcoder_engine" }
+kcoder_knowledge_rpc = { path = "../knowledge_rpc" }
+kcoder_mcp = { path = "../../../kcoder_mcp" }
+kcoder_mcp_app_runtime = { path = "../mcp_app_runtime" }
+kcoder_memory = { path = "../../../kcoder_memory" }
+kcoder_migration = { path = "../../../kcoder_migration" }
+kcoder_permissions = { path = "../../../kcoder_permissions" }
+kcoder_plugin_rpc = { path = "../plugin_rpc" }
+kcoder_plugins = { path = "../../../kcoder_plugins" }
+kcoder_session_configuration = { path = "../session_configuration" }
+kcoder_skills = { path = "../../../kcoder_skills" }
+kcoder_state = { path = "../../../kcoder_state" }
+kcoder_tools = { path = "../../../kcoder_tools" }
+kcoder_types = { path = "../../../kcoder_types" }

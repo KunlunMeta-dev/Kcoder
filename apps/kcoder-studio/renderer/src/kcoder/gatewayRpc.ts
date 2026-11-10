@@ -1,4 +1,10 @@
+import { getRuntimeConfig, joinAppPath } from '@/config/runtime'
+import { ThreadRuntimeHandoffClient, THREAD_RUNTIME_HANDOFF_CAPABILITY } from '../../../shared/threadRuntimeHandoff.mjs'
 import { isGatewayUnknownOutcome } from '../../../shared/gatewayRequestDeadline.js'
+import { INTEGRATION_CONTROL_CAPABILITIES } from '../../../shared/integrationControlMethods.mjs'
+import { isContract } from '../../../shared/generated/validator.mjs'
+import type { IntegrationScope } from '../../../shared/generated/contracts'
+import { publicImplementation, type NegotiatedRemoteFacts } from './remotes/negotiatedFacts'
 import { notifyAccountContextChange } from './accountContextEvents'
 import { navigateGatewayLogin } from './gatewayLoginNavigation'
 import { gatewayConnectionBudget, gatewayReconnectDelay } from './gatewayConnectionBudget'
@@ -6,6 +12,11 @@ import { createRandomUuid } from '@/lib/random-id'
 // Use the application's translation singleton without initializing language
 // detection or Storage merely by importing the transport boundary.
 import i18n from 'i18next'
+import {
+  nativeIsolatedWidgetsAvailable,
+  nativeMcpAppBridgeAvailable,
+} from './nativeWidgetCapabilities'
+import { sessionHistoryErrorMessage } from './sessionHistoryError'
 import {
   gatewayRequestOutcome,
   gatewayRequestTimeoutMs,
@@ -44,6 +55,7 @@ export interface GatewayServerHealth {
 }
 
 export interface GatewayServer extends GatewayServerConfig {
+  observationTargetIdentity?: string
   accountIdentity?: { principalId: string; username: string; role: 'admin' | 'user' }
   authorityId?: string
   capabilities?: {
@@ -90,11 +102,16 @@ interface RpcMessage {
 }
 
 interface InitializeResult {
+  serverInfo?: { name?: unknown; version?: unknown }
   protocolVersion?: string
   capabilities?: {
     threadResume?: boolean
     experimental?: Record<string, boolean>
   }
+}
+
+function gatewayPath(path: string): string {
+  return joinAppPath(getRuntimeConfig().appBasePath, path)
 }
 
 const KCODER_APP_SERVER_PROTOCOL_VERSION = '2026-07-27'
@@ -184,7 +201,8 @@ export class GatewayRpcError extends Error {
     targetId: string | null = null,
     diagnosticContext?: GatewayDiagnosticContext
   ) {
-    super(message)
+    const userMessage = sessionHistoryErrorMessage(message)
+    super(userMessage, userMessage === message ? undefined : { cause: new Error(message) })
     this.name = 'GatewayRpcError'
     this.code = Number.isSafeInteger(code) ? code : -1
     this.data = data
@@ -288,7 +306,7 @@ export function isKCoderDesktopHostPage(documentLike: Document = document): bool
 export function submitKCoderGatewayLogout(documentLike: Document = document): void {
   const form = documentLike.createElement('form')
   form.method = 'post'
-  form.action = '/logout'
+  form.action = gatewayPath('/logout')
   form.hidden = true
   documentLike.body.appendChild(form)
   form.submit()
@@ -297,7 +315,7 @@ export function submitKCoderGatewayLogout(documentLike: Document = document): vo
 export async function fetchGatewayServers(
   fetchImpl: typeof fetch = fetch
 ): Promise<GatewayServer[]> {
-  const response = await fetchImpl('/api/servers', { cache: 'no-store' })
+  const response = await fetchImpl(gatewayPath('/api/servers'), { cache: 'no-store' })
   requireGatewayResponse(response, '读取运行目标列表', 'list-targets')
   if (!response.ok)
     throw new GatewayRpcError(
@@ -323,7 +341,7 @@ export async function fetchGatewayServers(
 export async function fetchGatewayServerStatuses(
   fetchImpl: typeof fetch = fetch
 ): Promise<GatewayServerHealth[]> {
-  const response = await fetchImpl('/api/servers/status', { cache: 'no-store' })
+  const response = await fetchImpl(gatewayPath('/api/servers/status'), { cache: 'no-store' })
   requireGatewayResponse(response, '读取运行目标状态', 'target-health')
   if (!response.ok)
     throw new GatewayRpcError(
@@ -413,7 +431,7 @@ export async function saveGatewayServer(
   server: GatewayServerConfig,
   fetchImpl: typeof fetch = fetch
 ): Promise<GatewayServer> {
-  const response = await fetchImpl(`/api/servers/${encodeURIComponent(server.id)}`, {
+  const response = await fetchImpl(gatewayPath(`/api/servers/${encodeURIComponent(server.id)}`), {
     method: 'PUT',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(gatewayServerPayload(server)),
@@ -477,7 +495,7 @@ async function accountJson<T>(
 }
 
 export async function fetchGatewayAccountStatus(id: string): Promise<GatewayAccountStatus> {
-  const response = await fetch(`/api/servers/${encodeURIComponent(id)}/account`, {
+  const response = await fetch(gatewayPath(`/api/servers/${encodeURIComponent(id)}/account`), {
     cache: 'no-store',
   })
   return accountJson<GatewayAccountStatus>(response, '读取 KCoder 账号状态', 'account-status')
@@ -494,7 +512,7 @@ export async function loginGatewayAccount(
   id: string,
   input: GatewayAccountLoginInput
 ): Promise<GatewayAccountStatus> {
-  const response = await fetch(`/api/servers/${encodeURIComponent(id)}/account`, {
+  const response = await fetch(gatewayPath(`/api/servers/${encodeURIComponent(id)}/account`), {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
@@ -518,7 +536,7 @@ export async function autoLoginGatewayAccount(
   id: string,
   deviceId: string
 ): Promise<GatewayAccountStatus> {
-  const response = await fetch(`/api/servers/${encodeURIComponent(id)}/account`, {
+  const response = await fetch(gatewayPath(`/api/servers/${encodeURIComponent(id)}/account`), {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ auto: true, deviceId }),
@@ -533,7 +551,7 @@ export async function autoLoginGatewayAccount(
 }
 
 export async function logoutGatewayAccount(id: string, deviceId?: string): Promise<void> {
-  const response = await fetch(`/api/servers/${encodeURIComponent(id)}/account`, {
+  const response = await fetch(gatewayPath(`/api/servers/${encodeURIComponent(id)}/account`), {
     method: 'DELETE',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(deviceId ? { deviceId } : {}),
@@ -546,7 +564,7 @@ export async function manageGatewayAccounts<T>(
   id: string,
   operation: Record<string, unknown>
 ): Promise<T> {
-  const response = await fetch(`/api/servers/${encodeURIComponent(id)}/accounts`, {
+  const response = await fetch(gatewayPath(`/api/servers/${encodeURIComponent(id)}/accounts`), {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(operation),
@@ -559,7 +577,7 @@ export async function testGatewayServer(
   server: GatewayServerConfig,
   fetchImpl: typeof fetch = fetch
 ): Promise<GatewayConnectionTestResult> {
-  const response = await fetchImpl('/api/servers/test', {
+  const response = await fetchImpl(gatewayPath('/api/servers/test'), {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(gatewayServerPayload(server)),
@@ -574,7 +592,7 @@ export async function removeGatewayServer(
   id: string,
   fetchImpl: typeof fetch = fetch
 ): Promise<void> {
-  const response = await fetchImpl(`/api/servers/${encodeURIComponent(id)}`, {
+  const response = await fetchImpl(gatewayPath(`/api/servers/${encodeURIComponent(id)}`), {
     method: 'DELETE',
     headers: { 'content-type': 'application/json' },
     body: '{}',
@@ -593,6 +611,7 @@ export class GatewayRpcClient extends EventTarget {
   private authenticationFailure: GatewayRpcError | null = null
   private authenticationCheck: Promise<void> | null = null
   private experimentalCapabilities: Record<string, boolean> = {}
+  private negotiatedRemoteFacts: NegotiatedRemoteFacts | null = null
   private threadResumeCapability = false
   private nextId = 1
   get diagnosticConnection() {
@@ -618,6 +637,12 @@ export class GatewayRpcClient extends EventTarget {
   private readonly channel: 'runtime' | 'browser'
   private readonly workspacePath?: string
   private readonly fetchImpl: typeof fetch
+  private nativeManagementOnly = false
+
+  useNativeManagementTransport(): void {
+    if (this.socket || this.ready) throw new GatewayRpcError('Native management transport is already initialized')
+    this.nativeManagementOnly = true
+  }
 
   constructor(
     serverId: string,
@@ -717,10 +742,11 @@ export class GatewayRpcClient extends EventTarget {
   private async connectAndInitialize(): Promise<void> {
     const socket = await new Promise<WebSocket>((resolve, reject) => {
       const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:'
-      const url = new URL(`${protocol}//${location.host}/rpc`)
+      const url = new URL(`${protocol}//${location.host}${gatewayPath('/rpc')}`)
       url.searchParams.set('token', this.token)
       url.searchParams.set('server', this.serverId)
       if (this.channel === 'browser') url.searchParams.set('channel', 'browser')
+      if (this.nativeManagementOnly) url.searchParams.set('nativeManagement', '1')
       if (this.workspacePath) url.searchParams.set('workspace', this.workspacePath)
       const socket = new this.WebSocketImpl(url)
       this.socket = socket
@@ -760,6 +786,7 @@ export class GatewayRpcClient extends EventTarget {
         if (this.socket !== socket) return
         this.socket = null
         this.ready = false
+        this.negotiatedRemoteFacts = null
         const error = new GatewayRpcError(
           'KCoder app-server 连接已断开',
           -1,
@@ -787,32 +814,67 @@ export class GatewayRpcClient extends EventTarget {
       })
     })
     try {
+      const isolatedWidgets = await nativeIsolatedWidgetsAvailable()
       const initialized = await this.request<InitializeResult>('initialize', {
         protocolVersion: KCODER_APP_SERVER_PROTOCOL_VERSION,
         clientInfo: { name: 'kcoder-studio-wework', version: __KCODER_STUDIO_APP_VERSION__ },
         capabilities: {
           experimental: {
+            ...Object.fromEntries(
+              INTEGRATION_CONTROL_CAPABILITIES.map(capability => [capability, true])
+            ),
+            acpInboundV1: true,
+            studioWorkModesV1: true,
+            agentDefinitionsV1: true,
+            agentTurnConfigurationV1: true,
+            gatewaySharedThreadsV1: this.channel === 'runtime',
+            asyncUserQuestionsV1: true,
+            webSearchStatusV1: true,
+            webSearchProbeV1: true,
+            workflowCollaborationV1: true,
+            agentExactRunV1: true,
+            agentExactControlV1: true,
+            agentExactContinuationV1: true,
+            migrationHistoryWorkerStateClientV1: true,
+            inlineWidgetsV1: true,
+            isolatedWidgetsV1: isolatedWidgets,
+            mcpAppsV1: isolatedWidgets && nativeMcpAppBridgeAvailable(),
             browserAttachments: true,
             terminalSessions: true,
             workspaceFiles: true,
+            turnFileCaptureV1: true,
+            turnReviewEvidenceV1: true,
+            taskComparisonV1: true,
+            taskDeliveryV1: true,
             workspaceBinaryRevisionV1: true,
             toolPathPreviewV1: true,
             threadStreamContextV1: true,
+            sessionLifetimeV1: true,
             computerUseRecoveryV1: true,
             computerUseSessionAuthorizationV1: true,
             // Opt into the authoritative thread run projection so a pending
             // approval, background work or pending delivery is not collapsed
             // into the coarse running/idle status.
             threadRunSummaryV1: true,
+            [THREAD_RUNTIME_HANDOFF_CAPABILITY]: true,
+            threadGoalStatusBatchV1: true,
+            continuousWorkReadV1: true,
+            continuousWorkPartialListV1: true,
             // Opt into requiring every interaction reply to name the
             // interaction it answers, so a transport id from an earlier
             // connection generation can never be applied to a new turn.
             interactionBindingV1: true,
+            interactionStatusReadV1: true,
             // Opt into refusing a repeated submission identity, so a retry after
             // an unknown outcome cannot run the turn twice.
             turnSubmissionV1: true,
             turnRetryOperationV1: true,
             retryModelConfigurationV1: true,
+            ...(this.nativeManagementOnly ? {
+              gatewaySharedThreadsV1: false,
+              taskSourcesV1: false,
+              [THREAD_RUNTIME_HANDOFF_CAPABILITY]: false,
+            } : {}),
           },
         },
       })
@@ -824,6 +886,20 @@ export class GatewayRpcClient extends EventTarget {
       if (this.socket !== socket) throw new GatewayRpcError('Gateway connection was replaced')
       this.experimentalCapabilities = initialized.capabilities?.experimental ?? {}
       this.threadResumeCapability = initialized.capabilities?.threadResume === true
+      const publicCapabilities = Object.entries(this.experimentalCapabilities).filter(
+        ([name, value]) => /^[A-Za-z][A-Za-z0-9._-]{0,127}$/.test(name) && typeof value === 'boolean'
+      )
+      this.negotiatedRemoteFacts = {
+        connectionId: this.diagnosticConnection.connectionId,
+        protocolVersion: initialized.protocolVersion,
+        implementationName: publicImplementation(initialized.serverInfo?.name),
+        implementationVersion: publicImplementation(initialized.serverInfo?.version),
+        observedAt: new Date().toISOString(),
+        capabilities: Object.fromEntries(publicCapabilities.slice(0, 512)),
+        capabilityListComplete: publicCapabilities.length <= 512
+          && publicCapabilities.length === Object.keys(this.experimentalCapabilities).length,
+        nativeScope: null,
+      }
       this.notify('initialized')
       this.ready = true
     } catch (error) {
@@ -868,8 +944,27 @@ export class GatewayRpcClient extends EventTarget {
     }
   }
 
+  /** Observe only: this never connects/reconnects, probes a runner or sends a request. */
+  readNegotiatedRemoteFacts(): NegotiatedRemoteFacts | null {
+    if (
+      !this.ready ||
+      this.socket?.readyState !== WebSocket.OPEN ||
+      this.connectionAbort.signal.aborted
+    ) return null
+    return this.negotiatedRemoteFacts ? structuredClone(this.negotiatedRemoteFacts) : null
+  }
+
   supportsExperimental(capability: string): boolean {
     return this.experimentalCapabilities[capability] === true
+  }
+
+  runtimeHandoff(): ThreadRuntimeHandoffClient {
+    return new ThreadRuntimeHandoffClient({
+      request: (method, params) => this.request(method, params),
+      supported: () => this.ready && this.socket?.readyState === WebSocket.OPEN
+        && this.supportsExperimental(THREAD_RUNTIME_HANDOFF_CAPABILITY),
+      ownerStamp: () => this.connectionEpoch,
+    })
   }
 
   supportsThreadResume(): boolean {
@@ -882,11 +977,16 @@ export class GatewayRpcClient extends EventTarget {
     options?: GatewayRequestOptions
   ): Promise<T> {
     options?.signal?.throwIfAborted()
+    if (this.nativeManagementOnly && method !== 'initialize' && method !== 'gateway/client/detach'
+      && !/^integrations\/(scope\/read|operation\/read|connectivity\/|services\/channel\/)/.test(method)) {
+      throw new GatewayRpcError('Native management transport cannot execute task commands')
+    }
     const timeoutMs = gatewayRequestTimeoutMs(method, options?.timeoutMs)
     const startedAt = Date.now()
     // An open socket sends synchronously so an in-flight close still rejects
     // this request with its connection error instead of silently reconnecting.
-    if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+    if (this.socket && this.socket.readyState === WebSocket.OPEN
+      && (this.ready || method === 'initialize')) {
       return this.sendRequest<T>(method, params, timeoutMs, options?.signal)
     }
     // A queued connection also belongs to this request's deadline. Aborting one
@@ -926,6 +1026,26 @@ export class GatewayRpcClient extends EventTarget {
       Math.max(1, timeoutMs - (Date.now() - startedAt)),
       options?.signal
     )
+  }
+
+  /** Resource cleanup/renewal must use its original logical channel, without reconnecting. */
+  requestOnConnection<T = unknown>(
+    connectionId: string,
+    method: string,
+    params: Record<string, unknown> = {},
+    options?: { signal?: AbortSignal }
+  ): Promise<T> {
+    options?.signal?.throwIfAborted()
+    if (
+      !this.ready ||
+      this.socket?.readyState !== WebSocket.OPEN ||
+      this.connectionAbort.signal.aborted ||
+      this.diagnosticConnection.connectionId !== connectionId
+    )
+      return Promise.reject(
+        new GatewayRpcError('migration_history_view_connection_changed', -32049)
+      )
+    return this.sendRequest<T>(method, params, gatewayRequestTimeoutMs(method), options?.signal)
   }
 
   private sendRequest<T>(
@@ -972,6 +1092,15 @@ export class GatewayRpcClient extends EventTarget {
         diagnosticContext,
         resolve: value => {
           cleanup()
+          if (
+            method === 'integrations/scope/read' &&
+            this.socket === socket &&
+            this.ready &&
+            this.negotiatedRemoteFacts &&
+            isContract('IntegrationScope', value)
+          ) {
+            this.negotiatedRemoteFacts.nativeScope = structuredClone(value) as IntegrationScope
+          }
           resolve(value as T)
         },
         reject: error => {
@@ -1018,6 +1147,7 @@ export class GatewayRpcClient extends EventTarget {
     this.connectionAbort.abort()
     this.ready = false
     this.experimentalCapabilities = {}
+    this.negotiatedRemoteFacts = null
     this.threadResumeCapability = false
     this.socket?.close(1000, 'KCoder Studio runtime disposed')
   }
@@ -1027,7 +1157,7 @@ export class GatewayRpcClient extends EventTarget {
     try {
       message = JSON.parse(raw) as RpcMessage
     } catch {
-      this.dispatchEvent(new CustomEvent('protocol-error', { detail: raw }))
+      this.dispatchEvent(new CustomEvent('protocol-error', { detail: 'Invalid JSON-RPC frame' }))
       return
     }
     if (typeof message.id === 'number' && message.method) {

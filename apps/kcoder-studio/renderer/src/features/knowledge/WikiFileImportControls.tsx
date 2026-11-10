@@ -44,7 +44,10 @@ export function WikiFileImportControls({
   const limit = (items: WikiFileCapability[]) =>
     Math.max(...items.map(item => item.maxFileBytes)) / (1024 * 1024)
   return (
-    <div className="space-y-5">
+    <div
+      data-testid="knowledge-import-card"
+      className="studio-card-spacing space-y-4 rounded-2xl border border-border/70 bg-background"
+    >
       <input
         ref={picker}
         type="file"
@@ -60,7 +63,7 @@ export function WikiFileImportControls({
           if (!busy && files.length) onFiles(files)
         }}
       />
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3 border-b border-border/60 pb-4">
         <Button
           variant="outline"
           size="sm"
@@ -104,27 +107,21 @@ export function WikiFileImportControls({
           const files = Array.from(event.dataTransfer.files)
           if (files.length) onFiles(files)
         }}
-        className={`flex flex-wrap items-center gap-5 rounded-2xl border p-5 transition-colors ${dragging && !busy ? 'border-focus bg-accent-surface' : 'border-border/60 bg-surface/30'} ${busy ? 'opacity-60' : ''}`}
+        className={`flex flex-wrap items-center gap-4 rounded-xl border border-dashed p-4 transition-colors ${dragging && !busy ? 'border-focus bg-muted/60' : 'border-border/60 bg-surface/50'} ${busy ? 'opacity-60' : ''}`}
       >
-        <span
-          aria-hidden="true"
-          className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-accent-surface text-focus"
+        <button
+          type="button"
+          disabled={busy}
+          data-testid="wiki-upload-browse"
+          aria-label={t('upload')}
+          title={t('upload')}
+          onClick={() => picker.current?.click()}
+          className="flex size-12 shrink-0 items-center justify-center rounded-xl text-text-primary transition-colors hover:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus disabled:cursor-not-allowed"
         >
-          <Upload className="size-6" />
-        </span>
+          <Upload className="size-6" aria-hidden="true" />
+        </button>
         <div className="min-w-0 flex-1 basis-64">
-          <p className="text-base font-medium">
-            {t('dropFiles')}{' '}
-            <button
-              type="button"
-              disabled={busy}
-              data-testid="wiki-upload-browse"
-              className="rounded text-focus hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus max-md:min-h-11"
-              onClick={() => picker.current?.click()}
-            >
-              {t('upload')}
-            </button>
-          </p>
+          <p className="text-base font-medium">{t('dropFiles')}</p>
           <p className="mt-1 text-sm leading-relaxed text-text-secondary">
             {t('supportedExtensions', {
               extensions: capabilities
@@ -145,10 +142,10 @@ export function WikiFileImportControls({
             </span>
           </p>
         </div>
-        <div className="flex flex-wrap gap-3">
+        <div className="flex flex-wrap gap-3 max-sm:w-full">
           {documents.length > 0 && (
             <div className="flex items-center gap-3 rounded-xl bg-background/60 p-3">
-              <FileText aria-hidden="true" className="size-5 shrink-0 text-focus" />
+              <FileText aria-hidden="true" className="size-5 shrink-0 text-text-secondary" />
               <div>
                 <p className="text-sm font-medium">
                   {t('documentSize', { size: limit(documents) })}
@@ -159,7 +156,7 @@ export function WikiFileImportControls({
           )}
           {images.length > 0 && (
             <div className="flex items-center gap-3 rounded-xl bg-background/60 p-3">
-              <Image aria-hidden="true" className="size-5 shrink-0 text-focus" />
+              <Image aria-hidden="true" className="size-5 shrink-0 text-text-secondary" />
               <div>
                 <p className="text-sm font-medium">{t('imageSize', { size: limit(images) })}</p>
                 <p className="mt-1 text-xs text-text-muted">{t('imageProcessing')}</p>

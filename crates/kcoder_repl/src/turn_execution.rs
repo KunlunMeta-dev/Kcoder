@@ -44,6 +44,7 @@ pub(super) fn spawn_turn(
 
     tokio::spawn(async move {
         let mut completion = TurnCompletionGuard::new(tx.clone());
+        completion.set_steering(steer_session.as_ref().map(TurnSteerSession::settlement));
         let goal_at_start = engine.state.goal().filter(|goal| goal.status.is_active());
         let goal_turn_started_at = Instant::now();
         let mut goal_turn_failure: Option<GoalTurnFailure> = None;
@@ -52,9 +53,13 @@ pub(super) fn spawn_turn(
         // Even if background notifications are refreshed before startup, later user input
         // cannot accidentally enter the next-turn queue.
         let mut stream = if let Some(steer_session) = steer_session {
-            engine.run_turn_stream_with_cancel_and_steering(&prompt, turn_cancel, steer_session)
+            engine.run_turn_stream_with_cancel_and_steering(
+                &prompt,
+                turn_cancel.clone(),
+                steer_session,
+            )
         } else {
-            engine.run_turn_stream_with_cancel(&prompt, turn_cancel)
+            engine.run_turn_stream_with_cancel(&prompt, turn_cancel.clone())
         };
 
         // Drain any subagent notifications that have piled up so far
@@ -75,6 +80,10 @@ pub(super) fn spawn_turn(
 
         let _ = tx.send_ordered(AppEvent::TurnStarted).await;
         while let Some(event) = stream.next().await {
+            let is_tool_result_boundary = matches!(
+                &event,
+                EngineEvent::ToolResult { .. } | EngineEvent::ToolDenied { .. }
+            );
             if matches!(
                 event,
                 EngineEvent::Error(_)
@@ -82,6 +91,8 @@ pub(super) fn spawn_turn(
                     | EngineEvent::StreamAborted { .. }
                     | EngineEvent::MaxTurnsReached { .. }
             ) {
+                // Close admission before publishing a terminal event or waiting on UI work.
+                completion.close_steering();
                 orchestrate_turn_failed = true;
             }
             if let Some(failure) = goal_turn_failure_from_engine_event(&event) {
@@ -98,7 +109,30 @@ pub(super) fn spawn_turn(
                 orchestrate_turn_failed = true;
                 break;
             }
+            if is_tool_result_boundary {
+                let (resume_tx, mut resume_rx) = tokio::sync::oneshot::channel();
+                if !tx
+                    .send_ordered(AppEvent::TurnToolResultBoundary { resume_tx })
+                    .await
+                {
+                    orchestrate_turn_failed = true;
+                    break;
+                }
+                tokio::select! {
+                    result = &mut resume_rx => {
+                        if result.is_err() {
+                            orchestrate_turn_failed = true;
+                            break;
+                        }
+                    }
+                    _ = turn_cancel.cancelled() => {
+                        orchestrate_turn_failed = true;
+                        break;
+                    }
+                }
+            }
         }
+        completion.close_steering();
         if !orchestrate_turn_failed
             && let Some((keys, turn_id)) = background_followup
             && !keys.is_empty()

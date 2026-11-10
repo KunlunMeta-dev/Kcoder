@@ -28,7 +28,7 @@ await runE2E(import.meta.url, { testId: 'storage-scan-switch-and-targeted-cleanu
     await page.goto(`${gateway.baseUrl}/settings/storage`);
     await waitFor(async () => (await page.getByTestId('storage-total').innerText()).includes(context.pathInState('alpha')), 15000, 'alpha report');
     await page.evaluate(() => {
-      const api = window.__TAURI_INTERNALS__; const invoke = api.invoke;
+      const api = window.__ELECTRON_INTERNALS__; const invoke = api.invoke;
       api.invoke = async (command, args) => {
         const result = await invoke(command, args);
         if (!window.__storageHeld && command === 'local_executor_request' && args?.method === 'runtime.diagnostics.request' && args.params?.serverId === 'alpha' && args.params?.method === 'diagnostics/storage/read') {
@@ -57,7 +57,7 @@ await runE2E(import.meta.url, { testId: 'storage-scan-switch-and-targeted-cleanu
     await mkdir(context.pathInState('beta/logs/llm-request'), { recursive: true });
     await writeFile(context.pathInState('beta/logs/llm-request/after.json'), 'new data'.repeat(1000));
     await page.evaluate(() => {
-      const api = window.__TAURI_INTERNALS__; const invoke = api.invoke;
+      const api = window.__ELECTRON_INTERNALS__; const invoke = api.invoke;
       api.invoke = async (command, args) => {
         const result = await invoke(command, args);
         if (!window.__cancelHeld && command === 'local_executor_request' && args?.method === 'runtime.diagnostics.request' && args.params?.serverId === 'beta' && args.params?.method === 'diagnostics/storage/read') {

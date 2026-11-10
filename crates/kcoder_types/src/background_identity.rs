@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 /// A durable execution identity; wall-clock timestamps are not identifiers.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "json-schema", derive(schemars::JsonSchema))]
 pub struct BackgroundRunKey {
     pub parent_session_id: String,
     pub agent_id: String,
@@ -12,6 +13,7 @@ pub struct BackgroundRunKey {
 /// Logical identity survives transport reconnection and event replay.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "json-schema", derive(schemars::JsonSchema))]
 pub struct BackgroundEventIdentity {
     pub run: BackgroundRunKey,
     pub event_id: String,

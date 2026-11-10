@@ -1,9 +1,14 @@
-import { convertFileSrc } from '@tauri-apps/api/core'
+import { clientResourceUrl } from '@/lib/client-resource-url'
 import { getAttachmentImageUrl } from '@/lib/attachments'
 
 const ATTACHMENT_DOWNLOAD_PATH_PATTERN = /\/(?:api\/)?attachments\/(\d+)\/download(?:[?#].*)?$/
-const WORKSPACE_MARKDOWN_IMAGE_HOST = 'wework.local'
+export const WORKSPACE_MARKDOWN_HOST = 'kcoder.invalid'
+const LEGACY_WORKSPACE_MARKDOWN_HOST = 'wework.local'
 const WORKSPACE_MARKDOWN_IMAGE_PATH = '/markdown-workspace-image'
+
+export function isWorkspaceMarkdownHost(hostname: string): boolean {
+  return hostname === WORKSPACE_MARKDOWN_HOST || hostname === LEGACY_WORKSPACE_MARKDOWN_HOST
+}
 
 export type MarkdownLinkTarget =
   | { kind: 'external' }
@@ -17,7 +22,6 @@ export type MarkdownLinkTarget =
     }
 
 const HTML_FILE_PATTERN = /\.(?:html?|xhtml)$/i
-const LOCAL_TAURI_PATH_PREFIXES = ['/Users/', '/Volumes/', '/private/', '/tmp/', '/var/']
 
 // Assistant responses frequently reference repository files with relative or
 // absolute filesystem paths. Rendering those as plain anchors makes the browser
@@ -43,10 +47,6 @@ export function classifyMarkdownLink(href?: string): MarkdownLinkTarget {
       return { kind: 'none' }
     }
   }
-  const localTauriPath = localPathFromTauriUrl(value)
-  if (localTauriPath) {
-    return { kind: 'file', ...splitMarkdownFileLineSuffix(localTauriPath) }
-  }
   if (value.startsWith('file://')) {
     return { kind: 'file', ...splitMarkdownFileLineSuffix(localPathFromMarkdownImageSrc(value)) }
   }
@@ -59,10 +59,10 @@ export function isHtmlFilePath(path: string): boolean {
 }
 
 export function localHtmlBrowserUrl(path: string): string | null {
-  if (!isHtmlFilePath(path) || typeof convertFileSrc !== 'function') return null
+  if (!isHtmlFilePath(path) || typeof clientResourceUrl !== 'function') return null
 
   try {
-    return convertFileSrc(path)
+    return clientResourceUrl(path)
   } catch {
     return null
   }
@@ -92,10 +92,10 @@ export function resolveDirectMarkdownImageSrc(src: string): string | null {
   if (!isLocalMarkdownImagePath(src)) return src
 
   const localPath = localPathFromMarkdownImageSrc(src)
-  if (typeof convertFileSrc !== 'function') return null
+  if (typeof clientResourceUrl !== 'function') return null
 
   try {
-    return convertFileSrc(localPath)
+    return clientResourceUrl(localPath)
   } catch {
     return null
   }
@@ -116,7 +116,7 @@ export function localPathFromMarkdownImageSrc(src: string): string {
 
 export function encodeWorkspaceMarkdownImageSrc(src: string): string {
   if (decodeWorkspaceMarkdownImageSrc(src) !== null) return src
-  return `https://${WORKSPACE_MARKDOWN_IMAGE_HOST}${WORKSPACE_MARKDOWN_IMAGE_PATH}?path=${encodeURIComponent(src)}`
+  return `https://${WORKSPACE_MARKDOWN_HOST}${WORKSPACE_MARKDOWN_IMAGE_PATH}?path=${encodeURIComponent(src)}`
 }
 
 function decodeWorkspaceMarkdownImageSrc(src: string): string | null {
@@ -124,27 +124,12 @@ function decodeWorkspaceMarkdownImageSrc(src: string): string | null {
     const url = new URL(src)
     if (
       url.protocol !== 'https:' ||
-      url.hostname !== WORKSPACE_MARKDOWN_IMAGE_HOST ||
+      !isWorkspaceMarkdownHost(url.hostname) ||
       url.pathname !== WORKSPACE_MARKDOWN_IMAGE_PATH
     ) {
       return null
     }
     return url.searchParams.get('path')
-  } catch {
-    return null
-  }
-}
-
-function localPathFromTauriUrl(value: string): string | null {
-  try {
-    const url = new URL(value)
-    if (url.protocol !== 'tauri:' || url.hostname !== 'localhost') return null
-
-    const pathname = decodeURIComponent(url.pathname)
-    if (LOCAL_TAURI_PATH_PREFIXES.some(prefix => pathname.startsWith(prefix))) {
-      return pathname
-    }
-    return /^\/[a-zA-Z]:\//.test(pathname) ? pathname.slice(1) : null
   } catch {
     return null
   }

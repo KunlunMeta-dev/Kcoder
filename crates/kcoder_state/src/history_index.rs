@@ -4,13 +4,18 @@ use anyhow::{Context, Result, ensure};
 use rusqlite::{Connection, TransactionBehavior, limits::Limit, params};
 
 mod committed_projection;
-mod files;
+pub(crate) mod files;
+pub use files::{
+    HistoryCatalogBusy, HistoryCatalogCapacityReached, HistoryCatalogRecoveryRequired,
+};
 pub mod journal;
 mod list_projection;
 mod observation;
 mod tracked_catalog;
+mod transcript_observation;
 mod transcript_pages;
 mod transcript_receipt;
+pub use transcript_observation::{TranscriptObservationFence, transcript_input_identity};
 pub use transcript_pages::{TranscriptPageStore, TranscriptRowLimitExceeded, TranscriptStoredPage};
 pub use transcript_receipt::TranscriptReadFence;
 

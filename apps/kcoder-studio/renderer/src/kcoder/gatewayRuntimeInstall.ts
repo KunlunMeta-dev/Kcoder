@@ -1,5 +1,3 @@
-import { mockIPC, mockWindows } from '@tauri-apps/api/mocks'
-import { isTauriRuntime } from '@/lib/runtime-environment'
 import { gatewayVerificationConfig } from '@/e2e/gateway-verification'
 import { copyTextToClipboard } from '@/lib/clipboard'
 import { gatewayToken } from './gatewayRpc'
@@ -90,6 +88,9 @@ export function createGatewayIpcHandler(runtime: KCoderGatewayRuntime): GatewayI
     if (command === 'cancel_local_attachment_upload') return runtime.cancelAttachmentUpload(args)
     if (command === 'read_local_attachment_file') return runtime.readAttachment(args)
     if (command === 'embedded_browser_open') return runtime.openBrowser(args)
+    if (command === 'embedded_browser_profiles') return runtime.browserProfiles(args)
+    if (command === 'embedded_browser_handoff') return runtime.browserHandoff(args)
+    if (command === 'embedded_browser_close_for_account_switch') return runtime.closeBrowserForAccountSwitch(args.label)
     if (command === 'embedded_browser_set_bounds') return runtime.setBrowserBounds(args)
     if (command === 'embedded_browser_navigate') {
       return runtime.controlBrowser(args.label, { action: 'navigate', url: text(args.url) })
@@ -165,121 +166,18 @@ export function createGatewayIpcHandler(runtime: KCoderGatewayRuntime): GatewayI
       command === 'log_system_drag_debug' ||
       command === 'set_tray_menu_state' ||
       command === 'open_appshots_permission_settings' ||
-      command === 'acknowledge_appshot' ||
-      command === 'plugin:log|log'
+      command === 'acknowledge_appshot'
     ) {
       return null
     }
-    if (command.startsWith('plugin:window|')) return null
     throw new Error(`KCoder browser mode does not support native command: ${command}`)
   }
 }
 
-interface GatewayIpcInstallationLayer {
-  active: boolean
-  installedInvoke: unknown
-  restore: () => void
-}
-
-const ipcLayerByInvoke = new Map<unknown, GatewayIpcInstallationLayer>()
-
-type TauriWindow = typeof window & {
-  __TAURI_INTERNALS__?: Record<string, unknown>
-  __TAURI_EVENT_PLUGIN_INTERNALS__?: Record<string, unknown>
-  __KCODER_GATEWAY_WEB_SHIM__?: boolean
-}
-
-interface WindowObjectSnapshot {
-  key: '__TAURI_INTERNALS__' | '__TAURI_EVENT_PLUGIN_INTERNALS__' | '__KCODER_GATEWAY_WEB_SHIM__'
-  present: boolean
-  descriptor: PropertyDescriptor | undefined
-  value: unknown
-  objectDescriptors: PropertyDescriptorMap | null
-}
-
-function snapshotWindowObject(target: TauriWindow, key: WindowObjectSnapshot['key']) {
-  const present = Object.prototype.hasOwnProperty.call(target, key)
-  const value = target[key]
-  return {
-    key,
-    present,
-    descriptor: present ? Object.getOwnPropertyDescriptor(target, key) : undefined,
-    value,
-    objectDescriptors:
-      value && typeof value === 'object' ? Object.getOwnPropertyDescriptors(value) : null,
-  } satisfies WindowObjectSnapshot
-}
-
-function restoreWindowObject(target: TauriWindow, snapshot: WindowObjectSnapshot) {
-  if (snapshot.value && typeof snapshot.value === 'object' && snapshot.objectDescriptors) {
-    for (const key of Reflect.ownKeys(snapshot.value)) {
-      if (!(key in snapshot.objectDescriptors))
-        delete (snapshot.value as Record<PropertyKey, unknown>)[key]
-    }
-    Object.defineProperties(snapshot.value, snapshot.objectDescriptors)
-  }
-  if (!snapshot.present) {
-    delete target[snapshot.key]
-    return
-  }
-  if (snapshot.descriptor) Object.defineProperty(target, snapshot.key, snapshot.descriptor)
-}
-
-function restoreWindowObjects(target: TauriWindow, snapshots: WindowObjectSnapshot[]) {
-  let restoreError: unknown
-  for (const snapshot of snapshots) {
-    try {
-      restoreWindowObject(target, snapshot)
-    } catch (error) {
-      restoreError ??= error
-    }
-  }
-  if (restoreError) throw restoreError
-}
-
 export function installGatewayIpc(handler: GatewayIpcHandler): GatewayInstallCleanup {
-  if (gatewayVerificationConfig()) {
-    if (!gatewayToken()) throw new Error('Gateway verification requires a Gateway token')
-    return registerGatewayCommandTransport(handler)
-  }
-  const tauriWindow = window as TauriWindow
-  const snapshots = [
-    snapshotWindowObject(tauriWindow, '__TAURI_INTERNALS__'),
-    snapshotWindowObject(tauriWindow, '__TAURI_EVENT_PLUGIN_INTERNALS__'),
-    snapshotWindowObject(tauriWindow, '__KCODER_GATEWAY_WEB_SHIM__'),
-  ]
-  try {
-    if (!isTauriRuntime()) tauriWindow.__KCODER_GATEWAY_WEB_SHIM__ = true
-    mockWindows('main')
-    mockIPC(handler, { shouldMockEvents: true })
-  } catch (error) {
-    try {
-      restoreWindowObjects(tauriWindow, snapshots)
-    } catch {
-      // The installation error is the root cause callers must handle; rollback errors cannot replace it.
-    }
-    throw error
-  }
-  const installedInvoke = tauriWindow.__TAURI_INTERNALS__?.invoke
-  const layer: GatewayIpcInstallationLayer = {
-    active: true,
-    installedInvoke,
-    restore: () => {
-      const internals = tauriWindow.__TAURI_INTERNALS__
-      if (!internals || internals.invoke !== installedInvoke) return
-      restoreWindowObjects(tauriWindow, snapshots)
-      ipcLayerByInvoke.delete(installedInvoke)
-      const previousLayer = ipcLayerByInvoke.get(tauriWindow.__TAURI_INTERNALS__?.invoke)
-      if (previousLayer && !previousLayer.active) previousLayer.restore()
-    },
-  }
-  ipcLayerByInvoke.set(installedInvoke, layer)
-  return () => {
-    if (!layer.active) return
-    layer.active = false
-    // When superseded by a new installation, mark this layer stale only; continue skipping it after the new layer is removed.
-    layer.restore()
-  }
+  if (gatewayVerificationConfig() && !gatewayToken())
+    throw new Error('Gateway verification requires a Gateway token')
+  return registerGatewayCommandTransport(handler)
 }
 
 const defaultDependencies: GatewayRuntimeInstallDependencies = {

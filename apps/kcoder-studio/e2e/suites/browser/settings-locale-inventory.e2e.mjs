@@ -94,7 +94,7 @@ await runE2E(import.meta.url, { testId: 'settings-route-locale-inventory', tier:
   await page.getByTestId('quick-phrase-title-input').fill('User-owned phrase');
   await page.getByTestId('quick-phrase-content-input').fill('Preserve this draft after a failed save');
   await page.evaluate(() => {
-    const bridge = window.__TAURI_INTERNALS__, invoke = bridge.invoke;
+    const bridge = window.__ELECTRON_INTERNALS__, invoke = bridge.invoke;
     let failOnce = true;
     bridge.invoke = async (command,args) => {
       if (failOnce && command === 'update_app_preferences' && args?.patch?.quickPhrases) {

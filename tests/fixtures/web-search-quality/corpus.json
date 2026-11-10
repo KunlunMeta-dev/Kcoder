@@ -1,0 +1,558 @@
+{
+  "schema_version": 1,
+  "reference_date": "run_date_utc",
+  "configuration_requirement": "No search keys, no MCP entries, no web settings, and no prior visit to settings. A model connection is supplied separately by the consent-gated harness.",
+  "evaluation_notes": [
+    "Freeze retrieved source text and timestamps in private owned evidence at execution time; do not copy live answers into this versioned fixture.",
+    "A valid empty result in the requested time window is acceptable when stated accurately. A failed request is not an empty result.",
+    "Tool identity, retrieval success, factual correctness and citation support are scored separately; no metric is a substitute for another.",
+    "Optional paid-provider runs are separate comparison groups and cannot establish default-chain acceptance."
+  ],
+  "rubric": {
+    "relevance": {
+      "min": 0,
+      "max": 4
+    },
+    "factual_correctness": {
+      "min": 0,
+      "max": 4
+    },
+    "citation_support": {
+      "min": 0,
+      "max": 4
+    },
+    "freshness_and_date_accuracy": {
+      "min": 0,
+      "max": 4
+    },
+    "honesty_about_limits": {
+      "min": 0,
+      "max": 4
+    }
+  },
+  "tasks": [
+    {
+      "id": "government-01",
+      "category": "government",
+      "query": "查找国务院办公厅关于政务服务标准化、规范化、便利化的原始文件，整理主要要求并附原文。只用政府官网。",
+      "allowed_source_domains": [
+        "gov.cn"
+      ],
+      "require_page_read": true,
+      "time_range": null,
+      "valid_empty_allowed": false,
+      "expected_entry": "WebSearch",
+      "scoring": "manual_grounded_v1"
+    },
+    {
+      "id": "government-02",
+      "category": "government",
+      "query": "查找政府信息公开工作年度报告的官方编制要求，区分文件发布日期和网页更新时间。",
+      "allowed_source_domains": [
+        "gov.cn"
+      ],
+      "require_page_read": true,
+      "time_range": null,
+      "valid_empty_allowed": false,
+      "expected_entry": "WebSearch",
+      "scoring": "manual_grounded_v1"
+    },
+    {
+      "id": "government-03",
+      "category": "government",
+      "query": "查找财政部门发布的预算绩效管理相关原文，整理事前、事中、事后三个阶段的要求。",
+      "allowed_source_domains": [
+        "mof.gov.cn"
+      ],
+      "require_page_read": true,
+      "time_range": null,
+      "valid_empty_allowed": false,
+      "expected_entry": "WebSearch",
+      "scoring": "manual_grounded_v1"
+    },
+    {
+      "id": "government-04",
+      "category": "government",
+      "query": "查找国家发展改革委关于营商环境的官方资料，明确文种、发布机关和日期，不补造政策结论。",
+      "allowed_source_domains": [
+        "ndrc.gov.cn"
+      ],
+      "require_page_read": true,
+      "time_range": null,
+      "valid_empty_allowed": false,
+      "expected_entry": "WebSearch",
+      "scoring": "manual_grounded_v1"
+    },
+    {
+      "id": "government-05",
+      "category": "government",
+      "query": "查找国家统计局最近一期人口统计公报，引用原表并说明统计年度与发布时间。",
+      "allowed_source_domains": [
+        "stats.gov.cn"
+      ],
+      "require_page_read": true,
+      "time_range": null,
+      "valid_empty_allowed": false,
+      "expected_entry": "WebSearch",
+      "scoring": "manual_grounded_v1"
+    },
+    {
+      "id": "government-06",
+      "category": "government",
+      "query": "查找国家统计局最近一期国民经济和社会发展统计公报，只引用官方原文。",
+      "allowed_source_domains": [
+        "stats.gov.cn"
+      ],
+      "require_page_read": true,
+      "time_range": null,
+      "valid_empty_allowed": false,
+      "expected_entry": "WebSearch",
+      "scoring": "manual_grounded_v1"
+    },
+    {
+      "id": "government-07",
+      "category": "government",
+      "query": "查找生态环境部最近一期中国生态环境状况公报，区分报告年度和发布日期。",
+      "allowed_source_domains": [
+        "mee.gov.cn"
+      ],
+      "require_page_read": true,
+      "time_range": null,
+      "valid_empty_allowed": false,
+      "expected_entry": "WebSearch",
+      "scoring": "manual_grounded_v1"
+    },
+    {
+      "id": "government-08",
+      "category": "government",
+      "query": "查找教育部发布的教育事业发展统计公报，给出最近可核实版本和原文链接。",
+      "allowed_source_domains": [
+        "moe.gov.cn"
+      ],
+      "require_page_read": true,
+      "time_range": null,
+      "valid_empty_allowed": false,
+      "expected_entry": "WebSearch",
+      "scoring": "manual_grounded_v1"
+    },
+    {
+      "id": "government-09",
+      "category": "government",
+      "query": "查找市场监管部门关于企业信用信息公示的官方说明，列出信息来源与尚不能核实的内容。",
+      "allowed_source_domains": [
+        "samr.gov.cn"
+      ],
+      "require_page_read": true,
+      "time_range": null,
+      "valid_empty_allowed": false,
+      "expected_entry": "WebSearch",
+      "scoring": "manual_grounded_v1"
+    },
+    {
+      "id": "government-10",
+      "category": "government",
+      "query": "查找人力资源社会保障部门关于职业技能培训的官方政策原文，整理适用对象并保留日期。",
+      "allowed_source_domains": [
+        "mohrss.gov.cn"
+      ],
+      "require_page_read": true,
+      "time_range": null,
+      "valid_empty_allowed": false,
+      "expected_entry": "WebSearch",
+      "scoring": "manual_grounded_v1"
+    },
+    {
+      "id": "official_technical-01",
+      "category": "official_technical",
+      "query": "Read the official Python asyncio task cancellation documentation and explain cancellation propagation with source links.",
+      "allowed_source_domains": [
+        "docs.python.org"
+      ],
+      "require_page_read": true,
+      "time_range": null,
+      "valid_empty_allowed": false,
+      "expected_entry": "WebSearch",
+      "scoring": "manual_grounded_v1"
+    },
+    {
+      "id": "official_technical-02",
+      "category": "official_technical",
+      "query": "Find the official Tokio CancellationToken documentation and distinguish cancellation from waiting for a task to finish.",
+      "allowed_source_domains": [
+        "docs.rs",
+        "tokio.rs"
+      ],
+      "require_page_read": true,
+      "time_range": null,
+      "valid_empty_allowed": false,
+      "expected_entry": "WebSearch",
+      "scoring": "manual_grounded_v1"
+    },
+    {
+      "id": "official_technical-03",
+      "category": "official_technical",
+      "query": "Use the official React documentation to explain Effect cleanup and development Strict Mode behaviour.",
+      "allowed_source_domains": [
+        "react.dev"
+      ],
+      "require_page_read": true,
+      "time_range": null,
+      "valid_empty_allowed": false,
+      "expected_entry": "WebSearch",
+      "scoring": "manual_grounded_v1"
+    },
+    {
+      "id": "official_technical-04",
+      "category": "official_technical",
+      "query": "Explain TypeScript discriminated union narrowing using the official handbook.",
+      "allowed_source_domains": [
+        "typescriptlang.org"
+      ],
+      "require_page_read": true,
+      "time_range": null,
+      "valid_empty_allowed": false,
+      "expected_entry": "WebSearch",
+      "scoring": "manual_grounded_v1"
+    },
+    {
+      "id": "official_technical-05",
+      "category": "official_technical",
+      "query": "Find the official PostgreSQL transaction isolation documentation and distinguish the isolation levels without guessing.",
+      "allowed_source_domains": [
+        "postgresql.org"
+      ],
+      "require_page_read": true,
+      "time_range": null,
+      "valid_empty_allowed": false,
+      "expected_entry": "WebSearch",
+      "scoring": "manual_grounded_v1"
+    },
+    {
+      "id": "official_technical-06",
+      "category": "official_technical",
+      "query": "Read SQLite WAL documentation and explain its reader/writer concurrency limits.",
+      "allowed_source_domains": [
+        "sqlite.org"
+      ],
+      "require_page_read": true,
+      "time_range": null,
+      "valid_empty_allowed": false,
+      "expected_entry": "WebSearch",
+      "scoring": "manual_grounded_v1"
+    },
+    {
+      "id": "official_technical-07",
+      "category": "official_technical",
+      "query": "Find the SearXNG Search API documentation and explain JSON output prerequisites and time-range limitations.",
+      "allowed_source_domains": [
+        "docs.searxng.org"
+      ],
+      "require_page_read": true,
+      "time_range": null,
+      "valid_empty_allowed": false,
+      "expected_entry": "WebSearch",
+      "scoring": "manual_grounded_v1"
+    },
+    {
+      "id": "official_technical-08",
+      "category": "official_technical",
+      "query": "Explain HTTP Cache-Control no-cache and no-store using MDN documentation and preserve the distinction.",
+      "allowed_source_domains": [
+        "developer.mozilla.org"
+      ],
+      "require_page_read": true,
+      "time_range": null,
+      "valid_empty_allowed": false,
+      "expected_entry": "WebSearch",
+      "scoring": "manual_grounded_v1"
+    },
+    {
+      "id": "official_technical-09",
+      "category": "official_technical",
+      "query": "Find the official Node.js worker_threads documentation and explain the intended workload and limitations.",
+      "allowed_source_domains": [
+        "nodejs.org"
+      ],
+      "require_page_read": true,
+      "time_range": null,
+      "valid_empty_allowed": false,
+      "expected_entry": "WebSearch",
+      "scoring": "manual_grounded_v1"
+    },
+    {
+      "id": "official_technical-10",
+      "category": "official_technical",
+      "query": "Find official git diff documentation and explain --cached, --stat and --name-only.",
+      "allowed_source_domains": [
+        "git-scm.com"
+      ],
+      "require_page_read": true,
+      "time_range": null,
+      "valid_empty_allowed": false,
+      "expected_entry": "WebSearch",
+      "scoring": "manual_grounded_v1"
+    },
+    {
+      "id": "freshness-01",
+      "category": "freshness",
+      "query": "以本次测试日期为基准，只用 Rust 官方来源，查找最近七天发布的版本或项目公告；没有则明确说明。",
+      "allowed_source_domains": [
+        "blog.rust-lang.org",
+        "rust-lang.org"
+      ],
+      "require_page_read": true,
+      "time_range": "week",
+      "valid_empty_allowed": true,
+      "expected_entry": "WebSearch",
+      "scoring": "manual_grounded_v1"
+    },
+    {
+      "id": "freshness-02",
+      "category": "freshness",
+      "query": "只用 Python 官方来源，查找最近七天的版本发布消息，列出可核实的发布日期。没有则说明。",
+      "allowed_source_domains": [
+        "python.org",
+        "blog.python.org"
+      ],
+      "require_page_read": true,
+      "time_range": "week",
+      "valid_empty_allowed": true,
+      "expected_entry": "WebSearch",
+      "scoring": "manual_grounded_v1"
+    },
+    {
+      "id": "freshness-03",
+      "category": "freshness",
+      "query": "只用 Node.js 官方来源，查找最近七天的发布消息，区分安全公告和常规发布。没有则说明。",
+      "allowed_source_domains": [
+        "nodejs.org"
+      ],
+      "require_page_read": true,
+      "time_range": "week",
+      "valid_empty_allowed": true,
+      "expected_entry": "WebSearch",
+      "scoring": "manual_grounded_v1"
+    },
+    {
+      "id": "freshness-04",
+      "category": "freshness",
+      "query": "查找 Mozilla 官方最近七天的 Firefox 发布消息，只引用原始页面；没有则说明。",
+      "allowed_source_domains": [
+        "mozilla.org"
+      ],
+      "require_page_read": true,
+      "time_range": "week",
+      "valid_empty_allowed": true,
+      "expected_entry": "WebSearch",
+      "scoring": "manual_grounded_v1"
+    },
+    {
+      "id": "freshness-05",
+      "category": "freshness",
+      "query": "查找 PostgreSQL 官方最近七天的发布消息，明确实际发布日期；没有则说明。",
+      "allowed_source_domains": [
+        "postgresql.org"
+      ],
+      "require_page_read": true,
+      "time_range": "week",
+      "valid_empty_allowed": true,
+      "expected_entry": "WebSearch",
+      "scoring": "manual_grounded_v1"
+    },
+    {
+      "id": "freshness-06",
+      "category": "freshness",
+      "query": "只用中国政府官网，查找最近七天发布的国务院政策文件；无符合结果时不要用旧文件充数。",
+      "allowed_source_domains": [
+        "gov.cn"
+      ],
+      "require_page_read": true,
+      "time_range": "week",
+      "valid_empty_allowed": true,
+      "expected_entry": "WebSearch",
+      "scoring": "manual_grounded_v1"
+    },
+    {
+      "id": "freshness-07",
+      "category": "freshness",
+      "query": "只用国家统计局官网，查找最近七天发布的统计公告，标注数据期间和发布时间；没有则说明。",
+      "allowed_source_domains": [
+        "stats.gov.cn"
+      ],
+      "require_page_read": true,
+      "time_range": "week",
+      "valid_empty_allowed": true,
+      "expected_entry": "WebSearch",
+      "scoring": "manual_grounded_v1"
+    },
+    {
+      "id": "freshness-08",
+      "category": "freshness",
+      "query": "只用中国气象局官网，查找最近七天的公开工作动态；没有则说明，不生成实时天气预报。",
+      "allowed_source_domains": [
+        "cma.gov.cn"
+      ],
+      "require_page_read": true,
+      "time_range": "week",
+      "valid_empty_allowed": true,
+      "expected_entry": "WebSearch",
+      "scoring": "manual_grounded_v1"
+    },
+    {
+      "id": "comparison-01",
+      "category": "comparison",
+      "query": "根据官方文档比较 Node.js worker_threads 和 child_process，分别给出适用条件与原文。",
+      "allowed_source_domains": [
+        "nodejs.org"
+      ],
+      "require_page_read": true,
+      "time_range": null,
+      "valid_empty_allowed": false,
+      "expected_entry": "WebSearch",
+      "scoring": "manual_grounded_v1"
+    },
+    {
+      "id": "comparison-02",
+      "category": "comparison",
+      "query": "根据 Rust 标准库文档比较 Mutex 和 RwLock，说明不能从工具名称推断性能优劣。",
+      "allowed_source_domains": [
+        "doc.rust-lang.org"
+      ],
+      "require_page_read": true,
+      "time_range": null,
+      "valid_empty_allowed": false,
+      "expected_entry": "WebSearch",
+      "scoring": "manual_grounded_v1"
+    },
+    {
+      "id": "comparison-03",
+      "category": "comparison",
+      "query": "对照 MDN 原文比较 HTTP ETag 和 Last-Modified 的缓存验证方式，引用各自资料。",
+      "allowed_source_domains": [
+        "developer.mozilla.org"
+      ],
+      "require_page_read": true,
+      "time_range": null,
+      "valid_empty_allowed": false,
+      "expected_entry": "WebSearch",
+      "scoring": "manual_grounded_v1"
+    },
+    {
+      "id": "comparison-04",
+      "category": "comparison",
+      "query": "对照 SQLite 官方资料比较 WAL 与 rollback journal，列出并发与部署限制。",
+      "allowed_source_domains": [
+        "sqlite.org"
+      ],
+      "require_page_read": true,
+      "time_range": null,
+      "valid_empty_allowed": false,
+      "expected_entry": "WebSearch",
+      "scoring": "manual_grounded_v1"
+    },
+    {
+      "id": "comparison-05",
+      "category": "comparison",
+      "query": "根据 React 官方文档比较 useState 和 useReducer，解释选择依据并附两项来源。",
+      "allowed_source_domains": [
+        "react.dev"
+      ],
+      "require_page_read": true,
+      "time_range": null,
+      "valid_empty_allowed": false,
+      "expected_entry": "WebSearch",
+      "scoring": "manual_grounded_v1"
+    },
+    {
+      "id": "comparison-06",
+      "category": "comparison",
+      "query": "根据 PostgreSQL 官方资料比较 Repeatable Read 和 Serializable，指出保证范围与需要应用处理的失败。",
+      "allowed_source_domains": [
+        "postgresql.org"
+      ],
+      "require_page_read": true,
+      "time_range": null,
+      "valid_empty_allowed": false,
+      "expected_entry": "WebSearch",
+      "scoring": "manual_grounded_v1"
+    },
+    {
+      "id": "direct_page-01",
+      "category": "direct_page",
+      "query": "阅读 https://docs.python.org/3/library/asyncio-task.html ，按原有标题梳理任务取消和 TaskGroup，只总结实际读取的部分。",
+      "allowed_source_domains": [
+        "docs.python.org"
+      ],
+      "require_page_read": true,
+      "time_range": null,
+      "valid_empty_allowed": false,
+      "expected_entry": "WebFetch",
+      "scoring": "manual_grounded_v1"
+    },
+    {
+      "id": "direct_page-02",
+      "category": "direct_page",
+      "query": "阅读 https://docs.searxng.org/dev/search_api.html ，整理查询参数表及 JSON 输出限制，保留原文链接。",
+      "allowed_source_domains": [
+        "docs.searxng.org"
+      ],
+      "require_page_read": true,
+      "time_range": null,
+      "valid_empty_allowed": false,
+      "expected_entry": "WebFetch",
+      "scoring": "manual_grounded_v1"
+    },
+    {
+      "id": "direct_page-03",
+      "category": "direct_page",
+      "query": "阅读 https://www.typescriptlang.org/docs/handbook/2/narrowing.html ，提取两类 narrowing 示例并保留代码块。",
+      "allowed_source_domains": [
+        "typescriptlang.org"
+      ],
+      "require_page_read": true,
+      "time_range": null,
+      "valid_empty_allowed": false,
+      "expected_entry": "WebFetch",
+      "scoring": "manual_grounded_v1"
+    },
+    {
+      "id": "direct_page-04",
+      "category": "direct_page",
+      "query": "阅读 https://git-scm.com/docs/git-diff ，解释 --stat 和 --name-only 的不同，引用实际读取内容。",
+      "allowed_source_domains": [
+        "git-scm.com"
+      ],
+      "require_page_read": true,
+      "time_range": null,
+      "valid_empty_allowed": false,
+      "expected_entry": "WebFetch",
+      "scoring": "manual_grounded_v1"
+    },
+    {
+      "id": "direct_page-05",
+      "category": "direct_page",
+      "query": "阅读 https://www.sqlite.org/wal.html ，按原文结构整理优势与限制，未读到的内容不要补造。",
+      "allowed_source_domains": [
+        "sqlite.org"
+      ],
+      "require_page_read": true,
+      "time_range": null,
+      "valid_empty_allowed": false,
+      "expected_entry": "WebFetch",
+      "scoring": "manual_grounded_v1"
+    },
+    {
+      "id": "direct_page-06",
+      "category": "direct_page",
+      "query": "阅读 https://nodejs.org/api/worker_threads.html ，整理主要使用场景并保留原文代码样例；如正文截断请说明。",
+      "allowed_source_domains": [
+        "nodejs.org"
+      ],
+      "require_page_read": true,
+      "time_range": null,
+      "valid_empty_allowed": false,
+      "expected_entry": "WebFetch",
+      "scoring": "manual_grounded_v1"
+    }
+  ]
+}

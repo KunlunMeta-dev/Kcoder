@@ -89,6 +89,7 @@ impl MemoryManager {
                 // Parallel sessions share this database, so a lock contention
                 // gets a few bounded retries before we defer the migration.
                 for legacy in [
+                    crate::paths::unbounded_project_key(cwd),
                     previous_project_key_for_path(cwd),
                     legacy_project_key_for_path(cwd),
                 ] {
@@ -138,6 +139,11 @@ impl MemoryManager {
         self.project_key = Some(project_key.into());
         self.structured = Some(Arc::new(Mutex::new(store)));
         self
+    }
+
+    /// Native project identity used by structured observations and their review provenance.
+    pub fn structured_project_key(&self) -> Option<&str> {
+        self.project_key.as_deref()
     }
 
     /// Disable the structured SQLite memory layer while keeping legacy memory available.
@@ -431,8 +437,17 @@ impl MemoryManager {
     /// Save a structured observation when the SQLite store is available.
     pub fn save_structured_observation(
         &self,
-        mut input: MemoryObservationInput,
+        input: MemoryObservationInput,
     ) -> Result<Option<i64>> {
+        self.save_structured_observation_with_status(input)
+            .map(|saved| saved.map(|(id, _)| id))
+    }
+
+    /// Return the retained identity and whether this call inserted a new observation.
+    pub fn save_structured_observation_with_status(
+        &self,
+        mut input: MemoryObservationInput,
+    ) -> Result<Option<(i64, bool)>> {
         let Some(store) = &self.structured else {
             return Ok(None);
         };
@@ -447,7 +462,7 @@ impl MemoryManager {
             return Ok(None);
         }
         lock_structured_store(store)
-            .insert_observation(&input)
+            .insert_observation_with_status(&input)
             .map(Some)
     }
 

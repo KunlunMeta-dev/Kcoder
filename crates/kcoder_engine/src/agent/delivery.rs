@@ -133,13 +133,23 @@ impl QueryEngine {
                 return Err(anyhow::Error::new(error));
             }
 
-            self.state.set_messages(messages);
-            if let Err(error) = control
-                .checkpoint_writer
-                .write(&control.transcript_path, &self.state.messages())
-                .await
-            {
-                self.state.set_messages(before_messages);
+            if messages.len() > before_messages.len() {
+                self.state.add_message(messages.last().unwrap().clone());
+            }
+            let write = async {
+                let messages = self.state.messages();
+                let reference = self
+                    .checkpoint_context_reference(&control.transcript_path, &messages)
+                    .await?;
+                control
+                    .checkpoint_writer
+                    .write_with_context(&control.transcript_path, &messages, reference.as_ref())
+                    .await
+            }
+            .await;
+            if let Err(error) = write {
+                self.state
+                    .set_messages_preserving_history_ids(before_messages);
                 let _ = control.parent_state.fail_subagent_delivery(
                     &control.agent_id,
                     &claim.message_id,

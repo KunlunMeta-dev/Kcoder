@@ -118,7 +118,7 @@ await runE2E(import.meta.url, {
       successScreenshotReason: 'critical partial notice and retained known conversation' };
   } catch (error) {
     const workspaces = await page.evaluate(async () => {
-      const result = await window.__TAURI_INTERNALS__.invoke('local_executor_request', { method: 'runtime.tasks.list', params: {} });
+      const result = await window.__ELECTRON_INTERNALS__.invoke('local_executor_request', { method: 'runtime.tasks.list', params: {} });
       return result;
     }).catch(error => ({ error: String(error) }));
     await context.writeArtifactJson('failure.json', { stage, error: String(error), replies, requests, browserErrors, workspaces, body: await page.locator('body').innerText() });

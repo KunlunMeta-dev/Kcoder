@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 
 /// Explicit per-deployment transport authentication, independent of stored keys.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "json-schema", derive(schemars::JsonSchema))]
 #[serde(tag = "mode", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ProviderAuthentication {
     #[default]

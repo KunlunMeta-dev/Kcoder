@@ -32,7 +32,7 @@ async fn mutable_same_object_schema_never_uses_frozen_definition() {
     let changed = Arc::new(std::sync::atomic::AtomicBool::new(false));
     let engine = crate::test_support::engine_builder::TestEngineBuilder::new(root.path())
         .tool_registry(ToolRegistry::new().register(MutableSchemaTool(changed.clone())))
-        .build();
+        .build_with_profile_directory();
     for enabled in [false, true, false] {
         changed.store(enabled, std::sync::atomic::Ordering::SeqCst);
         let tool = engine.tools.get("mutable_schema").unwrap();
@@ -99,7 +99,7 @@ async fn runtime_input_format_changes_rebuild_model_transport_schema() {
     let freeform = Arc::new(std::sync::atomic::AtomicBool::new(false));
     let engine = crate::test_support::engine_builder::TestEngineBuilder::new(root.path())
         .tool_registry(ToolRegistry::new().register(MutableFormatTool(freeform.clone())))
-        .build();
+        .build_with_profile_directory();
     for enabled in [false, true, false] {
         freeform.store(enabled, std::sync::atomic::Ordering::SeqCst);
         let tool = engine.tools.get("mutable_format").unwrap();
@@ -157,7 +157,7 @@ async fn structural_revision_refreshes_model_and_execution_schemas() {
             name: "fixture",
             field: "old",
         }))
-        .build();
+        .build_with_profile_directory();
     let different_instance = RevisionSchemaTool {
         name: "fixture",
         field: "other-instance",
@@ -228,7 +228,7 @@ async fn file_edit_surface_is_pinned_at_engine_start() {
                 .register(kcoder_tools::ApplyPatchTool),
         )
         .settings(settings)
-        .build();
+        .build_with_profile_directory();
 
     let names = |definitions: Vec<kcoder_types::ToolDefinition>| -> Vec<String> {
         definitions
@@ -304,7 +304,7 @@ async fn peer_guidance_tracks_final_request_capabilities_in_cached_and_uncached_
         let root = tempfile::tempdir().unwrap();
         let mut engine = crate::test_support::engine_builder::TestEngineBuilder::new(root.path())
             .tool_registry(registry)
-            .build();
+            .build_with_profile_directory();
         let cached = engine.tool_definitions_for_model().await;
         let names = cached
             .iter()
@@ -434,7 +434,7 @@ async fn description_context_excludes_yolo_goal_edit_surface_and_terminal_filter
                 .register(CapabilityProbe)
                 .register(kcoder_tools::verifier_vote::VerifierVoteTool),
         )
-        .build();
+        .build_with_profile_directory();
     for yolo in [false, true] {
         {
             let mut settings = engine.settings.write().unwrap();
@@ -490,7 +490,7 @@ async fn windows_core_request_does_not_advertise_full_profile_or_unix_controls()
         .register(kcoder_tools::ConfigTool);
     let engine = crate::test_support::engine_builder::TestEngineBuilder::new(root.path())
         .tool_registry(registry)
-        .build();
+        .build_with_profile_directory();
     let definitions = engine.tool_definitions_for_model().await;
     let names = definitions
         .iter()
@@ -537,7 +537,7 @@ async fn wiki_switch_updates_existing_engine_without_restart_or_overriding_empty
     let path = root.path().join("settings.json");
     let engine = crate::test_support::engine_builder::TestEngineBuilder::new(root.path())
         .tool_registry(ToolRegistry::new().register(kcoder_tools::ConfigTool))
-        .build()
+        .build_with_profile_directory()
         .with_settings_persistence_path(path.clone());
     for enabled in [false, true, false, true] {
         std::fs::write(
@@ -574,7 +574,7 @@ async fn wiki_switch_updates_existing_engine_without_restart_or_overriding_empty
     }
     let empty = crate::test_support::engine_builder::TestEngineBuilder::new(root.path())
         .tool_registry(ToolRegistry::new())
-        .build()
+        .build_with_profile_directory()
         .with_settings_persistence_path(path);
     assert!(empty.active_tool_registry().names().is_empty());
 }

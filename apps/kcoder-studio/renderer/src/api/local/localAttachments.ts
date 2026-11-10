@@ -1,6 +1,7 @@
-import { invoke } from '@tauri-apps/api/core'
+import { invokeRuntimeCommand as invoke } from '@/kcoder/gatewayServiceBridge'
+import { abortable } from '@/lib/abortable'
 import { isValidFileSize, MAX_FILE_SIZE } from '@/api/attachments'
-import { isTauriRuntime } from '@/lib/runtime-environment'
+import { isGatewayRuntime } from '@/lib/runtime-environment'
 import { isKCoderGatewayPage } from '@/kcoder/gatewayRpc'
 import {
   ATTACHMENT_CHUNK_BYTES,
@@ -39,7 +40,7 @@ function canReadTextLength(file: File): boolean {
 }
 
 async function maybeTextLength(file: File): Promise<number | null> {
-  if (!canReadTextLength(file)) return null
+  if (!canReadTextLength(file) || file.size > 128 * 1024) return null
   try {
     return (await file.text()).length
   } catch {
@@ -72,7 +73,8 @@ async function uploadGatewayFile(
       filename: file.name,
       mimeType: fileMimeType(file),
       fileSize: file.size,
-    }
+    },
+    signal ? { signal } : undefined
   )
   const uploadId = typeof started.uploadId === 'string' ? started.uploadId : null
   if (!uploadId) throw new Error('KCoder 网关未返回附件上传 ID')
@@ -84,13 +86,17 @@ async function uploadGatewayFile(
       if (signal?.aborted) throw new Error('Upload cancelled')
       await yieldToBrowser()
       const end = Math.min(offset + ATTACHMENT_CHUNK_BYTES, file.size)
-      const bytes = new Uint8Array(await file.slice(offset, end).arrayBuffer())
+      const bytes = new Uint8Array(await abortable(file.slice(offset, end).arrayBuffer(), signal))
       await yieldToBrowser()
-      await invoke('append_local_attachment_upload', {
-        uploadId,
-        index,
-        contentBase64: encodeBase64(bytes),
-      })
+      await invoke(
+        'append_local_attachment_upload',
+        {
+          uploadId,
+          index,
+          contentBase64: encodeBase64(bytes),
+        },
+        signal ? { signal } : undefined
+      )
       index += 1
       onProgress?.(Math.round((end / file.size) * 100))
     }
@@ -98,12 +104,14 @@ async function uploadGatewayFile(
     if (signal?.aborted) throw new Error('Upload cancelled')
     const saved = await invoke<{ path?: string; deviceId?: string }>(
       'finish_local_attachment_upload',
-      { uploadId }
+      { uploadId },
+      signal ? { signal } : undefined
     )
     if (!saved.path || !saved.deviceId) throw new Error('KCoder 网关未返回附件路径')
     return { path: saved.path, deviceId: saved.deviceId }
   } catch (error) {
-    await invoke('cancel_local_attachment_upload', { uploadId }).catch(() => undefined)
+    // Cleanup belongs to the original upload; a stalled cleanup cannot hold the composer open.
+    void invoke('cancel_local_attachment_upload', { uploadId }).catch(() => undefined)
     if (signal?.aborted) throw new Error('Upload cancelled', { cause: error })
     throw error
   }
@@ -112,10 +120,12 @@ async function uploadGatewayFile(
 export function createLocalAttachmentApi(): LocalAttachmentApi {
   return {
     async uploadAttachment(file, onProgress, signal) {
+      // Older native callers supplied a workspace object in this position.
+      if (typeof signal?.addEventListener !== 'function') signal = undefined
       if (!isValidFileSize(file.size) || file.size > MAX_GATEWAY_ATTACHMENT_BYTES) {
         throw new Error(`File size exceeds ${MAX_FILE_SIZE / (1024 * 1024)} MB`)
       }
-      if (!isTauriRuntime()) {
+      if (!isGatewayRuntime()) {
         throw new Error('Local attachment storage requires the desktop app')
       }
       if (signal?.aborted) throw new Error('Upload cancelled')

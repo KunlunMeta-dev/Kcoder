@@ -1,6 +1,7 @@
 import type { ModelSelectionMode } from '@/types/model-selection'
 export type { ModelSelectionMode } from '@/types/model-selection'
 export const MODEL_SELECTION_MODE_CAPABILITY = 'modelSelectionModeV1'
+export const TURN_MODEL_SWITCH_CAPABILITY = 'turnModelSwitchV1'
 
 interface ModelSelectionClient {
   supportsExperimental?: (capability: string) => boolean
@@ -22,7 +23,8 @@ export function modelSelectionModeParams(
   }
   if (value === 'follow_target_default') {
     if (model) throw new Error('follow_target_default cannot include model')
-    if (retryFromTurnId) throw new Error('A failed-turn continuation cannot change to target-default following')
+    if (retryFromTurnId)
+      throw new Error('A failed-turn continuation cannot change to target-default following')
   } else if (!model?.trim()) {
     throw new Error('explicit model selection requires a nonempty model')
   }
@@ -30,10 +32,13 @@ export function modelSelectionModeParams(
 }
 
 /** Absence is not proof of explicit selection on a legacy history projection. */
-export function threadModelSelectionMode(thread: Record<string, unknown>): ModelSelectionMode | undefined {
+export function threadModelSelectionMode(
+  thread: Record<string, unknown>
+): ModelSelectionMode | undefined {
   const mode = thread.modelSelectionMode
   if (mode === undefined || mode === null) return undefined
-  if (mode !== 'explicit' && mode !== 'follow_target_default') throw new Error('Invalid thread modelSelectionMode')
+  if (mode !== 'explicit' && mode !== 'follow_target_default')
+    throw new Error('Invalid thread modelSelectionMode')
   return mode
 }
 
@@ -44,7 +49,11 @@ export function applyThreadModelSelection(
   const mode = threadModelSelectionMode(thread)
   if (mode === undefined) return
   const selected = thread.selectedModel
-  if (selected !== undefined && selected !== null && (typeof selected !== 'string' || !selected.trim())) {
+  if (
+    selected !== undefined &&
+    selected !== null &&
+    (typeof selected !== 'string' || !selected.trim())
+  ) {
     throw new Error('Invalid thread selectedModel')
   }
   task.modelSelectionMode = mode

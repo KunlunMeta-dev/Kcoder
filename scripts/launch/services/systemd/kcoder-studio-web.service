@@ -11,6 +11,7 @@ WorkingDirectory=@KCODER_STUDIO_REPO_DIR@/apps/kcoder-studio
 Environment=HOME=@KCODER_STUDIO_SERVICE_HOME@
 Environment=PATH=@KCODER_STUDIO_SERVICE_PATH@
 EnvironmentFile=@KCODER_STUDIO_SERVICE_HOME@/.config/kcoder-studio/web-gateway.env
+Environment=KCODER_STUDIO_RENDERER_MODE=@KCODER_STUDIO_RENDERER_MODE@
 ExecStart=@KCODER_STUDIO_NODE_BIN@ @KCODER_STUDIO_REPO_DIR@/apps/kcoder-studio/dev-server.mjs
 Restart=on-failure
 RestartSec=2s

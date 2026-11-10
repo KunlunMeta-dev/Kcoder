@@ -119,7 +119,10 @@ fn a_cut_off_answer_stays_visible_without_becoming_committed_output() {
     restored.send(json!({"jsonrpc":"2.0","id":3,"method":"thread/read","params":{"threadId":thread_id,"limit":50}}));
     let history = restored.response(3);
     let visible = history["result"]["messages"].as_array().unwrap();
-    let prior = visible.iter().position(|message| message["attemptId"] == failed_turn).expect("prior failed attempt remains visible");
+    let prior = visible.iter().position(|message| {
+        message["role"] == "assistant" && message["attemptId"] == failed_turn
+            && message["content"] == "half an answer"
+    }).expect("prior failed assistant output remains visible");
     let final_answer = visible.iter().position(|message| message["content"] == "ok").expect("continued final answer");
     assert!(prior < final_answer, "failure must precede its continuation: {history}");
     assert_eq!(visible[prior]["status"], "failed");

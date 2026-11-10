@@ -5,6 +5,11 @@ use std::io::BufRead;
 use std::path::Path;
 
 pub const PROTOCOL_VERSION: u32 = 1;
+pub const CLEANUP_PROTOCOL_VERSION: u32 = 2;
+pub const INTERNAL_CLEANUP_OWNER_V2: &str = "--kcoder-private-cleanup-owner-v2";
+pub const INTERNAL_GUI_CARRIER_V1: &str = "--kcoder-private-gui-carrier-v1";
+pub const INTERNAL_GUI_CARRIER_PROBE_V1: &str = "--kcoder-private-gui-carrier-probe-v1";
+pub const GUI_CARRIER_CAPABILITY_V1: &str = "kcoder-gui-carrier-v1";
 pub const MAX_PROTOCOL_LINE_BYTES: usize = 1024 * 1024;
 pub const MAX_NONCE_BYTES: usize = 128;
 pub const MAX_PATH_BYTES: usize = 32 * 1024;
@@ -23,6 +28,43 @@ pub struct SpawnRequest {
     pub status_file: String,
     pub args: Vec<String>,
     pub env: BTreeMap<String, String>,
+}
+
+/// Private paired-helper envelope; numeric identity is evidence, never a capability.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CleanupSpawnRequest {
+    pub version: u32,
+    pub spawn: SpawnRequest,
+    pub receipt_handle: u64,
+    pub receipt_identity: CleanupFileIdentity,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CleanupFileIdentity {
+    pub volume_serial_number: u64,
+    pub file_id: [u8; 16],
+}
+
+impl CleanupSpawnRequest {
+    pub fn validate(&self) -> Result<()> {
+        anyhow::ensure!(
+            self.version == CLEANUP_PROTOCOL_VERSION,
+            "unsupported cleanup protocol"
+        );
+        self.spawn.validate()?;
+        anyhow::ensure!(
+            self.receipt_handle > 0 && self.receipt_handle != u64::MAX,
+            "invalid cleanup receipt handle"
+        );
+        anyhow::ensure!(
+            self.receipt_identity.volume_serial_number != 0
+                && self.receipt_identity.file_id.iter().any(|byte| *byte != 0),
+            "invalid cleanup receipt identity"
+        );
+        Ok(())
+    }
 }
 
 #[derive(Debug, Deserialize)]

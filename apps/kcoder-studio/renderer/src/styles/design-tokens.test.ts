@@ -50,7 +50,7 @@ const SEMANTIC_COLORS = [
 ]
 
 /** Non-colour scales that must stay declared in CSS and wired into Tailwind. */
-const SEMANTIC_SCALES: Array<{ group: 'borderRadius' | 'height' | 'transitionDuration' | 'transitionTimingFunction'; cssVar: string; key: string }> = [
+const SEMANTIC_SCALES: Array<{ group: 'borderRadius' | 'height' | 'transitionDuration' | 'transitionTimingFunction' | 'boxShadow'; cssVar: string; key: string }> = [
   { group: 'borderRadius', cssVar: 'radius-sm', key: 'sm' },
   { group: 'borderRadius', cssVar: 'radius-inner', key: 'inner' },
   { group: 'borderRadius', cssVar: 'radius-checkbox', key: 'checkbox' },
@@ -68,8 +68,15 @@ const SEMANTIC_SCALES: Array<{ group: 'borderRadius' | 'height' | 'transitionDur
   { group: 'height', cssVar: 'control-height-xl', key: 'control-xl' },
   { group: 'transitionDuration', cssVar: 'duration-fast', key: 'fast' },
   { group: 'transitionDuration', cssVar: 'duration-base', key: 'DEFAULT' },
+  { group: 'transitionDuration', cssVar: 'duration-base', key: 'base' },
   { group: 'transitionDuration', cssVar: 'duration-slow', key: 'slow' },
   { group: 'transitionTimingFunction', cssVar: 'ease-standard', key: 'standard' },
+  { group: 'boxShadow', cssVar: 'shadow-control', key: 'control' },
+  { group: 'boxShadow', cssVar: 'shadow-control-hover', key: 'control-hover' },
+  { group: 'boxShadow', cssVar: 'shadow-control-inverse', key: 'control-inverse' },
+  { group: 'boxShadow', cssVar: 'shadow-control-pressed', key: 'control-pressed' },
+  { group: 'boxShadow', cssVar: 'shadow-card', key: 'card' },
+  { group: 'boxShadow', cssVar: 'shadow-card-hover', key: 'card-hover' },
 ]
 
 /**
@@ -152,12 +159,14 @@ test('semantic colour tokens are defined in both themes and wired into Tailwind'
   expect(problems).toEqual([])
 })
 
-test('radius, control-height and motion tokens are defined and wired', () => {
+test('radius, control-height, motion and elevation tokens are defined and wired', () => {
   const light = customPropertiesIn(globalsCss, ':root')
+  const dark = customPropertiesIn(globalsCss, "[data-theme='dark']")
   const problems: string[] = []
 
   for (const { group, cssVar, key } of SEMANTIC_SCALES) {
     if (!light.has(cssVar)) problems.push(`--${cssVar} missing from :root`)
+    if (group === 'boxShadow' && !dark.has(cssVar)) problems.push(`--${cssVar} missing from dark theme`)
     if (!(key in extend[group])) problems.push(`${group}.${key} missing from tailwind.config.js`)
   }
 
@@ -190,6 +199,7 @@ test('no component uses a colour utility that Tailwind cannot generate', () => {
         : raw.slice(raw.indexOf('-') + 1)
       // `border-t-text-muted` names a colour; `border-t-2` names a width.
       suffix = suffix.replace(/^(?:x|y|t|r|b|l|s|e)-/, '')
+      if (raw.startsWith('shadow-') && suffix in extend.boxShadow) continue
       if (/^\d+$/.test(suffix)) continue
       if (palette.has(suffix) || wired.has(suffix) || NON_COLOR_SUFFIXES.has(suffix)) continue
 

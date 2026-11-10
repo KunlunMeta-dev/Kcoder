@@ -317,9 +317,7 @@ mod tests {
             "studio-renderer-unit",
             "studio-harness",
             "studio-smoke",
-            "studio-tauri-unit",
             "studio-browser-e2e",
-            "studio-tauri-desktop-e2e",
             "tui-lab-unit",
             "tui-startup",
             "tui-full-turn",
@@ -383,34 +381,21 @@ mod tests {
             suite("studio-desktop-package-contract").depends_on,
             ["studio-desktop-package-build"]
         );
+        let offline_web = suite("web-search-native-faults-offline");
+        assert_eq!(offline_web.tiers, ["platform"]);
+        assert_eq!(
+            offline_web.consent.as_deref(),
+            Some("web-search-native-faults-offline")
+        );
+        assert_eq!(
+            offline_web.consent_env.as_deref(),
+            Some("KCODER_TEST_WEB_SEARCH_NATIVE_FAULTS")
+        );
         assert!(
-            suite("studio-tauri-unit")
-                .tiers
-                .contains(&"full".to_string()),
-            "full tier 必须保留不依赖 Codex 的 Tauri 原生编译与单元测试"
+            offline_web
+                .pass_env
+                .contains(&"KCODER_TEST_WEB_SEARCH_NATIVE_FAULTS".to_string())
         );
-        assert_eq!(suite("studio-tauri-desktop-e2e").tiers, ["platform"]);
-        let desktop = suite("studio-tauri-desktop-e2e");
-        assert!(desktop.requires_files.iter().any(|path| {
-            path.ends_with("src-tauri/binaries/wegent-executor-x86_64-unknown-linux-gnu")
-        }));
-        assert_eq!(
-            desktop
-                .env
-                .get("KCODER_STUDIO_E2E_EXECUTOR_BIN")
-                .map(String::as_str),
-            Some("src-tauri/binaries/wegent-executor-x86_64-unknown-linux-gnu")
-        );
-        assert!(desktop.requires_env.is_empty());
-        assert_eq!(desktop.requires_executables.len(), 1);
-        assert_eq!(desktop.requires_executables[0].env, "CODEX_BIN");
-        assert!(desktop.requires_executables[0].allow_external);
-        assert_eq!(desktop.consent.as_deref(), Some("tauri-codex-desktop"));
-        assert_eq!(
-            desktop.consent_env.as_deref(),
-            Some("KCODER_TEST_TAURI_CODEX_DESKTOP")
-        );
-        assert!(desktop.depends_on.is_empty());
     }
 
     #[test]

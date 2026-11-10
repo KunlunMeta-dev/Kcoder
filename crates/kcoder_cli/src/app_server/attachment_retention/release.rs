@@ -3,7 +3,7 @@
 use super::*;
 
 impl RetentionService {
-    pub(in crate::app_server) fn release_receipt(
+    pub fn release_receipt(
         &self,
         scope: &Scope,
         retention_id: &str,
@@ -15,6 +15,16 @@ impl RetentionService {
             reason == RetentionReleaseReasonV1::Discard,
             RetentionFailure::ProofUnavailable
         );
+        self.release_receipt_authorized(scope, retention_id, expected_revision, reason, None)
+    }
+    pub(super) fn release_receipt_authorized(
+        &self,
+        scope: &Scope,
+        retention_id: &str,
+        expected_revision: u64,
+        reason: RetentionReleaseReasonV1,
+        cleanup_operation: Option<&str>,
+    ) -> Result<RetentionReceiptV1> {
         checked_id(retention_id, self.namespace())?;
         let wanted = ReleaseIntent {
             expected_revision,
@@ -27,6 +37,15 @@ impl RetentionService {
                 .context("retention release receipt missing")?;
             ensure!(
                 receipt.scope_hash == scope.hash && receipt.wire.retention_id == retention_id,
+                RetentionFailure::Conflict
+            );
+            ensure!(
+                receipt.cleanup_intent.as_ref().map(|intent| intent
+                    .query
+                    .request
+                    .operation_id
+                    .as_str())
+                    == cleanup_operation,
                 RetentionFailure::Conflict
             );
             if receipt.wire.state == RetentionReceiptStateV1::Consumed {
@@ -142,6 +161,12 @@ impl RetentionService {
         ensure!(
             receipt.scope_hash == scope.hash
                 && receipt.wire.retention_id == retention_id
+                && receipt.cleanup_intent.as_ref().map(|intent| intent
+                    .query
+                    .request
+                    .operation_id
+                    .as_str())
+                    == cleanup_operation
                 && receipt.release_intent.as_ref()
                     == Some(&ReleaseIntent {
                         expected_revision,

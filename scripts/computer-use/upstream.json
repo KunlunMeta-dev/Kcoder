@@ -12,6 +12,7 @@
     "use per-thread MTA UIA clients and consistent virtual-desktop COM initialization",
     "bound unresponsive UIA providers using CUIAutomation8 connection and transaction timeouts",
     "apply capture bounds before UIA enumeration and avoid retrying failed windows",
+    "bound screenshot payloads before serialization and map image-pixel input using the current screenshot frame",
     "preserve copyable clipboard formats on paste and ordinary exceptions without overwriting external copies",
     "encode non-BMP keyboard characters as UTF-16 surrogate input pairs",
     "derive shortcut extended-key flags from real Windows scan-code prefixes",

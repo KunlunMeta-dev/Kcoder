@@ -1,4 +1,4 @@
-import { getRuntimeConfig } from '@/config/runtime'
+import { getRuntimeConfig, stripAppBasePath } from '@/config/runtime'
 
 function joinBrowserPath(basePath: string | undefined, path: string): string {
   const normalizedBasePath = !basePath || basePath === '/' ? '' : basePath.replace(/\/+$/, '')
@@ -20,6 +20,21 @@ export function navigateTo(path: string) {
 
   window.history.pushState({}, '', browserPath)
   window.dispatchEvent(new PopStateEvent('popstate'))
+}
+
+/** Return to the logical parent, independent of browser history or direct entry. */
+export function parentPageRoute(path: string, search = ''): string {
+  if (!path.startsWith('/') || path.startsWith('//')) return '/'
+  const normalized = path.replace(/\/+$/, '') || '/'
+  if (normalized === '/runtime-tasks') return '/tasks'
+  if (normalized === '/expert-conversations') return '/experts'
+  if (normalized === '/plugins' && new URLSearchParams(search).has('view')) return '/plugins'
+  const lastSlash = normalized.lastIndexOf('/')
+  return lastSlash > 0 ? normalized.slice(0, lastSlash) : '/'
+}
+
+export function navigateToParentPage() {
+  navigateTo(parentPageRoute(stripAppBasePath(window.location.pathname), window.location.search))
 }
 
 export interface RuntimeTaskRoute {
@@ -44,14 +59,20 @@ function getRequiredSearchParam(
 }
 
 export function parseRuntimeTaskRoute(path: string, search = ''): RuntimeTaskRoute | null {
-  if (path !== '/runtime-tasks') return null
+  if (path !== '/runtime-tasks' && path !== '/expert-conversations') return null
 
   const searchParams = new URLSearchParams(search.startsWith('?') ? search.slice(1) : search)
   const deviceId = getRequiredSearchParam(searchParams, 'deviceId', 'device_id')
   const taskIdParam = getRequiredSearchParam(searchParams, 'taskId', 'task_id')
   if (!deviceId || !taskIdParam) return null
 
-  return { deviceId, taskId: taskIdParam }
+  return {
+    deviceId,
+    taskId: taskIdParam,
+    ...(path === '/expert-conversations'
+      ? { workspacePath: getRequiredSearchParam(searchParams, 'workspacePath') }
+      : {}),
+  }
 }
 
 export function buildRuntimeTaskRoute(address: RuntimeTaskRouteInput): string {

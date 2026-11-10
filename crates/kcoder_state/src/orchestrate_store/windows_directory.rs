@@ -68,7 +68,7 @@ pub(super) fn enumerate(directory: &File) -> anyhow::Result<Vec<OsString>> {
             ensure!(
                 record_size >= header
                     && offset + record_size <= capacity
-                    && length % 2 == 0
+                    && length.is_multiple_of(2)
                     && length <= record_size - header,
                 "invalid PlanStore directory filename"
             );

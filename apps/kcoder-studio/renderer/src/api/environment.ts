@@ -1,6 +1,7 @@
 import type { DeviceCommandRequest, DeviceCommandResponse, ProjectWithTasks } from '@/types/api'
 import type { EnvironmentInfo } from '@/types/environment'
 import type { WorkspaceTarget } from '@/types/workspace-files'
+import { captureAccountContextRevision } from '@/kcoder/accountContextEvents'
 import {
   configuredWorkspacePath,
   executionDeviceId,
@@ -45,6 +46,8 @@ const NO_CHANGES_TO_COMMIT_MESSAGE = 'No changes to commit'
 type EnvironmentInfoCacheEntry = {
   expiresAt: number
   promise: Promise<EnvironmentInfo>
+  pending: boolean
+  isCurrent: (targetId: string) => boolean
 }
 
 const environmentInfoCaches = new WeakMap<
@@ -506,23 +509,37 @@ export async function loadProjectEnvironment(
   }
 
   const now = Date.now()
+  const targetId = target?.deviceId ?? (project ? executionDeviceId(project) : undefined)
+  const isCurrent = captureAccountContextRevision()
+  const checkCurrent = () => {
+    if (targetId && !isCurrent(targetId)) throw new DOMException('Account context changed', 'AbortError')
+  }
   const environmentInfoCache = getEnvironmentInfoCache(api)
   const cached = environmentInfoCache.get(cacheKey)
-  if (!options.force && cached && cached.expiresAt > now) {
-    return cloneEnvironmentInfo(await cached.promise)
+  if (!options.force && cached && targetId && cached.isCurrent(targetId) && (cached.pending || cached.expiresAt > now)) {
+    const result = await cached.promise
+    checkCurrent()
+    return cloneEnvironmentInfo(result)
   }
 
   const promise = loadProjectEnvironmentUncached(api, project, target)
-  environmentInfoCache.set(cacheKey, {
+  const entry = {
     expiresAt: now + ENVIRONMENT_INFO_CACHE_TTL_MS,
     promise,
-  })
+    pending: true,
+    isCurrent,
+  }
+  environmentInfoCache.set(cacheKey, entry)
 
   try {
-    return cloneEnvironmentInfo(await promise)
+    const result = await promise
+    checkCurrent()
+    return cloneEnvironmentInfo(result)
   } catch (error) {
-    environmentInfoCache.delete(cacheKey)
+    if (environmentInfoCache.get(cacheKey) === entry) environmentInfoCache.delete(cacheKey)
     throw error
+  } finally {
+    entry.pending = false
   }
 }
 

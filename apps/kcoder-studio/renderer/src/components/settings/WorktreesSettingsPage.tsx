@@ -1,3 +1,5 @@
+import { SettingsSelect } from '@/components/settings/SettingsSelect'
+import { currentHostDeviceId } from '@/features/runtime-target/currentHostTarget'
 import { deviceDisplayName } from '@/lib/device-display-name'
 import { CircleCheck, Loader2, RefreshCw, X } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -23,7 +25,7 @@ type RuntimeWorkApi = NonNullable<WorkbenchServices['runtimeWorkApi']>
 
 interface WorktreesSettingsPageProps {
   api?: RuntimeWorkApi
-  devices?: Array<Pick<DeviceInfo, 'device_id' | 'name' | 'status'>>
+  devices?: Array<Pick<DeviceInfo, 'device_id' | 'name' | 'status' | 'device_type' | 'nameKey' | 'capabilities'>>
   onOpenRuntimeTask?: (address: RuntimeTaskAddress) => Promise<void>
   onRefreshWorkLists?: () => Promise<void>
   onLeaveSettings?: () => void
@@ -154,7 +156,7 @@ export function WorktreesSettingsPage(props: WorktreesSettingsPageProps) {
   const [deviceId, setDeviceId] = useState('')
   const selectedDeviceId = availableDevices.some(device => device.device_id === deviceId)
     ? deviceId
-    : (availableDevices[0]?.device_id ?? '')
+    : (currentHostDeviceId(availableDevices) ?? '')
   // A different target owns a different form, including drafts and confirmation dialogs.
   return (
     <WorktreeTargetSettings
@@ -187,6 +189,9 @@ function WorktreeTargetSettings({
   const [keepCountDraft, setKeepCountDraft] = useState('15')
   const [items, setItems] = useState<RuntimeManagedWorktree[]>([])
   const [loading, setLoading] = useState(true)
+  // Refreshing the same device keeps its list visible; another device shows
+  // the placeholder instead of the previous device's worktrees.
+  const [loadedDeviceId, setLoadedDeviceId] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [busyPath, setBusyPath] = useState<string | null>(null)
   const [openingTaskId, setOpeningTaskId] = useState<string | null>(null)
@@ -224,7 +229,10 @@ function WorktreeTargetSettings({
         loadError instanceof Error ? loadError.message : t('workbench.worktrees_load_failed')
       )
     } finally {
-      if (generation === loadGeneration.current) setLoading(false)
+      if (generation === loadGeneration.current) {
+        setLoading(false)
+        setLoadedDeviceId(selectedDeviceId)
+      }
     }
   }, [api, selectedDeviceId, t])
 
@@ -414,7 +422,7 @@ function WorktreeTargetSettings({
       {availableDevices.length > 1 && (
         <label className="block text-sm text-text-secondary">
           <span className="mb-2 block">{t('workbench.worktrees_device')}</span>
-          <select
+          <SettingsSelect
             data-testid="worktrees-device-select"
             value={selectedDeviceId}
             onChange={event => onSelectDevice(event.target.value)}
@@ -426,12 +434,12 @@ function WorktreeTargetSettings({
                 {deviceDisplayName(device, t)}
               </option>
             ))}
-          </select>
+          </SettingsSelect>
         </label>
       )}
 
       {unavailable ? (
-        <div className="mt-8 rounded-lg border border-border bg-surface px-4 py-4 text-sm text-text-secondary">
+        <div className="studio-card-spacing mt-8 rounded-lg border border-border bg-surface text-sm text-text-secondary">
           {t('workbench.worktrees_device_unavailable')}
         </div>
       ) : (
@@ -506,13 +514,13 @@ function WorktreeTargetSettings({
       )}
 
       {error && (
-        <div className="mt-5 rounded-lg border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-500">
+        <div className="studio-card-spacing mt-5 rounded-lg border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-500">
           {error}
         </div>
       )}
 
       <section className="mt-10">
-        {loading ? (
+        {loading && loadedDeviceId !== selectedDeviceId ? (
           <div className="py-10 text-center text-sm text-text-secondary">{t('common.loading')}</div>
         ) : groups.length === 0 ? (
           <div>
@@ -528,7 +536,7 @@ function WorktreeTargetSettings({
                 <RefreshCw className="h-4 w-4" />
               </button>
             </div>
-            <div className="rounded-2xl border border-border bg-surface px-4 py-4 text-sm text-text-secondary">
+            <div className="studio-card-spacing rounded-2xl border border-border bg-surface text-sm text-text-secondary">
               {t('workbench.worktrees_empty_description')}
             </div>
           </div>

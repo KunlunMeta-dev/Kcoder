@@ -6,7 +6,8 @@ import liteRenderers from '@file-viewer/preset-lite'
 import { MessageSquare } from 'lucide-react'
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from '@/hooks/useTranslation'
-import type { CodeCommentContext, WorkspaceTextFileResponse } from '@/types/workspace-files'
+import { Button } from '@/components/ui/button'
+import type { CodeCommentContext, WorkspaceTextFileResponse, WorkspaceFileCommentController, WorkspaceFileCommentDraft } from '@/types/workspace-files'
 import { WorkspaceXMindPreview } from './WorkspaceXMindPreview'
 import { WorkspaceTextFileEditor } from './WorkspaceTextFileEditor'
 import { WorkspaceDocumentViewer } from './WorkspaceDocumentViewer'
@@ -79,6 +80,8 @@ const PIERRE_WORKSPACE_CODE_VIEW_CSS = `
 `
 
 interface WorkspaceFilePreviewProps {
+  commentController?: WorkspaceFileCommentController
+  sourceRevision?: string
   file: WorkspaceTextFileResponse | null
   binaryFile?: {
     path: string
@@ -161,19 +164,6 @@ const WorkspaceBinaryFilePreview = memo(function WorkspaceBinaryFilePreview({
   )
 })
 
-interface SelectionState {
-  filePath: string
-  targetKey: string
-  selectedText: string
-  startLine: number
-  endLine: number
-}
-
-interface CommentState {
-  filePath: string | null
-  value: string
-}
-
 interface WorkspaceCodeViewLineSelection {
   id: string
   range: {
@@ -183,10 +173,12 @@ interface WorkspaceCodeViewLineSelection {
 }
 
 interface WorkspaceFilePreviewContentProps {
+  sourceRevision?: string
   file: WorkspaceTextFileResponse
   targetLineStart?: number
   targetLineEnd?: number
-  onAddCodeComment: (context: CodeCommentContext) => void
+  commentDraft: WorkspaceFileCommentDraft | null
+  onCommentDraftChange: (draft: WorkspaceFileCommentDraft | null) => void
 }
 
 function isHtmlFile(file: WorkspaceTextFileResponse) {
@@ -228,7 +220,9 @@ function WorkspaceFilePreviewContent({
   file,
   targetLineStart,
   targetLineEnd,
-  onAddCodeComment,
+  commentDraft,
+  sourceRevision,
+  onCommentDraftChange,
 }: WorkspaceFilePreviewContentProps) {
   const { t } = useTranslation('common')
   const codeViewRef = useRef<CodeViewHandle<undefined>>(null)
@@ -246,11 +240,10 @@ function WorkspaceFilePreviewContent({
     observer.observe(probe)
     return () => observer.disconnect()
   }, [])
-  const [selection, setSelection] = useState<SelectionState | null>(null)
-  const [commentState, setCommentState] = useState<CommentState>({
-    filePath: null,
-    value: '',
-  })
+  // CodeView replaces file payloads only when its numeric item version changes.
+  const [source, setSource] = useState({ content: file.content, revision: file.revision, version: 0 })
+  if (source.content !== file.content || source.revision !== file.revision)
+    setSource({ content: file.content, revision: file.revision, version: source.version + 1 })
   const lines = useMemo(() => file.content.split('\n'), [file.content])
   const targetLineRange = useMemo(
     () => normalizeTargetLineRange(targetLineStart, targetLineEnd, lines.length),
@@ -267,16 +260,18 @@ function WorkspaceFilePreviewContent({
         file: {
           name: file.path || file.name,
           contents: file.content,
-          cacheKey: `${file.path}:${file.content.length}`,
+          cacheKey: file.revision ? `${file.path}:${file.revision}` : undefined,
         },
-        version: file.content.length,
+        version: source.version,
       },
     ],
-    [file.content, file.name, file.path]
+    [file.content, file.name, file.path, file.revision, source.version]
   )
   const activeSelection =
-    selection?.filePath === file.path && selection.targetKey === targetLineKey ? selection : null
-  const comment = commentState.filePath === file.path ? commentState.value : ''
+    commentDraft?.filePath === file.path && commentDraft.targetKey === targetLineKey &&
+    commentDraft.revision === file.revision && commentDraft.sourceContent === file.content
+      ? commentDraft
+      : null
   const selectedLines = activeSelection
     ? {
         id: file.path,
@@ -305,7 +300,6 @@ function WorkspaceFilePreviewContent({
 
   const captureLineSelection = (selectionRange: WorkspaceCodeViewLineSelection | null) => {
     if (!selectionRange || selectionRange.id !== file.path) {
-      setSelection(null)
       return
     }
     const { range } = selectionRange
@@ -316,33 +310,20 @@ function WorkspaceFilePreviewContent({
       .join('\n')
       .trim()
     if (!selectedText) {
-      setSelection(null)
       return
     }
-    setSelection({
+    onCommentDraftChange({
       filePath: file.path,
+      fileName: file.name,
+      sourceRevision,
+      revision: file.revision,
+      sourceContent: file.content,
       targetKey: targetLineKey,
       selectedText,
       startLine,
       endLine,
+      comment: commentDraft?.comment ?? '',
     })
-    setCommentState({ filePath: file.path, value: '' })
-  }
-
-  const addComment = () => {
-    if (!file || !activeSelection || !comment.trim()) return
-    onAddCodeComment({
-      id: `code-comment-${Date.now()}`,
-      filePath: file.path,
-      fileName: file.name,
-      startLine: activeSelection.startLine,
-      endLine: activeSelection.endLine,
-      selectedText: activeSelection.selectedText,
-      comment: comment.trim(),
-      createdAt: new Date().toISOString(),
-    })
-    setSelection(null)
-    setCommentState({ filePath: file.path, value: '' })
   }
 
   return (
@@ -386,45 +367,105 @@ function WorkspaceFilePreviewContent({
           style={{ height: '100%', overflow: 'auto' }}
         />
       </div>
-      {activeSelection && (
-        <div className="absolute bottom-4 left-4 right-4 rounded-xl border border-border bg-background p-3 shadow-xl">
+    </section>
+  )
+}
+
+export function WorkspaceFilePreview(props: WorkspaceFilePreviewProps) {
+  const { t } = useTranslation('common')
+  const [localDraft, setLocalDraft] = useState<WorkspaceFileCommentDraft | null>(null)
+  const controller = props.commentController
+  const draft = controller ? controller.draft : localDraft
+  const rendered = useRef<{ file: WorkspaceFilePreviewProps['file']; controller: typeof controller } | null>(null)
+  useLayoutEffect(() => {
+    rendered.current = { file: props.file, controller }
+    return () => { rendered.current = null }
+  }, [controller, props.file])
+  const isCurrent = () => rendered.current?.file === props.file &&
+    rendered.current?.controller === controller && (!controller || controller.isCurrent())
+  const setDraft = (next: WorkspaceFileCommentDraft | null) => {
+    if (!isCurrent()) return
+    if (controller) controller.setDraft(next)
+    else setLocalDraft(next)
+  }
+  const { file } = props
+  const sourceChanged = Boolean(draft && (
+    props.loading || props.error || !file || draft.filePath !== file.path ||
+    draft.revision !== file.revision || draft.sourceContent !== file.content
+  ))
+  const addComment = () => {
+    if (!draft?.comment.trim() || !isCurrent()) return
+    props.onAddCodeComment({
+      id: `code-comment-${crypto.randomUUID()}`,
+      filePath: draft.filePath,
+      fileName: draft.fileName,
+      startLine: draft.startLine,
+      endLine: draft.endLine,
+      selectedText: draft.selectedText,
+      comment: draft.comment.trim(),
+      ...(draft.revision && { fileRevision: draft.revision }),
+      ...(draft.sourceRevision && { sourceRevision: draft.sourceRevision }),
+      createdAt: new Date().toISOString(),
+    })
+    setDraft(null)
+  }
+  return (
+    <section className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+      {props.sourceRevision && <p data-testid="workspace-file-source-version" data-version-state={(!file?.revision || file.truncated) ? 'unknown' : file.revision === props.sourceRevision ? 'matches' : 'changed'} className="px-3 py-2 text-sm text-text-secondary" role="status">{t((!file?.revision || file.truncated) ? 'workbench.workspace_file_source_unknown' : file.revision === props.sourceRevision ? 'workbench.workspace_file_source_matches' : 'workbench.workspace_file_source_changed')}</p>}
+      <WorkspaceFilePreviewBody {...props} commentDraft={draft} onCommentDraftChange={setDraft} />
+      {controller?.capacityExceeded && <p role="alert" className="px-3 py-2 text-sm text-text-secondary">{t('workbench.workspace_file_comment_capacity')}</p>}
+      {draft && (
+        <div className="absolute bottom-4 left-4 right-4 max-h-full overflow-y-auto rounded-xl border border-border bg-background p-3 shadow-xl">
           <div className="mb-2 flex items-center gap-2 text-sm font-medium text-text-primary">
             <MessageSquare className="h-4 w-4" />
-            {t('workbench.workspace_file_local_comment', '本地评论')}
+            {t('workbench.workspace_file_local_comment')}
           </div>
+          <p className="break-all text-xs text-text-secondary">
+            {draft.filePath}:{draft.startLine}-{draft.endLine}
+          </p>
+          {sourceChanged && (
+            <p role="status" className="text-xs text-text-secondary" data-testid="workspace-file-comment-source-changed">
+              {t('workbench.workspace_file_comment_source_changed')}
+            </p>
+          )}
+          {!draft.revision && (
+            <p className="text-xs text-text-secondary">{t('workbench.workspace_file_comment_version_unknown')}</p>
+          )}
+          <details>
+            <summary data-testid="workspace-file-comment-source" className="min-h-11 cursor-pointer rounded py-3 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/60 md:min-h-8 md:py-1">
+              {t('workbench.workspace_file_comment_source')}
+            </summary>
+            {draft.revision && <p className="break-all text-xs text-text-secondary">{t('workbench.workspace_file_comment_version', { revision: draft.revision })}</p>}
+            <pre className="max-h-24 overflow-auto whitespace-pre-wrap break-words text-xs">{draft.selectedText}</pre>
+          </details>
           <textarea
             data-testid="workspace-file-comment-input"
-            value={comment}
-            onChange={event =>
-              setCommentState({
-                filePath: file.path,
-                value: event.target.value,
-              })
-            }
-            placeholder={t('workbench.workspace_file_comment_placeholder', '请输入评论')}
-            className="min-h-20 w-full resize-none rounded-lg border border-border bg-surface p-2 text-sm outline-none"
+            value={draft.comment}
+            maxLength={8192}
+            onChange={event => setDraft({ ...draft, comment: event.target.value })}
+            aria-label={t('workbench.workspace_file_comment_placeholder')}
+            placeholder={t('workbench.workspace_file_comment_placeholder')}
+            className="min-h-20 w-full resize-none rounded-lg border border-border bg-surface p-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-focus/60"
           />
           <div className="mt-2 flex justify-end gap-2">
-            <button
-              type="button"
+            <Button
+              variant="ghost"
+              size="sm"
               data-testid="workspace-file-comment-cancel-button"
-              className="h-8 rounded-md px-3 text-sm text-text-secondary hover:bg-muted"
-              onClick={() => {
-                setSelection(null)
-                setCommentState({ filePath: file.path, value: '' })
-              }}
+              className="min-h-11 md:min-h-8"
+              onClick={() => setDraft(null)}
             >
-              {t('workbench.cancel', '取消')}
-            </button>
-            <button
-              type="button"
+              {t('workbench.cancel')}
+            </Button>
+            <Button
+              size="sm"
               data-testid="workspace-file-add-comment-button"
-              className="h-8 rounded-md bg-text-primary px-3 text-sm font-medium text-white disabled:opacity-50"
-              disabled={!comment.trim()}
+              className="min-h-11 md:min-h-8"
+              disabled={!draft.comment.trim()}
               onClick={addComment}
             >
-              {t('workbench.comment', '评论')}
-            </button>
+              {t('workbench.comment')}
+            </Button>
           </div>
         </div>
       )}
@@ -432,7 +473,7 @@ function WorkspaceFilePreviewContent({
   )
 }
 
-export function WorkspaceFilePreview({
+function WorkspaceFilePreviewBody({
   file,
   binaryFile,
   loading,
@@ -441,12 +482,17 @@ export function WorkspaceFilePreview({
   onRetry,
   targetLineStart,
   targetLineEnd,
-  onAddCodeComment,
+  commentDraft,
+  sourceRevision,
+  onCommentDraftChange,
   editing = false,
   editedContent = '',
   onEditedContentChange,
   onSave,
-}: WorkspaceFilePreviewProps) {
+}: WorkspaceFilePreviewProps & {
+  commentDraft: WorkspaceFileCommentDraft | null
+  onCommentDraftChange: (draft: WorkspaceFileCommentDraft | null) => void
+}) {
   const { t } = useTranslation('common')
 
   if (loading) {
@@ -530,7 +576,9 @@ export function WorkspaceFilePreview({
       file={file}
       targetLineStart={targetLineStart}
       targetLineEnd={targetLineEnd}
-      onAddCodeComment={onAddCodeComment}
+      commentDraft={commentDraft}
+      sourceRevision={sourceRevision}
+      onCommentDraftChange={onCommentDraftChange}
     />
   )
 }

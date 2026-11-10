@@ -1,7 +1,13 @@
 import type { GatewayProfile } from "@/gateway/types";
 import { Platform } from "react-native";
-import { withLocalIdentityLock } from "./context-lock";
-import { deleteSecureValue, getSecureValue, setSecureValue } from "./secure";
+import {
+  canonicalGatewayConnectionUrl,
+  parseGatewayConnectionRoutes,
+  type GatewayConnectionRoutes,
+} from "../../../shared/gatewayConnectionRoutes.js";
+import { withLocalMetadata } from "./context-lock";
+import { metadataSecure, type MetadataAuthority } from "./metadata-authority";
+
 
 export const PROFILE_INDEX_KEY = "kcoder-studio-mobile.gateway-profiles.v2";
 export const LEGACY_WEB_PROFILE_KEY =
@@ -21,6 +27,8 @@ interface StoredProfileSecret {
   baseUrl?: string;
   deviceId?: string;
   authorizationGeneration?: string;
+  /** Non-secret Gateway key identity bound to public route metadata. */
+  connectionRoutesKeyId?: string;
   accessToken: string;
   rpcToken: string;
   refreshToken?: string;
@@ -36,6 +44,37 @@ function profileSecretKey(id: string): string {
   return `${PROFILE_SECRET_PREFIX}${(hash >>> 0).toString(16).padStart(8, "0")}`;
 }
 
+function routeKeyId(routes: GatewayConnectionRoutes): string {
+  return `${routes.gatewayId}:${routes.publicKey}`;
+}
+
+function profileRouteMetadata(profile: GatewayProfile): {
+  routes?: GatewayConnectionRoutes;
+  keyId?: string;
+} {
+  if (profile.connectionRoutes === undefined) return {};
+  const routes = parseGatewayConnectionRoutes(profile.connectionRoutes);
+  const canonicalBaseUrl = canonicalGatewayConnectionUrl(profile.baseUrl);
+  if (!routes || !canonicalBaseUrl || !routes.endpoints.some(endpoint => endpoint.url === canonicalBaseUrl)) {
+    throw new Error("Gateway 连接描述与 canonical 地址不匹配");
+  }
+  return { routes, keyId: routeKeyId(routes) };
+}
+
+function storedRouteMetadata(entry: StoredProfile): {
+  routes?: GatewayConnectionRoutes;
+  keyId?: string;
+  valid: boolean;
+} {
+  if (entry.connectionRoutes === undefined) return { valid: true };
+  const routes = parseGatewayConnectionRoutes(entry.connectionRoutes);
+  const canonicalBaseUrl = canonicalGatewayConnectionUrl(entry.baseUrl);
+  if (!routes || !canonicalBaseUrl || !routes.endpoints.some(endpoint => endpoint.url === canonicalBaseUrl)) {
+    return { valid: false };
+  }
+  return { routes, keyId: routeKeyId(routes), valid: true };
+}
+
 function publicProfile(profile: GatewayProfile): PublicProfile {
   const {
     accessToken: _accessToken,
@@ -44,7 +83,11 @@ function publicProfile(profile: GatewayProfile): PublicProfile {
     pendingRotationId: _pendingRotationId,
     ...metadata
   } = profile;
-  return metadata;
+  const routeMetadata = profileRouteMetadata(profile);
+  return {
+    ...metadata,
+    ...(routeMetadata.routes ? { connectionRoutes: routeMetadata.routes } : {}),
+  };
 }
 
 function secretKeyFor(profile: StoredProfile): string | null {
@@ -56,7 +99,8 @@ function indexProfiles(index: Partial<StoredProfileIndex>): StoredProfile[] {
     typeof profile.id === "string" && typeof profile.label === "string" && typeof profile.baseUrl === "string" &&
     typeof profile.expiresAt === "number" && (profile.secretKey === undefined || typeof profile.secretKey === "string"));
 }
-export async function loadProfiles(): Promise<{ profiles: GatewayProfile[]; activeId: string | null }> {
+export async function loadProfiles(authority?: MetadataAuthority): Promise<{ profiles: GatewayProfile[]; activeId: string | null }> {
+  const { getSecureValue } = metadataSecure(authority);
   const raw = await getSecureValue(PROFILE_INDEX_KEY);
   if (!raw) return { profiles: [], activeId: null };
   const parsed = JSON.parse(raw) as Partial<StoredProfileIndex>;
@@ -64,8 +108,15 @@ export async function loadProfiles(): Promise<{ profiles: GatewayProfile[]; acti
   const keys = metadata.map(secretKeyFor);
   const profiles = await Promise.all(metadata.map(async (entry, index): Promise<GatewayProfile> => {
     const {secretKey: _key, ...profile} = entry;
+    const routeMetadata = storedRouteMetadata(entry);
+    const { connectionRoutes: _untrustedRoutes, ...profileWithoutRoutes } = profile;
+    const safeProfile = {
+      ...profileWithoutRoutes,
+      ...(routeMetadata.routes ? { connectionRoutes: routeMetadata.routes } : {}),
+    };
     // Keep the endpoint available for reauthorization; do not discard unrelated connections.
-    const unavailable = {...profile, accessToken: "", rpcToken: "cookie-auth", expiresAt: 0};
+    const unavailable = {...safeProfile, accessToken: "", rpcToken: "cookie-auth", expiresAt: 0};
+    if (!routeMetadata.valid) return unavailable;
     const key = keys[index];
     if (!key || keys.filter(candidate => candidate === key).length > 1) return unavailable;
     const secretRaw = await getSecureValue(key);
@@ -74,7 +125,8 @@ export async function loadProfiles(): Promise<{ profiles: GatewayProfile[]; acti
       const secret = JSON.parse(secretRaw) as StoredProfileSecret;
       if (!secret || typeof secret.accessToken !== "string" || typeof secret.rpcToken !== "string" ||
         (entry.secretKey !== undefined && secret.profileId !== entry.id) || (secret.baseUrl !== undefined && secret.baseUrl !== profile.baseUrl) || (secret.refreshToken !== undefined && (secret.baseUrl !== profile.baseUrl || secret.deviceId !== profile.deviceId || secret.authorizationGeneration !== profile.authorizationGeneration))) return unavailable;
-      return {...profile, accessToken: secret.accessToken, rpcToken: secret.rpcToken, refreshToken: typeof secret.refreshToken === "string" ? secret.refreshToken : undefined, pendingRotationId: typeof secret.pendingRotationId === "string" ? secret.pendingRotationId : undefined};
+      if (secret.connectionRoutesKeyId !== routeMetadata.keyId) return unavailable;
+      return {...safeProfile, accessToken: secret.accessToken, rpcToken: secret.rpcToken, refreshToken: typeof secret.refreshToken === "string" ? secret.refreshToken : undefined, pendingRotationId: typeof secret.pendingRotationId === "string" ? secret.pendingRotationId : undefined};
     } catch { return unavailable; }
   }));
   const activeId = parsed.activeId === null
@@ -82,26 +134,29 @@ export async function loadProfiles(): Promise<{ profiles: GatewayProfile[]; acti
     : profiles.some((profile) => profile.id === parsed.activeId)
       ? parsed.activeId!
       : profiles[0]?.id ?? null;
+  authority?.assert();
   return { profiles, activeId };
 }
 
 let persistenceTail: Promise<void> = Promise.resolve();
 let secretSequence = 0;
 // The nonce identifies an immutable storage record, not an authentication secret.
-async function freshSecretKey(id: string): Promise<string> {
+async function freshSecretKey(id: string, authority?: MetadataAuthority): Promise<string> {
+  const { getSecureValue } = metadataSecure(authority);
   for (let attempt=0; attempt<8; attempt++) {
     const key = `${profileSecretKey(id)}.v3.${Date.now().toString(36)}.${++secretSequence}.${Math.random().toString(36).slice(2)}`;
     if (await getSecureValue(key) === null) return key;
   }
   throw new Error("无法分配新的凭据存储记录");
 }
-export function persistProfiles(profiles: GatewayProfile[], activeId: string | null): Promise<void> {
+export function persistProfiles(profiles: GatewayProfile[], activeId: string | null, authority?: MetadataAuthority): Promise<void> {
   const snapshot = profiles.map(profile => ({...profile}));
-  const operation = persistenceTail.then(() => persistProfileSnapshot(snapshot, activeId));
+  const operation = persistenceTail.then(() => persistProfileSnapshot(snapshot, activeId, authority));
   persistenceTail = operation.catch(() => {});
   return operation;
 }
-async function persistProfileSnapshot(profiles: GatewayProfile[], activeId: string | null): Promise<void> {
+async function persistProfileSnapshot(profiles: GatewayProfile[], activeId: string | null, authority?: MetadataAuthority): Promise<void> {
+  const { getSecureValue, setSecureValue, deleteSecureValue } = metadataSecure(authority);
   const previousRaw = await getSecureValue(PROFILE_INDEX_KEY);
   let previous: StoredProfile[] = [];
   try { if (previousRaw) previous = indexProfiles(JSON.parse(previousRaw)); } catch { /* Replace damaged metadata only on a successful commit. */ }
@@ -114,10 +169,40 @@ async function persistProfileSnapshot(profiles: GatewayProfile[], activeId: stri
     for (const profile of profiles) {
       const entry = previous.find(item => item.id === profile.id);
       const oldKey = entry?.secretKey ? secretKeyFor(entry) : null;
-      const secretRaw = JSON.stringify({profileId:profile.id,baseUrl:profile.baseUrl,deviceId:profile.deviceId,authorizationGeneration:profile.authorizationGeneration,accessToken:profile.accessToken,rpcToken:profile.rpcToken,refreshToken:profile.refreshToken,pendingRotationId:profile.pendingRotationId});
+      const routeMetadata = profileRouteMetadata(profile);
+      if (entry) {
+        const previousRoutes = storedRouteMetadata(entry);
+        const previousSecretRaw = oldKey ? await getSecureValue(oldKey) : null;
+        let previousSecret: StoredProfileSecret | undefined;
+        if (previousSecretRaw) {
+          try {
+            const parsedSecret = JSON.parse(previousSecretRaw) as unknown;
+            if (parsedSecret && typeof parsedSecret === "object" && !Array.isArray(parsedSecret))
+              previousSecret = parsedSecret as StoredProfileSecret;
+          } catch { /* Existing legacy profiles may be recovered from the current in-memory grant. */ }
+        }
+        const hasRouteBinding = entry.connectionRoutes !== undefined || routeMetadata.keyId !== undefined ||
+          previousSecret?.connectionRoutesKeyId !== undefined;
+        if (hasRouteBinding && (!previousRoutes.valid || !previousSecret ||
+            previousSecret.connectionRoutesKeyId !== previousRoutes.keyId ||
+            routeMetadata.keyId !== previousRoutes.keyId)) {
+          throw new Error("Gateway 连接身份已绑定凭据，不能替换或移除其 route key");
+        }
+      }
+      const secretRaw = JSON.stringify({
+        profileId: profile.id,
+        baseUrl: profile.baseUrl,
+        deviceId: profile.deviceId,
+        authorizationGeneration: profile.authorizationGeneration,
+        ...(routeMetadata.keyId ? { connectionRoutesKeyId: routeMetadata.keyId } : {}),
+        accessToken: profile.accessToken,
+        rpcToken: profile.rpcToken,
+        refreshToken: profile.refreshToken,
+        pendingRotationId: profile.pendingRotationId,
+      });
       let key = oldKey;
       if (!key || await getSecureValue(key) !== secretRaw) {
-        key = await freshSecretKey(profile.id);
+        key = await freshSecretKey(profile.id, authority);
         created.push(key);
         await setSecureValue(key, secretRaw);
       }
@@ -156,9 +241,9 @@ export async function migrateLegacyWebProfiles(): Promise<{
 } | null> {
   // Migration is another index writer. Recheck under the same lock as pairing
   // and removal; an existing winner must also reach the hydration consumer.
-  if (Platform.OS === "web" && (typeof navigator === "undefined" || typeof navigator.locks?.request !== "function")) throw new Error("此浏览器无法安全迁移连接配置，请使用支持 Web Locks 的浏览器；原配置已保留。");
-  const migrate = async () => {
-    if (await getSecureValue(PROFILE_INDEX_KEY)) return loadProfiles();
+  const migrate = async (authority?: MetadataAuthority) => {
+    const { getSecureValue, deleteSecureValue } = metadataSecure(authority);
+    if (await getSecureValue(PROFILE_INDEX_KEY)) return loadProfiles(authority);
     const raw = await getSecureValue(LEGACY_WEB_PROFILE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as {
@@ -171,13 +256,11 @@ export async function migrateLegacyWebProfiles(): Promise<{
       : typeof parsed.activeId === "string" && profiles.some((profile) => profile.id === parsed.activeId)
         ? parsed.activeId
         : profiles[0]?.id ?? null;
-    await persistProfiles(profiles, activeId);
+    await persistProfiles(profiles, activeId, authority);
     await Promise.allSettled([deleteSecureValue(LEGACY_WEB_PROFILE_KEY)]);
     return { profiles, activeId };
   };
-  return Platform.OS === "web"
-    ? navigator.locks.request("kcoder-mobile:gateway-profile-index", { mode: "exclusive" }, migrate)
-    : withLocalIdentityLock("gateway-profile-index", migrate);
+  return withLocalMetadata("gateway-profile-index", migrate);
 }
 
 export const profileStoreTestHelpers = { profileSecretKey };

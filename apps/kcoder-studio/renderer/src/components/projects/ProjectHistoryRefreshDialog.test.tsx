@@ -5,7 +5,7 @@ import '@/i18n'
 import { ProjectHistoryRefreshDialog } from './ProjectHistoryRefreshDialog'
 
 const { request } = vi.hoisted(() => ({ request: vi.fn() }))
-vi.mock('@/tauri/localExecutor', () => ({ requestLocalExecutor: request }))
+vi.mock('@/host/localExecutor', () => ({ requestLocalExecutor: request }))
 const workspaces = [
   {
     deviceId: 'remote',
@@ -117,9 +117,10 @@ test('renders a Windows device workspace without its namespace prefix', () => {
       onClose={vi.fn()}
     />
   )
-  expect(
-    screen.getByText('This computer · C:/Users/kunlunmeta/projects/gpt-factory')
-  ).toBeTruthy()
+  // SettingsSelect shows the selected label beside its native option; both must be namespace-free.
+  const label = 'This computer · C:/Users/kunlunmeta/projects/gpt-factory'
+  expect(screen.getByRole('option', { name: label })).toBeTruthy()
+  expect(screen.getAllByText(label)).toHaveLength(2)
   expect(screen.queryByText(/\\\?\\/)).toBeNull()
 })
 

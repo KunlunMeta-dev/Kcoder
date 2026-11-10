@@ -50,6 +50,10 @@ pub struct SpecNewChangeInput {
     pub name: String,
     /// Optional human-readable title.
     pub title: Option<String>,
+    /// Carry the exact candidate change_base returned by SpecStatus knowledge.updates.
+    /// Sources are retained in the existing change base and never silently rebased.
+    #[serde(default)]
+    pub knowledge_base: Option<project_knowledge::ProjectKnowledgeChangeBaseInput>,
 }
 
 /// Archive a completed change.
@@ -68,6 +72,10 @@ pub struct SpecStatusTool;
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct SpecStatusInput {
+    /// Read selected project knowledge sources or preview revision-bound candidate updates.
+    /// Mutually exclusive with name/change. This operation never writes or publishes.
+    #[serde(default)]
+    pub knowledge: Option<project_knowledge::ProjectKnowledgeInput>,
     /// Name of the change to report on using the quick dashboard.
     #[serde(default)]
     pub name: Option<String>,
@@ -335,6 +343,8 @@ use render::*;
 mod lifecycle_tools;
 
 mod query_tools;
+
+pub mod project_knowledge;
 
 mod verification_tools;
 

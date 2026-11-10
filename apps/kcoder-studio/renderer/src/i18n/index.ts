@@ -1,67 +1,62 @@
-import enKnowledge from './locales/en/knowledge.json'
-import zhKnowledge from './locales/zh-CN/knowledge.json'
 import i18n from 'i18next'
 import { initReactI18next } from 'react-i18next'
 import LanguageDetector from 'i18next-browser-languagedetector'
-import enCommon from './locales/en/common'
-import zhCommon from './locales/zh-CN/common'
-import enChat from './locales/en/chat.json'
-import zhChat from './locales/zh-CN/chat.json'
-import enLocalRuntime from './locales/en/localRuntime.json'
-import zhLocalRuntime from './locales/zh-CN/localRuntime.json'
-import enSites from './locales/en/sites.json'
-import zhSites from './locales/zh-CN/sites.json'
-import enHooks from './locales/en/hooks.json'
-import zhHooks from './locales/zh-CN/hooks.json'
-import enSshTerminal from './locales/en/sshTerminal.json'
-import zhSshTerminal from './locales/zh-CN/sshTerminal.json'
-import { extensionI18nResources } from '@extensions/i18n'
-
-const extensionNamespaces = Array.from(
-  new Set(Object.values(extensionI18nResources).flatMap(resources => Object.keys(resources ?? {})))
-)
+import { resources, extensionNamespaces } from './resources'
+import { replaceLocaleResources } from './hotResources'
 
 i18n
   .use(LanguageDetector)
   .use(initReactI18next)
   .init({
-    resources: {
-      en: {
-        knowledge: enKnowledge,
-        chat: enChat,
-        common: enCommon,
-        localRuntime: enLocalRuntime,
-        sites: enSites,
-        hooks: enHooks,
-        sshTerminal: enSshTerminal,
-        ...(extensionI18nResources.en ?? {}),
-      },
-      'zh-CN': {
-        knowledge: zhKnowledge,
-        chat: zhChat,
-        common: zhCommon,
-        localRuntime: zhLocalRuntime,
-        sites: zhSites,
-        hooks: zhHooks,
-        sshTerminal: zhSshTerminal,
-        ...(extensionI18nResources['zh-CN'] ?? {}),
-      },
-    },
+    // Keep static bundle ownership separate from runtime extension resources.
+    resources: structuredClone(resources),
     lng: 'zh-CN',
     fallbackLng: 'zh-CN',
     supportedLngs: ['zh-CN', 'en'],
     defaultNS: 'common',
     ns: [
+      'experts',
+      'taskMembers',
+      'taskCollaboration',
+      'migration',
+      'migrationPrivate',
+      'migrationResources',
+      'migrationPlugins',
+      'migrationMemory',
+      'migrationDefinitions',
+      'migrationProjects',
+      'migrationAgents',
+      'migrationInstructions',
+      'migrationUpload',
       'knowledge',
+      'knowledgeIntegration',
+      'officeIntegration',
+      'modelPolicies',
+      'remoteCapabilities',
+      'taskWorkspace',
       'common',
       'chat',
       'localRuntime',
       'sites',
       'hooks',
       'sshTerminal',
+      'taskComparison',
+      'taskDelivery',
+      'taskCapabilityScope',
+      'connectivity',
       ...extensionNamespaces,
     ],
     interpolation: { escapeValue: false },
+    react: { bindI18n: 'languageChanged loaded' },
   })
+
+if (import.meta.hot) {
+  let previousResources = resources
+  import.meta.hot.accept('./resources', updated => {
+    if (!updated) return
+    replaceLocaleResources(i18n, previousResources, updated.resources)
+    previousResources = updated.resources
+  })
+}
 
 export default i18n

@@ -26,6 +26,7 @@ import {
   getThemeSnapshot,
   initTheme,
   lightColors,
+  radius,
   refreshSystemTheme,
   setThemePreference,
   subscribeTheme,
@@ -58,6 +59,26 @@ describe("mobile theme", () => {
     expect(Object.keys(lightColors).sort()).toEqual(Object.keys(darkColors).sort());
     expect(lightColors.background).not.toBe(darkColors.background);
     expect(lightColors.text).not.toBe(darkColors.text);
+    expect(lightColors.settingsPageBackground).toBe("#F4F4F5");
+    expect(lightColors.settingsGroupBackground).toBe("#FFFFFF");
+    expect(darkColors.settingsPageBackground).toBe(darkColors.background);
+    expect(darkColors.settingsGroupBackground).toBe(darkColors.surface);
+    expect(contrastRatio(lightColors.settingsPageBackground, lightColors.settingsGroupBackground)).toBeGreaterThan(1.05);
+    expect(contrastRatio(darkColors.settingsPageBackground, darkColors.settingsGroupBackground)).toBeGreaterThan(1.05);
+    expect(radius.settingsGroup).toBeGreaterThanOrEqual(18);
+    expect(radius.settingsGroup).toBeLessThanOrEqual(20);
+    expect(radius.chatMessage).toBe(22);
+    expect(radius.chatOutputGroup).toBe(18);
+    expect(radius.chatComposer).toBe(28);
+  });
+
+  it.each([
+    ["light", lightColors],
+    ["dark", darkColors],
+  ] as const)("keeps %s user messages distinct from the chat surface", (_mode, colors) => {
+    expect(colors.userMessageSurface).not.toBe(colors.background);
+    expect(contrastRatio(colors.userMessageSurface, colors.background)).toBeGreaterThan(1.05);
+    expect(contrastRatio(colors.userMessageBorder, colors.userMessageSurface)).toBeGreaterThan(1.05);
   });
 
   it.each([

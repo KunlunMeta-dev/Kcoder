@@ -5,6 +5,15 @@ use serde::{Deserialize, Serialize};
 
 use crate::{ModelCapabilities, ProviderConfig, ReasoningEffort};
 
+impl ProviderConfig {
+    /// Bind child routing to the public deployment configuration, independently of credentials.
+    pub fn runtime_configuration_revision(&self) -> Result<String> {
+        use sha2::{Digest, Sha256};
+        let bytes = zeroize::Zeroizing::new(serde_json::to_vec(self)?);
+        Ok(format!("{:x}", Sha256::digest(&*bytes)))
+    }
+}
+
 /// Model-specific runtime parameters, independent of deployment credentials and transport.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]

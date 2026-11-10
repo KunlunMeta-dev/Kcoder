@@ -1,7 +1,7 @@
 param(
   [Parameter(Mandatory=$true)][int]$ProcessId,
   [Parameter(Mandatory=$true)][string]$OwnedRoot,
-  [Parameter(Mandatory=$true)][ValidateSet('focus','text','pinyin','space','enter','toggle-ime','backspace','escape','restore')][string]$Action,
+  [Parameter(Mandatory=$true)][ValidateSet('focus','text','pinyin','space','enter','toggle-ime','backspace','escape','restore','hide')][string]$Action,
   [int]$X=0,[int]$Y=0,[string]$Text=''
 )
 $ErrorActionPreference='Stop'
@@ -26,6 +26,7 @@ public static class OwnedWindowsInput {
   [DllImport("user32.dll")]static extern bool ShowWindow(IntPtr window,int state);
   [DllImport("user32.dll")]public static extern IntPtr GetForegroundWindow();
   public static uint Owner(IntPtr window) {uint pid;GetWindowThreadProcessId(window,out pid);return pid;}
+  public static void Hide(uint pid) {EnumWindows((window,state)=>{if(Owner(window)==pid)ShowWindow(window,0);return true;},IntPtr.Zero);}
   public static bool Restore(IntPtr window,uint expectedPid) {return Owner(window)==expectedPid&&SetForegroundWindow(window);}
   [DllImport("user32.dll")]static extern bool SetForegroundWindow(IntPtr window);
   [DllImport("user32.dll")]static extern IntPtr SetFocus(IntPtr window);
@@ -105,6 +106,11 @@ public static class OwnedWindowsInput {
   }
 }
 '@
+if($Action -eq 'hide'){
+  $until=[DateTime]::UtcNow.AddMinutes(3)
+  while(-not $process.HasExited -and [DateTime]::UtcNow -lt $until){[OwnedWindowsInput]::Hide([uint32]$ProcessId);Start-Sleep -Milliseconds 200}
+  exit 0
+}
 $focusFile=Join-Path $root 'native-input-foreground.json'
 if($Action -eq 'restore'){
   $restored=$true

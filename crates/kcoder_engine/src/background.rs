@@ -6,6 +6,7 @@
 //! finishes or fails.
 
 mod publisher;
+mod terminal_observers;
 use futures::FutureExt;
 use kcoder_config::MAX_CONCURRENT_SUBAGENTS;
 use kcoder_state::{BoundedDiagnostic, Task, TaskDelivery, TaskKind, TaskStatus};
@@ -25,6 +26,7 @@ use std::sync::{
 use tokio::sync::{broadcast, oneshot};
 use tokio::task::JoinHandle;
 
+mod owned_run;
 mod spawner;
 
 const SUBAGENT_CANCELLATION_GRACE_PERIOD: std::time::Duration = std::time::Duration::from_secs(5);
@@ -41,6 +43,7 @@ pub struct BackgroundJobManager {
     idle_reserved: Arc<AtomicBool>,
     generation: Arc<AtomicU64>,
     publishers: Arc<RwLock<HashMap<String, ScopedPublisher>>>,
+    terminal_observers: terminal_observers::TerminalObservers,
 }
 
 /// Holds background admission closed after an atomic empty-registry check.
@@ -78,6 +81,8 @@ struct SpawnPolicy {
     kind: TaskKind,
     count_subagents_only: bool,
     reuse_existing: bool,
+    adopt_unstarted: bool,
+    workflow_recovery: Option<owned_run::WorkflowRecoveryClaim>,
     notify_parent_on_completion: bool,
 }
 
@@ -150,6 +155,7 @@ impl BackgroundJobManager {
         let manager = Self {
             live_views: Default::default(),
             publishers: Default::default(),
+            terminal_observers: Default::default(),
             state,
             tx,
             handles: Arc::new(RwLock::new(HashMap::new())),
@@ -358,6 +364,8 @@ impl BackgroundJobManager {
                 kind: TaskKind::Generic,
                 count_subagents_only: false,
                 reuse_existing: false,
+                adopt_unstarted: false,
+                workflow_recovery: None,
                 notify_parent_on_completion: false,
             },
         )
@@ -381,6 +389,8 @@ impl BackgroundJobManager {
                 kind: TaskKind::Generic,
                 count_subagents_only: false,
                 reuse_existing: false,
+                adopt_unstarted: false,
+                workflow_recovery: None,
                 notify_parent_on_completion: false,
             },
         )
@@ -423,6 +433,8 @@ impl BackgroundJobManager {
                 kind: TaskKind::Subagent,
                 count_subagents_only: true,
                 reuse_existing: false,
+                adopt_unstarted: false,
+                workflow_recovery: None,
                 notify_parent_on_completion: true,
             },
         )
@@ -451,6 +463,8 @@ impl BackgroundJobManager {
                 kind: TaskKind::Subagent,
                 count_subagents_only: true,
                 reuse_existing: false,
+                adopt_unstarted: false,
+                workflow_recovery: None,
                 notify_parent_on_completion: true,
             },
         )
@@ -475,6 +489,8 @@ impl BackgroundJobManager {
                 kind: TaskKind::Workflow,
                 count_subagents_only: false,
                 reuse_existing: false,
+                adopt_unstarted: false,
+                workflow_recovery: None,
                 notify_parent_on_completion: true,
             },
         )
@@ -497,6 +513,8 @@ impl BackgroundJobManager {
                 kind: TaskKind::Workflow,
                 count_subagents_only: false,
                 reuse_existing: true,
+                adopt_unstarted: false,
+                workflow_recovery: None,
                 notify_parent_on_completion: true,
             },
         )
@@ -525,6 +543,8 @@ impl BackgroundJobManager {
                 kind: TaskKind::Subagent,
                 count_subagents_only: true,
                 reuse_existing: false,
+                adopt_unstarted: false,
+                workflow_recovery: None,
                 notify_parent_on_completion: false,
             },
         )
@@ -552,6 +572,8 @@ impl BackgroundJobManager {
                 kind: TaskKind::Subagent,
                 count_subagents_only: true,
                 reuse_existing: false,
+                adopt_unstarted: false,
+                workflow_recovery: None,
                 notify_parent_on_completion: false,
             },
         )
@@ -579,6 +601,8 @@ impl BackgroundJobManager {
                 kind: TaskKind::Subagent,
                 count_subagents_only: true,
                 reuse_existing: true,
+                adopt_unstarted: false,
+                workflow_recovery: None,
                 notify_parent_on_completion: true,
             },
         )
@@ -606,6 +630,8 @@ impl BackgroundJobManager {
                 kind: TaskKind::Subagent,
                 count_subagents_only: true,
                 reuse_existing: true,
+                adopt_unstarted: false,
+                workflow_recovery: None,
                 notify_parent_on_completion: true,
             },
         )
@@ -631,6 +657,8 @@ impl BackgroundJobManager {
                 kind,
                 count_subagents_only,
                 reuse_existing: false,
+                adopt_unstarted: false,
+                workflow_recovery: None,
                 notify_parent_on_completion: true,
             },
         )
@@ -643,12 +671,25 @@ impl BackgroundJobManager {
         work: Pin<Box<dyn Future<Output = ToolOutput> + Send>>,
         policy: SpawnPolicy,
     ) -> Result<String, SpawnError> {
+        self.spawn_with_id_and_kind_for_run(id, description, work, policy, None)
+    }
+
+    fn spawn_with_id_and_kind_for_run(
+        &self,
+        id: String,
+        description: impl Into<String>,
+        work: Pin<Box<dyn Future<Output = ToolOutput> + Send>>,
+        policy: SpawnPolicy,
+        expected_previous: Option<&kcoder_types::BackgroundRunKey>,
+    ) -> Result<String, SpawnError> {
         let SpawnPolicy {
             cancel,
             max_concurrent,
             kind,
             count_subagents_only,
             reuse_existing,
+            adopt_unstarted,
+            workflow_recovery,
             notify_parent_on_completion,
         } = policy;
         // Capacity checks, duplicate-ID checks, task publication, and handle
@@ -677,7 +718,6 @@ impl BackgroundJobManager {
             }
         }
         let description = description.into();
-        crate::recover_write_lock(&self.cancelled, "background_job_cancelled").remove(&id);
         {
             let handles = crate::recover_read_lock(&self.handles, "background_job_handles");
             if handles.contains_key(&id) {
@@ -691,13 +731,32 @@ impl BackgroundJobManager {
                 .state
                 .task(&id)
                 .ok_or_else(|| SpawnError::NotFound { id: id.clone() })?;
+            if let Some(expected) = expected_previous
+                && (expected.parent_session_id != self.state.session_id()
+                    || expected.agent_id != id
+                    || task.background_run.as_ref() != Some(expected)
+                    || !matches!(task.status, TaskStatus::Completed | TaskStatus::Failed))
+            {
+                return Err(SpawnError::AlreadyExists { id });
+            }
             if task.kind != kind {
                 return Err(SpawnError::NotSubagent { id });
+            }
+            if let Some(claim) = &workflow_recovery {
+                claim
+                    .verify(self, &task)
+                    .map_err(|_| SpawnError::AlreadyExists { id: id.clone() })?;
+            }
+            let unstarted = !task.managed
+                && task.background_run.is_none()
+                && task.status == TaskStatus::Pending;
+            if adopt_unstarted && !unstarted {
+                return Err(SpawnError::AlreadyExists { id });
             }
             // The live-handle check above is authoritative. A restored
             // Pending/Running workflow has no handle after process restart and
             // is therefore an interrupted run that may be resumed.
-            if !matches!(kind, TaskKind::Workflow)
+            if !(matches!(kind, TaskKind::Workflow) || adopt_unstarted && unstarted)
                 && matches!(task.status, TaskStatus::Pending | TaskStatus::Running)
             {
                 return Err(SpawnError::AlreadyRunning { id });
@@ -714,6 +773,7 @@ impl BackgroundJobManager {
             }
             Task::new(&id, &description)
         };
+        crate::recover_write_lock(&self.cancelled, "background_job_cancelled").remove(&id);
         // Keep Paused visible to the durable run transition until it is accepted.
         task.output = None;
         task.updated_at_ms = now;
@@ -748,13 +808,24 @@ impl BackgroundJobManager {
             .map_err(|error| SpawnError::Persistence {
                 message: error.to_string(),
             })?;
-        let publisher = ScopedPublisher::new(self.tx.clone(), self.state.clone(), run.clone());
+        if kind == TaskKind::Subagent {
+            // A real admitted run is observable while waiting for its first
+            // authorized event. Only its manager supplies this empty stream;
+            // a read request cannot relabel an old checkpoint as this run.
+            self.live_views.prepare_managed_run(&id, run.run_id.clone());
+        }
+        let publisher = ScopedPublisher::new(
+            self.tx.clone(),
+            self.state.clone(),
+            run.clone(),
+            self.terminal_observers.clone(),
+        );
         crate::recover_write_lock(&self.publishers, "background_publishers")
             .insert(id.clone(), publisher.clone());
         let _ = self.publish(BackgroundJobEvent::Started {
             id: id.clone(),
             description: description.clone(),
-            continuation: reuse_existing,
+            continuation: reuse_existing && !adopt_unstarted,
         });
 
         let tx = publisher;
@@ -778,7 +849,8 @@ impl BackgroundJobManager {
             // terminal-state transaction below. Letting it unwind out of this
             // task would strand the persisted Task in Running, leave its
             // SendMessage queue open, and retain a stale concurrency handle.
-            let mut output = match AssertUnwindSafe(work).catch_unwind().await {
+            let owned_work = owned_run::scope(&state, run.clone(), work);
+            let mut output = match AssertUnwindSafe(owned_work).catch_unwind().await {
                 Ok(output) => output,
                 Err(payload) => ToolOutput::error(format!(
                     "background job panicked: {}",
@@ -1006,6 +1078,7 @@ impl BackgroundJobManager {
                             _ => None,
                         })
                         .collect::<String>(),
+                    execution_metadata: output.execution_metadata.clone(),
                 }
             } else {
                 BackgroundJobEvent::Completed {
@@ -1063,6 +1136,10 @@ impl BackgroundJobManager {
 
     /// Abort a running background job by ID, if it exists.
     pub fn abort(&self, id: &str) -> bool {
+        self.abort_checked(id, None)
+    }
+
+    fn abort_checked(&self, id: &str, expected: Option<&kcoder_types::BackgroundRunKey>) -> bool {
         let _admission = self
             .admission
             .lock()
@@ -1071,6 +1148,17 @@ impl BackgroundJobManager {
             // Serialize the running-state check with the completion commit.
             // TaskStop may race a command that has just produced its result.
             let _cancelled = crate::recover_write_lock(&self.cancelled, "background_job_cancelled");
+            if let Some(expected) = expected
+                && (expected.agent_id != id
+                    || expected.parent_session_id != self.state.session_id()
+                    || self
+                        .state
+                        .task(id)
+                        .is_none_or(|task| task.background_run.as_ref() != Some(expected))
+                    || !self.has_live_run(id, expected))
+            {
+                return false;
+            }
             let Some(handle) =
                 crate::recover_write_lock(&self.handles, "background_job_handles").remove(id)
             else {
@@ -1196,7 +1284,8 @@ impl BackgroundJobManager {
         id: &str,
         expected: &kcoder_types::BackgroundRunKey,
     ) -> anyhow::Result<bool> {
-        self.abort_and_wait_checked(id, Some(expected)).await
+        self.abort_and_wait_checked(id, Some((expected, TaskDelivery::Background)))
+            .await
     }
 
     pub fn has_live_run(&self, id: &str, expected: &kcoder_types::BackgroundRunKey) -> bool {
@@ -1208,7 +1297,7 @@ impl BackgroundJobManager {
     async fn abort_and_wait_checked(
         &self,
         id: &str,
-        expected: Option<&kcoder_types::BackgroundRunKey>,
+        expected: Option<(&kcoder_types::BackgroundRunKey, TaskDelivery)>,
     ) -> anyhow::Result<bool> {
         let mut handle = {
             let _admission = self
@@ -1221,7 +1310,7 @@ impl BackgroundJobManager {
             let mut cancelled =
                 crate::recover_write_lock(&self.cancelled, "background_job_cancelled");
             let mut handles = crate::recover_write_lock(&self.handles, "background_job_handles");
-            if let Some(expected) = expected {
+            if let Some((expected, delivery)) = expected {
                 anyhow::ensure!(
                     expected.agent_id == id
                         && expected.parent_session_id == self.state.session_id(),
@@ -1239,7 +1328,7 @@ impl BackgroundJobManager {
                     "agent_stop_identity_conflict"
                 );
                 anyhow::ensure!(
-                    task.delivery == TaskDelivery::Background,
+                    task.delivery == delivery,
                     "agent_stop_not_supported_foreground"
                 );
                 if let Some(handle) = handles.get(id) {
@@ -1426,6 +1515,7 @@ impl BackgroundJobManager {
                                 .output
                                 .clone()
                                 .unwrap_or_else(|| "background task failed".to_string()),
+                            execution_metadata: Vec::new(),
                         }),
                         TaskStatus::Cancelled => Some(BackgroundJobEvent::Cancelled {
                             id: id.to_string(),

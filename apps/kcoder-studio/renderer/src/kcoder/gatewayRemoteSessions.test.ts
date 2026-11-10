@@ -19,6 +19,7 @@ class TerminalClient extends EventTarget {
       return { session_id: 'wire-terminal', cwd: '/workspace' } as T
     }
     if (method === 'terminal/close' && this.closeFailure) throw this.closeFailure
+    if (method === 'terminal/close') return { closed: true } as T
     if (method === 'terminal/attach') {
       return {
         session_id: params.session_id,
@@ -120,11 +121,16 @@ describe('Gateway remote terminal lifecycle and buffering', () => {
       filename: 'photo.png',
       size: 6,
     })
-    expect(client.request).toHaveBeenNthCalledWith(2, 'attachment/upload/chunk', {
-      upload_id: 'upload-large',
-      index: 0,
-      content_base64: 'AQID',
-    })
+    expect(client.request).toHaveBeenNthCalledWith(
+      2,
+      'attachment/upload/chunk',
+      {
+        upload_id: 'upload-large',
+        index: 0,
+        content_base64: 'AQID',
+      },
+      { signal: expect.any(AbortSignal) }
+    )
     await expect(
       sessions.readAttachment({ deviceId: 'local', path: '/tmp/large.bin' })
     ).resolves.toMatchObject({ contentBase64: 'AQIDBAUG', size: 6 })
@@ -158,7 +164,7 @@ describe('Gateway remote terminal lifecycle and buffering', () => {
     })
   })
 
-  test('cleans a rejected close, ignores stale output, and permits authoritative wire reuse', async () => {
+  test('retains a rejected close until explicit retry, then ignores stale output and permits authoritative wire reuse', async () => {
     const { client, sessions, session } = await terminalFixture()
     const remote = sessions.createTerminalClient(session.session_id)
     const output = vi.fn()
@@ -166,6 +172,12 @@ describe('Gateway remote terminal lifecycle and buffering', () => {
     client.closeFailure = new Error('terminal close failed')
 
     await expect(remote.close()).rejects.toThrow('terminal close failed')
+    expect(() => sessions.createTerminalClient(session.session_id)).not.toThrow()
+    await remote.write('must not run after an unconfirmed close')
+    expect(client.request.mock.calls.some(([method]) => method === 'terminal/write')).toBe(false)
+    client.closeFailure = null
+    await remote.close()
+    expect(client.request.mock.calls.filter(([method]) => method === 'terminal/close')).toHaveLength(2)
     expect(() => sessions.createTerminalClient(session.session_id)).toThrow('不存在')
     expect(
       sessions.handleNotification(
@@ -186,6 +198,42 @@ describe('Gateway remote terminal lifecycle and buffering', () => {
     )
     expect(reusedOutput).toHaveBeenCalledWith({ session_id: reused.session_id, data: 'fresh' })
     expect(output).not.toHaveBeenCalled()
+  })
+
+  test('an unknown terminal exit stops input but preserves ownership for cleanup retry', async () => {
+    const { client, sessions, session } = await terminalFixture()
+    const remote = sessions.createTerminalClient(session.session_id), exited = vi.fn()
+    remote.onExit(exited)
+    sessions.handleNotification('terminal/exit', { session_id: 'wire-terminal', exit_code: null }, 'local')
+    expect(exited).toHaveBeenCalledExactlyOnceWith({ session_id: session.session_id, exit_code: null })
+    await remote.write('ignored')
+    await remote.resize(30, 100)
+    expect(client.request.mock.calls.some(([method]) => method === 'terminal/write' || method === 'terminal/resize')).toBe(false)
+    await remote.close()
+    expect(client.request).toHaveBeenLastCalledWith('terminal/close', { session_id: 'wire-terminal' })
+    expect(() => sessions.createTerminalClient(session.session_id)).toThrow('不存在')
+  })
+
+  test('a confirmed terminal exit is not downgraded by a duplicated unknown event', async () => {
+    const { sessions, session } = await terminalFixture()
+    const remote = sessions.createTerminalClient(session.session_id), exited = vi.fn()
+    remote.onExit(exited)
+    sessions.handleNotification('terminal/exit', { session_id: 'wire-terminal', exit_code: 0 }, 'local')
+    sessions.handleNotification('terminal/exit', { session_id: 'wire-terminal', exit_code: null }, 'local')
+    expect(exited).toHaveBeenCalledExactlyOnceWith({ session_id: session.session_id, exit_code: 0 })
+  })
+
+  test('a missing or negative close receipt cannot discard an unknown terminal owner', async () => {
+    const { client, sessions, session } = await terminalFixture()
+    const remote = sessions.createTerminalClient(session.session_id)
+    sessions.handleNotification('terminal/exit', { session_id: 'wire-terminal', exit_code: null }, 'local')
+    for (const value of [{ closed: false }, {}]) {
+      client.request.mockResolvedValueOnce(value)
+      await expect(remote.close()).rejects.toThrow()
+      expect(() => sessions.createTerminalClient(session.session_id)).not.toThrow()
+    }
+    await remote.close()
+    expect(() => sessions.createTerminalClient(session.session_id)).toThrow('不存在')
   })
 
   test('caps one oversized terminal packet to the newest 256 KiB', async () => {

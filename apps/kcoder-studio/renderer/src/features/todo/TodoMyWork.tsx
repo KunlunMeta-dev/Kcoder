@@ -57,7 +57,7 @@ export function TodoMyWork({ items, onSelectItem }: TodoMyWorkProps) {
           return (
             <section
               key={group.key}
-              className="overflow-hidden rounded-lg border border-border bg-surface"
+              className="studio-card overflow-hidden rounded-lg border border-border bg-surface"
             >
               <header className="flex h-10 items-center gap-2 border-b border-border px-3">
                 <Icon className="h-3.5 w-3.5 text-text-muted" />

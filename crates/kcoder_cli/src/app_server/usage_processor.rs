@@ -1,7 +1,7 @@
 use super::*;
 
 pub(super) async fn process(id: Value, params: Value, engine: &QueryEngine) -> Value {
-    if serde_json::from_value::<kcoder_app_protocol::UsageStatsParams>(params).is_err() {
+    if kcoder_app_rpc_codec::decode::<kcoder_app_protocol::UsageStatsParams>(params).is_err() {
         return error_response(id, -32602, "usage/stats expects an empty parameter object");
     }
     let Some(root) = engine.state.usage_history_root() else {

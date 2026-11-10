@@ -207,7 +207,8 @@ export function renderTerminalPage(options) {
             if (!cell || cell.getWidth() === 0) continue;
             text += cell.getChars();
             cells.push({ text: cell.getChars(), fg: cell.getFgColor(), fgMode: cell.getFgColorMode(),
-              rgb: cell.isFgRGB(), bold: Boolean(cell.isBold()), underline: Boolean(cell.isUnderline()) });
+              rgb: cell.isFgRGB(), bold: Boolean(cell.isBold()), underline: Boolean(cell.isUnderline()),
+              bg: cell.getBgColor(), bgMode: cell.getBgColorMode(), inverse: Boolean(cell.isInverse()) });
           }
           return { ...hit, cells };
         });

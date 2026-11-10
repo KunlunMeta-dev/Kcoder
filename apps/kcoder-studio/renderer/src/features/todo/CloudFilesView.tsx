@@ -203,7 +203,7 @@ function ProjectFilesView({ api, project }: { api: DeliveryApi; project: CloudPr
             {error}
           </p>
         )}
-        <div className="mt-6 overflow-hidden rounded-2xl border border-border bg-background shadow-sm">
+        <div className="studio-card mt-6 overflow-hidden rounded-2xl border border-border bg-background shadow-sm">
           <div className="grid h-10 grid-cols-[minmax(0,1fr)_110px_110px_90px_100px] items-center bg-muted/30 px-4 text-xs text-text-muted">
             <span>名称</span>
             <span>类型</span>
@@ -293,7 +293,7 @@ function ProjectFilesView({ api, project }: { api: DeliveryApi; project: CloudPr
             <h3 className="text-base font-semibold text-text-primary">交付快照</h3>
             <span className="text-xs text-text-muted">来自已完成任务，只读且不可修改</span>
           </div>
-          <div className="mt-3 overflow-hidden rounded-2xl border border-border bg-background shadow-sm">
+          <div className="studio-card mt-3 overflow-hidden rounded-2xl border border-border bg-background shadow-sm">
             <div className="grid h-10 grid-cols-[240px_minmax(0,1fr)_120px_120px_80px_40px] items-center bg-muted/30 px-4 text-xs text-text-muted">
               <span>任务</span>
               <span>名称</span>

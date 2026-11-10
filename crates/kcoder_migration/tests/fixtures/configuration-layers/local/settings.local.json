@@ -1,0 +1,6 @@
+{
+  "model": "local-model",
+  "env": {
+    "ANTHROPIC_API_KEY": "SYNTHETIC_LAYERED_LOCAL_API_KEY"
+  }
+}

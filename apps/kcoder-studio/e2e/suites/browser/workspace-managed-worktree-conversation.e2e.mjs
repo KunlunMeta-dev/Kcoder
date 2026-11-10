@@ -998,7 +998,7 @@ async function removeProject(page, name, id) {
 async function rawRuntimeRequest(page, method, params) {
   return page.evaluate(
     async ({ method, params }) =>
-      window.__TAURI_INTERNALS__?.invoke("local_executor_request", {
+      window.__ELECTRON_INTERNALS__?.invoke("local_executor_request", {
         method,
         params,
       }),
@@ -1008,7 +1008,7 @@ async function rawRuntimeRequest(page, method, params) {
 
 async function installIpcCapture(page) {
   await page.evaluate(() => {
-    const internals = window.__TAURI_INTERNALS__;
+    const internals = window.__ELECTRON_INTERNALS__;
     if (
       !internals ||
       typeof internals.invoke !== "function" ||

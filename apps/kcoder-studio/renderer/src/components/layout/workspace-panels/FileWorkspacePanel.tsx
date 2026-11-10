@@ -42,6 +42,8 @@ import {
 } from '@/lib/workspace-file-path'
 import type {
   CodeCommentContext,
+  WorkspaceFileCommentController,
+  WorkspaceFileEditorNavigation,
   WorkspaceFileApi,
   WorkspaceFileOpenRequest,
   WorkspaceFileOpenOptions,
@@ -58,6 +60,8 @@ import {
 } from './WorkspaceFileTreeContextMenu'
 
 interface FileWorkspacePanelProps {
+  registerEditorGuard?: WorkspaceFileEditorNavigation['register']
+  commentController?: WorkspaceFileCommentController
   target: WorkspaceTarget | null
   workspaceTargets?: WorkspaceTarget[]
   workspaceFileApi: WorkspaceFileApi
@@ -70,7 +74,8 @@ interface FileWorkspacePanelProps {
 
 interface PreviewLineTarget {
   filePath: string
-  lineStart: number
+  sourceRevision?: string
+  lineStart?: number
   lineEnd?: number
 }
 
@@ -145,15 +150,18 @@ function createPreviewLineTarget(
   filePath: string,
   options?: WorkspaceFileOpenOptions
 ): PreviewLineTarget | null {
-  if (typeof options?.lineStart !== 'number') return null
+  if (!options?.sourceRevision && typeof options?.lineStart !== 'number') return null
   return {
     filePath,
-    lineStart: options.lineStart,
-    lineEnd: options.lineEnd,
+    lineStart: options?.lineStart,
+    lineEnd: options?.lineEnd,
+    sourceRevision: options?.sourceRevision,
   }
 }
 
 export function FileWorkspacePanel({
+  registerEditorGuard,
+  commentController,
   target,
   workspaceTargets = [],
   workspaceFileApi,
@@ -232,6 +240,8 @@ export function FileWorkspacePanel({
   const [saveError, setSaveError] = useState<string | null>(null)
   const [pendingNavigation, setPendingNavigation] = useState<(() => void) | null>(null)
   const latestPendingNavigation = useRef<(() => void) | null>(null)
+  const pendingNavigationCancel = useRef<(() => void) | null>(null)
+  const editorOwner = useMemo(() => ({}), [])
   const [treeSelectionRevision, setTreeSelectionRevision] = useState(0)
   const [openingWorkspace, setOpeningWorkspace] = useState(false)
   const [directoryTreeVisible, setDirectoryTreeVisible] = useState(true)
@@ -628,6 +638,15 @@ export function FileWorkspacePanel({
   )
 
   const dirty = editing && preview !== null && editedContent !== preview.content
+  useLayoutEffect(
+    () => () => {
+      latestTarget.current = null
+      latestPendingNavigation.current = null
+      pendingNavigationCancel.current = null
+      invalidateFileRequest()
+    },
+    [invalidateFileRequest]
+  )
 
   const refreshDirectory = useCallback(
     async (path: string) => {
@@ -650,7 +669,8 @@ export function FileWorkspacePanel({
         submittedContent,
         preview.revision
       )
-      if (fileRequestSequence.current !== requestId) return false
+      if (fileRequestSequence.current !== requestId || latestTarget.current !== stableTarget)
+        return false
       setPreview(saved)
       // A successful disk write advances the read revision, but must not erase
       // text entered while that write was pending or navigate away from it.
@@ -659,20 +679,23 @@ export function FileWorkspacePanel({
       setEditing(false)
       return true
     } catch (error) {
-      if (fileRequestSequence.current !== requestId) return false
+      if (fileRequestSequence.current !== requestId || latestTarget.current !== stableTarget)
+        return false
       setSaveError(
         error instanceof Error ? error.message : t('workbench.workspace_file_save_failed')
       )
       return false
     } finally {
-      if (fileRequestSequence.current === requestId) setSaving(false)
+      if (fileRequestSequence.current === requestId && latestTarget.current === stableTarget)
+        setSaving(false)
     }
   }, [dirty, preview, saving, stableTarget, t, writeWorkspaceTextFile])
 
   const navigateWithDirtyGuard = useCallback(
-    (action: () => void) => {
+    (action: () => void, onCancel?: () => void) => {
       if (dirty) {
         latestPendingNavigation.current = action
+        pendingNavigationCancel.current = onCancel ?? null
         setPendingNavigation(() => action)
         // Pierre updates internal selection before notifying the application; rebuilding the model restores selection to the current edited file.
         setTreeSelectionRevision(revision => revision + 1)
@@ -681,6 +704,16 @@ export function FileWorkspacePanel({
       action()
     },
     [dirty]
+  )
+  useLayoutEffect(
+    () =>
+      registerEditorGuard?.({
+        owner: editorOwner,
+        deviceId: stableTarget?.deviceId,
+        dirty,
+        navigate: navigateWithDirtyGuard,
+      }),
+    [registerEditorGuard, editorOwner, stableTarget?.deviceId, dirty, navigateWithDirtyGuard]
   )
 
   useEffect(() => {
@@ -701,6 +734,7 @@ export function FileWorkspacePanel({
         setSaveError(null)
         setSaving(false)
         latestPendingNavigation.current = null
+        pendingNavigationCancel.current = null
         setPendingNavigation(null)
         setPreviewLoading(false)
         setPreviewLoadingProgress(null)
@@ -730,28 +764,32 @@ export function FileWorkspacePanel({
     void Promise.resolve().then(() => {
       if (!cancelled && !consumedOpenRequests.current.ids.has(openFileRequest.id)) {
         consumedOpenRequests.current.ids.add(openFileRequest.id)
-        navigateWithDirtyGuard(() => {
-          if (openFileRequest.isCurrent?.() === false) return
-          if (onCommitFileOpenRequest && !onCommitFileOpenRequest(openFileRequest)) return
-          if (!stableTarget) return // A cold editor can commit its first target without a draft.
-          const proposed = openFileRequest.target
-          if (
-            proposed &&
-            onCommitFileOpenRequest &&
-            (proposed.deviceId !== stableTarget.deviceId ||
-              proposed.path !== stableTarget.path ||
-              proposed.source !== stableTarget.source ||
-              proposed.taskId !== stableTarget.taskId ||
-              proposed.workspaceSource !== stableTarget.workspaceSource)
-          )
-            return // The accepted target mounts its own editor and consumes this request there.
-          setDirectoryTreeVisible(false)
-          openFilePath(openFileRequest.path, {
-            lineStart: openFileRequest.lineStart,
-            lineEnd: openFileRequest.lineEnd,
-            isDirectory: openFileRequest.isDirectory,
-          })
-        })
+        navigateWithDirtyGuard(
+          () => {
+            if (openFileRequest.isCurrent?.() === false) return
+            if (onCommitFileOpenRequest && !onCommitFileOpenRequest(openFileRequest)) return
+            if (!stableTarget) return // A cold editor can commit its first target without a draft.
+            const proposed = openFileRequest.target
+            if (
+              proposed &&
+              onCommitFileOpenRequest &&
+              (proposed.deviceId !== stableTarget.deviceId ||
+                proposed.path !== stableTarget.path ||
+                proposed.source !== stableTarget.source ||
+                proposed.taskId !== stableTarget.taskId ||
+                proposed.workspaceSource !== stableTarget.workspaceSource)
+            )
+              return // The accepted target mounts its own editor and consumes this request there.
+            setDirectoryTreeVisible(false)
+            openFilePath(openFileRequest.path, {
+              lineStart: openFileRequest.lineStart,
+              lineEnd: openFileRequest.lineEnd,
+              sourceRevision: openFileRequest.sourceRevision,
+              isDirectory: openFileRequest.isDirectory,
+            })
+          },
+          () => onCancelFileOpenRequest?.(openFileRequest)
+        )
       }
     })
     return () => {
@@ -761,11 +799,13 @@ export function FileWorkspacePanel({
     stableTarget,
     navigateWithDirtyGuard,
     onCommitFileOpenRequest,
+    onCancelFileOpenRequest,
     openFileRequest,
     openFilePath,
     openFileRequest?.id,
     openFileRequest?.lineEnd,
     openFileRequest?.lineStart,
+    openFileRequest?.sourceRevision,
     openFileRequest?.isDirectory,
     openFileRequest?.path,
   ])
@@ -831,7 +871,9 @@ export function FileWorkspacePanel({
   }
 
   const activePreviewLineTarget =
-    previewLineTarget && previewLineTarget.filePath === preview?.path ? previewLineTarget : null
+    previewLineTarget && previewLineTarget.filePath === (preview?.path ?? binaryPreview?.path)
+      ? previewLineTarget
+      : null
   const displayPath = selectedFilePath ?? stableTarget.path
   const canOpenFile =
     stableTarget.workspaceSource !== 'remote' &&
@@ -1325,7 +1367,9 @@ export function FileWorkspacePanel({
         className="flex min-h-0 min-w-0 flex-1 overflow-hidden"
       >
         <WorkspaceFilePreview
+          commentController={commentController}
           file={preview}
+          sourceRevision={activePreviewLineTarget?.sourceRevision}
           binaryFile={binaryPreview}
           loading={previewLoading}
           loadingProgress={previewLoadingProgress}
@@ -1495,9 +1539,11 @@ export function FileWorkspacePanel({
                 data-testid="workspace-file-unsaved-cancel"
                 className="h-8 rounded-md px-3 text-sm hover:bg-muted"
                 onClick={() => {
+                  const cancel = pendingNavigationCancel.current
                   latestPendingNavigation.current = null
+                  pendingNavigationCancel.current = null
                   setPendingNavigation(null)
-                  if (openFileRequest) onCancelFileOpenRequest?.(openFileRequest)
+                  cancel?.()
                 }}
               >
                 {t('workbench.cancel')}
@@ -1509,6 +1555,7 @@ export function FileWorkspacePanel({
                 onClick={() => {
                   const action = pendingNavigation
                   latestPendingNavigation.current = null
+                  pendingNavigationCancel.current = null
                   setPendingNavigation(null)
                   setEditing(false)
                   action()
@@ -1526,6 +1573,7 @@ export function FileWorkspacePanel({
                     const action = pendingNavigation
                     if ((await saveFile()) && latestPendingNavigation.current === action) {
                       latestPendingNavigation.current = null
+                      pendingNavigationCancel.current = null
                       setPendingNavigation(null)
                       setEditing(false)
                       action()

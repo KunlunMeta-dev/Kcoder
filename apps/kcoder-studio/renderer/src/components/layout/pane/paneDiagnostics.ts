@@ -1,3 +1,4 @@
+import { isRuntimeDebugEnabled } from '@/lib/diagnosticPreferences'
 import type { RuntimePaneMessageAction } from '@/features/workbench/runtimePaneMessages'
 import type { RuntimeTaskAddress } from '@/types/api'
 import type { WorkbenchMessage } from '@/types/workbench'
@@ -34,8 +35,4 @@ export function debugRuntimePaneMessageFlow(event: string, details: Record<strin
 
 export function isBatchableRuntimePaneMessageAction(action: RuntimePaneMessageAction): boolean {
   return action.type === 'assistant_chunk' || action.type === 'block_updated'
-}
-
-export function isRuntimeDebugEnabled(): boolean {
-  return globalThis.localStorage?.getItem('wework:debug-runtime') === '1'
 }

@@ -1,0 +1,264 @@
+{
+  "TurnFileChangesCapture": [
+    {
+      "decoded": {
+        "artifactId": null,
+        "attemptId": "turn-1",
+        "base": null,
+        "captureId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "head": null,
+        "limitations": [],
+        "state": "capturing",
+        "threadId": "thread-1",
+        "turnId": "turn-1",
+        "version": 1
+      },
+      "name": "capturing",
+      "value": {
+        "artifactId": null,
+        "attemptId": "turn-1",
+        "base": null,
+        "captureId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "head": null,
+        "limitations": [],
+        "state": "capturing",
+        "threadId": "thread-1",
+        "turnId": "turn-1",
+        "version": 1
+      }
+    },
+    {
+      "decoded": {
+        "artifactId": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "attemptId": "turn-1",
+        "base": {
+          "completedAtMs": 2,
+          "startedAtMs": 1
+        },
+        "captureId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "head": {
+          "completedAtMs": 5,
+          "startedAtMs": 4
+        },
+        "limitations": [],
+        "state": "changed",
+        "threadId": "thread-1",
+        "turnId": "turn-1",
+        "version": 1
+      },
+      "name": "changed",
+      "value": {
+        "artifactId": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "attemptId": "turn-1",
+        "base": {
+          "completedAtMs": 2,
+          "startedAtMs": 1
+        },
+        "captureId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "head": {
+          "completedAtMs": 5,
+          "startedAtMs": 4
+        },
+        "limitations": [],
+        "state": "changed",
+        "threadId": "thread-1",
+        "turnId": "turn-1",
+        "version": 1
+      }
+    },
+    {
+      "decoded": {
+        "artifactId": null,
+        "attemptId": "turn-1",
+        "base": {
+          "completedAtMs": 2,
+          "startedAtMs": 1
+        },
+        "captureId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "head": {
+          "completedAtMs": 5,
+          "startedAtMs": 4
+        },
+        "limitations": [],
+        "state": "unchanged",
+        "threadId": "thread-1",
+        "turnId": "turn-1",
+        "version": 1
+      },
+      "name": "unchanged",
+      "value": {
+        "artifactId": null,
+        "attemptId": "turn-1",
+        "base": {
+          "completedAtMs": 2,
+          "startedAtMs": 1
+        },
+        "captureId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "head": {
+          "completedAtMs": 5,
+          "startedAtMs": 4
+        },
+        "limitations": [],
+        "state": "unchanged",
+        "threadId": "thread-1",
+        "turnId": "turn-1",
+        "version": 1
+      }
+    },
+    {
+      "decoded": {
+        "artifactId": null,
+        "attemptId": "turn-1",
+        "base": null,
+        "captureId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "head": null,
+        "limitations": [],
+        "state": "disabled",
+        "threadId": "thread-1",
+        "turnId": "turn-1",
+        "version": 1
+      },
+      "name": "disabled",
+      "value": {
+        "artifactId": null,
+        "attemptId": "turn-1",
+        "base": null,
+        "captureId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "head": null,
+        "limitations": [],
+        "state": "disabled",
+        "threadId": "thread-1",
+        "turnId": "turn-1",
+        "version": 1
+      }
+    },
+    {
+      "decoded": {
+        "artifactId": null,
+        "attemptId": "turn-1",
+        "base": {
+          "completedAtMs": 2,
+          "startedAtMs": 1
+        },
+        "captureId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "head": {
+          "completedAtMs": 5,
+          "startedAtMs": 4
+        },
+        "limitations": [
+          "policyExclusions"
+        ],
+        "state": "partial",
+        "threadId": "thread-1",
+        "turnId": "turn-1",
+        "version": 1
+      },
+      "name": "partial",
+      "value": {
+        "artifactId": null,
+        "attemptId": "turn-1",
+        "base": {
+          "completedAtMs": 2,
+          "startedAtMs": 1
+        },
+        "captureId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "head": {
+          "completedAtMs": 5,
+          "startedAtMs": 4
+        },
+        "limitations": [
+          "policyExclusions"
+        ],
+        "state": "partial",
+        "threadId": "thread-1",
+        "turnId": "turn-1",
+        "version": 1
+      }
+    },
+    {
+      "decoded": {
+        "artifactId": null,
+        "attemptId": "turn-1",
+        "base": null,
+        "captureId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "head": null,
+        "limitations": [
+          "captureFailed"
+        ],
+        "state": "failed",
+        "threadId": "thread-1",
+        "turnId": "turn-1",
+        "version": 1
+      },
+      "name": "failed",
+      "value": {
+        "artifactId": null,
+        "attemptId": "turn-1",
+        "base": null,
+        "captureId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "head": null,
+        "limitations": [
+          "captureFailed"
+        ],
+        "state": "failed",
+        "threadId": "thread-1",
+        "turnId": "turn-1",
+        "version": 1
+      }
+    },
+    {
+      "decoded": {
+        "artifactId": null,
+        "attemptId": "turn-1",
+        "base": null,
+        "captureId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "head": null,
+        "limitations": [],
+        "state": "cancelled",
+        "threadId": "thread-1",
+        "turnId": "turn-1",
+        "version": 1
+      },
+      "name": "cancelled",
+      "value": {
+        "artifactId": null,
+        "attemptId": "turn-1",
+        "base": null,
+        "captureId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "head": null,
+        "limitations": [],
+        "state": "cancelled",
+        "threadId": "thread-1",
+        "turnId": "turn-1",
+        "version": 1
+      }
+    },
+    {
+      "decoded": {
+        "artifactId": null,
+        "attemptId": "turn-1",
+        "base": null,
+        "captureId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "head": null,
+        "limitations": [],
+        "state": "unknown",
+        "threadId": "thread-1",
+        "turnId": "turn-1",
+        "version": 1
+      },
+      "name": "unknown",
+      "value": {
+        "artifactId": null,
+        "attemptId": "turn-1",
+        "base": null,
+        "captureId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "head": null,
+        "limitations": [],
+        "state": "unknown",
+        "threadId": "thread-1",
+        "turnId": "turn-1",
+        "version": 1
+      }
+    }
+  ]
+}

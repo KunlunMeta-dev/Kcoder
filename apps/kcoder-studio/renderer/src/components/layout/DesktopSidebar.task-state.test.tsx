@@ -10,7 +10,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { DesktopSidebar } from './DesktopSidebar'
 import {
   createSidebarProps,
-  enableTauri,
+  enableGateway,
   renderSidebar,
 } from './sidebar/DesktopSidebar.test-support'
 const experimentalFeatures = vi.hoisted(() => ({ enabled: true }))
@@ -24,7 +24,7 @@ describe('DesktopSidebar task-state', () => {
   beforeEach(() => {
     experimentalFeatures.enabled = true
     localStorage.clear()
-    enableTauri()
+    enableGateway()
     Element.prototype.scrollIntoView = vi.fn()
     vi.mocked(openLocalWorkspace).mockReset()
   })
@@ -269,6 +269,33 @@ describe('DesktopSidebar task-state', () => {
 
     expect(onOpenRuntimeTask).toHaveBeenCalledTimes(1)
     expect(onMarkRuntimeTaskRead).toHaveBeenCalledTimes(1)
+  })
+
+  test('shows a new-conversation fallback for an old persisted history control error', async () => {
+    const rawError = 'failed to validate bound history source: history source control directory exists but its record is missing; explicit recovery is required'
+    renderSidebar({
+      runtimeWork: {
+        projects: [{
+          project: { id: 7, key: 'project-7', name: 'KCoder' },
+          totalTasks: 1,
+          deviceWorkspaces: [{
+            deviceId: 'local-device', workspacePath: '/fixture/work', available: true,
+            tasks: [{
+              taskId: 'damaged-history', title: 'Existing conversation',
+              workspacePath: '/fixture/work', runtime: 'kcoder', running: false,
+              status: 'failed', error: rawError,
+            }],
+          }],
+        }],
+        chats: [], totalTasks: 1,
+      },
+    })
+    await userEvent.click(screen.getByTestId('project-item-button'))
+    const error = screen.getByTestId('runtime-task-creation-error-damaged-history')
+    expect(error).toHaveTextContent('此会话暂时无法恢复，请新建会话继续')
+    expect(error).not.toHaveTextContent('explicit recovery')
+    expect(error).not.toHaveTextContent(rawError)
+    expect(screen.getByTestId('runtime-local-task-row-damaged-history')).toHaveTextContent('Existing conversation')
   })
 
   test('shows a failed draft error and removes it immediately even when the target is unavailable', async () => {

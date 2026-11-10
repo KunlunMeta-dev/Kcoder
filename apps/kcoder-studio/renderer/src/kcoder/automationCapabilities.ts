@@ -8,6 +8,12 @@ export function assertAutomationCapabilities(
 ): void {
   if (client.supportsExperimental?.('projectAutomations') !== true)
     throw new Error(i18n.t('automations.targetUnsupported'))
+  if (
+    method === 'cron/delete' &&
+    fields.triggerId !== undefined &&
+    client.supportsExperimental?.('cronHistoryDeleteV1') !== true
+  )
+    throw new Error(i18n.t('automations.execution.deleteUnsupported'))
   if (method === 'cron/preview' && client.supportsExperimental?.('cronPreviewV1') !== true)
     throw new Error(i18n.t('automations.previewUnsupported'))
   const schedule = fields.schedule
@@ -61,6 +67,7 @@ export interface AutomationExecution {
 
 export interface AutomationExecutionDiagnostics {
   runs: AutomationExecution[]
+  historyDeletionSupported: boolean
   automaticReplay: false
   serviceRequired: true
   offlinePolicy: string
@@ -150,6 +157,8 @@ export function automationExecutionDiagnostics(
   }
   return {
     runs: parsed,
+    historyDeletionSupported:
+      (diagnostics as Record<string, unknown>).historyDeletionSupported === true,
     automaticReplay: false,
     serviceRequired: true,
     offlinePolicy: 'wait-for-host-and-service; coalesce-missed; expire-after-seven-days',

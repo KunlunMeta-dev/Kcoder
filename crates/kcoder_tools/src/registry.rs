@@ -3,6 +3,9 @@ use std::collections::HashMap;
 use std::{fmt, sync::Arc};
 use thiserror::Error;
 
+/// Exact tool names disabled by the release, independently of editable settings.
+const RELEASE_DISABLED_TOOLS: &[&str] = &[];
+
 /// A collection of tools indexed by name.
 #[derive(Clone, Default)]
 pub struct ToolRegistry {
@@ -30,6 +33,12 @@ impl std::hash::Hash for ToolRegistryRevision {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ToolSource {
     Builtin,
+    /// Native host contribution; provenance is not execution permission.
+    NativeFeature {
+        feature: String,
+        tool: String,
+        revision: String,
+    },
     Mcp {
         server: String,
         tool: String,
@@ -45,6 +54,9 @@ impl fmt::Display for ToolSource {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Builtin => write!(f, "builtin"),
+            Self::NativeFeature { feature, tool, .. } => {
+                write!(f, "native feature {feature:?} tool {tool:?}")
+            }
             Self::Mcp { server, tool } => write!(f, "MCP server {server:?} tool {tool:?}"),
             Self::Plugin {
                 plugin,
@@ -191,20 +203,25 @@ impl ToolRegistry {
         filtered
     }
 
+    /// Inspect configuration eligibility for a late-bound name without a Tool instance.
+    pub fn name_is_disabled(name: &str, patterns: &[String]) -> bool {
+        RELEASE_DISABLED_TOOLS.contains(&name)
+            || patterns
+                .iter()
+                .any(|pattern| tool_name_matches(name, pattern))
+    }
+
     /// Remove every tool whose registered name matches any pattern in
     /// `patterns` (exact names and `prefix*` globs). Disabled tools are gone
     /// from the registry entirely: the model is never offered them and they
     /// cannot be invoked by name.
     pub fn filtered_out_by_patterns(&self, patterns: &[String]) -> Self {
-        if patterns.is_empty() {
+        if patterns.is_empty() && RELEASE_DISABLED_TOOLS.is_empty() {
             return self.clone();
         }
         let mut filtered = Self::new();
         for (name, entry) in self.tools.iter() {
-            if !patterns
-                .iter()
-                .any(|pattern| tool_name_matches(name, pattern))
-            {
+            if !Self::name_is_disabled(name, patterns) {
                 Arc::make_mut(&mut filtered.tools).insert(name.clone(), entry.clone());
             }
         }

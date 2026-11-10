@@ -1,6 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { useLocalSearchParams, useRouter } from "expo-router";
-import { useNavigation, usePreventRemove } from "@react-navigation/native";
+import { useLocalSearchParams, usePreventRemove, useRouter } from "expo-router";
 import {
   ActivityIndicator,
   Alert,
@@ -96,7 +95,6 @@ export default function ServerEditorRoute() {
   const styles = useThemedStyles(makeStyles);
   const router = useRouter();
   const { serverId } = useLocalSearchParams<{ serverId?: string }>();
-  const navigation = useNavigation();
   const insets = useSafeAreaInsets();
   const { activeProfile, runtime, refresh } = useApp();
   const sshServers = runtime.servers.filter(
@@ -183,15 +181,17 @@ export default function ServerEditorRoute() {
     });
   };
 
-  usePreventRemove(dirty, ({ data }) => {
+  usePreventRemove(dirty, ({ repeat }) => {
     const profileIdAtPrompt = activeProfileId;
     const revisionAtPrompt = renderEditorRevision;
     confirmDiscard(() => {
       if (
         activeProfileIdRef.current === profileIdAtPrompt &&
         editorRevisionRef.current === revisionAtPrompt
-      )
-        navigation.dispatch(data.action);
+      ) {
+        setBaseline(draft);
+        repeat();
+      }
     }, true);
   });
 

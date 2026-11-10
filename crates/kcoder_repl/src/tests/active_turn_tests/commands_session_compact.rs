@@ -2,7 +2,10 @@
 async fn btw_starts_immediately_while_foreground_turn_is_busy() {
     let temp = tempfile::tempdir().unwrap();
     let engine = test_engine(temp.path());
-    let mut app = ReplApp::default();
+    let mut app = ReplApp {
+        input_session_owner: Some(engine.state.inspection_lifecycle_identity()),
+        ..ReplApp::default()
+    };
     app.start_loading();
     let (raw_tx, _rx) = mpsc::channel(APP_EVENT_CHANNEL_CAPACITY);
     let tx = AppEventSender::new(raw_tx);

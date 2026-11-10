@@ -1,7 +1,7 @@
+import { currentHostServer } from '@/features/runtime-target/currentHostTarget'
 import { gatewayServerLabel } from '@/kcoder/gatewayServerLabel'
 import { Checkbox } from '@/components/ui/checkbox'
 import { WorkbenchContext } from '@/features/workbench/useWorkbench'
-import { workbenchModelTarget } from '@/features/workbench/workbenchModelTarget'
 import {
   Box,
   Code,
@@ -44,8 +44,8 @@ import { LOCAL_MODEL_SETTINGS_CHANGED_EVENT } from '@/features/model-settings/lo
 import { providerSaveErrorKey, providerSaveOutcomeUnknown } from '@/kcoder/providerValidationErrors'
 import { isPlaintextRemoteEndpoint } from '@/lib/endpoint-security'
 import { navigateTo } from '@/lib/navigation'
-import { DEFAULT_MODEL_OUTPUT_TOKENS } from '../../../../shared/modelConfiguration'
 
+import { NativeModelPolicyWorkspace } from '@/features/model-policies/NativeModelPolicyWorkspace'
 import { ProviderEffectiveConfiguration } from './ProviderEffectiveConfiguration'
 import { ConfigTemplatesSection } from './ConfigTemplatesSection'
 import { ProviderConfigurationSources } from './ProviderConfigurationSources'
@@ -62,11 +62,8 @@ import {
   StatusChip,
 } from './settings-ui'
 import { RuntimeTargetConfirmDialog } from './RuntimeTargetConfirmDialog'
-
-const DEFAULT_MODEL_LIMITS = {
-  contextWindowTokens: 100_000_000,
-  maxOutputTokens: DEFAULT_MODEL_OUTPUT_TOKENS,
-}
+import { ProviderMigrationCard } from './ProviderMigrationCard'
+import { ProviderModelDiscovery } from './ProviderModelDiscovery'
 
 const emptyDraft = (revision?: string): ProviderDraft => ({
   ...(revision ? { expectedRevision: revision } : {}),
@@ -74,10 +71,11 @@ const emptyDraft = (revision?: string): ProviderDraft => ({
   apiFormat: 'openai_chat_completions',
   endpoint: '',
   model: '',
-  ...DEFAULT_MODEL_LIMITS,
+  contextWindowTokens: 0,
+  maxOutputTokens: 0,
   apiKey: '',
   authentication: { mode: 'api_key' },
-  makeDefault: true,
+  makeDefault: false,
 })
 
 const conservativeCapabilities: ProviderModelCapabilities = {
@@ -86,6 +84,19 @@ const conservativeCapabilities: ProviderModelCapabilities = {
   vision: false,
   reasoning: false,
   structured_output: false,
+}
+
+function connectionId(endpoint: string, profiles: ProviderProfile[]) {
+  let base = 'custom-api'
+  try {
+    base = `api-${new URL(endpoint).hostname.replace(/[^A-Za-z0-9_-]/g, '-').slice(0, 96)}`
+  } catch {
+    /* Endpoint validation still runs before saving. */
+  }
+  let candidate = base
+  for (let suffix = 2; profiles.some(profile => profile.id === candidate); suffix++)
+    candidate = `${base}-${suffix}`
+  return candidate
 }
 
 function providerTargetScope(server?: GatewayServer): string {
@@ -110,9 +121,6 @@ export function KCoderProviderSettingsPage() {
   const { t } = useTranslation('common')
   const { t: policyT } = useTranslation('localRuntime')
   const workbench = useContext(WorkbenchContext)
-  const initialTarget = useRef(
-    workbench ? workbenchModelTarget(workbench.state).deviceId : undefined
-  )
   const [servers, setServers] = useState<GatewayServer[]>([])
   const [identityReady, setIdentityReady] = useState(false)
   const [serverId, setServerId] = useState('')
@@ -124,6 +132,8 @@ export function KCoderProviderSettingsPage() {
   const [extraBodyText, setExtraBodyText] = useState('')
   const [draft, setDraft] = useState<ProviderDraft>(emptyDraft)
   const [draftMode, setDraftMode] = useState<'new-api' | 'new-model' | 'edit'>('new-api')
+  const [editorOpen, setEditorOpen] = useState(false)
+  const editorRef = useRef<HTMLFormElement>(null)
   const [templateState, setTemplateState] = useState<{
     serverId: string
     templates: ProviderTemplate[]
@@ -195,8 +205,17 @@ export function KCoderProviderSettingsPage() {
         ) ?? [])
       : providerRows.filter(profile => profile.canDelete && profile.id !== deleting.id)
     : []
+  const revealEditor = () => {
+    setEditorOpen(true)
+    const owner = generation.current
+    window.requestAnimationFrame(() => {
+      if (owner !== generation.current) return
+      editorRef.current?.scrollIntoView?.({ block: 'start' })
+    })
+  }
   const editProfile = (profile: ProviderProfile, addModel = false) => {
     if (saveRecovery === 'read') return
+    revealEditor()
     setSaveRecovery(null)
     setNotice(null)
     setExtraBodyText(addModel ? '' : JSON.stringify(profile.extraBody ?? {}, null, 2))
@@ -215,10 +234,8 @@ export function KCoderProviderSettingsPage() {
         : {}),
       endpoint: profile.endpoint,
       model: addModel ? '' : profile.model,
-      contextWindowTokens: addModel
-        ? DEFAULT_MODEL_LIMITS.contextWindowTokens
-        : profile.contextWindowTokens,
-      maxOutputTokens: addModel ? DEFAULT_MODEL_LIMITS.maxOutputTokens : profile.maxOutputTokens,
+      contextWindowTokens: addModel ? 0 : profile.contextWindowTokens,
+      maxOutputTokens: addModel ? 0 : profile.maxOutputTokens,
       apiKey: '',
       authentication: profile.authentication ?? { mode: 'api_key' },
       capabilities: addModel ? undefined : profile.capabilities,
@@ -235,9 +252,7 @@ export function KCoderProviderSettingsPage() {
         setServers(items)
         setIdentityReady(true)
         setServerId(current =>
-          items.some(item => item.id === current)
-            ? current
-            : (items.find(item => item.id === initialTarget.current)?.id ?? items[0]?.id ?? '')
+          items.some(item => item.id === current) ? current : (currentHostServer(items)?.id ?? '')
         )
       })
       .catch(() => {
@@ -275,7 +290,7 @@ export function KCoderProviderSettingsPage() {
           setIdentityReady(true)
           setSaveRecovery(null)
           if (!selected) {
-            setServerId(items[0]?.id ?? '')
+            setServerId(currentHostServer(items)?.id ?? '')
             return
           }
           const sameScope = oldScope !== '' && oldScope === providerTargetScope(selected)
@@ -443,9 +458,13 @@ export function KCoderProviderSettingsPage() {
       setError(label('multipleModelsUnsupported'))
       return
     }
+    const submittedDraft =
+      draftMode === 'new-api' && !draft.id.trim()
+        ? { ...draft, id: connectionId(draft.endpoint, settings.profiles) }
+        : draft
     if (
       draftMode === 'new-api' &&
-      settings.profiles.some(profile => profile.id === draft.id.trim())
+      settings.profiles.some(profile => profile.id === submittedDraft.id.trim())
     ) {
       setError(label(multiple ? 'existingApi' : 'multipleModelsUnsupported'))
       return
@@ -471,6 +490,23 @@ export function KCoderProviderSettingsPage() {
     if (!draft.model.trim()) {
       setError(t('providerSettings.modelRequired'))
       document.querySelector<HTMLInputElement>('[data-testid="provider-model"]')?.focus()
+      return
+    }
+    if (
+      !Number.isSafeInteger(draft.contextWindowTokens) ||
+      draft.contextWindowTokens <= 0 ||
+      !Number.isSafeInteger(draft.maxOutputTokens) ||
+      draft.maxOutputTokens <= 0
+    ) {
+      setError(label('limitsRequired'))
+      return
+    }
+    if (
+      draft.contextWindowTokens < 1024 ||
+      draft.contextWindowTokens > 100_000_000 ||
+      draft.maxOutputTokens >= draft.contextWindowTokens
+    ) {
+      setError(label('limitsInvalid'))
       return
     }
     let extraBody: Record<string, unknown> | undefined
@@ -515,14 +551,14 @@ export function KCoderProviderSettingsPage() {
         serverId,
         settings.supportsModelCapabilities
           ? {
-              ...draft,
+              ...submittedDraft,
               ...(taskScope && settings.supportsRuntimeScope ? { runtimeTaskId: taskScope } : {}),
               ...(settings.supportsIndependentProbe ? { validateConnection: false } : {}),
               ...(extraBody ? { extraBody } : {}),
               capabilities: draft.capabilities ?? conservativeCapabilities,
             }
           : {
-              ...draft,
+              ...submittedDraft,
               ...(taskScope && settings.supportsRuntimeScope ? { runtimeTaskId: taskScope } : {}),
               ...(settings.supportsIndependentProbe ? { validateConnection: false } : {}),
               ...(extraBody ? { extraBody } : {}),
@@ -532,14 +568,14 @@ export function KCoderProviderSettingsPage() {
       setSettings(next)
       setDraftMode('edit')
       const savedDraft: ProviderDraft = {
-        ...draft,
+        ...submittedDraft,
         apiKey: '',
         ...(next.supportsOptimisticConcurrency ? { expectedRevision: next.savedRevision } : {}),
         ...(next.supportsMultipleModels ? { originalModel: draft.model.trim() } : {}),
       }
       setDraft(savedDraft)
       const savedProfile = next.profiles.find(
-        profile => profile.id === draft.id.trim() && profile.model === draft.model.trim()
+        profile => profile.id === submittedDraft.id.trim() && profile.model === draft.model.trim()
       )
       setNotice(
         label(
@@ -673,10 +709,7 @@ export function KCoderProviderSettingsPage() {
     settings?.profiles.find(profile => profile.id === draft.id && profile.model === draft.model) ??
     settings?.profiles.find(profile => profile.isDefault)
   return (
-    <SettingsPage
-      data-testid="kcoder-provider-settings-page"
-      className="space-y-5"
-    >
+    <SettingsPage data-testid="kcoder-provider-settings-page" className="space-y-5">
       <SettingsPageHeader
         title={label('title')}
         description={label('description')}
@@ -690,15 +723,18 @@ export function KCoderProviderSettingsPage() {
             value={serverId}
             disabled={busy}
             onChange={event => {
+              const nextServerId = event.currentTarget.value
+              if (nextServerId === serverId) return
               generation.current += 1
               setSettings(null)
               setSaveRecovery(null)
               setDraft(emptyDraft())
               setExtraBodyText('')
               setDraftMode('new-api')
+              setEditorOpen(false)
               setNotice(null)
               setDeleting(null)
-              setServerId(event.target.value)
+              setServerId(nextServerId)
             }}
           >
             {servers.map(server => (
@@ -709,6 +745,14 @@ export function KCoderProviderSettingsPage() {
           </IconSelect>
         }
       />
+      {target && (
+        <ProviderMigrationCard
+          key={`${providerTargetScope(target)}:${scopeVersion}`}
+          target={target}
+          onRefresh={refresh}
+          disabled={!identityReady || busy}
+        />
+      )}
       <div className="flex flex-wrap items-center justify-end gap-2">
         <Button
           data-testid="provider-refresh"
@@ -732,85 +776,19 @@ export function KCoderProviderSettingsPage() {
             )
             setExtraBodyText('')
             setDraftMode('new-api')
+            revealEditor()
             setError(null)
           }}
         >
           <Plus className="size-4" aria-hidden="true" />
-          {label('add')}
+          {label('addEntry')}
         </Button>
       </div>
-      <DisclosureSection
-        testId="provider-configuration-details"
-        title={label('configurationDetails')}
-        description={label('userScope')}
-        icon={<Layers />}
-        defaultOpen
-      >
-        <ConfigTemplatesSection key={`${serverId}:${scopeVersion}`} serverId={serverId} />
-      </DisclosureSection>
-      <section
-        data-testid="provider-identity"
-        className="space-y-4 rounded-2xl border border-border/60 bg-surface/30 p-5 text-sm"
-        aria-live="polite"
-      >
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <SectionHeader
-            icon={<User />}
-            title={
-              <span className="flex flex-wrap items-center gap-3">
-                {label('identityLabel')}
-                <StatusChip variant="neutral">{accountStatus}</StatusChip>
-              </span>
-            }
-            description={
-              target && !accountName && target.security?.identity.mode !== 'kcoder-account'
-                ? label('identitySharedHelp')
-                : undefined
-            }
-          />
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={busy || !target}
-            data-testid="provider-switch-account"
-            onClick={() => navigateTo('/settings/kcoder-servers')}
-          >
-            <RefreshCw aria-hidden="true" />
-            {policyT('accounts.switch')}
-          </Button>
-        </div>
-        <ProviderConfigurationSources
-          profile={
-            draftMode === 'edit'
-              ? settings?.profiles.find(
-                  profile =>
-                    profile.id === draft.id &&
-                    profile.model === (draft.originalModel ?? draft.model)
-                )
-              : undefined
-          }
-        />
-        {settings?.supportsNewSessionReload && (
-          <InfoBox
-            data-testid="provider-session-reload"
-            icon={<Info />}
-            className="border border-focus/10 bg-accent-surface"
-          >
-            {label(
-              settings.supportsTurnModelReload ? 'nextTurnReloadHelp' : 'newSessionReloadHelp'
-            )}
-          </InfoBox>
-        )}
-        {settings?.supportsIndependentProbe && (
-          <p className="text-sm text-text-muted">{label('saveOfflineHelp')}</p>
-        )}
-      </section>
       {settings?.restartRequired && !settings.supportsNewSessionReload && (
         <section
           data-testid="provider-pending-apply"
           aria-label={label('pendingApplyTitle')}
-          className="space-y-2 rounded-lg border border-border bg-muted/40 p-3"
+          className="studio-card-spacing space-y-2 rounded-lg border border-border bg-muted/40"
         >
           <h2 className="text-sm font-medium">{label('pendingApplyTitle')}</h2>
           <p className="text-sm text-muted-foreground">{label('pendingApply')}</p>
@@ -846,13 +824,193 @@ export function KCoderProviderSettingsPage() {
           )}
         </p>
       )}
+      <DisclosureSection
+        testId="provider-configured-models"
+        title={label('configuredModels')}
+        description={label('configuredModelsHelp')}
+        icon={<Layers />}
+        tone="neutral"
+        defaultOpen
+      >
+        <div className="space-y-1 border-t border-border/60 pt-2">
+          {settings?.profiles.map(profile => (
+            <div
+              key={JSON.stringify([profile.id, profile.model])}
+              className="flex items-center gap-2"
+            >
+              <button
+                type="button"
+                data-testid={`provider-edit-${rowId(profile)}`}
+                aria-pressed={
+                  draftMode === 'edit' && draft.id === profile.id && draft.model === profile.model
+                }
+                className="flex min-w-0 flex-1 items-center justify-between gap-3 rounded-xl border border-transparent px-3 py-3 text-left text-sm transition-all hover:border-border/60 hover:bg-surface/60 aria-pressed:bg-surface/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                disabled={busy}
+                onClick={() => editProfile(profile)}
+              >
+                <span className="flex min-w-0 items-center gap-2">
+                  <ModelMark label={profile.id} />
+                  <span className="flex min-w-0 flex-col gap-1">
+                    <span className="truncate font-medium">{profile.model}</span>
+                    <span className="truncate text-xs text-text-secondary">{profile.id}</span>
+                  </span>
+                </span>
+                <span className="flex shrink-0 flex-wrap items-center gap-2">
+                  {profile.isProviderDefault && (
+                    <StatusChip variant="neutral">{label('providerDefault')}</StatusChip>
+                  )}
+                  {profile.authentication?.mode === 'none' ? (
+                    <StatusChip variant="neutral">{label('authenticationNone')}</StatusChip>
+                  ) : profile.apiKeyConfigured ? (
+                    <StatusChip variant="success">{label('keyConfigured')}</StatusChip>
+                  ) : (
+                    <StatusChip variant="neutral">{label('noKey')}</StatusChip>
+                  )}
+                </span>
+              </button>
+              <ActionMenu
+                testId={`provider-actions-${rowId(profile)}`}
+                ariaLabel={label('modelActions')}
+                placement="bottom-end"
+                disabled={busy}
+                triggerClassName="flex size-7 shrink-0 items-center justify-center rounded-lg text-text-muted hover:bg-surface hover:text-text-primary focus-visible:ring-2 focus-visible:ring-focus max-md:size-11"
+                items={[
+                  ...(settings.supportsIndependentProbe
+                    ? [
+                        {
+                          label: label('testConnection'),
+                          icon: RefreshCw,
+                          testId: `provider-test-${rowId(profile)}`,
+                          disabled: !settings.revision,
+                          onSelect: () => testSaved(profile, settings),
+                        },
+                      ]
+                    : []),
+                  ...(multiple && providerRows.find(item => item.id === profile.id) === profile
+                    ? [
+                        {
+                          label: label('addModel'),
+                          icon: Plus,
+                          testId: `provider-add-model-${profile.id}`,
+                          onSelect: () => editProfile(profile, true),
+                        },
+                      ]
+                    : []),
+                  ...(multiple && profile.canDelete
+                    ? [
+                        {
+                          label: label('deleteModel'),
+                          icon: Trash2,
+                          testId: `provider-delete-model-${rowId(profile)}`,
+                          danger: true,
+                          disabled:
+                            settings.profiles.filter(item => item.id === profile.id).length < 2,
+                          onSelect: () => {
+                            deleteTrigger.current =
+                              Array.from(
+                                document.querySelectorAll<HTMLButtonElement>('button[data-testid]')
+                              ).find(
+                                button =>
+                                  button.dataset.testid === `provider-actions-${rowId(profile)}`
+                              ) ?? null
+                            setDeleteKind('model')
+                            setDeleting(profile)
+                            setReplacement('')
+                            setRemoveCredentials(false)
+                          },
+                        },
+                      ]
+                    : []),
+                  ...(profile.canDelete &&
+                  providerRows.find(item => item.id === profile.id) === profile
+                    ? [
+                        {
+                          label: label('delete'),
+                          icon: Trash2,
+                          testId: `provider-delete-${profile.id}`,
+                          danger: true,
+                          onSelect: () => {
+                            deleteTrigger.current =
+                              Array.from(
+                                document.querySelectorAll<HTMLButtonElement>('button[data-testid]')
+                              ).find(
+                                button =>
+                                  button.dataset.testid === `provider-actions-${rowId(profile)}`
+                              ) ?? null
+                            setReplacement('')
+                            setRemoveCredentials(false)
+                            setDeleteKind('provider')
+                            setDeleting(profile)
+                          },
+                        },
+                      ]
+                    : []),
+                ]}
+              />
+            </div>
+          ))}
+          {!settings?.profiles.length && (
+            <p className="px-3 py-4 text-sm text-text-secondary">{label('emptyModels')}</p>
+          )}
+        </div>
+      </DisclosureSection>
+      <DisclosureSection
+        testId="provider-identity"
+        title={label('identityLabel')}
+        description={label('identityHelp')}
+        icon={<User />}
+        tone="neutral"
+      >
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3" aria-live="polite">
+          <StatusChip variant="neutral">{accountStatus}</StatusChip>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={busy || !target}
+            data-testid="provider-switch-account"
+            onClick={() => navigateTo('/settings/kcoder-servers')}
+          >
+            <RefreshCw aria-hidden="true" />
+            {policyT('accounts.switch')}
+          </Button>
+        </div>
+        {target && !accountName && target.security?.identity.mode !== 'kcoder-account' && (
+          <p className="mb-4 text-sm text-text-secondary">{label('identitySharedHelp')}</p>
+        )}
+        <ProviderConfigurationSources
+          profile={
+            draftMode === 'edit'
+              ? settings?.profiles.find(
+                  profile =>
+                    profile.id === draft.id &&
+                    profile.model === (draft.originalModel ?? draft.model)
+                )
+              : undefined
+          }
+        />
+        {settings?.supportsNewSessionReload && (
+          <InfoBox
+            data-testid="provider-session-reload"
+            icon={<Info />}
+            className="border border-focus/10 bg-accent-surface"
+          >
+            {label(
+              settings.supportsTurnModelReload ? 'nextTurnReloadHelp' : 'newSessionReloadHelp'
+            )}
+          </InfoBox>
+        )}
+        {settings?.supportsIndependentProbe && (
+          <p className="text-sm text-text-muted">{label('saveOfflineHelp')}</p>
+        )}
+      </DisclosureSection>
       {settings && (
         <DisclosureSection
           testId="provider-effective-details"
           title={label('effectiveDetails')}
           description={label('effectiveHelp')}
           icon={<Database />}
-          defaultOpen
+          tone="neutral"
         >
           <ProviderEffectiveConfiguration
             settings={settings}
@@ -877,125 +1035,21 @@ export function KCoderProviderSettingsPage() {
           />
         </DisclosureSection>
       )}
-      <div className="space-y-2 rounded-2xl border border-border/60 p-4">
-        <SectionHeader icon={<Layers />} title={label('configuredModels')} />
-        {settings?.profiles.map(profile => (
-          <div
-            key={JSON.stringify([profile.id, profile.model])}
-            className="flex items-center gap-2"
-          >
-            <button
-              type="button"
-              data-testid={`provider-edit-${rowId(profile)}`}
-              aria-pressed={
-                draftMode === 'edit' && draft.id === profile.id && draft.model === profile.model
-              }
-              className="flex min-w-0 flex-1 items-center justify-between gap-3 rounded-xl border border-transparent px-3 py-3 text-left text-sm transition-all hover:border-border/60 hover:bg-surface/60 aria-pressed:bg-surface/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-              disabled={busy}
-              onClick={() => editProfile(profile)}
-            >
-              <span className="flex min-w-0 items-center gap-2">
-                <ModelMark label={profile.id} />
-                <span className="flex min-w-0 flex-col gap-1">
-                  <span className="truncate font-medium">{profile.model}</span>
-                  <span className="truncate text-xs text-text-secondary">{profile.id}</span>
-                </span>
-              </span>
-              <span className="flex shrink-0 flex-wrap items-center gap-2">
-                {profile.isProviderDefault && (
-                  <StatusChip variant="neutral">{label('providerDefault')}</StatusChip>
-                )}
-                {profile.authentication?.mode === 'none' ? (
-                  <StatusChip variant="neutral">{label('authenticationNone')}</StatusChip>
-                ) : profile.apiKeyConfigured ? (
-                  <StatusChip variant="success">{label('keyConfigured')}</StatusChip>
-                ) : (
-                  <StatusChip variant="neutral">{label('noKey')}</StatusChip>
-                )}
-              </span>
-            </button>
-            <ActionMenu
-              testId={`provider-actions-${rowId(profile)}`}
-              ariaLabel={label('modelActions')}
-              placement="bottom-end"
-              disabled={busy}
-              triggerClassName="flex size-7 shrink-0 items-center justify-center rounded-lg text-text-muted hover:bg-surface hover:text-text-primary focus-visible:ring-2 focus-visible:ring-focus max-md:size-11"
-              items={[
-                ...(settings.supportsIndependentProbe
-                  ? [
-                      {
-                        label: label('testConnection'),
-                        icon: RefreshCw,
-                        testId: `provider-test-${rowId(profile)}`,
-                        disabled: !settings.revision,
-                        onSelect: () => testSaved(profile, settings),
-                      },
-                    ]
-                  : []),
-                ...(multiple && providerRows.find(item => item.id === profile.id) === profile
-                  ? [
-                      {
-                        label: label('addModel'),
-                        icon: Plus,
-                        testId: `provider-add-model-${profile.id}`,
-                        onSelect: () => editProfile(profile, true),
-                      },
-                    ]
-                  : []),
-                ...(multiple && profile.canDelete
-                  ? [
-                      {
-                        label: label('deleteModel'),
-                        icon: Trash2,
-                        testId: `provider-delete-model-${rowId(profile)}`,
-                        danger: true,
-                        disabled:
-                          settings.profiles.filter(item => item.id === profile.id).length < 2,
-                        onSelect: () => {
-                          deleteTrigger.current =
-                            Array.from(
-                              document.querySelectorAll<HTMLButtonElement>('button[data-testid]')
-                            ).find(
-                              button =>
-                                button.dataset.testid === `provider-actions-${rowId(profile)}`
-                            ) ?? null
-                          setDeleteKind('model')
-                          setDeleting(profile)
-                          setReplacement('')
-                          setRemoveCredentials(false)
-                        },
-                      },
-                    ]
-                  : []),
-                ...(profile.canDelete &&
-                providerRows.find(item => item.id === profile.id) === profile
-                  ? [
-                      {
-                        label: label('delete'),
-                        icon: Trash2,
-                        testId: `provider-delete-${profile.id}`,
-                        danger: true,
-                        onSelect: () => {
-                          deleteTrigger.current =
-                            Array.from(
-                              document.querySelectorAll<HTMLButtonElement>('button[data-testid]')
-                            ).find(
-                              button =>
-                                button.dataset.testid === `provider-actions-${rowId(profile)}`
-                            ) ?? null
-                          setReplacement('')
-                          setRemoveCredentials(false)
-                          setDeleteKind('provider')
-                          setDeleting(profile)
-                        },
-                      },
-                    ]
-                  : []),
-              ]}
-            />
-          </div>
-        ))}
-      </div>
+      <DisclosureSection
+        testId="provider-configuration-details"
+        title={label('configurationDetails')}
+        description={label('configurationDetailsHelp')}
+        icon={<Layers />}
+        tone="neutral"
+      >
+        <ConfigTemplatesSection key={`${serverId}:${scopeVersion}`} serverId={serverId} />
+        {target && (
+          <NativeModelPolicyWorkspace
+            key={`model-policies:${providerTargetScope(target)}`}
+            target={{ serverId: target.id, workspacePath: target.workspacePath }}
+          />
+        )}
+      </DisclosureSection>
       {plaintextConfirmation !== null && (
         <RuntimeTargetConfirmDialog
           testId="provider-plaintext-dialog"
@@ -1078,19 +1132,39 @@ export function KCoderProviderSettingsPage() {
       )}
       <form
         data-testid="provider-form"
+        ref={editorRef}
+        hidden={!editorOpen}
         className="space-y-5 rounded-2xl border border-border/60 bg-surface/30 p-5"
         onSubmit={event => {
           event.preventDefault()
           void save()
         }}
       >
-        <fieldset disabled={busy || !settings || saveRecovery === 'read'} className="contents">
+        <fieldset
+          disabled={busy || !settings || saveRecovery === 'read'}
+          className="min-w-0 space-y-4"
+        >
           <SectionHeader
             icon={<KeyRound />}
             title={label(
               draftMode === 'new-model' ? 'addModel' : draftMode === 'edit' ? 'editModel' : 'add'
             )}
           />
+          <div className="flex justify-end">
+            <Button
+              type="button"
+              variant="ghost"
+              disabled={busy}
+              data-testid="provider-editor-close"
+              onClick={() => {
+                setEditorOpen(false)
+                setDraft(value => ({ ...value, apiKey: '' }))
+                document.querySelector<HTMLButtonElement>('[data-testid="provider-new"]')?.focus()
+              }}
+            >
+              {label('closeEditor')}
+            </Button>
+          </div>
           {multiple && draftMode !== 'new-api' && (
             <p className="text-sm text-muted-foreground">{label('sharedConnection')}</p>
           )}
@@ -1141,7 +1215,7 @@ export function KCoderProviderSettingsPage() {
                 {label('templateLoadFailed')}
               </p>
             )}
-            {(['id', 'endpoint', 'model', 'apiKey'] as const).map(field => (
+            {(['endpoint', 'apiKey', 'model', 'id'] as const).map(field => (
               <label key={field} className="text-sm">
                 {label(field)}
                 {field === 'apiKey' ? (
@@ -1154,7 +1228,7 @@ export function KCoderProviderSettingsPage() {
                     autoComplete="off"
                     required={false}
                     disabled={draft.authentication?.mode === 'none'}
-                    value={draft[field]}
+                    value={draft[field] || ''}
                     onChange={event =>
                       setDraft(value => ({ ...value, [field]: event.target.value }))
                     }
@@ -1173,7 +1247,7 @@ export function KCoderProviderSettingsPage() {
                     }
                     type={field === 'endpoint' ? 'url' : 'text'}
                     autoComplete="off"
-                    required
+                    required={field !== 'id'}
                     disabled={
                       (field === 'id' && draftMode !== 'new-api') ||
                       (draftMode === 'new-model' && field !== 'model')
@@ -1193,6 +1267,26 @@ export function KCoderProviderSettingsPage() {
                 )}
               </label>
             ))}
+            {settings?.supportsModelDiscovery && (
+              <ProviderModelDiscovery
+                serverId={serverId}
+                draft={draft}
+                enabled={!busy && identityReady && !saveRecovery}
+                ownerScope={JSON.stringify([providerTargetScope(target), scopeVersion])}
+                hasStoredKey={
+                  draftMode !== 'new-api' &&
+                  settings.profiles.some(
+                    profile =>
+                      profile.id === draft.id &&
+                      profile.apiKeyConfigured &&
+                      profile.endpoint === draft.endpoint &&
+                      profile.apiFormat === draft.apiFormat &&
+                      profile.authentication?.mode !== 'none'
+                  )
+                }
+                onSelect={model => setDraft(value => ({ ...value, model }))}
+              />
+            )}
             <label className="text-sm">
               {label('apiFormat')}
               <IconSelect
@@ -1264,7 +1358,7 @@ export function KCoderProviderSettingsPage() {
           </fieldset>
           <details
             data-testid="provider-advanced-settings"
-            className="rounded-xl border border-border/50 p-4"
+            className="studio-card-spacing rounded-xl border border-border/50"
           >
             <summary className="cursor-pointer text-sm font-medium">
               {label('advancedSettings')}
@@ -1277,15 +1371,19 @@ export function KCoderProviderSettingsPage() {
                     data-testid={`provider-${field}`}
                     icon={<Database className="h-4 w-4" />}
                     type="number"
-                    min={1}
+                    min={field === 'contextWindowTokens' ? 1024 : 1}
+                    max={field === 'contextWindowTokens' ? 100_000_000 : undefined}
                     required
-                    value={draft[field]}
+                    value={draft[field] > 0 ? draft[field] : ''}
                     onChange={event =>
                       setDraft(value => ({ ...value, [field]: Number(event.target.value) }))
                     }
                   />
                 </label>
               ))}
+              <p className="text-sm text-muted-foreground md:col-span-2">
+                {label('limitsRequired')}
+              </p>
               {settings?.supportsModelCapabilities && (
                 <fieldset className="space-y-2 md:col-span-2">
                   <legend className="text-sm">{label('capabilities')}</legend>

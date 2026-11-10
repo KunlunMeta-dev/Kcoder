@@ -29,30 +29,34 @@ pub fn default_auto_compact_percentage(context_window_tokens: usize) -> usize {
     }
 }
 
-mod compatibility;
 mod credential_store;
+pub mod imported_credentials;
+mod migrations;
 pub mod plugin_credentials;
-pub(crate) use compatibility::normalize_legacy_profile_references;
-pub use compatibility::normalize_legacy_settings_document;
 pub use credential_store::{
     CredentialBackend, CredentialStoreMode, MigrationDirection, MigrationReport,
     OsCredentialBackend, marker_for_provider, migrate_stored_credentials, provider_from_marker,
     resolve_stored_credentials,
 };
+pub(crate) use migrations::legacy::normalize_legacy_profile_references;
+pub use migrations::legacy::normalize_legacy_settings_document;
+pub use migrations::migrate_settings_document;
 mod deployment;
 pub mod provider_templates;
 mod schema;
 #[allow(deprecated)]
+pub use deployment::apply_managed_deployment_settings;
+#[allow(deprecated)]
+#[cfg(any(test, feature = "provider-test-fixtures"))]
+pub use deployment::default_active_provider_config;
 pub use deployment::{
-    DEFAULT_ACTIVE_PROVIDER, DEFAULT_ANTHROPIC_ENDPOINT, DEFAULT_GEMINI_ENDPOINT,
-    DEFAULT_GROK_ENDPOINT, DEFAULT_KUNLUNMETA_ENDPOINT, DEFAULT_LOCAL_ENDPOINT, DEFAULT_MODEL,
-    DEFAULT_OPENAI_ENDPOINT, DEFAULT_REQUEST_TIMEOUT_SECS, apply_managed_deployment_settings,
-    default_active_provider_config, default_active_provider_name, default_deployment_settings,
-    default_endpoint_for_provider, default_goal_pro_completion_rejection_limit,
-    default_goal_pro_model_escalation_threshold, default_goal_pro_verification_settings,
-    default_goal_pro_verifier_max_turns, default_model_name, default_provider_endpoint,
-    default_providers, default_settings_document, merge_default_deployment_settings,
-    migrate_deployment_settings,
+    DEFAULT_ANTHROPIC_ENDPOINT, DEFAULT_GEMINI_ENDPOINT, DEFAULT_GROK_ENDPOINT,
+    DEFAULT_LOCAL_ENDPOINT, DEFAULT_OPENAI_ENDPOINT, DEFAULT_REQUEST_TIMEOUT_SECS,
+    default_active_provider_name, default_deployment_settings,
+    default_goal_pro_completion_rejection_limit, default_goal_pro_model_escalation_threshold,
+    default_goal_pro_verification_settings, default_goal_pro_verifier_max_turns,
+    default_model_name, default_provider_endpoint, default_providers, default_settings_document,
+    merge_default_deployment_settings, migrate_deployment_settings,
 };
 pub use schema::{ensure_user_settings_schema, settings_schema_for_path};
 mod dotenv;
@@ -64,24 +68,34 @@ pub use turn_file_changes::{
     DEFAULT_TURN_FILE_CHANGES_RETENTION_DAYS, TurnFileChangesSettings,
 };
 mod file_permissions;
+pub mod imported_context;
+pub mod imported_projects;
 mod private_files;
 mod private_temp_dir;
+mod profile_settings_file;
 pub use dotenv::looks_like_credential_env_key;
 pub use dotenv::{
     DEFAULT_USER_DOTENV, USER_DOTENV_FILENAME, ensure_default_user_dotenv, user_dotenv_path,
     write_user_dotenv_if_missing,
 };
+pub use profile_settings_file::ProfileSettingsFile;
 mod model_sources;
 pub use model_sources::{ModelConfigurationFieldSources, ModelConfigurationSources};
 mod loader;
 pub use loader::{
     CONFIG_DIR_ENV, ConfigPaths, ConfigScope, ConfigSource, CredentialStore, KCODER_HOME_ENV,
     LoadedSettings, ModelRuntimeOverrides, SettingsLoader, dotted_value, ensure_project_gitignore,
-    merge_settings_documents, read_scope, read_settings_file, remove_dotted_value,
-    set_dotted_value, update_scope, update_settings_and_credentials, update_settings_file,
-    user_config_dir, validate_and_resolve_settings_document, write_scope, write_scope_if_missing,
+    merge_settings_documents, read_scope, read_settings_file, read_settings_file_if_present,
+    remove_dotted_value, set_dotted_value, update_scope, update_settings_and_credentials,
+    update_settings_file, user_config_dir, validate_and_resolve_settings_document, write_scope,
+    write_scope_if_missing,
 };
 mod project_instructions;
+mod project_mcp;
+pub use project_mcp::{
+    PROJECT_MCP_INHERITED_SERVERS, ProjectMcpCatalog, ProjectMcpCatalogSelection,
+    validate_project_mcp_fragment,
+};
 mod trusted_folders;
 #[cfg(windows)]
 pub use file_permissions::set_and_verify_windows_user_only_handle;
@@ -89,14 +103,22 @@ pub use file_permissions::{
     is_user_only_file, set_user_only_dir_permissions, set_user_only_file_permissions,
 };
 pub use private_files::{
-    AnonymousPrivateEntry, PrivateDirectory, PrivateLeaseMode, PrivateManifestRemoval,
-    PrivateRemovalEntry, VerifiedPrivateEntry,
+    AnonymousPrivateEntry, AvailableStorage, PortableLeaseIdentity, PrivateDirectory,
+    PrivateEntryHandle, PrivateLeaseMode, PrivateManifestRemoval, PrivateRemovalEntry,
+    SourceDocumentSnapshot, SqliteSourceFileFact, SqliteSourcePart, SqliteSourceReadLease,
+    VerifiedPortableEntry, VerifiedPrivateEntry, VerifiedPrivateLease,
 };
-pub use private_temp_dir::{PrivateTempDir, create_private_temp_dir};
+#[cfg(windows)]
+pub use private_files::{
+    NativeSqliteDirectoryPin, PreparedWindowsImmutableStream, PublishedWindowsImmutableStream,
+    ReadOnlyDirectoryPin, ReadOnlyDirectoryStamp, ReadOnlyFilePin,
+};
+pub use private_temp_dir::{PrivateTempDir, create_private_temp_dir, create_private_temp_dir_in};
 pub use project_instructions::{
     MAX_PROJECT_MD_FILE_BYTES, MAX_PROJECT_MD_FILES, MAX_PROJECT_MD_TOTAL_BYTES,
-    build_project_md_system_prompt, discover_project_md, load_project_md_contents,
-    try_build_project_md_system_prompt, try_discover_project_md, try_load_project_md_contents,
+    NativeProjectInstructions, build_project_md_system_prompt, discover_project_md,
+    load_project_md_contents, try_build_project_md_snapshot, try_build_project_md_system_prompt,
+    try_discover_project_md, try_load_project_md_contents,
 };
 pub use trusted_folders::{FolderTrust, FolderTrustStore};
 mod request_body;
@@ -193,6 +215,9 @@ pub struct Settings {
     /// do not have an explicit profile.
     #[serde(default)]
     pub model_discovery: ModelDiscoverySettings,
+    /// Target-owned built-in search and network policy; tool switches remain in tools.
+    #[serde(default)]
+    pub web: WebSettings,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub active_model_selection: Option<ActiveModelSelection>,
     #[serde(default = "default_model")]
@@ -309,6 +334,10 @@ pub struct Settings {
     /// Session-level orchestration policy, persisted injection, and persona routing.
     #[serde(default)]
     pub orchestrate: OrchestrateSettings,
+    /// Host-owned valve for automatic continuous-work dispatch. No tool or RPC
+    /// surface exposes it to the model.
+    #[serde(default)]
+    pub continuous_work: ContinuousWorkSettings,
     /// Whether background skill review may update `.kcoder/skills` after
     /// completed turns. This is a session-only flag set by the CLI
     /// `--skill-review` startup mode; it is intentionally not persisted.
@@ -329,6 +358,9 @@ pub struct Settings {
     /// Opt-in personal Wiki settings, independent of Agent Memory.
     #[serde(default)]
     pub knowledge: KnowledgeSettings,
+    /// Explicit target-side integration switches and bounded domain settings.
+    #[serde(default)]
+    pub integrations: integrations::IntegrationSettings,
     /// Structured long-term memory settings.
     #[serde(default)]
     pub memory: MemorySettings,
@@ -432,6 +464,12 @@ pub struct Settings {
     /// External MCP servers to connect to on startup.
     #[serde(default)]
     pub mcp_servers: Vec<McpServerConfig>,
+    /// Explicit project-only inherited names; consumed by the loader before runtime.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mcp_inherited_servers: Option<Vec<String>>,
+    /// Disabled target-local MCP server names, including plugin contributions.
+    #[serde(default)]
+    pub mcp_disabled_servers: Vec<String>,
     /// Tool-system settings.
     #[serde(default)]
     pub tools: ToolsSettings,
@@ -506,6 +544,14 @@ impl Default for Settings {
 }
 
 impl Settings {
+    /// Server activation is independent of installation and OAuth credentials.
+    pub fn mcp_server_enabled(&self, name: &str) -> bool {
+        !self
+            .mcp_disabled_servers
+            .iter()
+            .any(|disabled| disabled == name)
+    }
+
     /// Apply irreversible process-level training-harness overrides that disable background model requests not required by the task.
     pub fn enable_training_mode(&mut self) {
         self.training_mode = true;
@@ -865,6 +911,9 @@ impl Settings {
         for budget in self.tool_limits.foreground_budget_ms.tools.values_mut() {
             *budget = (*budget).max(1);
         }
+        for timeout in self.tool_limits.execution_timeout_ms.values_mut() {
+            *timeout = (*timeout).max(1);
+        }
         self.tool_limits.task_output_timeout_ms.normalize();
         self.tool_limits.permission_denials.consecutive_limit =
             self.tool_limits.permission_denials.consecutive_limit.max(1);
@@ -996,5 +1045,9 @@ mod reasoning_policy;
 pub use reasoning_policy::validate_reasoning_policy;
 
 mod settings;
+pub mod tool_settings;
 use settings::defaults::*;
+pub use settings::integrations;
 pub use settings::*;
+
+pub mod settings_templates;

@@ -153,6 +153,8 @@ pub(super) enum UserAction {
     CompactConversation,
     StartSideQuestion(String),
     StartMoaPlan(String),
+    StartMigration(Vec<String>),
+    StartMigrate(Vec<String>),
     ResumeSession(PathBuf),
     ConfirmGoalReplacement {
         objective: String,

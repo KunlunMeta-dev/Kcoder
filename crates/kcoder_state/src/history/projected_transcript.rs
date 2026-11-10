@@ -59,6 +59,12 @@ impl ProjectedTranscriptReader {
     pub fn take_projection(&mut self) -> Option<HistoryListProjection> {
         self.projection.take()
     }
+
+    /// Recheck this completed, exact stream under a caller-owned publication fence.
+    /// This performs no body read and never repairs or activates source tracking.
+    pub fn validate_completed(&mut self) -> anyhow::Result<()> {
+        self.source.validate_completed()
+    }
 }
 
 #[cfg(test)]

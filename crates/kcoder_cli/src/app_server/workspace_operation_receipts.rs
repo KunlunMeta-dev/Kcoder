@@ -172,7 +172,7 @@ pub(super) fn reserve(
         let result=record.result.context("Workspace operation was reserved but completion is unknown; inspect its receipt instead of repeating it")?;
         let path = result_path(&result).context("invalid workspace receipt path")?;
         ensure!(
-            ClientWorkspaceStore::new(engine)
+            client_workspace_store(engine)
                 .load()
                 .records
                 .contains_key(path),
@@ -237,7 +237,7 @@ pub(super) fn query(engine: &QueryEngine, id: &str) -> Result<Value> {
         return Ok(json!({"receipt":null}));
     };
     let registered = record.result.as_ref().and_then(result_path).filter(|path| {
-        ClientWorkspaceStore::new(engine)
+        client_workspace_store(engine)
             .load()
             .records
             .contains_key(*path)

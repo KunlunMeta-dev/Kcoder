@@ -11,13 +11,84 @@ use std::sync::{
     Arc, Mutex, OnceLock,
     atomic::{AtomicBool, Ordering},
 };
+mod resource;
+pub(crate) use resource::resource_for_database;
+#[cfg(windows)]
+mod windows_lock;
+
+fn try_catalog_lock(file: &File) -> io::Result<()> {
+    #[cfg(windows)]
+    {
+        windows_lock::try_lock_exclusive(file)
+    }
+    #[cfg(not(windows))]
+    {
+        FileExt::try_lock_exclusive(file)
+    }
+}
+
+fn unlock_catalog(file: &File) -> io::Result<()> {
+    #[cfg(windows)]
+    {
+        windows_lock::unlock(file)
+    }
+    #[cfg(not(windows))]
+    {
+        FileExt::unlock(file)
+    }
+}
 
 const DATABASE: &str = "catalog.sqlite3";
 const JOURNAL: &str = "catalog.sqlite3-journal";
 const OWNER: &str = "owner.json";
 const MAX_OWNER_BYTES: usize = 32 * 1024;
 const MAX_FILE_BYTES: u64 = 512 * 1024 * 1024;
-const SLOT_COUNT: usize = 16;
+// Thirty-two independent migration writers plus current observations and derived readers.
+// This bounds concurrent private VFS registrations; payload/file/space quotas remain separate.
+const SLOT_COUNT: usize = 128;
+
+/// The bounded process VFS table has no free connection; this is not a valid empty catalog.
+#[derive(Clone, Copy, Debug, thiserror::Error)]
+#[error("history_catalog_capacity_reached")]
+pub struct HistoryCatalogCapacityReached;
+
+/// A read-only SQLite observation found a hot rollback journal. Only an explicitly
+/// authorized writer may let SQLite recover it; ordinary read-only errors are distinct.
+#[derive(Clone, Copy, Debug, thiserror::Error)]
+#[error("history_catalog_recovery_required")]
+pub struct HistoryCatalogRecoveryRequired;
+
+/// A competing SQLite owner temporarily prevents an observation; no checkpoint is fabricated.
+#[derive(Clone, Copy, Debug, thiserror::Error)]
+#[error("history_catalog_busy")]
+pub struct HistoryCatalogBusy;
+
+impl HistoryCatalogBusy {
+    pub fn from_error(error: &anyhow::Error) -> Option<Self> {
+        error.chain().any(|cause| {
+            cause.is::<Self>()
+                || matches!(cause.downcast_ref::<rusqlite::Error>(),
+                    Some(rusqlite::Error::SqliteFailure(code, _))
+                        if matches!(code.code, rusqlite::ErrorCode::DatabaseBusy | rusqlite::ErrorCode::DatabaseLocked))
+        }).then_some(Self)
+    }
+}
+
+impl HistoryCatalogRecoveryRequired {
+    /// Recognize the exact native extended code, including failures raised after open.
+    /// Error text, generic read-only failures and corrupt databases are not evidence.
+    pub fn from_error(error: &anyhow::Error) -> Option<Self> {
+        error
+            .chain()
+            .any(|cause| {
+                cause.is::<Self>()
+                    || matches!(cause.downcast_ref::<rusqlite::Error>(),
+                    Some(rusqlite::Error::SqliteFailure(code, _))
+                        if code.extended_code == rusqlite::ffi::SQLITE_READONLY_ROLLBACK)
+            })
+            .then_some(Self)
+    }
+}
 
 #[cfg(test)]
 thread_local! {
@@ -27,6 +98,12 @@ thread_local! {
 struct Root {
     directory: PrivateDirectory,
     writable: bool,
+    max_file_bytes: u64,
+    resource: Option<Arc<crate::external_history::lifecycle::resource_budget::ResourceStream>>,
+    recovery: Option<crate::external_history::lifecycle::SealedCacheRecovery>,
+    recovery_active: AtomicBool,
+    #[cfg(windows)]
+    legacy_data_lock_conflict: AtomicBool,
 }
 
 struct Slot {
@@ -38,7 +115,42 @@ struct Slot {
 // sqlite-vfs registrations live for the process. A bounded slot has only one connection at a time.
 static SLOTS: OnceLock<std::result::Result<Vec<Arc<Slot>>, String>> = OnceLock::new();
 
-pub(super) struct Lease(Arc<Slot>);
+pub(crate) struct Lease(Arc<Slot>);
+impl Lease {
+    fn finish_sealed_recovery(&self, connection: &Connection) -> Result<()> {
+        let root = self
+            .0
+            .root
+            .lock()
+            .map_err(|_| anyhow::anyhow!("catalog file lease unavailable"))?
+            .clone()
+            .context("catalog file lease released")?;
+        let Some(checkpoint) = &root.recovery else {
+            return Ok(());
+        };
+        // A read forces SQLite's native rollback while VFS writes remain bound
+        // to the original sealed DB extent. No SQL mutation is accepted here.
+        connection.pragma_update(None, "query_only", true)?;
+        connection.query_row("PRAGMA schema_version", [], |row| row.get::<_, i64>(0))?;
+        checkpoint.verify_restored(&root.directory)?;
+        root.recovery_active.store(false, Ordering::Release);
+        Ok(())
+    }
+
+    pub(crate) fn with_directory<T>(
+        &self,
+        action: impl FnOnce(&PrivateDirectory) -> Result<T>,
+    ) -> Result<T> {
+        let root = self
+            .0
+            .root
+            .lock()
+            .map_err(|_| anyhow::anyhow!("catalog file lease unavailable"))?
+            .clone()
+            .context("catalog file lease released")?;
+        action(&root.directory)
+    }
+}
 
 impl Drop for Lease {
     fn drop(&mut self) {
@@ -84,7 +196,7 @@ fn acquire(root: Root) -> Result<Lease> {
             return Ok(lease);
         }
     }
-    anyhow::bail!("catalog connection budget exhausted; retry later")
+    Err(HistoryCatalogCapacityReached.into())
 }
 
 fn io_error(error: anyhow::Error) -> io::Error {
@@ -215,9 +327,9 @@ impl HistoryCatalog {
 }
 
 // Connection ownership must end before the VFS lease and setup lock are released.
-pub(super) struct OpenedDatabase {
-    pub(super) connection: Connection,
-    pub(super) lease: Lease,
+pub(crate) struct OpenedDatabase {
+    pub(crate) connection: Connection,
+    pub(crate) lease: Lease,
     _setup: Option<File>,
 }
 
@@ -247,6 +359,63 @@ pub(super) fn open_database(
         Err(error) if !writable && missing(&error) => return Ok(None),
         Err(error) => return Err(error),
     };
+    open_database_in(directory, scope, writable, MAX_FILE_BYTES)
+}
+
+/// Reuse descriptor-relative SQLite I/O for another explicitly bounded derived store.
+/// Existing catalog callers retain their original 512 MiB ceiling.
+pub(crate) fn open_database_in(
+    directory: PrivateDirectory,
+    scope: &str,
+    writable: bool,
+    max_file_bytes: u64,
+) -> Result<Option<OpenedDatabase>> {
+    open_database_in_with_resource(directory, scope, writable, max_file_bytes, None)
+}
+pub(crate) fn open_database_in_with_resource(
+    directory: PrivateDirectory,
+    scope: &str,
+    writable: bool,
+    max_file_bytes: u64,
+    resource: Option<crate::external_history::lifecycle::resource_budget::ResourceStream>,
+) -> Result<Option<OpenedDatabase>> {
+    open_database_in_with_recovery(directory, scope, writable, max_file_bytes, resource, None)
+}
+
+pub(crate) fn open_database_in_with_recovery(
+    directory: PrivateDirectory,
+    scope: &str,
+    writable: bool,
+    max_file_bytes: u64,
+    resource: Option<crate::external_history::lifecycle::resource_budget::ResourceStream>,
+    recovery: Option<crate::external_history::lifecycle::SealedCacheRecovery>,
+) -> Result<Option<OpenedDatabase>> {
+    ensure!(
+        recovery.is_none()
+            || (writable && resource.as_ref().is_some_and(|value| value.is_committed())),
+        "history_projection_recovery_authority_required"
+    );
+    ensure!(
+        (1..=4 * 1024 * 1024 * 1024).contains(&max_file_bytes),
+        "invalid private database budget"
+    );
+    #[cfg(windows)]
+    ensure!(
+        max_file_bytes < windows_lock::LOCK_OFFSET,
+        "invalid private database lock boundary"
+    );
+    ensure!(
+        !scope.is_empty() && scope.len() <= 16 * 1024,
+        "invalid catalog scope"
+    );
+    let owner_bytes = serde_json::to_vec(&Owner {
+        schema: 1,
+        scope: scope.to_owned(),
+    })?;
+    ensure!(
+        owner_bytes.len() <= MAX_OWNER_BYTES,
+        "catalog owner record exceeds budget"
+    );
     let _setup = if writable {
         let lock = update_file(&directory, "setup.lock", true)?;
         FileExt::try_lock_exclusive(&lock)
@@ -301,7 +470,7 @@ pub(super) fn open_database(
     for name in [DATABASE, JOURNAL] {
         if let Some(file) = existing(&directory, name)? {
             ensure!(
-                file.metadata()?.len() <= MAX_FILE_BYTES,
+                file.metadata()?.len() <= max_file_bytes,
                 "catalog file exceeds byte budget"
             );
         } else if name == DATABASE && !writable {
@@ -311,6 +480,12 @@ pub(super) fn open_database(
     let lease = acquire(Root {
         directory,
         writable,
+        max_file_bytes,
+        resource: resource.map(Arc::new),
+        recovery_active: AtomicBool::new(recovery.is_some()),
+        recovery,
+        #[cfg(windows)]
+        legacy_data_lock_conflict: AtomicBool::new(false),
     })?;
     let flags = rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX
         | rusqlite::OpenFlags::SQLITE_OPEN_PRIVATE_CACHE
@@ -319,17 +494,43 @@ pub(super) fn open_database(
         } else {
             rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY
         };
-    let connection = Connection::open_with_flags_and_vfs(DATABASE, flags, &lease.0.name)?;
+    let connection = Connection::open_with_flags_and_vfs(DATABASE, flags, &lease.0.name)
+        .map_err(|error| catalog_open_error(&lease, error))?;
     ensure!(
         !writable || !connection.is_readonly(rusqlite::DatabaseName::Main)?,
         "catalog writer opened read-only"
     );
-    connection.execute_batch("PRAGMA temp_store=MEMORY; PRAGMA mmap_size=0;")?;
+    connection
+        .execute_batch("PRAGMA temp_store=MEMORY; PRAGMA mmap_size=0;")
+        .map_err(|error| catalog_open_error(&lease, error))?;
+    lease.finish_sealed_recovery(&connection)?;
     Ok(Some(OpenedDatabase {
         connection,
         lease,
         _setup,
     }))
+}
+
+fn catalog_open_error(lease: &Lease, error: rusqlite::Error) -> anyhow::Error {
+    if matches!(&error, rusqlite::Error::SqliteFailure(code, _) if matches!(code.code,
+        rusqlite::ErrorCode::DatabaseBusy | rusqlite::ErrorCode::DatabaseLocked))
+    {
+        return anyhow::Error::new(error).context(HistoryCatalogBusy);
+    }
+    #[cfg(windows)]
+    if lease.0.root.lock().is_ok_and(|root| {
+        root.as_ref()
+            .is_some_and(|root| root.legacy_data_lock_conflict.load(Ordering::Acquire))
+    }) {
+        return anyhow::Error::new(error).context(HistoryCatalogBusy);
+    }
+    #[cfg(not(windows))]
+    let _ = lease;
+    let error = anyhow::Error::new(error);
+    match HistoryCatalogRecoveryRequired::from_error(&error) {
+        Some(recovery) => error.context(recovery),
+        None => error,
+    }
 }
 
 struct Backend(Arc<Slot>);
@@ -362,13 +563,42 @@ impl Vfs for Backend {
                 "catalog is read-only",
             ));
         }
-        let file = match options.access {
-            OpenAccess::Read => root.directory.open_regular_file(OsStr::new(db)),
-            OpenAccess::Write => update_file(&root.directory, db, false),
-            OpenAccess::Create => update_file(&root.directory, db, true),
-            OpenAccess::CreateNew => root.directory.open_read_write_file(OsStr::new(db), true),
+        if root
+            .resource
+            .as_ref()
+            .is_some_and(|resource| resource.is_committed())
+            && db == JOURNAL
+            && options.access != OpenAccess::Read
+            && (!root.recovery_active.load(Ordering::Acquire)
+                || matches!(options.access, OpenAccess::CreateNew))
+        {
+            return Err(io::Error::other("history_resource_already_committed"));
+        }
+        let file = if root.recovery_active.load(Ordering::Acquire) {
+            // Existing objects only: rollback cannot allocate a new journal or DB.
+            match options.access {
+                OpenAccess::Read => root.directory.open_regular_file(OsStr::new(db)),
+                OpenAccess::CreateNew => {
+                    Err(anyhow::anyhow!("history_projection_recovery_file_denied"))
+                }
+                _ => update_file(&root.directory, db, false),
+            }
+        } else {
+            match options.access {
+                OpenAccess::Read => root.directory.open_regular_file(OsStr::new(db)),
+                OpenAccess::Write => update_file(&root.directory, db, false),
+                OpenAccess::Create => update_file(&root.directory, db, true),
+                OpenAccess::CreateNew => root.directory.open_read_write_file(OsStr::new(db), true),
+            }
         }
         .map_err(io_error)?;
+        if let Some(checkpoint) = &root.recovery
+            && root.recovery_active.load(Ordering::Acquire)
+        {
+            checkpoint
+                .verify_file(&root.directory, db, &file)
+                .map_err(io_error)?;
+        }
         Ok(Handle {
             file,
             root,
@@ -384,6 +614,18 @@ impl Vfs for Backend {
                 io::ErrorKind::PermissionDenied,
                 "unsupported catalog deletion",
             ));
+        }
+        if root.recovery_active.load(Ordering::Acquire) {
+            let checkpoint = root.recovery.as_ref().ok_or_else(|| {
+                io::Error::other("history_projection_recovery_authority_required")
+            })?;
+            let held = root
+                .directory
+                .open_single_link_regular_file(OsStr::new(db))
+                .map_err(io_error)?;
+            checkpoint
+                .verify_file(&root.directory, db, &held)
+                .map_err(io_error)?;
         }
         match root.directory.remove_regular_file(OsStr::new(db)) {
             Ok(()) => Ok(()),
@@ -490,16 +732,39 @@ impl DatabaseHandle for Handle {
                     filled += count;
                 }
                 Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
-                Err(error) => return Err(error),
+                Err(error) => {
+                    #[cfg(windows)]
+                    if error.raw_os_error()
+                        == Some(windows_sys::Win32::Foundation::ERROR_LOCK_VIOLATION as i32)
+                    {
+                        self.root
+                            .legacy_data_lock_conflict
+                            .store(true, Ordering::Release);
+                    }
+                    return Err(error);
+                }
             }
         }
         Ok(())
     }
     fn write_all_at(&mut self, bytes: &[u8], offset: u64) -> io::Result<()> {
-        if !self.root.writable || offset.saturating_add(bytes.len() as u64) > MAX_FILE_BYTES {
+        if !self.root.writable
+            || offset.saturating_add(bytes.len() as u64) > self.root.max_file_bytes
+        {
             return Err(io::Error::other(
                 "catalog write exceeds access or byte budget",
             ));
+        }
+        if !bytes.is_empty() {
+            self.root
+                .resource_extent(
+                    &self.name,
+                    &self.file,
+                    offset
+                        .checked_add(bytes.len() as u64)
+                        .ok_or_else(|| io::Error::other("history_resource_budget_exceeded"))?,
+                )
+                .map_err(io_error)?;
         }
         self.file.seek(SeekFrom::Start(offset))?;
         self.file.write_all(bytes)
@@ -513,22 +778,39 @@ impl DatabaseHandle for Handle {
         self.root.directory.sync().map_err(io_error)
     }
     fn set_len(&mut self, length: u64) -> io::Result<()> {
-        if !self.root.writable || length > MAX_FILE_BYTES {
+        if !self.root.writable || length > self.root.max_file_bytes {
             return Err(io::Error::other(
                 "catalog truncate exceeds access or byte budget",
             ));
+        }
+        if self.root.recovery_active.load(Ordering::Acquire) {
+            let checkpoint = self.root.recovery.as_ref().ok_or_else(|| {
+                io::Error::other("history_projection_recovery_authority_required")
+            })?;
+            if self.name != DATABASE || length != checkpoint.database_bytes() {
+                return Err(io::Error::other(
+                    "history_projection_recovery_extent_denied",
+                ));
+            }
+        }
+        if length != self.file.metadata()?.len() {
+            self.root
+                .resource_extent(&self.name, &self.file, length)
+                .map_err(io_error)?;
         }
         self.file.set_len(length)
     }
     fn lock(&mut self, requested: LockKind) -> io::Result<bool> {
         if requested == LockKind::None {
-            FileExt::unlock(&self.file)?;
+            if self.lock != LockKind::None {
+                unlock_catalog(&self.file)?;
+            }
             self.lock = requested;
             return Ok(true);
         }
         if self.lock == LockKind::None {
             // Short catalog transactions serialize readers too; no platform-specific lock upgrade.
-            match FileExt::try_lock_exclusive(&self.file) {
+            match try_catalog_lock(&self.file) {
                 Ok(()) => {}
                 Err(error)
                     if error.kind() == io::ErrorKind::WouldBlock
@@ -542,7 +824,7 @@ impl DatabaseHandle for Handle {
         match self.moved() {
             Ok(false) => {}
             result => {
-                FileExt::unlock(&self.file)?;
+                unlock_catalog(&self.file)?;
                 self.lock = LockKind::None;
                 return Err(result
                     .err()
@@ -561,9 +843,9 @@ impl DatabaseHandle for Handle {
             .directory
             .open_regular_file(OsStr::new(&self.name))
             .map_err(io_error)?;
-        match FileExt::try_lock_exclusive(&probe) {
+        match try_catalog_lock(&probe) {
             Ok(()) => {
-                FileExt::unlock(&probe)?;
+                unlock_catalog(&probe)?;
                 Ok(false)
             }
             Err(error)
@@ -597,6 +879,143 @@ impl DatabaseHandle for Handle {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn native_contention_is_distinct_from_readonly_recovery_or_corruption() {
+        for code in [
+            rusqlite::ffi::SQLITE_BUSY,
+            rusqlite::ffi::SQLITE_BUSY_RECOVERY,
+            rusqlite::ffi::SQLITE_LOCKED,
+        ] {
+            let error = anyhow::Error::new(rusqlite::Error::SqliteFailure(
+                rusqlite::ffi::Error::new(code),
+                None,
+            ));
+            assert!(HistoryCatalogBusy::from_error(&error).is_some());
+            assert!(HistoryCatalogRecoveryRequired::from_error(&error).is_none());
+        }
+        for code in [
+            rusqlite::ffi::SQLITE_READONLY,
+            rusqlite::ffi::SQLITE_READONLY_ROLLBACK,
+            rusqlite::ffi::SQLITE_CORRUPT,
+            rusqlite::ffi::SQLITE_NOTADB,
+        ] {
+            let error = anyhow::Error::new(rusqlite::Error::SqliteFailure(
+                rusqlite::ffi::Error::new(code),
+                Some("history_catalog_busy".into()),
+            ));
+            assert!(HistoryCatalogBusy::from_error(&error).is_none());
+        }
+        assert!(HistoryCatalogBusy::from_error(&anyhow::anyhow!("history_catalog_busy")).is_none());
+    }
+
+    #[test]
+    fn only_native_readonly_rollback_requires_writer_recovery() {
+        let rollback = anyhow::Error::new(rusqlite::Error::SqliteFailure(
+            rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_READONLY_ROLLBACK),
+            None,
+        ))
+        .context("projection query failed");
+        assert!(HistoryCatalogRecoveryRequired::from_error(&rollback).is_some());
+        let typed = anyhow::Error::new(HistoryCatalogRecoveryRequired);
+        assert!(HistoryCatalogRecoveryRequired::from_error(&typed).is_some());
+        for code in [
+            rusqlite::ffi::SQLITE_READONLY,
+            rusqlite::ffi::SQLITE_READONLY_RECOVERY,
+            rusqlite::ffi::SQLITE_READONLY_CANTLOCK,
+            rusqlite::ffi::SQLITE_CORRUPT,
+            rusqlite::ffi::SQLITE_NOTADB,
+            rusqlite::ffi::SQLITE_IOERR,
+        ] {
+            let other = anyhow::Error::new(rusqlite::Error::SqliteFailure(
+                rusqlite::ffi::Error::new(code),
+                Some("history_catalog_recovery_required".into()),
+            ));
+            assert!(
+                HistoryCatalogRecoveryRequired::from_error(&other).is_none(),
+                "{code}"
+            );
+        }
+        assert!(
+            HistoryCatalogRecoveryRequired::from_error(&anyhow::anyhow!(
+                "Database has hot journal that must be rolled back (requires write access)"
+            ))
+            .is_none()
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn private_catalog_windows_vfs_upgrades_preserve_competing_reader_exclusion() {
+        let temp = tempfile::tempdir().unwrap();
+        drop(
+            HistoryCatalog::open(temp.path(), "project", true)
+                .unwrap()
+                .unwrap(),
+        );
+        let directory =
+            PrivateDirectory::open_existing(&temp.path().join("history-index")).unwrap();
+        let first_file = update_file(&directory, DATABASE, false).unwrap();
+        let second_file = update_file(&directory, DATABASE, false).unwrap();
+        let root = Arc::new(Root {
+            directory,
+            writable: true,
+            max_file_bytes: MAX_FILE_BYTES,
+            resource: None,
+            recovery: None,
+            recovery_active: AtomicBool::new(false),
+            legacy_data_lock_conflict: AtomicBool::new(false),
+        });
+        let mut first = Handle {
+            file: first_file,
+            root: root.clone(),
+            name: DATABASE.into(),
+            lock: LockKind::None,
+        };
+        let mut second = Handle {
+            file: second_file,
+            root,
+            name: DATABASE.into(),
+            lock: LockKind::None,
+        };
+        assert!(first.lock(LockKind::Shared).unwrap());
+        second.read_exact_at(&mut [0; 16], 0).unwrap();
+        assert!(first.lock(LockKind::Reserved).unwrap());
+        assert!(first.lock(LockKind::Exclusive).unwrap());
+        assert!(!second.lock(LockKind::Shared).unwrap());
+        assert!(first.lock(LockKind::None).unwrap());
+        assert!(first.lock(LockKind::None).unwrap());
+        assert!(second.lock(LockKind::Shared).unwrap());
+        assert!(second.lock(LockKind::None).unwrap());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn private_catalog_windows_legacy_mandatory_read_lock_is_reported_as_busy() {
+        let temp = tempfile::tempdir().unwrap();
+        drop(
+            HistoryCatalog::open(temp.path(), "project", true)
+                .unwrap()
+                .unwrap(),
+        );
+        let legacy = File::open(temp.path().join("history-index").join(DATABASE)).unwrap();
+        FileExt::try_lock_exclusive(&legacy).unwrap();
+        let error = HistoryCatalog::open(temp.path(), "project", false)
+            .err()
+            .unwrap();
+        assert!(
+            error
+                .chain()
+                .any(|cause| cause.to_string() == "history_catalog_busy"),
+            "{error:?}"
+        );
+        FileExt::unlock(&legacy).unwrap();
+        assert!(
+            HistoryCatalog::open(temp.path(), "project", false)
+                .unwrap()
+                .is_some()
+        );
+    }
 
     #[test]
     fn private_catalog_files_process_child() {
@@ -784,13 +1203,50 @@ mod tests {
                     .unwrap(),
             );
         }
-        assert!(HistoryCatalog::open(temp.path(), "project", true).is_err());
+        let error = HistoryCatalog::open(temp.path(), "project", true)
+            .err()
+            .unwrap();
+        assert!(
+            error
+                .downcast_ref::<HistoryCatalogCapacityReached>()
+                .is_some()
+        );
         drop(catalogs.pop());
         let replacement = HistoryCatalog::open(temp.path(), "project", true)
             .unwrap()
             .unwrap();
-        drop(catalogs);
+        // Reusing the released VFS slot must bind a different profile's real root.
+        let first_slot = Arc::clone(&replacement.file_lease.as_ref().unwrap().0);
+        let first_revision = replacement.revision().unwrap();
         drop(replacement);
+        let other = tempfile::tempdir().unwrap();
+        let mut replacement = HistoryCatalog::open(other.path(), "other-profile", true)
+            .unwrap()
+            .unwrap();
+        assert!(Arc::ptr_eq(
+            &first_slot,
+            &replacement.file_lease.as_ref().unwrap().0
+        ));
+        assert!(replacement.publish(&first_revision, &[], &[]).is_err());
+        assert!(replacement.snapshot(None, 10).unwrap().sessions.is_empty());
+        drop(replacement);
+        // A corrupt SQLite file fails after acquiring the only free VFS slot.
+        std::fs::write(
+            other.path().join("history-index/catalog.sqlite3"),
+            b"not sqlite",
+        )
+        .unwrap();
+        for _ in 0..SLOT_COUNT + 1 {
+            let error = HistoryCatalog::open(other.path(), "other-profile", false)
+                .err()
+                .unwrap();
+            assert!(
+                error
+                    .downcast_ref::<HistoryCatalogCapacityReached>()
+                    .is_none()
+            );
+        }
+        drop(catalogs);
         for _ in 0..SLOT_COUNT + 1 {
             drop(
                 HistoryCatalog::open(temp.path(), "project", false)
@@ -812,6 +1268,41 @@ mod tests {
     }
 
     #[test]
+    fn private_database_budget_is_specific_to_its_owned_directory() {
+        let temp = tempfile::tempdir().unwrap();
+        let directory = PrivateDirectory::open_existing(temp.path()).unwrap();
+        let opened = open_database_in(directory, "bounded-derived-store", true, 16 * 1024)
+            .unwrap()
+            .unwrap();
+        opened
+            .connection
+            .execute_batch("CREATE TABLE payload(value BLOB)")
+            .unwrap();
+        assert!(
+            opened
+                .connection
+                .execute("INSERT INTO payload VALUES(zeroblob(65536))", [])
+                .is_err()
+        );
+        let count: u64 = opened
+            .connection
+            .query_row("SELECT count(*) FROM payload", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(count, 0, "quota failure must not publish a partial row");
+        assert!(temp.path().join(DATABASE).metadata().unwrap().len() <= 16 * 1024);
+        drop(opened);
+        let directory = PrivateDirectory::open_existing(temp.path()).unwrap();
+        let reopened = open_database_in(directory, "bounded-derived-store", false, 16 * 1024)
+            .unwrap()
+            .unwrap();
+        let count: u64 = reopened
+            .connection
+            .query_row("SELECT count(*) FROM payload", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(count, 0);
+    }
+
+    #[test]
     fn private_catalog_files_short_reads_zero_only_the_unread_tail() {
         let temp = tempfile::tempdir().unwrap();
         let directory = PrivateDirectory::open_existing(temp.path()).unwrap();
@@ -824,6 +1315,12 @@ mod tests {
             root: Arc::new(Root {
                 directory,
                 writable: true,
+                max_file_bytes: MAX_FILE_BYTES,
+                resource: None,
+                recovery: None,
+                recovery_active: AtomicBool::new(false),
+                #[cfg(windows)]
+                legacy_data_lock_conflict: AtomicBool::new(false),
             }),
             name: DATABASE.into(),
             lock: LockKind::None,

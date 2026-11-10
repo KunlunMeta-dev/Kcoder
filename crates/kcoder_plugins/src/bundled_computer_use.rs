@@ -2,8 +2,8 @@
 use super::*;
 const ID: &str = "kcoder-windows-computer-use";
 #[cfg(any(windows, test))]
-const VERSION: &str = "0.1.6";
-const DIGEST: &str = "sha256:dc6a58f0e979505bdc63960bb289915a34b358041a44e07234504f67283870c8";
+const VERSION: &str = "0.1.7";
+const DIGEST: &str = "sha256:410dd0ce08bb03946eded9ebfce56b042a1980d603861a70e8e0c476e1df1497";
 pub(super) fn digest() -> &'static str {
     DIGEST
 }

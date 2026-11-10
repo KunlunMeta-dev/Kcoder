@@ -7,6 +7,27 @@ use std::sync::Arc;
 use tokio::sync::broadcast;
 
 impl BackgroundJobSpawner for BackgroundJobManager {
+    fn report_tool_progress(&self, id: &str, message: &str) -> bool {
+        BackgroundJobManager::report_progress(self, id, message, None, None)
+    }
+
+    fn respawn_original_subagent(
+        &self,
+        expected: &kcoder_types::BackgroundRunKey,
+        description: String,
+        work: Pin<Box<dyn Future<Output = ToolOutput> + Send>>,
+        cancel: Arc<dyn Fn() + Send + Sync>,
+        max_concurrent: Option<usize>,
+    ) -> Result<String, SpawnError> {
+        BackgroundJobManager::respawn_original_subagent(
+            self,
+            expected,
+            description,
+            work,
+            cancel,
+            max_concurrent,
+        )
+    }
     fn spawn(
         &self,
         description: String,
@@ -109,6 +130,8 @@ impl BackgroundJobSpawner for BackgroundJobManager {
                 kind: TaskKind::Workflow,
                 count_subagents_only: false,
                 reuse_existing: false,
+                adopt_unstarted: false,
+                workflow_recovery: None,
                 notify_parent_on_completion: true,
             },
         )
@@ -142,6 +165,8 @@ impl BackgroundJobSpawner for BackgroundJobManager {
                 kind: TaskKind::Workflow,
                 count_subagents_only: false,
                 reuse_existing: true,
+                adopt_unstarted: false,
+                workflow_recovery: None,
                 notify_parent_on_completion: true,
             },
         )

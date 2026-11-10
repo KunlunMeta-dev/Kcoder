@@ -9,7 +9,7 @@ describe('sanitizeRedirectPath', () => {
   test('rejects external and login-loop redirects', () => {
     expect(sanitizeRedirectPath('https://evil.test')).toBeNull()
     expect(sanitizeRedirectPath('//evil.test')).toBeNull()
-    expect(sanitizeRedirectPath('/login', ['/login', '/login/oidc'])).toBeNull()
-    expect(sanitizeRedirectPath('/login/oidc', ['/login', '/login/oidc'])).toBeNull()
+    const loginPath = '/g/example/login'
+    expect(sanitizeRedirectPath(`${loginPath}?returnTo=%2F`, [loginPath])).toBeNull()
   })
 })

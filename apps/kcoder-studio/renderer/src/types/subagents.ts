@@ -36,6 +36,9 @@ export interface RuntimeSubagentListResponse {
     pages: boolean
     live: boolean
     conversationStream?: boolean
+    exactRun?: boolean
+    exactControl?: boolean
+    exactContinuation?: boolean
     receipts: boolean
     steering: boolean
     stop: boolean
@@ -44,6 +47,7 @@ export interface RuntimeSubagentListResponse {
 export interface RuntimeSubagentAddressRequest {
   address: RuntimeTaskAddress
   agentId: string
+  expectedBackgroundRun?: RuntimeSubagentRun
 }
 export interface RuntimeSubagentReceipt {
   clientMessageId: string
@@ -110,6 +114,7 @@ export interface RuntimeSourceAgent {
 
 /** Same public messages/actions as the ordinary conversation, scoped to one worker run. */
 export interface RuntimeSubagentConversationSnapshot {
+  status?: string
   threadId: string
   agentId: string
   subscriptionId: string

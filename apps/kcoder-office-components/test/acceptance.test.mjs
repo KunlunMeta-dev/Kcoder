@@ -1,0 +1,4 @@
+import test from'node:test';import assert from'node:assert/strict';import{readFile}from'node:fs/promises';
+import{generateOffice}from'../src/index.mjs';import{verifyMaterialContent}from'../src/acceptance.mjs';
+const fixtures=JSON.parse(await readFile(new URL('./fixtures/office-scenarios.json',import.meta.url),'utf8'));
+for(const item of fixtures.cases)test(item.id+' real bytes satisfy the frozen material oracle (no model claim)',async()=>{const artifact=await generateOffice(item.specification);const report=await verifyMaterialContent(artifact.bytes,item.specification.kind,item.criteria);assert.equal(report.status,'passed',JSON.stringify(report.checks.filter(check=>!check.passed)));const poisoned=await verifyMaterialContent(artifact.bytes,item.specification.kind,{...item.criteria,requiredText:[...(item.criteria.requiredText??[]),'invented content that was never produced']});assert.equal(poisoned.status,'failed');});

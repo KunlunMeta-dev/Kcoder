@@ -55,6 +55,7 @@ export function usePaneWorkspaceResources(context: ReturnType<typeof usePaneWork
     embeddedBrowserLabel,
     activeDeviceId,
     effectiveWorkspaceTarget,
+    fileEditorNavigation,
     preferLocalWorkspaceTerminal,
   } = context
   useEffect(() => {
@@ -348,11 +349,15 @@ export function usePaneWorkspaceResources(context: ReturnType<typeof usePaneWork
 
   const openRightPanelTab = useCallback(
     (tab: RightWorkspacePanelTab) => {
-      setRightPanelOpen(true)
-      setRightPanelTabs(current => (current.includes(tab) ? current : [...current, tab]))
-      setRightPanelView(tab)
+      const open = () => {
+        setRightPanelOpen(true)
+        setRightPanelTabs(current => (current.includes(tab) ? current : [...current, tab]))
+        setRightPanelView(tab)
+      }
+      if (tab === 'files') open()
+      else fileEditorNavigation.request(open)
     },
-    [setRightPanelOpen, setRightPanelTabs, setRightPanelView]
+    [setRightPanelOpen, setRightPanelTabs, setRightPanelView, fileEditorNavigation]
   )
   return {
     ...context,

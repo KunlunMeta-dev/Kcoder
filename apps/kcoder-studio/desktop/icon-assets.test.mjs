@@ -14,8 +14,8 @@ test('ICNS canonicalization preserves payloads and rejects malformed containers'
   assert.throws(() => canonicalizeIcns(invalid), /Invalid ICNS chunk length/);
 });
 
-test('all native, floating-panel and browser icons reproduce the supplied source image', async () => {
+test('committed desktop, Mobile and browser icon inventory matches its source and hashes', async () => {
   const result = await generateDesktopIcons({ check: true });
-  assert.equal(result.files, 20);
+  assert.equal(result.files, 11);
   assert.match(result.sourceSha256, /^[a-f0-9]{64}$/);
 });

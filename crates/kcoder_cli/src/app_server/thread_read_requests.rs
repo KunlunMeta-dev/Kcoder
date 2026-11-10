@@ -17,10 +17,39 @@ pub(super) async fn dispatch(
     thread_list_snapshots: &mut thread_list_snapshots::ThreadListSnapshots,
     history_refresh: &mut history_refresh_processor::HistoryRefreshProcessor,
 ) -> Result<DispatchControl> {
+    dispatch_original(
+        method,
+        id,
+        params,
+        workspace_engine,
+        outbound_tx,
+        thread_manager,
+        state,
+        thread_list_snapshots,
+        history_refresh,
+    )
+    .await
+}
+
+#[expect(
+    clippy::too_many_arguments,
+    reason = "The original manager and per-client read resources stay explicit"
+)]
+pub(super) async fn dispatch_original(
+    method: &str,
+    id: Value,
+    params: Value,
+    workspace_engine: &QueryEngine,
+    outbound_tx: &mpsc::Sender<Value>,
+    thread_manager: &mut ThreadManager,
+    state: &mut ConnectionState,
+    thread_list_snapshots: &mut thread_list_snapshots::ThreadListSnapshots,
+    history_refresh: &mut history_refresh_processor::HistoryRefreshProcessor,
+) -> Result<DispatchControl> {
     match method {
         method::THREAD_LIST => {
             let running_thread_ids = thread_manager.running_thread_ids();
-            let result = serde_json::from_value::<ThreadListParams>(params)
+            let result = kcoder_app_rpc_codec::decode::<ThreadListParams>(params)
                     .context("invalid thread/list params")
                     .and_then(|params| {
                         let limit = params.limit.unwrap_or(100).clamp(1, 100) as usize;
@@ -120,10 +149,11 @@ pub(super) async fn dispatch(
             }
         }
         method::THREAD_HISTORY_REFRESH => {
-            let result =
-                serde_json::from_value::<kcoder_app_protocol::ThreadHistoryRefreshParams>(params)
-                    .context("invalid thread/history/refresh params")
-                    .and_then(|params| history_refresh.process(workspace_engine, params));
+            let result = kcoder_app_rpc_codec::decode::<
+                kcoder_app_protocol::ThreadHistoryRefreshParams,
+            >(params)
+            .context("invalid thread/history/refresh params")
+            .and_then(|params| history_refresh.process(workspace_engine, params));
             match result {
                 Ok(result) => {
                     send(
@@ -139,15 +169,18 @@ pub(super) async fn dispatch(
         }
         method::THREAD_METADATA_UPDATE => {
             let running_thread_ids = thread_manager.running_thread_ids();
-            let result = serde_json::from_value::<ThreadMetadataUpdateParams>(params)
+            let result = kcoder_app_rpc_codec::decode::<ThreadMetadataUpdateParams>(params)
                 .context("invalid thread/metadata/update params")
                 .and_then(|params| {
                     let target_engine = thread_manager
                         .engine(&params.thread_id)
                         .unwrap_or_else(|| workspace_engine.clone());
-                    let active_thread_owned = thread_manager
-                        .lease(&params.thread_id)
-                        .is_some_and(|lease| lease.matches_engine(&target_engine));
+                    let active_thread_owned =
+                        thread_manager
+                            .lease(&params.thread_id)
+                            .is_some_and(|lease| {
+                                lease.matches_target(&target_engine.session_lease_target())
+                            });
                     update_thread_metadata(
                         &target_engine,
                         params,
@@ -169,7 +202,7 @@ pub(super) async fn dispatch(
             }
         }
         method::TOOLS_CATALOG => {
-            match tools_catalog::query(params, thread_manager, workspace_engine).await {
+            match tools_catalog::query(params, thread_manager, workspace_engine, state).await {
                 Ok(result) => {
                     send(
                         outbound_tx,
@@ -183,12 +216,13 @@ pub(super) async fn dispatch(
             }
         }
         method::THREAD_CREATION_READ => {
-            let result =
-                serde_json::from_value::<kcoder_app_protocol::ThreadCreationReadParams>(params)
-                    .context("invalid thread creation query")
-                    .and_then(|params| {
-                        thread_creations::query(workspace_engine, &params.client_request_id)
-                    });
+            let result = kcoder_app_rpc_codec::decode::<
+                kcoder_app_protocol::ThreadCreationReadParams,
+            >(params)
+            .context("invalid thread creation query")
+            .and_then(|params| {
+                thread_creations::query(workspace_engine, &params.client_request_id)
+            });
             match result {
                 Ok(result) => send(outbound_tx, success_response(id, result)).await?,
                 Err(error) => {
@@ -212,7 +246,7 @@ pub(super) async fn dispatch(
         }
         method::THREAD_READ => {
             let running_thread_ids = thread_manager.running_thread_ids();
-            let result = match serde_json::from_value::<ThreadReadParams>(params)
+            let result = match kcoder_app_rpc_codec::decode::<ThreadReadParams>(params)
                 .context("invalid thread/read params")
             {
                 Ok(params) => {
@@ -226,6 +260,13 @@ pub(super) async fn dispatch(
                     );
                     thread_transcript(&target_engine, params, &running_thread_ids, run_projection)
                         .await
+                        .map(|page| {
+                            indexed_transcript::ReadOutcome::legacy(
+                                page,
+                                state.transcript_snapshot_v1,
+                            )
+                            .finish(run_projection)
+                        })
                 }
                 Err(error) => Err(error),
             };

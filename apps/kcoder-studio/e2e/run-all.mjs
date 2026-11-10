@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { releaseGroupSuites } from "./harness/release-plan.mjs";
 import { selectSuites, suiteEnvironmentNames } from "./harness/runner-options.mjs";
-import { isolatedEnvironment } from "./harness/run-context.mjs";
+import { artifactSourceRoot, e2eDayRoot, isolatedEnvironment } from "./harness/run-context.mjs";
 import { modelIndependentSuites, realModelSuites, registeredSuites, smokeSuites } from "./suite-registry.mjs";
 import {
   processTreeAlive,
@@ -40,7 +40,16 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
 }
 
 export async function prepareSuiteArtifacts(requested, options = {}) {
-  if (requested.length && requested.every(source => source === "suites/browser/packaged-desktop-smoke.e2e.mjs" || source === "suites/gateway/windows-wine-resources.e2e.mjs")) return;
+  if (requested.length && requested.every(source => source === "suites/gateway/linux-headless-credentials.e2e.mjs")) return;
+  if (requested.length && requested.every(source => source === "suites/gateway/windows-private-keyring.e2e.mjs")) return;
+  if (requested.length && requested.every(source => source === "suites/gateway/windows-private-credentials.e2e.mjs")) return;
+  if (requested.length && requested.every(source => ["suites/gateway/windows-keyring-logon.e2e.mjs", "suites/gateway/windows-keyring-account.e2e.mjs", "suites/gateway/windows-keyring-core.e2e.mjs", "suites/gateway/windows-keyring-host.e2e.mjs"].includes(source))) return;
+  if (requested.length && requested.every(source => source === "suites/gateway/windows-archive-retention.e2e.mjs")) return;
+  if (requested.length && requested.every(source => source === "suites/gateway/windows-source-transfer.e2e.mjs")) return;
+  if (requested.length && requested.every(source => source === "suites/gateway/windows-cross-host-source.e2e.mjs")) return;
+  if (requested.length && requested.every(source => source === "suites/gateway/windows-plugin-migration.e2e.mjs")) return;
+  if (requested.length && requested.every(source => source === "suites/browser/migration-large-history.e2e.mjs")) return;
+  if (requested.length && requested.every(source => source === "suites/browser/packaged-desktop-smoke.e2e.mjs" || source === "suites/gateway/windows-wine-resources.e2e.mjs" || source === "suites/browser/electron-widget-controller.e2e.mjs" || source === "suites/gateway/windows-migration.e2e.mjs" || source === "suites/gateway/windows-migration-security.e2e.mjs" || source === "suites/gateway/windows-historical-undo.e2e.mjs" || source === "suites/gateway/windows-terminal-lifecycle.e2e.mjs" || source === "suites/gateway/windows-local-attachment.e2e.mjs" || source === "suites/gateway/windows-local-attachment-lock.e2e.mjs" || source === "suites/gateway/windows-snapshot-paths.e2e.mjs" || source === "suites/gateway/windows-profile-settings-lock.e2e.mjs")) return;
   const run = options.run || runPreparation;
   const caSuite = "suites/gateway/plugin-target-ca.e2e.mjs";
   if (requested.includes(caSuite)) {
@@ -50,6 +59,13 @@ export async function prepareSuiteArtifacts(requested, options = {}) {
     if (requested.every(source => source === caSuite)) return;
   }
   await run("cargo", ["build", "-p", "kcoder_cli", "--bin", "kcoder"], resolve(e2eRoot, "../../.."));
+  if (requested.every(source => source === "suites/gateway/migration-terminal-transfer.e2e.mjs")) return;
+  if (requested.includes("suites/browser/migration.e2e.mjs") && !(options.environment || process.env).KCODER_MIGRATION_FIXTURE_BINARY) {
+    await run("cargo", ["build", "-p", "kcoder_migration", "--example", "history_reinterpretation_fixture"], resolve(e2eRoot, "../../.."));
+  }
+  if (requested.includes("suites/browser/memory-native-management.e2e.mjs") && !(options.environment || process.env).KCODER_E2E_KNOWLEDGE_FIXTURE_BIN) {
+    await run("cargo", ["build", "-p", "kcoder_knowledge", "--example", "native_wiki_publication_fixture"], resolve(e2eRoot, "../../.."));
+  }
   const rendererRoot = resolve(e2eRoot, "../renderer");
   // Use installed build tools without triggering a package-manager dependency reinstall.
   await run(process.execPath, ["node_modules/typescript/bin/tsc", "-b"], rendererRoot);
@@ -104,23 +120,17 @@ export async function runSuites(requested, options = {}) {
 }
 
 export async function suiteFailedFromNetworkChange(suiteId, startedAt) {
-  const suiteRoot = resolve(
-    e2eRoot,
-    "../../../target/test/apps/kcoder-studio/e2e",
-    suiteId,
-  );
-  let entries;
-  try {
-    entries = await readdir(suiteRoot, { withFileTypes: true });
-  } catch {
-    return false;
-  }
   const candidates = [];
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
-    const runRoot = resolve(suiteRoot, entry.name);
-    const info = await stat(runRoot).catch(() => null);
-    if (info && info.mtimeMs >= startedAt - 1_000) candidates.push(runRoot);
+  const source = resolve(e2eRoot, suiteId);
+  const suiteRoots = new Set([artifactSourceRoot(source, new Date(startedAt)), artifactSourceRoot(source)]);
+  for (const suiteRoot of suiteRoots) {
+    const entries = await readdir(suiteRoot, { withFileTypes: true }).catch(() => []);
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const runRoot = resolve(suiteRoot, entry.name);
+      const info = await stat(runRoot).catch(() => null);
+      if (info && info.mtimeMs >= startedAt - 1_000) candidates.push(runRoot);
+    }
   }
   for (const runRoot of candidates) {
     const artifactsRoot = resolve(runRoot, "artifacts");
@@ -164,7 +174,7 @@ export function runNode(suiteId, options = {}) {
         process.execPath,
         [source],
         spawnOptions,
-        resolve(e2eRoot, "../../../target/test/apps/kcoder-studio/e2e/supervisors"),
+        resolve(e2eDayRoot(), "supervisors"),
       )
       : null;
     const child = supervised?.child || spawnChild(process.execPath, [source], spawnOptions);

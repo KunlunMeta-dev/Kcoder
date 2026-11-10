@@ -71,21 +71,21 @@ const WAIT_TIMEOUT: u32 = 258;
 const GENERIC_ALL: u32 = 0x1000_0000;
 const ACCESS_ALLOWED_ACE_TYPE: u8 = 0;
 
-pub(crate) struct WindowsSandboxChild {
+pub struct WindowsSandboxChild {
     process: Arc<OwnedHandle>,
     job: WindowsSandboxTerminator,
-    pub(crate) pid: u32,
-    pub(crate) stdout: Option<tokio::fs::File>,
-    pub(crate) stderr: Option<tokio::fs::File>,
+    pub pid: u32,
+    pub stdout: Option<tokio::fs::File>,
+    pub stderr: Option<tokio::fs::File>,
 }
 
 #[derive(Clone)]
-pub(crate) struct WindowsSandboxTerminator {
+pub struct WindowsSandboxTerminator {
     job: Arc<OwnedHandle>,
 }
 
 impl WindowsSandboxTerminator {
-    pub(crate) fn terminate(&self) {
+    pub fn terminate(&self) {
         unsafe {
             TerminateJobObject(handle(&self.job), 1);
         }
@@ -93,15 +93,15 @@ impl WindowsSandboxTerminator {
 }
 
 impl WindowsSandboxChild {
-    pub(crate) fn terminator(&self) -> WindowsSandboxTerminator {
+    pub fn terminator(&self) -> WindowsSandboxTerminator {
         self.job.clone()
     }
 
-    pub(crate) fn terminate(&self) {
+    pub fn terminate(&self) {
         self.job.terminate();
     }
 
-    pub(crate) async fn wait(&self) -> io::Result<ExitStatus> {
+    pub async fn wait(&self) -> io::Result<ExitStatus> {
         loop {
             let result = unsafe { WaitForSingleObject(handle(&self.process), 0) };
             if result == WAIT_OBJECT_0 {
@@ -120,7 +120,7 @@ impl WindowsSandboxChild {
     }
 }
 
-pub(crate) fn spawn(
+pub fn spawn(
     program: &OsStr,
     args: &[OsString],
     cwd: &Path,

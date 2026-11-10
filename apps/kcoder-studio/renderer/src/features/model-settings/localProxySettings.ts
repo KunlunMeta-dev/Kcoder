@@ -9,7 +9,7 @@ interface StoredLocalProxyConfig {
   updatedAt?: string
 }
 
-export const LOCAL_PROXY_SETTINGS_CHANGED_EVENT = 'wework:local-proxy-settings-changed'
+export const LOCAL_PROXY_SETTINGS_CHANGED_EVENT = 'kcoder:local-proxy-settings-changed'
 
 export const LOCAL_PROXY_SETTINGS_STORAGE_KEY = 'wework.local-proxy-settings'
 const MAX_PROXY_URL_BYTES = 2048

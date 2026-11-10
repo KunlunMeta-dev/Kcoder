@@ -22,12 +22,20 @@ export function useSubagentConversation(
   address: RuntimeTaskAddress | null | undefined,
   agentId: string | undefined,
   enabled: boolean,
-  generation?: { runId?: string; ownerScope?: string }
+  generation?: {
+    runId?: string
+    ownerScope?: string
+    expectedBackgroundRun?: import('@/types/subagents').RuntimeSubagentRun
+  }
 ) {
-  const runId = generation?.runId
+  const expected = generation?.expectedBackgroundRun
+  const runId = expected?.runId ?? generation?.runId
+  const exactKey = expected
+    ? JSON.stringify([expected.parentSessionId, expected.agentId, expected.runId])
+    : ''
   const scope =
     enabled && address && agentId
-      ? `${generation?.ownerScope ?? ''}\0${address.deviceId}\0${address.taskId}\0${agentId}`
+      ? `${generation?.ownerScope ?? ''}\0${address.deviceId}\0${address.taskId}\0${agentId}${exactKey ? `\0${exactKey}` : ''}`
       : ''
   const [view, setView] = useState<ConversationView | null>(null)
   const retainedView = useRef<ConversationView | null>(null)
@@ -57,6 +65,12 @@ export function useSubagentConversation(
       attempt += 1
       release()
       connectionError = error
+      if (expected) {
+        snapshot = undefined
+        publish(false)
+        clearTimeout(retryTimer)
+        return
+      }
       publish(true)
       clearTimeout(retryTimer)
       retryTimer = setTimeout(
@@ -102,7 +116,7 @@ export function useSubagentConversation(
       publish(true)
       try {
         const subscription = await api.subscribeRuntimeSubagentConversation(
-          { address, agentId },
+          { address, agentId, ...(expected ? { expectedBackgroundRun: { ...expected } } : {}) },
           accept
         )
         if (disposed || request !== attempt) {
@@ -167,6 +181,7 @@ export function useSubagentConversation(
   }, [snapshotMessages, liveEstimatesOwned])
   return {
     key: scope,
+    status: currentGeneration?.snapshot?.status,
     messages: enabled ? messages : undefined,
     active: Boolean(
       currentGeneration?.snapshot?.active &&

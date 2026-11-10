@@ -316,7 +316,8 @@ impl QueryEngine {
         workspace_services: Option<WorkspaceRuntimeServices>,
         register_session_on_construct: bool,
     ) -> anyhow::Result<Self> {
-        let project_instructions = kcoder_config::try_build_project_md_system_prompt(&cwd)?;
+        let native_guides = kcoder_config::try_build_project_md_snapshot(&cwd)?;
+        let project_instructions = native_guides.prompt;
         super::engine_configuration::strip_private_plugin_settings(&mut settings)?;
         state.set_history_max_messages(settings.history_max_messages);
         state.configure_orchestrate_runtime_audit(
@@ -432,9 +433,19 @@ impl QueryEngine {
         let auto_compact_state = Arc::new(RwLock::new(AutoCompactState::default()));
         // Pin the edit surface at engine creation: the session cannot switch
         // surfaces mid-run (see `file_edit_surface`).
+        let studio_tool_selection = settings.tools.studio.clone();
         let file_edit_surface = settings.tools.file_edit_tool;
-        Ok(Self {
+        let inherited_observer = crate::native_model_requests::inherited_observer(&provider);
+        let provider = if inherited_observer.is_some() {
+            crate::native_model_requests::admission_identity(&provider)
+        } else {
+            provider
+        };
+        let engine = Self {
             provider: Arc::new(RwLock::new(provider)),
+            model_request_binding: None,
+            model_health: workspace_services.model_health,
+            native_auto_model_health: None,
             client_model_configuration: None,
             client_model_options: Arc::new(RwLock::new(
                 client_model_configuration::ClientModelOptions {
@@ -444,12 +455,35 @@ impl QueryEngine {
                 },
             )),
             request_class: request_admission::RequestClass::Foreground,
+            #[cfg(feature = "web-network-test-fixture")]
+            web_network_test_dns: None,
+            web_session_resources: kcoder_tools::web_network::WebSessionResources::new(&state),
             state,
             tools,
+            session_tool_contributions: None,
+            client_questions_supported: true,
+            async_user_questions_supported: false,
+            unattended_input: false,
+            channel_tool_restrictions: Default::default(),
+            owned_command_program: None,
+            native_tool_ceiling: None,
+            agent_tool_ceiling: None,
+            agent_uses_own_tool_selection: false,
+            agent_turn_configuration: None,
+            native_tool_authorization: None,
+            native_turn_admission: None,
+            native_web_source_identity: None,
+            native_office_projection: None,
+            native_reviewed_memory_turn: None,
+            native_wiki_read_factory: None,
+            bundled_search_backend: None,
+            web_search_runtime: workspace_services.web_search_runtime,
             subagent_tools: Arc::new(RwLock::new(subagent_tools)),
+            subagent_tools_explicit: false,
             tool_definitions: Arc::new(tool_definitions),
             tool_input_hints: Arc::new(tool_input_hints),
             tool_schema_revision,
+            discovered_tools: Arc::default(),
             tool_input_schemas: Arc::new(tool_input_schemas),
             permissions: Arc::new(RwLock::new(permissions)),
             settings: Arc::new(RwLock::new(settings)),
@@ -460,7 +494,10 @@ impl QueryEngine {
             memory_manager: Arc::new(memory_manager),
             memory_store,
             memory_prompt_counter: Arc::new(RwLock::new(initial_memory_prompt_count)),
-            memory_observer_queue: Arc::new(RwLock::new(memory_observer_queue)),
+            memory_observer_queue: Arc::new(RwLock::new(
+                memory_observer::runtime_queue::ObserverRuntimeQueue::new(memory_observer_queue),
+            )),
+            curated_memory_observer_sink: None,
             memory_idle_gate: Arc::new(RwLock::new(())),
             memory_idle_reserved: Arc::new(AtomicBool::new(false)),
             memory_observer_last_validation_failure: Arc::new(RwLock::new(None)),
@@ -472,6 +509,7 @@ impl QueryEngine {
             memory_session_end_summary_recorded: Arc::new(AtomicBool::new(false)),
             skill_registry,
             active_skills: Arc::new(RwLock::new(Vec::new())),
+            agent_skill_resources: None,
             skill_registry_generation: Arc::new(AtomicU64::new(0)),
             skill_mutation_actor: Arc::new(None),
             cwd,
@@ -480,6 +518,7 @@ impl QueryEngine {
             workspace_persistence_mode,
             cancel_token: CancellationToken::new(),
             input_persistence_failed: Arc::new(AtomicBool::new(false)),
+            input_session_end_gate: Arc::new(tokio::sync::RwLock::new(())),
             shorten_signal: Arc::new(tokio::sync::Notify::new()),
             prefire_owner: Arc::new(PrefireOwner::new(Arc::clone(&auto_compact_state))),
             auto_compact_state,
@@ -494,7 +533,14 @@ impl QueryEngine {
             plugin_snapshot: Arc::new(plugin_snapshot),
             folder_trusted,
             last_cache_safe_params: Arc::new(RwLock::new(None)),
+            side_question_cache_binding: Arc::new(RwLock::new(None)),
             project_user_context: Arc::new(project_user_context),
+            native_input_only_context: None,
+            native_host_source_admission_required: None,
+            project_instruction_facts: Arc::new(native_guides.facts),
+            imported_instruction_gate: Arc::default(),
+            imported_context_notice: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            agent_definition_context: None,
             subagent_system_prompt: Arc::new(None),
             subagent_runtime_control: Arc::new(None),
             cumulative_usage: Arc::new(RwLock::new(UsageAccumulator::default())),
@@ -512,6 +558,8 @@ impl QueryEngine {
             checkpoints: checkpoint::CheckpointManager::new(checkpoints_dir),
             arrangement_mode: Arc::new(AtomicBool::new(false)),
             luna_mode: Arc::new(AtomicBool::new(false)),
+            client_presentation: None,
+            studio_tool_selection,
             allowed_write_paths: Arc::new(RwLock::new(Vec::new())),
             allowed_shell_prefixes: Arc::new(RwLock::new(Vec::new())),
             block_shell_file_mutation: Arc::new(AtomicBool::new(false)),
@@ -544,6 +592,10 @@ impl QueryEngine {
             turn_steer_mailbox: Arc::new(Mutex::new(TurnSteerMailbox::default())),
             shell_environment_snapshot,
             cron_scheduler,
-        })
+        };
+        match inherited_observer {
+            Some(observer) => engine.with_inherited_provider_model_observer(observer),
+            None => Ok(engine),
+        }
     }
 }

@@ -1,0 +1,597 @@
+{
+  "MigrationHistoryParentResourceAttachParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "MigrationResourceLimits": {
+        "additionalProperties": false,
+        "description": "Existing per-file, frame, archive and decoding limits remain independent hard bounds.",
+        "properties": {
+          "maxPayloadFiles": {
+            "default": 10000,
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxTotalBytes": {
+            "default": 21474836480,
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "minFreeBytes": {
+            "default": 134217728,
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "minFreeFileNodes": {
+            "default": 32,
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "properties": {
+      "confirm": {
+        "default": false,
+        "type": "boolean"
+      },
+      "expectedSequence": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "jobId": {
+        "type": "string"
+      },
+      "limits": {
+        "$ref": "#/definitions/MigrationResourceLimits"
+      },
+      "planId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "expectedSequence",
+      "jobId",
+      "limits",
+      "planId"
+    ],
+    "title": "MigrationHistoryParentResourceAttachParams",
+    "type": "object"
+  },
+  "MigrationHistoryResourceAttachParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "MigrationResourceLimits": {
+        "additionalProperties": false,
+        "description": "Existing per-file, frame, archive and decoding limits remain independent hard bounds.",
+        "properties": {
+          "maxPayloadFiles": {
+            "default": 10000,
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxTotalBytes": {
+            "default": 21474836480,
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "minFreeBytes": {
+            "default": 134217728,
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "minFreeFileNodes": {
+            "default": 32,
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "properties": {
+      "confirm": {
+        "default": false,
+        "type": "boolean"
+      },
+      "expectedSequence": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "jobId": {
+        "type": "string"
+      },
+      "limits": {
+        "$ref": "#/definitions/MigrationResourceLimits"
+      }
+    },
+    "required": [
+      "expectedSequence",
+      "jobId",
+      "limits"
+    ],
+    "title": "MigrationHistoryResourceAttachParams",
+    "type": "object"
+  },
+  "MigrationHistoryResourceAttachmentReadParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "jobId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "jobId"
+    ],
+    "title": "MigrationHistoryResourceAttachmentReadParams",
+    "type": "object"
+  },
+  "MigrationHistoryResourceAttachmentResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "MigrationHistoryResourceAttachmentIntent": {
+        "additionalProperties": false,
+        "properties": {
+          "expectedSequence": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "initialLimits": {
+            "$ref": "#/definitions/MigrationResourceLimitFacts"
+          },
+          "planId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "expectedSequence",
+          "initialLimits",
+          "planId"
+        ],
+        "type": "object"
+      },
+      "MigrationHistoryResourceAttachmentPhase": {
+        "enum": [
+          "not_applicable",
+          "untracked",
+          "pending",
+          "attached",
+          "tracked",
+          "parent_owned",
+          "unknown"
+        ],
+        "type": "string"
+      },
+      "MigrationResourceLimitFacts": {
+        "additionalProperties": false,
+        "description": "Responses contain observed complete facts; omitted request fields may have defaults instead.",
+        "properties": {
+          "maxPayloadFiles": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxTotalBytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "minFreeBytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "minFreeFileNodes": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "maxPayloadFiles",
+          "maxTotalBytes",
+          "minFreeBytes",
+          "minFreeFileNodes"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "currentPlanId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "currentSequence": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "issueCode": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "jobId": {
+        "type": "string"
+      },
+      "originalIntent": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/MigrationHistoryResourceAttachmentIntent"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "ownerJobId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "phase": {
+        "$ref": "#/definitions/MigrationHistoryResourceAttachmentPhase"
+      }
+    },
+    "required": [
+      "currentPlanId",
+      "currentSequence",
+      "issueCode",
+      "jobId",
+      "originalIntent",
+      "ownerJobId",
+      "phase"
+    ],
+    "title": "MigrationHistoryResourceAttachmentResult",
+    "type": "object"
+  },
+  "MigrationHistoryResourceIncreaseParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "MigrationResourceLimits": {
+        "additionalProperties": false,
+        "description": "Existing per-file, frame, archive and decoding limits remain independent hard bounds.",
+        "properties": {
+          "maxPayloadFiles": {
+            "default": 10000,
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxTotalBytes": {
+            "default": 21474836480,
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "minFreeBytes": {
+            "default": 134217728,
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "minFreeFileNodes": {
+            "default": 32,
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "properties": {
+      "confirm": {
+        "default": false,
+        "type": "boolean"
+      },
+      "expectedPolicyRevision": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "jobId": {
+        "type": "string"
+      },
+      "limits": {
+        "$ref": "#/definitions/MigrationResourceLimits"
+      },
+      "requestId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "expectedPolicyRevision",
+      "jobId",
+      "limits",
+      "requestId"
+    ],
+    "title": "MigrationHistoryResourceIncreaseParams",
+    "type": "object"
+  },
+  "MigrationHistoryResourceReadParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "jobId": {
+        "type": "string"
+      },
+      "requestId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "jobId"
+    ],
+    "title": "MigrationHistoryResourceReadParams",
+    "type": "object"
+  },
+  "MigrationHistoryResourceResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "MigrationResourceBudgetView": {
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "jobId": {
+                "type": "string"
+              },
+              "phase": {
+                "enum": [
+                  "not_applicable"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "jobId",
+              "phase"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "jobId": {
+                "type": "string"
+              },
+              "phase": {
+                "enum": [
+                  "legacy_untracked"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "jobId",
+              "phase"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "jobId": {
+                "type": "string"
+              },
+              "limits": {
+                "$ref": "#/definitions/MigrationResourceLimitFacts"
+              },
+              "phase": {
+                "enum": [
+                  "planned"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "jobId",
+              "limits",
+              "phase"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "jobId": {
+                "type": "string"
+              },
+              "limits": {
+                "$ref": "#/definitions/MigrationResourceLimitFacts"
+              },
+              "phase": {
+                "enum": [
+                  "active"
+                ],
+                "type": "string"
+              },
+              "policyRevision": {
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "requestedReceipt": {
+                "anyOf": [
+                  {
+                    "$ref": "#/definitions/MigrationResourceIncreaseReceipt"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "usage": {
+                "$ref": "#/definitions/MigrationResourceUsage"
+              }
+            },
+            "required": [
+              "jobId",
+              "limits",
+              "phase",
+              "policyRevision",
+              "usage"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "MigrationResourceIncreaseReceipt": {
+        "additionalProperties": false,
+        "description": "A receipt identifies the accepted intent, even when a newer policy already exists.",
+        "properties": {
+          "jobId": {
+            "type": "string"
+          },
+          "limits": {
+            "$ref": "#/definitions/MigrationResourceLimitFacts"
+          },
+          "previousRevision": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "revision": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "jobId",
+          "limits",
+          "previousRevision",
+          "requestId",
+          "revision"
+        ],
+        "type": "object"
+      },
+      "MigrationResourceLimitFacts": {
+        "additionalProperties": false,
+        "description": "Responses contain observed complete facts; omitted request fields may have defaults instead.",
+        "properties": {
+          "maxPayloadFiles": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxTotalBytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "minFreeBytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "minFreeFileNodes": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "maxPayloadFiles",
+          "maxTotalBytes",
+          "minFreeBytes",
+          "minFreeFileNodes"
+        ],
+        "type": "object"
+      },
+      "MigrationResourceUsage": {
+        "additionalProperties": false,
+        "properties": {
+          "committedBytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "committedFiles": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "reservedBytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "reservedFiles": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "committedBytes",
+          "committedFiles",
+          "reservedBytes",
+          "reservedFiles"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "budget": {
+        "$ref": "#/definitions/MigrationResourceBudgetView"
+      },
+      "initialLimits": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/MigrationResourceLimitFacts"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "Frozen initial policy, separate from the possibly raised current policy."
+      },
+      "ownerJobId": {
+        "description": "A parent-owned history child exposes the real parent. It cannot raise that parent's policy through the standalone endpoint or manufacture a batch plan authority.",
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "budget",
+      "initialLimits",
+      "ownerJobId"
+    ],
+    "title": "MigrationHistoryResourceResult",
+    "type": "object"
+  }
+}

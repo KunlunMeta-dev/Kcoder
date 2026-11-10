@@ -1,9 +1,9 @@
 import { File, FileText, MessageSquareText, Search, Settings, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { convertFileSrc } from '@tauri-apps/api/core'
+import { clientResourceUrl } from '@/lib/client-resource-url'
 import { useTranslation } from '@/hooks/useTranslation'
 import { navigateTo } from '@/lib/navigation'
-import { getAppPreferences, updateAppPreferences, type QuickPhrase } from '@/tauri/appPreferences'
+import { getAppPreferences, updateAppPreferences, type QuickPhrase } from '@/host/appPreferences'
 import { useQuickPhrases } from '@/hooks/useQuickPhrases'
 
 interface QuickPhraseMenuProps {
@@ -28,7 +28,7 @@ function StashThumbnail({ path }: { path: string }) {
   if (isImagePath(path)) {
     return (
       <img
-        src={convertFileSrc(path)}
+        src={clientResourceUrl(path) ?? undefined}
         alt=""
         className="h-10 w-10 rounded-lg border border-border bg-muted object-cover"
       />
@@ -125,7 +125,7 @@ function StashPreview({ phrase }: { phrase: QuickPhrase }) {
     >
       {imagePath ? (
         <img
-          src={convertFileSrc(imagePath)}
+          src={clientResourceUrl(imagePath) ?? undefined}
           alt={fileName(imagePath)}
           className="max-h-48 w-full rounded-lg bg-muted object-contain"
         />

@@ -203,6 +203,20 @@ pub(super) struct State {
     pub retired_through: u64,
     pub epochs: BTreeMap<u64, Epoch>,
     pub charges: Charges,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub device_revocations: BTreeMap<String, String>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub device_cleanup_cursors: BTreeMap<String, (Option<String>, Option<String>)>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub reaper_cursors: BTreeMap<String, ReaperCursor>,
+}
+/// Discovery position only. It never authorizes deletion or proves completion.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct ReaperCursor {
+    pub epoch: u64,
+    pub next_record: u64,
+    pub last_used: u64,
 }
 impl State {
     pub fn new(namespace: String) -> Self {
@@ -214,6 +228,9 @@ impl State {
             retired_through: 0,
             epochs: [(1, Epoch::default())].into(),
             charges: Charges::default(),
+            device_revocations: BTreeMap::new(),
+            device_cleanup_cursors: BTreeMap::new(),
+            reaper_cursors: BTreeMap::new(),
         }
     }
     pub fn allocate(&mut self, limits: &Limits) -> Result<u64> {
@@ -314,13 +331,56 @@ impl State {
                 "invalid retention epoch counts"
             );
         }
+        ensure!(
+            self.reaper_cursors.len() <= 32
+                && self.reaper_cursors.iter().all(|(key, cursor)| {
+                    key.len() == 64
+                        && key
+                            .bytes()
+                            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+                        && cursor.last_used <= self.revision
+                        && self
+                            .epochs
+                            .get(&cursor.epoch)
+                            .is_some_and(|epoch| cursor.next_record <= epoch.records)
+                }),
+            "invalid retention reaper cursor"
+        );
+        ensure!(
+            self.device_revocations.len() <= 256
+                && self
+                    .device_revocations
+                    .iter()
+                    .all(|(key, value)| key.len() == 64
+                        && value.len() == 64
+                        && key
+                            .bytes()
+                            .chain(value.bytes())
+                            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))),
+            "invalid device revocation fences"
+        );
+        ensure!(
+            self.device_cleanup_cursors.len() <= 256
+                && self
+                    .device_cleanup_cursors
+                    .iter()
+                    .all(
+                        |(key, (receipt, owner))| self.device_revocations.contains_key(key)
+                            && [receipt, owner].into_iter().all(|cursor| cursor
+                                .as_ref()
+                                .is_none_or(|id| !id.is_empty()
+                                    && id.len() <= 256
+                                    && !id.chars().any(char::is_control)))
+                    ),
+            "invalid device cleanup cursor"
+        );
         self.charges.validate(&header.limits)
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub(in crate::app_server) struct Scope {
+pub struct Scope {
     pub context: TrustedRetentionContextV1,
     pub workspace_identity: String,
     pub hash: String,
@@ -379,6 +439,8 @@ pub(super) struct Owner {
     pub manifest_retirement: Option<RemovalPhase>,
     #[serde(default, skip_serializing_if = "is_zero")]
     pub cleanup_capacity: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub device_cleanup: Option<String>,
 }
 fn legacy_owner_layout() -> u8 {
     1
@@ -457,7 +519,7 @@ impl EntryPhase {
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub(super) struct TransferBinding {
+pub struct TransferBinding {
     pub thread_id: String,
     pub client_message_id: String,
     pub attempt_id: String,
@@ -522,6 +584,60 @@ pub(super) struct Receipt {
     pub terminal_budget: u64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub release_intent: Option<ReleaseIntent>,
+    /// Local progress for this receipt only; the Accepted record holds the batch.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transfer_intent: Option<TransferIntent>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cleanup_intent: Option<super::cleanup::CleanupIntent>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct TransferIntent {
+    pub version: u8,
+    pub identity: kcoder_types::TurnAttemptIdentity,
+    pub client_message_id: String,
+    pub request_fingerprint: String,
+    pub request_digest: String,
+    pub materialization_digest: Option<String>,
+    pub artifact_parent: PrivateFileIdentityV1,
+    pub expected_receipt_revision: u64,
+    pub artifacts: Vec<TransferArtifact>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub device_abort: Option<DeviceTransferAbort>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct DeviceTransferAbort {
+    pub statement_sha256: String,
+    pub query_sha256: String,
+    pub artifacts: BTreeMap<String, RemovalPhase>,
+    pub complete: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct TransferArtifact {
+    pub source: kcoder_app_protocol::RetentionStageRefV1,
+    pub source_parent: PrivateFileIdentityV1,
+    pub source_identity: PrivateFileIdentityV1,
+    pub name: String,
+    pub sha256: String,
+    pub size: u64,
+    pub identity: Option<PrivateFileIdentityV1>,
+    pub phase: TransferPhase,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub(super) enum TransferPhase {
+    Planned,
+    Publishing,
+    Copied,
+    RenamePending,
+    Quarantined,
+    Gone,
+    Transferred,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -535,8 +651,11 @@ pub(super) struct Tombstone {
     pub scope_hash: String,
     pub retention_id: String,
     pub revision: u64,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub client_ack_id: String,
     pub epoch: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub administrative: Option<kcoder_app_protocol::RetentionAdministrativeTerminalV1>,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]

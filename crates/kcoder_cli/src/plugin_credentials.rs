@@ -4,7 +4,7 @@ use kcoder_config::{CredentialStore, CredentialStoreMode, OsCredentialBackend};
 use kcoder_plugins::PluginManager;
 use std::{collections::BTreeMap, path::Path};
 
-pub(crate) fn by_scope(
+pub fn by_scope(
     path: &Path,
     mode: CredentialStoreMode,
 ) -> Result<BTreeMap<String, BTreeMap<String, String>>> {
@@ -23,7 +23,7 @@ pub(crate) fn by_scope(
         .collect()
 }
 
-pub(crate) fn by_operation(
+pub fn by_operation(
     path: &Path,
     mode: CredentialStoreMode,
     manager: &PluginManager,
@@ -50,7 +50,7 @@ pub(crate) fn by_operation(
     Ok(result)
 }
 
-pub(crate) fn bind_install(path: &Path, scope: &str, operation: &str) -> Result<()> {
+pub fn bind_install(path: &Path, scope: &str, operation: &str) -> Result<()> {
     CredentialStore::update_file(path, |store| {
         if let Some(entry) = store.plugin_credentials.scopes.get_mut(scope) {
             entry.operation_id = Some(operation.into());

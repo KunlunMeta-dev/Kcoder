@@ -2,7 +2,8 @@ import type {
   ModelReasoningPolicy,
   ModelConfigurationSummary,
 } from '../../../shared/modelConfiguration'
-import { requestLocalExecutor } from '@/tauri/localExecutor'
+import { requestLocalExecutor } from '@/host/localExecutor'
+import { isProviderDiscoveredModels } from '../../../shared/generated/contractGuards.mjs'
 
 export interface ProviderAuthentication {
   mode: 'api_key' | 'none'
@@ -61,6 +62,7 @@ export interface ProviderProfile {
 }
 
 export interface ProviderSettings {
+  supportsModelDiscovery?: boolean
   supportsIndependentProbe?: boolean
   supportsRuntimeScope?: boolean
   supportsClearUserOverrides?: boolean
@@ -82,6 +84,31 @@ export interface ProviderSettings {
   profiles: ProviderProfile[]
   restartRequired: boolean
   warning?: string | null
+}
+
+export async function discoverProviderSettingsModels(
+  serverId: string,
+  draft: Pick<ProviderDraft, 'id' | 'endpoint' | 'apiFormat' | 'apiKey' | 'authentication'>,
+  options?: { signal?: AbortSignal }
+) {
+  const result = await requestLocalExecutor<unknown>(
+    'runtime.providers.request',
+    {
+      serverId,
+      method: 'runtime.providers.discoverModels',
+      params: {
+        ...(draft.id.trim() ? { id: draft.id.trim() } : {}),
+        endpoint: draft.endpoint.trim(),
+        apiFormat: draft.apiFormat,
+        ...(draft.apiKey.trim() ? { apiKey: draft.apiKey } : {}),
+        authentication: draft.authentication ?? { mode: 'api_key' },
+      },
+    },
+    options
+  )
+  if (!isProviderDiscoveredModels(result))
+    throw new Error('[provider_discovery_response] Invalid model list')
+  return result
 }
 
 export type ProviderDraft = Omit<

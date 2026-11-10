@@ -1,6 +1,6 @@
 {
   "name": "kcoder-windows-computer-use",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "Windows desktop operation guidance for KCoder's bundled Windows-MCP host",
   "author": {
     "name": "KCoder"

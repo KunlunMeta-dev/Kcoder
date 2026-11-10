@@ -1,8 +1,8 @@
 use super::*;
 
 #[test]
-fn bash_fallback_timeout_is_five_minutes() {
-    assert_eq!(DEFAULT_TIMEOUT_MS, 300_000);
+fn bash_fallback_timeout_is_thirty_minutes() {
+    assert_eq!(DEFAULT_TIMEOUT_MS, 1_800_000);
 }
 
 #[tokio::test]

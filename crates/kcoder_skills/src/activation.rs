@@ -2,7 +2,12 @@
 use anyhow::{Context, Result, ensure};
 use kcoder_config::PrivateDirectory;
 use serde::{Deserialize, Serialize};
-use std::{collections::BTreeSet, ffi::OsStr, io::Read, path::Path};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    ffi::OsStr,
+    io::Read,
+    path::Path,
+};
 
 const STATE: &str = "skill-activation.json";
 const LOCK: &str = ".skill-activation.lock";
@@ -13,12 +18,15 @@ const MAX_BYTES: usize = 1024 * 1024;
 struct State {
     version: u8,
     disabled: BTreeSet<String>,
+    #[serde(default)]
+    enabled_imports: BTreeMap<String, String>,
 }
 impl Default for State {
     fn default() -> Self {
         Self {
             version: 1,
             disabled: BTreeSet::new(),
+            enabled_imports: BTreeMap::new(),
         }
     }
 }
@@ -50,7 +58,17 @@ fn read(directory: &PrivateDirectory) -> Result<State> {
     ensure!(
         state.version == 1
             && state.disabled.len() <= 4096
-            && state.disabled.iter().all(|name| valid_name(name)),
+            && state.disabled.iter().all(|name| valid_name(name))
+            && state.enabled_imports.len() <= 4096
+            && state
+                .enabled_imports
+                .iter()
+                .all(|(name, token)| valid_name(name)
+                    && !token.is_empty()
+                    && token.len() <= 128
+                    && token
+                        .bytes()
+                        .all(|b| b.is_ascii_alphanumeric() || b == b'-')),
         "Skill activation settings are invalid"
     );
     Ok(state)
@@ -73,10 +91,35 @@ pub fn disabled(profile: &Path) -> Result<BTreeSet<String>> {
     Ok(read(&directory)?.disabled)
 }
 
+pub fn enabled_imports(profile: &Path) -> Result<BTreeMap<String, String>> {
+    match PrivateDirectory::open_existing(profile) {
+        Ok(directory) => Ok(read(&directory)?.enabled_imports),
+        Err(error)
+            if error.chain().any(|error| {
+                error
+                    .downcast_ref::<std::io::Error>()
+                    .is_some_and(|error| error.kind() == std::io::ErrorKind::NotFound)
+            }) =>
+        {
+            Ok(BTreeMap::new())
+        }
+        Err(error) => Err(error),
+    }
+}
+
 /// Names are the registry's authoritative resolved identities, including the
 /// stable names of plugin prompts whose materialized paths change on reload.
 /// The host must first authorize the name against its discovered catalog.
 pub fn set_enabled(profile: &Path, name: &str, enabled: bool) -> Result<()> {
+    set_enabled_for_import(profile, name, enabled, None)
+}
+
+pub fn set_enabled_for_import(
+    profile: &Path,
+    name: &str,
+    enabled: bool,
+    token: Option<&str>,
+) -> Result<()> {
     ensure!(valid_name(name), "Invalid skill activation identity");
     let directory = PrivateDirectory::open_or_create(profile)?;
     let _lock = directory
@@ -85,11 +128,23 @@ pub fn set_enabled(profile: &Path, name: &str, enabled: bool) -> Result<()> {
     let mut state = read(&directory)?;
     if enabled {
         state.disabled.remove(name);
+        if let Some(token) = token {
+            ensure!(
+                !token.is_empty()
+                    && token.len() <= 128
+                    && token
+                        .bytes()
+                        .all(|b| b.is_ascii_alphanumeric() || b == b'-'),
+                "Invalid skill activation identity"
+            );
+            state.enabled_imports.insert(name.into(), token.into());
+        }
     } else {
         state.disabled.insert(name.to_owned());
+        state.enabled_imports.remove(name);
     }
     ensure!(
-        state.disabled.len() <= 4096,
+        state.disabled.len() <= 4096 && state.enabled_imports.len() <= 4096,
         "Skill activation settings exceed the entry limit"
     );
     let bytes = serde_json::to_vec(&state)?;

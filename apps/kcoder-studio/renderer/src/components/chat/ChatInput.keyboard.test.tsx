@@ -42,7 +42,6 @@ describe('ChatInput keyboard', () => {
       configurable: true,
       value: originalInnerWidth,
     })
-    delete (window as typeof window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__
   })
   test('keeps the desktop editor focused while submission is temporarily disabled', async () => {
     const props = {

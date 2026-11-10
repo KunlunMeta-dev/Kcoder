@@ -15,3 +15,26 @@ async fn internal_provider_failure_moa_retains_source_without_retry() {
         assert_eq!(provider.calls.load(Ordering::SeqCst), 1);
     }
 }
+
+// Test-only facade retains the existing root test call path without runtime helpers.
+pub(crate) async fn run_moa_references(
+    settings: Settings,
+    preset: MoaPresetConfig,
+    messages: &SharedMessages,
+    session_id: String,
+    cancel_token: CancellationToken,
+    max_workers: usize,
+    source: Option<Arc<dyn crate::ClientModelConfiguration>>,
+) -> Result<Vec<MoaReferenceOutput>> {
+    run_moa_references_observed(
+        settings,
+        preset,
+        messages,
+        session_id,
+        cancel_token,
+        max_workers,
+        source,
+        None,
+    )
+    .await
+}

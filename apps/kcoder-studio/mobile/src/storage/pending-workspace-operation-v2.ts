@@ -1,10 +1,10 @@
 import { readTurnReceipt } from "../../../shared/turnReceipt";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { metadataStorage, type MetadataAuthority } from "./metadata-authority";
 import type { GatewayProfile, KCoderServer } from "@/gateway/types";
 import { MobileRpcError, type JsonRecord } from "@/gateway/rpc";
 import { workspaceParamsDigestV2, workspaceReadV2, workspaceMutationV2, workspaceScopeV2, sameWorkspaceScopeV2, WORKSPACE_READ_V2, WORKSPACE_SCOPE_V2, WORKSPACE_RECEIPTS_V2, type WorkspaceScopeV2, type WorkspaceMutationMethodV2 } from "@/protocol/workspace-operation-receipts-v2";
-import { captureWorkspaceProfileIdentity, startWorkspaceProfileRpc, withWorkspaceProfileWrite, WorkspaceProfileFenceError, type WorkspaceProfileIdentity } from "./workspace-profile-fence";
-import { withLocalIdentityLock } from "./context-lock";
+import { captureWorkspaceProfileIdentity, startWorkspaceProfileRpc, withWorkspaceProfileMetadata, WorkspaceProfileFenceError, type WorkspaceProfileIdentity } from "./workspace-profile-fence";
+import { withLocalMetadata } from "./context-lock";
 import { loadProfiles } from "./profile-store";
 import { pendingThreadCreationKey, linkedThreadCreationsInsideGate, reserveWorkspaceTaskHandoffInsideGate, readWorkspaceTaskHandoff, updateWorkspaceTaskHandoff, confirmWorkspaceTaskRouteInsideGate, assertLinkedThreadCreationsResolvedInsideGate, type LinkedCreationInput, type WorkspaceTaskHandoff, type PendingThreadCreation } from "./pending-thread-creation";
 import { taskClientConnector } from "@/runtime/task-runtime/connectionFactory";
@@ -46,8 +46,8 @@ function storedScope(value: StoredScopeV2): void {
   if (value?.version !== 2 || !/^[0-9a-f]{64}$/.test(value.rootId) || !/^[0-9a-f]{64}$/.test(value.scopeId)) invalid();
   if (value.familyId !== undefined) workspaceScopeV2(value);
 }
-async function index(): Promise<IndexRow[]> {
-  const raw = await AsyncStorage.getItem(INDEX);
+async function index(authority?: MetadataAuthority): Promise<IndexRow[]> {
+  const raw = await metadataStorage(authority).getItem(INDEX);
   if (!raw) return [];
   if (raw.length > MAX_INDEX_BYTES) invalid();
   const value: unknown = JSON.parse(raw);
@@ -59,8 +59,8 @@ async function index(): Promise<IndexRow[]> {
   }
   return value as IndexRow[];
 }
-async function record(row: IndexRow): Promise<RecordV2> {
-  const raw = await AsyncStorage.getItem(row.key);
+async function record(row: IndexRow, authority?: MetadataAuthority): Promise<RecordV2> {
+  const raw = await metadataStorage(authority).getItem(row.key);
   if (!raw || raw.length > 65536) invalid();
   const value = JSON.parse(raw) as RecordV2;
   if (value.version !== 2 || value.id !== row.id || value.key !== row.key || value.profileId !== row.profileId || value.family !== row.family || typeof value.owner !== "string" || typeof value.intent !== "string" || typeof value.path !== "string" || !["open","create","worktree"].includes(value.kind) || !Array.isArray(value.phases) || value.phases.length < 1 || value.phases.length > 2) invalid();
@@ -79,9 +79,9 @@ async function record(row: IndexRow): Promise<RecordV2> {
   if (value.result !== undefined && (typeof value.result !== "string" || !value.completedAt || value.phases.some(phase => !phase.result))) invalid();
   return value;
 }
-async function put(value: RecordV2): Promise<void> {
+async function put(value: RecordV2, authority?: MetadataAuthority): Promise<void> {
   const raw = JSON.stringify(value); if (raw.length > 65536) invalid();
-  await AsyncStorage.setItem(value.key, raw);
+  await metadataStorage(authority).setItem(value.key, raw);
 }
 function handle(value: RecordV2): ConfirmedWorkspaceOperation {
   if (!value.result || !value.completedAt) invalid();
@@ -89,17 +89,17 @@ function handle(value: RecordV2): ConfirmedWorkspaceOperation {
 }
 const jobs = new Map<string, Promise<ConfirmedWorkspaceOperation>>();
 const pendingWrites = new Map<string, Set<Promise<unknown>>>();
-function gate<T>(authorization: WorkspaceProfileIdentity, body: () => Promise<T>): Promise<T> {
+function gate<T>(authorization: WorkspaceProfileIdentity, body: (authority?: MetadataAuthority) => Promise<T>): Promise<T> {
   const writes = pendingWrites.get(authorization.id) ?? new Set<Promise<unknown>>();
-  const operation = withWorkspaceProfileWrite(authorization, body);
+  const operation = withWorkspaceProfileMetadata(authorization, body);
   writes.add(operation); pendingWrites.set(authorization.id, writes);
   return operation.finally(() => { writes.delete(operation); if (!writes.size && pendingWrites.get(authorization.id) === writes) pendingWrites.delete(authorization.id); });
 }
 export async function waitForWorkspaceOperationWritesV2(profileId: string): Promise<void> { await Promise.all([...(pendingWrites.get(profileId) ?? [])].map(value => value.catch(() => {}))); }
 
 interface LegacyCandidate { key: string; raw: string; profileId: string; owner: string; unresolved: boolean }
-async function legacyCandidates(profileId?: string, targetId?: string, kind?: WorkspaceOperationKind, source?: string): Promise<LegacyCandidate[]> {
-  const keys = await AsyncStorage.getAllKeys(); if (keys.length > 10_000) invalid();
+async function legacyCandidates(profileId?: string, targetId?: string, kind?: WorkspaceOperationKind, source?: string, authority?: MetadataAuthority): Promise<LegacyCandidate[]> {
+  const keys = await metadataStorage(authority).getAllKeys(); if (keys.length > 10_000) invalid();
   const prefix = "kcoder-studio:mobile-workspace-operation:v1:";
   const result: LegacyCandidate[] = [];
   for (const key of keys.filter(key => key.startsWith(prefix))) {
@@ -113,7 +113,7 @@ async function legacyCandidates(profileId?: string, targetId?: string, kind?: Wo
     let owner: unknown; try { owner = JSON.parse(decodeURIComponent(parts[1].slice(nestedPrefix.length))); } catch { invalid(); }
     if (!Array.isArray(owner) || typeof owner[2] !== "string" || typeof owner.at(-1) !== "string") invalid();
     if (targetId !== undefined && (owner[2] !== targetId || parts[0] !== kind || path(owner.at(-1)) !== source)) continue;
-    const raw = await AsyncStorage.getItem(key); if (!raw || raw.length > 65536) invalid();
+    const raw = await metadataStorage(authority).getItem(key); if (!raw || raw.length > 65536) invalid();
     const old = JSON.parse(raw);
     if (typeof old.id !== "string" || typeof old.dispatched !== "boolean" || typeof old.intent !== "string") invalid();
     if (result.length >= MAX_RECORDS) throw new Error("旧版回执核对数量已达上限；原记录已保留，不会派发新操作");
@@ -189,7 +189,7 @@ async function withCurrentScope<T>(profile: GatewayProfile, server: KCoderServer
 }
 /** Resolve an old profile only with its captured key and still-authenticated credentials; never migrate its receipt. */
 async function legacyFamilyProofs(input: WorkspaceOperationInputV2, authorization: WorkspaceProfileIdentity, source: string): Promise<Map<string, { raw: string; familyId: string }>> {
-  const candidates = await gate(authorization, () => legacyCandidates(undefined, input.server.id, input.kind, source));
+  const candidates = await gate(authorization, authority => legacyCandidates(undefined, input.server.id, input.kind, source, authority));
   const proofs = new Map<string, { raw: string; familyId: string }>();
   if (!candidates.some(value => value.unresolved)) return proofs;
   const profiles = (await loadProfiles()).profiles;
@@ -209,8 +209,8 @@ async function legacyFamilyProofs(input: WorkspaceOperationInputV2, authorizatio
   }
   return proofs;
 }
-async function assertLegacyResolved(profileId?: string, targetId?: string, kind?: WorkspaceOperationKind, source?: string, scope?: WorkspaceScopeV2, proofs?: Map<string, { raw: string; familyId: string }>): Promise<void> {
-  for (const candidate of await legacyCandidates(profileId, targetId, kind, source)) {
+async function assertLegacyResolved(profileId?: string, targetId?: string, kind?: WorkspaceOperationKind, source?: string, scope?: WorkspaceScopeV2, proofs?: Map<string, { raw: string; familyId: string }>, authority?: MetadataAuthority): Promise<void> {
+  for (const candidate of await legacyCandidates(profileId, targetId, kind, source, authority)) {
     if (!candidate.unresolved) continue;
     const proof = proofs?.get(candidate.key);
     if (scope && proof?.raw === candidate.raw && proof.familyId !== scope.familyId) continue;
@@ -226,10 +226,10 @@ export function recoverableWorkspaceOperationV2(input: WorkspaceOperationInputV2
   let current: RecordV2;
   const operation = (async () => {
     const legacyProofs = await legacyFamilyProofs(input, authorization, source);
-    current = await gate(authorization, async () => {
-      await assertLegacyResolved(undefined, input.server.id, input.kind, source, scope, legacyProofs);
-      const rows = await index(); let candidate: RecordV2 | undefined;
-      const linkedFamily = (await linkedThreadCreationsInsideGate()).filter(({ value }) => value.linked!.receipt.scope?.familyId === scope.familyId && value.linked!.kind === input.kind && value.linked!.sourcePath === source);
+    current = await gate(authorization, async authority => {
+      await assertLegacyResolved(undefined, input.server.id, input.kind, source, scope, legacyProofs, authority);
+      const rows = await index(authority); let candidate: RecordV2 | undefined;
+      const linkedFamily = (await linkedThreadCreationsInsideGate(authority)).filter(({ value }) => value.linked!.receipt.scope?.familyId === scope.familyId && value.linked!.kind === input.kind && value.linked!.sourcePath === source);
       if (linkedFamily.some(({ value }) => !rows.some(row => row.id === value.linked!.receipt.id))) throw new Error("原任务交接回执缺失；创建 ID 已保留，不会生成新操作");
       const linkedIds = new Set(linkedFamily.map(({ value }) => value.linked!.receipt.id));
       for (const row of rows) {
@@ -238,7 +238,7 @@ export function recoverableWorkspaceOperationV2(input: WorkspaceOperationInputV2
         if (rowFamily.length === 3) { if (row.family !== familyId) continue; }
         else if (rowFamily.length === 5) { if (rowFamily[2] !== input.server.id || rowFamily[3] !== input.kind || path(rowFamily[4]) !== source) continue; }
         else invalid();
-        const value = await record(row);
+        const value = await record(row, authority);
         if (value.consumed && value.completedAt && (!value.deliveryToNew || value.deliveryToNew.confirmed) && !linkedIds.has(value.id)) {
           if (value.taskBindingVersion !== 1) throw new Error("旧工作区回执没有可信任务交接证明；请核对原任务，不会生成新操作 ID");
           continue;
@@ -262,16 +262,16 @@ export function recoverableWorkspaceOperationV2(input: WorkspaceOperationInputV2
       const next = [...rows, { profileId: input.profile.id, family: familyId, id, key }];
       const serialized = JSON.stringify(next); if (serialized.length > MAX_INDEX_BYTES) invalid();
       // Register the ID before its record. A crash leaves an inert blocker, not permission to mint again.
-      await AsyncStorage.setItem(INDEX, serialized); await put(value); return value;
+      await metadataStorage(authority).setItem(INDEX, serialized); await put(value, authority); return value;
     });
     for (let position = 0; position < current.phases.length; position++) {
       let phase = current.phases[position];
       const read = async () => {
         input.onProgress?.("checking");
-        const started = await gate(authorization, async () => {
-          const exact = await record({ ...current });
+        const started = await gate(authorization, async authority => {
+          const exact = await record({ ...current }, authority);
           if (exact.owner !== owner || exact.id !== current.id || exact.phases[position].digest !== phase.digest) invalid();
-          return { response: input.request(WORKSPACE_READ_V2, { clientRequestId: phase.id, scopeId: scope.scopeId }) };
+          return authority ? authority.effect(() => ({ response: input.request(WORKSPACE_READ_V2, { clientRequestId: phase.id, scopeId: scope.scopeId }) })) : { response: input.request(WORKSPACE_READ_V2, { clientRequestId: phase.id, scopeId: scope.scopeId }) };
         });
         const receipt = workspaceReadV2(await started.response, scope, phase.id, phase.method, phase.digest);
         if (!receipt || receipt.status !== "ready") throw new Error("远程工作区结果仍未知；保留原 ID，不会重派或生成新 ID");
@@ -280,18 +280,18 @@ export function recoverableWorkspaceOperationV2(input: WorkspaceOperationInputV2
       let result: string;
       if (phase.dispatched && !phase.notSent) result = await read();
       else {
-        const started = await gate(authorization, async () => {
-          const exact = await record({ ...current });
+        const started = await gate(authorization, async authority => {
+          const exact = await record({ ...current }, authority);
           phase = exact.phases[position];
           if (exact.owner !== owner || exact.id !== current.id || exact.intent !== input.intent || phase.dispatched && !phase.notSent || position > 0 && !exact.phases[position-1].result) invalid();
-          phase = { ...phase, dispatched: true, notSent: false }; exact.phases[position] = phase; await put(exact); current = exact;
+          phase = { ...phase, dispatched: true, notSent: false }; exact.phases[position] = phase; await put(exact, authority); current = exact;
           input.onProgress?.(position === 0 && input.kind === "worktree" || input.kind === "open" ? "opening" : "preparing");
-          return { response: input.request(phase.method, phase.params, input.kind === "worktree" ? 60_000 : undefined) };
+          return authority ? authority.effect(() => ({ response: input.request(phase.method, phase.params, input.kind === "worktree" ? 60_000 : undefined) })) : { response: input.request(phase.method, phase.params, input.kind === "worktree" ? 60_000 : undefined) };
         });
         try { result = workspaceMutationV2(await started.response, scope, phase.id, phase.method, phase.digest).workspacePath!; }
         catch (error) {
           if (error instanceof MobileRpcError && error.delivery === "not-sent") {
-            await gate(authorization, async () => { const exact = await record({ ...current }); if (exact.phases[position].digest !== phase.digest) invalid(); exact.phases[position].notSent = true; await put(exact); });
+            await gate(authorization, async authority => { const exact = await record({ ...current }, authority); if (exact.phases[position].digest !== phase.digest) invalid(); exact.phases[position].notSent = true; await put(exact, authority); });
             throw error;
           }
           if (error instanceof MobileRpcError && error.code === -32032) throw new Error("目标工作区回执容量已满；原 ID 已保留，不会自动重试或删除记录");
@@ -300,12 +300,12 @@ export function recoverableWorkspaceOperationV2(input: WorkspaceOperationInputV2
       }
       const fresh = await startWorkspaceProfileRpc(authorization, () => input.request(WORKSPACE_SCOPE_V2, {}));
       if (!sameWorkspaceScopeV2(workspaceScopeV2(await fresh.response), scope)) throw new Error("工作区身份已变化；原 ID 和结果尚待核对，不会继续派发");
-      current = await gate(authorization, async () => {
-        const exact = await record({ ...current });
+      current = await gate(authorization, async authority => {
+        const exact = await record({ ...current }, authority);
         if (exact.owner !== owner || exact.phases[position].digest !== phase.digest) invalid();
         exact.phases[position] = { ...exact.phases[position], result };
         if (position === exact.phases.length - 1) { exact.result = result; exact.completedAt = exact.completedAt ?? Date.now(); }
-        await put(exact); return exact;
+        await put(exact, authority); return exact;
       });
     }
     input.onProgress?.("ready"); return handle(current);
@@ -316,20 +316,20 @@ export function recoverableWorkspaceOperationV2(input: WorkspaceOperationInputV2
 }
 
 /** Invoked inside coordinator's existing profile-index transaction, before persistence. */
-export async function assertWorkspaceOperationsResolvedV2(profile: GatewayProfile): Promise<void> {
-  await assertLegacyResolved(profile.id);
-  await assertLinkedThreadCreationsResolvedInsideGate(profile.id);
-  for (const row of (await index()).filter(row => row.profileId === profile.id)) {
-    const value = await record(row);
+export async function assertWorkspaceOperationsResolvedV2(profile: GatewayProfile, authority?: MetadataAuthority): Promise<void> {
+  await assertLegacyResolved(profile.id, undefined, undefined, undefined, undefined, undefined, authority);
+  await assertLinkedThreadCreationsResolvedInsideGate(profile.id, authority);
+  for (const row of (await index(authority)).filter(row => row.profileId === profile.id)) {
+    const value = await record(row, authority);
     if (!value.consumed || !value.completedAt || !value.result || value.deliveryToNew && !value.deliveryToNew.confirmed) throw new Error("仍有未确认的工作区操作；连接与原 ID 已保留，请先核对结果再移除");
   }
 }
 export async function loadWorkspaceOperationReceiptV2(profile: GatewayProfile, server: KCoderServer, locator: WorkspaceOperationLocator, expectedResult: string): Promise<WorkspaceOperationReceiptHandle | null> {
   const authorization = captureWorkspaceProfileIdentity(profile), owner = workspaceOperationOwnerV2(profile, server);
-  return withCurrentScope(profile, server, scope => gate(authorization, async () => {
-    const rows = (await index()).filter(row => row.id === locator.receiptId && row.profileId === profile.id);
+  return withCurrentScope(profile, server, scope => gate(authorization, async authority => {
+    const rows = (await index(authority)).filter(row => row.id === locator.receiptId && row.profileId === profile.id);
     if (rows.length !== 1) return null;
-    const value = await record(rows[0]);
+    const value = await record(rows[0], authority);
     if (!value.scope.familyId || !sameWorkspaceScopeV2(workspaceScopeV2(value.scope), scope) || value.owner !== owner || value.kind !== locator.kind || value.path !== path(locator.sourcePath) || value.result !== expectedResult || !value.completedAt) return null;
     return handle(value).receipt;
   }));
@@ -341,12 +341,12 @@ export async function acknowledgeWorkspaceOperationV2(receipt: WorkspaceOperatio
       if (!sameWorkspaceScopeV2(receipt.scope!, scope)) return "unverified";
       for (let attempt = 0; attempt < 2; attempt++) {
         try {
-          return await gate(receipt.authorization, async () => {
-            const row = (await index()).find(row => row.id === receipt.id && row.key === receipt.key && row.profileId === receipt.profileId);
+          return await gate(receipt.authorization, async authority => {
+            const row = (await index(authority)).find(row => row.id === receipt.id && row.key === receipt.key && row.profileId === receipt.profileId);
             if (!row) return "superseded" as const;
-            const value = await record(row);
+            const value = await record(row, authority);
             if (!value.scope.familyId || value.owner !== receipt.owner || !sameWorkspaceScopeV2(workspaceScopeV2(value.scope), scope) || value.intent !== receipt.intent || value.result !== receipt.result || value.completedAt !== receipt.completedAt) return "superseded" as const;
-            if (!value.consumed) await put({ ...value, consumed: true });
+            if (!value.consumed) await put({ ...value, consumed: true }, authority);
             return "consumed" as const;
           });
         } catch (error) { if (error instanceof WorkspaceProfileFenceError) return "unverified"; }
@@ -357,38 +357,38 @@ export async function acknowledgeWorkspaceOperationV2(receipt: WorkspaceOperatio
 }
 export async function removeWorkspaceOperationRecordsV2(profileId: string): Promise<void> {
   await waitForWorkspaceOperationWritesV2(profileId);
-  return withLocalIdentityLock("gateway-profile-index", async () => {
-    await assertLinkedThreadCreationsResolvedInsideGate(profileId);
-    const rows = await index(), selected = rows.filter(row => row.profileId === profileId);
-    for (const row of selected) { const value = await record(row); if (!value.consumed || !value.completedAt || value.deliveryToNew && !value.deliveryToNew.confirmed) invalid(); }
+  return withLocalMetadata("gateway-profile-index", async authority => {
+    await assertLinkedThreadCreationsResolvedInsideGate(profileId, authority);
+    const rows = await index(authority), selected = rows.filter(row => row.profileId === profileId);
+    for (const row of selected) { const value = await record(row, authority); if (!value.consumed || !value.completedAt || value.deliveryToNew && !value.deliveryToNew.confirmed) invalid(); }
     const remaining = rows.filter(row => row.profileId !== profileId);
-    if (remaining.length) await AsyncStorage.setItem(INDEX, JSON.stringify(remaining));
-    else await AsyncStorage.removeItem(INDEX);
-    if (selected.length) await AsyncStorage.multiRemove(selected.map(row => row.key));
+    if (remaining.length) await metadataStorage(authority).setItem(INDEX, JSON.stringify(remaining));
+    else await metadataStorage(authority).removeItem(INDEX);
+    if (selected.length) await metadataStorage(authority).multiRemove(selected.map(row => row.key));
   });
 }
 
-async function exactReceiptInsideGate(profile: GatewayProfile, server: KCoderServer, receipt: WorkspaceOperationReceiptHandle, scope: WorkspaceScopeV2): Promise<RecordV2> {
-  const row = (await index()).find(row => row.id === receipt.id && row.key === receipt.key && row.profileId === profile.id);
-  if (!row) invalid(); const value = await record(row);
+async function exactReceiptInsideGate(profile: GatewayProfile, server: KCoderServer, receipt: WorkspaceOperationReceiptHandle, scope: WorkspaceScopeV2, authority?: MetadataAuthority): Promise<RecordV2> {
+  const row = (await index(authority)).find(row => row.id === receipt.id && row.key === receipt.key && row.profileId === profile.id);
+  if (!row) invalid(); const value = await record(row, authority);
   if (!value.scope.familyId || value.owner !== workspaceOperationOwnerV2(profile, server) || value.owner !== receipt.owner || value.intent !== receipt.intent || value.result !== receipt.result || value.completedAt !== receipt.completedAt || !sameWorkspaceScopeV2(workspaceScopeV2(value.scope), scope) || !receipt.scope || !sameWorkspaceScopeV2(receipt.scope, scope)) throw new Error("原任务工作区身份尚未核对；回执和创建 ID 已保留");
   return value;
 }
 export async function reserveWorkspaceTaskHandoff(profile: GatewayProfile, server: KCoderServer, receipt: WorkspaceOperationReceiptHandle, input: LinkedCreationInput): Promise<WorkspaceTaskHandoff> {
   const authorization = captureWorkspaceProfileIdentity(profile);
-  return withCurrentScope(profile, server, scope => gate(authorization, async () => {
-    const value = await exactReceiptInsideGate(profile, server, receipt, scope);
-    const links = await linkedThreadCreationsInsideGate();
+  return withCurrentScope(profile, server, scope => gate(authorization, async authority => {
+    const value = await exactReceiptInsideGate(profile, server, receipt, scope, authority);
+    const links = await linkedThreadCreationsInsideGate(authority);
     const existing = links.find(({ value: pending }) => pending.linked!.receipt.id === receipt.id);
     if (!existing && value.taskBindingVersion !== 1) throw new Error("旧工作区回执没有可信任务交接记录；请核对原创建 ID，不会创建第二个任务");
     for (const { value: pending } of links) if (pending.linked!.receipt.scope?.familyId === scope.familyId && pending.linked!.kind === value.kind && pending.linked!.sourcePath === value.path && pending.linked!.receipt.id !== receipt.id) throw new Error("原任务交接尚未完成；不会为另一回执创建任务");
-    return reserveWorkspaceTaskHandoffInsideGate(profile, server, receipt, value.kind, value.path, input);
+    return reserveWorkspaceTaskHandoffInsideGate(profile, server, receipt, value.kind, value.path, input, authority);
   }));
 }
 type WorkspaceHandoffQuery = { kind?: WorkspaceOperationKind; sourcePath?: string; receiptId?: string; creationRequestId?: string; cwd?: string; threadId?: string };
 async function hasWorkspaceTaskHandoff(profile: GatewayProfile, query: WorkspaceHandoffQuery): Promise<boolean> {
   const authorization = captureWorkspaceProfileIdentity(profile);
-  return await gate(authorization, async () => (await linkedThreadCreationsInsideGate()).some(({ value }) => {
+  return await gate(authorization, async authority => (await linkedThreadCreationsInsideGate(authority)).some(({ value }) => {
     const link = value.linked!;
     if (query.creationRequestId) return value.clientRequestId === query.creationRequestId;
     if (query.receiptId) return link.receipt.id === query.receiptId;
@@ -400,9 +400,9 @@ async function loadWorkspaceTaskHandoffInSession(session: WorkspaceScopeSession,
   const { profile, server } = session;
   const authorization = captureWorkspaceProfileIdentity(profile);
   session.assertCurrent();
-  return session.withScope(scope => gate(authorization, async () => {
+  return session.withScope(scope => gate(authorization, async authority => {
     session.assertCurrent();
-    const matches = (await linkedThreadCreationsInsideGate()).filter(({ value }) => {
+    const matches = (await linkedThreadCreationsInsideGate(authority)).filter(({ value }) => {
       const link = value.linked!;
       if (query.creationRequestId) return value.clientRequestId === query.creationRequestId;
       if (query.receiptId) return link.receipt.id === query.receiptId;
@@ -410,7 +410,7 @@ async function loadWorkspaceTaskHandoffInSession(session: WorkspaceScopeSession,
       return link.receipt.scope?.familyId === scope.familyId && (query.kind === undefined || link.kind === query.kind) && (query.sourcePath === undefined || link.sourcePath === path(query.sourcePath)) && (query.cwd === undefined || link.input.cwd === path(query.cwd));
     });
     if (!matches.length) return null; if (matches.length !== 1) invalid();
-    await exactReceiptInsideGate(profile, server, matches[0].value.linked!.receipt, scope);
+    await exactReceiptInsideGate(profile, server, matches[0].value.linked!.receipt, scope, authority);
     session.assertCurrent();
     return matches[0];
   }));
@@ -455,37 +455,62 @@ export async function confirmWorkspaceTaskRoute(profile: GatewayProfile, server:
       }
     } finally { client.close(); }
     await verifyWorkspaceTaskHandoffInSession(session, handoff);
-    return gate(link.authorization, async () => {
+    return gate(link.authorization, async authority => {
       session.assertCurrent();
       if (!isCurrent()) return false;
-      const exact = await readWorkspaceTaskHandoff(handoff);
+      const exact = await readWorkspaceTaskHandoff(handoff, authority);
       if (exact.threadId !== threadId || !exact.linked!.taskScope || !sameWorkspaceScopeV2(exact.linked!.taskScope, scope)) invalid();
       if (!isCurrent()) return false;
-      const receipt = await exactReceiptInsideGate(profile, server, exact.linked!.receipt, exact.linked!.receipt.scope!);
+      const receipt = await exactReceiptInsideGate(profile, server, exact.linked!.receipt, exact.linked!.receipt.scope!, authority);
       if (!isCurrent()) return false;
-      return confirmWorkspaceTaskRouteInsideGate(handoff, threadId, isCurrent, receipt.consumed === true);
+      return confirmWorkspaceTaskRouteInsideGate(handoff, threadId, isCurrent, receipt.consumed === true, authority);
     });
   });
 }
 export async function markWorkspaceOpenDelivery(profile: GatewayProfile, server: KCoderServer, receipt: WorkspaceOperationReceiptHandle): Promise<void> {
-  return withCurrentScope(profile, server, scope => gate(captureWorkspaceProfileIdentity(profile), async () => {
-    const value = await exactReceiptInsideGate(profile, server, receipt, scope);
-    if (!value.deliveryToNew) await put({ ...value, deliveryToNew: { confirmed: false } });
+  return withCurrentScope(profile, server, scope => gate(captureWorkspaceProfileIdentity(profile), async authority => {
+    const value = await exactReceiptInsideGate(profile, server, receipt, scope, authority);
+    if (!value.deliveryToNew) await put({ ...value, deliveryToNew: { confirmed: false } }, authority);
   }));
 }
-export async function loadWorkspaceOpenDelivery(profile: GatewayProfile, server: KCoderServer, kind: WorkspaceOperationKind, sourcePath: string): Promise<ConfirmedWorkspaceOperation | null> {
-  return withCurrentScope(profile, server, scope => gate(captureWorkspaceProfileIdentity(profile), async () => {
+export async function loadWorkspaceOpenDelivery(profile: GatewayProfile, server: KCoderServer, kind: WorkspaceOperationKind, sourcePath: string, isCurrent: () => boolean = () => true): Promise<ConfirmedWorkspaceOperation | null> {
+  const authorization = captureWorkspaceProfileIdentity(profile);
+  const owner = workspaceOperationOwnerV2(profile, server);
+  const current = () => isCurrent() && owner === workspaceOperationOwnerV2(profile, server);
+  const assertCurrent = () => { if (!current()) throw new WorkspaceProfileFenceError(); };
+  assertCurrent();
+  // This read-only preflight proves only that nothing needs delivery. Unknown
+  // records keep the original fresh-scope path and its validation/error timing.
+  const empty = await withWorkspaceProfileMetadata(authorization, async authority => {
+    assertCurrent();
+    let rows: IndexRow[];
+    try { rows = await index(authority); }
+    catch { assertCurrent(); return false; }
+    assertCurrent();
+    for (const row of rows) {
+      assertCurrent();
+      let value: RecordV2;
+      try { value = await record(row, authority); }
+      catch { assertCurrent(); return false; }
+      assertCurrent();
+      if (value.owner !== owner || value.scope.familyId === undefined || value.deliveryToNew?.confirmed !== true) return false;
+    }
+    return true;
+  });
+  assertCurrent();
+  if (empty) return null; // Do not normalize an interim sourcePath for an empty index.
+  return withWorkspaceScopeSession(profile, server, session => session.withScope(scope => gate(authorization, async authority => {
     const matches: RecordV2[] = [];
-    for (const row of (await index()).filter(row => row.family === family(scope, kind, sourcePath))) {
-      const value = await record(row);
-      if (value.deliveryToNew && !value.deliveryToNew.confirmed && value.result && value.completedAt) { await exactReceiptInsideGate(profile, server, handle(value).receipt, scope); matches.push(value); }
+    for (const row of (await index(authority)).filter(row => row.family === family(scope, kind, sourcePath))) {
+      const value = await record(row, authority);
+      if (value.deliveryToNew && !value.deliveryToNew.confirmed && value.result && value.completedAt) { await exactReceiptInsideGate(profile, server, handle(value).receipt, scope, authority); matches.push(value); }
     }
     if (matches.length > 1) invalid(); return matches.length ? handle(matches[0]) : null;
-  }));
+  })), current);
 }
 export async function confirmWorkspaceOpenDelivery(profile: GatewayProfile, server: KCoderServer, receipt: WorkspaceOperationReceiptHandle, isCurrent: () => boolean): Promise<void> {
-  return withCurrentScope(profile, server, scope => gate(captureWorkspaceProfileIdentity(profile), async () => {
-    const value = await exactReceiptInsideGate(profile, server, receipt, scope);
-    if (isCurrent() && value.deliveryToNew && !value.deliveryToNew.confirmed) await put({ ...value, deliveryToNew: { confirmed: true } });
+  return withCurrentScope(profile, server, scope => gate(captureWorkspaceProfileIdentity(profile), async authority => {
+    const value = await exactReceiptInsideGate(profile, server, receipt, scope, authority);
+    if (isCurrent() && value.deliveryToNew && !value.deliveryToNew.confirmed) await put({ ...value, deliveryToNew: { confirmed: true } }, authority);
   }));
 }

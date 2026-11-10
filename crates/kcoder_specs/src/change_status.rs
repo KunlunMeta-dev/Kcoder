@@ -49,7 +49,8 @@ pub fn status(cwd: &Path, name: &str) -> Result<ChangeStatusSummary> {
         false
     };
 
-    let drift_errors = fingerprint::check_change(&specs_dir, &change_dir).unwrap_or_default();
+    let drift_errors = fingerprint::check_change(&specs_dir, &change_dir)
+        .unwrap_or_else(|error| vec![format!("spec base check failed: {error:#}")]);
     let apply_blockers = apply_blockers_for_schema(&schema, &change_dir);
     let verification = verification_status(&change_dir);
     let completion_blockers = completion_blockers_for_schema(&schema, &change_dir, &verification);

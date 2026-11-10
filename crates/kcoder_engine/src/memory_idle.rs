@@ -57,7 +57,7 @@ mod tests {
     #[test]
     fn memory_idle_reservation_blocks_observer_enqueue_and_restores_it_on_rollback() {
         let root = tempfile::tempdir().unwrap();
-        let engine = TestEngineBuilder::new(root.path()).build();
+        let engine = TestEngineBuilder::new(root.path()).build_with_profile_directory();
         engine.settings.write().unwrap().memory.observer_mode =
             kcoder_config::MemoryObserverMode::Model;
         let reservation = engine.try_reserve_background_work_idle().unwrap();
@@ -86,7 +86,7 @@ mod tests {
     #[tokio::test]
     async fn memory_idle_reservation_rejects_worker_tail_and_rolls_back_other_domains() {
         let root = tempfile::tempdir().unwrap();
-        let engine = TestEngineBuilder::new(root.path()).build();
+        let engine = TestEngineBuilder::new(root.path()).build_with_profile_directory();
         let held = engine.memory_idle_gate.read().unwrap();
         assert!(engine.try_reserve_background_work_idle().is_none());
         assert!(engine.background_jobs.try_reserve_idle().is_some());

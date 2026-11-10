@@ -2,23 +2,25 @@
 
 use super::*;
 
-pub(crate) fn resolve_provider_kind(
+pub fn resolve_provider_kind(
     cli_provider: Option<&str>,
     env_provider: Option<ApiProviderKind>,
     settings: &Settings,
-) -> Result<ApiProviderKind> {
+) -> Result<Option<ApiProviderKind>> {
     if let Some(provider) = cli_provider {
         if let Some(provider) = ApiProviderKind::parse(provider) {
-            return Ok(provider);
+            return Ok(Some(provider));
         }
-        return ProviderKind::from_settings(settings)?.ok_or_else(|| {
-            anyhow::anyhow!("custom provider '{provider}' must declare an api_format")
-        });
+        return ProviderKind::from_settings(settings)?
+            .map(Some)
+            .ok_or_else(|| {
+                anyhow::anyhow!("custom provider '{provider}' must declare an api_format")
+            });
     }
     if let Some(provider) = env_provider {
-        return Ok(provider);
+        return Ok(Some(provider));
     }
-    Ok(ProviderKind::from_settings(settings)?.unwrap_or(ApiProviderKind::Kunlunmeta))
+    ProviderKind::from_settings(settings)
 }
 
 /// Model API kind for the session commands.
@@ -26,22 +28,22 @@ pub(crate) fn resolve_provider_kind(
 /// `auth` carries its own `--provider`, which names a credential (and may be an id that is not a
 /// transport at all). The global flag is marked `global = true`, so Clap also fills the global
 /// one for `auth` invocations; resolving it as a transport would reject every such id.
-pub(crate) fn cli_provider_kind(
+pub fn cli_provider_kind(
     cli: &Cli,
     env_provider: Option<ApiProviderKind>,
     settings: &Settings,
-) -> Result<ApiProviderKind> {
+) -> Result<Option<ApiProviderKind>> {
     if matches!(cli.command, Some(Commands::Auth { .. })) {
-        return Ok(env_provider.unwrap_or(ApiProviderKind::Kunlunmeta));
+        return Ok(env_provider);
     }
     resolve_cli_provider_kind(cli, env_provider, settings)
 }
 
-pub(crate) fn resolve_cli_provider_kind(
+pub fn resolve_cli_provider_kind(
     cli: &Cli,
     env_provider: Option<ApiProviderKind>,
     settings: &Settings,
-) -> Result<ApiProviderKind> {
+) -> Result<Option<ApiProviderKind>> {
     if cli
         .model
         .as_deref()
@@ -54,7 +56,7 @@ pub(crate) fn resolve_cli_provider_kind(
     }
 }
 
-pub(crate) fn apply_cli_settings_overrides(settings: &mut Settings, cli: &Cli) -> Result<()> {
+pub fn apply_cli_settings_overrides(settings: &mut Settings, cli: &Cli) -> Result<()> {
     settings.tools.profile = cli.tool_profile.effective(settings.tools.profile);
     if cli.profile.is_some() {
         settings.apply_provider(cli.profile.as_deref())?;
@@ -62,7 +64,7 @@ pub(crate) fn apply_cli_settings_overrides(settings: &mut Settings, cli: &Cli) -
     if let Some(provider) = non_empty(cli.provider.clone()) {
         if cli.profile.is_none() && settings.providers.contains_key(&provider) {
             settings.apply_provider(Some(&provider))?;
-        } else {
+        } else if settings.provider.as_deref() != Some(provider.as_str()) {
             // Direct selection of a built-in transport must not inherit protocol or endpoint from the previously active provider.
             settings.active_provider = None;
             settings.active_model_selection = None;
@@ -73,6 +75,7 @@ pub(crate) fn apply_cli_settings_overrides(settings: &mut Settings, cli: &Cli) -
             settings.provider_extra_body.clear();
             settings.provider_chat_protocol = kcoder_types::ChatProtocol::Auto;
             settings.provider = Some(provider);
+            settings.model.clear();
         }
     }
     if let Some(model) = non_empty(cli.model.clone()) {
@@ -83,9 +86,6 @@ pub(crate) fn apply_cli_settings_overrides(settings: &mut Settings, cli: &Cli) -
         } else {
             settings.model = model;
         }
-    }
-    if settings.model.trim().is_empty() {
-        settings.model = default_model_name();
     }
     if let Some(max_tokens) = cli.max_tokens {
         settings.max_tokens = Some(max_tokens);
@@ -152,7 +152,7 @@ pub(crate) fn apply_cli_settings_overrides(settings: &mut Settings, cli: &Cli) -
     Ok(())
 }
 
-pub(crate) fn runtime_override_source(cli: &Cli, key: &str) -> Option<&'static str> {
+pub fn runtime_override_source(cli: &Cli, key: &str) -> Option<&'static str> {
     if cli.profile.is_some()
         && matches!(
             key,
@@ -188,7 +188,7 @@ pub(crate) fn runtime_override_source(cli: &Cli, key: &str) -> Option<&'static s
     overridden.then_some("CLI/environment")
 }
 
-pub(crate) fn provider_overrides_from_cli(cli: &Cli) -> ProviderBuildOverrides {
+pub fn provider_overrides_from_cli(cli: &Cli) -> ProviderBuildOverrides {
     ProviderBuildOverrides {
         api_key: cli.api_key.clone(),
         base_url: cli.base_url.clone(),
@@ -202,17 +202,13 @@ pub(crate) fn provider_overrides_from_cli(cli: &Cli) -> ProviderBuildOverrides {
     }
 }
 
-pub(crate) fn local_base_url(cli: &Cli, settings: &Settings) -> String {
+pub fn local_base_url(cli: &Cli, settings: &Settings) -> Option<String> {
     ProviderFactory::new(settings)
         .with_overrides(provider_overrides_from_cli(cli))
         .local_base_url()
 }
 
-pub(crate) fn effective_setting_source<'a>(
-    cli: &Cli,
-    loaded: &'a LoadedSettings,
-    key: &str,
-) -> &'a str {
+pub fn effective_setting_source<'a>(cli: &Cli, loaded: &'a LoadedSettings, key: &str) -> &'a str {
     if let Some(source) = runtime_override_source(cli, key) {
         return source;
     }
@@ -221,4 +217,17 @@ pub(crate) fn effective_setting_source<'a>(
         .get(key)
         .map(|scope| scope.as_str())
         .unwrap_or("default")
+}
+
+pub fn optional_runtime_name(value: Option<&str>) -> Option<String> {
+    let value = value?.trim();
+    if value.is_empty()
+        || value.eq_ignore_ascii_case("current")
+        || value.eq_ignore_ascii_case("default")
+        || value.eq_ignore_ascii_case("none")
+    {
+        None
+    } else {
+        Some(value.to_string())
+    }
 }

@@ -16,33 +16,96 @@ impl RetentionService {
             let entry: Entry = tx
                 .read(Area::Entries, id)?
                 .context("owner entry authority missing")?;
+            self.retirement_entry_ready(tx, owner, &entry)?;
+        }
+        Ok(())
+    }
+    /// Verify one terminal source and its exact durable consume proof. This
+    /// does not authorize deleting an Accepted turn's target artifact.
+    pub(super) fn retirement_entry_ready(
+        &self,
+        tx: &Transaction<'_>,
+        owner: &Owner,
+        entry: &Entry,
+    ) -> Result<()> {
+        ensure!(
+            entry.owner_id == owner.id
+                && entry.scope_hash == owner.scope.hash
+                && entry.phase.physical_terminal(),
+            "owner contains ready/unknown/pending entry"
+        );
+        if let Some(id) = &entry.retention_id {
+            let receipt: Receipt = tx
+                .read(Area::Receipts, id)?
+                .context("owner receipt missing")?;
+            let consumed: Tombstone = tx
+                .read(Area::Consumed, id)?
+                .context("owner consume proof missing")?;
             ensure!(
-                entry.owner_id == owner.id
-                    && entry.scope_hash == owner.scope.hash
-                    && entry.phase.physical_terminal(),
-                "owner contains ready/unknown/pending entry"
+                receipt.scope_hash == owner.scope.hash
+                    && receipt.wire.state == RetentionReceiptStateV1::Consumed
+                    && consumed.scope_hash == owner.scope.hash
+                    && receipt.wire.retention_id == *id
+                    && consumed.retention_id == *id
+                    && consumed.epoch == receipt.epoch
+                    && consumed.revision == receipt.wire.revision,
+                "owner has unconsumed reference"
             );
-            if let Some(id) = &entry.retention_id {
-                let receipt: Receipt = tx
-                    .read(Area::Receipts, id)?
-                    .context("owner receipt missing")?;
-                let consumed: Tombstone = tx
-                    .read(Area::Consumed, id)?
-                    .context("owner consume proof missing")?;
+            let references: Vec<_> = receipt
+                .wire
+                .entries
+                .iter()
+                .filter(|reference| reference.stage_ref.entry_id == entry.id)
+                .collect();
+            ensure!(references.len() == 1, "owner receipt reference mismatch");
+            let reference = references[0];
+            let stage = &reference.stage_ref;
+            ensure!(
+                stage.root_namespace == self.namespace()
+                    && stage.epoch == entry.epoch
+                    && stage.owner_id == owner.id
+                    && stage.revision == entry.revision
+                    && match entry.phase {
+                        EntryPhase::Released => {
+                            reference.state == RetentionEntryStateV1::Released
+                                && entry.transfer.is_none()
+                        }
+                        EntryPhase::Transferred => {
+                            reference.state == RetentionEntryStateV1::Transferred
+                                && entry.transfer.is_some()
+                        }
+                        _ => false,
+                    },
+                "owner terminal reference mismatch"
+            );
+            // An administrative terminal is not a fabricated client ACK.
+            if let Some(evidence) = &consumed.administrative {
+                let intent = receipt
+                    .cleanup_intent
+                    .as_ref()
+                    .context("administrative terminal lacks cleanup intent")?;
                 ensure!(
-                    receipt.scope_hash == owner.scope.hash
-                        && receipt.wire.state == RetentionReceiptStateV1::Consumed
-                        && consumed.scope_hash == owner.scope.hash
-                        && consumed.retention_id == *id
-                        && consumed.revision == receipt.wire.revision,
-                    "owner has unconsumed reference"
+                    consumed.client_ack_id.is_empty()
+                        && evidence.operation_id == intent.query.request.operation_id
+                        && evidence.root_namespace == self.namespace()
+                        && evidence.scope_id == owner.scope.hash
+                        && evidence.epoch == receipt.epoch
+                        && evidence.retention_id == *id
+                        && evidence.terminal_revision == receipt.wire.revision
+                        && evidence.reason == intent.query.request.reason,
+                    "administrative retirement proof mismatch"
                 );
             } else {
                 ensure!(
-                    entry.phase == EntryPhase::Cancelled,
-                    "unretained terminal source lacks cancellation proof"
+                    receipt.cleanup_intent.is_none() && !consumed.client_ack_id.is_empty(),
+                    "client retirement proof mismatch"
                 );
             }
+        } else {
+            ensure!(
+                entry.phase == EntryPhase::Cancelled,
+                "unretained terminal source lacks cancellation proof"
+            );
         }
         Ok(())
     }

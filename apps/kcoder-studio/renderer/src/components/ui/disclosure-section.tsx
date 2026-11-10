@@ -9,40 +9,48 @@ export function DisclosureSection({
   icon,
   status,
   testId,
+  toggleTestId,
   defaultOpen = false,
   inlineDescription = false,
   children,
   className,
+  tone = 'accent',
 }: {
   title: ReactNode
   description?: ReactNode
   icon: ReactNode
   status?: ReactNode
   testId: string
+  toggleTestId?: string
   defaultOpen?: boolean
   inlineDescription?: boolean
   children: ReactNode
   className?: string
+  tone?: 'accent' | 'neutral'
 }) {
   return (
     <details
       open={defaultOpen}
       data-testid={testId}
       className={cn(
-        'group/disclosure rounded-2xl border border-border/60 bg-surface/30',
+        'studio-card group/disclosure rounded-2xl border border-border/60',
+        tone === 'neutral' ? 'bg-background' : 'bg-surface/30',
         className
       )}
     >
       <summary
-        data-testid={`${testId}-toggle`}
+        data-testid={toggleTestId ?? `${testId}-toggle`}
         className={cn(
           'flex cursor-pointer list-none items-center gap-3 rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus [&::-webkit-details-marker]:hidden',
-          inlineDescription ? 'min-h-[60px] px-4 py-2.5' : 'min-h-16 p-4'
+          inlineDescription ? 'studio-card-heading min-h-[60px]' : 'studio-card-heading min-h-16'
         )}
       >
         <span
           aria-hidden="true"
-          className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-accent-surface text-focus [&>svg]:size-5"
+          className={cn(
+            'flex size-10 shrink-0 items-center justify-center rounded-xl [&>svg]:size-5',
+            tone === 'neutral' ? 'bg-surface text-text-secondary' : 'bg-accent-surface text-focus'
+          )}
         >
           {icon}
         </span>
@@ -52,7 +60,14 @@ export function DisclosureSection({
             inlineDescription && 'flex flex-wrap items-baseline gap-x-5 gap-y-1'
           )}
         >
-          <span className="block break-words text-lg font-semibold text-text-primary">{title}</span>
+          <span
+            className={cn(
+              'block break-words font-semibold text-text-primary',
+              tone === 'neutral' ? 'text-base' : 'text-lg'
+            )}
+          >
+            {title}
+          </span>
           {description && (
             <span
               className={cn(
@@ -67,10 +82,10 @@ export function DisclosureSection({
         {status}
         <ChevronDown
           aria-hidden="true"
-          className="size-4 shrink-0 text-text-muted transition-transform group-open/disclosure:rotate-180 motion-reduce:transition-none"
+          className="size-4 shrink-0 text-text-muted transition-transform group-open/disclosure:rotate-180"
         />
       </summary>
-      <div className="px-4 pb-4">{children}</div>
+      <div className="studio-card-body">{children}</div>
     </details>
   )
 }

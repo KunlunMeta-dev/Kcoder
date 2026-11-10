@@ -1,0 +1,11 @@
+{
+  "schema": 1,
+  "defaultProject": "kcoder-v3",
+  "projects": {
+    "kcoder-v3": {
+      "url": "https://www.figma.com/design/n3ZXIXCF785lwDJMVEj14O/k-coder?node-id=90-2",
+      "checkpoint": "docs/phone/figma-sync-checkpoint.json",
+      "index": "docs/phone/figma-reference.json"
+    }
+  }
+}

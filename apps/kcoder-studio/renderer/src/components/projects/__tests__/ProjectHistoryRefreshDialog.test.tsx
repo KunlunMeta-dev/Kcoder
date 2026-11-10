@@ -4,7 +4,7 @@ import '@/i18n'
 import { ProjectHistoryRefreshDialog } from '../ProjectHistoryRefreshDialog'
 
 const { request } = vi.hoisted(() => ({ request: vi.fn() }))
-vi.mock('@/tauri/localExecutor', () => ({ requestLocalExecutor: request }))
+vi.mock('@/host/localExecutor', () => ({ requestLocalExecutor: request }))
 
 test('the workspace selector key uses the normalized device path', () => {
   render(

@@ -27,6 +27,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+      - name: Check the product version and release tag
+        shell: pwsh
+        run: |
+          $version = node scripts/release/client-version.mjs --check
+          if ($LASTEXITCODE -ne 0) { throw "Client version validation failed" }
+          if ($env:GITHUB_REF_NAME -ne "v$version") { throw "Release tag does not match Studio product version" }
       - name: Install JavaScript dependencies
         shell: pwsh
         run: |
@@ -55,7 +61,6 @@ jobs:
         shell: pwsh
         run: |
           $version = (Get-Content -Raw "apps/kcoder-studio/package.json" | ConvertFrom-Json).version
-          if ($env:GITHUB_REF_NAME -ne "v$version") { throw "Release tag does not match Studio version" }
           $installer = "target/packages/kcoder-studio/windows/KCoder-Studio-Setup-$version-win-x64.exe"
           if (-not (Test-Path -LiteralPath $installer -PathType Leaf)) { throw "Windows installer is missing" }
           $out = "target/dist/studio-windows"

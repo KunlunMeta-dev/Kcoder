@@ -1,0 +1,933 @@
+{
+  "MigrationBatchItemPlanParams": [
+    {
+      "decoded": {
+        "itemId": "item",
+        "jobId": "job"
+      },
+      "name": "owned_item",
+      "value": {
+        "itemId": "item",
+        "jobId": "job"
+      }
+    }
+  ],
+  "MigrationBatchItemPlanResult": [
+    {
+      "decoded": {
+        "item": {
+          "enabled": false,
+          "errorCode": null,
+          "itemId": "item",
+          "nativeReference": false,
+          "projectScoped": true,
+          "targetName": "review"
+        },
+        "mcp": null,
+        "provider": null
+      },
+      "name": "asset_metadata_only",
+      "value": {
+        "item": {
+          "enabled": false,
+          "errorCode": null,
+          "itemId": "item",
+          "nativeReference": false,
+          "projectScoped": true,
+          "targetName": "review"
+        },
+        "mcp": null,
+        "provider": null
+      }
+    }
+  ],
+  "MigrationBatchMcpCredentialChoice": [
+    {
+      "decoded": {
+        "consentPrivateValues": true,
+        "fields": [
+          {
+            "kind": "environment",
+            "name": "TOKEN"
+          },
+          {
+            "kind": "header",
+            "name": "Authorization"
+          }
+        ],
+        "itemId": "mcp"
+      },
+      "name": "explicit_selected_fields",
+      "value": {
+        "consentPrivateValues": true,
+        "fields": [
+          {
+            "kind": "environment",
+            "name": "TOKEN"
+          },
+          {
+            "kind": "header",
+            "name": "Authorization"
+          }
+        ],
+        "itemId": "mcp"
+      }
+    }
+  ],
+  "MigrationBatchOperationParams": [
+    {
+      "decoded": {
+        "expectedSequence": 3,
+        "jobId": "job",
+        "planId": "plan",
+        "requestId": "request"
+      },
+      "name": "stable_operation_identity",
+      "value": {
+        "expectedSequence": 3,
+        "jobId": "job",
+        "planId": "plan",
+        "requestId": "request"
+      }
+    }
+  ],
+  "MigrationBatchPlanParams": [
+    {
+      "decoded": {
+        "choices": [
+          {
+            "itemId": "history",
+            "kind": "history"
+          },
+          {
+            "enableAfterImport": false,
+            "itemId": "skill",
+            "kind": "asset",
+            "targetName": "review"
+          },
+          {
+            "cwd": null,
+            "enableAfterImport": false,
+            "itemId": "mcp",
+            "kind": "mcp",
+            "targetName": "docs"
+          },
+          {
+            "contextWindowTokens": 128000,
+            "endpoint": null,
+            "itemId": "provider",
+            "kind": "provider",
+            "maxOutputTokens": 8192,
+            "model": null,
+            "outputHeadroomTokens": 8192,
+            "targetName": "Imported"
+          }
+        ],
+        "excludedItemIds": [],
+        "expectedSequence": 1,
+        "includeDefaultItems": false,
+        "jobId": "job",
+        "reuseExisting": false
+      },
+      "name": "multiple_content_classes",
+      "value": {
+        "choices": [
+          {
+            "itemId": "history",
+            "kind": "history"
+          },
+          {
+            "itemId": "skill",
+            "kind": "asset",
+            "targetName": "review"
+          },
+          {
+            "itemId": "mcp",
+            "kind": "mcp",
+            "targetName": "docs"
+          },
+          {
+            "contextWindowTokens": 128000,
+            "itemId": "provider",
+            "kind": "provider",
+            "maxOutputTokens": 8192,
+            "outputHeadroomTokens": 8192,
+            "targetName": "Imported"
+          }
+        ],
+        "expectedSequence": 1,
+        "jobId": "job"
+      }
+    },
+    {
+      "decoded": {
+        "choices": [],
+        "credentials": [
+          {
+            "consentApiKey": true,
+            "itemId": "provider",
+            "source": "configuration"
+          }
+        ],
+        "excludedItemIds": [],
+        "expectedSequence": 1,
+        "includeDefaultItems": false,
+        "jobId": "job",
+        "reuseExisting": false
+      },
+      "name": "explicit_api_key_consent",
+      "value": {
+        "choices": [],
+        "credentials": [
+          {
+            "consentApiKey": true,
+            "itemId": "provider",
+            "source": "configuration"
+          }
+        ],
+        "expectedSequence": 1,
+        "jobId": "job"
+      }
+    },
+    {
+      "decoded": {
+        "choices": [],
+        "excludedItemIds": [],
+        "expectedSequence": 1,
+        "includeDefaultItems": false,
+        "jobId": "job",
+        "mcpCredentials": [
+          {
+            "consentPrivateValues": true,
+            "fields": [
+              {
+                "kind": "environment",
+                "name": "TOKEN"
+              },
+              {
+                "kind": "header",
+                "name": "Authorization"
+              }
+            ],
+            "itemId": "mcp"
+          }
+        ],
+        "reuseExisting": false
+      },
+      "name": "explicit_mcp_private_consent",
+      "value": {
+        "choices": [],
+        "expectedSequence": 1,
+        "jobId": "job",
+        "mcpCredentials": [
+          {
+            "consentPrivateValues": true,
+            "fields": [
+              {
+                "kind": "environment",
+                "name": "TOKEN"
+              },
+              {
+                "kind": "header",
+                "name": "Authorization"
+              }
+            ],
+            "itemId": "mcp"
+          }
+        ]
+      }
+    },
+    {
+      "decoded": {
+        "choices": [
+          {
+            "itemId": "plugin",
+            "kind": "plugin",
+            "targetName": "office-helper"
+          }
+        ],
+        "excludedItemIds": [],
+        "expectedSequence": 1,
+        "includeDefaultItems": false,
+        "jobId": "job",
+        "reuseExisting": false
+      },
+      "name": "explicit_plugin_choice",
+      "value": {
+        "choices": [
+          {
+            "itemId": "plugin",
+            "kind": "plugin",
+            "targetName": "office-helper"
+          }
+        ],
+        "expectedSequence": 1,
+        "jobId": "job"
+      }
+    },
+    {
+      "decoded": {
+        "choices": [],
+        "excludedItemIds": [],
+        "expectedSequence": 1,
+        "includeDefaultItems": false,
+        "jobId": "owned-job",
+        "projectMcpInheritance": {
+          "expectedRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "names": []
+        },
+        "reuseExisting": false
+      },
+      "name": "explicit_empty_project_mcp_inheritance",
+      "value": {
+        "choices": [],
+        "expectedSequence": 1,
+        "jobId": "owned-job",
+        "projectMcpInheritance": {
+          "expectedRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "names": []
+        }
+      }
+    },
+    {
+      "decoded": {
+        "choices": [
+          {
+            "itemId": "item-fixture",
+            "kind": "project",
+            "mapping": {
+              "mappings": [
+                {
+                  "sourceRootId": "source-root-fixture",
+                  "targetRootHandle": "target-root-fixture"
+                }
+              ],
+              "targetCatalogId": "targets-fixture",
+              "targetHandle": "target-fixture"
+            }
+          }
+        ],
+        "excludedItemIds": [],
+        "expectedSequence": 1,
+        "includeDefaultItems": false,
+        "jobId": "job",
+        "reuseExisting": false
+      },
+      "name": "explicit_native_project_mapping",
+      "value": {
+        "choices": [
+          {
+            "itemId": "item-fixture",
+            "kind": "project",
+            "mapping": {
+              "mappings": [
+                {
+                  "sourceRootId": "source-root-fixture",
+                  "targetRootHandle": "target-root-fixture"
+                }
+              ],
+              "targetCatalogId": "targets-fixture",
+              "targetHandle": "target-fixture"
+            }
+          }
+        ],
+        "expectedSequence": 1,
+        "jobId": "job"
+      }
+    }
+  ],
+  "MigrationBatchRunParams": [
+    {
+      "decoded": {
+        "expectedSequence": 3,
+        "jobId": "job",
+        "mode": "resume",
+        "planId": "plan",
+        "requestId": "confirmed-request"
+      },
+      "name": "explicit_resume",
+      "value": {
+        "expectedSequence": 3,
+        "jobId": "job",
+        "mode": "resume",
+        "planId": "plan",
+        "requestId": "confirmed-request"
+      }
+    }
+  ],
+  "MigrationBatchScanParams": [
+    {
+      "decoded": {
+        "sourceIds": [
+          "source-one",
+          "source-two"
+        ]
+      },
+      "name": "native_grants",
+      "value": {
+        "sourceIds": [
+          "source-one",
+          "source-two"
+        ]
+      }
+    },
+    {
+      "decoded": {
+        "historySources": [
+          {
+            "catalogId": "catalog",
+            "sourceHandle": "opaque-selection"
+          }
+        ],
+        "sourceIds": []
+      },
+      "name": "explicit_native_history_grant",
+      "value": {
+        "historySources": [
+          {
+            "catalogId": "catalog",
+            "sourceHandle": "opaque-selection"
+          }
+        ],
+        "sourceIds": []
+      }
+    },
+    {
+      "decoded": {
+        "pluginSources": [
+          {
+            "expectedSequence": 3,
+            "operationId": "11111111-1111-4111-8111-111111111111"
+          }
+        ],
+        "sourceIds": []
+      },
+      "name": "prepared_plugin_without_live_discovery",
+      "value": {
+        "pluginSources": [
+          {
+            "expectedSequence": 3,
+            "operationId": "11111111-1111-4111-8111-111111111111"
+          }
+        ],
+        "sourceIds": []
+      }
+    },
+    {
+      "decoded": {
+        "historySources": [
+          {
+            "catalogId": "catalog",
+            "sourceHandle": "opaque-selection"
+          }
+        ],
+        "resourceLimits": {
+          "maxPayloadFiles": 10000,
+          "maxTotalBytes": 21474836480,
+          "minFreeBytes": 134217728,
+          "minFreeFileNodes": 32
+        },
+        "sourceIds": []
+      },
+      "name": "explicit_initial_resource_policy",
+      "value": {
+        "historySources": [
+          {
+            "catalogId": "catalog",
+            "sourceHandle": "opaque-selection"
+          }
+        ],
+        "resourceLimits": {
+          "maxPayloadFiles": 10000,
+          "maxTotalBytes": 21474836480,
+          "minFreeBytes": 134217728,
+          "minFreeFileNodes": 32
+        },
+        "sourceIds": []
+      }
+    },
+    {
+      "decoded": {
+        "projectSources": [
+          {
+            "catalogId": "projects-fixture",
+            "sourceHandle": "project-source-fixture"
+          }
+        ],
+        "sourceIds": [
+          "source-one",
+          "source-two"
+        ]
+      },
+      "name": "opaque_project_source_selection",
+      "value": {
+        "projectSources": [
+          {
+            "catalogId": "projects-fixture",
+            "sourceHandle": "project-source-fixture"
+          }
+        ],
+        "sourceIds": [
+          "source-one",
+          "source-two"
+        ]
+      }
+    }
+  ],
+  "MigrationBatchStateResult": [
+    {
+      "decoded": {
+        "progress": null,
+        "state": {
+          "assetPlans": [],
+          "issues": [],
+          "job": {
+            "committedItems": 0,
+            "hasUnconfirmedOutcomes": false,
+            "jobId": "job",
+            "requiresActionItems": 0,
+            "sequence": 2,
+            "sourceId": "source",
+            "status": "ready",
+            "totalItems": 0
+          },
+          "mcpPlans": [],
+          "plans": [],
+          "source": "codex"
+        },
+        "workerError": null,
+        "workerRunning": false
+      },
+      "name": "observed_durable_state",
+      "value": {
+        "progress": null,
+        "state": {
+          "issues": [],
+          "job": {
+            "committedItems": 0,
+            "jobId": "job",
+            "requiresActionItems": 0,
+            "sequence": 2,
+            "sourceId": "source",
+            "status": "ready",
+            "totalItems": 0
+          },
+          "plans": [],
+          "source": "codex"
+        },
+        "workerError": null,
+        "workerRunning": false
+      }
+    },
+    {
+      "decoded": {
+        "progress": {
+          "actionId": "owned-action",
+          "actionIndex": 0,
+          "history": {
+            "phase": "capturing",
+            "processed": 1024,
+            "total": 4096,
+            "unit": "bytes"
+          },
+          "totalActions": 2
+        },
+        "state": {
+          "assetPlans": [],
+          "issues": [],
+          "job": {
+            "committedItems": 0,
+            "hasUnconfirmedOutcomes": false,
+            "jobId": "job",
+            "requiresActionItems": 0,
+            "sequence": 2,
+            "sourceId": "source",
+            "status": "ready",
+            "totalItems": 0
+          },
+          "mcpPlans": [],
+          "plans": [],
+          "source": "codex"
+        },
+        "workerError": null,
+        "workerRunning": true
+      },
+      "name": "bounded_progress",
+      "value": {
+        "progress": {
+          "actionId": "owned-action",
+          "actionIndex": 0,
+          "history": {
+            "phase": "capturing",
+            "processed": 1024,
+            "total": 4096,
+            "unit": "bytes"
+          },
+          "totalActions": 2
+        },
+        "state": {
+          "issues": [],
+          "job": {
+            "committedItems": 0,
+            "jobId": "job",
+            "requiresActionItems": 0,
+            "sequence": 2,
+            "sourceId": "source",
+            "status": "ready",
+            "totalItems": 0
+          },
+          "plans": [],
+          "source": "codex"
+        },
+        "workerError": null,
+        "workerRunning": true
+      }
+    }
+  ],
+  "MigrationJobsListParams": [
+    {
+      "decoded": {
+        "cursor": null
+      },
+      "name": "first_page",
+      "value": {}
+    }
+  ],
+  "MigrationJobsListResult": [
+    {
+      "decoded": {
+        "jobs": [],
+        "nextCursor": null
+      },
+      "name": "no_records",
+      "value": {
+        "jobs": [],
+        "nextCursor": null
+      }
+    }
+  ],
+  "MigrationProjectMcpCatalogParams": [
+    {
+      "decoded": {
+        "jobId": "owned-job",
+        "pageIndex": 0
+      },
+      "name": "first_page",
+      "value": {
+        "jobId": "owned-job"
+      }
+    },
+    {
+      "decoded": {
+        "expectedRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "jobId": "owned-job",
+        "pageIndex": 1
+      },
+      "name": "bound_next_page",
+      "value": {
+        "expectedRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "jobId": "owned-job",
+        "pageIndex": 1
+      }
+    }
+  ],
+  "MigrationProjectMcpCatalogResult": [
+    {
+      "decoded": {
+        "jobId": "owned-job",
+        "names": [
+          "docs"
+        ],
+        "nextPageIndex": null,
+        "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "status": "selection_required",
+        "totalNames": 1
+      },
+      "name": "names_only",
+      "value": {
+        "jobId": "owned-job",
+        "names": [
+          "docs"
+        ],
+        "nextPageIndex": null,
+        "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "status": "selection_required",
+        "totalNames": 1
+      }
+    },
+    {
+      "decoded": {
+        "jobId": "owned-job",
+        "names": [],
+        "nextPageIndex": null,
+        "revision": null,
+        "status": "already_declared",
+        "totalNames": 0
+      },
+      "name": "existing_declaration",
+      "value": {
+        "jobId": "owned-job",
+        "names": [],
+        "nextPageIndex": null,
+        "revision": null,
+        "status": "already_declared",
+        "totalNames": 0
+      }
+    }
+  ],
+  "MigrationResourceBudgetReadParams": [
+    {
+      "decoded": {
+        "jobId": "job"
+      },
+      "name": "observe_without_allocating",
+      "value": {
+        "jobId": "job"
+      }
+    },
+    {
+      "decoded": {
+        "jobId": "job",
+        "requestId": "original-increase"
+      },
+      "name": "reconcile_original_request",
+      "value": {
+        "jobId": "job",
+        "requestId": "original-increase"
+      }
+    }
+  ],
+  "MigrationResourceBudgetView": [
+    {
+      "decoded": {
+        "jobId": "job",
+        "phase": "not_applicable"
+      },
+      "name": "not_applicable",
+      "value": {
+        "jobId": "job",
+        "phase": "not_applicable"
+      }
+    },
+    {
+      "decoded": {
+        "jobId": "job",
+        "phase": "legacy_untracked"
+      },
+      "name": "legacy_has_no_fabricated_usage",
+      "value": {
+        "jobId": "job",
+        "phase": "legacy_untracked"
+      }
+    },
+    {
+      "decoded": {
+        "jobId": "job",
+        "limits": {
+          "maxPayloadFiles": 10000,
+          "maxTotalBytes": 21474836480,
+          "minFreeBytes": 134217728,
+          "minFreeFileNodes": 32
+        },
+        "phase": "planned"
+      },
+      "name": "planned_is_not_zero_usage",
+      "value": {
+        "jobId": "job",
+        "limits": {
+          "maxPayloadFiles": 10000,
+          "maxTotalBytes": 21474836480,
+          "minFreeBytes": 134217728,
+          "minFreeFileNodes": 32
+        },
+        "phase": "planned"
+      }
+    },
+    {
+      "decoded": {
+        "jobId": "job",
+        "limits": {
+          "maxPayloadFiles": 10002,
+          "maxTotalBytes": 21474836480,
+          "minFreeBytes": 134217728,
+          "minFreeFileNodes": 32
+        },
+        "phase": "active",
+        "policyRevision": 2,
+        "usage": {
+          "committedBytes": 1024,
+          "committedFiles": 4,
+          "reservedBytes": 64,
+          "reservedFiles": 1
+        }
+      },
+      "name": "active",
+      "value": {
+        "jobId": "job",
+        "limits": {
+          "maxPayloadFiles": 10002,
+          "maxTotalBytes": 21474836480,
+          "minFreeBytes": 134217728,
+          "minFreeFileNodes": 32
+        },
+        "phase": "active",
+        "policyRevision": 2,
+        "usage": {
+          "committedBytes": 1024,
+          "committedFiles": 4,
+          "reservedBytes": 64,
+          "reservedFiles": 1
+        }
+      }
+    },
+    {
+      "decoded": {
+        "jobId": "job",
+        "limits": {
+          "maxPayloadFiles": 10002,
+          "maxTotalBytes": 21474836480,
+          "minFreeBytes": 134217728,
+          "minFreeFileNodes": 32
+        },
+        "phase": "active",
+        "policyRevision": 2,
+        "requestedReceipt": {
+          "jobId": "job",
+          "limits": {
+            "maxPayloadFiles": 10001,
+            "maxTotalBytes": 21474836480,
+            "minFreeBytes": 134217728,
+            "minFreeFileNodes": 32
+          },
+          "previousRevision": 0,
+          "requestId": "original-increase",
+          "revision": 1
+        },
+        "usage": {
+          "committedBytes": 1024,
+          "committedFiles": 4,
+          "reservedBytes": 64,
+          "reservedFiles": 1
+        }
+      },
+      "name": "old_receipt_is_not_current_policy",
+      "value": {
+        "jobId": "job",
+        "limits": {
+          "maxPayloadFiles": 10002,
+          "maxTotalBytes": 21474836480,
+          "minFreeBytes": 134217728,
+          "minFreeFileNodes": 32
+        },
+        "phase": "active",
+        "policyRevision": 2,
+        "requestedReceipt": {
+          "jobId": "job",
+          "limits": {
+            "maxPayloadFiles": 10001,
+            "maxTotalBytes": 21474836480,
+            "minFreeBytes": 134217728,
+            "minFreeFileNodes": 32
+          },
+          "previousRevision": 0,
+          "requestId": "original-increase",
+          "revision": 1
+        },
+        "usage": {
+          "committedBytes": 1024,
+          "committedFiles": 4,
+          "reservedBytes": 64,
+          "reservedFiles": 1
+        }
+      }
+    }
+  ],
+  "MigrationResourceIncreaseParams": [
+    {
+      "decoded": {
+        "confirm": true,
+        "expectedPolicyRevision": 0,
+        "jobId": "job",
+        "limits": {
+          "maxPayloadFiles": 10001,
+          "maxTotalBytes": 21474836480,
+          "minFreeBytes": 134217728,
+          "minFreeFileNodes": 32
+        },
+        "planId": "plan",
+        "requestId": "original-increase"
+      },
+      "name": "explicit_original_intent",
+      "value": {
+        "confirm": true,
+        "expectedPolicyRevision": 0,
+        "jobId": "job",
+        "limits": {
+          "maxPayloadFiles": 10001,
+          "maxTotalBytes": 21474836480,
+          "minFreeBytes": 134217728,
+          "minFreeFileNodes": 32
+        },
+        "planId": "plan",
+        "requestId": "original-increase"
+      }
+    },
+    {
+      "decoded": {
+        "confirm": false,
+        "expectedPolicyRevision": 0,
+        "jobId": "job",
+        "limits": {
+          "maxPayloadFiles": 10001,
+          "maxTotalBytes": 21474836480,
+          "minFreeBytes": 134217728,
+          "minFreeFileNodes": 32
+        },
+        "planId": "plan",
+        "requestId": "original-increase"
+      },
+      "name": "omitted_confirmation_is_false",
+      "value": {
+        "expectedPolicyRevision": 0,
+        "jobId": "job",
+        "limits": {
+          "maxPayloadFiles": 10001,
+          "maxTotalBytes": 21474836480,
+          "minFreeBytes": 134217728,
+          "minFreeFileNodes": 32
+        },
+        "planId": "plan",
+        "requestId": "original-increase"
+      }
+    }
+  ],
+  "MigrationResourceIncreaseReceipt": [
+    {
+      "decoded": {
+        "jobId": "job",
+        "limits": {
+          "maxPayloadFiles": 10001,
+          "maxTotalBytes": 21474836480,
+          "minFreeBytes": 134217728,
+          "minFreeFileNodes": 32
+        },
+        "previousRevision": 0,
+        "requestId": "original-increase",
+        "revision": 1
+      },
+      "name": "accepted_original_intent",
+      "value": {
+        "jobId": "job",
+        "limits": {
+          "maxPayloadFiles": 10001,
+          "maxTotalBytes": 21474836480,
+          "minFreeBytes": 134217728,
+          "minFreeFileNodes": 32
+        },
+        "previousRevision": 0,
+        "requestId": "original-increase",
+        "revision": 1
+      }
+    }
+  ]
+}

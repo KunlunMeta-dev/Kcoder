@@ -19,6 +19,7 @@ import {
 } from './paneDiagnostics'
 import {
   filterBufferedTranscriptActions,
+  mergeBufferedTranscriptProcessing,
   reconcileRuntimeConversationMessages,
   RUNTIME_TRANSCRIPT_PAGE_SIZE,
   transcriptSettlesLatestSeededTurn,
@@ -70,6 +71,7 @@ export function usePaneRestore(context: ReturnType<typeof usePaneState>) {
     loadedTranscriptRangesRef,
     pendingMessageActionsRef,
     rebuildingTranscriptRef,
+    showLiveDuringTranscriptLoadRef,
     transcriptGapGenerationRef,
     forceAuthoritativeTranscriptRef,
     rebuildingTranscriptIdentityRef,
@@ -113,8 +115,8 @@ export function usePaneRestore(context: ReturnType<typeof usePaneState>) {
     }
 
     syncCachedPlan()
-    globalThis.addEventListener('wework-runtime-plan-updated', syncCachedPlan)
-    return () => globalThis.removeEventListener('wework-runtime-plan-updated', syncCachedPlan)
+    globalThis.addEventListener('kcoder-runtime-plan-updated', syncCachedPlan)
+    return () => globalThis.removeEventListener('kcoder-runtime-plan-updated', syncCachedPlan)
   }, [currentRuntimeTaskLoadTarget, setTaskPlan])
 
   useEffect(() => {
@@ -309,7 +311,13 @@ export function usePaneRestore(context: ReturnType<typeof usePaneState>) {
     const pageGate = transcriptPageGateRef.current
     pageGate.invalidate()
     rebuildingTranscriptRef.current = true
+    showLiveDuringTranscriptLoadRef.current = !authoritativeReset
     rebuildingTranscriptIdentityRef.current = runtimeTaskLoadTarget.identityKey
+    // Reloading the conversation already on screen (stream gap, transport
+    // replacement, receipt reconciliation) keeps its side panels; clearing
+    // them made the plan, turn rail and subagent rows vanish and reappear.
+    const reloadingDisplayedConversation =
+      displayedTranscriptIdentityRef.current === runtimeTaskLoadTarget.identityKey
     const cachedSeededMessages = getRuntimeConversationMessages(address)
     const seededMessages =
       displayedTranscriptIdentityRef.current === runtimeTaskLoadTarget.identityKey
@@ -326,15 +334,17 @@ export function usePaneRestore(context: ReturnType<typeof usePaneState>) {
     })
     dispatchMessages({ type: 'reset', messages: seededMessages })
     setTranscriptLoading(true)
-    setTranscriptHasMoreBefore(false)
-    setTranscriptBeforeCursor(null)
     setTranscriptLoadingMoreBefore(false)
     setTranscriptLoadingFullContent(false)
-    setTranscriptFullContent(false)
-    setLoadedTranscriptRanges([])
-    setTurnNavigation([])
-    setSubagentStatuses([])
-    setTaskPlan(null)
+    if (!reloadingDisplayedConversation) {
+      setTranscriptHasMoreBefore(false)
+      setTranscriptBeforeCursor(null)
+      setTranscriptFullContent(false)
+      setLoadedTranscriptRanges([])
+      setTurnNavigation([])
+      setSubagentStatuses([])
+      setTaskPlan(null)
+    }
     void Promise.resolve()
       .then(() =>
         loadRuntimeTranscriptForPaneRef.current(address, {
@@ -356,10 +366,12 @@ export function usePaneRestore(context: ReturnType<typeof usePaneState>) {
             settlesActiveTurn,
           })
           const transcriptTaskRunning = lifecycleStore.getTask(address)?.derived.isRunning ?? false
+          const observedTranscript = mergeBufferedTranscriptProcessing(transcript.messages,
+            bufferedTranscriptActionsRef.current, transcript.running === true)
           const nextMessages = authoritativeReset
-            ? transcript.messages
+            ? observedTranscript
             : reconcileRuntimeConversationMessages(
-                transcript.messages,
+                observedTranscript,
                 seededMessages,
                 transcriptTaskRunning
               )
@@ -378,18 +390,16 @@ export function usePaneRestore(context: ReturnType<typeof usePaneState>) {
             resetSource: transcript.messages.length > 0 ? 'transcript' : 'seed',
             nextMessages: summarizeWorkbenchMessages(nextMessages),
           })
-          dispatchMessages({
-            type: 'reset',
-            messages: nextMessages,
-          })
           rebuildingTranscriptRef.current = false
+          showLiveDuringTranscriptLoadRef.current = false
           rebuildingTranscriptIdentityRef.current = null
           const bufferedActions = filterBufferedTranscriptActions(
-            transcript.messages,
-            bufferedTranscriptActionsRef.current
+            observedTranscript,
+            bufferedTranscriptActionsRef.current,
+            transcript.running === true
           )
           bufferedTranscriptActionsRef.current = []
-          bufferedActions.forEach(dispatchMessages)
+          dispatchMessages([{ type: 'reset', messages: nextMessages }, ...bufferedActions])
         }
       })
       .catch(error => {
@@ -399,6 +409,7 @@ export function usePaneRestore(context: ReturnType<typeof usePaneState>) {
           !isAbortError(error)
         ) {
           rebuildingTranscriptRef.current = false
+          showLiveDuringTranscriptLoadRef.current = false
           rebuildingTranscriptIdentityRef.current = null
           const bufferedActions = bufferedTranscriptActionsRef.current
           bufferedTranscriptActionsRef.current = []
@@ -438,6 +449,7 @@ export function usePaneRestore(context: ReturnType<typeof usePaneState>) {
     rebuildingTranscriptIdentityRef,
     transcriptPageGateRef,
     rebuildingTranscriptRef,
+    showLiveDuringTranscriptLoadRef,
     displayedTranscriptIdentityRef,
     messagesRef,
     setTranscriptLoading,

@@ -1,3 +1,4 @@
+import { WorkspacePageHeader } from '@/components/layout/WorkspacePageHeader'
 import { PluginInstallTarget } from './PluginInstallTarget'
 import { ChevronRight, MoreHorizontal, Search } from 'lucide-react'
 import type { FormEvent, ReactNode } from 'react'
@@ -10,7 +11,7 @@ import { createSystemSkillApi } from '@/api/systemSkills'
 import { getRuntimeConfig } from '@/config/runtime'
 import { navigateTo } from '@/lib/navigation'
 import { notifyLocalPluginSkillsChanged, queuePluginTrial } from '@/features/plugins/pluginTrial'
-import { DESKTOP_TOP_BAR_BUTTON_CLASS, DesktopTopBar } from '@/components/layout/DesktopTopBar'
+import { DESKTOP_TOP_BAR_BUTTON_CLASS } from '@/components/layout/DesktopTopBar'
 import {
   CustomMcpDialog,
   McpProviderBlock,
@@ -211,7 +212,6 @@ interface PluginManagementWorkspaceProps {
 export function PluginManagementWorkspace({
   targetDeviceId,
   targetWorkspacePath,
-  sidebarCollapsed = false,
   topBarLeftActions,
 }: PluginManagementWorkspaceProps) {
   const { t } = useTranslation('common')
@@ -643,29 +643,11 @@ export function PluginManagementWorkspace({
       data-testid="plugin-management-workspace"
       className="min-h-0 min-w-0 flex-1 overflow-y-auto bg-background text-text-primary"
     >
-      <DesktopTopBar
+      <WorkspacePageHeader
+        title={t('workbench.plugins_manage', '插件管理')}
         testId="plugin-management-topbar"
-        className={[
-          'sticky top-0 z-30 h-12 bg-background/95 pr-4 backdrop-blur-xl md:h-[52px] md:pr-7',
-          sidebarCollapsed ? 'pl-5 md:pl-6' : 'pl-20 md:pl-7',
-        ].join(' ')}
-        left={
-          <>
-            {topBarLeftActions}
-            <nav className="flex items-center gap-3 text-sm font-semibold" aria-label="breadcrumb">
-              <button
-                type="button"
-                className="text-text-secondary transition-colors hover:text-text-primary"
-                onClick={() => navigateTo('/plugins')}
-              >
-                {t('workbench.plugins_tab', '插件')}
-              </button>
-              <ChevronRight className="h-4 w-4 text-text-secondary" />
-              <span>{t('workbench.plugins_manage', '管理')}</span>
-            </nav>
-          </>
-        }
-        right={
+        beforeBack={topBarLeftActions}
+        actions={
           <>
             {pluginApi.supportsAuthoring !== false && (
               <PluginCreateMenu

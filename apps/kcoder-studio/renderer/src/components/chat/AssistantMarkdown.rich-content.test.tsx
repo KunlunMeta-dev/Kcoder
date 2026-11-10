@@ -1,3 +1,4 @@
+import { hydrateConversationPreferences, saveConversationPreferences } from '@/features/appearance/useConversationPreferences'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
@@ -43,7 +44,6 @@ describe('AssistantMarkdown 富内容', () => {
   })
 
   test('keeps existing Markdown DOM mounted when a fast stream crosses the window threshold', async () => {
-    vi.stubGlobal('__TAURI_INTERNALS__', {})
     const prefix = `# Stable heading\n\n${'alpha '.repeat(260)}\n\n# Next heading\n\n`
     const { rerender } = render(<AssistantMarkdown content={prefix} isStreaming />)
     const heading = screen.getByRole('heading', { name: 'Stable heading' })
@@ -53,7 +53,6 @@ describe('AssistantMarkdown 富内容', () => {
   })
 
   test('keeps all paragraph DOM available when chunks leave the viewport', () => {
-    vi.stubGlobal('__TAURI_INTERNALS__', {})
     const observers: Array<() => void> = []
     vi.stubGlobal(
       'IntersectionObserver',
@@ -178,4 +177,22 @@ describe('AssistantMarkdown 富内容', () => {
     expect(firstOpen).not.toHaveBeenCalled()
     expect(latestOpen).toHaveBeenCalledWith('/workspace/project/config.json')
   })
+})
+
+test('limits new font and spacing preferences to opted-in conversation prose and preserves code metrics', async () => {
+  await hydrateConversationPreferences()
+  await saveConversationPreferences({ conversationBlockSpacing: 'relaxed', conversationLetterSpacing: 'relaxed', conversationFontFamily: 'system' })
+  const content = '中文段落 `inline`。\n\n| 列 | 值 |\n| --- | --- |\n| A | B |\n\n```js\nconst value = 1;\n```'
+  const { container, rerender } = render(<AssistantMarkdown conversationReading content={content} />)
+  const root = container.querySelector('[data-conversation-reading]') as HTMLElement
+  expect(root.style.getPropertyValue('--conversation-block-gap')).toBe('18px')
+  expect(root.style.letterSpacing).toBe('0.6px')
+  expect(root.style.fontFamily).toBe('var(--font-ui)')
+  expect(container.querySelector('[data-reading-table]')).toBeInTheDocument()
+  expect(container.querySelector('code')).toHaveStyle({ fontFamily: 'var(--font-code)', letterSpacing: '0' })
+  rerender(<AssistantMarkdown content={content} />)
+  expect(container.querySelector('[data-conversation-reading]')).not.toBeInTheDocument()
+  expect((container.firstElementChild as HTMLElement).style.letterSpacing).toBe('')
+  expect((container.firstElementChild as HTMLElement).style.fontFamily).toBe('')
+  await saveConversationPreferences({ conversationBlockSpacing: 'normal', conversationLetterSpacing: 'normal', conversationFontFamily: 'noto-sans-sc' })
 })

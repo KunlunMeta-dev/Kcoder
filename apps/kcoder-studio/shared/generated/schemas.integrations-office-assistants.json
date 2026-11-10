@@ -1,0 +1,2026 @@
+{
+  "OfficeAdoptParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "id": {
+        "type": "string"
+      },
+      "inputs": true,
+      "language": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "startTask": {
+        "default": false,
+        "description": "Adoption alone never starts a task.",
+        "type": "boolean"
+      },
+      "version": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "id",
+      "inputs",
+      "version"
+    ],
+    "title": "OfficeAdoptParams",
+    "type": "object"
+  },
+  "OfficeAssistantAdoption": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationNullable_for_String": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationOwner": {
+        "additionalProperties": false,
+        "description": "Stable owner identity excludes refreshable authorization/configuration generations.",
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "organizationId": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationNullable_for_String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "$ref": "#/definitions/IntegrationNullable_for_String"
+          }
+        },
+        "required": [
+          "accountId",
+          "targetId",
+          "workspaceId"
+        ],
+        "type": "object"
+      },
+      "IntegrationScope": {
+        "additionalProperties": false,
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "identityGeneration": {
+            "type": "string"
+          },
+          "organizationId": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationNullable_for_String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "targetRevision": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "$ref": "#/definitions/IntegrationNullable_for_String"
+          }
+        },
+        "required": [
+          "accountId",
+          "identityGeneration",
+          "targetId",
+          "targetRevision",
+          "workspaceId"
+        ],
+        "type": "object"
+      },
+      "OfficeArtifactKind": {
+        "enum": [
+          "document",
+          "table",
+          "chart",
+          "action_items",
+          "research",
+          "operation_receipt",
+          "file_collection",
+          "form"
+        ],
+        "type": "string"
+      },
+      "OfficeAssistantDefinition": {
+        "additionalProperties": false,
+        "properties": {
+          "acceptanceCriteria": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "allowedTools": {
+            "description": "None inherits only the already permitted registry; an empty list permits no tools.",
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "capabilities": {
+            "default": [],
+            "items": {
+              "$ref": "#/definitions/OfficeCapabilityRequirement"
+            },
+            "type": "array"
+          },
+          "description": {
+            "type": "string"
+          },
+          "externalSend": {
+            "$ref": "#/definitions/OfficeExternalSend"
+          },
+          "id": {
+            "type": "string"
+          },
+          "inputSchema": true,
+          "instructions": {
+            "type": "string"
+          },
+          "language": {
+            "type": "string"
+          },
+          "modelSelection": {
+            "$ref": "#/definitions/OfficeModelSelection"
+          },
+          "outputKinds": {
+            "items": {
+              "$ref": "#/definitions/OfficeArtifactKind"
+            },
+            "type": "array"
+          },
+          "resources": {
+            "default": [],
+            "items": {
+              "$ref": "#/definitions/OfficeResourceRef"
+            },
+            "type": "array"
+          },
+          "schemaVersion": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "scope": {
+            "$ref": "#/definitions/OfficeAssistantScope"
+          },
+          "skills": {
+            "description": "Reviewed, versioned skill instructions; these never grant tools or execute files.",
+            "items": {
+              "$ref": "#/definitions/OfficeAssistantSkill"
+            },
+            "type": "array"
+          },
+          "title": {
+            "type": "string"
+          },
+          "workflowRef": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/OfficeWorkflowRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "acceptanceCriteria",
+          "description",
+          "externalSend",
+          "id",
+          "inputSchema",
+          "instructions",
+          "language",
+          "modelSelection",
+          "outputKinds",
+          "schemaVersion",
+          "scope",
+          "title"
+        ],
+        "type": "object"
+      },
+      "OfficeAssistantScope": {
+        "enum": [
+          "personal",
+          "workspace",
+          "organization"
+        ],
+        "type": "string"
+      },
+      "OfficeAssistantSkill": {
+        "additionalProperties": false,
+        "properties": {
+          "allowedTools": {
+            "description": "Omitted inherits task tools; an explicit list only narrows the registry.",
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "content": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "content",
+          "description",
+          "enabled",
+          "slug",
+          "title"
+        ],
+        "type": "object"
+      },
+      "OfficeAssistantVersion": {
+        "additionalProperties": false,
+        "properties": {
+          "archived": {
+            "type": "boolean"
+          },
+          "createdAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "definition": {
+            "$ref": "#/definitions/OfficeAssistantDefinition"
+          },
+          "definitionSha256": {
+            "type": "string"
+          },
+          "owner": {
+            "$ref": "#/definitions/IntegrationOwner"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "archived",
+          "createdAtMs",
+          "definition",
+          "definitionSha256",
+          "owner",
+          "version"
+        ],
+        "type": "object"
+      },
+      "OfficeCapabilityRequirement": {
+        "additionalProperties": false,
+        "properties": {
+          "capabilityId": {
+            "type": "string"
+          },
+          "formats": {
+            "default": [],
+            "items": {
+              "$ref": "#/definitions/OfficeFileFormat"
+            },
+            "type": "array"
+          },
+          "optional": {
+            "default": false,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "capabilityId"
+        ],
+        "type": "object"
+      },
+      "OfficeExternalSend": {
+        "enum": [
+          "ask",
+          "deny"
+        ],
+        "type": "string"
+      },
+      "OfficeFileFormat": {
+        "enum": [
+          "docx",
+          "xlsx",
+          "pptx",
+          "pdf",
+          "csv",
+          "json"
+        ],
+        "type": "string"
+      },
+      "OfficeModelSelection": {
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "inherit_current"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "explicit"
+                ],
+                "type": "string"
+              },
+              "model": {
+                "type": "string"
+              },
+              "provider": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "model",
+              "provider"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "auto_policy"
+                ],
+                "type": "string"
+              },
+              "version": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "kind",
+              "version"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "OfficeResourceRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "revision"
+        ],
+        "type": "object"
+      },
+      "OfficeWorkflowRef": {
+        "additionalProperties": false,
+        "properties": {
+          "definitionId": {
+            "type": "string"
+          },
+          "version": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "definitionId",
+          "version"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "assistant": {
+        "$ref": "#/definitions/OfficeAssistantVersion"
+      },
+      "createdAtMs": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "inputs": true,
+      "nativeThreadId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "nativeTurnId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "operationId": {
+        "type": "string"
+      },
+      "scope": {
+        "$ref": "#/definitions/IntegrationScope"
+      }
+    },
+    "required": [
+      "assistant",
+      "createdAtMs",
+      "inputs",
+      "operationId",
+      "scope"
+    ],
+    "title": "OfficeAssistantAdoption",
+    "type": "object"
+  },
+  "OfficeAssistantDefinition": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "OfficeArtifactKind": {
+        "enum": [
+          "document",
+          "table",
+          "chart",
+          "action_items",
+          "research",
+          "operation_receipt",
+          "file_collection",
+          "form"
+        ],
+        "type": "string"
+      },
+      "OfficeAssistantScope": {
+        "enum": [
+          "personal",
+          "workspace",
+          "organization"
+        ],
+        "type": "string"
+      },
+      "OfficeAssistantSkill": {
+        "additionalProperties": false,
+        "properties": {
+          "allowedTools": {
+            "description": "Omitted inherits task tools; an explicit list only narrows the registry.",
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "content": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "content",
+          "description",
+          "enabled",
+          "slug",
+          "title"
+        ],
+        "type": "object"
+      },
+      "OfficeCapabilityRequirement": {
+        "additionalProperties": false,
+        "properties": {
+          "capabilityId": {
+            "type": "string"
+          },
+          "formats": {
+            "default": [],
+            "items": {
+              "$ref": "#/definitions/OfficeFileFormat"
+            },
+            "type": "array"
+          },
+          "optional": {
+            "default": false,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "capabilityId"
+        ],
+        "type": "object"
+      },
+      "OfficeExternalSend": {
+        "enum": [
+          "ask",
+          "deny"
+        ],
+        "type": "string"
+      },
+      "OfficeFileFormat": {
+        "enum": [
+          "docx",
+          "xlsx",
+          "pptx",
+          "pdf",
+          "csv",
+          "json"
+        ],
+        "type": "string"
+      },
+      "OfficeModelSelection": {
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "inherit_current"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "explicit"
+                ],
+                "type": "string"
+              },
+              "model": {
+                "type": "string"
+              },
+              "provider": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "model",
+              "provider"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "auto_policy"
+                ],
+                "type": "string"
+              },
+              "version": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "kind",
+              "version"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "OfficeResourceRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "revision"
+        ],
+        "type": "object"
+      },
+      "OfficeWorkflowRef": {
+        "additionalProperties": false,
+        "properties": {
+          "definitionId": {
+            "type": "string"
+          },
+          "version": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "definitionId",
+          "version"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "acceptanceCriteria": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "allowedTools": {
+        "description": "None inherits only the already permitted registry; an empty list permits no tools.",
+        "items": {
+          "type": "string"
+        },
+        "type": [
+          "array",
+          "null"
+        ]
+      },
+      "capabilities": {
+        "default": [],
+        "items": {
+          "$ref": "#/definitions/OfficeCapabilityRequirement"
+        },
+        "type": "array"
+      },
+      "description": {
+        "type": "string"
+      },
+      "externalSend": {
+        "$ref": "#/definitions/OfficeExternalSend"
+      },
+      "id": {
+        "type": "string"
+      },
+      "inputSchema": true,
+      "instructions": {
+        "type": "string"
+      },
+      "language": {
+        "type": "string"
+      },
+      "modelSelection": {
+        "$ref": "#/definitions/OfficeModelSelection"
+      },
+      "outputKinds": {
+        "items": {
+          "$ref": "#/definitions/OfficeArtifactKind"
+        },
+        "type": "array"
+      },
+      "resources": {
+        "default": [],
+        "items": {
+          "$ref": "#/definitions/OfficeResourceRef"
+        },
+        "type": "array"
+      },
+      "schemaVersion": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "scope": {
+        "$ref": "#/definitions/OfficeAssistantScope"
+      },
+      "skills": {
+        "description": "Reviewed, versioned skill instructions; these never grant tools or execute files.",
+        "items": {
+          "$ref": "#/definitions/OfficeAssistantSkill"
+        },
+        "type": "array"
+      },
+      "title": {
+        "type": "string"
+      },
+      "workflowRef": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/OfficeWorkflowRef"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      }
+    },
+    "required": [
+      "acceptanceCriteria",
+      "description",
+      "externalSend",
+      "id",
+      "inputSchema",
+      "instructions",
+      "language",
+      "modelSelection",
+      "outputKinds",
+      "schemaVersion",
+      "scope",
+      "title"
+    ],
+    "title": "OfficeAssistantDefinition",
+    "type": "object"
+  },
+  "OfficeAssistantDeleteParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "id": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "id"
+    ],
+    "title": "OfficeAssistantDeleteParams",
+    "type": "object"
+  },
+  "OfficeAssistantDraft": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationNullable_for_String": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationOwner": {
+        "additionalProperties": false,
+        "description": "Stable owner identity excludes refreshable authorization/configuration generations.",
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "organizationId": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationNullable_for_String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "$ref": "#/definitions/IntegrationNullable_for_String"
+          }
+        },
+        "required": [
+          "accountId",
+          "targetId",
+          "workspaceId"
+        ],
+        "type": "object"
+      },
+      "OfficeArtifactKind": {
+        "enum": [
+          "document",
+          "table",
+          "chart",
+          "action_items",
+          "research",
+          "operation_receipt",
+          "file_collection",
+          "form"
+        ],
+        "type": "string"
+      },
+      "OfficeAssistantDefinition": {
+        "additionalProperties": false,
+        "properties": {
+          "acceptanceCriteria": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "allowedTools": {
+            "description": "None inherits only the already permitted registry; an empty list permits no tools.",
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "capabilities": {
+            "default": [],
+            "items": {
+              "$ref": "#/definitions/OfficeCapabilityRequirement"
+            },
+            "type": "array"
+          },
+          "description": {
+            "type": "string"
+          },
+          "externalSend": {
+            "$ref": "#/definitions/OfficeExternalSend"
+          },
+          "id": {
+            "type": "string"
+          },
+          "inputSchema": true,
+          "instructions": {
+            "type": "string"
+          },
+          "language": {
+            "type": "string"
+          },
+          "modelSelection": {
+            "$ref": "#/definitions/OfficeModelSelection"
+          },
+          "outputKinds": {
+            "items": {
+              "$ref": "#/definitions/OfficeArtifactKind"
+            },
+            "type": "array"
+          },
+          "resources": {
+            "default": [],
+            "items": {
+              "$ref": "#/definitions/OfficeResourceRef"
+            },
+            "type": "array"
+          },
+          "schemaVersion": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "scope": {
+            "$ref": "#/definitions/OfficeAssistantScope"
+          },
+          "skills": {
+            "description": "Reviewed, versioned skill instructions; these never grant tools or execute files.",
+            "items": {
+              "$ref": "#/definitions/OfficeAssistantSkill"
+            },
+            "type": "array"
+          },
+          "title": {
+            "type": "string"
+          },
+          "workflowRef": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/OfficeWorkflowRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "acceptanceCriteria",
+          "description",
+          "externalSend",
+          "id",
+          "inputSchema",
+          "instructions",
+          "language",
+          "modelSelection",
+          "outputKinds",
+          "schemaVersion",
+          "scope",
+          "title"
+        ],
+        "type": "object"
+      },
+      "OfficeAssistantScope": {
+        "enum": [
+          "personal",
+          "workspace",
+          "organization"
+        ],
+        "type": "string"
+      },
+      "OfficeAssistantSkill": {
+        "additionalProperties": false,
+        "properties": {
+          "allowedTools": {
+            "description": "Omitted inherits task tools; an explicit list only narrows the registry.",
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "content": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "content",
+          "description",
+          "enabled",
+          "slug",
+          "title"
+        ],
+        "type": "object"
+      },
+      "OfficeCapabilityRequirement": {
+        "additionalProperties": false,
+        "properties": {
+          "capabilityId": {
+            "type": "string"
+          },
+          "formats": {
+            "default": [],
+            "items": {
+              "$ref": "#/definitions/OfficeFileFormat"
+            },
+            "type": "array"
+          },
+          "optional": {
+            "default": false,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "capabilityId"
+        ],
+        "type": "object"
+      },
+      "OfficeExternalSend": {
+        "enum": [
+          "ask",
+          "deny"
+        ],
+        "type": "string"
+      },
+      "OfficeFileFormat": {
+        "enum": [
+          "docx",
+          "xlsx",
+          "pptx",
+          "pdf",
+          "csv",
+          "json"
+        ],
+        "type": "string"
+      },
+      "OfficeModelSelection": {
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "inherit_current"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "explicit"
+                ],
+                "type": "string"
+              },
+              "model": {
+                "type": "string"
+              },
+              "provider": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "model",
+              "provider"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "auto_policy"
+                ],
+                "type": "string"
+              },
+              "version": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "kind",
+              "version"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "OfficeResourceRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "revision"
+        ],
+        "type": "object"
+      },
+      "OfficeWorkflowRef": {
+        "additionalProperties": false,
+        "properties": {
+          "definitionId": {
+            "type": "string"
+          },
+          "version": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "definitionId",
+          "version"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "definition": {
+        "$ref": "#/definitions/OfficeAssistantDefinition"
+      },
+      "owner": {
+        "$ref": "#/definitions/IntegrationOwner"
+      },
+      "revision": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "updatedAtMs": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "definition",
+      "owner",
+      "revision",
+      "updatedAtMs"
+    ],
+    "title": "OfficeAssistantDraft",
+    "type": "object"
+  },
+  "OfficeAssistantReadParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "id": {
+        "type": "string"
+      },
+      "language": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "version": {
+        "default": null,
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "id"
+    ],
+    "title": "OfficeAssistantReadParams",
+    "type": "object"
+  },
+  "OfficeAssistantSkill": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "allowedTools": {
+        "description": "Omitted inherits task tools; an explicit list only narrows the registry.",
+        "items": {
+          "type": "string"
+        },
+        "type": [
+          "array",
+          "null"
+        ]
+      },
+      "content": {
+        "type": "string"
+      },
+      "description": {
+        "type": "string"
+      },
+      "enabled": {
+        "type": "boolean"
+      },
+      "slug": {
+        "type": "string"
+      },
+      "title": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "content",
+      "description",
+      "enabled",
+      "slug",
+      "title"
+    ],
+    "title": "OfficeAssistantSkill",
+    "type": "object"
+  },
+  "OfficeAssistantVersion": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationNullable_for_String": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationOwner": {
+        "additionalProperties": false,
+        "description": "Stable owner identity excludes refreshable authorization/configuration generations.",
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "organizationId": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationNullable_for_String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "$ref": "#/definitions/IntegrationNullable_for_String"
+          }
+        },
+        "required": [
+          "accountId",
+          "targetId",
+          "workspaceId"
+        ],
+        "type": "object"
+      },
+      "OfficeArtifactKind": {
+        "enum": [
+          "document",
+          "table",
+          "chart",
+          "action_items",
+          "research",
+          "operation_receipt",
+          "file_collection",
+          "form"
+        ],
+        "type": "string"
+      },
+      "OfficeAssistantDefinition": {
+        "additionalProperties": false,
+        "properties": {
+          "acceptanceCriteria": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "allowedTools": {
+            "description": "None inherits only the already permitted registry; an empty list permits no tools.",
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "capabilities": {
+            "default": [],
+            "items": {
+              "$ref": "#/definitions/OfficeCapabilityRequirement"
+            },
+            "type": "array"
+          },
+          "description": {
+            "type": "string"
+          },
+          "externalSend": {
+            "$ref": "#/definitions/OfficeExternalSend"
+          },
+          "id": {
+            "type": "string"
+          },
+          "inputSchema": true,
+          "instructions": {
+            "type": "string"
+          },
+          "language": {
+            "type": "string"
+          },
+          "modelSelection": {
+            "$ref": "#/definitions/OfficeModelSelection"
+          },
+          "outputKinds": {
+            "items": {
+              "$ref": "#/definitions/OfficeArtifactKind"
+            },
+            "type": "array"
+          },
+          "resources": {
+            "default": [],
+            "items": {
+              "$ref": "#/definitions/OfficeResourceRef"
+            },
+            "type": "array"
+          },
+          "schemaVersion": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "scope": {
+            "$ref": "#/definitions/OfficeAssistantScope"
+          },
+          "skills": {
+            "description": "Reviewed, versioned skill instructions; these never grant tools or execute files.",
+            "items": {
+              "$ref": "#/definitions/OfficeAssistantSkill"
+            },
+            "type": "array"
+          },
+          "title": {
+            "type": "string"
+          },
+          "workflowRef": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/OfficeWorkflowRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "acceptanceCriteria",
+          "description",
+          "externalSend",
+          "id",
+          "inputSchema",
+          "instructions",
+          "language",
+          "modelSelection",
+          "outputKinds",
+          "schemaVersion",
+          "scope",
+          "title"
+        ],
+        "type": "object"
+      },
+      "OfficeAssistantScope": {
+        "enum": [
+          "personal",
+          "workspace",
+          "organization"
+        ],
+        "type": "string"
+      },
+      "OfficeAssistantSkill": {
+        "additionalProperties": false,
+        "properties": {
+          "allowedTools": {
+            "description": "Omitted inherits task tools; an explicit list only narrows the registry.",
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "content": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "content",
+          "description",
+          "enabled",
+          "slug",
+          "title"
+        ],
+        "type": "object"
+      },
+      "OfficeCapabilityRequirement": {
+        "additionalProperties": false,
+        "properties": {
+          "capabilityId": {
+            "type": "string"
+          },
+          "formats": {
+            "default": [],
+            "items": {
+              "$ref": "#/definitions/OfficeFileFormat"
+            },
+            "type": "array"
+          },
+          "optional": {
+            "default": false,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "capabilityId"
+        ],
+        "type": "object"
+      },
+      "OfficeExternalSend": {
+        "enum": [
+          "ask",
+          "deny"
+        ],
+        "type": "string"
+      },
+      "OfficeFileFormat": {
+        "enum": [
+          "docx",
+          "xlsx",
+          "pptx",
+          "pdf",
+          "csv",
+          "json"
+        ],
+        "type": "string"
+      },
+      "OfficeModelSelection": {
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "inherit_current"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "explicit"
+                ],
+                "type": "string"
+              },
+              "model": {
+                "type": "string"
+              },
+              "provider": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "model",
+              "provider"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "auto_policy"
+                ],
+                "type": "string"
+              },
+              "version": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "kind",
+              "version"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "OfficeResourceRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "revision"
+        ],
+        "type": "object"
+      },
+      "OfficeWorkflowRef": {
+        "additionalProperties": false,
+        "properties": {
+          "definitionId": {
+            "type": "string"
+          },
+          "version": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "definitionId",
+          "version"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "archived": {
+        "type": "boolean"
+      },
+      "createdAtMs": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "definition": {
+        "$ref": "#/definitions/OfficeAssistantDefinition"
+      },
+      "definitionSha256": {
+        "type": "string"
+      },
+      "owner": {
+        "$ref": "#/definitions/IntegrationOwner"
+      },
+      "version": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "archived",
+      "createdAtMs",
+      "definition",
+      "definitionSha256",
+      "owner",
+      "version"
+    ],
+    "title": "OfficeAssistantVersion",
+    "type": "object"
+  },
+  "OfficeSaveDraftParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationRevisionRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "revision"
+        ],
+        "type": "object"
+      },
+      "OfficeArtifactKind": {
+        "enum": [
+          "document",
+          "table",
+          "chart",
+          "action_items",
+          "research",
+          "operation_receipt",
+          "file_collection",
+          "form"
+        ],
+        "type": "string"
+      },
+      "OfficeAssistantDefinition": {
+        "additionalProperties": false,
+        "properties": {
+          "acceptanceCriteria": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "allowedTools": {
+            "description": "None inherits only the already permitted registry; an empty list permits no tools.",
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "capabilities": {
+            "default": [],
+            "items": {
+              "$ref": "#/definitions/OfficeCapabilityRequirement"
+            },
+            "type": "array"
+          },
+          "description": {
+            "type": "string"
+          },
+          "externalSend": {
+            "$ref": "#/definitions/OfficeExternalSend"
+          },
+          "id": {
+            "type": "string"
+          },
+          "inputSchema": true,
+          "instructions": {
+            "type": "string"
+          },
+          "language": {
+            "type": "string"
+          },
+          "modelSelection": {
+            "$ref": "#/definitions/OfficeModelSelection"
+          },
+          "outputKinds": {
+            "items": {
+              "$ref": "#/definitions/OfficeArtifactKind"
+            },
+            "type": "array"
+          },
+          "resources": {
+            "default": [],
+            "items": {
+              "$ref": "#/definitions/OfficeResourceRef"
+            },
+            "type": "array"
+          },
+          "schemaVersion": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "scope": {
+            "$ref": "#/definitions/OfficeAssistantScope"
+          },
+          "skills": {
+            "description": "Reviewed, versioned skill instructions; these never grant tools or execute files.",
+            "items": {
+              "$ref": "#/definitions/OfficeAssistantSkill"
+            },
+            "type": "array"
+          },
+          "title": {
+            "type": "string"
+          },
+          "workflowRef": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/OfficeWorkflowRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "acceptanceCriteria",
+          "description",
+          "externalSend",
+          "id",
+          "inputSchema",
+          "instructions",
+          "language",
+          "modelSelection",
+          "outputKinds",
+          "schemaVersion",
+          "scope",
+          "title"
+        ],
+        "type": "object"
+      },
+      "OfficeAssistantScope": {
+        "enum": [
+          "personal",
+          "workspace",
+          "organization"
+        ],
+        "type": "string"
+      },
+      "OfficeAssistantSkill": {
+        "additionalProperties": false,
+        "properties": {
+          "allowedTools": {
+            "description": "Omitted inherits task tools; an explicit list only narrows the registry.",
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "content": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "content",
+          "description",
+          "enabled",
+          "slug",
+          "title"
+        ],
+        "type": "object"
+      },
+      "OfficeCapabilityRequirement": {
+        "additionalProperties": false,
+        "properties": {
+          "capabilityId": {
+            "type": "string"
+          },
+          "formats": {
+            "default": [],
+            "items": {
+              "$ref": "#/definitions/OfficeFileFormat"
+            },
+            "type": "array"
+          },
+          "optional": {
+            "default": false,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "capabilityId"
+        ],
+        "type": "object"
+      },
+      "OfficeExternalSend": {
+        "enum": [
+          "ask",
+          "deny"
+        ],
+        "type": "string"
+      },
+      "OfficeFileFormat": {
+        "enum": [
+          "docx",
+          "xlsx",
+          "pptx",
+          "pdf",
+          "csv",
+          "json"
+        ],
+        "type": "string"
+      },
+      "OfficeModelSelection": {
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "inherit_current"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "explicit"
+                ],
+                "type": "string"
+              },
+              "model": {
+                "type": "string"
+              },
+              "provider": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "model",
+              "provider"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "auto_policy"
+                ],
+                "type": "string"
+              },
+              "version": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "kind",
+              "version"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "OfficeResourceRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "revision"
+        ],
+        "type": "object"
+      },
+      "OfficeWorkflowRef": {
+        "additionalProperties": false,
+        "properties": {
+          "definitionId": {
+            "type": "string"
+          },
+          "version": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "definitionId",
+          "version"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "copyFrom": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/IntegrationRevisionRef"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "definition": {
+        "$ref": "#/definitions/OfficeAssistantDefinition"
+      }
+    },
+    "required": [
+      "definition"
+    ],
+    "title": "OfficeSaveDraftParams",
+    "type": "object"
+  },
+  "OfficeSaveVersionParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "id": {
+        "type": "string"
+      },
+      "language": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "version": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "id",
+      "version"
+    ],
+    "title": "OfficeSaveVersionParams",
+    "type": "object"
+  }
+}

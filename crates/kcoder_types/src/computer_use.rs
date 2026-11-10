@@ -4,6 +4,15 @@ use serde::{Deserialize, Serialize};
 
 pub const DESKTOP_PROTOCOL_VERSION: u32 = 1;
 pub const CAPABILITY_COMPUTER_USE_DESKTOP_V1: &str = "computerUseDesktopV1";
+/// Inline image budget for the owned desktop worker, measured after base64 encoding.
+pub const DESKTOP_SCREENSHOT_BASE64_BYTES: usize = 1536 * 1024;
+
+pub fn is_desktop_screenshot_tool(name: &str) -> bool {
+    matches!(
+        name,
+        "mcp__kcoder_computer_use__Screenshot" | "mcp__kcoder_computer_use__Snapshot"
+    )
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]

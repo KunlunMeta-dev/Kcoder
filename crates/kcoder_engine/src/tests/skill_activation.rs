@@ -56,7 +56,7 @@ async fn skill_tool_activation_updates_next_provider_request_and_usage() {
         )
         .unwrap();
     let requests = Arc::new(Mutex::new(Vec::new()));
-    let settings = Settings::default();
+    let settings = crate::test_support::engine_builder::fixture_settings();
     let engine = QueryEngine::new(
         Arc::new(SkillActivationProvider {
             emitted: AtomicBool::new(false),
@@ -145,7 +145,7 @@ async fn core_skill_pressure_using_superpowers_injected_for_spec_project() {
         )
         .unwrap();
     let systems = Arc::new(Mutex::new(Vec::new()));
-    let settings = Settings::default();
+    let settings = crate::test_support::engine_builder::fixture_settings();
     let engine = QueryEngine::new(
         Arc::new(SystemPromptRecordingProvider {
             systems: Arc::clone(&systems),
@@ -209,7 +209,7 @@ async fn core_skill_pressure_tdd_gate_injects_skill_after_denied_source_write() 
         )
         .unwrap();
     let systems = Arc::new(Mutex::new(Vec::new()));
-    let settings = Settings::default();
+    let settings = crate::test_support::engine_builder::fixture_settings();
     let engine = QueryEngine::new(
         Arc::new(SystemPromptRecordingProvider {
             systems: Arc::clone(&systems),
@@ -287,7 +287,7 @@ async fn luna_mode_disables_spec_driven_tdd_gate() {
     let tmp = tempfile::tempdir().unwrap();
     std::fs::create_dir_all(tmp.path().join(".kcoder").join("specs")).unwrap();
     std::fs::create_dir_all(tmp.path().join("src")).unwrap();
-    let settings = Settings::default();
+    let settings = crate::test_support::engine_builder::fixture_settings();
     let engine = QueryEngine::new(
         Arc::new(EmptyProvider),
         AppState::new(tmp.path()),
@@ -355,7 +355,7 @@ async fn tdd_preferred_warns_without_denying_source_write() {
         )
         .unwrap();
 
-    let settings = Settings::default();
+    let settings = crate::test_support::engine_builder::fixture_settings();
     let engine = QueryEngine::new(
         Arc::new(SystemPromptRecordingProvider {
             systems: Arc::new(Mutex::new(Vec::new())),
@@ -416,7 +416,7 @@ async fn core_skill_pressure_verification_skill_survives_rushed_completion_promp
         )
         .unwrap();
     let requests = Arc::new(Mutex::new(Vec::new()));
-    let settings = Settings::default();
+    let settings = crate::test_support::engine_builder::fixture_settings();
     let engine = QueryEngine::new(
         Arc::new(SkillActivationProvider {
             emitted: AtomicBool::new(false),
@@ -488,7 +488,7 @@ fn engine_auto_activates_superpowers_root_in_spec_project() {
         )
         .unwrap();
 
-    let settings = Settings::default();
+    let settings = crate::test_support::engine_builder::fixture_settings();
     let engine = QueryEngine::new(
         Arc::new(EmptyProvider),
         AppState::new(tmp.path()),
@@ -528,7 +528,7 @@ fn luna_auto_activates_superpowers_root_without_spec_project() {
         )
         .unwrap();
 
-    let settings = Settings::default();
+    let settings = crate::test_support::engine_builder::fixture_settings();
     let engine = QueryEngine::new(
         Arc::new(EmptyProvider),
         AppState::new(tmp.path()),
@@ -566,7 +566,7 @@ async fn write_attempt_auto_activates_tdd_skill_before_gate_denial() {
         )
         .unwrap();
 
-    let settings = Settings::default();
+    let settings = crate::test_support::engine_builder::fixture_settings();
     let engine = QueryEngine::new(
         Arc::new(EmptyProvider),
         AppState::new(tmp.path()),

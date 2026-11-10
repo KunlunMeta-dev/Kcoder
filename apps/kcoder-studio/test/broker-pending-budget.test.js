@@ -76,7 +76,7 @@ test('stdin failure rolls back admission and claims', t => {
 test('unwritten initialize does not leave an orphan handshake gate', t => {
   const f = fixture(); t.after(() => f.child.emit('close', 0)); const client = f.owner();
   f.child.stdin.cork(); f.child.stdin.write(Buffer.alloc(2 * 1024 * 1024));
-  assert.throws(() => f.request(client, 1, 'initialize', {}), /queue is full/);
+  assert.throws(() => f.request(client, 1, 'initialize', { protocolVersion: '2026-07-27', clientInfo: { name: 'pending-budget-fixture', version: '1' } }), /queue is full/);
   assert.equal(f.broker.initializePending, null);
   assert.equal(f.broker.pending.size, 0);
   assert.equal(f.broker.requestLoad.total.inFlight, 0);

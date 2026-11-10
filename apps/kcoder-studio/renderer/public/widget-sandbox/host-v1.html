@@ -1,0 +1,611 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-H9NX150QbaLiktyaZQEL+mR0T5nrXyiPNGdXFj2ne9k=' 'sha256-SERKgtTty1vsDxll+qzd4Y2cF9swY9BCq62i9wXJ9Uo=' 'sha256-8glLv2FBs1lyLE/kVOtsSw8OQswQzHr5IfwVj864ZTk=' 'sha256-Jc0CrkhsxQY+AhWk5M+xXeg3AMh6xIusTVfcaq8+u4k='; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; font-src 'none'; frame-src 'none'; object-src 'none'; form-action 'none'; base-uri 'none'"><title>KCoder widget sandbox</title><style>* { box-sizing: border-box; }
+html { color-scheme: light dark; }
+body { margin: 0; color: var(--foreground, CanvasText); background: var(--background, Canvas); font-family: var(--font-ui, system-ui); font-size: var(--text-base, medium); line-height: 1.5; }
+#widget-root { padding: 12px; min-width: 0; }
+svg { display: block; max-width: 100%; height: auto; }
+img { max-width: 100%; height: auto; }
+figure, p { margin: 0; }
+figure + figure, p + p { margin-top: 12px; }
+h1, h2, h3, h4, h5, h6 { font-size: inherit; font-weight: 500; margin: 0; }
+button, input, select { font: inherit; color: inherit; }
+input[type=range] { width: 100%; accent-color: var(--primary, Highlight); }
+input[type=number] { max-width: 7em; text-align: right; background: transparent; border: 1px solid var(--border, GrayText); border-radius: 4px; }
+:focus-visible { outline: 2px solid var(--primary, Highlight); outline-offset: 2px; }
+[data-kcoder-prompt] { cursor: pointer; }
+.widget-controls, .widget-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.widget-controls { grid-template-columns: repeat(auto-fit, minmax(min(100%, 14em), 1fr)); }
+.widget-legend { display: flex; flex-wrap: wrap; gap: 12px; }
+.widget-swatch { display: inline-block; width: 10px; height: 10px; margin-inline-end: 6px; border-radius: 2px; }
+.widget-label-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.widget-stats { margin: 16px 0; }
+.widget-stats > div { padding: 12px; border-radius: 8px; background: color-mix(in srgb, var(--foreground, CanvasText) 5%, transparent); }
+.widget-stats output { display: block; font-size: calc(var(--text-base, 1em) * 1.5); margin-top: 4px; font-weight: 500; }
+.widget-muted, figcaption { color: var(--muted, GrayText); }
+.widget-chart-canvas { position: relative; min-height: 280px; height: 320px; }
+details { margin-top: 12px; }
+summary { cursor: pointer; color: var(--muted, GrayText); }
+table { border-collapse: collapse; min-width: 100%; text-align: left; margin-top: 8px; }
+td, th { padding: 4px 8px; border-bottom: 1px solid var(--border, GrayText); }
+th { font-weight: 500; }
+@media(max-width: 480px) { .widget-controls, .widget-stats { grid-template-columns: 1fr; } .widget-chart-canvas { min-height: 240px; height: 280px; } input[type=range] { min-height: 44px; } }
+</style></head><body><main id="widget-root"></main><script>(() => { function createWidgetDrawingReadiness({ root, Chart, required, locale = () => 'en', timeoutMs = 2000 }) {
+  const samples = new WeakMap()
+  const labels = new WeakMap()
+  const getChart = Chart?.getChart?.bind(Chart)
+  const getContext = HTMLCanvasElement.prototype.getContext
+  const rect = Element.prototype.getBoundingClientRect
+  const width = Object.getOwnPropertyDescriptor(HTMLCanvasElement.prototype, 'width').get
+  const height = Object.getOwnPropertyDescriptor(HTMLCanvasElement.prototype, 'height').get
+  const requestFrame = requestAnimationFrame
+  const cancelFrame = cancelAnimationFrame
+  const schedule = setTimeout
+  const unschedule = clearTimeout
+  const now = performance.now.bind(performance)
+
+  const hasVisibleValues = chart => chart.data.datasets.some((dataset, index) => {
+    if (chart.isDatasetVisible?.(index) === false) return false
+    const meta = chart.getDatasetMeta(index)
+    const axis = meta.vScale?.axis
+    return (meta._parsed ?? dataset.data).some((point, pointIndex) => {
+      if (meta.data?.[pointIndex]?.skip === true || point == null) return false
+      if (typeof point === 'number') return Number.isFinite(point)
+      if (axis) return typeof point[axis] === 'number' && Number.isFinite(point[axis])
+      return typeof point.x === 'number' && Number.isFinite(point.x) && typeof point.y === 'number' && Number.isFinite(point.y)
+    })
+  })
+  const painted = canvas => {
+    let sample = samples.get(canvas)
+    if (!sample) {
+      sample = document.createElement('canvas'); sample.width = 64; sample.height = 64
+      samples.set(canvas, sample)
+    }
+    try {
+      const context = getContext.call(sample, '2d', { willReadFrequently: true })
+      context.clearRect(0, 0, 64, 64); context.drawImage(canvas, 0, 0, 64, 64)
+      const pixels = context.getImageData(0, 0, 64, 64).data
+      for (let alpha = 3; alpha < pixels.length; alpha += 4) if (pixels[alpha] > 0) return true
+    } catch { /* An unreadable bitmap is unconfirmed, not a fabricated drawing failure. */ }
+    return false
+  }
+  const confirmed = () => {
+    if (!required) return true
+    const canvases = [...root.querySelectorAll('canvas')]
+    if (!canvases.length || !getChart) return false
+    return canvases.every(canvas => {
+      const box = rect.call(canvas)
+      const chart = getChart(canvas)
+      if (!canvas.isConnected || width.call(canvas) <= 0 || height.call(canvas) <= 0 || box.width <= 0 || box.height <= 0 || !chart || chart.canvas !== canvas) return false
+      if (hasVisibleValues(chart)) return painted(canvas)
+      if (!labels.has(canvas)) {
+        const label = document.createElement('p'); label.setAttribute('role', 'status'); label.dataset.widgetEmptyChart = 'true'
+        label.textContent = locale().startsWith('zh') ? '暂无可显示的图表数据' : 'No chart data to display'
+        ;(canvas.closest('figure') ?? canvas.parentElement ?? root).append(label)
+        labels.set(canvas, label)
+      }
+      return true
+    })
+  }
+  const frameOrTimeout = () => new Promise(resolve => {
+    const frame = requestFrame(() => { unschedule(timer); resolve(true) })
+    const timer = schedule(() => { cancelFrame(frame); resolve(false) }, 50)
+  })
+  return {
+    async waitUntilReady() {
+      const started = now()
+      while (now() - started < timeoutMs) {
+        if (await frameOrTimeout()) {
+          try { if (confirmed()) return true } catch { /* Binding and geometry can still be pending. */ }
+        }
+      }
+      return false
+    },
+  }
+};
+/* This script runs only inside the opaque-origin widget document. */
+/* global createWidgetDrawingReadiness */
+(() => {
+  'use strict'
+  const root = document.getElementById('widget-root')
+  const limits = { nodes: 4000, points: 10000, state: 16384, source: 1048576 }
+  const blockedTags = new Set(['iframe', 'frame', 'frameset', 'object', 'embed', 'base', 'link', 'meta', 'form', 'input', 'textarea', 'select', 'button', 'audio', 'video', 'source', 'track', 'portal', 'foreignobject'])
+  const allowedTags = new Set('html body main section article div span p br hr h1 h2 h3 h4 h5 h6 ul ol li dl dt dd strong b em i small pre code blockquote table caption thead tbody tfoot tr th td details summary figure figcaption a img style script svg title desc g path rect circle ellipse line polyline polygon text tspan defs marker lineargradient radialgradient stop clippath mask symbol use'.split(' '))
+  const allowedAttrs = new Set('id class style role aria-label aria-labelledby aria-describedby aria-hidden tabindex viewbox xmlns x y x1 x2 y1 y2 width height d points rx ry r cx cy fill stroke stroke-width stroke-linecap stroke-linejoin stroke-dasharray opacity fill-opacity stroke-opacity transform text-anchor dominant-baseline font-weight gradientunits gradienttransform offset stop-color stop-opacity marker-start marker-end markerwidth markerheight refx refy orient clip-path mask preserveaspectratio colspan rowspan scope alt src href type data-kcoder-chart data-kcoder-map data-kcoder-recipe data-kcoder-config data-kcoder-prompt'.split(' '))
+  let channel = null
+  let charts = []
+  let localeViews = []
+  let savedState = {}
+  let renderRevision = 0
+  let lastResize = 0
+  let queuedResize = false
+  const send = (type, payload = {}) => {
+    if (!channel) return
+    parent.postMessage({ protocol: 'kcoder-widget', version: 1, token: channel.token, widgetId: channel.widgetId, revision: channel.revision, type, payload }, channel.parentOrigin)
+  }
+  const fail = error => send('error', { message: String(error?.message || error).slice(0, 2048) })
+  const safeCss = value => !/(?:url\s*\(|@import|expression\s*\(|javascript:|behavior\s*:|-moz-binding|image-set\s*\()/i.test(value)
+  const encodeBytes = value => new TextEncoder().encode(value).byteLength
+  const validateState = value => value && typeof value === 'object' && !Array.isArray(value) && encodeBytes(JSON.stringify(value)) <= limits.state
+  const saveState = value => {
+    if (!validateState(value)) return
+    savedState = value
+    send('state', { state: value })
+  }
+
+  function sanitize(source) {
+    if (encodeBytes(source) > limits.source) throw new Error('widget_quota: source exceeds 1 MiB')
+    const parsed = new DOMParser().parseFromString(`<body>${source}</body>`, 'text/html')
+    const nodes = [...parsed.querySelectorAll('*')]
+    if (nodes.length > limits.nodes) throw new Error('widget_quota: too many DOM nodes')
+    for (const element of nodes) {
+      const tag = element.localName.toLowerCase()
+      if (!allowedTags.has(tag) || blockedTags.has(tag)) { element.remove(); continue }
+      if (tag === 'script' && !(element.getAttribute('type') === 'application/json' &&
+        (element.hasAttribute('data-kcoder-chart') || element.hasAttribute('data-kcoder-map') || element.hasAttribute('data-kcoder-config')))) {
+        throw new Error('invalid_widget: managed content cannot execute scripts')
+      }
+      if (tag === 'style' && !safeCss(element.textContent)) throw new Error('resource_blocked: external CSS resources are unavailable')
+      for (const attribute of [...element.attributes]) {
+        const name = attribute.name.toLowerCase()
+        if (!allowedAttrs.has(name) || name.startsWith('on')) { element.removeAttribute(attribute.name); continue }
+        if (name === 'style' && !safeCss(attribute.value)) { element.removeAttribute(attribute.name); continue }
+        if (name === 'href' && !/^#[A-Za-z][\w:.-]*$/.test(attribute.value)) element.removeAttribute(attribute.name)
+        if (name === 'src' && !/^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(attribute.value)) element.removeAttribute(attribute.name)
+        if (['fill', 'stroke', 'clip-path', 'mask', 'marker-start', 'marker-end'].includes(name) && /url\s*\(/i.test(attribute.value) && !/^url\(#[A-Za-z][\w:.-]*\)$/.test(attribute.value)) element.removeAttribute(attribute.name)
+      }
+    }
+    return parsed.body
+  }
+
+  function applyTheme(theme) {
+    if (!theme || typeof theme !== 'object') return
+    document.documentElement.lang = theme.locale || 'en'
+    document.documentElement.style.colorScheme = theme.colorScheme === 'dark' ? 'dark' : 'light'
+    document.documentElement.dataset.reducedMotion = String(Boolean(theme.reducedMotion))
+    const mappings = { foreground: '--foreground', background: '--background', muted: '--muted', border: '--border', primary: '--primary', success: '--success', destructive: '--destructive', fontFamily: '--font-ui', fontSize: '--text-base' }
+    for (const [key, variable] of Object.entries(mappings)) {
+      if (typeof theme[key] === 'string' && theme[key].length < 256 && safeCss(theme[key])) document.documentElement.style.setProperty(variable, theme[key])
+    }
+    if (globalThis.Chart) {
+      globalThis.Chart.defaults.color = theme.foreground
+      globalThis.Chart.defaults.borderColor = theme.border
+      globalThis.Chart.defaults.font.family = theme.fontFamily
+      globalThis.Chart.defaults.font.size = parseFloat(theme.fontSize) || 14
+      for (const chart of charts) { chart.options.animation = false; chart.update('none') }
+    }
+    for (const localize of localeViews) localize()
+  }
+
+  function loadLibraries(sources) {
+    if (!sources || typeof sources !== 'object') return
+    for (const id of ['chartjs', 'd3', 'topojson']) {
+      if (typeof sources[id] !== 'string' || document.querySelector(`script[data-library="${id}"]`)) continue
+      const script = document.createElement('script')
+      script.dataset.library = id
+      script.textContent = sources[id]
+      document.head.append(script)
+    }
+  }
+
+  function chartTable(config, title) {
+    const details = document.createElement('details')
+    const summary = document.createElement('summary')
+    summary.textContent = channel.theme.locale.startsWith('zh') ? '查看图表数据' : 'View chart data'
+    details.append(summary)
+    const table = document.createElement('table')
+    table.setAttribute('aria-label', title)
+    const head = table.createTHead().insertRow()
+    for (const label of ['', ...config.data.datasets.map(item => item.label || '')]) { const th = document.createElement('th'); th.textContent = label; head.append(th) }
+    const labels = config.data.labels || config.data.datasets[0]?.data.map((_, i) => String(i + 1)) || []
+    const body = table.createTBody()
+    labels.slice(0, 100).forEach((label, index) => {
+      const row = body.insertRow()
+      row.insertCell().textContent = String(label)
+      for (const dataset of config.data.datasets) row.insertCell().textContent = JSON.stringify(dataset.data[index] ?? null)
+    })
+    if (labels.length > 100) {
+      const caption = document.createElement('caption')
+      caption.textContent = channel.theme.locale.startsWith('zh') ? `显示前100行，共${labels.length}行` : `Showing 100 of ${labels.length} rows`
+      table.prepend(caption)
+    }
+    details.append(table)
+    localeViews.push(() => {
+      summary.textContent = channel.theme.locale.startsWith('zh') ? '查看图表数据' : 'View chart data'
+      const caption = table.querySelector('caption')
+      if (caption) caption.textContent = channel.theme.locale.startsWith('zh') ? `显示前100行，共${labels.length}行` : `Showing 100 of ${labels.length} rows`
+    })
+    return details
+  }
+
+  function chartDeclarationError(path, reason, message, quota = false) {
+    throw new Error(`${quota ? 'widget_quota' : 'invalid_widget'}: ${path} (${reason}): ${message}`)
+  }
+
+  function chartObject(value) {
+    return value !== null && typeof value === 'object' && !Array.isArray(value)
+  }
+
+  function checkFiniteChartValue(value, path) {
+    const pending = [[value, path]]
+    while (pending.length) {
+      const [item, pointer] = pending.pop()
+      if (typeof item === 'number' && !Number.isFinite(item)) {
+        chartDeclarationError(pointer, 'nonfinite_chart_value', 'expected a finite number')
+      }
+      if (item !== null && typeof item === 'object') {
+        for (const [key, nested] of Object.entries(item)) {
+          pending.push([nested, `${pointer}/${key.replace(/~/g, '~0').replace(/\//g, '~1')}`])
+        }
+      }
+    }
+  }
+
+  function parseChartDeclaration(declaration) {
+    let config
+    try { config = JSON.parse(declaration.textContent) }
+    catch { chartDeclarationError('/', 'invalid_chart_json', 'expected valid JSON for a Chart.js configuration') }
+    if (!chartObject(config)) chartDeclarationError('/', 'invalid_chart_config', 'expected a Chart.js configuration object')
+    const types = new Set(['bar', 'line', 'pie', 'doughnut', 'scatter', 'radar', 'bubble', 'polarArea'])
+    if (config.type !== undefined && !types.has(config.type)) chartDeclarationError('/type', 'unsupported_chart_type', 'expected bar, line, pie, doughnut, scatter, radar, bubble or polarArea')
+    if (!chartObject(config.data)) chartDeclarationError('/data', 'invalid_chart_data', 'expected an object with a datasets array; pass the Chart.js configuration directly')
+    if (!Array.isArray(config.data.datasets)) chartDeclarationError('/data/datasets', 'invalid_chart_datasets', 'expected an array')
+    if (config.data.datasets.length > 32) chartDeclarationError('/data/datasets', 'dataset_limit', 'at most 32 datasets are allowed', true)
+    if (config.data.labels !== undefined && config.data.labels !== null && !Array.isArray(config.data.labels)) chartDeclarationError('/data/labels', 'invalid_chart_labels', 'expected an array or null')
+    if (config.options !== undefined && config.options !== null && !chartObject(config.options)) chartDeclarationError('/options', 'invalid_chart_options', 'expected an object or null')
+    let points = 0
+    for (const [index, dataset] of config.data.datasets.entries()) {
+      const path = `/data/datasets/${index}`
+      if (!chartObject(dataset)) chartDeclarationError(path, 'invalid_chart_dataset', 'expected a dataset object')
+      if (dataset.type !== undefined && !types.has(dataset.type)) chartDeclarationError(`${path}/type`, 'unsupported_dataset_type', 'expected a supported Chart.js dataset type')
+      if (!types.has(dataset.type ?? config.type)) chartDeclarationError(`${path}/type`, 'missing_chart_type', 'set a supported dataset.type or top-level type')
+      if (!Array.isArray(dataset.data)) chartDeclarationError(`${path}/data`, 'invalid_dataset_data', 'expected an array of numbers, nulls, tuples or point objects')
+      points += dataset.data.length
+      if (points > limits.points) chartDeclarationError('/data/datasets', 'point_limit', 'at most 10000 points are allowed per chart', true)
+      dataset.data.forEach((value, point) => {
+        const pointer = `${path}/data/${point}`
+        if (value !== null && typeof value !== 'number' && typeof value !== 'object') chartDeclarationError(pointer, 'invalid_chart_point', 'expected a number, null, tuple or point object')
+        checkFiniteChartValue(value, pointer)
+      })
+    }
+    checkFiniteChartValue(config.data.labels, '/data/labels')
+    return config
+  }
+
+  function renderChart(declaration) {
+    if (!globalThis.Chart) throw new Error('resource_blocked: Chart.js is unavailable')
+    const config = parseChartDeclaration(declaration)
+    const section = document.createElement('figure')
+    section.className = 'widget-chart'
+    const canvas = document.createElement('canvas')
+    const title = declaration.getAttribute('aria-label') || channel.title
+    canvas.setAttribute('role', 'img')
+    canvas.setAttribute('aria-label', title)
+    const box = document.createElement('div')
+    box.className = 'widget-chart-canvas'
+    box.append(canvas)
+    section.append(box, chartTable(config, title))
+    declaration.replaceWith(section)
+    config.options = { ...config.options, responsive: true, maintainAspectRatio: false, animation: false }
+    const chart = new globalThis.Chart(canvas, config)
+    charts.push(chart)
+  }
+
+  function renderCompound(element) {
+    let zh = channel.theme.locale.startsWith('zh')
+    const initial = element.querySelector('script[data-kcoder-config]')
+    const config = initial ? JSON.parse(initial.textContent) : {}
+    if (config.currency !== undefined && (typeof config.currency !== 'string' || !/^[A-Z]{3}$/.test(config.currency))) throw new Error('invalid_widget: compound-interest.currency must be an ISO currency code')
+    if (config.unit !== undefined && (typeof config.unit !== 'string' || config.unit.length > 16)) throw new Error('invalid_widget: compound-interest.unit is invalid')
+    let unit = config.unit || (config.currency === 'CNY' ? (zh ? '元' : 'CNY') : config.currency || '')
+    const stateKey = element.id || 'compound-interest'
+    const state = savedState[stateKey] || config
+    const fields = [
+      { key: 'principal', label: `${zh ? '初始本金' : 'Initial principal'}${unit ? ` (${unit})` : ''}`, min: 0, max: 10000000, step: 10000, value: 560000 },
+      { key: 'annualRate', label: zh ? '年化收益率 %' : 'Annual rate %', min: -100, max: 100, step: 0.1, value: 8.5 },
+      { key: 'years', label: zh ? '投资年限' : 'Years', min: 0, max: 100, step: 1, value: 7 },
+    ]
+    element.replaceChildren()
+    element.classList.add('widget-compound')
+    const inputs = {}
+    const inputLabels = {}
+    const controls = document.createElement('div')
+    controls.className = 'widget-controls'
+    for (const field of fields) {
+      const group = document.createElement('div')
+      const label = document.createElement('label')
+      const input = document.createElement('input')
+      const numeric = document.createElement('input')
+      const id = `compound-${stateKey}-${field.key}`
+      input.type = 'range'; input.id = id; input.min = String(field.min); input.max = String(field.max); input.step = String(field.step)
+      numeric.type = 'number'; numeric.min = input.min; numeric.max = input.max; numeric.step = input.step
+      numeric.setAttribute('aria-label', field.label)
+      const requested = state[field.key] ?? field.value
+      if (typeof requested !== 'number' || !Number.isFinite(requested) || requested < field.min || requested > field.max || (field.key === 'years' && !Number.isInteger(requested))) throw new Error(`invalid_widget: compound-interest.${field.key} is outside its numeric range`)
+      input.value = numeric.value = String(requested)
+      label.htmlFor = id; label.textContent = field.label
+      const row = document.createElement('div'); row.className = 'widget-label-row'; row.append(label, numeric)
+      group.append(row, input); controls.append(group)
+      inputs[field.key] = input
+      inputLabels[field.key] = { label, numeric }
+      input.addEventListener('input', () => { numeric.value = input.value; update() })
+      numeric.addEventListener('change', () => { input.value = numeric.value; numeric.value = input.value; update() })
+    }
+    const stats = document.createElement('div'); stats.className = 'widget-stats'
+    const rows = [zh ? '期末总资产' : 'Future value', zh ? '累计收益' : 'Earnings', zh ? '收益占比' : 'Earnings share']
+    const outputs = rows.map(label => { const card = document.createElement('div'); const text = document.createElement('div'); text.textContent = label; const output = document.createElement('output'); card.append(text, output); stats.append(card); return output })
+    const plot = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); plot.setAttribute('viewBox', '0 0 700 180'); plot.setAttribute('role', 'img'); plot.setAttribute('aria-label', zh ? '本金与复利收益' : 'Principal and compound earnings')
+    const title = document.createElementNS(plot.namespaceURI, 'title'); title.textContent = plot.getAttribute('aria-label'); plot.append(title)
+    const legend = document.createElement('p'); legend.className = 'widget-legend'
+    for (const [label, color] of [[zh ? '本金' : 'Principal', 'var(--primary)'], [zh ? '复利收益' : 'Compound earnings', 'var(--destructive)']]) {
+      const entry = document.createElement('span'); const swatch = document.createElement('span'); swatch.className = 'widget-swatch'; swatch.style.background = color; entry.append(swatch, document.createTextNode(label)); legend.append(entry)
+    }
+    const summary = document.createElement('p'); summary.className = 'widget-muted'
+    element.append(controls, stats, legend, plot, summary)
+    function update() {
+      const principal = Number(inputs.principal.value), ratePercent = Number(inputs.annualRate.value), years = Number(inputs.years.value)
+      const rate = ratePercent / 100
+      const total = principal * (1 + rate) ** years
+      const earnings = total - principal
+      const formatter = new Intl.NumberFormat(channel.theme.locale, { maximumFractionDigits: 0 })
+      const money = value => config.currency === 'CNY' && zh ? `${new Intl.NumberFormat(channel.theme.locale, { notation: 'compact', maximumFractionDigits: 2 }).format(value)}元` : `${formatter.format(value)}${unit ? ` ${unit}` : ''}`
+      outputs[0].value = money(total); outputs[1].value = money(earnings); outputs[2].value = `${total === 0 ? 0 : Math.round(earnings / total * 100)}%`
+      outputs[1].style.color = earnings < 0 ? 'var(--success)' : 'var(--destructive)'
+      legend.querySelectorAll('.widget-swatch')[1].style.background = earnings < 0 ? 'var(--success)' : 'var(--destructive)'
+      outputs[0].dataset.value = String(total); outputs[1].dataset.value = String(earnings)
+      plot.querySelectorAll('rect,line').forEach(node => node.remove())
+      const count = Math.max(1, Math.min(100, years))
+      const max = Math.max(principal, total, 1)
+      const baseline = earnings < 0 ? 90 : 170
+      const scale = (earnings < 0 ? 80 : 160) / max
+      const zeroLine = document.createElementNS(plot.namespaceURI, 'line'); zeroLine.setAttribute('x1', '0'); zeroLine.setAttribute('x2', '700'); zeroLine.setAttribute('y1', String(baseline)); zeroLine.setAttribute('y2', String(baseline)); zeroLine.setAttribute('stroke', 'var(--border)'); plot.append(zeroLine)
+      for (let i = 1; i <= count; i += 1) {
+        const value = principal * (1 + rate) ** (years ? i : 0)
+        const width = 700 / count
+        const baseHeight = principal * scale
+        const gainHeight = (value - principal) * scale
+        const base = document.createElementNS(plot.namespaceURI, 'rect'); base.setAttribute('x', String((i - 1) * width)); base.setAttribute('y', String(baseline - baseHeight)); base.setAttribute('width', String(Math.max(1, width - 3))); base.setAttribute('height', String(baseHeight)); base.setAttribute('fill', 'var(--primary)'); plot.append(base)
+        const gain = document.createElementNS(plot.namespaceURI, 'rect'); gain.setAttribute('x', base.getAttribute('x')); gain.setAttribute('y', String(gainHeight >= 0 ? baseline - baseHeight - gainHeight : baseline)); gain.setAttribute('width', base.getAttribute('width')); gain.setAttribute('height', String(Math.abs(gainHeight))); gain.setAttribute('fill', gainHeight < 0 ? 'var(--success)' : 'var(--destructive)'); plot.append(gain)
+      }
+      summary.textContent = `${years} ${zh ? '年' : 'years'} · ${ratePercent}% · ${zh ? '收益' : 'earnings'} ${money(earnings)}`
+      saveState({ ...savedState, [stateKey]: { principal, annualRate: ratePercent, years } })
+      resize()
+    }
+    const localize = () => {
+      zh = channel.theme.locale.startsWith('zh')
+      unit = config.unit || (config.currency === 'CNY' ? (zh ? '元' : 'CNY') : config.currency || '')
+      const labels = [`${zh ? '初始本金' : 'Initial principal'}${unit ? ` (${unit})` : ''}`, zh ? '年化收益率 %' : 'Annual rate %', zh ? '投资年限' : 'Years']
+      fields.forEach((field, index) => { inputLabels[field.key].label.textContent = labels[index]; inputLabels[field.key].numeric.setAttribute('aria-label', labels[index]) })
+      const statLabels = [zh ? '期末总资产' : 'Future value', zh ? '累计收益' : 'Earnings', zh ? '收益占比' : 'Earnings share']
+      outputs.forEach((output, index) => { output.parentElement.firstElementChild.textContent = statLabels[index] })
+      legend.children[0].lastChild.textContent = zh ? '本金' : 'Principal'
+      legend.children[1].lastChild.textContent = zh ? '复利收益' : 'Compound earnings'
+      title.textContent = zh ? '本金与复利收益' : 'Principal and compound earnings'; plot.setAttribute('aria-label', title.textContent)
+      update()
+    }
+    localeViews.push(localize); localize()
+  }
+
+  function renderMap(declaration, topology) {
+    if (!globalThis.d3 || !globalThis.topojson || !topology?.objects?.countries) throw new Error('resource_blocked: verified world topology is unavailable')
+    let spec
+    try { spec = JSON.parse(declaration.textContent || '{}') } catch { throw new Error('invalid_widget: / (invalid_map_json) expected complete JSON') }
+    if (!spec || typeof spec !== 'object' || Array.isArray(spec)) throw new Error('invalid_widget: / (invalid_map_config) expected an object')
+    if (spec.unit !== undefined && (typeof spec.unit !== 'string' || spec.unit.length > 64)) throw new Error('invalid_widget: map unit must be a short string')
+    const markers = spec.markers ?? []
+    if (!Array.isArray(markers) || markers.length > 100) throw new Error('invalid_widget: map markers must be an array of at most 100 real coordinates')
+    markers.forEach((marker, index) => {
+      if (!marker || typeof marker !== 'object' || typeof marker.label !== 'string' || !marker.label.trim() || marker.label.length > 80 ||
+        !Number.isFinite(marker.longitude) || marker.longitude < -180 || marker.longitude > 180 || !Number.isFinite(marker.latitude) || marker.latitude < -90 || marker.latitude > 90) {
+        throw new Error(`invalid_widget: map markers[${index}] requires a label, longitude [-180,180] and latitude [-90,90]`)
+      }
+    })
+    const zh = channel.theme.locale.startsWith('zh')
+    const number = new Intl.NumberFormat(channel.theme.locale, { maximumFractionDigits: 3 })
+    const sourceValues = spec.values === undefined ? {} : spec.values
+    if (!sourceValues || typeof sourceValues !== 'object' || Array.isArray(sourceValues)) throw new Error('invalid_widget: /values (invalid_map_values) expected a country-ID object')
+    if (Object.keys(sourceValues).length > 300) throw new Error('widget_quota: /values (country_limit) at most 300 entries')
+    const countryId = id => /^\d{1,3}$/.test(String(id)) ? String(id).padStart(3, '0') : null
+    const features = globalThis.topojson.feature(topology, topology.objects.countries)
+    const countryIds = new Set(features.features.map(feature => countryId(feature.id)).filter(id => id !== null))
+    const values = new Map()
+    for (const [rawId, value] of Object.entries(sourceValues)) {
+      const pointer = `/values/${rawId.replace(/~/g, '~0').replace(/\//g, '~1')}`
+      const id = countryId(rawId)
+      if (id === null) throw new Error(`invalid_widget: ${pointer} (invalid_country_id) expected 1–3 ASCII digits, for example 076 or 76 for Brazil`)
+      if (!countryIds.has(id)) throw new Error(`invalid_widget: ${pointer} (unknown_country_id) unknown ISO numeric country ID ${rawId}; normalized ${id} is absent from the bundled topology`)
+      if (values.has(id)) throw new Error(`invalid_widget: ${pointer} (duplicate_country_id) country ${id} is already declared; use one key per country`)
+      if (typeof value !== 'number' || !Number.isFinite(value)) throw new Error(`invalid_widget: ${pointer} (invalid_country_value) expected a finite number`)
+      values.set(id, value)
+    }
+    const extent = globalThis.d3.extent([...values.values()])
+    const projection = globalThis.d3.geoNaturalEarth1().fitExtent([[8, 8], [692, 342]], features)
+    const path = globalThis.d3.geoPath(projection)
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); svg.setAttribute('viewBox', '0 0 700 350'); svg.setAttribute('role', 'img'); svg.setAttribute('aria-label', channel.title)
+    svg.setAttribute('tabindex', '0')
+    svg.style.touchAction = 'none'
+    const title = document.createElementNS(svg.namespaceURI, 'title'); title.textContent = channel.title; svg.append(title)
+    const hint = document.createElementNS(svg.namespaceURI, 'desc'); hint.textContent = zh ? '拖动或方向键平移；加号/减号缩放，0复位。滚轮保持页面滚动。' : 'Drag or use arrow keys to pan; plus/minus to zoom, 0 to reset. The wheel keeps scrolling the page.'; svg.append(hint)
+    const plot = document.createElementNS(svg.namespaceURI, 'g'); plot.dataset.mapPlot = 'true'; svg.append(plot)
+    for (const feature of features.features) {
+      const region = document.createElementNS(svg.namespaceURI, 'path'); region.setAttribute('d', path(feature) || ''); region.setAttribute('fill', values.has(countryId(feature.id)) ? 'var(--primary)' : 'var(--border)'); region.setAttribute('stroke', 'var(--background)'); region.setAttribute('stroke-width', '0.5')
+      if (values.has(countryId(feature.id))) region.setAttribute('fill-opacity', String(extent[1] === extent[0] ? 1 : 0.35 + 0.65 * (values.get(countryId(feature.id)) - extent[0]) / (extent[1] - extent[0])))
+      const tip = document.createElementNS(svg.namespaceURI, 'title'); tip.textContent = `${feature.properties.name}: ${values.get(countryId(feature.id)) ?? '—'}${spec.unit || ''}`; region.append(tip); plot.append(region)
+    }
+    for (const marker of markers) {
+      const [x, y] = projection([marker.longitude, marker.latitude])
+      const group = document.createElementNS(svg.namespaceURI, 'g'); group.dataset.mapMarker = marker.label
+      group.dataset.longitude = String(marker.longitude); group.dataset.latitude = String(marker.latitude)
+      const dot = document.createElementNS(svg.namespaceURI, 'circle'); dot.setAttribute('cx', String(x)); dot.setAttribute('cy', String(y)); dot.setAttribute('r', '4'); dot.setAttribute('fill', 'var(--foreground)'); dot.setAttribute('stroke', 'var(--background)'); dot.setAttribute('stroke-width', '1.5')
+      const text = document.createElementNS(svg.namespaceURI, 'text'); text.setAttribute('x', String(x + 7)); text.setAttribute('y', String(y + 4)); text.setAttribute('fill', 'var(--foreground)'); text.setAttribute('stroke', 'var(--background)'); text.setAttribute('stroke-width', '2'); text.style.paintOrder = 'stroke'; text.textContent = marker.label
+      const tip = document.createElementNS(svg.namespaceURI, 'title'); tip.textContent = `${marker.label}: ${number.format(marker.longitude)}, ${number.format(marker.latitude)}`
+      group.append(dot, text, tip); plot.append(group)
+    }
+    const figure = document.createElement('figure'); const caption = document.createElement('figcaption'); caption.textContent = 'Natural Earth · world-atlas 2.0.2 · 1:110m'
+    figure.dataset.kcoderMapView = 'true'
+    const toolbar = document.createElement('div'); toolbar.className = 'widget-legend'; toolbar.setAttribute('role', 'toolbar'); toolbar.setAttribute('aria-label', zh ? '地图视图' : 'Map view')
+    const zoomOutput = document.createElement('output'); zoomOutput.dataset.mapZoom = 'true'; zoomOutput.setAttribute('aria-live', 'polite')
+    const mapStateKey = `map:${declaration.id || root.querySelectorAll('[data-kcoder-map-view]').length}`
+    const zoom = globalThis.d3.zoom().extent([[0, 0], [700, 350]]).translateExtent([[0, 0], [700, 350]]).scaleExtent([1, 4]).duration(0)
+      .filter(event => event.type !== 'wheel' && !event.button)
+      .on('zoom', event => {
+        const { x, y, k } = event.transform
+        plot.setAttribute('transform', event.transform.toString())
+        zoomOutput.textContent = `${Math.round(k * 100)}%`
+        saveState({ ...savedState, [mapStateKey]: { x, y, k } })
+      })
+    const selection = globalThis.d3.select(svg).call(zoom)
+    const button = (label, action, apply) => {
+      const control = document.createElement('button'); control.type = 'button'; control.textContent = label; control.dataset.mapAction = action
+      control.style.padding = '4px 8px'; control.style.minHeight = '44px'; control.style.border = '1px solid var(--border)'; control.style.borderRadius = '6px'; control.style.background = 'var(--background)'
+      control.addEventListener('click', apply); toolbar.append(control)
+    }
+    const reset = () => selection.call(zoom.transform, globalThis.d3.zoomIdentity)
+    button(zh ? '放大' : 'Zoom in', 'in', () => selection.call(zoom.scaleBy, 1.5))
+    button(zh ? '缩小' : 'Zoom out', 'out', () => selection.call(zoom.scaleBy, 1 / 1.5))
+    button(zh ? '复位' : 'Reset', 'reset', reset)
+    toolbar.append(zoomOutput)
+    svg.addEventListener('keydown', event => {
+      if (event.key === '+' || event.key === '=') selection.call(zoom.scaleBy, 1.5)
+      else if (event.key === '-' || event.key === '_') selection.call(zoom.scaleBy, 1 / 1.5)
+      else if (event.key === '0' || event.key === 'Home') reset()
+      else if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) {
+        const scale = globalThis.d3.zoomTransform(svg).k
+        selection.call(zoom.translateBy, event.key === 'ArrowLeft' ? 40 / scale : event.key === 'ArrowRight' ? -40 / scale : 0, event.key === 'ArrowUp' ? 40 / scale : event.key === 'ArrowDown' ? -40 / scale : 0)
+      } else return
+      event.preventDefault()
+    })
+    const previous = savedState[mapStateKey]
+    if (previous && [previous.x, previous.y, previous.k].every(Number.isFinite) && previous.k >= 1 && previous.k <= 4) {
+      const transform = globalThis.d3.zoomIdentity.translate(previous.x, previous.y).scale(previous.k)
+      selection.call(zoom.transform, zoom.constrain()(transform, [[0, 0], [700, 350]], [[0, 0], [700, 350]]))
+    } else reset()
+    const legend = document.createElement('div'); legend.className = 'widget-legend'; legend.dataset.mapLegend = 'true'
+    const legendItem = (label, color, opacity = 1) => {
+      const item = document.createElement('span'); const swatch = document.createElement('span'); swatch.className = 'widget-swatch'; swatch.style.background = color; swatch.style.opacity = String(opacity); swatch.setAttribute('aria-hidden', 'true'); item.append(swatch, document.createTextNode(label)); legend.append(item)
+    }
+    if (values.size) {
+      legendItem(`${number.format(extent[0])}${spec.unit || ''}`, 'var(--primary)', extent[0] === extent[1] ? 1 : 0.35)
+      if (extent[0] !== extent[1]) legendItem(`${number.format(extent[1])}${spec.unit || ''}`, 'var(--primary)')
+    }
+    legendItem(zh ? '无数据' : 'No data', 'var(--border)')
+    if (markers.length) legendItem(zh ? '坐标标注' : 'Coordinate markers', 'var(--foreground)')
+    const details = document.createElement('details'); const summary = document.createElement('summary'); summary.textContent = channel.theme.locale.startsWith('zh') ? '查看地区数据' : 'View region data'
+    const table = document.createElement('table'); table.setAttribute('aria-label', channel.title)
+    const body = table.createTBody()
+    for (const feature of features.features.filter(feature => values.has(countryId(feature.id)))) { const row = body.insertRow(); row.insertCell().textContent = feature.properties.name; row.insertCell().textContent = `${values.get(countryId(feature.id))}${spec.unit || ''}` }
+    for (const marker of markers) { const row = body.insertRow(); row.insertCell().textContent = marker.label; row.insertCell().textContent = `${marker.longitude}, ${marker.latitude}` }
+    details.append(summary, table)
+    localeViews.push(() => {
+      const nextZh = channel.theme.locale.startsWith('zh')
+      const nextNumber = new Intl.NumberFormat(channel.theme.locale, { maximumFractionDigits: 3 })
+      toolbar.setAttribute('aria-label', nextZh ? '地图视图' : 'Map view')
+      toolbar.querySelector('[data-map-action="in"]').textContent = nextZh ? '放大' : 'Zoom in'
+      toolbar.querySelector('[data-map-action="out"]').textContent = nextZh ? '缩小' : 'Zoom out'
+      toolbar.querySelector('[data-map-action="reset"]').textContent = nextZh ? '复位' : 'Reset'
+      hint.textContent = nextZh ? '拖动或方向键平移；加号/减号缩放，0复位。滚轮保持页面滚动。' : 'Drag or use arrow keys to pan; plus/minus to zoom, 0 to reset. The wheel keeps scrolling the page.'
+      summary.textContent = nextZh ? '查看地区数据' : 'View region data'
+      legend.replaceChildren()
+      if (values.size) { legendItem(`${nextNumber.format(extent[0])}${spec.unit || ''}`, 'var(--primary)', extent[0] === extent[1] ? 1 : 0.35); if (extent[0] !== extent[1]) legendItem(`${nextNumber.format(extent[1])}${spec.unit || ''}`, 'var(--primary)') }
+      legendItem(nextZh ? '无数据' : 'No data', 'var(--border)')
+      if (markers.length) legendItem(nextZh ? '坐标标注' : 'Coordinate markers', 'var(--foreground)')
+    })
+    figure.append(toolbar, svg, legend, caption, details); declaration.replaceWith(figure)
+  }
+
+  function wirePrompts() {
+    for (const node of root.querySelectorAll('[data-kcoder-prompt]')) {
+      const prompt = node.getAttribute('data-kcoder-prompt')
+      if (!prompt || prompt.length > 4000) continue
+      node.setAttribute('tabindex', '0'); node.setAttribute('role', 'button')
+      const request = () => send('sendPrompt', { text: prompt })
+      node.addEventListener('click', request)
+      node.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); request() } })
+    }
+  }
+
+  function wireAnimationControls() {
+    if (![...root.querySelectorAll('style')].some(style => /@(?:-webkit-)?keyframes\s+[\w-]+/i.test(style.textContent))) return
+    const stateKey = 'animation:playback'
+    let userPaused = savedState[stateKey]?.paused === true
+    const style = document.createElement('style')
+    style.textContent = '#widget-root[data-kcoder-animation-paused="true"] *,#widget-root[data-kcoder-animation-paused="true"] *::before,#widget-root[data-kcoder-animation-paused="true"] *::after{animation-play-state:paused!important}'
+    document.head.append(style)
+    const toolbar = document.createElement('div'); toolbar.className = 'widget-legend'; toolbar.setAttribute('role', 'toolbar')
+    const control = document.createElement('button'); control.type = 'button'; control.dataset.animationControl = 'true'
+    control.style.padding = '4px 8px'; control.style.minHeight = '44px'; control.style.border = '1px solid var(--border)'; control.style.borderRadius = '6px'; control.style.background = 'var(--background)'
+    toolbar.append(control); root.prepend(toolbar)
+    const apply = () => {
+      const zh = channel.theme.locale.startsWith('zh')
+      const reduced = Boolean(channel.theme.reducedMotion)
+      const paused = userPaused || reduced
+      root.dataset.kcoderAnimationPaused = String(paused)
+      toolbar.setAttribute('aria-label', zh ? '动画控制' : 'Animation controls')
+      control.disabled = reduced
+      control.textContent = reduced ? (zh ? '已减少动画' : 'Reduced motion is on') : userPaused ? (zh ? '播放动画' : 'Play animation') : (zh ? '暂停动画' : 'Pause animation')
+      control.setAttribute('aria-pressed', String(paused))
+      const animations = typeof root.getAnimations === 'function' ? root.getAnimations({ subtree: true }) : []
+      for (const animation of animations) {
+        try { if (paused) animation.pause(); else animation.play() } catch { /* Completed or detached animations need no recovery action. */ }
+      }
+    }
+    control.addEventListener('click', () => {
+      if (channel.theme.reducedMotion) return
+      userPaused = !userPaused
+      saveState({ ...savedState, [stateKey]: { paused: userPaused } })
+      apply()
+    })
+    localeViews.push(apply); apply()
+  }
+
+  function resize() {
+    if (queuedResize) return
+    queuedResize = true
+    setTimeout(() => {
+      queuedResize = false
+      const height = Math.max(120, Math.ceil(root.getBoundingClientRect().height), root.scrollHeight)
+      if (height !== lastResize) { lastResize = height; send('resize', { height }) }
+    }, 50)
+  }
+
+  async function initialize(message) {
+    if (message.executionMode !== 'managed') throw new Error('unsupported_client: arbitrary JavaScript requires a separately verified execution boundary')
+    charts.forEach(chart => chart.destroy()); charts = []; localeViews = []
+    savedState = validateState(message.state) ? message.state : {}
+    loadLibraries(message.librarySources)
+    applyTheme(message.theme)
+    const source = sanitize(message.source)
+    root.replaceChildren(...source.childNodes)
+    const revision = ++renderRevision
+    if (root.querySelectorAll('script[data-kcoder-chart]').length > 8 || root.querySelectorAll('script[data-kcoder-map]').length > 2 || root.querySelectorAll('[data-kcoder-recipe]').length > 4) throw new Error('widget_quota: too many managed views in one widget')
+    const drawing = createWidgetDrawingReadiness({ root, Chart: globalThis.Chart, required: Boolean(root.querySelector('script[data-kcoder-chart]')), locale: () => channel.theme.locale })
+    for (const declaration of root.querySelectorAll('script[data-kcoder-chart]')) renderChart(declaration)
+    for (const element of root.querySelectorAll('[data-kcoder-recipe]')) {
+      if (element.getAttribute('data-kcoder-recipe') !== 'compound-interest') throw new Error('invalid_widget: unsupported managed recipe')
+      renderCompound(element)
+    }
+    for (const declaration of root.querySelectorAll('script[data-kcoder-map]')) renderMap(declaration, message.topology)
+    wirePrompts()
+    wireAnimationControls()
+    if (root.querySelectorAll('*').length > limits.nodes) throw new Error('widget_quota: rendered DOM exceeds 4000 nodes')
+    const confirmed = await drawing.waitUntilReady()
+    if (revision === renderRevision) { resize(); send(confirmed ? 'ready' : 'unconfirmed') }
+  }
+
+  addEventListener('message', event => {
+    if (event.source !== parent || !event.data || typeof event.data !== 'object') return
+    const message = event.data
+    if (message.protocol !== 'kcoder-widget-host' || message.version !== 1) return
+    if (message.type === 'init' && !channel) {
+      if (typeof message.token !== 'string' || message.token.length < 24 || typeof message.widgetId !== 'string' || !Number.isSafeInteger(message.revision) || typeof message.source !== 'string') return
+      channel = { token: message.token, widgetId: message.widgetId, revision: message.revision, parentOrigin: event.origin, title: message.title, theme: message.theme }
+      initialize(message).catch(fail)
+      return
+    }
+    if (!channel || message.token !== channel.token || message.widgetId !== channel.widgetId || message.revision !== channel.revision) return
+    if (message.type === 'theme') { channel.theme = message.theme; applyTheme(message.theme); resize() }
+  })
+  addEventListener('error', event => fail(event.error || event.message))
+  addEventListener('unhandledrejection', event => fail(event.reason))
+  new ResizeObserver(resize).observe(root)
+})()
+
+})()</script></body></html>

@@ -1,3 +1,4 @@
+import { openNativeWorkspacePathPicker } from '@/lib/native-workspace-path-picker'
 import { Checkbox } from '@/components/ui/checkbox'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
@@ -7,7 +8,7 @@ import type { RuntimeTaskAddress } from '@/types/api'
 import type { LocalWorkItem } from '@/features/todo/todoModel'
 import type { WorkbenchServices } from '@/features/workbench/workbenchServices'
 import { useTranslation } from '@/hooks/useTranslation'
-import { readSelectedDeliveryFiles, type SelectedDeliveryFile } from '@/tauri/droppedFiles'
+import { readSelectedDeliveryFiles, type SelectedDeliveryFile } from '@/host/droppedFiles'
 
 interface DeliveryDialogProps {
   item: Omit<LocalWorkItem, 'projectId'>
@@ -66,10 +67,9 @@ export function DeliveryDialog({
     reading.current = controller
     setError(null)
     try {
-      const { open } = await import('@tauri-apps/plugin-dialog')
-      const selected = await open({ directory, multiple: !directory })
+      const selected = await openNativeWorkspacePathPicker(undefined, { directoriesOnly: directory, multiple: !directory })
       if (controller.signal.aborted) return
-      const paths = Array.isArray(selected) ? selected : selected ? [selected] : []
+      const paths = selected.map(item => item.path)
       if (paths.length === 0) return
       const nextFiles = await readSelectedDeliveryFiles(paths, { signal: controller.signal })
       if (controller.signal.aborted) return
@@ -132,7 +132,7 @@ export function DeliveryDialog({
       <div className="fixed inset-0 z-system flex items-center justify-center bg-black/30">
         <div
           data-testid="delivery-complete-dialog"
-          className="w-[360px] rounded-xl border border-border bg-background p-6 text-center shadow-lg"
+          className="studio-card-spacing w-[360px] rounded-xl border border-border bg-background p-6 text-center shadow-lg"
         >
           <span className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-green-500/10 text-green-600">
             <Check className="h-5 w-5" />

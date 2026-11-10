@@ -71,8 +71,8 @@ impl ShellEnvironmentSnapshot {
             .clone()
     }
 
-    #[cfg(test)]
-    pub(crate) fn from_paths_for_test(
+    #[cfg(all(feature = "test-oracle", target_os = "linux"))]
+    pub fn from_paths_for_test(
         ready: Option<PathBuf>,
         verifier_ready: Option<PathBuf>,
         sandbox_ready: Option<PathBuf>,
@@ -269,7 +269,7 @@ fn environment_name_is_sensitive(name: &str) -> bool {
     .any(|marker| name.contains(marker))
 }
 
-pub(crate) fn sandbox_snapshot_source(
+pub fn sandbox_snapshot_source(
     environment: impl IntoIterator<Item = (OsString, OsString)>,
 ) -> String {
     let mut allowed = environment

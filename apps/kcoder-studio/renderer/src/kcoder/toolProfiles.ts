@@ -1,4 +1,4 @@
-import { requestLocalExecutor } from '@/tauri/localExecutor'
+import { requestLocalExecutor } from '@/host/localExecutor'
 
 export const TOOL_PROFILES = ['full', 'core', 'nano', 'none'] as const
 export type ToolProfile = (typeof TOOL_PROFILES)[number]

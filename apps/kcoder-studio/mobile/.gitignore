@@ -2,7 +2,7 @@
 dist/
 dist-*-validation/
 node_modules/
-android/
+/android/
 ios/
 *.log
 

@@ -1,0 +1,38 @@
+<!doctype html><html><body>
+<h2>Real MCP App</h2><div id="initialized">initializing</div>
+<div id="input">awaiting input</div><div id="result">awaiting result</div><div id="meta">awaiting metadata</div>
+<button id="resource">Read real resource</button><button id="refresh" disabled>Refresh with permission</button><button id="repeat" disabled>Repeat identical request</button>
+<output id="resource-result"></output><output id="action-result"></output>
+<script>
+let nextId=1,lastAction;
+const pending=new Map();
+const send=(message)=>new Promise((resolve,reject)=>{pending.set(message.id,{resolve,reject});parent.postMessage(message,'*');});
+const request=(method,params)=>send({jsonrpc:'2.0',id:nextId++,method,params});
+addEventListener('message',event=>{
+ if(event.source!==parent||event.data?.jsonrpc!=='2.0')return;
+ const message=event.data;
+ if(pending.has(message.id)){const request=pending.get(message.id);pending.delete(message.id);message.error?request.reject(new Error(message.error.message)):request.resolve(message.result);}
+ if(message.method==='ui/notifications/tool-input')document.getElementById('input').textContent='input:'+JSON.stringify(message.params.arguments);
+ if(message.method==='ui/notifications/tool-result'){document.getElementById('result').textContent='result:'+JSON.stringify(message.params.structuredContent);document.getElementById('meta').textContent='meta:'+JSON.stringify(message.params._meta);}
+});
+request('ui/initialize',{protocolVersion:'2026-01-26',appInfo:{name:'real-source-fixture',version:'1'},appCapabilities:{availableDisplayModes:['inline']}}).then(result=>{
+ document.getElementById('initialized').textContent='initialized:'+JSON.stringify(result.hostCapabilities);
+ document.getElementById('refresh').disabled=!result.hostCapabilities.serverTools;
+ document.getElementById('resource').disabled=!result.hostCapabilities.serverResources;
+ parent.postMessage({jsonrpc:'2.0',method:'ui/notifications/initialized'},'*');
+}).catch(error=>document.getElementById('initialized').textContent=error.message);
+document.getElementById('resource').onclick=async()=>{
+ try{const result=await request('resources/read',{uri:'fixture://source/data'});document.getElementById('resource-result').textContent=result.contents[0].text.slice(0,50);}
+ catch(error){document.getElementById('resource-result').textContent=error.message;}
+};
+document.getElementById('refresh').onclick=async()=>{
+ lastAction={jsonrpc:'2.0',id:nextId++,method:'tools/call',params:{name:'refresh',arguments:{value:8}}};
+ document.getElementById('action-result').textContent='awaiting permission';
+ try{const result=await send(lastAction);document.getElementById('action-result').textContent=JSON.stringify(result);document.getElementById('repeat').disabled=false;}
+ catch(error){document.getElementById('action-result').textContent=error.message;}
+};
+document.getElementById('repeat').onclick=async()=>{
+ try{document.getElementById('action-result').textContent=JSON.stringify(await send(lastAction));}
+ catch(error){document.getElementById('action-result').textContent=error.message;}
+};
+</script></body></html>

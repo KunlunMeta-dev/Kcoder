@@ -2,6 +2,95 @@ use super::*;
 
 #[cfg(unix)]
 #[test]
+fn directory_metadata_preserves_ordinary_permissions() {
+    use std::os::unix::fs::PermissionsExt;
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("ordinary");
+    std::fs::create_dir(&path).unwrap();
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let directory = PrivateDirectory::open_existing(&path).unwrap();
+    assert_eq!(
+        directory.directory_metadata().unwrap().permissions().mode() & 0o777,
+        0o755
+    );
+    assert_eq!(
+        std::fs::metadata(&path).unwrap().permissions().mode() & 0o777,
+        0o755
+    );
+    assert!(
+        directory.retention_identity().is_err(),
+        "ordinary metadata must not relax retention policy"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn directory_metadata_remains_bound_to_open_handle_after_path_replacement() {
+    use std::os::unix::fs::MetadataExt;
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("original");
+    let moved = root.path().join("moved");
+    std::fs::create_dir(&path).unwrap();
+    let directory = PrivateDirectory::open_existing(&path).unwrap();
+    let before = directory.directory_metadata().unwrap();
+    std::fs::rename(&path, &moved).unwrap();
+    std::fs::create_dir(&path).unwrap();
+    let replacement = std::fs::metadata(&path).unwrap();
+    let held = directory.directory_metadata().unwrap();
+    assert_eq!((held.dev(), held.ino()), (before.dev(), before.ino()));
+    assert_ne!(
+        (held.dev(), held.ino()),
+        (replacement.dev(), replacement.ino())
+    );
+}
+
+#[test]
+fn entry_handle_verifies_child_directory_identity_and_preserves_entry_kind() {
+    let root = tempfile::tempdir().unwrap();
+    let child_path = root.path().join("child");
+    let file_path = root.path().join("ordinary.txt");
+    std::fs::create_dir(&child_path).unwrap();
+    std::fs::write(&file_path, b"ordinary file").unwrap();
+    let directory = PrivateDirectory::open_existing(root.path()).unwrap();
+
+    let child_entry = directory.open_entry_handle(OsStr::new("child")).unwrap();
+    assert!(child_entry.metadata().is_dir());
+    assert!(
+        child_entry
+            .open_child_directory()
+            .unwrap()
+            .directory_metadata()
+            .unwrap()
+            .is_dir()
+    );
+
+    let file_entry = directory
+        .open_entry_handle(OsStr::new("ordinary.txt"))
+        .unwrap();
+    assert!(file_entry.metadata().is_file());
+    assert!(file_entry.open_child_directory().is_err());
+}
+
+#[cfg(unix)]
+#[test]
+fn entry_handle_rejects_same_name_directory_replacement_while_identity_is_held() {
+    let root = tempfile::tempdir().unwrap();
+    let child_path = root.path().join("child");
+    std::fs::create_dir(&child_path).unwrap();
+    std::fs::write(child_path.join("original.txt"), b"original").unwrap();
+    let directory = PrivateDirectory::open_existing(root.path()).unwrap();
+    let entry = directory.open_entry_handle(OsStr::new("child")).unwrap();
+
+    std::fs::remove_dir_all(&child_path).unwrap();
+    std::fs::create_dir(&child_path).unwrap();
+    std::fs::write(child_path.join("replacement.txt"), b"replacement").unwrap();
+
+    let error = entry.open_child_directory().unwrap_err();
+    assert!(error.to_string().contains("directory entry changed"));
+}
+
+#[cfg(unix)]
+#[test]
 fn reusing_private_directory_requires_confirmed_sync_without_changing_file_bytes() {
     let tmp = tempfile::tempdir().unwrap();
     let directory = PrivateDirectory::open_or_create(tmp.path()).unwrap();
@@ -376,6 +465,89 @@ fn append_preserves_existing_bytes_and_private_mode() {
             0o600
         );
     }
+}
+
+#[test]
+fn append_held_keeps_the_actual_written_object_after_name_replacement() {
+    use std::io::Read;
+    let root = tempfile::tempdir().unwrap();
+    let private = PrivateDirectory::open_or_create(&root.path().join("private")).unwrap();
+    let name = OsStr::new("history.jsonl");
+    let held = private.append_held(name, b"first\n").unwrap();
+    let original_identity = private_file_identity(&held).unwrap();
+    let mut original_reader = private.open_regular_file(name).unwrap();
+    assert_eq!(
+        private_file_identity(&original_reader).unwrap(),
+        original_identity
+    );
+
+    private.atomic_replace(name, b"replacement\n").unwrap();
+    let replacement = private.open_regular_file(name).unwrap();
+    assert_ne!(
+        private_file_identity(&replacement).unwrap(),
+        original_identity
+    );
+    assert_eq!(private_file_identity(&held).unwrap(), original_identity);
+    let mut original_bytes = Vec::new();
+    original_reader.read_to_end(&mut original_bytes).unwrap();
+    assert_eq!(original_bytes, b"first\n");
+}
+
+#[test]
+fn append_held_failure_does_not_erase_or_claim_unwritten_bytes() {
+    for (point, expected) in [
+        (AppendFailurePoint::AfterPrefix, b"original\napp".as_slice()),
+        (
+            AppendFailurePoint::FileSync,
+            b"original\nappend\n".as_slice(),
+        ),
+        (
+            AppendFailurePoint::DirectorySync,
+            b"original\nappend\n".as_slice(),
+        ),
+    ] {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("private");
+        let private = PrivateDirectory::open_or_create(&path).unwrap();
+        let name = OsStr::new("history.jsonl");
+        private.append(name, b"original\n").unwrap();
+        APPEND_FAILURE_POINT.with(|failure| failure.set(point as u8));
+
+        assert!(private.append_held(name, b"append\n").is_err());
+        assert_eq!(std::fs::read(path.join(name)).unwrap(), expected);
+    }
+}
+
+#[test]
+fn append_held_rejects_hard_link_without_modifying_the_original() {
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("private");
+    let private = PrivateDirectory::open_or_create(&path).unwrap();
+    let outside = root.path().join("outside");
+    std::fs::write(&outside, b"outside\n").unwrap();
+    std::fs::hard_link(&outside, path.join("linked")).unwrap();
+
+    assert!(private.append_held(OsStr::new("linked"), b"no\n").is_err());
+    assert_eq!(std::fs::read(outside).unwrap(), b"outside\n");
+}
+
+#[cfg(unix)]
+#[test]
+fn append_held_rejects_fifo_without_waiting_for_a_reader() {
+    use std::ffi::CString;
+    use std::os::unix::ffi::OsStrExt;
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("private");
+    let private = PrivateDirectory::open_or_create(&path).unwrap();
+    let fifo = CString::new(path.join("fifo").as_os_str().as_bytes()).unwrap();
+    // SAFETY: fifo is a valid NUL-terminated path inside this test's directory.
+    assert_eq!(unsafe { libc::mkfifo(fifo.as_ptr(), 0o600) }, 0);
+    let (tx, rx) = std::sync::mpsc::channel();
+    let worker = std::thread::spawn(move || {
+        let _ = tx.send(private.append_held(OsStr::new("fifo"), b"no").is_err());
+    });
+    assert!(rx.recv_timeout(std::time::Duration::from_secs(2)).unwrap());
+    worker.join().unwrap();
 }
 
 #[cfg(unix)]
@@ -962,6 +1134,13 @@ fn private_directory_rejects_a_symlinked_ancestor() {
 
     assert!(format!("{error:#}").contains("symlink"));
     assert!(!outside.path().join("artifacts").exists());
+
+    let ordinary = outside.path().join("artifacts");
+    std::fs::create_dir(&ordinary).unwrap();
+    assert!(PrivateDirectory::open_existing(&ordinary).is_ok());
+    assert!(PrivateDirectory::open_existing(&link).is_err());
+    assert!(PrivateDirectory::open_existing(&link.join("artifacts")).is_err());
+    assert!(PrivateDirectory::open_existing(&ordinary.join("..")).is_err());
 }
 
 #[cfg(any(unix, windows))]
@@ -1210,4 +1389,71 @@ fn retained_publication_restores_previous_when_directory_sync_fails_after_move()
         b"original"
     );
     assert_eq!(std::fs::read_dir(root.path()).unwrap().count(), 1);
+}
+
+#[cfg(unix)]
+#[test]
+fn atomic_journal_snapshot_keeps_an_opened_unlinked_inode_without_accepting_aliases() {
+    let root = tempfile::tempdir().unwrap();
+    let directory = PrivateDirectory::open_or_create(root.path()).unwrap();
+    directory
+        .atomic_replace(OsStr::new("entry"), b"old")
+        .unwrap();
+    let mut opened = directory.open_regular_file(OsStr::new("entry")).unwrap();
+    directory
+        .atomic_replace(OsStr::new("entry"), b"new")
+        .unwrap();
+    assert!(verify_reader_links(&opened, false).is_err());
+    verify_reader_links(&opened, true).unwrap();
+    let mut content = Vec::new();
+    std::io::Read::read_to_end(&mut opened, &mut content).unwrap();
+    assert_eq!(content, b"old");
+    let mut current = directory
+        .open_regular_file_snapshot(OsStr::new("entry"))
+        .unwrap();
+    content.clear();
+    std::io::Read::read_to_end(&mut current, &mut content).unwrap();
+    assert_eq!(content, b"new");
+    std::fs::hard_link(root.path().join("entry"), root.path().join("alias")).unwrap();
+    assert!(
+        directory
+            .open_regular_file_snapshot(OsStr::new("entry"))
+            .is_err()
+    );
+    std::fs::remove_file(root.path().join("entry")).unwrap();
+    std::os::unix::fs::symlink(root.path().join("alias"), root.path().join("entry")).unwrap();
+    assert!(
+        directory
+            .open_regular_file_snapshot(OsStr::new("entry"))
+            .is_err()
+    );
+}
+
+#[test]
+fn short_exclusive_lock_waits_for_a_transient_holder_but_not_a_lasting_one() {
+    let root = tempfile::tempdir().unwrap();
+    let directory = PrivateDirectory::open_or_create(&root.path().join("locks")).unwrap();
+    let name = OsStr::new("short.lock");
+    let holder = directory.try_exclusive_lock(name).unwrap().unwrap();
+    let release = std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        drop(holder);
+    });
+    assert!(
+        directory
+            .exclusive_lock_within(name, std::time::Duration::from_secs(5))
+            .unwrap()
+            .is_some(),
+        "a holder that releases within the wait must not read as busy"
+    );
+    release.join().unwrap();
+    let _lasting = directory.try_exclusive_lock(name).unwrap().unwrap();
+    let started = std::time::Instant::now();
+    assert!(
+        directory
+            .exclusive_lock_within(name, std::time::Duration::from_millis(150))
+            .unwrap()
+            .is_none()
+    );
+    assert!(started.elapsed() >= std::time::Duration::from_millis(150));
 }

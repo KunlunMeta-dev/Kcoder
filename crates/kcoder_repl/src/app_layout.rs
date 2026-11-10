@@ -77,7 +77,11 @@ pub(super) fn status_indicator_height(app: &ReplApp, width: u16) -> u16 {
         app.status_elapsed(),
         StatusIndicatorControls {
             show_interrupt_hint: app.has_interruptible_turn(),
-            interrupt_hint: "esc",
+            interrupt_hint: if app.can_return_to_bottom() {
+                "ctrl+c"
+            } else {
+                "esc"
+            },
             is_running: app.spinner.is_running(),
         },
         &KCODER_UI_THEME,

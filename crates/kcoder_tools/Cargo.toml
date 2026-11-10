@@ -1,13 +1,23 @@
 [package]
 name = "kcoder_tools"
-version.workspace = true
-edition.workspace = true
-authors.workspace = true
-license.workspace = true
-repository.workspace = true
-rust-version.workspace = true
+version = { workspace = true }
+edition = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+rust-version = { workspace = true }
+
+[features]
+web-network-test-fixture = []
 
 [dependencies]
+kcoder_tool_error = { path = "internal/tool_error" }
+kcoder_tool_input = { path = "internal/tool_input" }
+kcoder_web = { path = "internal/web" }
+kcoder_document_parsers = { path = "internal/document_parsers" }
+kcoder_file_search = { path = "internal/file_search" }
+kcoder_shell_isolation = { path = "internal/shell_isolation" }
+kcoder_process_supervisor = { path = "../kcoder_process_supervisor", features = ["async-process"] }
 shell-words = "1.1"
 image = { workspace = true }
 kcoder_types = { path = "../kcoder_types", features = ["json-schema"] }
@@ -15,9 +25,11 @@ kcoder_config = { path = "../kcoder_config" }
 kcoder_state = { path = "../kcoder_state" }
 kcoder_memory = { path = "../kcoder_memory" }
 kcoder_knowledge = { path = "../kcoder_knowledge" }
+kcoder_skill_support = { path = "internal/skill_support" }
 kcoder_skills = { path = "../kcoder_skills" }
 kcoder_specs = { path = "../kcoder_specs" }
 kcoder_workflow = { path = "../kcoder_workflow" }
+kcoder_workflow_observations = { path = "internal/workflow_observations" }
 async-trait = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -29,13 +41,13 @@ futures = { workspace = true }
 tracing = { workspace = true }
 reqwest = { workspace = true }
 chrono = { workspace = true }
-chrono-tz = { workspace = true }
+kcoder_schedule = { path = "internal/schedule" }
 dirs = { workspace = true }
 schemars = "0.8"
 base64 = "0.22"
 encoding_rs = "0.8.35"
-html-escape = "0.2"
 html5ever = "0.38"
+html-escape = "0.2"
 globset = { workspace = true }
 walkdir = { workspace = true }
 regex = { workspace = true }
@@ -44,7 +56,6 @@ url = { workspace = true }
 similar = { workspace = true }
 flate2 = "1.1"
 zip = { version = "2.4.2", default-features = false, features = ["deflate"] }
-quick-xml = "0.39.4"
 libc = { workspace = true }
 nix = { version = "0.30", features = ["fs"] }
 dunce = { workspace = true }
@@ -53,20 +64,13 @@ sha2 = { workspace = true }
 uuid = { workspace = true }
 fs2 = "0.4"
 
-[target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.61.2", features = [
-  "Win32_Globalization",
-  "Win32_Foundation",
-  "Win32_Security",
-  "Win32_Security_Authorization",
-  "Win32_Storage_FileSystem",
-  "Win32_System_Pipes",
-  "Win32_System_JobObjects",
-  "Win32_System_Threading",
-] }
-
 [dev-dependencies]
+kcoder_web = { path = "internal/web", features = ["test-oracle"] }
+kcoder_tool_input = { path = "internal/tool_input", features = ["test-oracle"] }
+kcoder_shell_isolation = { path = "internal/shell_isolation", features = ["test-oracle"] }
+kcoder_config = { path = "../kcoder_config", features = ["provider-test-fixtures"] }
 kcoder_types = { path = "../kcoder_types" }
 
-[target.'cfg(target_os = "linux")'.dependencies]
-landlock = "0.4"
+[target."cfg(windows)".dependencies]
+windows-registry = "0.6.1"
+windows-sys = { version = "0.61.2", features = ["Win32_Globalization", "Win32_Foundation", "Win32_Networking_WinHttp", "Win32_Security", "Win32_Security_Authorization", "Win32_Storage_FileSystem", "Win32_System_Pipes", "Win32_System_JobObjects", "Win32_System_Threading"] }

@@ -1,10 +1,15 @@
+import { NativeWebToolOutput } from './NativeWebToolOutput'
+import { NativeWebSources } from './NativeWebSources'
 import { isActiveToolCallStatus } from '@wegent/chat-core'
+import { ThinkingElapsedTime } from '../ThinkingElapsedTime'
+import { WidgetMessageArtifacts } from '../widgets/WidgetMessageBoundary'
 import { ToolImageObservations } from './ToolImageObservations'
 import { hasToolImageObservations } from '@/kcoder/toolObservationOutput'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 import {
   AlertCircle,
+  Brain,
   CheckCircle2,
   ChevronDown,
   Circle,
@@ -38,6 +43,7 @@ import {
   getToolActivityFilePaths,
   getToolActivityKind,
   isWebSearchToolName,
+  isWebFetchToolName,
 } from './toolBlockActivity'
 import {
   getFileInputPath,
@@ -55,6 +61,7 @@ import {
 import { WebSearchActivityRows } from './WebSearchSources'
 import { getWebSearchActivityItems } from './webSearchActivity'
 import { usePersistentProcessingExpansion } from './processingExpansionState'
+import { useInitialConversationPreferences } from '@/features/appearance/useConversationPreferences'
 import { ToolLineProgress } from './ToolLineProgress'
 
 const THINKING_PREVIEW_MAX_LENGTH = 96
@@ -93,7 +100,12 @@ export function ToolBlockItem({
 }: ToolBlockItemProps) {
   const catalogEntry = useToolCatalogEntry(block.type === 'tool' ? block.toolName : undefined)
   const { t } = useTranslation('chat')
-  const [userExpanded, setUserExpanded] = usePersistentProcessingExpansion(stateKey)
+  const preferences = useInitialConversationPreferences()
+  const initialExpanded = !preferences.toolsCollapsedByDefault
+  const [userExpanded, setUserExpanded] = usePersistentProcessingExpansion(
+    stateKey,
+    initialExpanded
+  )
   const isRunning = isActiveToolCallStatus(block.status)
   const duration = useToolDuration(
     durationStartedAt ?? block.createdAt,
@@ -146,33 +158,6 @@ export function ToolBlockItem({
     return <SubagentToolBlock block={block} />
   }
 
-  if (block.status !== 'unknown' && block.toolName === 'runtime_reconnecting') {
-    const reconnecting = isActiveToolCallStatus(block.status)
-    const failed = block.status === 'error'
-    const label = reconnecting
-      ? t('tool_activity.reconnecting')
-      : failed
-        ? t('tool_activity.reconnect_failed')
-        : t('tool_activity.reconnected')
-    return (
-      <div
-        className={`flex min-w-0 items-center gap-1.5 truncate py-1 text-sm ${failed ? 'text-red-500' : 'text-text-muted'}`}
-        data-testid="runtime-reconnecting-status"
-        role={failed ? 'alert' : 'status'}
-        aria-live={failed ? 'assertive' : 'polite'}
-      >
-        {reconnecting ? (
-          <LoaderCircle className="h-4 w-4 shrink-0 animate-spin" aria-hidden="true" />
-        ) : failed ? (
-          <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
-        ) : (
-          <CheckCircle2 className="h-4 w-4 shrink-0 text-green-600" aria-hidden="true" />
-        )}
-        <span className={reconnecting ? 'tool-activity-shimmer' : undefined}>{label}</span>
-      </div>
-    )
-  }
-
   const { icon, label: activityLabel } = getBlockLabel(
     block,
     {
@@ -195,7 +180,12 @@ export function ToolBlockItem({
   const label =
     block.status === 'generating_arguments'
       ? t('tool_input_progress.preparing', {
-          name: catalogEntry?.displayName ?? toolDisplayName(block.toolName),
+          name:
+            block.toolName === 'tool_search'
+              ? t('toolSearch.title')
+              : block.toolName === 'tool_execute'
+                ? t('toolSearch.executeTitle')
+                : (catalogEntry?.displayName ?? toolDisplayName(block.toolName)),
         })
       : activityLabel
   const workspaceFilePath = getWorkspaceFilePath(block)
@@ -272,6 +262,8 @@ export function ToolBlockItem({
           {renderBlockDetail(block, { onLoadFullTranscript, loadingFullTranscript })}
         </div>
       ) : null}
+      {block.webSources ? <NativeWebSources receipt={block.webSources} /> : null}
+      <WidgetMessageArtifacts preview toolCallId={block.id} />
     </div>
   )
 }
@@ -428,7 +420,7 @@ function SubagentToolBlock({ block }: { block: ToolBlock }) {
           className="ml-2 mt-2 border-l border-border pl-3 text-text-secondary"
           data-testid="subagent-tool-detail"
         >
-          <AssistantMarkdown content={output} variant="process" />
+          <AssistantMarkdown conversationReading content={output} variant="process" />
         </div>
       ) : null}
     </section>
@@ -1155,7 +1147,10 @@ function ThinkingBlockItem({
   onOpenWorkspaceFile?: (path: string, options?: WorkspaceFileOpenOptions) => void
 }) {
   const { t } = useTranslation('chat')
-  const [expanded, setExpanded] = useState(false)
+  const preferences = useInitialConversationPreferences()
+  const defaultExpanded = !preferences.thinkingCollapsedByDefault
+  const [userExpanded, setUserExpanded] = useState<boolean | null>(null)
+  const expanded = userExpanded ?? defaultExpanded
 
   if (!block.content) return null
 
@@ -1170,7 +1165,9 @@ function ThinkingBlockItem({
           aria-live="polite"
           data-testid="thinking-live-preview"
         >
+          <Brain className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
           <span className="shrink-0">{t('thinking.running')}</span>
+          <ThinkingElapsedTime startedAt={block.createdAt} completedAt={block.completedAt} running={isRunning} />
           <span className="shrink-0 text-text-muted">·</span>
           <span className="min-w-0 truncate text-text-muted">
             {preview || t('thinking.updating')}
@@ -1190,12 +1187,14 @@ function ThinkingBlockItem({
         data-testid="thinking-toggle-button"
         aria-expanded={expanded}
         aria-controls={detailId}
-        onClick={() => setExpanded(value => !value)}
+        onClick={() => setUserExpanded(value => !(value ?? defaultExpanded))}
         className="flex max-w-full items-center gap-1.5 text-text-muted hover:text-text-secondary"
       >
+        <Brain className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
         <span className="min-w-0 truncate">
           {t('thinking.completed')} · {charCount} {t('thinking.chars')}
         </span>
+        <ThinkingElapsedTime startedAt={block.createdAt} completedAt={block.completedAt} running={isRunning} />
         <ChevronDown
           className={`h-3.5 w-3.5 shrink-0 transition-transform ${expanded ? '' : '-rotate-90'}`}
           strokeWidth={2}
@@ -1207,7 +1206,7 @@ function ThinkingBlockItem({
           className="mt-2 min-w-0 overflow-x-hidden border-l border-border pl-4"
           data-testid="thinking-detail"
         >
-          <AssistantMarkdown
+          <AssistantMarkdown conversationReading
             content={block.content}
             variant="process"
             onOpenFile={onOpenWorkspaceFile}
@@ -1241,7 +1240,7 @@ function ProcessTextBlockItem({
       data-testid="process-text-block"
     >
       <div className="min-w-0">
-        <AssistantMarkdown
+        <AssistantMarkdown conversationReading
           content={block.content}
           isStreaming={isRunning}
           variant="process"
@@ -1324,6 +1323,9 @@ function getBlockLabel(
       label: prefix.webSearch,
     }
   }
+  if (isWebFetchToolName(name)) {
+    return { icon: <Search className="h-4 w-4" strokeWidth={1.7} />, label: prefix.webFetch }
+  }
   if (isImageViewToolName(name)) {
     const path = getInputField(block, 'path', 'file_path', 'filePath')
     return {
@@ -1343,7 +1345,19 @@ function getGenericToolLabel(
   labels: GenericToolLabels,
   entry?: ToolCatalogEntry
 ): { icon: React.ReactNode; label: string } {
-  const name = entry?.displayName ?? toolDisplayName(block.toolName)
+  const deferredName =
+    block.toolName === 'tool_execute' && typeof block.toolInput?.tool_name === 'string'
+      ? toolDisplayName(block.toolInput.tool_name)
+      : undefined
+  const name =
+    deferredName ??
+    (block.toolName === 'show_widget'
+      ? i18n.t('widgets.title', { ns: 'chat' })
+      : block.toolName === 'tool_search'
+        ? i18n.t('toolSearch.title', { ns: 'chat' })
+        : block.toolName === 'tool_execute'
+          ? i18n.t('toolSearch.executeTitle', { ns: 'chat' })
+          : (entry?.displayName ?? toolDisplayName(block.toolName)))
   const normalizedName = name.toLowerCase()
 
   if (!entry && normalizedName.includes('wait')) {
@@ -1396,6 +1410,7 @@ function getToolStatusPrefix(block: ToolBlock) {
     edit: i18n.t(`toolStatus.edit_${state}`, { ns: 'chat' }),
     read: i18n.t(`toolStatus.read_${state}`, { ns: 'chat' }),
     webSearch: i18n.t(`toolStatus.webSearch_${state}`, { ns: 'chat' }),
+    webFetch: i18n.t(`toolStatus.webFetch_${state}`, { ns: 'chat' }),
     guidance: i18n.t(`toolStatus.guidance_${state}`, { ns: 'chat' }),
     generic: i18n.t(`toolStatus.generic_${state}`, { ns: 'chat' }),
   }
@@ -1482,7 +1497,7 @@ function renderBlockDetail(
 ) {
   const name = block.toolName.toLowerCase()
   if (hasToolImageObservations(block.toolOutput))
-    return <ToolImageObservations output={block.toolOutput} />
+    return <ToolImageObservations output={block.toolOutput} toolName={block.toolName} />
 
   if (isCommandToolName(name)) {
     return <BashBlockDetail block={block} {...options} />
@@ -1494,8 +1509,9 @@ function renderBlockDetail(
     return <FileEditDetail block={block} />
   }
   if (isWebSearchToolName(name)) {
-    return <WebSearchBlockDetail block={block} />
+    return <><WebSearchBlockDetail block={block} />{block.status === 'error' ? <NativeWebToolOutput block={block} /> : null}</>
   }
+  if (isWebFetchToolName(name)) return <NativeWebToolOutput block={block} />
   if (isImageViewToolName(name)) {
     return <ImageViewBlockDetail block={block} />
   }
@@ -1514,6 +1530,7 @@ function hasBlockDetail(block: ToolBlock): boolean {
     isFileCreateToolName(name) ||
     isFileEditToolName(name) ||
     isWebSearchToolName(name) ||
+    isWebFetchToolName(name) ||
     isImageViewToolName(name)
   )
 }

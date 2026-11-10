@@ -46,6 +46,16 @@ function Resolve-InputPath([string]$Path) {
     return [IO.Path]::GetFullPath((Join-Path (Get-Location).Path $Path))
 }
 
+# Both staged images reside beside their destination, so replacement never
+# exposes a missing executable even if the installing process is terminated.
+function Publish-LocalReleaseImage([string]$Staged, [string]$Destination) {
+    if ([IO.File]::Exists($Destination)) {
+        [IO.File]::Replace($Staged, $Destination, [System.Management.Automation.Language.NullString]::Value)
+    } else {
+        [IO.File]::Move($Staged, $Destination)
+    }
+}
+
 if (-not $SourceBinary) {
     Write-Host "Building KCoder release from current source: $repoDir"
     Push-Location $repoDir
@@ -146,11 +156,14 @@ try {
     $backupSupervisor = Join-Path $tempDir 'previous-kcoder-process-supervisor.exe'
     if ($hadInstalled) { Copy-Item -LiteralPath $installed -Destination $backupBinary -Force }
     if ($hadInstalledSupervisor) { Copy-Item -LiteralPath $installedSupervisor -Destination $backupSupervisor -Force }
+    $publishedBinary = $false
+    $publishedSupervisor = $false
+    $keepBackup = $false
     try {
-        if ($hadInstalledSupervisor) { Remove-Item -LiteralPath $installedSupervisor -Force }
-        Move-Item -LiteralPath $stagedSupervisor -Destination $installedSupervisor -Force
-        if ($hadInstalled) { Remove-Item -LiteralPath $installed -Force }
-        Move-Item -LiteralPath $stagedBinary -Destination $installed -Force
+        Publish-LocalReleaseImage $stagedSupervisor $installedSupervisor
+        $publishedSupervisor = $true
+        Publish-LocalReleaseImage $stagedBinary $installed
+        $publishedBinary = $true
         if ((Get-FileHash -Algorithm SHA256 -LiteralPath $installed).Hash -ne $sourceHash) {
             throw 'Installed release binary checksum mismatch'
         }
@@ -167,10 +180,26 @@ try {
             Write-Host "Keeping existing user settings: $settingsPath"
         }
     } catch {
-        Remove-Item -LiteralPath $installed, $installedSupervisor -Force -ErrorAction SilentlyContinue
-        if ($hadInstalled) { Copy-Item -LiteralPath $backupBinary -Destination $installed -Force }
-        if ($hadInstalledSupervisor) { Copy-Item -LiteralPath $backupSupervisor -Destination $installedSupervisor -Force }
-        throw
+        $failure = $_
+        try {
+            foreach ($image in @(
+                @{ Published=$publishedBinary; Had=$hadInstalled; Backup=$backupBinary; Staged=$stagedBinary; Destination=$installed },
+                @{ Published=$publishedSupervisor; Had=$hadInstalledSupervisor; Backup=$backupSupervisor; Staged=$stagedSupervisor; Destination=$installedSupervisor }
+            )) {
+                if (-not $image.Published) { continue }
+                if ($image.Had) {
+                    Copy-Item -LiteralPath $image.Backup -Destination $image.Staged -Force
+                    Publish-LocalReleaseImage $image.Staged $image.Destination
+                } else {
+                    Remove-Item -LiteralPath $image.Destination -Force
+                }
+            }
+        } catch {
+            $keepBackup = $true
+            $failure.Exception.Data['RecoveryBackup'] = $tempDir
+            Write-Warning "Rollback incomplete; previous release preserved in $tempDir"
+        }
+        throw $failure
     } finally {
         Remove-Item -LiteralPath $stagedBinary, $stagedSupervisor -Force -ErrorAction SilentlyContinue
     }
@@ -182,5 +211,7 @@ try {
     Write-Output $installed
 } finally {
     Remove-Item -LiteralPath $stagedBinary, $stagedSupervisor -Force -ErrorAction SilentlyContinue
-    Remove-Item -LiteralPath $tempDir -Recurse -Force -ErrorAction SilentlyContinue
+    if (-not (Get-Variable keepBackup -ErrorAction SilentlyContinue) -or -not $keepBackup) {
+        Remove-Item -LiteralPath $tempDir -Recurse -Force -ErrorAction SilentlyContinue
+    }
 }

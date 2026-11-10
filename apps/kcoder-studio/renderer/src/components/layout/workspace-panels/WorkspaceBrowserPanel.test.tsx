@@ -38,7 +38,7 @@ const embeddedBrowserMocks = vi.hoisted(() => ({
   reloadEmbeddedBrowser: vi.fn(),
   resumeEmbeddedBrowserDownload: vi.fn(),
   setEmbeddedBrowserBounds: vi.fn(),
-  EMBEDDED_BROWSER_DEBUG_PANEL_VISIBILITY_EVENT: 'wework:debug-panel-visibility-change',
+  EMBEDDED_BROWSER_DEBUG_PANEL_VISIBILITY_EVENT: 'kcoder:debug-panel-visibility-change',
   EMBEDDED_BROWSER_OCCLUSION_EVENT: 'kcoder:embedded-browser-occlusion-change',
 }))
 
@@ -191,7 +191,8 @@ describe('WorkspaceBrowserPanel', () => {
           width: 400,
           height: 300,
         },
-        'workspace-browser'
+        'workspace-browser',
+        undefined
       )
     })
 
@@ -376,7 +377,8 @@ describe('WorkspaceBrowserPanel', () => {
       expect(embeddedBrowserMocks.openEmbeddedBrowser).toHaveBeenCalledWith(
         'https://example.com/',
         expect.any(Object),
-        'workspace-browser-owner'
+        'workspace-browser-owner',
+        undefined
       )
     )
 
@@ -767,7 +769,8 @@ describe('WorkspaceBrowserPanel', () => {
           width: 400,
           height: 300,
         },
-        'workspace-browser'
+        'workspace-browser',
+        undefined
       )
     })
     expect(screen.getByTestId('workspace-browser-url-input')).toHaveValue('https://example.test/')
@@ -881,6 +884,37 @@ describe('WorkspaceBrowserPanel', () => {
         'workspace-browser'
       )
     })
+  })
+
+  test('changing overlay visibility during startup preserves the original browser session', async () => {
+    mockBrowserHostRect()
+    embeddedBrowserMocks.readEmbeddedBrowserPageState.mockRejectedValue(new Error('no existing browser'))
+    let resolveOpen!: (state: { nativeLabel: string; title: null; url: string }) => void
+    embeddedBrowserMocks.openEmbeddedBrowser.mockImplementationOnce(
+      () => new Promise(resolve => { resolveOpen = resolve })
+    )
+    render(<WorkspaceBrowserPanel active />)
+    const input = screen.getByTestId('workspace-browser-url-input')
+    fireEvent.change(input, { target: { value: 'example.com' } })
+    fireEvent.submit(input.closest('form')!)
+    await waitFor(() => expect(embeddedBrowserMocks.openEmbeddedBrowser).toHaveBeenCalledTimes(1))
+    act(() => window.dispatchEvent(new CustomEvent('kcoder:embedded-browser-occlusion-change', {
+      detail: { id: 'account-switch-dialog', occluded: true },
+    })))
+    await act(async () => resolveOpen({ nativeLabel: 'original-opening-session', title: null, url: 'https://example.com/' }))
+    await waitFor(() => expect(embeddedBrowserMocks.setEmbeddedBrowserBounds).toHaveBeenCalledWith(
+      expect.any(Object), false, 'workspace-browser'
+    ))
+    expect(embeddedBrowserMocks.openEmbeddedBrowser).toHaveBeenCalledTimes(1)
+    expect(embeddedBrowserMocks.closeEmbeddedBrowser).not.toHaveBeenCalled()
+    act(() => window.dispatchEvent(new CustomEvent('kcoder:embedded-browser-occlusion-change', {
+      detail: { id: 'account-switch-dialog', occluded: false },
+    })))
+    await waitFor(() => expect(embeddedBrowserMocks.setEmbeddedBrowserBounds).toHaveBeenCalledWith(
+      expect.any(Object), true, 'workspace-browser'
+    ))
+    expect(embeddedBrowserMocks.openEmbeddedBrowser).toHaveBeenCalledTimes(1)
+    expect(embeddedBrowserMocks.closeEmbeddedBrowser).not.toHaveBeenCalled()
   })
 
   test('hides the native browser while a main webview overlay occludes it', async () => {

@@ -14,12 +14,47 @@ pub(super) async fn dispatch(
     params: Value,
     outbound_tx: &mpsc::Sender<Value>,
     thread_manager: &mut ThreadManager,
+    exact_control_negotiated: bool,
+    continuation_negotiated: bool,
 ) -> Result<DispatchControl> {
     match method {
         method::AGENT_LIVE_READ => {
-            let result = serde_json::from_value::<AgentLiveReadParams>(params)
+            let result = kcoder_app_rpc_codec::decode::<AgentLiveReadParams>(params)
                 .context("invalid agent/live/read params")
                 .and_then(|params| {
+                    if let Some(expected) = params.expected_background_run.as_ref() {
+                        let (engine, _) =
+                            owned_agent_scope(thread_manager, &params.thread_id, &params.agent_id)?;
+                        let lease = thread_manager
+                            .lease(&params.thread_id)
+                            .context("agent_exact_run_unavailable")?;
+                        let exact = agent_run_constraint::AgentRunObservation::capture(
+                            &engine,
+                            lease,
+                            &params.thread_id,
+                            &params.agent_id,
+                            expected,
+                        )?;
+                        let snapshot = engine
+                            .subagent_public_live_tail_for_run(expected, params.previous_revision)
+                            .map_err(|_| {
+                                anyhow::Error::from(agent_run_constraint::ExactRunUnavailable(
+                                    kcoder_app_protocol::AgentStreamCloseReason::OwnerUnavailable,
+                                ))
+                            })?;
+                        exact.verify(&engine)?;
+                        return Ok(AgentLiveReadResult {
+                            thread_id: params.thread_id,
+                            agent_id: params.agent_id,
+                            active: snapshot.active,
+                            unchanged: snapshot.unchanged,
+                            revision: Some(snapshot.revision),
+                            phase: Some(snapshot.status),
+                            content: snapshot.content,
+                            truncated: snapshot.truncated,
+                            background_run: Some(expected.clone()),
+                        });
+                    }
                     let (engine, _) =
                         owned_agent(thread_manager, &params.thread_id, &params.agent_id)?;
                     let active = engine.has_subagent_live_view(&params.agent_id);
@@ -32,6 +67,7 @@ pub(super) async fn dispatch(
                         None => (params.previous_revision, None, String::new(), false),
                     };
                     Ok(AgentLiveReadResult {
+                        background_run: None,
                         thread_id: params.thread_id,
                         agent_id: params.agent_id,
                         active,
@@ -56,9 +92,7 @@ pub(super) async fn dispatch(
                         && task.background_run.as_ref() == Some(&params.expected_background_run),
                     "agent_stop_identity_conflict"
                 );
-                let (stopped, status, reason_code) = if task.delivery != TaskDelivery::Background {
-                    (false, "not_supported", Some("foreground_only"))
-                } else if !engine.can_stop_subagent_run(&params.expected_background_run) {
+                let (stopped, status, reason_code) = if !engine.can_stop_subagent_run(&params.expected_background_run) {
                     if matches!(
                         task.status,
                         TaskStatus::Completed
@@ -105,7 +139,7 @@ pub(super) async fn dispatch(
             send_agent_response(outbound_tx, id, result, -32036).await?;
         }
         "agent/messages/list" => {
-            let result = serde_json::from_value::<AgentMessagesListParams>(params)
+            let result = kcoder_app_rpc_codec::decode::<AgentMessagesListParams>(params)
                 .context("invalid agent/messages/list params")
                 .and_then(|params| {
                     let (_, task) =
@@ -147,7 +181,7 @@ pub(super) async fn dispatch(
             send_agent_response(outbound_tx, id, result, -32025).await?;
         }
         "agent/messages/archive" => {
-            let result = serde_json::from_value::<AgentMessagesArchiveParams>(params)
+            let result = kcoder_app_rpc_codec::decode::<AgentMessagesArchiveParams>(params)
                 .context("invalid agent/messages/archive params")
                 .and_then(|params| {
                     anyhow::ensure!(
@@ -174,9 +208,17 @@ pub(super) async fn dispatch(
             send_agent_response(outbound_tx, id, result, -32036).await?;
         }
         "agent/message/read" => {
-            let result = serde_json::from_value::<AgentMessageReadParams>(params)
+            let result = kcoder_app_rpc_codec::decode::<AgentMessageReadParams>(params)
                 .context("invalid agent/message/read params")
                 .and_then(|params| {
+                    if let Some(expected) = &params.expected_background_run {
+                        anyhow::ensure!(
+                            exact_control_negotiated
+                                && expected.parent_session_id == params.thread_id
+                                && expected.agent_id == params.agent_id,
+                            "agent_exact_control_unavailable"
+                        );
+                    }
                     if params.client_message_id.trim().is_empty()
                         || params.client_message_id.len() > 128
                     {
@@ -185,6 +227,15 @@ pub(super) async fn dispatch(
                     let (_, task) =
                         owned_agent(thread_manager, &params.thread_id, &params.agent_id)?;
                     let receipt = command_receipt_wire(&task, &params.client_message_id);
+                    if let Some(expected) = &params.expected_background_run {
+                        anyhow::ensure!(
+                            receipt.as_ref().map_or(
+                                task.background_run.as_ref() == Some(expected),
+                                |receipt| receipt.background_run.as_ref() == Some(expected)
+                            ),
+                            "subagent_run_changed"
+                        );
+                    }
                     let receipt_epoch = task.command_receipt_epoch;
                     Ok(AgentMessageReadResult {
                         thread_id: params.thread_id,
@@ -208,7 +259,7 @@ pub(super) async fn dispatch(
             }
         }
         method::AGENT_LIST => {
-            let result = serde_json::from_value::<AgentListParams>(params)
+            let result = kcoder_app_rpc_codec::decode::<AgentListParams>(params)
                 .context("invalid agent/list params")
                 .and_then(|params| {
                     let target_engine = thread_manager
@@ -281,7 +332,7 @@ pub(super) async fn dispatch(
             }
         }
         method::AGENT_ARTIFACT_READ => {
-            let params = match serde_json::from_value::<AgentArtifactReadParams>(params) {
+            let params = match kcoder_app_rpc_codec::decode::<AgentArtifactReadParams>(params) {
                 Ok(params) => params,
                 Err(error) => {
                     send(outbound_tx, error_response(id, -32602, &error.to_string())).await?;
@@ -298,7 +349,26 @@ pub(super) async fn dispatch(
                         thread_manager.lease(&thread_id),
                         &thread_id,
                     )?;
-                    agent_artifacts::read(&target_engine, &params)
+                    let exact = params
+                        .expected_background_run
+                        .as_ref()
+                        .map(|expected| {
+                            agent_run_constraint::AgentRunObservation::capture(
+                                &target_engine,
+                                thread_manager
+                                    .lease(&thread_id)
+                                    .context("agent_exact_run_unavailable")?,
+                                &thread_id,
+                                &params.agent_id,
+                                expected,
+                            )
+                        })
+                        .transpose()?;
+                    let result = agent_artifacts::read(&target_engine, &params)?;
+                    if let Some(exact) = &exact {
+                        exact.verify(&target_engine)?;
+                    }
+                    Ok(result)
                 });
             match result {
                 Ok(result) => {
@@ -318,18 +388,49 @@ pub(super) async fn dispatch(
                     let message = unavailable
                         .map(|unavailable| unavailable.0.clone())
                         .unwrap_or_else(|| error.to_string());
-                    send(outbound_tx, error_response(id, code, &message)).await?;
+                    send(
+                        outbound_tx,
+                        error_response(
+                            id,
+                            agent_run_constraint::response_code(&error, code),
+                            &message,
+                        ),
+                    )
+                    .await?;
                 }
             }
         }
-        method::AGENT_STEER => {
-            let params = match serde_json::from_value::<AgentSteerParams>(params.clone()) {
+        method::AGENT_STEER | method::AGENT_CONTINUE => {
+            let continuation = method == method::AGENT_CONTINUE;
+            let params = match kcoder_app_rpc_codec::decode::<AgentSteerParams>(params.clone()) {
                 Ok(params) => params,
                 Err(error) => {
                     send(outbound_tx, error_response(id, -32602, &error.to_string())).await?;
                     return Ok(DispatchControl::Continue);
                 }
             };
+            if (continuation
+                && (!continuation_negotiated || params.expected_background_run.is_none()))
+                || params
+                    .expected_background_run
+                    .as_ref()
+                    .is_some_and(|expected| {
+                        !(if continuation {
+                            continuation_negotiated
+                        } else {
+                            exact_control_negotiated
+                        }) || expected.parent_session_id != params.thread_id
+                            || expected.agent_id != params.agent_id
+                            || params.client_message_id.is_none()
+                    })
+            {
+                send(
+                    outbound_tx,
+                    error_response(id, -32038, "agent_exact_control_unavailable"),
+                )
+                .await?;
+                return Ok(DispatchControl::Continue);
+            }
             if params.message.trim().is_empty() {
                 send(
                     outbound_tx,
@@ -402,14 +503,34 @@ pub(super) async fn dispatch(
                 send(outbound_tx, error_response(id, -32037, &error.to_string())).await?;
                 return Ok(DispatchControl::Continue);
             }
-            let receipt = match target_engine
-                .steer_subagent_with_client_id(
-                    &params.agent_id,
-                    params.message.trim(),
-                    params.client_message_id.as_deref(),
-                )
-                .await
-            {
+            let delivered = if let Some(expected) = &params.expected_background_run {
+                if continuation {
+                    target_engine
+                        .continue_subagent_run_with_client_id(
+                            expected,
+                            params.message.trim(),
+                            params.client_message_id.as_deref().unwrap_or_default(),
+                        )
+                        .await
+                } else {
+                    target_engine
+                        .steer_subagent_run_with_client_id(
+                            expected,
+                            params.message.trim(),
+                            params.client_message_id.as_deref().unwrap_or_default(),
+                        )
+                        .await
+                }
+            } else {
+                target_engine
+                    .steer_subagent_with_client_id(
+                        &params.agent_id,
+                        params.message.trim(),
+                        params.client_message_id.as_deref(),
+                    )
+                    .await
+            };
+            let receipt = match delivered {
                 Ok(receipt) => receipt,
                 Err(error) => {
                     finish_agent_steer_response_gate(
@@ -424,6 +545,14 @@ pub(super) async fn dispatch(
                             if reason == "client_message_payload_conflict" =>
                         {
                             Some("client_message_payload_conflict")
+                        }
+                        kcoder_tools::ToolError::Execution(reason)
+                            if matches!(
+                                reason.as_str(),
+                                "subagent_run_changed" | "subagent_run_not_active"
+                            ) =>
+                        {
+                            Some(reason.as_str())
                         }
                         kcoder_tools::ToolError::Execution(reason)
                             if reason.starts_with("command_receipt_capacity:") =>
@@ -443,7 +572,7 @@ pub(super) async fn dispatch(
                             outbound_tx,
                             success_response(
                                 id,
-                                serde_json::to_value(AgentSteerResult {
+                                kcoder_app_rpc_codec::encode(AgentSteerResult {
                                     agent_id: params.agent_id,
                                     message_id: None,
                                     status: AgentSteerStatus::Rejected,
@@ -451,6 +580,7 @@ pub(super) async fn dispatch(
                                     queue_position: None,
                                     reason_code: Some(reason.into()),
                                     client_message_id: params.client_message_id,
+                                    expected_background_run: params.expected_background_run,
                                 })?,
                             ),
                         )
@@ -464,7 +594,8 @@ pub(super) async fn dispatch(
                 }
             };
             let message_id = receipt.message_id.clone();
-            let result = agent_steer_result_from_receipt(params.client_message_id, receipt);
+            let mut result = agent_steer_result_from_receipt(params.client_message_id, receipt);
+            result.expected_background_run = params.expected_background_run;
             send(
                 outbound_tx,
                 success_response(id, serde_json::to_value(result)?),
@@ -552,7 +683,11 @@ async fn send_agent_response<T: serde::Serialize>(
 ) -> Result<()> {
     let response = match result {
         Ok(result) => success_response(id, serde_json::to_value(result)?),
-        Err(error) => error_response(id, code, &error.to_string()),
+        Err(error) => error_response(
+            id,
+            agent_run_constraint::response_code(&error, code),
+            &error.to_string(),
+        ),
     };
     send(outbound, response).await
 }

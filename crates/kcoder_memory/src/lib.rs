@@ -10,8 +10,10 @@ use std::time::{Duration, Instant};
 use tracing::{debug, warn};
 
 mod global_revision;
+pub mod integrations;
 pub mod manager;
 mod markdown_header;
+mod migrations;
 pub mod observer;
 pub mod paths;
 pub mod retrieval;

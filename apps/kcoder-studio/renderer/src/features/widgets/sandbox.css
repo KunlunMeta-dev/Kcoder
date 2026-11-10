@@ -1,0 +1,30 @@
+* { box-sizing: border-box; }
+html { color-scheme: light dark; }
+body { margin: 0; color: var(--foreground, CanvasText); background: var(--background, Canvas); font-family: var(--font-ui, system-ui); font-size: var(--text-base, medium); line-height: 1.5; }
+#widget-root { padding: 12px; min-width: 0; }
+svg { display: block; max-width: 100%; height: auto; }
+img { max-width: 100%; height: auto; }
+figure, p { margin: 0; }
+figure + figure, p + p { margin-top: 12px; }
+h1, h2, h3, h4, h5, h6 { font-size: inherit; font-weight: 500; margin: 0; }
+button, input, select { font: inherit; color: inherit; }
+input[type=range] { width: 100%; accent-color: var(--primary, Highlight); }
+input[type=number] { max-width: 7em; text-align: right; background: transparent; border: 1px solid var(--border, GrayText); border-radius: 4px; }
+:focus-visible { outline: 2px solid var(--primary, Highlight); outline-offset: 2px; }
+[data-kcoder-prompt] { cursor: pointer; }
+.widget-controls, .widget-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.widget-controls { grid-template-columns: repeat(auto-fit, minmax(min(100%, 14em), 1fr)); }
+.widget-legend { display: flex; flex-wrap: wrap; gap: 12px; }
+.widget-swatch { display: inline-block; width: 10px; height: 10px; margin-inline-end: 6px; border-radius: 2px; }
+.widget-label-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.widget-stats { margin: 16px 0; }
+.widget-stats > div { padding: 12px; border-radius: 8px; background: color-mix(in srgb, var(--foreground, CanvasText) 5%, transparent); }
+.widget-stats output { display: block; font-size: calc(var(--text-base, 1em) * 1.5); margin-top: 4px; font-weight: 500; }
+.widget-muted, figcaption { color: var(--muted, GrayText); }
+.widget-chart-canvas { position: relative; min-height: 280px; height: 320px; }
+details { margin-top: 12px; }
+summary { cursor: pointer; color: var(--muted, GrayText); }
+table { border-collapse: collapse; min-width: 100%; text-align: left; margin-top: 8px; }
+td, th { padding: 4px 8px; border-bottom: 1px solid var(--border, GrayText); }
+th { font-weight: 500; }
+@media(max-width: 480px) { .widget-controls, .widget-stats { grid-template-columns: 1fr; } .widget-chart-canvas { min-height: 240px; height: 280px; } input[type=range] { min-height: 44px; } }

@@ -1,4 +1,11 @@
-pub mod turn_attempt_store;
+pub mod browser_profiles;
+pub mod continuous_work;
+pub mod external_history;
+pub mod historical_contexts;
+mod historical_seed;
+pub mod historical_undo;
+pub use kcoder_integration_storage::{integrations, turn_attempt_store};
+pub mod widgets;
 use anyhow::Context;
 use fs2::FileExt;
 use kcoder_types::{ContentBlock, Message, MessageRole, MessagesRequest, StreamEvent, Usage};
@@ -9,13 +16,24 @@ use std::fs;
 use std::io::{BufRead, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, MutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use std::sync::{Arc, Mutex, MutexGuard, RwLock};
 use std::time::SystemTime;
 use tokio::sync::{mpsc, oneshot};
 use tracing::{info, warn};
 
 mod agent_breaker;
+mod async_user_questions;
+pub mod context_archive;
 mod conversation_rewind;
+mod current_history_observation;
+pub use current_history_observation::{
+    CurrentHistoryEntry, CurrentHistoryObservation, CurrentHistoryPresence, CurrentHistoryUnknown,
+    HistoryMessageLocator,
+};
+mod provenance_revision;
+use provenance_revision::{
+    PrivateStateLock, ProvenanceTokens, ReadGuard, Revision, Tracked, WriteGuard,
+};
 mod message_revision;
 pub use message_revision::MessageRevision;
 
@@ -33,24 +51,53 @@ pub use artifact_requirements::{
 mod diagnostic_capture;
 mod diagnostic_writer;
 mod goal;
+mod goal_remote_budget;
 mod goal_state;
+pub use goal_state::WeakGoalObservation;
 mod history;
+mod history_append_context;
 mod history_flusher;
+pub use history_append_context::{
+    AppStateLifecycleIdentity, HistoryAppendScope, ScopedLifecycleIdentity, TryLifecycleAccess,
+};
+pub use history_flusher::NativeHistoryRowReceipt;
 pub mod history_index;
 mod history_metadata;
 mod history_store;
+pub use history_store::{
+    NativeGoalMetadataLineage, NativeGoalMetadataLineageStatus, NativeGoalMetadataObserver,
+    NativeGoalMetadataSettlement, NativeHistoryLineageReservation, NativeHistoryLineageStatus,
+};
+mod user_input_commit;
+pub use user_input_commit::{
+    CommittedUserInput, PendingUserInput, UserInputCommit, UserInputRejection, UserInputStart,
+};
 mod llm_history;
 mod model;
 pub mod orchestrate_store;
+mod prepared_immutable;
 mod recovery_record;
 mod runtime_audit;
 pub use recovery_record::{RecoveryCapture, RecoveryDecision, RecoveryOutcome};
 mod background_delivery;
 pub use background_delivery::{MAX_BACKGROUND_RUNS_PER_TASK, MAX_BACKGROUND_TASK_IDENTITIES};
+mod agent_definition;
+mod imported_context_snapshot;
+mod migrations;
+mod read_visibility;
+mod session_lifetime;
 mod session_persistence;
+pub use session_persistence::PROCESS_EXIT_TASK_INTERRUPTION;
+mod side_question_snapshot;
+mod task_configuration_inheritance;
+pub use side_question_snapshot::SideQuestionSnapshot;
+pub use task_configuration_inheritance::TaskSuccessorConfiguration;
 mod task_control_metadata;
 mod task_state;
-pub use background_delivery::{BackgroundHookReceipt, BackgroundRunRecord};
+pub use background_delivery::{
+    BackgroundHookReceipt, BackgroundRunRecord, NativeSubagentResultCapacity,
+    NativeSubagentResultObservation, NativeSubagentResultReservation,
+};
 pub mod usage_history;
 
 pub use artifacts::{
@@ -68,22 +115,32 @@ pub use goal::{
     PreparedGoalObjective, goal_context_snapshot, goal_objective_text, goal_report_relative_path,
     prepare_goal_objective,
 };
+pub use goal_remote_budget::NativeGoalTaskBudgetBinding;
 pub use history::{
-    BoundedTranscriptReader, PreparedSessionResume, PreparedTranscriptHistory,
-    ProjectedTranscriptReader, SessionCandidateBatch, SessionCandidateScan,
-    SessionCandidateScanner, delete_session_history_files, history_has_persisted_session_cwd,
-    history_persisted_base_cwd, history_persisted_goal, history_persisted_goal_history,
-    history_persisted_session_mode, load_history, load_transcript_history,
-    load_transcript_history_bounded, prepare_session_resume, prepare_session_resume_counting,
-    prepare_session_resume_real_user_counting, prune_session_history, recent_session_candidates,
+    BoundedTranscriptReader, PreparedCommittedAttemptHistory, PreparedCompletedAttemptHistory,
+    PreparedSessionResume, PreparedTranscriptHistory, ProjectedTranscriptReader,
+    SessionCandidateBatch, SessionCandidateScan, SessionCandidateScanner,
+    delete_session_history_files, history_has_persisted_session_cwd, history_persisted_base_cwd,
+    history_persisted_goal, history_persisted_goal_history, history_persisted_session_mode,
+    load_history, load_transcript_history, load_transcript_history_bounded,
+    mark_session_history_deleted, observe_session_history_source_presence, prepare_session_resume,
+    prepare_session_resume_counting, prepare_session_resume_real_user_counting,
+    prune_session_history, read_session_history_deletion, recent_session_candidates,
     recent_session_candidates_report, recent_sessions, session_first_prompt,
     session_first_timestamp_ms, session_timestamps_ms,
 };
 use history_flusher::*;
 pub use history_metadata::{
-    PreparedSessionMetadata, prepare_session_metadata, prepare_session_metadata_bounded,
+    CapturedSessionMetadata, PersistedSubagentRecord, PersistedSubagentSnapshot,
+    PreparedSessionMetadata, capture_session_metadata_bounded,
+    capture_session_metadata_bounded_with_check, capture_task_workspace_metadata,
+    prepare_committed_session_metadata, prepare_session_metadata, prepare_session_metadata_bounded,
 };
 use history_store::HistorySource;
+pub use history_store::{
+    BoundDeletedHistoryPresenceReference, DeletedHistoryProof, HistorySourceObservation,
+    HistorySourceObservationBusy, HistorySourcePresenceUnsupported, HistorySourceUnknown,
+};
 use llm_history::*;
 pub use model::{
     AgentBreakerState, AgentCommandReceipt, AgentControlAction, AgentControlBoundaryOutcome,
@@ -105,8 +162,12 @@ use session_persistence::*;
 /// Opaque weak identity for owner-bound, in-memory read snapshots. It does not
 /// retain conversation payloads or expose the persistence lock.
 #[derive(Clone)]
-pub struct AppStateIdentity(std::sync::Weak<RwLock<AppStateInner>>);
+pub struct AppStateIdentity(std::sync::Weak<PrivateStateLock<AppStateInner>>);
 impl AppStateIdentity {
+    /// Liveness is only a retention hint; it does not authorize a read or a new request.
+    pub fn is_alive(&self) -> bool {
+        self.0.strong_count() > 0
+    }
     pub fn matches(&self, state: &AppState) -> bool {
         std::sync::Weak::ptr_eq(&self.0, &Arc::downgrade(&state.inner))
     }
@@ -115,7 +176,8 @@ impl AppStateIdentity {
 /// Central application state shared across the REPL, engine, and tools.
 #[derive(Debug, Clone)]
 pub struct AppState {
-    inner: Arc<RwLock<AppStateInner>>,
+    context_archive_cache: Arc<Mutex<Option<context_archive::ContextArchive>>>,
+    inner: Arc<PrivateStateLock<AppStateInner>>,
     usage_history_root: Arc<RwLock<Option<PathBuf>>>,
     diagnostic_context: Arc<diagnostic_capture::DiagnosticContext>,
     session_state_persist_lock: Arc<Mutex<()>>,
@@ -139,6 +201,12 @@ struct AppStateInner {
     pub cwd: PathBuf,
     /// Sole source of truth for session-level mode; the goal lifecycle cannot clear it.
     pub session_mode: SessionMode,
+    pub studio_work_mode: kcoder_types::StudioWorkMode,
+    pub studio_tool_selection: Option<kcoder_types::StudioToolSelections>,
+    pub agent_definition: Option<kcoder_types::agent_definition::AgentTaskBinding>,
+    pub agent_configuration_revision: u64,
+    pub session_lifetime: kcoder_types::session_lifetime::SessionLifetimeSetting,
+    pub channel_task_source: Option<kcoder_types::agent_definition::ChannelTaskSource>,
     pub workflow_definition_id: Option<String>,
     pub model_selection_mode: kcoder_types::ModelSelectionMode,
     pub selected_model: Option<String>,
@@ -160,7 +228,8 @@ struct AppStateInner {
     pub session_state_path: Option<PathBuf>,
     /// Transcript UUIDs aligned with `messages`; `None` means the message is
     /// model-only state that is not represented by a JSONL transcript entry.
-    pub message_history_ids: Vec<Option<String>>,
+    pub message_history_ids: Tracked<Vec<Option<String>>>,
+    pub history_attempts: history_append_context::HistoryAppendMetadata,
     /// Last UUID in the append-only transcript, used for parent chaining.
     pub last_history_uuid: Option<String>,
     /// Timestamp of the latest assistant message in the active model history.
@@ -171,6 +240,7 @@ struct AppStateInner {
     pub history_flusher: Option<HistoryFlusher>,
     /// Fixed source identity shared by direct writes, snapshots, and the background worker.
     pub history_source: Option<HistorySource>,
+    pub inherited_context_archive: Option<Arc<context_archive::InheritedArchive>>,
     /// Direct writes stay disabled after any unretained write failure.
     pub history_write_fault: Option<String>,
     /// Maximum number of messages to keep in the in-memory buffer.
@@ -186,6 +256,11 @@ struct AppStateInner {
     pub goal_history: Vec<Goal>,
     /// Per-session Markdown memory metadata.
     pub session_memory: Option<SessionMemorySnapshot>,
+    pub imported_context_snapshot:
+        Option<Arc<kcoder_types::imported_context_snapshot::ImportedContextSnapshot>>,
+    pub imported_context_reference: Option<imported_context_snapshot::SnapshotReference>,
+    pub imported_context_persisted_at: Option<PathBuf>,
+    pub imported_context_legacy_unobserved: bool,
     /// Files read during this session, used to reject stale write/edit calls.
     pub file_reads: HashMap<PathBuf, FileReadSnapshot>,
     /// Retain the most recent full read independently from range reads so a range snapshot cannot overwrite the compaction anchor.
@@ -203,10 +278,20 @@ struct AppStateInner {
     last_injected_fleet_members: HashMap<String, String>,
 }
 
+impl ProvenanceTokens for AppStateInner {
+    fn provenance_tokens(&self) -> (Revision, Revision) {
+        (
+            self.message_history_ids.revision(),
+            self.history_attempts.provenance_revision(),
+        )
+    }
+}
+
 #[derive(Debug, Clone)]
 struct SessionArtifactLocation {
     project_dir: PathBuf,
     session_id: String,
+    prefer_over_history: bool,
 }
 
 impl AppState {
@@ -246,6 +331,7 @@ impl AppState {
         let cwd = cwd.into();
         let timestamp_ms = now_millis();
         Self {
+            context_archive_cache: Default::default(),
             usage_history_root: Arc::new(RwLock::new(None)),
             diagnostic_context: Arc::new(diagnostic_capture::DiagnosticContext::default()),
             session_state_persist_lock: Arc::new(Mutex::new(())),
@@ -253,13 +339,19 @@ impl AppState {
             runtime_audit_lock: Arc::new(Mutex::new(())),
             runtime_audit_policy: Arc::new(RwLock::new(OrchestrateRuntimeAuditPolicy::default())),
             runtime_audit_degradation: Arc::new(RwLock::new(None)),
-            inner: Arc::new(RwLock::new(AppStateInner {
+            inner: Arc::new(PrivateStateLock::new(AppStateInner {
                 short_id_registry: None,
                 messages: Default::default(),
                 message_revision: MessageRevision::default(),
                 conversation_started: false,
                 cwd: cwd.clone(),
                 session_mode: SessionMode::Default,
+                studio_work_mode: Default::default(),
+                studio_tool_selection: None,
+                agent_definition: None,
+                agent_configuration_revision: 0,
+                session_lifetime: Default::default(),
+                channel_task_source: None,
                 workflow_definition_id: None,
                 model_selection_mode: Default::default(),
                 selected_model: None,
@@ -271,11 +363,13 @@ impl AppState {
                 llm_request_history_override: None,
                 session_artifact_override: None,
                 session_state_path: None,
-                message_history_ids: Vec::new(),
+                message_history_ids: Vec::new().into(),
+                history_attempts: Default::default(),
                 last_history_uuid: None,
                 last_assistant_message_timestamp_ms: None,
                 history_flusher: None,
                 history_source: None,
+                inherited_context_archive: None,
                 history_write_fault: None,
                 history_max_messages: default_history_max_messages(),
                 todos: Vec::new(),
@@ -284,6 +378,10 @@ impl AppState {
                 goal: None,
                 goal_history: Vec::new(),
                 session_memory: None,
+                imported_context_snapshot: None,
+                imported_context_reference: None,
+                imported_context_persisted_at: None,
+                imported_context_legacy_unobserved: false,
                 file_reads: HashMap::new(),
                 full_file_reads: HashMap::new(),
                 read_tool_call_keys: HashMap::new(),
@@ -301,6 +399,7 @@ impl AppState {
         let timestamp_ms = now_millis();
         let message_count = messages.len();
         Self {
+            context_archive_cache: Default::default(),
             usage_history_root: Arc::new(RwLock::new(None)),
             diagnostic_context: Arc::new(diagnostic_capture::DiagnosticContext::default()),
             session_state_persist_lock: Arc::new(Mutex::new(())),
@@ -308,13 +407,19 @@ impl AppState {
             runtime_audit_lock: Arc::new(Mutex::new(())),
             runtime_audit_policy: Arc::new(RwLock::new(OrchestrateRuntimeAuditPolicy::default())),
             runtime_audit_degradation: Arc::new(RwLock::new(None)),
-            inner: Arc::new(RwLock::new(AppStateInner {
+            inner: Arc::new(PrivateStateLock::new(AppStateInner {
                 short_id_registry: None,
                 messages: messages.into(),
                 message_revision: MessageRevision::default(),
                 conversation_started: message_count > 0,
                 cwd: cwd.clone(),
                 session_mode: SessionMode::Default,
+                studio_work_mode: Default::default(),
+                studio_tool_selection: None,
+                agent_definition: None,
+                agent_configuration_revision: 0,
+                session_lifetime: Default::default(),
+                channel_task_source: None,
                 workflow_definition_id: None,
                 model_selection_mode: Default::default(),
                 selected_model: None,
@@ -326,11 +431,13 @@ impl AppState {
                 llm_request_history_override: None,
                 session_artifact_override: None,
                 session_state_path: None,
-                message_history_ids: vec![None; message_count],
+                message_history_ids: vec![None; message_count].into(),
+                history_attempts: Default::default(),
                 last_history_uuid: None,
                 last_assistant_message_timestamp_ms: None,
                 history_flusher: None,
                 history_source: None,
+                inherited_context_archive: None,
                 history_write_fault: None,
                 history_max_messages: default_history_max_messages(),
                 todos: Vec::new(),
@@ -339,6 +446,10 @@ impl AppState {
                 goal: None,
                 goal_history: Vec::new(),
                 session_memory: None,
+                imported_context_snapshot: None,
+                imported_context_reference: None,
+                imported_context_persisted_at: None,
+                imported_context_legacy_unobserved: false,
                 file_reads: HashMap::new(),
                 full_file_reads: HashMap::new(),
                 read_tool_call_keys: HashMap::new(),
@@ -358,14 +469,14 @@ impl AppState {
             .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
-    fn read_inner(&self) -> RwLockReadGuard<'_, AppStateInner> {
+    fn read_inner(&self) -> ReadGuard<'_, AppStateInner> {
         self.inner.read().unwrap_or_else(|poisoned| {
             warn!("AppState read lock was poisoned; recovering the contained state");
             poisoned.into_inner()
         })
     }
 
-    fn write_inner(&self) -> RwLockWriteGuard<'_, AppStateInner> {
+    fn write_inner(&self) -> WriteGuard<'_, AppStateInner> {
         self.inner.write().unwrap_or_else(|poisoned| {
             warn!("AppState write lock was poisoned; recovering the contained state");
             poisoned.into_inner()
@@ -382,10 +493,26 @@ impl AppState {
         self.write_inner().session_artifact_override = Some(SessionArtifactLocation {
             project_dir: project_dir.into(),
             session_id: session_id.into(),
+            prefer_over_history: false,
         });
     }
 
     fn session_artifact_project_dir_and_id(inner: &AppStateInner) -> Option<(PathBuf, String)> {
+        if let Some(location) = inner
+            .session_artifact_override
+            .as_ref()
+            .filter(|location| location.prefer_over_history)
+        {
+            return Some((location.project_dir.clone(), location.session_id.clone()));
+        }
+        if inner
+            .history_source
+            .as_ref()
+            .is_some_and(|source| source.private_storage().is_some())
+            && let Some(location) = &inner.session_artifact_override
+        {
+            return Some((location.project_dir.clone(), location.session_id.clone()));
+        }
         inner
             .history_path
             .as_ref()
@@ -788,6 +915,25 @@ impl AppState {
             !uuid.is_empty() && uuid.len() <= 128,
             "invalid history message identity"
         );
+        self.enqueue_message_with_sources(message, uuid, require_healthy_writer, Vec::new())
+    }
+
+    /// Append native web observations atomically with their matching tool results.
+    pub fn add_message_with_web_sources(
+        &self,
+        message: Message,
+        sources: Vec<kcoder_types::web_sources::WebSourcesV1>,
+    ) -> anyhow::Result<()> {
+        self.enqueue_message_with_sources(message, &generate_transcript_uuid(), false, sources)
+    }
+
+    fn enqueue_message_with_sources(
+        &self,
+        message: Message,
+        uuid: &str,
+        require_healthy_writer: bool,
+        sources: Vec<kcoder_types::web_sources::WebSourcesV1>,
+    ) -> anyhow::Result<()> {
         let mut inner = self.write_inner();
         inner.conversation_started = true;
         let timestamp_ms = now_millis();
@@ -813,7 +959,25 @@ impl AppState {
         inner.messages.push(message.clone());
         inner.message_history_ids.push(Some(uuid.clone()));
         Self::truncate_messages(&mut inner);
+        let history_attempt =
+            history_append_context::record_append(self, &mut inner, &uuid, !require_healthy_writer)
+                .or_else(|| {
+                    history_append_context::web_source_history_identity(
+                        &sources,
+                        &inner.session_id,
+                        &message,
+                    )
+                });
+        history_append_context::remember(&mut inner, &uuid, history_attempt.clone());
+        let web_sources: Vec<_> = sources.into_iter().filter(|receipt| {
+            history_attempt.as_ref() == Some(&receipt.identity)
+                && receipt.matches(&inner.session_id, &receipt.tool_call_id)
+                && matches!(&message, Message::User { content, .. } if content.iter().any(|block| matches!(block, ContentBlock::ToolResult { tool_use_id, .. } if tool_use_id == &receipt.tool_call_id)))
+        }).collect();
+        inner.history_attempts.record_sources(&uuid, &web_sources);
         let entry = HistoryEntry {
+            web_sources,
+            history_attempt,
             session_id: inner.session_id.clone(),
             timestamp_ms,
             uuid: Some(uuid),
@@ -830,7 +994,12 @@ impl AppState {
                 && let Some(path) = path
             {
                 flusher.process_direct(&path, *command);
-                flusher.queue.flush(&path)?;
+                if let Err(error) = flusher.queue.flush(&path) {
+                    inner.history_write_fault.get_or_insert_with(|| {
+                        format!("history writer could not confirm the original entry: {error:#}")
+                    });
+                    return Err(error);
+                }
             }
         } else if path.is_some() {
             let result = direct_history_write(&mut inner, |inner| {
@@ -872,7 +1041,8 @@ impl AppState {
         if inner.message_history_ids.len() >= drain_end {
             inner.message_history_ids.drain(drain_start..drain_end);
         } else {
-            inner.message_history_ids = vec![None; inner.messages.len()];
+            inner.message_history_ids = vec![None; inner.messages.len()].into();
+            inner.history_attempts.clear_records();
         }
     }
 
@@ -883,12 +1053,14 @@ impl AppState {
             inner.session_updated_at_ms = inner.session_updated_at_ms.max(now_millis());
         }
         inner.conversation_started |= !messages.is_empty();
-        inner.message_history_ids = vec![None; messages.len()];
+        inner.message_history_ids = vec![None; messages.len()].into();
+        inner.history_attempts.clear_records();
         inner.messages = messages.into();
     }
 
     /// Replace model-visible message content without discarding transcript
-    /// identity metadata when the message count is unchanged.
+    /// identity metadata when the message count is unchanged. Count changes
+    /// retain identities only for the exact unchanged prefix.
     ///
     /// This is used by in-place context reductions such as cold-cache
     /// micro-compaction. The append-only transcript remains untouched while a
@@ -901,7 +1073,16 @@ impl AppState {
         }
         inner.conversation_started |= !messages.is_empty();
         if inner.message_history_ids.len() != messages.len() {
-            inner.message_history_ids = vec![None; messages.len()];
+            let prefix = inner
+                .messages
+                .iter()
+                .zip(&messages)
+                .take_while(|(old, new)| old == new)
+                .count();
+            inner.message_history_ids.truncate(prefix);
+            inner.message_history_ids.resize(messages.len(), None);
+            let retained = inner.message_history_ids.clone();
+            inner.history_attempts.retain(&retained);
         }
         inner.messages = messages.into();
     }
@@ -945,7 +1126,8 @@ impl AppState {
                 inner.session_updated_at_ms = inner.session_updated_at_ms.max(now_millis());
             }
             inner.conversation_started |= !messages.is_empty();
-            inner.message_history_ids = vec![None; messages.len()];
+            inner.message_history_ids = vec![None; messages.len()].into();
+            inner.history_attempts.clear_records();
             inner.messages = messages.into();
             check_direct_history_fault(&inner)?;
             inner.history_flusher.as_ref().map(|flusher| {
@@ -982,24 +1164,7 @@ impl AppState {
     }
 
     pub async fn flush_history(&self) -> anyhow::Result<()> {
-        let flush_done = {
-            let inner = self.read_inner();
-            check_direct_history_fault(&inner)?;
-            inner.history_flusher.as_ref().map(|flusher| {
-                let (done_tx, done_rx) = oneshot::channel();
-                if let Err(command) = flusher.send(HistoryFlusherCommand::Flush(done_tx))
-                    && let Some(path) = inner.history_path.as_ref()
-                {
-                    flusher.process_direct(path, *command);
-                }
-                done_rx
-            })
-        };
-        if let Some(done) = flush_done {
-            done.await
-                .context("history flusher stopped before flush completed")??;
-        }
-        Ok(())
+        history_flusher::flush_history(self).await
     }
 
     /// Replace the current model conversation after a full compaction and
@@ -1050,7 +1215,9 @@ impl AppState {
             let next_ids = compacted_message_history_ids(&messages, &transcript_metadata);
             inner.message_revision = MessageRevision::default();
             inner.messages = messages.into();
-            inner.message_history_ids = next_ids;
+            inner.message_history_ids = next_ids.into();
+            let retained_ids = inner.message_history_ids.clone();
+            inner.history_attempts.retain(&retained_ids);
             inner.last_history_uuid = Some(transcript_metadata.summary_uuid.clone());
             // Mark only Read bodies actually removed by full compaction. Reads retained
             // verbatim in the recent tail keep normal duplicate suppression; removed full
@@ -1223,6 +1390,8 @@ impl AppState {
                 return Ok(());
             }
             ensure_message_history_ids(&mut inner);
+            let retained_ids = inner.message_history_ids.clone();
+            inner.history_attempts.retain(&retained_ids);
             let source = require_history_source(&inner)?;
             let write = || {
                 write_history_snapshot(
@@ -1230,6 +1399,8 @@ impl AppState {
                     &inner.session_id,
                     inner.messages.iter(),
                     &inner.message_history_ids,
+                    &inner.history_attempts,
+                    inner.inherited_context_archive.as_deref(),
                 )?;
                 // A committed body supersedes old commands even if its sidecar fails.
                 persist_snapshot_session_state(&inner)
@@ -1242,6 +1413,18 @@ impl AppState {
             };
             if result.is_ok() {
                 inner.history_write_fault = None;
+                if inner
+                    .history_flusher
+                    .as_ref()
+                    .is_some_and(|flusher| flusher.queue.worker_is_stopped() || flusher.is_closed())
+                    && let (Ok(handle), Some(path), Some(source)) = (
+                        tokio::runtime::Handle::try_current(),
+                        inner.history_path.clone(),
+                        inner.history_source.clone(),
+                    )
+                {
+                    inner.history_flusher = Some(start_history_flusher(handle, path, source));
+                }
             } else if let Err(error) = &result
                 && crate::history_store::is_uncertain_mutation(error)
             {
@@ -2631,3 +2814,6 @@ mod tests {
 
     include!("tests/history_flusher.rs");
 }
+
+#[cfg(test)]
+mod web_sources_tests;

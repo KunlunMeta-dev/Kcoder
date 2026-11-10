@@ -1,19 +1,17 @@
-{
-    servers {
-        protocols h1 h2
-    }
-}
-
 https://{$KCODER_RELAY_DOMAIN}:{$KCODER_RELAY_PUBLIC_PORT} {
     tls {
         issuer acme {
-            disable_tlsalpn_challenge
+            disable_http_challenge
         }
     }
 
     handle /_relay/* {
-        reverse_proxy 127.0.0.1:{$KCODER_RELAY_CONTROL_PORT} {
-            header_up Host {http.request.hostport}
+        route {
+            @relayAdmin path /_relay/admin /_relay/admin/*
+            respond @relayAdmin 404
+            reverse_proxy 127.0.0.1:{$KCODER_RELAY_CONTROL_PORT} {
+                header_up Host {http.request.hostport}
+            }
         }
     }
 
@@ -26,10 +24,28 @@ https://{$KCODER_RELAY_DOMAIN}:{$KCODER_RELAY_PUBLIC_PORT} {
     }
 
     handle {
+        respond 404
+    }
+}
+
+# Isolated per-Gateway origins (g-<hash>.<domain>). Certificates are issued on
+# demand only after the Relay's loopback ask endpoint confirms the exact name.
+https://*.{$KCODER_RELAY_DOMAIN}:{$KCODER_RELAY_PUBLIC_PORT} {
+    tls {
+        on_demand
+        issuer acme {
+            disable_http_challenge
+        }
+    }
+
+    handle /g/* {
         reverse_proxy 127.0.0.1:{$KCODER_RELAY_PROXY_PORT} {
-            # Legacy root URLs share the existing endpoint during migration.
             header_up Host {http.request.hostport}
             flush_interval -1
         }
+    }
+
+    handle {
+        respond 404
     }
 }

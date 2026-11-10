@@ -424,12 +424,18 @@ pub(crate) fn render_panel_message(
             if column > 0 {
                 spans.push(Span::raw(" ".repeat(gap)));
             }
-            spans.extend(render_member_cell(
-                member,
-                index + 1,
+            let cell = crate::line_truncation::truncate_line_with_ellipsis_if_overflow(
+                Line::from(render_member_cell(
+                    member,
+                    index + 1,
+                    cell_width,
+                    phase_elapsed,
+                )),
                 cell_width,
-                phase_elapsed,
-            ));
+            );
+            let padding = cell_width.saturating_sub(cell.width());
+            spans.extend(cell.spans);
+            spans.push(Span::raw(" ".repeat(padding)));
         }
         lines.push(Line::from(spans));
     }
@@ -592,9 +598,14 @@ fn render_member_cell(
         ];
     }
     let bar = member_bar(member, phase_elapsed);
-    let phase = phase_label(member);
-    let fixed_width = id.len() + 1 + bar.chars().count() + 1 + phase.chars().count() + 1;
-    let detail_width = width.saturating_sub(fixed_width);
+    const STATUS_FIELD_WIDTH: usize = 18;
+    const MIN_DETAIL_WIDTH: usize = 8;
+    let prefix_width = id.len() + 1 + unicode_width::UnicodeWidthStr::width(bar.as_str()) + 1;
+    // Reserve fields from the slot width, never from the current status or preview.
+    let status_width =
+        STATUS_FIELD_WIDTH.min(width.saturating_sub(prefix_width + 1 + MIN_DETAIL_WIDTH));
+    let phase = padded_member_field(&phase_label(member), status_width);
+    let detail_width = width.saturating_sub(prefix_width + status_width + 1);
     let terminal_detail = matches!(
         member.phase,
         SubagentPhase::Failed | SubagentPhase::Halted | SubagentPhase::Cancelled
@@ -604,7 +615,7 @@ fn render_member_cell(
     let detail = terminal_detail
         .or_else(|| latest_nonempty_line(&member.latest_model_text).filter(|line| !line.is_empty()))
         .unwrap_or(member.item_text.as_str());
-    let detail = truncate_display_text(detail, detail_width.max(1));
+    let detail = padded_member_field(detail, detail_width);
     let phase_color = match member.phase {
         SubagentPhase::Completed => theme.success,
         SubagentPhase::Failed => theme.error_fg,
@@ -622,6 +633,13 @@ fn render_member_cell(
         Span::raw(" "),
         Span::styled(detail, Style::default().fg(theme.text_dim)),
     ]
+}
+
+fn padded_member_field(text: &str, width: usize) -> String {
+    let mut text = truncate_display_text(text, width);
+    let padding = width.saturating_sub(unicode_width::UnicodeWidthStr::width(text.as_str()));
+    text.push_str(&" ".repeat(padding));
+    text
 }
 
 fn phase_label(member: &SubagentMember) -> String {
@@ -915,6 +933,106 @@ mod tests {
         assert_eq!(rows_with_ids(120), 1);
         assert_eq!(rows_with_ids(80), 2);
         assert_eq!(rows_with_ids(40), 3);
+    }
+
+    #[test]
+    fn member_columns_stay_fixed_when_previews_and_states_change() {
+        let mut panel = SubagentPanel::new(5);
+        for index in 1..=3 {
+            panel.add_pending(
+                format!("tool-{index}"),
+                "short".to_string(),
+                SubagentDelivery::Background,
+            );
+        }
+        for (width, rows, expected) in [
+            (120, None, [(1, 1), (1, 41), (1, 81)]),
+            (80, None, [(1, 1), (1, 41), (2, 1)]),
+            (40, Some(3), [(1, 1), (1, 14), (1, 27)]),
+        ] {
+            for preview in [
+                "",
+                "x",
+                "正在检查👩‍💻文件 e\u{301}",
+                &"long output ".repeat(40),
+            ] {
+                for phase in [
+                    SubagentPhase::Pending,
+                    SubagentPhase::Running,
+                    SubagentPhase::Completed,
+                ] {
+                    panel.members[0].latest_model_text = preview.to_string();
+                    panel.members[0].phase = phase;
+                    panel.members[0].status_text =
+                        "A long running status that exceeds one column".to_string();
+                    let lines =
+                        render_panel_message(&panel.encode_message(), width, Duration::ZERO, rows)
+                            .unwrap();
+                    let mut positions = Vec::new();
+                    for (row, line) in lines.iter().enumerate() {
+                        let mut column = 0;
+                        for span in &line.spans {
+                            if matches!(span.content.as_ref(), "001" | "002" | "003") {
+                                positions.push((row, column));
+                            }
+                            column += span.width();
+                        }
+                        assert!(line.width() <= usize::from(width));
+                    }
+                    assert_eq!(
+                        positions, expected,
+                        "width={width}, phase={phase:?}, preview={preview}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn member_summary_field_keeps_its_start_and_width_across_live_status_changes() {
+        let mut panel = SubagentPanel::new(9);
+        panel.add_pending(
+            "tool-1".to_string(),
+            "initial task".to_string(),
+            SubagentDelivery::Background,
+        );
+        assert!(panel.associate("tool-1", "agent-1", SubagentDelivery::Background));
+        for width in [30, 36, 56, 80] {
+            let mut summary_start = None;
+            let mut summary_width = None;
+            for (phase, current, status, preview) in [
+                (SubagentPhase::Running, 1, "Running", "first live preview"),
+                (SubagentPhase::Running, 22, "Running", "next"),
+                (
+                    SubagentPhase::Running,
+                    1000,
+                    "Steering queued with a long status",
+                    "正在检查👩‍💻文件 e\u{301} and a much longer live preview",
+                ),
+                (SubagentPhase::Completed, 22, "Completed", "final preview"),
+            ] {
+                let member = &mut panel.members[0];
+                member.phase = phase;
+                member.current = Some(current);
+                member.total = Some(60);
+                member.status_text = status.to_string();
+                member.latest_model_text = preview.to_string();
+                let spans = render_member_cell(member, 1, width, Duration::ZERO);
+                let start = spans[..6].iter().map(Span::width).sum::<usize>();
+                let detail = &spans[6];
+                assert_eq!(*summary_start.get_or_insert(start), start);
+                assert_eq!(*summary_width.get_or_insert(detail.width()), detail.width());
+                assert_eq!(Line::from(spans.clone()).width(), width);
+                assert!(detail.content.starts_with(preview.chars().next().unwrap()));
+                if preview == "next" {
+                    assert_eq!(detail.content.trim_end(), "next");
+                }
+                if phase == SubagentPhase::Completed {
+                    assert!(spans[4].content.starts_with("Completed"));
+                    assert!(detail.content.starts_with("final"));
+                }
+            }
+        }
     }
 
     #[test]

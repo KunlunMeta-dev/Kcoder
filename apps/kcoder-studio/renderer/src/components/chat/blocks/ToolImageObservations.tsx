@@ -5,7 +5,13 @@ import { ModalDialog } from '@/components/ui/modal-dialog'
 import { Button } from '@/components/ui/button'
 import { toolObservationOutput, hasToolImageObservations } from '@/kcoder/toolObservationOutput'
 
-export function ToolImageObservations({ output }: { output: unknown }) {
+export function ToolImageObservations({
+  output,
+  toolName,
+}: {
+  output: unknown
+  toolName?: string
+}) {
   const { t } = useTranslation('chat')
   const { t: commonT } = useTranslation('common')
   const [sizes, setSizes] = useState<Record<string, { width: number; height: number }>>({})
@@ -14,6 +20,7 @@ export function ToolImageObservations({ output }: { output: unknown }) {
   if (!hasToolImageObservations(output)) return null
   const raw = output as Record<string, unknown>
   const parsed = toolObservationOutput({
+    name: toolName,
     output: raw.output,
     outputImages: raw.images,
     outputImagesOmitted: raw.imagesOmitted,

@@ -16,8 +16,13 @@ import { startRelay } from '../src/server.mjs';
 import { startRegisteredClient } from '../src/client.mjs';
 import { readRegisteredClientId, readRegisteredClientIdentity } from '../src/client-identity.mjs';
 import { buildPairingLink } from '../src/pair.mjs';
+import { isolatedGatewayAuthority } from '../src/gateway-origin.mjs';
 
 const SHARED_HOST = 'registered-relay.example';
+// Registered Gateways are reached on their isolated origin; malformed IDs fall back to the root.
+function gatewayHost(id) {
+  try { return isolatedGatewayAuthority(SHARED_HOST, id); } catch { return SHARED_HOST; }
+}
 const REGISTRATION_KEY = randomToken();
 
 function randomToken() {
@@ -91,10 +96,10 @@ function httpRequest({ port, path = '/_relay/register', method = 'POST', key = R
   });
 }
 
-function register(port, enrollmentToken = randomToken(), pairingToken = randomToken(), options = {}) {
+function register(port, enrollmentToken = randomToken(), gatewaySecret = randomToken(), options = {}) {
   return httpRequest({
     port,
-    body: { enrollmentToken, pairingToken, ...(options.extraBody ?? {}) },
+    body: { enrollmentToken, gatewaySecret, ...(options.extraBody ?? {}) },
     key: options.key ?? REGISTRATION_KEY,
     timeoutMs: options.timeoutMs ?? 3000,
   });
@@ -105,10 +110,10 @@ function jsonBody(response) {
   catch { throw new Error(`Expected JSON response (HTTP ${response.status}): ${response.body.toString('utf8')}`); }
 }
 
-async function registerWithRetry(port, enrollmentToken, pairingToken) {
+async function registerWithRetry(port, enrollmentToken, gatewaySecret) {
   let response;
   for (let attempt = 0; attempt < 8; attempt += 1) {
-    response = await register(port, enrollmentToken, pairingToken);
+    response = await register(port, enrollmentToken, gatewaySecret);
     if (response.status !== 429) return response;
     await new Promise(resolve => setTimeout(resolve, 15 * (attempt + 1)));
   }
@@ -140,7 +145,7 @@ function openControl(port, gateway, { authorization = gateway.secret, gatewayId 
 
 function proxyHttp(port, { id, path = '/api/mobile/session', method = 'GET', body, authorization, timeoutMs = 2500 }) {
   const bytes = body === undefined ? null : Buffer.from(JSON.stringify(body));
-  const headers = { host: SHARED_HOST, connection: 'close' };
+  const headers = { host: gatewayHost(id), connection: 'close' };
   if (authorization) headers.authorization = `Bearer ${authorization}`;
   if (bytes) {
     headers['content-type'] = 'application/json';
@@ -169,7 +174,7 @@ function proxyHttp(port, { id, path = '/api/mobile/session', method = 'GET', bod
 
 function proxyWebSocket(port, { id, path = '/rpc', authorization, protocols }) {
   const socket = new WebSocket(`ws://127.0.0.1:${port}/g/${encodeURIComponent(id)}${path}`, {
-    headers: { host: SHARED_HOST, ...(authorization ? { authorization: `Bearer ${authorization}` } : {}) },
+    headers: { host: gatewayHost(id), ...(authorization ? { authorization: `Bearer ${authorization}` } : {}) },
     ...(protocols ? { protocol: protocols } : {}),
     handshakeTimeout: 1500,
   });
@@ -230,8 +235,8 @@ async function listen(server) {
   return server.address().port;
 }
 
-async function fakeGateway(t, name, pairingToken) {
-  const state = { name, pairingToken, accessTokens: new Set(), rpcToken: randomToken(), server: null, sockets: new Set() };
+async function fakeGateway(t, name, gatewaySecret) {
+  const state = { name, gatewaySecret, accessTokens: new Set(), rpcToken: randomToken(), server: null, sockets: new Set() };
   const server = createServer(async (request, response) => {
     const url = new URL(request.url, 'http://gateway.invalid');
     if (request.method === 'POST' && url.pathname === '/api/mobile/session') {
@@ -240,7 +245,7 @@ async function fakeGateway(t, name, pairingToken) {
       let payload;
       try { payload = JSON.parse(Buffer.concat(chunks).toString('utf8')); }
       catch { response.writeHead(400); response.end('bad request'); return; }
-      if (payload?.token !== state.pairingToken) {
+      if (payload?.token !== state.gatewaySecret) {
         response.writeHead(401, { 'content-type': 'application/json' });
         response.end(JSON.stringify({ error: 'unauthorized' }));
         return;
@@ -328,9 +333,9 @@ test('registration assigns unguessable credentials, is idempotent, persists, and
   assert.equal(firstResponse.status, 201);
   const first = jsonBody(firstResponse);
   assert.deepEqual(Object.keys(first).sort(), [
-    'id', 'secret', 'pairingToken', 'maxConnections', 'maxBytesPerWindow', 'trafficWindowMs',
+    'id', 'secret', 'gatewaySecret', 'maxConnections', 'maxBytesPerWindow', 'trafficWindowMs',
   ].sort());
-  assert.equal(first.pairingToken, pairingA);
+  assert.equal(first.gatewaySecret, pairingA);
   assert.equal(typeof first.id, 'string');
   assert.equal(typeof first.secret, 'string');
   assert.ok(first.id.length >= 12, 'the Relay assigns a nontrivial independent ID');
@@ -397,7 +402,7 @@ test('registration rejects bad keys and malformed inputs, and concurrent indepen
   assert.equal(await truncatedHttpBody(relay.controlPort), 400, 'a prematurely ended HTTP body is rejected');
   const malformed = await httpRequest({ port: relay.controlPort, rawBody: '{not-json' });
   assert.equal(malformed.status, 400);
-  const tooLarge = await httpRequest({ port: relay.controlPort, rawBody: JSON.stringify({ enrollmentToken: randomToken(), pairingToken: randomToken(), padding: 'x'.repeat(65 * 1024) }) });
+  const tooLarge = await httpRequest({ port: relay.controlPort, rawBody: JSON.stringify({ enrollmentToken: randomToken(), gatewaySecret: randomToken(), padding: 'x'.repeat(65 * 1024) }) });
   assert.equal(tooLarge.status, 413);
 
   const attempts = Array.from({ length: 24 }, () => ({ enrollment: randomToken(), pairing: randomToken() }));
@@ -442,7 +447,7 @@ test('registered client rejects a registration redirect without forwarding its p
   await assert.rejects(startRegisteredClient({
     url: `http://127.0.0.1:${redirectPort}`,
     registrationKey: REGISTRATION_KEY,
-    pairingToken: randomToken(),
+    gatewaySecret: randomToken(),
     identityFile,
     gateway: 'http://127.0.0.1:4186',
     allowInsecure: true,
@@ -456,14 +461,14 @@ test('registered client rejects a registration redirect without forwarding its p
 
 test('registered client retries the same proof after network failure and a committed response is lost', async t => {
   const { home } = await privateHome(t);
-  const pairingToken = randomToken();
-  const gateway = await fakeGateway(t, 'retry-machine', pairingToken);
+  const gatewaySecret = randomToken();
+  const gateway = await fakeGateway(t, 'retry-machine', gatewaySecret);
   const relay = await startRelayFixture(t, join(home, 'store.json'));
   const identityFile = join(home, 'retry-machine.identity.json');
   const options = {
     url: `http://127.0.0.1:${relay.controlPort}`,
     registrationKey: REGISTRATION_KEY,
-    pairingToken,
+    gatewaySecret,
     identityFile,
     gateway: gateway.url,
     allowInsecure: true,
@@ -501,22 +506,22 @@ test('registered client retries the same proof after network failure and a commi
   let client;
   client = await waitForOnline(options);
   t.after(() => client?.close());
-  const restored = await readRegisteredClientIdentity({ identityFile, relayUrl: options.url, pairingToken });
+  const restored = await readRegisteredClientIdentity({ identityFile, relayUrl: options.url, gatewaySecret });
   assert.deepEqual(restored, { id: committedResponse.id, secret: committedResponse.secret },
     'the idempotent retry restores the Relay assignment made before the first response was lost');
 });
 
 test('registered client preserves its pending proof when local identity saving fails after Relay commit', async t => {
   const { home } = await privateHome(t);
-  const pairingToken = randomToken();
-  const gateway = await fakeGateway(t, 'save-retry-machine', pairingToken);
+  const gatewaySecret = randomToken();
+  const gateway = await fakeGateway(t, 'save-retry-machine', gatewaySecret);
   const relay = await startRelayFixture(t, join(home, 'store.json'));
   const identityFile = join(home, 'save-retry-machine.identity.json');
   const backupFile = join(home, 'pending-proof.backup');
   const options = {
     url: `http://127.0.0.1:${relay.controlPort}`,
     registrationKey: REGISTRATION_KEY,
-    pairingToken,
+    gatewaySecret,
     identityFile,
     gateway: gateway.url,
     allowInsecure: true,
@@ -547,7 +552,7 @@ test('registered client preserves its pending proof when local identity saving f
   let client;
   client = await waitForOnline(options);
   t.after(() => client?.close());
-  const restored = await readRegisteredClientIdentity({ identityFile, relayUrl: options.url, pairingToken });
+  const restored = await readRegisteredClientIdentity({ identityFile, relayUrl: options.url, gatewaySecret });
   assert.deepEqual(restored, { id: committedResponse.id, secret: committedResponse.secret },
     'retry reuses the original proof and saves the credentials already assigned by the Relay');
 });
@@ -569,7 +574,7 @@ test('registered Gateways isolate HTTP and WebSocket traffic, survive Relay rest
   let clientA = await waitForOnline({
     url: `http://127.0.0.1:${relay.controlPort}`,
     registrationKey: REGISTRATION_KEY,
-    pairingToken: pairingA,
+    gatewaySecret: pairingA,
     identityFile: identityFileA,
     gateway: gatewayA.url,
     allowInsecure: true,
@@ -581,15 +586,15 @@ test('registered Gateways isolate HTTP and WebSocket traffic, survive Relay rest
   let clientB = await waitForOnline({
     url: `http://127.0.0.1:${relay.controlPort}`,
     registrationKey: REGISTRATION_KEY,
-    pairingToken: pairingB,
+    gatewaySecret: pairingB,
     identityFile: identityFileB,
     gateway: gatewayB.url,
     allowInsecure: true,
   });
   t.after(() => { clientA?.close(); clientB?.close(); });
 
-  const identityA = await readRegisteredClientIdentity({ identityFile: identityFileA, relayUrl: `http://127.0.0.1:${relay.controlPort}`, pairingToken: pairingA });
-  const identityB = await readRegisteredClientIdentity({ identityFile: identityFileB, relayUrl: `http://127.0.0.1:${relay.controlPort}`, pairingToken: pairingB });
+  const identityA = await readRegisteredClientIdentity({ identityFile: identityFileA, relayUrl: `http://127.0.0.1:${relay.controlPort}`, gatewaySecret: pairingA });
+  const identityB = await readRegisteredClientIdentity({ identityFile: identityFileB, relayUrl: `http://127.0.0.1:${relay.controlPort}`, gatewaySecret: pairingB });
   assert.notEqual(identityA.id, identityB.id, 'each machine receives an independent ID');
   assert.notEqual(identityA.secret, identityB.secret, 'each machine receives an independent Relay secret');
   assert.equal((await stat(identityFileA)).mode & 0o777, 0o600, 'cached identity file is private');
@@ -598,7 +603,7 @@ test('registered Gateways isolate HTTP and WebSocket traffic, survive Relay rest
   const qrGatewayId = await readRegisteredClientId({
     identityFile: identityFileA,
     relayUrl: `http://127.0.0.1:${relay.controlPort}`,
-    pairingToken: pairingA,
+    gatewaySecret: pairingA,
   });
   assert.equal(qrGatewayId, identityA.id, 'the phone pairing path resolves the assigned ID from the cached identity');
   const mobileLinkA = new URL(buildPairingLink({
@@ -608,7 +613,7 @@ test('registered Gateways isolate HTTP and WebSocket traffic, survive Relay rest
     routeMode: 'path',
     includeGatewayId: true,
   }));
-  assert.equal(mobileLinkA.searchParams.get('gateway'), `https://registered-relay.example/g/${qrGatewayId}`);
+  assert.equal(mobileLinkA.searchParams.get('gateway'), `https://${gatewayHost(qrGatewayId)}/g/${qrGatewayId}`);
   assert.equal(mobileLinkA.searchParams.get('token'), pairingA);
   assert.equal(mobileLinkA.searchParams.get('gatewayId'), qrGatewayId);
   assert.equal(mobileLinkA.searchParams.has('secret'), false, 'mobile pairing link never contains the Relay secret');
@@ -708,8 +713,8 @@ test('registered Gateways isolate HTTP and WebSocket traffic, survive Relay rest
     allowInsecure: true,
   });
   assert.deepEqual(await readFile(identityFileA), clientIdentityBeforeRestart, 'cached reconnect does not rewrite or replace the assigned identity');
-  assert.deepEqual(await readRegisteredClientIdentity({ identityFile: identityFileA, relayUrl: `http://127.0.0.1:${relay.controlPort}`, pairingToken: pairingA }), identityA);
-  assert.deepEqual(await readRegisteredClientIdentity({ identityFile: identityFileB, relayUrl: `http://127.0.0.1:${relay.controlPort}`, pairingToken: pairingB }), identityB);
+  assert.deepEqual(await readRegisteredClientIdentity({ identityFile: identityFileA, relayUrl: `http://127.0.0.1:${relay.controlPort}`, gatewaySecret: pairingA }), identityA);
+  assert.deepEqual(await readRegisteredClientIdentity({ identityFile: identityFileB, relayUrl: `http://127.0.0.1:${relay.controlPort}`, gatewaySecret: pairingB }), identityB);
   const afterRestartA = await proxyHttp(relay.proxyPort, { id: identityA.id, path: '/api/whoami', authorization: sessionA.accessToken });
   const afterRestartB = await proxyHttp(relay.proxyPort, { id: identityB.id, path: '/api/whoami', authorization: sessionB.accessToken });
   // A fresh Relay has no in-memory mobile sessions, so pairing again proves

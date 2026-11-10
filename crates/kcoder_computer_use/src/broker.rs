@@ -179,6 +179,49 @@ mod tests {
             .unwrap()
     }
     #[tokio::test]
+    async fn host_disconnect_cleans_worker_without_waiting_for_client_transport() {
+        let started = Arc::new(tokio::sync::Notify::new());
+        let broker = DesktopBroker::new(
+            WorkerHandle::spawn(Hanging(started.clone()), Duration::from_secs(60)),
+            3,
+        )
+        .unwrap();
+        let owner = DesktopOwner {
+            client_instance: "client".into(),
+            thread_id: "thread".into(),
+            turn_id: "turn".into(),
+        };
+        let connection = Arc::new(authorized_connection(owner.clone()));
+        let acquired = broker
+            .dispatch(
+                &connection,
+                &frame(1, json!({"type":"acquire","owner":owner})),
+            )
+            .await
+            .unwrap();
+        let call = tokio::spawn({
+            let broker = broker.clone();
+            let connection = connection.clone();
+            let owner = owner.clone();
+            let lease = acquired["lease"].clone();
+            async move {
+                broker.dispatch(&connection, &frame(2, json!({"type":"call","owner":owner,"lease":lease,"tool":"Screenshot","arguments":{}}))).await
+            }
+        });
+        started.notified().await;
+        tokio::time::timeout(Duration::from_secs(1), broker.disconnect_owner(&owner))
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(call.await.unwrap().is_err());
+        broker.disconnect_owner(&owner).await.unwrap();
+        assert_eq!(
+            broker.control.lock().await.state(),
+            DesktopControlState::Unavailable
+        );
+    }
+
+    #[tokio::test]
     async fn authenticated_stop_interrupts_call_on_same_connection_and_retires_worker() {
         let started = Arc::new(tokio::sync::Notify::new());
         let broker = DesktopBroker::new(

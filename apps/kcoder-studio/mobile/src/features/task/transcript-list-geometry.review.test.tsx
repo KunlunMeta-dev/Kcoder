@@ -7,6 +7,7 @@ import {
   type MessageFollowState,
 } from "@/components/message-follow-state";
 import { TaskTranscript } from "./TaskTranscript";
+import { MessageBubble } from "./MessageBubble";
 import {
   InvertedTranscriptGeometry,
   TRANSCRIPT_ANCHOR_SETTLE_MAX_FRAMES,
@@ -18,6 +19,9 @@ import {
 const host = vi.hoisted(() => ({
   refs: [] as { current: unknown }[],
   refCursor: 0,
+  states: [] as unknown[],
+  stateCursor: 0,
+  effects: [] as Array<() => void | (() => void)>,
   layoutEffects: [] as (() => void | (() => void))[],
   platformOS: "web",
 }));
@@ -29,8 +33,21 @@ vi.mock("react", async importOriginal => ({
     host.refs[index] ??= { current: initial };
     return host.refs[index];
   },
+  useState: (initial: unknown) => {
+    const index = host.stateCursor++;
+    if (!(index in host.states))
+      host.states[index] = typeof initial === "function" ? (initial as () => unknown)() : initial;
+    return [host.states[index], (next: unknown) => {
+      host.states[index] = typeof next === "function"
+        ? (next as (value: unknown) => unknown)(host.states[index])
+        : next;
+    }];
+  },
   useCallback: (callback: unknown) => callback,
   useMemo: (factory: () => unknown) => factory(),
+  useEffect: (effect: () => void | (() => void)) => {
+    host.effects.push(effect);
+  },
   useLayoutEffect: (effect: () => void | (() => void)) => {
     host.layoutEffects.push(effect);
   },
@@ -53,6 +70,7 @@ vi.mock("@/theme", () => ({
 vi.mock("lucide-react-native", () => ({ Bot: () => null }));
 vi.mock("@/components/ui", () => ({ EmptyState: () => null }));
 vi.mock("./MessageBubble", () => ({ MessageBubble: () => null }));
+vi.mock("./useTextAnimationAllowed", () => ({ useTextAnimationAllowed: () => true }));
 vi.mock("./RuntimeErrorBanner", () => ({ RuntimeErrorBanner: () => null }));
 vi.mock("./taskStyles", () => ({
   styles: new Proxy({}, { get: (_target, key) => key }),
@@ -162,6 +180,19 @@ function findByTestId(node: any, testID: string): any {
   return findByTestId(node.props?.children, testID);
 }
 
+function findByType(node: any, type: unknown): any {
+  if (Array.isArray(node)) {
+    for (const child of node) {
+      const found = findByType(child, type);
+      if (found) return found;
+    }
+    return undefined;
+  }
+  if (!node || typeof node !== "object") return undefined;
+  if (node.type === type) return node;
+  return findByType(node.props?.children, type);
+}
+
 function makeTranscriptModel(platform: "web" | "ios" = "web") {
   const { raw: scroller, listeners } = makeHost(120);
   const rawList = {
@@ -198,6 +229,9 @@ function makeTranscriptModel(platform: "web" | "ios" = "web") {
 function renderActualTranscript(model: any) {
   host.refs = [];
   host.refCursor = 0;
+  host.states = [];
+  host.stateCursor = 0;
+  host.effects = [];
   host.layoutEffects = [];
   const tree: any = TaskTranscript({ model } as never);
   const listElement = findByTestId(tree, "message-list");
@@ -211,7 +245,7 @@ function renderActualTranscript(model: any) {
       ref(list);
     },
     runLayoutEffects() {
-      return host.layoutEffects.map(effect => effect()).filter(
+      return [...host.layoutEffects, ...host.effects].map(effect => effect()).filter(
         (cleanup): cleanup is () => void => typeof cleanup === "function",
       );
     },
@@ -228,11 +262,31 @@ function nativeEvent(y: number) {
   };
 }
 
+it("enables body pacing only for the actual active turn, including live messages without a status field", () => {
+  const { model } = makeTranscriptModel();
+  const active = { id: "active", role: "assistant", turnId: "active-turn", content: "live body" };
+  const history = { ...active, id: "history", turnId: "past-turn" };
+  model.snapshot.messages = [history, active];
+  model.snapshot.activeTurnId = "active-turn"; model.snapshot.running = true;
+  const transcript = renderActualTranscript(model);
+  const bubble = (item: unknown) => findByType(transcript.props.renderItem({ item }), MessageBubble);
+  expect(bubble(active).props.animateText).toBe(true);
+  expect(bubble(active).props.turnRunning).toBe(true);
+  expect(bubble(history).props.animateText).toBe(false);
+  expect(bubble(history).props.turnRunning).toBe(false);
+  model.snapshot.running = false;
+  expect(bubble(active).props.animateText).toBe(false);
+  expect(bubble(active).props.turnRunning).toBe(false);
+});
+
 beforeEach(() => {
   nextFrameId = 1;
   frames = new Map();
   host.refs = [];
   host.refCursor = 0;
+  host.states = [];
+  host.stateCursor = 0;
+  host.effects = [];
   host.layoutEffects = [];
   host.platformOS = "web";
   vi.stubGlobal("requestAnimationFrame", scheduleFrame);
@@ -315,7 +369,9 @@ describe("inverted transcript geometry direct consumers", () => {
     const row: any = { isConnected: true, getBoundingClientRect: () => rect(40) };
     rowRef(row);
 
-    const geometry = rendered.tree.props.geometry as InvertedTranscriptGeometry;
+    const boundary = findByType(rendered.tree, TranscriptAnchorBoundary);
+    const geometry = boundary?.props.geometry as InvertedTranscriptGeometry | undefined;
+    if (!geometry) throw new Error("TaskTranscript did not render its production geometry boundary");
     model.messageFollowState.current = {
       followsLatest: false, programmaticFollow: false, awaitingDistanceAway: false,
     };
@@ -660,4 +716,99 @@ describe("owned latest-jump interruption geometry contract (non-browser)", () =>
     cleanups.forEach(cleanup => cleanup());
   });
 
+});
+
+it("exports only a reading marker and restores it on a new display binding", () => {
+  const cached = makeGeometryFixture();
+  const marker = cached.geometry.readingAnchor();
+  expect(marker).toEqual({ messageId: "message-a", offset: 72, followsLatest: false });
+  const live = makeGeometryFixture();
+  live.addHeight(90);
+  expect(live.geometry.adoptReadingAnchor(marker!)).toBe(true);
+  live.geometry.contentChanged();
+  expect(live.scroller.scrollTop).toBe(30);
+  expect(live.list.scrollToOffset).not.toHaveBeenCalled();
+  expect(live.geometry.adoptReadingAnchor({ ...marker!, messageId: "deleted" })).toBe(false);
+});
+
+it("restores Native by stable message index and view offset without Web DOM or latest jump", () => {
+  host.platformOS = "ios";
+  const { model, rawList } = makeTranscriptModel("ios");
+  const scrollToIndex = vi.fn();
+  Object.assign(rawList, { scrollToIndex, scrollToEnd: vi.fn() });
+  host.refs = []; host.refCursor = 0; host.states = []; host.stateCursor = 0; host.effects = []; host.layoutEffects = [];
+  const marker = { messageId: "message-a", offset: 42, followsLatest: false };
+  const tree = TaskTranscript({ model, initialAnchor: marker });
+  const list = findByTestId(tree, "message-list");
+  list.props.onContentSizeChange();
+  expect(scrollToIndex).toHaveBeenCalledWith({ index: 0, viewOffset: 42, animated: false });
+  expect((rawList as any).scrollToEnd).not.toHaveBeenCalled();
+  expect(model.messageFollowState.current.followsLatest).toBe(false);
+});
+
+
+it.each(["automatic", "wheel", "latest"] as const)("late cache marker follows initial %s intent without replacing rows", action => {
+  const { model, rawList, scroller, listeners } = makeTranscriptModel();
+  Object.assign(rawList, { scrollToIndex: vi.fn() });
+  const publish = vi.fn();
+  host.refs = []; host.refCursor = 0; host.states = []; host.stateCursor = 0; host.effects = []; host.layoutEffects = [];
+  const render = (initialAnchor?: { messageId: string; offset: number; followsLatest: boolean }) => {
+    host.refCursor = 0; host.stateCursor = 0; host.effects = []; host.layoutEffects = [];
+    return findByTestId(TaskTranscript({ model, initialAnchor, onReadAnchor: publish }), "message-list");
+  };
+  const list = render();
+  list.props.ref(rawList);
+  const row = list.props.renderItem({ item: model.snapshot.messages[0] });
+  row.props.ref({ isConnected: true, getBoundingClientRect: () => rect(72 + scroller.scrollTop) });
+  for (const effect of host.layoutEffects) effect();
+  list.props.onContentSizeChange();
+  scroller.scrollTop = 0; // Simulated browser completion of the initial automatic latest scroll.
+  list.props.onScroll(nativeEvent(0));
+  expect(publish).toHaveBeenLastCalledWith(expect.objectContaining({ followsLatest: true }), false);
+  if (action === "wheel") {
+    listeners.get("wheel")!({ target: scroller, deltaY: -10, deltaX: 0 });
+    scroller.scrollTop = 10;
+    list.props.onScroll(nativeEvent(10));
+  } else if (action === "latest") model.messageFollowState.current = beginProgrammaticFollow();
+  const before = scroller.scrollTop;
+  const late = render({ messageId: "message-a", offset: 42, followsLatest: false });
+  for (const effect of host.layoutEffects) effect();
+  drainFrames();
+  expect(late.props.data).toEqual(model.snapshot.messages);
+  if (action === "automatic") {
+    expect(model.messageFollowState.current.followsLatest).toBe(false);
+    expect(scroller.scrollTop).not.toBe(before);
+  } else {
+    expect(scroller.scrollTop).toBe(before);
+    if (action === "latest") expect(model.messageFollowState.current.programmaticFollow).toBe(true);
+  }
+});
+
+
+it.each(["none", "wheel", "latest"] as const)("an unlocatable reading marker does not consume later exact-anchor acceptance after %s input", action => {
+  const { model, rawList, scroller, listeners } = makeTranscriptModel();
+  Object.assign(rawList, { scrollToIndex: vi.fn() });
+  const render = (messageId: string) => {
+    host.refCursor = 0; host.stateCursor = 0; host.effects = []; host.layoutEffects = [];
+    return findByTestId(TaskTranscript({ model, initialAnchor: { messageId, offset: 42, followsLatest: false } }), "message-list");
+  };
+  const unresolved = render("raw-id-not-yet-mapped");
+  unresolved.props.ref(rawList);
+  const row = unresolved.props.renderItem({ item: model.snapshot.messages[0] });
+  row.props.ref({ isConnected: true, getBoundingClientRect: () => rect(72 + scroller.scrollTop) });
+  for (const effect of host.layoutEffects) effect();
+  unresolved.props.onContentSizeChange();
+  expect(model.messageFollowState.current.followsLatest).toBe(false);
+  if (action === "wheel") {
+    listeners.get("wheel")!({ target: scroller, deltaY: -10, deltaX: 0 });
+    scroller.scrollTop += 10; unresolved.props.onScroll(nativeEvent(scroller.scrollTop));
+    drainFrames();
+  } else if (action === "latest") model.messageFollowState.current = beginProgrammaticFollow();
+  const before = scroller.scrollTop;
+  render("message-a"); for (const effect of host.layoutEffects) effect(); drainFrames();
+  if (action === "none") expect(scroller.scrollTop).not.toBe(before);
+  else {
+    expect(scroller.scrollTop).toBe(before);
+    if (action === "latest") expect(model.messageFollowState.current.programmaticFollow).toBe(true);
+  }
 });

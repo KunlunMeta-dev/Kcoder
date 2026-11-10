@@ -3,6 +3,7 @@
 import base64
 import hashlib
 import hmac
+import math
 import os
 from pathlib import Path
 import re
@@ -89,8 +90,21 @@ class AccountStore:
             data = read_private_json(self.path)
         except FileNotFoundError:
             return {"version": 1, "instance": str(uuid.uuid4()), "accounts": [], "bindings": {}, "attempts": {}}
-        if not isinstance(data, dict) or data.get("version") != 1 or set(data) != {"version", "instance", "accounts", "bindings", "attempts"}:
+        fields = {"version", "instance", "accounts", "bindings", "attempts"}
+        if not isinstance(data, dict) or data.get("version") != 1 or set(data) - {"organizationId", "oidcState"} != fields:
             raise AccountError("Unsupported account store")
+        if "organizationId" in data and (not isinstance(data["organizationId"], str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:@/-]{0,255}", data["organizationId"]) or ".." in data["organizationId"]):
+            raise AccountError("Invalid organization account binding")
+        if "oidcState" in data:
+            state = data["oidcState"]
+            if not data.get("organizationId") or not isinstance(state, dict) or set(state) != {"receipts", "revokedSids"} or any(not isinstance(state[key], dict) or len(state[key]) > 4096 for key in state):
+                raise AccountError("Invalid OIDC account revocation state")
+            for key, item in state["receipts"].items():
+                if not re.fullmatch(r"[0-9a-f]{64}", key) or not isinstance(item, dict) or set(item) != {"tokenHash", "processedAt"} or not isinstance(item["tokenHash"], str) or not re.fullmatch(r"[0-9a-f]{64}", item["tokenHash"]) or type(item["processedAt"]) not in (int, float) or not math.isfinite(item["processedAt"]):
+                    raise AccountError("Invalid OIDC account receipt")
+            for key, item in state["revokedSids"].items():
+                if not re.fullmatch(r"[0-9a-f]{64}", key) or not isinstance(item, dict) or set(item) != {"subjectHash", "expiresAt"} or (item["subjectHash"] is not None and (not isinstance(item["subjectHash"], str) or not re.fullmatch(r"[0-9a-f]{64}", item["subjectHash"]))) or type(item["expiresAt"]) not in (int, float) or not math.isfinite(item["expiresAt"]):
+                    raise AccountError("Invalid OIDC session revocation")
         try:
             if str(uuid.UUID(data["instance"])) != data["instance"]:
                 raise ValueError()
@@ -113,25 +127,44 @@ class AccountStore:
             ids.add(record["id"])
             names.add(record["username"])
 
-    def create(self, name, password, role="user"):
+    def _require_current_administrator(self, data, actor):
+        # None is reserved for the local root operator. Remote dispatch always
+        # supplies its authenticated entry context, never an actor from JSON.
+        if actor is None:
+            return
+        if not isinstance(actor, dict):
+            raise AccountError("Account authorization has changed")
+        current = next((item for item in data["accounts"] if item["id"] == actor.get("id")), None)
+        if not current or current["disabled"] or current["revision"] != actor.get("revision"):
+            raise AccountError("Account authorization has changed")
+        if current["role"] != "admin":
+            raise AccountError("Account administrator role required")
+        from studio_organization import OrganizationStore
+        OrganizationStore(self).require_current_account(current, actor)
+
+    def create(self, name, password, role="user", *, actor=None):
         name = username(name)
         record = {"id": str(uuid.uuid4()), "username": name, "role": role, "disabled": False,
                   "password": password_hash(password), "revision": 1}
         validate_identity(record)
         with locked(self.lock):
             data = self._load()
+            self._require_current_administrator(data, actor)
             data["accounts"].append(record)
             self._validate_accounts(data["accounts"])
             write_private_json(self.path, data)
         return public_identity(record)
 
-    def list(self):
-        with locked(self.lock):
-            return [public_identity(record) for record in self._load()["accounts"]]
-
-    def set_disabled(self, name, disabled):
+    def list(self, *, actor=None):
         with locked(self.lock):
             data = self._load()
+            self._require_current_administrator(data, actor)
+            return [public_identity(record) for record in data["accounts"]]
+
+    def set_disabled(self, name, disabled, *, actor=None):
+        with locked(self.lock):
+            data = self._load()
+            self._require_current_administrator(data, actor)
             record = next((item for item in data["accounts"] if item["username"] == username(name)), None)
             if record is None:
                 raise AccountError("Unknown account")
@@ -144,11 +177,19 @@ class AccountStore:
     def session_current(self, identity):
         with locked(self.lock):
             current = next((item for item in self._load()["accounts"] if item["id"] == identity["id"]), None)
-            return bool(current and not current["disabled"] and current["revision"] == identity["revision"])
+            if not current or current["disabled"] or current["revision"] != identity["revision"]:
+                return False
+            try:
+                from studio_organization import OrganizationStore
+                OrganizationStore(self).require_current_account(current, identity)
+            except Exception:
+                return False
+            return True
 
-    def revoke_sessions(self, name):
+    def revoke_sessions(self, name, *, actor=None):
         with locked(self.lock):
             data = self._load()
+            self._require_current_administrator(data, actor)
             record = next((item for item in data["accounts"] if item["username"] == username(name)), None)
             if record is None:
                 raise AccountError("Unknown account")
@@ -157,6 +198,17 @@ class AccountStore:
             return public_identity(record)
 
     def authenticate(self, name, password, now=None):
+        from studio_organization import OrganizationStore
+        mapping = OrganizationStore(self).mapped_directory_login(name)
+        if mapping is not None:
+            # The existing login form names the stable KCoder account. Its
+            # authoritative private enrollment selects the PAM subject. Caller
+            # JSON cannot select an issuer, and local passwords cannot bypass it.
+            from studio_organization_directory import authenticate_directory
+            identity = authenticate_directory(self, mapping["subject"]["username"], password)
+            if identity["id"] != mapping["principalId"] or identity["username"] != name or identity["revision"] != mapping["revision"]:
+                raise AccountError("Account authorization has changed")
+            return identity
         now = time.time() if now is None else now
         with locked(self.lock):
             data = self._load()
@@ -177,6 +229,8 @@ class AccountStore:
                 write_private_json(self.path, data)
                 raise AccountError("Account authentication failed")
             data["attempts"].pop(key, None)
+            from studio_organization import OrganizationStore
+            OrganizationStore(self).require_current_account(record)
             write_private_json(self.path, data)
             return public_identity(record)
 
@@ -185,19 +239,22 @@ class AccountStore:
         write_private_json(destination, bundle, replace=False)
         return {"accounts": len(bundle["accounts"]), "path": str(destination)}
 
-    def export_bundle(self):
+    def export_bundle(self, *, actor=None):
         with locked(self.lock):
-            return {"format": "kcoder-identities", "version": 1, "accounts": self._load()["accounts"]}
+            data = self._load()
+            self._require_current_administrator(data, actor)
+            return {"format": "kcoder-identities", "version": 1, "accounts": data["accounts"]}
 
     def import_identities(self, source):
         return self.import_bundle(read_private_json(source))
 
-    def import_bundle(self, bundle):
+    def import_bundle(self, bundle, *, actor=None):
         if not isinstance(bundle, dict) or set(bundle) != {"format", "version", "accounts"} or bundle["format"] != "kcoder-identities" or bundle["version"] != 1:
             raise AccountError("Unsupported identity export")
         self._validate_accounts(bundle["accounts"])
         with locked(self.lock):
             data = self._load()
+            self._require_current_administrator(data, actor)
             added = 0
             for incoming in bundle["accounts"]:
                 existing = next((item for item in data["accounts"] if item["id"] == incoming["id"] or item["username"] == incoming["username"]), None)
@@ -210,10 +267,11 @@ class AccountStore:
             write_private_json(self.path, data)
             return {"added": added, "total": len(data["accounts"])}
 
-    def change_password(self, name, password):
+    def change_password(self, name, password, *, actor=None):
         encoded = password_hash(password)
         with locked(self.lock):
             data = self._load()
+            self._require_current_administrator(data, actor)
             record = next((item for item in data["accounts"] if item["username"] == username(name)), None)
             if not record:
                 raise AccountError("Unknown account")
@@ -224,15 +282,12 @@ class AccountStore:
             return public_identity(record)
 
     def administer(self, actor, request):
-        if not isinstance(request, dict) or not isinstance(request.get("operation"), str):
+        if not isinstance(actor, dict) or not isinstance(request, dict) or not isinstance(request.get("operation"), str):
             raise AccountError("Invalid account operation")
-        with locked(self.lock):
-            current = next((item for item in self._load()["accounts"] if item["id"] == actor["id"]), None)
-            if not current or current["disabled"] or current["revision"] != actor["revision"]:
-                raise AccountError("Account authorization has changed")
-            if current["role"] != "admin":
-                raise AccountError("Account administrator role required")
         operation = request["operation"]
+        if operation.startswith("organization."):
+            from studio_organization import OrganizationStore
+            return OrganizationStore(self).administer(actor, request)
         allowed = {"list": {"operation"}, "create": {"operation", "username", "password", "role"},
                    "revoke": {"operation", "username"},
                    "disable": {"operation", "username"}, "enable": {"operation", "username"},
@@ -241,15 +296,15 @@ class AccountStore:
         if operation not in allowed or set(request) - allowed[operation]:
             raise AccountError("Unsupported account operation")
         if operation == "list":
-            return self.list()
+            return self.list(actor=actor)
         if operation == "create":
-            return self.create(request.get("username"), request.get("password"), request.get("role", "user"))
+            return self.create(request.get("username"), request.get("password"), request.get("role", "user"), actor=actor)
         if operation in ("disable", "enable"):
-            return self.set_disabled(request.get("username"), operation == "disable")
+            return self.set_disabled(request.get("username"), operation == "disable", actor=actor)
         if operation == "revoke":
-            return self.revoke_sessions(request.get("username"))
+            return self.revoke_sessions(request.get("username"), actor=actor)
         if operation == "password":
-            return self.change_password(request.get("username"), request.get("password"))
+            return self.change_password(request.get("username"), request.get("password"), actor=actor)
         if operation == "export":
-            return self.export_bundle()
-        return self.import_bundle(request.get("bundle"))
+            return self.export_bundle(actor=actor)
+        return self.import_bundle(request.get("bundle"), actor=actor)

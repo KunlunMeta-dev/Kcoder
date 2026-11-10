@@ -6,6 +6,8 @@ mod context_commands;
 mod conversation_commands;
 mod info_commands;
 mod memory_commands;
+mod migrate_commands;
+mod migration_commands;
 mod moa_commands;
 mod model_diagnostics;
 mod parser;
@@ -19,6 +21,8 @@ mod skill_lifecycle_commands;
 mod spec_commands;
 mod wiki_commands;
 mod workflow_commands;
+use migrate_commands::MigrateCommand;
+use migration_commands::MigrationCommand;
 
 pub use context_commands::ContextBreakdown;
 pub use parser::parse_slash_input;

@@ -27,8 +27,8 @@ export function PluginIcon({
   const [visible, setVisible] = useState(() => typeof IntersectionObserver === 'undefined')
   const [loaded, setLoaded] = useState<{
     key: string
-    primary: string | null
-    light: string | null
+    primary?: string | null
+    light?: string | null
     loader: PluginIconLoader
   } | null>(null)
   const [failed, setFailed] = useState<{
@@ -71,7 +71,7 @@ export function PluginIcon({
             setLoaded(previous => ({
               ...(previous?.key === key && previous.loader === loader
                 ? previous
-                : { key, loader, primary: null, light: null }),
+                : { key, loader }),
               [field]: url,
             }))
           })
@@ -87,7 +87,15 @@ export function PluginIcon({
   const lightSource = resolvePluginAssetUrl(source)
   const darkAsset = dark ? resolvePluginAssetUrl(darkSource) : ''
   const failedUrls = failed?.key === key && failed.loader === loader ? failed.urls : []
-  const url = [current?.primary, current?.light, darkAsset, lightSource].find(
+  const useLoader = loader && !preferSource
+  const primaryPending = useLoader && current?.primary === undefined
+  const lightPending = useLoader && dark && current?.light === undefined
+  // Resolve higher-priority candidates before showing a fallback. Otherwise
+  // asynchronous theme reads cycle through several images for the same icon.
+  const candidates = primaryPending
+    ? []
+    : [current?.primary, current?.light, ...(!lightPending ? [darkAsset, lightSource] : [])]
+  const url = candidates.find(
     candidate => candidate && !failedUrls.includes(candidate)
   )
   const lightBackdrop = dark && url && (url === current?.light || url === lightSource)

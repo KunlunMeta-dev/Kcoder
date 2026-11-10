@@ -5,6 +5,9 @@ use crate::message_render::{
     message_uses_markdown_body,
 };
 use crate::theme::{self, KCODER_UI_THEME};
+pub(super) use kcoder_tui_render::navigation_render::{
+    MAX_NAVIGATION_LINE_BYTES, NavigationBudget, NavigationHeading, NavigationRenderError,
+};
 use kcoder_types::{DisplayMessage, MessageRole};
 use ratatui::{
     buffer::Buffer,
@@ -15,7 +18,6 @@ use ratatui::{
 use std::collections::VecDeque;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
-use std::time::{Duration, Instant};
 use unicode_width::UnicodeWidthStr;
 
 /// Replay already laid-out visual rows directly, avoiding another wrap pass or clipping of boundary glyphs from the original Paragraph.
@@ -57,44 +59,6 @@ impl Widget for NavigationLines<'_> {
     }
 }
 
-pub(super) const MAX_NAVIGATION_LINE_BYTES: usize = 64 * 1024;
-
-pub(super) struct NavigationBudget<'a> {
-    cancelled: &'a AtomicBool,
-    deadline: Instant,
-    events: usize,
-}
-
-impl<'a> NavigationBudget<'a> {
-    pub(super) fn new(
-        text: &str,
-        cancelled: &'a AtomicBool,
-    ) -> Result<Self, NavigationRenderError> {
-        if cancelled.load(Ordering::Relaxed) {
-            return Err(NavigationRenderError::Cancelled);
-        }
-        if text.len() > 16 * 1024 * 1024 {
-            return Err(NavigationRenderError::BudgetExceeded("source bytes"));
-        }
-        Ok(Self {
-            cancelled,
-            deadline: Instant::now() + Duration::from_secs(10),
-            events: 0,
-        })
-    }
-
-    pub(super) fn check(&mut self) -> Result<(), NavigationRenderError> {
-        self.events += 1;
-        if self.cancelled.load(Ordering::Relaxed) {
-            return Err(NavigationRenderError::Cancelled);
-        }
-        if self.events > 2_000_000 || Instant::now() >= self.deadline {
-            return Err(NavigationRenderError::BudgetExceeded("parser work"));
-        }
-        Ok(())
-    }
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum MessageSourceTarget {
     MessageStart,
@@ -111,36 +75,6 @@ pub(super) struct NavigationMessageWindow {
     pub(super) total_rows: usize,
     pub(super) source_byte: usize,
     pub(super) source_row_offset: usize,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) enum NavigationRenderError {
-    Cancelled,
-    InvalidSource,
-    UnsupportedMessage,
-    BudgetExceeded(&'static str),
-}
-
-impl std::fmt::Display for NavigationRenderError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Cancelled => f.write_str("navigation cancelled"),
-            Self::InvalidSource => f.write_str(
-                "the navigation target is stale or cannot be displayed at the current width",
-            ),
-            Self::UnsupportedMessage => f.write_str("this message has no navigable body"),
-            Self::BudgetExceeded(kind) => {
-                write!(f, "navigation reached the resource limit ({kind})")
-            }
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) struct NavigationHeading {
-    pub(super) source_byte: usize,
-    pub(super) level: u8,
-    pub(super) label: String,
 }
 
 pub(super) fn extract_navigation_headings(

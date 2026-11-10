@@ -7,8 +7,6 @@ import { resolve } from 'node:path';
 import { build, Platform, Arch } from 'electron-builder';
 import { assertWindowsX64Executable, windowsPackConfig } from '../../desktop/build-windows.mjs';
 import { stageGatewayDependencies } from '../../desktop/stage-gateway-dependencies.mjs';
-import releaseArtifactHook from '../../desktop/release-artifact-hook.mjs';
-import { stageComputerUseRuntime } from '../../../../scripts/release/stage-computer-use.mjs';
 import { assertRendererBuildFresh } from '../harness/renderer-build.mjs';
 import { appRoot, repoRoot } from '../harness/run-context.mjs';
 
@@ -39,7 +37,11 @@ const packageJson = (await import('../../package.json', { with: { type: 'json' }
 const config = { ...packageJson.build, ...windowsPackConfig(async () => {
   await stageGatewayDependencies();
   await assertWindowsX64Executable(resolve(repoRoot, 'target/packages/kcoder-studio/windows-input/bin/pdf/pdftotext.exe'));
-}, undefined, {}) };
+}, undefined, { ...process.env,
+  KCODER_COMPUTER_USE_RUNTIME: process.env.KCODER_E2E_COMPUTER_USE_RUNTIME || process.env.KCODER_COMPUTER_USE_RUNTIME,
+  KCODER_COMPUTER_USE_INVENTORY_SHA256: process.env.KCODER_E2E_COMPUTER_USE_SHA256 || process.env.KCODER_COMPUTER_USE_INVENTORY_SHA256,
+  KCODER_COMPUTER_USE_ALLOW_PROTOTYPE: '1',
+}) };
 config.directories = { output };
 // Explicit data-only base: package.json arrays must not merge duplicate CLI
 // sources into concurrent copies of the same output executable.
@@ -57,12 +59,6 @@ if (installer) {
   config.executableName = executableName;
   config.nsis = { ...packageJson.build.nsis, runAfterFinish: false,
     createDesktopShortcut: false, createStartMenuShortcut: false };
-  config.afterPack = async context => {
-    await stageComputerUseRuntime({ source: resolve(process.env.KCODER_E2E_COMPUTER_USE_RUNTIME),
-      destination: resolve(context.appOutDir, 'resources/computer-use'),
-      expectedHash: process.env.KCODER_E2E_COMPUTER_USE_SHA256, allowPrototype: true });
-    await releaseArtifactHook(context);
-  };
 }
 config.win = {
   ...packageJson.build.win,

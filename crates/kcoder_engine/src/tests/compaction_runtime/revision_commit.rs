@@ -107,7 +107,7 @@ async fn summary_commit_preserves_messages_appended_after_snapshot_and_on_resume
 async fn no_op_commit_preserves_messages_appended_during_pre_compact_hook() {
     let tmp = tempfile::tempdir().unwrap();
     let history = tmp.path().join("history.jsonl");
-    let mut engine = TestEngineBuilder::new(tmp.path()).build();
+    let mut engine = TestEngineBuilder::new(tmp.path()).build_with_profile_directory();
     engine.hook_registry = kcoder_hooks::HookRegistry::from_matchers(vec![(
         kcoder_hooks::HookEvent::PreCompact,
         serde_json::from_value(serde_json::json!({"hooks": [{
@@ -168,7 +168,7 @@ async fn session_memory_commit_rejects_stale_context_without_rebasing_metadata()
     settings.session_memory.compact_min_recent_messages = 2;
     let mut engine = TestEngineBuilder::new(tmp.path())
         .settings(settings)
-        .build();
+        .build_with_profile_directory();
     engine.hook_registry = kcoder_hooks::HookRegistry::from_matchers(vec![(
         kcoder_hooks::HookEvent::PostCompact,
         serde_json::from_value(serde_json::json!({"hooks": [{

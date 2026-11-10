@@ -1,3 +1,4 @@
+import { SettingsSelect } from '@/components/settings/SettingsSelect'
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { useTranslation } from '@/hooks/useTranslation'
@@ -73,7 +74,7 @@ export function WorkflowArguments({
                 </span>
               </span>
               {choices ? (
-                <select
+                <SettingsSelect
                   className={control}
                   aria-required={field.required}
                   data-testid={`workflow-arg-${field.name}`}
@@ -96,7 +97,7 @@ export function WorkflowArguments({
                         : String(choice)}
                     </option>
                   ))}
-                </select>
+                </SettingsSelect>
               ) : (
                 <input
                   className={control}

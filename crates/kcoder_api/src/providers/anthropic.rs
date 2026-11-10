@@ -32,6 +32,7 @@ impl AnthropicProvider {
     pub fn new(api_key: impl Into<String>) -> Result<Self, ApiErrorKind> {
         Ok(Self {
             client: reqwest::Client::builder()
+                .redirect(reqwest::redirect::Policy::none())
                 .connect_timeout(std::time::Duration::from_secs(DEFAULT_REQUEST_TIMEOUT_SECS))
                 .http1_only()
                 .no_gzip()
@@ -76,6 +77,7 @@ impl AnthropicProvider {
 
     fn rebuild_client(&mut self) -> Result<(), ApiErrorKind> {
         let mut builder = reqwest::Client::builder()
+            .redirect(reqwest::redirect::Policy::none())
             // A reqwest request timeout covers the complete streaming body and
             // can truncate an otherwise healthy long-running model response.
             // Limit connection establishment only; the engine owns the

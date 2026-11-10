@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "scope": "owned Windows local filesystem and original Job exit observations; no Python/search/model/network calls",
+  "externalRequests": 0,
+  "expectedIgnored": 0,
+  "prerequisites": [
+    "Rust1.95 x86_64-pc-windows-gnu libtest executables from these two exact crates",
+    "Owned local NTFS root with private TMP/TEMP and held native Job supervision",
+    "Existing WindowsPowerShell, no personal profile scripts",
+    "Symlink creation privilege only for config symlink_leaf_and_junction_ancestor_are_not_followed; no Registry or proxy modification"
+  ],
+  "components": [
+    {
+      "crate": "kcoder_config",
+      "source": "crates/kcoder_config/src/private_files/readonly_handles_tests.rs",
+      "filter": "private_files::readonly_handles::tests::",
+      "names": [
+        "private_files::readonly_handles::tests::ambiguous_leaf_names_and_device_namespace_are_rejected",
+        "private_files::readonly_handles::tests::complete_name_inventory_is_bounded_without_following_children",
+        "private_files::readonly_handles::tests::original_parent_components_remain_pinned_after_dotdot_normalization",
+        "private_files::readonly_handles::tests::pinned_leaf_blocks_write_rename_and_keeps_peer_pin",
+        "private_files::readonly_handles::tests::preexisting_writer_and_hardlink_alias_are_rejected",
+        "private_files::readonly_handles::tests::symlink_leaf_and_junction_ancestor_are_not_followed"
+      ]
+    },
+    {
+      "crate": "kcoder_mcp",
+      "source": "crates/kcoder_mcp/src/searxng_runtime/windows_verify_tests.rs",
+      "filter": "searxng_runtime::windows_verify::tests::",
+      "names": [
+        "searxng_runtime::windows_verify::tests::bounded_directory_inventory_uses_the_same_fail_closed_predicate",
+        "searxng_runtime::windows_verify::tests::concurrent_leaf_and_directory_replacement_are_blocked_by_the_owned_pins",
+        "searxng_runtime::windows_verify::tests::failed_parallel_batch_joins_all_workers_and_releases_successful_pins",
+        "searxng_runtime::windows_verify::tests::full_inventory_accepts_the_fixture_and_rejects_same_length_restored_mtime_tampering",
+        "searxng_runtime::windows_verify::tests::invalid_ready_keeps_pins_until_the_original_job_exit_receipt",
+        "searxng_runtime::windows_verify::tests::missing_unlisted_required_and_budget_violations_fail_closed",
+        "searxng_runtime::windows_verify::tests::outside_hardlink_alias_is_not_a_verified_resource",
+        "searxng_runtime::windows_verify::tests::spawn_failure_releases_the_unstarted_verification_lease",
+        "searxng_runtime::windows_verify::tests::unlisted_insertion_at_final_validation_is_rejected_and_all_pins_release",
+        "searxng_runtime::windows_verify::tests::unsafe_inventory_paths_do_not_escape_the_pinned_tree",
+        "searxng_runtime::windows_verify::tests::verified_lease_blocks_mutation_until_every_peer_releases"
+      ]
+    }
+  ]
+}

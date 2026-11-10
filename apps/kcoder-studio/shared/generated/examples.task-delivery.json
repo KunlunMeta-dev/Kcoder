@@ -1,0 +1,548 @@
+{
+  "TaskDeliveryFailureParams": [
+    {
+      "decoded": {
+        "checkId": "check:42",
+        "deliveryId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "owner": {
+          "deviceId": "fixture-target",
+          "taskId": "fixture-view-task-a",
+          "threadId": "fixture-view-thread-a"
+        },
+        "threadId": "fixture-view-thread-a"
+      },
+      "name": "selected-check",
+      "value": {
+        "checkId": "check:42",
+        "deliveryId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "owner": {
+          "deviceId": "fixture-target",
+          "taskId": "fixture-view-task-a",
+          "threadId": "fixture-view-thread-a"
+        },
+        "threadId": "fixture-view-thread-a"
+      }
+    }
+  ],
+  "TaskDeliveryFailureResult": [
+    {
+      "decoded": {
+        "checkId": "check:42",
+        "headCommit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "prompt": "Synthetic bounded CI context for source task B draft only.",
+        "rawEvidence": "{\"name\":\"Fixture failing check\",\"head_sha\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"conclusion\":\"failure\"}",
+        "recipient": {
+          "deviceId": "fixture-target",
+          "taskId": "fixture-source-task-b",
+          "threadId": "fixture-source-thread-b"
+        },
+        "threadId": "fixture-view-thread-a",
+        "truncated": false
+      },
+      "name": "view-a-feedback-to-source-b",
+      "value": {
+        "checkId": "check:42",
+        "headCommit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "prompt": "Synthetic bounded CI context for source task B draft only.",
+        "rawEvidence": "{\"name\":\"Fixture failing check\",\"head_sha\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"conclusion\":\"failure\"}",
+        "recipient": {
+          "deviceId": "fixture-target",
+          "taskId": "fixture-source-task-b",
+          "threadId": "fixture-source-thread-b"
+        },
+        "threadId": "fixture-view-thread-a",
+        "truncated": false
+      }
+    },
+    {
+      "decoded": {
+        "checkId": "check:42",
+        "headCommit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "prompt": "Synthetic bounded CI context for source task B draft only.",
+        "rawEvidence": "bounded synthetic prefix",
+        "recipient": {
+          "deviceId": "fixture-target",
+          "taskId": "fixture-source-task-b",
+          "threadId": "fixture-source-thread-b"
+        },
+        "threadId": "fixture-view-thread-a",
+        "truncated": true
+      },
+      "name": "bounded-truncated-evidence",
+      "value": {
+        "checkId": "check:42",
+        "headCommit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "prompt": "Synthetic bounded CI context for source task B draft only.",
+        "rawEvidence": "bounded synthetic prefix",
+        "recipient": {
+          "deviceId": "fixture-target",
+          "taskId": "fixture-source-task-b",
+          "threadId": "fixture-source-thread-b"
+        },
+        "threadId": "fixture-view-thread-a",
+        "truncated": true
+      }
+    }
+  ],
+  "TaskDeliveryPrepareParams": [
+    {
+      "decoded": {
+        "baseBranch": "main",
+        "comparisonId": "fixture-comparison",
+        "owner": {
+          "deviceId": "fixture-target",
+          "taskId": "fixture-view-task-a",
+          "threadId": "fixture-view-thread-a"
+        },
+        "threadId": "fixture-view-thread-a"
+      },
+      "name": "selected-source",
+      "value": {
+        "baseBranch": "main",
+        "comparisonId": "fixture-comparison",
+        "owner": {
+          "deviceId": "fixture-target",
+          "taskId": "fixture-view-task-a",
+          "threadId": "fixture-view-thread-a"
+        },
+        "threadId": "fixture-view-thread-a"
+      }
+    },
+    {
+      "decoded": {
+        "baseBranch": "main",
+        "comparisonId": null,
+        "owner": {
+          "deviceId": "fixture-target",
+          "taskId": "fixture-view-task-a",
+          "threadId": "fixture-thread"
+        },
+        "threadId": "fixture-thread"
+      },
+      "name": "ordinary-source",
+      "value": {
+        "baseBranch": "main",
+        "owner": {
+          "deviceId": "fixture-target",
+          "taskId": "fixture-view-task-a",
+          "threadId": "fixture-thread"
+        },
+        "threadId": "fixture-thread"
+      }
+    }
+  ],
+  "TaskDeliveryReadParams": [
+    {
+      "decoded": {
+        "deliveryId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "owner": {
+          "deviceId": "fixture-target",
+          "taskId": "fixture-view-task-a",
+          "threadId": "fixture-view-thread-a"
+        },
+        "threadId": "fixture-view-thread-a"
+      },
+      "name": "original-delivery",
+      "value": {
+        "deliveryId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "owner": {
+          "deviceId": "fixture-target",
+          "taskId": "fixture-view-task-a",
+          "threadId": "fixture-view-thread-a"
+        },
+        "threadId": "fixture-view-thread-a"
+      }
+    }
+  ],
+  "TaskDeliveryRequestParams": [
+    {
+      "decoded": {
+        "body": "Synthetic fixture PR draft; no remote operation has run.",
+        "deliveryId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "owner": {
+          "deviceId": "fixture-target",
+          "taskId": "fixture-view-task-a",
+          "threadId": "fixture-view-thread-a"
+        },
+        "requestId": "123e4567-e89b-42d3-a456-426614174000",
+        "threadId": "fixture-view-thread-a",
+        "title": "Fixture edited title"
+      },
+      "name": "stable-edited-intent",
+      "value": {
+        "body": "Synthetic fixture PR draft; no remote operation has run.",
+        "deliveryId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "owner": {
+          "deviceId": "fixture-target",
+          "taskId": "fixture-view-task-a",
+          "threadId": "fixture-view-thread-a"
+        },
+        "requestId": "123e4567-e89b-42d3-a456-426614174000",
+        "threadId": "fixture-view-thread-a",
+        "title": "Fixture edited title"
+      }
+    }
+  ],
+  "TaskDeliveryResult": [
+    {
+      "decoded": {
+        "comparisonId": "fixture-comparison",
+        "deliveryId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "draft": {
+          "body": "Synthetic data only.",
+          "title": "Fixture draft title"
+        },
+        "nativeEvidenceIds": [],
+        "recipient": {
+          "deviceId": "fixture-target",
+          "taskId": "fixture-source-task-b",
+          "threadId": "fixture-source-thread-b"
+        },
+        "request": null,
+        "source": {
+          "baseBranch": "main",
+          "baseCommit": "cccccccccccccccccccccccccccccccccccccccc",
+          "branch": "fixture-selected-b",
+          "diffSha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "dirty": false,
+          "headCommit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "repository": "fixture/owned-test",
+          "workingSha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+        },
+        "status": {
+          "checks": [],
+          "checksTruncated": false,
+          "ciState": "unknown",
+          "limitation": "notRefreshed",
+          "pullRequest": null,
+          "pushState": "unknown",
+          "sourceChanged": false
+        },
+        "threadId": "fixture-view-thread-a"
+      },
+      "name": "prepared-view-a-source-b",
+      "value": {
+        "comparisonId": "fixture-comparison",
+        "deliveryId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "draft": {
+          "body": "Synthetic data only.",
+          "title": "Fixture draft title"
+        },
+        "nativeEvidenceIds": [],
+        "recipient": {
+          "deviceId": "fixture-target",
+          "taskId": "fixture-source-task-b",
+          "threadId": "fixture-source-thread-b"
+        },
+        "request": null,
+        "source": {
+          "baseBranch": "main",
+          "baseCommit": "cccccccccccccccccccccccccccccccccccccccc",
+          "branch": "fixture-selected-b",
+          "diffSha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "dirty": false,
+          "headCommit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "repository": "fixture/owned-test",
+          "workingSha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+        },
+        "status": {
+          "checks": [],
+          "checksTruncated": false,
+          "ciState": "unknown",
+          "limitation": "notRefreshed",
+          "pullRequest": null,
+          "pushState": "unknown",
+          "sourceChanged": false
+        },
+        "threadId": "fixture-view-thread-a"
+      }
+    },
+    {
+      "decoded": {
+        "comparisonId": "fixture-comparison",
+        "deliveryId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "draft": {
+          "body": "Synthetic data only.",
+          "title": "Fixture draft title"
+        },
+        "nativeEvidenceIds": [],
+        "recipient": {
+          "deviceId": "fixture-target",
+          "taskId": "fixture-source-task-b",
+          "threadId": "fixture-source-thread-b"
+        },
+        "request": {
+          "draftSha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+          "prompt": "Fixture intent for source task B; never a publication receipt.",
+          "requestId": "123e4567-e89b-42d3-a456-426614174000"
+        },
+        "source": {
+          "baseBranch": "main",
+          "baseCommit": "cccccccccccccccccccccccccccccccccccccccc",
+          "branch": "fixture-selected-b",
+          "diffSha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "dirty": false,
+          "headCommit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "repository": "fixture/owned-test",
+          "workingSha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+        },
+        "status": {
+          "checks": [
+            {
+              "checkId": "check:42",
+              "detailsUrl": null,
+              "headCommit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "name": "Fixture failing check",
+              "state": "failed"
+            }
+          ],
+          "checksTruncated": false,
+          "ciState": "failed",
+          "limitation": null,
+          "pullRequest": {
+            "headCommit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "matchesRequest": true,
+            "number": 42,
+            "reviewState": "REVIEW_REQUIRED",
+            "state": "OPEN",
+            "url": "https://github.com/fixture/owned-test/pull/42"
+          },
+          "pushState": "pushed",
+          "sourceChanged": false
+        },
+        "threadId": "fixture-view-thread-a"
+      },
+      "name": "observed-commit-bound-pr-failure",
+      "value": {
+        "comparisonId": "fixture-comparison",
+        "deliveryId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "draft": {
+          "body": "Synthetic data only.",
+          "title": "Fixture draft title"
+        },
+        "nativeEvidenceIds": [],
+        "recipient": {
+          "deviceId": "fixture-target",
+          "taskId": "fixture-source-task-b",
+          "threadId": "fixture-source-thread-b"
+        },
+        "request": {
+          "draftSha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+          "prompt": "Fixture intent for source task B; never a publication receipt.",
+          "requestId": "123e4567-e89b-42d3-a456-426614174000"
+        },
+        "source": {
+          "baseBranch": "main",
+          "baseCommit": "cccccccccccccccccccccccccccccccccccccccc",
+          "branch": "fixture-selected-b",
+          "diffSha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "dirty": false,
+          "headCommit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "repository": "fixture/owned-test",
+          "workingSha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+        },
+        "status": {
+          "checks": [
+            {
+              "checkId": "check:42",
+              "detailsUrl": null,
+              "headCommit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "name": "Fixture failing check",
+              "state": "failed"
+            }
+          ],
+          "checksTruncated": false,
+          "ciState": "failed",
+          "limitation": null,
+          "pullRequest": {
+            "headCommit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "matchesRequest": true,
+            "number": 42,
+            "reviewState": "REVIEW_REQUIRED",
+            "state": "OPEN",
+            "url": "https://github.com/fixture/owned-test/pull/42"
+          },
+          "pushState": "pushed",
+          "sourceChanged": false
+        },
+        "threadId": "fixture-view-thread-a"
+      }
+    },
+    {
+      "decoded": {
+        "comparisonId": "fixture-comparison",
+        "deliveryId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "draft": {
+          "body": "Synthetic data only.",
+          "title": "Fixture draft title"
+        },
+        "nativeEvidenceIds": [],
+        "recipient": {
+          "deviceId": "fixture-target",
+          "taskId": "fixture-source-task-b",
+          "threadId": "fixture-source-thread-b"
+        },
+        "request": null,
+        "source": {
+          "baseBranch": "main",
+          "baseCommit": "cccccccccccccccccccccccccccccccccccccccc",
+          "branch": "fixture-selected-b",
+          "diffSha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "dirty": false,
+          "headCommit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "repository": "fixture/owned-test",
+          "workingSha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+        },
+        "status": {
+          "checks": [
+            {
+              "checkId": "check:43",
+              "detailsUrl": null,
+              "headCommit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "name": "Fixture skipped check",
+              "state": "skipped"
+            },
+            {
+              "checkId": "check:44",
+              "detailsUrl": null,
+              "headCommit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "name": "Fixture neutral check",
+              "state": "neutral"
+            }
+          ],
+          "checksTruncated": false,
+          "ciState": "unknown",
+          "limitation": "notRefreshed",
+          "pullRequest": null,
+          "pushState": "unknown",
+          "sourceChanged": false
+        },
+        "threadId": "fixture-view-thread-a"
+      },
+      "name": "skipped-and-neutral-are-not-passed",
+      "value": {
+        "comparisonId": "fixture-comparison",
+        "deliveryId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "draft": {
+          "body": "Synthetic data only.",
+          "title": "Fixture draft title"
+        },
+        "nativeEvidenceIds": [],
+        "recipient": {
+          "deviceId": "fixture-target",
+          "taskId": "fixture-source-task-b",
+          "threadId": "fixture-source-thread-b"
+        },
+        "request": null,
+        "source": {
+          "baseBranch": "main",
+          "baseCommit": "cccccccccccccccccccccccccccccccccccccccc",
+          "branch": "fixture-selected-b",
+          "diffSha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "dirty": false,
+          "headCommit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "repository": "fixture/owned-test",
+          "workingSha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+        },
+        "status": {
+          "checks": [
+            {
+              "checkId": "check:43",
+              "detailsUrl": null,
+              "headCommit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "name": "Fixture skipped check",
+              "state": "skipped"
+            },
+            {
+              "checkId": "check:44",
+              "detailsUrl": null,
+              "headCommit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "name": "Fixture neutral check",
+              "state": "neutral"
+            }
+          ],
+          "checksTruncated": false,
+          "ciState": "unknown",
+          "limitation": "notRefreshed",
+          "pullRequest": null,
+          "pushState": "unknown",
+          "sourceChanged": false
+        },
+        "threadId": "fixture-view-thread-a"
+      }
+    },
+    {
+      "decoded": {
+        "comparisonId": "fixture-comparison",
+        "deliveryId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "draft": {
+          "body": "Synthetic data only.",
+          "title": "Fixture draft title"
+        },
+        "nativeEvidenceIds": [],
+        "recipient": {
+          "deviceId": "fixture-target",
+          "taskId": "fixture-source-task-b",
+          "threadId": "fixture-source-thread-b"
+        },
+        "request": null,
+        "source": {
+          "baseBranch": "main",
+          "baseCommit": "cccccccccccccccccccccccccccccccccccccccc",
+          "branch": "fixture-selected-b",
+          "diffSha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "dirty": false,
+          "headCommit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "repository": "fixture/owned-test",
+          "workingSha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+        },
+        "status": {
+          "checks": [],
+          "checksTruncated": false,
+          "ciState": "unknown",
+          "limitation": "sourceChanged",
+          "pullRequest": null,
+          "pushState": "unknown",
+          "sourceChanged": true
+        },
+        "threadId": "fixture-view-thread-a"
+      },
+      "name": "changed-source-unknown",
+      "value": {
+        "comparisonId": "fixture-comparison",
+        "deliveryId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "draft": {
+          "body": "Synthetic data only.",
+          "title": "Fixture draft title"
+        },
+        "nativeEvidenceIds": [],
+        "recipient": {
+          "deviceId": "fixture-target",
+          "taskId": "fixture-source-task-b",
+          "threadId": "fixture-source-thread-b"
+        },
+        "request": null,
+        "source": {
+          "baseBranch": "main",
+          "baseCommit": "cccccccccccccccccccccccccccccccccccccccc",
+          "branch": "fixture-selected-b",
+          "diffSha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "dirty": false,
+          "headCommit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "repository": "fixture/owned-test",
+          "workingSha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+        },
+        "status": {
+          "checks": [],
+          "checksTruncated": false,
+          "ciState": "unknown",
+          "limitation": "sourceChanged",
+          "pullRequest": null,
+          "pushState": "unknown",
+          "sourceChanged": true
+        },
+        "threadId": "fixture-view-thread-a"
+      }
+    }
+  ]
+}

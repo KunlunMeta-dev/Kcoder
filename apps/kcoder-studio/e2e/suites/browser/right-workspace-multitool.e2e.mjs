@@ -231,7 +231,7 @@ async function persistenceSnapshot(page, label) {
     const entries = [];
     for (let index = 0; index < localStorage.length; index += 1) {
       const key = localStorage.key(index);
-      if (key?.startsWith("wework.desktop.pane-workspace.v1:")) entries.push({ key, value: localStorage.getItem(key) });
+      if (key?.startsWith("kcoder.desktop.pane-workspace.v1:")) entries.push({ key, value: localStorage.getItem(key) });
     }
     return {
       label: snapshotLabel,

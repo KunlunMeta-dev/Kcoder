@@ -1,0 +1,8 @@
+[
+  "private-candidate-modules/home-samples-r2/plan.json",
+  "private-candidate-modules/scroll-v1/plan.json",
+  "private-candidate-modules/scroll-r2/plan.json",
+  "private-candidate-modules/baseline-r2/plan.json",
+  "private-candidate-modules/full-capture/plan.json",
+  "private-candidate-modules/source-maps/plan.json"
+]

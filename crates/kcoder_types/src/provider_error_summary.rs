@@ -59,6 +59,9 @@ pub fn safe_provider_error_type(value: &str) -> &'static str {
         "rate_limit_error" => "rate_limit_error",
         "overloaded_error" => "overloaded_error",
         "insufficient_quota" => "insufficient_quota",
+        "native_model_budget_denied" => "native_model_budget_denied",
+        "native_model_budget_unavailable" => "native_model_budget_unavailable",
+        "native_model_budget_deadline" => "native_model_budget_deadline",
         "billing_hard_limit_reached" => "billing_hard_limit_reached",
         "unsupported_parameter" => "unsupported_parameter",
         "model_not_found" => "model_not_found",
@@ -140,5 +143,32 @@ mod tests {
                 .contains("SENTINEL_PRIVATE")
         );
         assert!(projected.message.len() <= super::PROVIDER_ERROR_SUMMARY_MAX_BYTES);
+    }
+}
+
+#[cfg(test)]
+mod native_budget_tests {
+    #[test]
+    fn native_budget_diagnostics_preserve_the_finite_reason_without_provider_text() {
+        for kind in [
+            "native_model_budget_denied",
+            "native_model_budget_unavailable",
+            "native_model_budget_deadline",
+        ] {
+            let summary = super::ProviderErrorSummary::new(kind, None);
+            assert!(summary.as_str().contains(kind));
+            assert!(!summary.as_str().contains("unknown_error"));
+            let error = crate::ApiError {
+                error_type: kind.into(),
+                message: "PRIVATE_BODY_PATH_OR_CREDENTIAL".into(),
+            };
+            let public = error.diagnostic_projection();
+            assert_eq!(public.error_type, kind);
+            assert!(!public.message.contains("PRIVATE_BODY_PATH_OR_CREDENTIAL"));
+        }
+        assert_eq!(
+            super::safe_provider_error_type("native_model_budget_denied PRIVATE_BODY"),
+            "unknown_error"
+        );
     }
 }

@@ -9,7 +9,7 @@ if(Test-Path -LiteralPath $RunRoot){
 # Exact owned executable or owned probe/fixture script; never kill by application name.
 Get-CimInstance Win32_Process | Where-Object {
   ($_.ExecutablePath -and $_.ExecutablePath.StartsWith(($RunRoot.TrimEnd('\')+'\'),[StringComparison]::OrdinalIgnoreCase)) -or
-  ($_.Name -eq 'node.exe' -and $_.CommandLine -and ($_.CommandLine.Contains((Join-Path $RunRoot 'probe.cjs')) -or $_.CommandLine.Contains((Join-Path $RunRoot 'model.cjs'))))
+  ($_.Name -eq 'node.exe' -and $_.CommandLine -and ($_.CommandLine.Contains((Join-Path $RunRoot 'probe.cjs')) -or $_.CommandLine.Contains((Join-Path $RunRoot 'model.cjs')) -or $_.CommandLine.Contains((Join-Path $RunRoot 'native-components-probe.cjs'))))
 } | ForEach-Object { & taskkill /PID $_.ProcessId /T /F 2>$null | Out-Null }
 $user=Get-LocalUser -Name $Username -ErrorAction SilentlyContinue
 if($user -and $user.Description -ne ('KCoderE2E '+$Owner)){throw 'Account ownership mismatch'}
@@ -32,6 +32,22 @@ if($user) {
  Remove-LocalUser -Name $Username
  if(Get-LocalUser -Name $Username -ErrorAction SilentlyContinue){throw 'Owned account cleanup failed'}
 }
-if(Test-Path -LiteralPath $RunRoot){[IO.Directory]::Delete($RunRoot,$true)}
+$readOnlyFilesCleared=0
+if(Test-Path -LiteralPath $RunRoot){
+ # Inspect each owned entry without following reparse points before changing attributes.
+ $pending=[Collections.Generic.Stack[string]]::new()
+ $pending.Push([IO.Path]::GetFullPath($RunRoot))
+ while($pending.Count -gt 0){
+  foreach($entry in @(Get-ChildItem -LiteralPath $pending.Pop() -Force)){
+   if($entry.Attributes -band [IO.FileAttributes]::ReparsePoint){throw 'Reparse point in owned cleanup tree'}
+   if($entry.PSIsContainer){$pending.Push($entry.FullName)}
+   elseif($entry.Attributes -band [IO.FileAttributes]::ReadOnly){
+    [IO.File]::SetAttributes($entry.FullName,($entry.Attributes -band (-bnot [IO.FileAttributes]::ReadOnly)))
+    $readOnlyFilesCleared++
+   }
+  }
+ }
+ [IO.Directory]::Delete($RunRoot,$true)
+}
 if(Test-Path -LiteralPath $RunRoot){throw 'Owned installation directory cleanup failed'}
-@{cleaned=$true;accountAbsent=$true;profileAbsent=$true;directoryAbsent=$true}|ConvertTo-Json -Compress
+@{cleaned=$true;accountAbsent=$true;profileAbsent=$true;directoryAbsent=$true;readOnlyFilesCleared=$readOnlyFilesCleared}|ConvertTo-Json -Compress

@@ -17,6 +17,10 @@ from source_facts import claim_errors
 
 ROOT = Path(__file__).resolve().parents[2]
 LINK = re.compile(r"!?\[[^\]\n]*\]\(([^)\n]+)\)")
+# Synthetic project instructions are executable fixture input, not private repository guidance.
+PUBLIC_FIXTURE_GUIDES = {
+    "apps/kcoder-studio/e2e/fixtures/workspaces/native-business/AGENTS.md",
+}
 
 
 def prose_lines(text):
@@ -109,7 +113,8 @@ def check(root=ROOT, public_snapshot=False):
             if (root / name).exists():
                 errors.append(f"Public source snapshot contains private documentation: {name}")
         for name in sorted(tracked_guides(root) | ({"AGENTS.md"} if (root / "AGENTS.md").exists() else set())):
-            errors.append(f"Public source snapshot contains private agent guide: {name}")
+            if name not in PUBLIC_FIXTURE_GUIDES:
+                errors.append(f"Public source snapshot contains private agent guide: {name}")
         file = root / "README.md"
         return link_errors(root, file) + example_errors(root, file) + errors
     manifest = json.loads((root / "docs/coverage.json").read_text())

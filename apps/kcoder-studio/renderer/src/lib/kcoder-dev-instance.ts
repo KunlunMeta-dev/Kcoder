@@ -1,4 +1,4 @@
-export interface WeworkDevInstanceInfo {
+export interface KCoderDevInstanceInfo {
   title: string
   port?: string
   worktree?: string
@@ -8,7 +8,7 @@ export interface WeworkDevInstanceInfo {
   parentWorkspace?: string
 }
 
-export interface WeworkDevInstanceRow {
+export interface KCoderDevInstanceRow {
   key: string
   label: string
   value: string
@@ -18,11 +18,11 @@ function envValue(key: keyof ImportMetaEnv): string | undefined {
   return import.meta.env[key]?.trim() || undefined
 }
 
-export function getWeworkDevTitle(): string | null {
-  return getWeworkDevInstanceInfo()?.title ?? null
+export function getKCoderDevTitle(): string | null {
+  return getKCoderDevInstanceInfo()?.title ?? null
 }
 
-export function getWeworkDevInstanceInfo(): WeworkDevInstanceInfo | null {
+export function getKCoderDevInstanceInfo(): KCoderDevInstanceInfo | null {
   const title = envValue('VITE_KCODER_STUDIO_DEV_TITLE')
   if (!title) return null
 
@@ -37,12 +37,12 @@ export function getWeworkDevInstanceInfo(): WeworkDevInstanceInfo | null {
   }
 }
 
-export function getWeworkDocumentTitle(): string {
-  const devTitle = getWeworkDevTitle()
+export function getKCoderDocumentTitle(): string {
+  const devTitle = getKCoderDevTitle()
   return devTitle ? `KCoder Studio - ${devTitle}` : 'KCoder Studio'
 }
 
-export function getWeworkDevInstanceRows(info: WeworkDevInstanceInfo): WeworkDevInstanceRow[] {
+export function getKCoderDevInstanceRows(info: KCoderDevInstanceInfo): KCoderDevInstanceRow[] {
   return [
     { key: 'title', label: 'Title', value: info.title },
     info.port ? { key: 'port', label: 'Port', value: info.port } : null,
@@ -57,5 +57,5 @@ export function getWeworkDevInstanceRows(info: WeworkDevInstanceInfo): WeworkDev
     info.parentWorkspace
       ? { key: 'parent-workspace', label: 'Parent workspace', value: info.parentWorkspace }
       : null,
-  ].filter((row): row is WeworkDevInstanceRow => Boolean(row))
+  ].filter((row): row is KCoderDevInstanceRow => Boolean(row))
 }

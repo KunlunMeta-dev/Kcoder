@@ -1,0 +1,52 @@
+[package]
+name = "kcoder_native_service_runtime"
+description = "Original signed native service owners and live OS process fences."
+version = { workspace = true }
+publish = false
+edition = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+rust-version = { workspace = true }
+
+[features]
+test-oracle = []
+
+[dependencies]
+kcoder_connectivity_storage = { path = "../connectivity_storage" }
+async-trait = { workspace = true }
+base64 = "0.22"
+futures = { workspace = true }
+tokio = { workspace = true }
+anyhow = { workspace = true }
+fs2 = "0.4"
+kcoder_app_protocol = { path = "../../../kcoder_app_protocol" }
+kcoder_app_rpc_codec = { path = "../../../kcoder_app_protocol/internal/app_rpc_codec" }
+kcoder_config = { path = "../../../kcoder_config" }
+kcoder_host_transport = { path = "../host_transport" }
+kcoder_native_delegation = { path = "../../../kcoder_permissions/internal/native_delegation" }
+kcoder_native_receipts = { path = "../native_receipts" }
+kcoder_native_scope = { path = "../native_scope" }
+kcoder_process_supervisor = { path = "../../../kcoder_process_supervisor" }
+kcoder_types = { path = "../../../kcoder_types" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+tokio-util = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+reqwest = { workspace = true }
+which = { workspace = true }
+kcoder_test_harness = { path = "../../../../tests/harness" }
+kcoder_native_scope = { path = "../native_scope", features = ["native-identity-test-hooks"] }
+tempfile = { workspace = true }
+
+[target."cfg(unix)".dependencies]
+libc = { workspace = true }
+
+[target."cfg(windows)".dependencies]
+windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Security", "Win32_Security_Authorization", "Win32_Storage_FileSystem", "Win32_System_SystemServices", "Win32_System_Threading"] }
+
+[lib]
+path = "../../src/internal/native_service_runtime/lib.rs"

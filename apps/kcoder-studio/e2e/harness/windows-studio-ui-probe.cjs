@@ -7,9 +7,19 @@ const http = require('node:http');
 
 const [binary, installation, overlay, artifacts] = process.argv.slice(2);
 const directInstall = process.argv.includes('--direct-install');
+const officeNativeProbe = process.argv.includes('--office-native');
+const browserProfileUiProbe = process.argv.includes('--browser-profile-ui');
+if(browserProfileUiProbe&&(!directInstall||officeNativeProbe))throw Error('Browser profile UI requires its owned packaged Electron directory');
+const officeTelemetry = officeNativeProbe ? require('./windows-office-native-ui.cjs').createOfficeTelemetry() : null;
+const startupWindowExpected=process.argv.includes('--lifecycle-startup-window');
+const {createCdpClient,isCommittedStartupDocument}=require('./windows-cdp-document.cjs');
+const {gatewayStartupRecords,desktopSessionCookieMetadata}=require('./windows-gateway-startup-records.cjs');
 const lifecycleSmoke = process.argv.includes('--lifecycle-smoke');
 const lifecycleVerify = process.argv.includes('--lifecycle-verify');
 const lifecycleCurrentFeatures = process.argv.includes('--lifecycle-current-features');
+const lifecycleDirectoryTrust = process.argv.includes('--lifecycle-directory-trust');
+if (lifecycleDirectoryTrust && (!directInstall || !lifecycleVerify || !lifecycleCurrentFeatures || lifecycleSmoke)) throw Error('Directory trust requires full installed upgrade UI verification');
+if(officeNativeProbe&&(!directInstall||!lifecycleVerify||!lifecycleCurrentFeatures||lifecycleSmoke))throw Error('Office requires current actual installed lifecycle resources');
 const lifecycleModelUrl = directInstall ? process.env.KCODER_E2E_LIFECYCLE_MODEL_URL : null;
 if (directInstall && !/^http:\/\/127\.0\.0\.1:\d+\/v1$/.test(lifecycleModelUrl || '')) throw Error('Owned loopback lifecycle fixture required');
 const menuLayoutProbe = process.argv.includes('--menu-layout');
@@ -18,6 +28,14 @@ const remoteOAuthInput = remoteOAuthProbe ? JSON.parse(fs.readFileSync(path.join
 const remoteModelsProbe = process.argv.includes('--remote-models');
 const remoteModelsInput = remoteModelsProbe ? JSON.parse(fs.readFileSync(path.join(artifacts, 'remote-models-input.json'), 'utf8')) : null;
 const modelScopeProbe = process.argv.includes('--model-scope');
+const taskHostProbe = process.argv.includes('--task-host');
+const toolSelectionsProbe = process.argv.includes('--tool-selections');
+const streamingProbe = process.argv.includes('--task-streaming');
+const kworkerProbe = process.argv.includes('--kworker');
+if(toolSelectionsProbe&&!taskHostProbe)throw Error('Tool selections require the owned task host');
+const migrationProbe = process.argv.includes('--migration');
+const migrationInput = migrationProbe ? JSON.parse(fs.readFileSync(path.join(artifacts, 'migration-input.json'), 'utf8')) : null;
+let migrationFixture;
 const nativeInputProbe = process.argv.includes('--native-input');
 const workflowProbe = process.argv.includes('--workflows');
 const pluginsProbe = process.argv.includes('--plugins');
@@ -25,10 +43,10 @@ const installedResources = directInstall || process.argv.includes('--installed-r
 const accountsProbe = process.argv.includes('--accounts');
 let accountInput;
 const steerProbe = process.argv.includes('--steer');
-const historyProbe = directInstall || process.argv.includes('--project-history') || workflowProbe || modelScopeProbe;
+const historyProbe = migrationProbe || directInstall || process.argv.includes('--project-history') || workflowProbe || modelScopeProbe || taskHostProbe;
 if (process.platform !== 'win32' || ![binary, installation, overlay, artifacts].every(Boolean))
   throw Error('An explicit Windows binary, installation, overlay and artifact directory are required');
-const root = directInstall ? path.join(artifacts, 'installed-ui-profile') : fs.mkdtempSync(path.join(artifacts, 'studio-ui-'));
+const root = directInstall ? path.join(artifacts, officeNativeProbe ? 'office-ui-profile' : 'installed-ui-profile') : fs.mkdtempSync(path.join(artifacts, 'studio-ui-'));
 if (directInstall) {
   const owner = JSON.parse(fs.readFileSync(path.join(artifacts, '.owner.json'), 'utf8'));
   if (!/^[a-f0-9-]{36}$/.test(owner.owner) || !/^kc_e2e_[a-f0-9]{8}$/.test(owner.username)) throw Error('Owned installer marker required');
@@ -36,17 +54,29 @@ if (directInstall) {
   fs.mkdirSync(root, { recursive: true });
 }
 let app;
+let appStartedAt=0;
 let socket;
 let stage = 'prepare';
+const stageMarker = setInterval(() => {
+  try { fs.writeFileSync(path.join(artifacts, 'windows-stage.json'), JSON.stringify({ stage })); } catch {}
+}, 1000);
+stageMarker.unref();
 let appOutput = '';
 let cleaned = false;
 let captureFailure;
 let closeInstalledApp;
+let startupObservation={pages:[],elapsedMs:0};
 let failureText;
 let modelFixture;
+let runtimeAutomation;
 let modelRequests = 0;
+const advertisedToolNames=[];
+let forbiddenSpecDenied=false;
+let disabledSpecs=[];
+const streamingTimings={};
 let nativeInputObservations;
 let imageRequests = 0;
+let officeToolAdvertised = false;
 const wireTrace = [];
 const initializeRequests = new Set();
 const negotiatedProtocols = [];
@@ -54,6 +84,9 @@ const steerIds = new Map();
 const completions = new Map();
 const appliedSteers = [];
 const runtimeDiagnostics = [];
+let taskHostFailure;
+let backgroundChild;
+const documentRequests = new Map();
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 async function until(predicate, timeout = 15000) {
   const end = Date.now() + timeout;
@@ -69,7 +102,7 @@ function stopApp() {
   if (app && app.exitCode === null)
     spawnSync('taskkill', ['/PID', String(app.pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore', timeout: 10000 });
 }
-const deadline = setTimeout(() => { stopApp(); }, historyProbe || steerProbe || installedResources ? 180000 : 75000);
+const deadline = setTimeout(() => { stopApp(); }, officeNativeProbe ? 300000 : historyProbe || steerProbe || installedResources || migrationProbe ? 180000 : 75000);
 
 async function main() {
   const host = directInstall ? installation : path.join(root, 'app');
@@ -82,6 +115,10 @@ async function main() {
   }
   fs.cpSync(path.join(installation, 'locales'), path.join(host, 'locales'), { recursive: true });
   fs.copyFileSync(path.join(installation, 'resources/app.asar'), path.join(resources, 'app.asar'));
+  if (taskHostProbe && fs.existsSync(path.join(artifacts,'candidate-app.asar'))) {
+    fs.copyFileSync(path.join(artifacts,'candidate-app.asar'),path.join(resources,'app.asar'));
+    fs.copyFileSync(path.join(artifacts,'candidate-studio.exe'),path.join(host,'kcoder-studio.exe'));
+  }
   assert.ok(fs.readFileSync(path.join(resources, 'app.asar')).includes(Buffer.from('KCODER_STUDIO_DESKTOP_USER_DATA_DIR')),
     'Installed host does not support an isolated profile');
   fs.cpSync(path.join(installation, 'resources/shell'), path.join(resources, 'shell'), { recursive: true });
@@ -92,10 +129,17 @@ async function main() {
     assert.ok(fs.readFileSync(binary).equals(fs.readFileSync(path.join(resources, 'bin/kcoder.exe'))), 'Installed runtime differs from the reviewed Windows build');
   } else {
     fs.copyFileSync(path.join(overlay, 'dev-server.mjs'), path.join(resources, 'gateway/dev-server.mjs'));
-    fs.cpSync(path.join(overlay, 'src'), path.join(resources, 'gateway/src'), { recursive: true, force: true });
+    for(const directory of ['src','shared']){
+      const destination=path.join(resources,'gateway',directory);
+      fs.rmSync(destination,{recursive:true,force:true});
+      fs.cpSync(path.join(overlay,directory),destination,{recursive:true});
+    }
     fs.mkdirSync(path.join(resources, 'bin'));
     fs.copyFileSync(binary, path.join(resources, 'bin/kcoder.exe'));
     fs.copyFileSync(path.join(installation, 'resources/bin/kcoder-process-supervisor.exe'), path.join(resources, 'bin/kcoder-process-supervisor.exe'));
+    const candidateImage = path.join(artifacts,'candidate-native-image.node');
+    const nativeImage = taskHostProbe && fs.existsSync(candidateImage) ? candidateImage : path.join(installation, 'resources/bin/kcoder-native-image.node');
+    if (fs.existsSync(nativeImage)) fs.copyFileSync(nativeImage, path.join(resources, 'bin/kcoder-native-image.node'));
   }
   } else {
     assert.ok(fs.readFileSync(path.join(resources, 'app.asar')).includes(Buffer.from('KCODER_STUDIO_DESKTOP_USER_DATA_DIR')), 'Installed host must support private profiles');
@@ -107,6 +151,7 @@ async function main() {
   if (historyProbe && !directInstall) {
     modelFixture = http.createServer((req, res) => {
       req.resume();
+      if(req.method === 'HEAD'){res.writeHead(204);res.end();return;}
       if (req.method === 'GET') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ object: 'list', data: [{ id: 'fixture', object: 'model' }] }));
@@ -116,14 +161,46 @@ async function main() {
         req.once('end', () => {
           try {
             const parsed = JSON.parse(body);
+            if (kworkerProbe) officeToolAdvertised ||= (parsed.tools || []).some(tool => ['OfficeRead','OfficeData','OfficeDocument','OfficeCard','OfficeExport'].includes(tool.name));
+            if(toolSelectionsProbe){
+              advertisedToolNames.push((parsed.tools||[]).map(tool=>tool.name));
+              forbiddenSpecDenied ||= (parsed.messages||[]).some(message=>Array.isArray(message.content)&&message.content.some(part=>part.type==='tool_result'&&part.tool_use_id==='disabled-spec-probe'&&part.is_error===true&&JSON.stringify(part.content).includes('Unknown tool `SpecInit`')));
+            }
             const latest = parsed.messages?.filter(message => message.role === 'user').at(-1);
             if (Array.isArray(latest?.content) && latest.content.some(part => part.type === 'image_url')) imageRequests++;
           } catch {}
         });
         modelRequests++;
         res.writeHead(200, { 'Content-Type': 'text/event-stream' });
+        if(taskHostProbe){
+          const event=(type,body)=>res.write(`event: ${type}\ndata: ${JSON.stringify({type,...body})}\n\n`);
+          event('message_start',{message:{id:`history-${modelRequests}`,type:'message',role:'assistant',model:'fixture',content:[],stop_reason:null,usage:{input_tokens:10,output_tokens:0}}});
+          if(toolSelectionsProbe&&modelRequests===1){
+            event('content_block_start',{index:0,content_block:{type:'tool_use',id:'disabled-spec-probe',name:'SpecInit',input:{}}});
+            event('content_block_delta',{index:0,delta:{type:'input_json_delta',partial_json:'{}'}});
+            event('content_block_stop',{index:0});
+            event('message_delta',{delta:{stop_reason:'tool_use',stop_sequence:null},usage:{output_tokens:5}});
+            event('message_stop',{});res.end();return;
+          }
+          if(streamingProbe){
+            event('content_block_start',{index:0,content_block:{type:'text',text:''}});
+            streamingTimings.providerFirst=Date.now();
+            event('content_block_delta',{index:0,delta:{type:'text_delta',text:'WINDOWS_STREAM_FIRST'}});
+            setTimeout(()=>event('content_block_delta',{index:0,delta:{type:'text_delta',text:' WINDOWS_HISTORY_REPLY'}}),1000);
+            setTimeout(()=>{streamingTimings.providerFinished=Date.now();event('content_block_stop',{index:0});event('message_delta',{delta:{stop_reason:'end_turn',stop_sequence:null},usage:{output_tokens:5}});event('message_stop',{});res.end()},4000);
+            return;
+          }
+          event('content_block_start',{index:0,content_block:{type:'thinking',thinking:''}});
+          event('content_block_delta',{index:0,delta:{type:'thinking_delta',thinking:'Checking the owned conversation.'}});
+          event('content_block_stop',{index:0});
+          event('content_block_start',{index:1,content_block:{type:'text',text:''}});
+          event('content_block_delta',{index:1,delta:{type:'text_delta',text:'WINDOWS_HISTORY_REPLY'}});
+          event('content_block_stop',{index:1});
+          event('message_delta',{delta:{stop_reason:'end_turn',stop_sequence:null},usage:{output_tokens:5}});
+          event('message_stop',{});res.end();return;
+        }
         const chunk = { id: `history-${modelRequests}`, object: 'chat.completion.chunk', created: 1, model: 'fixture' };
-        res.write(`data: ${JSON.stringify({ ...chunk, choices: [{ index: 0, delta: { role: 'assistant', content: 'WINDOWS_HISTORY_REPLY' }, finish_reason: null }] })}\n\n`);
+        res.write(`data: ${JSON.stringify({ ...chunk, choices: [{ index: 0, delta: { role: 'assistant', content: migrationProbe ? require('./windows-migration-ui.cjs').LONGFORM_MARKDOWN : 'WINDOWS_HISTORY_REPLY' }, finish_reason: null }] })}\n\n`);
         res.write(`data: ${JSON.stringify({ ...chunk, choices: [{ index: 0, delta: {}, finish_reason: 'stop' }], usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 } })}\n\n`);
         res.end('data: [DONE]\n\n');
       }
@@ -132,10 +209,19 @@ async function main() {
   }
   if (!directInstall) {
   fs.writeFileSync(path.join(profile, 'settings.json'), JSON.stringify({ active_provider: 'fixture',
-    providers: { fixture: { api_format: 'openai_chat_completions', endpoint: historyProbe ? `http://127.0.0.1:${modelFixture.address().port}/v1` : 'http://127.0.0.1:1/v1', no_proxy: true,
+    ...(taskHostProbe ? {integrations:{knowledge:{memory_center_enabled:true},...(kworkerProbe ? {office:{enabled:true}} : {})}} : {}),
+    providers: { fixture: { api_format: taskHostProbe ? 'anthropic_messages' : 'openai_chat_completions', endpoint: historyProbe ? `http://127.0.0.1:${modelFixture.address().port}/v1` : 'http://127.0.0.1:1/v1', no_proxy: true,
       default_model: 'fixture', context_window_tokens: 128000, max_output_tokens: 8192, output_headroom_tokens: 8192 } } }));
   fs.writeFileSync(path.join(profile, 'credentials.json'), JSON.stringify(historyProbe
     ? { fixture: { type: 'api', key: 'synthetic-windows-history-fixture' } } : {}));
+  } else if (browserProfileUiProbe) {
+    assert.ok(!fs.existsSync(path.join(profile,'settings.json')),'Browser UI starts with a new ordinary profile');
+    fs.writeFileSync(path.join(profile,'settings.json'),JSON.stringify({active_provider:'fixture',credential_store:'file',mcp_servers:[],hooks:{},max_retries:0,session_memory:{enabled:false},memory:{observer_mode:'disabled',structured_enabled:false,legacy_prompt_enabled:false},providers:{fixture:{api_format:'openai_chat_completions',authentication:{mode:'none'},endpoint:lifecycleModelUrl,default_model:'not-called',context_window_tokens:128000,max_output_tokens:1024,output_headroom_tokens:2048,no_proxy:true,discover_models:false}}}));
+    fs.writeFileSync(path.join(profile,'credentials.json'),'{}');
+  } else if (officeNativeProbe) {
+    assert.ok(!fs.existsSync(path.join(profile,'settings.json')),'Office starts with its own ordinary account profile');
+    fs.writeFileSync(path.join(profile,'settings.json'),JSON.stringify({active_provider:'fixture',credential_store:'file',permission_mode:'bypass',max_retries:0,session_memory:{enabled:false},integrations:{office:{enabled:false}},providers:{fixture:{api_format:'openai_chat_completions',authentication:{mode:'none'},endpoint:lifecycleModelUrl,default_model:'fixture',context_window_tokens:1048576,max_output_tokens:262144,output_headroom_tokens:8192,no_proxy:true,discover_models:false}}}));
+    fs.writeFileSync(path.join(profile,'credentials.json'),'{}');
   } else if (lifecycleVerify) {
     const saved = JSON.parse(fs.readFileSync(path.join(profile, 'settings.json'), 'utf8'));
     assert.equal(saved.providers.fixture.models?.fixture?.extra_body?.temperature ?? saved.providers.fixture.extra_body?.temperature, 0.27, 'Saved model configuration survived upgrade');
@@ -146,6 +232,7 @@ async function main() {
     fs.writeFileSync(path.join(profile, 'credentials.json'), '{}');
   }
   const steerGate = path.join(root, 'steer-gate');
+  if(taskHostProbe)require('./windows-probe-config.cjs')(profile,root);
   if (steerProbe) {
     fs.mkdirSync(steerGate);
     fs.writeFileSync(path.join(profile, 'settings.json'), JSON.stringify({ providers: {}, model: 'tui-dev-mock',
@@ -154,16 +241,34 @@ async function main() {
   const env = {};
   for (const key of ['PATH', 'Path', 'SystemRoot', 'SYSTEMROOT', 'SystemDrive', 'WINDIR', 'TEMP', 'TMP', 'USERPROFILE', 'HOMEDRIVE', 'HOMEPATH', 'USERNAME', 'USERDOMAIN', 'COMPUTERNAME', 'ProgramData', 'ProgramFiles', 'CommonProgramFiles', 'APPDATA', 'LOCALAPPDATA', 'COMSPEC'])
     if (process.env[key]) env[key] = process.env[key];
+  if (migrationProbe) {
+    const identity = spawnSync('whoami.exe', [], {windowsHide:true,encoding:'utf8',timeout:10000});
+    assert.equal(identity.status,0,'The owned desktop fixture requires the actual token identity');
+    const account=identity.stdout.trim().split('\\');assert.equal(account.length,2);
+    env.USERDOMAIN=account[0];env.USERNAME=account[1];
+  }
   Object.assign(env, {
     KCODER_CONFIG_DIR: profile,
     KCODER_STUDIO_DESKTOP_USER_DATA_DIR: path.join(root, 'electron-profile'),
     KCODER_STUDIO_WEB_ROOT: installedResources ? path.join(resources, 'renderer-dist') : path.join(overlay, 'renderer/dist'),
     KCODER_STUDIO_KCODER_BIN: path.join(resources, 'bin/kcoder.exe'),
     KCODER_STUDIO_WORKSPACE: workspace,
-    ...(installedResources && !accountsProbe ? { KCODER_STUDIO_AUTH_SESSION_TTL_MS: '3000' } : {}),
+    ...(installedResources && !accountsProbe && !officeNativeProbe && !browserProfileUiProbe && (!directInstall || lifecycleVerify) ? { KCODER_STUDIO_AUTH_SESSION_TTL_MS: '3000' } : {}),
     KCODER_STUDIO_SERVERS: JSON.stringify([{ id: 'local', label: 'Windows UI fixture', transport: 'local',
       command: path.join(resources, 'bin/kcoder.exe'), workspace }]),
   });
+  if (migrationProbe) {
+    migrationFixture = require('./windows-migration-ui.cjs').seedMigrationUi({ root, profile, workspace, historyCount: migrationInput?.quickOnly ? 3 : 1 });
+    // Chromium must retain the real Windows known folders. Only Native receives
+    // the synthetic home through the owned launcher and explicit source roots.
+    env.CLAUDE_CONFIG_DIR=migrationFixture.claude;
+    env.CODEX_HOME=migrationFixture.codex;
+    env.KCODER_E2E_MIGRATION_AMBIENT=migrationFixture.ambient;
+    const launcher=path.join(resources,'bin/kcoder-migration-env.exe');
+    fs.copyFileSync(path.join(artifacts,'migration-cli-env.exe'),launcher);
+    env.KCODER_STUDIO_KCODER_BIN=launcher;
+    env.KCODER_STUDIO_SERVERS=JSON.stringify([{id:'local',label:'Windows UI fixture',transport:'local',command:launcher,workspace}]);
+  }
   if (remoteModelsProbe) {
     env.KCODER_STUDIO_SERVERS = JSON.stringify([...JSON.parse(env.KCODER_STUDIO_SERVERS), remoteModelsInput.server]);
     delete env.PATH;
@@ -181,31 +286,63 @@ async function main() {
   }
   if (steerProbe) Object.assign(env, { KCODER_STUDIO_SCENARIO: 'subagent-trace', KCODER_TUI_LAB_STEER_GATE_DIR: steerGate });
   stage = 'app-start';
-  const appStartedAt = Date.now();
+  appStartedAt = Date.now();
   app = spawn(path.join(host, 'kcoder-studio.exe'), ['--disable-gpu', '--disable-background-timer-throttling', '--disable-renderer-backgrounding', '--disable-backgrounding-occluded-windows', '--remote-debugging-address=127.0.0.1', '--remote-debugging-port=0'],
     { cwd: root, env, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+  if(taskHostProbe)backgroundChild=spawn('powershell.exe',['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',path.join(__dirname,'windows-owned-input.ps1'),'-ProcessId',String(app.pid),'-OwnedRoot',root,'-Action','hide'],{windowsHide:true,stdio:'ignore'});
   const collect = data => { appOutput = `${appOutput}${data}`.slice(-16000); };
+  if(migrationProbe)fs.writeFileSync(path.join(artifacts,'windows-migration-progress.json'),JSON.stringify({stage}));
   app.stdout.on('data', collect); app.stderr.on('data', collect);
-  const browserUrl = await until(() => appOutput.match(/DevTools listening on (ws:\/\/127\.0\.0\.1:[^\s]+)/)?.[1]);
+  const browserUrl = await until(() => {startupObservation={...startupObservation,elapsedMs:Date.now()-appStartedAt};return appOutput.match(/DevTools listening on (ws:\/\/127\.0\.0\.1:[^\s]+)/)?.[1]},90000);
+  stage='cdp-page-discovery';
   const debuggerOrigin = `http://${new URL(browserUrl).host}`;
-  const target = await until(async () => {
-    const targets = await (await fetch(`${debuggerOrigin}/json/list`)).json();
-    return targets.find(item => item.type === 'page' && item.url.startsWith('http://127.0.0.1:'));
-  });
+  const targetsNow=async()=> {
+    try { return await (await fetch(`${debuggerOrigin}/json/list`,{signal:AbortSignal.timeout(3000)})).json(); }
+    catch (error) {
+      if (error?.name === 'TimeoutError' || error?.name === 'AbortError' || error?.cause?.code === 'ECONNREFUSED') return [];
+      throw error;
+    }
+  };
+  if(startupWindowExpected){
+    stage='restricted-startup-window';
+    const loading=await until(async()=>(await targetsNow()).find(item=>item.type==='page'&&item.url.startsWith('data:text/html')&&item.url.includes('kcoder-desktop-startup')),5000);
+    const firstWindowMs=Date.now()-appStartedAt;assert.ok(firstWindowMs<5000,'Actual startup window must appear promptly');
+    const client=createCdpClient(loading.webSocketDebuggerUrl);
+    try{
+      await client.ready;
+      await until(async()=>{
+        const frame=await client.request('Page.getFrameTree',{},5000);
+        const document=await client.request('DOM.getDocument',{depth:-1,pierce:true},5000);
+        return isCommittedStartupDocument(frame.frameTree.frame,document.root);
+      },5000);
+      assert.ok(Date.now()-appStartedAt<5000,'Startup status document must commit promptly');
+      const inspected=await client.request('Runtime.evaluate',{expression:"({protocol:location.protocol,restricted:document.querySelector('meta[name=kcoder-desktop-startup]')?.content==='restricted',desktop:Boolean(window.kcoderDesktopHost),rpc:Boolean(window.__KCODER_STUDIO_E2E__||window.kcoderDesktopMenu),node:typeof require!=='undefined'||typeof process!=='undefined'})",returnByValue:true},5000);
+      assert.deepEqual(inspected.result.value,{protocol:'data:',restricted:true,desktop:false,rpc:false,node:false});
+      startupObservation.loading={firstWindowMs,documentReadyMs:Date.now()-appStartedAt,noPreloadOrRpc:true,noNode:true};
+      fs.writeFileSync(path.join(artifacts,'windows-restricted-startup.json'),JSON.stringify(startupObservation.loading));
+    }finally{client.close();}
+    stage='verified-gateway-main-window';
+  }
+  const target=await until(async()=>{
+    const targets=await targetsNow();
+    startupObservation={...startupObservation,elapsedMs:Date.now()-appStartedAt,pages:targets.map(item=>{let url;try{url=new URL(item.url)}catch{};return{type:item.type,protocol:url?.protocol,hostname:url?.hostname,port:url?.port,path:url?.protocol==='data:'?'[restricted startup]':url?.pathname}})};
+    return targets.find(item=>item.type==='page'&&item.url.startsWith('http://127.0.0.1:'));
+  },startupWindowExpected?180000:90000);
   const base = new URL(target.url).origin;
   assert.ok(fs.existsSync(path.join(root, 'electron-profile/Partitions/kcoder-studio-desktop')), 'Private Chromium profile was not created');
-  socket = new WebSocket(target.webSocketDebuggerUrl);
-  const pending = new Map();
   const events = [];
-  let sequence = 0;
+  const loadedDocuments = new Set();
   let navigation = 0;
-  socket.addEventListener('message', event => {
-    const message = JSON.parse(event.data);
-    if (message.id) {
-      const request = pending.get(message.id);
-      if (!request) return;
-      pending.delete(message.id); clearTimeout(request.timer);
-      message.error ? request.reject(Error(`CDP ${request.method} failed`)) : request.resolve(message.result);
+  const mainClient=createCdpClient(target.webSocketDebuggerUrl,{onEvent:message=>{
+    if (message.method === 'Network.requestWillBeSent') {
+      const request=message.params.request;
+      let path;try{path=new URL(request.url).pathname}catch{path='non-http'}
+      documentRequests.set(message.params.requestId,{path,type:message.params.type,state:'pending'});
+    } else if (message.method === 'Network.loadingFinished' || message.method === 'Network.loadingFailed') {
+      const request=documentRequests.get(message.params.requestId);
+      if(request){request.state=message.method.endsWith('Finished')?'finished':'failed';request.error=message.params.errorText;}
+    } else if (message.method === 'Page.lifecycleEvent' && ['DOMContentLoaded','load'].includes(message.params.name)) {
+      loadedDocuments.add(message.params.loaderId);
     } else if (message.method === 'Runtime.consoleAPICalled') {
       const args = message.params.args ?? [];
       if (message.params.type === 'error' || String(args[0]?.value).includes('[KCoder Studio] Runtime')) {
@@ -223,6 +360,12 @@ async function main() {
     else if (['Network.webSocketFrameSent', 'Network.webSocketFrameReceived'].includes(message.method)) {
       try {
         const frame = JSON.parse(message.params.response.payloadData);
+        if(streamingProbe&&message.method.endsWith('Received')&&frame.method==='item/delta'&&message.params.response.payloadData.includes('WINDOWS_STREAM_FIRST'))streamingTimings.wireFirst??=Date.now();
+        if (taskHostProbe && message.method === 'Network.webSocketFrameReceived') {
+          const error=frame.method==='turn/completed' ? frame.params?.error : frame.params?.event?.type==='error' ? frame.params.event.error : null;
+          if(error) taskHostFailure=String(typeof error==='string'?error:error.message||error.code||'Task failed')
+            .replace(/Bearer\s+\S+|sk-[A-Za-z0-9_-]{12,}/gi,'[redacted]').slice(0,2000);
+        }
         if (steerProbe && message.method === 'Network.webSocketFrameReceived') {
           const event = frame.params?.event;
           if (frame.method === 'item/event' && event?.type === 'background_job_associated') steerIds.set(event.tool_call_id, event.id);
@@ -242,6 +385,7 @@ async function main() {
                 threadResume: result.capabilities?.threadResume === true, experimental } });
           }
         }
+        officeTelemetry?.observe(message.params.requestId,message.method.endsWith('Sent')?'sent':'received',frame);
         // Whitelist protocol metadata only; never retain tokens, message bodies or URLs.
         wireTrace.push({ at: Date.now(), socket: message.params.requestId,
           direction: message.method.endsWith('Sent') ? 'sent' : 'received', id: frame.id,
@@ -255,34 +399,30 @@ async function main() {
         if (wireTrace.length > 400) wireTrace.shift();
       } catch {}
     }
-  });
-  await new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(Error('CDP open timed out')), 10000);
-    socket.addEventListener('open', () => { clearTimeout(timer); resolve(); }, { once: true });
-    socket.addEventListener('error', () => { clearTimeout(timer); reject(Error('CDP open failed')); }, { once: true });
-  });
-  const request = (method, params = {}) => new Promise((resolve, reject) => {
-    const id = ++sequence;
-    const timer = setTimeout(() => { pending.delete(id); reject(Error(`CDP ${method} timed out`)); }, method === 'Runtime.evaluate' ? 30000 : 10000);
-    pending.set(id, { method, resolve, reject, timer });
-    socket.send(JSON.stringify({ id, method, params }));
-  });
+  }});
+  socket=mainClient.socket;app.once('exit',mainClient.abort);await mainClient.ready;
+  const request=mainClient.request;
+  if(taskHostProbe)await request('Emulation.setFocusEmulationEnabled',{enabled:true});
   const evaluate = async expression => {
     const response = await request('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true, userGesture: true });
     if (response.exceptionDetails) throw Error(`Page script failed at ${stage}: ${String(response.exceptionDetails.exception?.description ?? response.exceptionDetails.text).slice(0, 2000)}`);
     return response.result.value;
   };
+  runtimeAutomation = await require('./runtime-automation-control.cjs').startRuntimeAutomationControl(base);
+  await request('Page.addScriptToEvaluateOnNewDocument', { source: runtimeAutomation.script });
+  await request('Page.reload');
+  await until(() => evaluate("typeof window.__KCODER_STUDIO_E2E__?.invokeRuntimeCommand==='function'"), 30000);
   if(directInstall) closeInstalledApp=async()=>{
     await evaluate(`(async()=>{const menus=await window.kcoderDesktopMenu.list('en');for(const menu of menus){const quit=menu.entries?.find(item=>item.id==='quit');if(quit){void window.kcoderDesktopMenu.invoke(menu.index,quit.position);return true}}throw Error('Quit menu unavailable')})()`);
     const end=Date.now()+15000;while(app.exitCode===null&&Date.now()<end)await delay(50);
     if(app.exitCode===null)throw Error('Normal installed application quit did not complete');
   };
-  const traceIpc = () => evaluate(`(()=>{const original=window.__TAURI_INTERNALS__.invoke;const entries=[];window.__kcoderProbeIpc=entries;window.__TAURI_INTERNALS__.invoke=async function(command,args){const item={at:Date.now(),command,method:args?.method,taskId:args?.params?.address?.taskId||args?.params?.taskId,state:'pending'};entries.push(item);if(entries.length>150)entries.shift();try{const result=await original.call(this,command,args);item.state='resolved';item.ms=Date.now()-item.at;return result}catch(error){item.state='rejected';item.error=String(error.message).slice(0,180);throw error}};return true})()`);
+  const traceIpc = () => evaluate(`(()=>{const original=window.__KCODER_STUDIO_E2E__.invokeRuntimeCommand;const entries=[];window.__kcoderProbeIpc=entries;window.__KCODER_STUDIO_E2E__.invokeRuntimeCommand=async function(command,args){const item={at:Date.now(),command,method:args?.method,taskId:args?.params?.address?.taskId||args?.params?.taskId,state:'pending'};entries.push(item);if(entries.length>150)entries.shift();try{const result=await original.call(this,command,args);item.state='resolved';item.ms=Date.now()-item.at;return result}catch(error){item.state='rejected';item.error=String(error.message).slice(0,180);throw error}};return true})()`);
   const selector = id => `[data-testid="${id}"]`;
   const exists = id => evaluate(`Boolean(document.querySelector(${JSON.stringify(selector(id))}))`);
   const click = async id => {
-    await until(() => evaluate(`Boolean(document.querySelector(${JSON.stringify(selector(id))})) && !document.querySelector(${JSON.stringify(selector(id))}).matches(':disabled')`));
-    await evaluate(`(()=>{const e=document.querySelector(${JSON.stringify(selector(id))});e.scrollIntoView({block:'center'});if(e.disabled)throw Error('disabled');e.click();return true})()`);
+    // Check and click in one page task so a React replacement cannot detach the lookup.
+    await until(() => evaluate(`(()=>{const e=document.querySelector(${JSON.stringify(selector(id))});if(!e||e.matches(':disabled'))return false;e.scrollIntoView({block:'center'});e.click();return true})()`));
   };
   const navigate = async (route, id) => {
     const before = navigation;
@@ -310,8 +450,33 @@ async function main() {
     fs.writeFileSync(path.join(artifacts, name), Buffer.from(result.data, 'base64'));
   };
   captureFailure = async () => {
+    const authObservation = {
+      renewalFailureWarningCountInRetainedOutput: (appOutput.match(/KCoder Studio desktop session renewal failed; retrying/g) || []).length,
+      recoveryFailureWarningCountInRetainedOutput: (appOutput.match(/KCoder Studio desktop login recovery failed; retrying/g) || []).length,
+      retainedOutputBytes: Buffer.byteLength(appOutput),
+      requestedAuthSessionTtlMs: env.KCODER_STUDIO_AUTH_SESSION_TTL_MS ? Number(env.KCODER_STUDIO_AUTH_SESSION_TTL_MS) : null,
+    };
+    try {
+      authObservation.document = await evaluate(`({protocol:location.protocol,hostname:location.hostname,port:location.port,pathname:location.pathname,loginForm:Boolean(document.querySelector('form[method="post"] input[name="token"][type="password"]')),loginActionPath:(()=>{const form=document.querySelector('form[method="post"] input[name="token"][type="password"]')?.form;return form?new URL(form.action,location.origin).pathname:null})()})`);
+    } catch { authObservation.documentUnavailable = true; }
+    try {
+      const response = await request('Network.getCookies', {urls:[base]}, 5000);
+      // Discard secret fields immediately; only explicit cookie metadata is evidence.
+      for (const cookie of response.cookies || []) delete cookie.value;
+      authObservation.sessionCookie = desktopSessionCookieMetadata(response.cookies);
+    } catch { authObservation.cookieMetadataUnavailable = true; }
+    fs.writeFileSync(path.join(artifacts,'windows-desktop-auth-failure.json'),JSON.stringify(authObservation));
+    if(officeNativeProbe&&!stage.startsWith('office-')){
+      const observation={stage,loading:startupObservation.loading,wireTrace,runtimeDiagnostics};
+      try{observation.dom=await evaluate(`({readyState:document.readyState,hidden:document.hidden,visibility:document.visibilityState,focused:document.hasFocus(),desktop:Boolean(window.kcoderDesktopHost),bridge:typeof window.__KCODER_STUDIO_E2E__?.invokeRuntimeCommand==='function',rpcMetaPresent:Boolean(document.querySelector('meta[name="kcoder-rpc-token"]')?.content),testIds:[...document.querySelectorAll('[data-testid]')].slice(0,100).map(e=>e.dataset.testid),navigation:performance.getEntriesByType('navigation').map(e=>({responseEnd:e.responseEnd,domComplete:e.domComplete,loadEventEnd:e.loadEventEnd})),resources:performance.getEntriesByType('resource').slice(-80).map(e=>({path:new URL(e.name,location.href).pathname,type:e.initiatorType,duration:e.duration,finished:e.responseEnd>0,bytes:e.transferSize}))})`)}catch(error){observation.domError=error.message}
+      try{observation.servers=await evaluate(`(async()=>{const r=await fetch('/api/servers',{credentials:'include',signal:AbortSignal.timeout(5000)});const x=await r.json();return {status:r.status,serverCount:Array.isArray(x.servers)?x.servers.length:null,serverIds:Array.isArray(x.servers)?x.servers.map(s=>s.id):[],keys:Object.keys(x)}})()`)}catch(error){observation.serverError=error.message}
+      try{await evaluate(`(()=>{window.__kcoderStartupTicks={timer:false,raf:false};setTimeout(()=>{window.__kcoderStartupTicks.timer=true},50);requestAnimationFrame(()=>{window.__kcoderStartupTicks.raf=true});return true})()`);await delay(250);observation.ticks=await evaluate('window.__kcoderStartupTicks')}catch(error){observation.tickError=error.message}
+      try{observation.window=await request('Browser.getWindowForTarget',{targetId:target.id})}catch(error){observation.windowError=error.message}
+      fs.writeFileSync(path.join(artifacts,'windows-startup-gate-observation.json'),JSON.stringify(observation));
+    }
     if (accountsProbe) failureText = await evaluate('document.body.innerText.slice(0,3000)');
-    await screenshot('windows-failure.png');
+    if (migrationProbe) fs.writeFileSync(path.join(artifacts, 'windows-migration-progress.json'), JSON.stringify({stage,wireTrace,runtimeDiagnostics,documentRequests:[...documentRequests.values()],dom:await evaluate('({readyState:document.readyState,title:document.title,path:location.pathname,rootPresent:Boolean(document.getElementById("root")),text:document.body.innerText.slice(0,4000),testIds:[...document.querySelectorAll("[data-testid]")].map(e=>e.dataset.testid)})')}));
+    if(!taskHostProbe)await screenshot('windows-failure.png');
     if (historyProbe || steerProbe) {
       const state = await evaluate(`({ testIds: [...document.querySelectorAll('[data-testid]')].map(node=>({id:node.dataset.testid,visible:node.getClientRects().length>0})).filter(item=>/message|pause/.test(item.id)), assistants: [...document.querySelectorAll('[data-testid="message-assistant"]')].map(node=>({text:node.textContent,inner:node.innerText})), text:document.body.innerText.slice(-6000) })`);
       const ipc = await evaluate('window.__kcoderProbeIpc || []');
@@ -320,13 +485,40 @@ async function main() {
     }
   };
   await request('Page.enable');
+  await request('Network.enable');
+  // Runtime.enable can create a JS context on Electron's initial empty document.
+  // Wait for the real document before attaching Runtime or evaluating any script.
+  await request('Page.setLifecycleEventsEnabled',{enabled:true});
+  stage='committed-desktop-document';
+  await until(async()=>{
+    const {frameTree}=await request('Page.getFrameTree');
+    const {root:document}=await request('DOM.getDocument',{depth:3});
+    return require('./windows-cdp-document.cjs').isCommittedLoopbackDocument(frameTree.frame,document);
+  },30000);
   await request('Runtime.enable');
   await request('Network.enable');
   // Observe the real first navigation. Reloading immediately after attaching
   // CDP can abort Electron's still-pending loadURL and fabricate startup errors.
   await request('Page.bringToFront');
   await request('Emulation.setFocusEmulationEnabled', { enabled: true });
-  await until(() => exists(accountsProbe ? 'kcoder-account-login' : 'desktop-sidebar'));
+  stage='desktop-sidebar-ready';
+  if(officeNativeProbe&&await evaluate("typeof window.__KCODER_STUDIO_E2E__?.invokeRuntimeCommand==='function'"))await traceIpc();
+  await until(() => exists(accountsProbe ? 'kcoder-account-login' : 'desktop-sidebar'), 45000);
+  if(browserProfileUiProbe){
+    await until(()=>negotiatedProtocols.length>0);
+    assert.ok(negotiatedProtocols.some(item=>item.capabilities.experimental.browserProfileSessionsV1===true));
+    return require('./windows-browser-profile-ui.cjs').runWindowsBrowserProfileUi({evaluate,until,click,screenshot,request,profile,artifacts,app,modelUrl:lifecycleModelUrl,getWireTrace:()=>wireTrace,setStage:value=>{stage=value;}});
+  }
+  if (migrationProbe) {
+    return require('./windows-migration-ui.cjs').runMigrationUi({ evaluate, until, navigate, click,
+      screenshot, profile, fixture: migrationFixture, binary, quickOnly: migrationInput?.quickOnly === true, insertText: text=>request('Input.insertText',{text}), resize:(width,height)=>request('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false}), setStage: value => { stage = value; fs.writeFileSync(path.join(artifacts,'windows-migration-progress.json'),JSON.stringify({stage,at:Date.now()})); } });
+  }
+  if(officeNativeProbe){
+    await until(()=>negotiatedProtocols.length>0);
+    assert.equal(negotiatedProtocols.some(item=>item.capabilities.experimental.officeSettingsV1===true),true);
+    fs.writeFileSync(path.join(artifacts,'windows-office-initial-negotiation.json'),JSON.stringify({settingsNegotiated:true,workspaceInitiallyEnabled:negotiatedProtocols.some(item=>item.capabilities.experimental.officeWorkspaceV1===true)}));
+    return require('./windows-office-native-ui.cjs').runWindowsOfficeNative({evaluate,until,navigate,click,screenshot,workspace,artifacts,app,modelUrl:lifecycleModelUrl,telemetry:officeTelemetry,setStage:value=>{stage=value;fs.writeFileSync(path.join(artifacts,'windows-office-progress.json'),JSON.stringify({stage,at:Date.now()}));}});
+  }
   if (directInstall) {
     await until(() => negotiatedProtocols.length > 0);
     const negotiated = negotiatedProtocols.at(-1);
@@ -341,7 +533,7 @@ async function main() {
     fs.writeFileSync(path.join(artifacts, 'windows-installed-negotiated-protocol.json'), JSON.stringify(negotiated));
     const evidencePath = path.join(root, 'upgrade-evidence.json');
     const fillControl = async (id, value) => evaluate(`(()=>{const e=document.querySelector(${JSON.stringify(selector(id))});const prototype=e.tagName==='SELECT'?HTMLSelectElement.prototype:e.tagName==='TEXTAREA'?HTMLTextAreaElement.prototype:HTMLInputElement.prototype;Object.getOwnPropertyDescriptor(prototype,'value').set.call(e,${JSON.stringify(value)});e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}));return true})()`);
-    const rpc = (method, params) => evaluate(`window.__TAURI_INTERNALS__.invoke('local_executor_request',${JSON.stringify({method,params})})`);
+    const rpc = (method, params) => evaluate(`window.__KCODER_STUDIO_E2E__.invokeRuntimeCommand('local_executor_request',${JSON.stringify({method,params})})`);
     const send = async (text, expectedReplies) => {
       await until(() => evaluate(`document.querySelector('[data-testid="chat-message-input"]')?.getAttribute('contenteditable')==='true'`));
       await evaluate(`document.querySelector('[data-testid="chat-message-input"]').focus();true`);
@@ -358,10 +550,16 @@ async function main() {
       await fillControl('provider-id','fixture');await fillControl('provider-model','fixture');
       await fillControl('provider-endpoint',lifecycleModelUrl);
       await fillControl('provider-format','openai_chat_completions');await fillControl('provider-authentication','none');
+      // Explicit model limits are required; the fixture must satisfy the normal form.
+      await evaluate(`document.querySelector('[data-testid="provider-advanced-settings"] > summary').click();true`);
+      await fillControl('provider-contextWindowTokens','100000');
+      await fillControl('provider-maxOutputTokens','4096');
       await fillControl('provider-extra-body','{"temperature":0.27}');
       if(!(await evaluate(`document.querySelector('[data-testid="provider-default"]').checked`)))await click('provider-default');
       await click('provider-save');
       await until(()=>Boolean(JSON.parse(fs.readFileSync(path.join(profile,'settings.json'),'utf8')).providers?.fixture));
+      stage='installed-register-owned-project';
+      await rpc('runtime.projects.upsert_local',{projectKey:'windows-installer-lifecycle',name:'Windows installer fixture',roots:[workspace],deviceId:'local'});
       stage='installed-two-user-turns';
       await navigate('/','project-new-conversation-button');await click('project-new-conversation-button');
       await send('INSTALL_LIFECYCLE_FIRST',1);await send('INSTALL_LIFECYCLE_SECOND',2);
@@ -373,7 +571,7 @@ async function main() {
         const origin=await evaluate('location.origin');
         fs.writeFileSync(evidencePath,JSON.stringify({taskId,workspace,origin,expectedTemperature:0.27}));
         await screenshot('windows-installed-fresh-smoke.png');
-        return {passed:true,actualInstalledResources:true,negotiatedProtocol:negotiated,noExistingKey:true,modelSavedThroughUI:true,twoRepliesVisible:true,smokeOnly:true};
+        return {passed:true,actualInstalledResources:true,negotiatedProtocol:negotiated,noExistingKey:true,modelSavedThroughUI:true,twoRepliesVisible:true,smokeOnly:true,directoryTrust:'not_requested'};
       }
       await navigate('/settings/appearance','appearance-mode-dark');await click('appearance-mode-dark');
       await until(()=>evaluate(`document.documentElement.dataset.theme==='dark'`));
@@ -389,16 +587,20 @@ async function main() {
       fs.writeFileSync(path.join(plugin,'hooks','hooks.json'),JSON.stringify({hooks:{UserPromptSubmit:[{hooks:[{type:'command',command:'bash "${CLAUDE_PLUGIN_ROOT}/scripts with spaces/marker.sh"',timeout:15}]}]}}));
       const pluginId=await evaluate(`(${seedProjectHistory.toString()})('',false,${JSON.stringify(plugin)})`);
       const origin=await evaluate('location.origin');
-      assert.equal(await evaluate(`JSON.parse(localStorage.getItem('wework.appearance')).mode`),'dark');
+      assert.equal(await evaluate(`JSON.parse(localStorage.getItem('kcoder.appearance') ?? localStorage.getItem('wework.appearance'))?.mode`),'dark');
       fs.writeFileSync(evidencePath,JSON.stringify({taskId,workspace,pluginId,origin,targetId:'upgrade-target',expectedTemperature:0.27}));
-      await navigate('/plugins/manage','kcoder-plugin-management');
+      stage='installed-plugin-explicit-target';
+      await navigate('/plugins/manage','kcoder-plugin-target-select');
+      await until(()=>evaluate(`(()=>{const e=document.querySelector('[data-testid="kcoder-plugin-target-select"]');return Boolean(e&&!e.disabled&&[...e.options].some(option=>option.value==='local'))})()`));
+      await fillControl('kcoder-plugin-target-select','local');
+      await until(()=>exists('kcoder-plugin-management'));
       await until(()=>evaluate(`document.body.innerText.includes('upgrade-preserved')`));
       stage='installed-plugin-new-session-hook';
       await navigate('/','project-new-conversation-button');await click('project-new-conversation-button');
       await send('INSTALL_LIFECYCLE_PLUGIN_HOOK',1);
       assert.equal(fs.readFileSync(path.join(workspace,'windows-plugin-hook-count'),'utf8'),'x','Actual installed Windows Hook expands plugin root and executes a path with spaces');
       await screenshot('windows-installed-seed.png');
-      return {passed:true,actualInstalledResources:true,negotiatedProtocol:negotiated,noExistingKey:true,modelSavedThroughUI:true,twoRepliesVisible:true,pluginInstalled:true,pluginHookExecuted:true,retainedTarget:true,themeSaved:true};
+      return {passed:true,actualInstalledResources:true,negotiatedProtocol:negotiated,noExistingKey:true,modelSavedThroughUI:true,twoRepliesVisible:true,pluginInstalled:true,pluginHookExecuted:true,retainedTarget:true,themeSaved:true,directoryTrust:'not_requested'};
     }
     stage='installed-upgrade-restoration';
     const saved=JSON.parse(fs.readFileSync(evidencePath,'utf8'));
@@ -417,7 +619,7 @@ async function main() {
       if(geometry.statusRight!==undefined)assert.ok(geometry.statusRight<=geometry.actionsLeft+1);
       fs.writeFileSync(path.join(artifacts,'windows-installed-hover-geometry.json'),JSON.stringify(geometry));
       await screenshot('windows-installed-reopened-smoke.png');
-      return {passed:true,actualInstalledResources:true,negotiatedProtocol:negotiated,historyRestored:true,modelBodyRetained:true,hoverGeometryVerified:true,smokeOnly:true};
+      return {passed:true,actualInstalledResources:true,negotiatedProtocol:negotiated,historyRestored:true,modelBodyRetained:true,hoverGeometryVerified:true,smokeOnly:true,directoryTrust:'not_requested'};
     }
     await until(()=>evaluate(`document.documentElement.dataset.theme==='dark'`));
     const targets=await evaluate(`fetch('/api/servers').then(response=>response.json()).then(value=>value.servers.map(item=>({id:item.id,label:item.label})))`);
@@ -438,7 +640,7 @@ async function main() {
     await send('INSTALL_LIFECYCLE_RESTORED_PLUGIN_HOOK',1);
     assert.equal(fs.readFileSync(path.join(workspace,'windows-plugin-hook-count'),'utf8').length,hookCountBefore+1,'Retained plugin Hook executes exactly once in a new conversation');
     await screenshot('windows-installed-plugin-hook.png');
-    if(lifecycleCurrentFeatures){
+    if(lifecycleDirectoryTrust){
       stage='installed-windows-directory-trust';
       const trustSource=path.join(root,'windows trust market');
       const trustFile=path.join(profile,'trusted-folders.json');
@@ -492,7 +694,7 @@ async function main() {
         saved.windowsDirectoryTrustVerified=true;fs.writeFileSync(evidencePath,JSON.stringify(saved));
       }else assert.equal(trustContains('trusted'),true,'Explicit Windows directory decision survived restart');
     }
-    return {passed:true,actualInstalledResources:true,negotiatedProtocol:negotiated,historyRestored:true,modelBodyRetained:true,themeRetained:true,targetRetained:true,pluginRetained:true,pluginHookExecuted:true,...(lifecycleCurrentFeatures?{windowsDirectoryTrustVerified:true}:{})};
+    return {passed:true,actualInstalledResources:true,negotiatedProtocol:negotiated,historyRestored:true,modelBodyRetained:true,themeRetained:true,targetRetained:true,pluginRetained:true,pluginHookExecuted:true,directoryTrust:lifecycleDirectoryTrust?'verified':'not_requested',...(lifecycleDirectoryTrust?{windowsDirectoryTrustVerified:true}:{})};
   }
   if (menuLayoutProbe) {
     stage = 'menu-layout';
@@ -522,7 +724,7 @@ async function main() {
     await until(() => exists('kcoder-mcp-auth-action'));
     // Suppress only the user's default external opener; exercise the actual link
     // in a separate Windows Edge process with an owned browser profile below.
-    await evaluate(`(()=>{const original=window.__TAURI_INTERNALS__.invoke;window.__TAURI_INTERNALS__.invoke=(command,args)=>command==='plugin:opener|open_url'?Promise.resolve():original(command,args);window.open=()=>null;return true})()`);
+    await evaluate(`(()=>{window.open=()=>null;return true})()`);
     await click('kcoder-mcp-auth-action');
     await until(() => exists('kcoder-mcp-open-authorization'));
     const authorizationUrl = await evaluate(`document.querySelector('[data-testid="kcoder-mcp-open-authorization"]').href`);
@@ -787,7 +989,7 @@ async function main() {
     assert.equal(fs.readFileSync(path.join(profile, 'credentials.json'), 'utf8'), beforeCredentials);
     assert.deepEqual(JSON.parse(beforeCredentials), {}, 'Windows has no model credential');
     stage = 'remote-model-chat';
-    await evaluate(`window.__TAURI_INTERNALS__.invoke('local_executor_request',{method:'runtime.projects.upsert_local',params:{deviceId:'remote-models',projectKey:'windows-remote-model',name:'WINDOWS_REMOTE_MODEL_PROJECT',roots:[${JSON.stringify(remoteModelsInput.workspace)}]}})`);
+    await evaluate(`window.__KCODER_STUDIO_E2E__.invokeRuntimeCommand('local_executor_request',{method:'runtime.projects.upsert_local',params:{deviceId:'remote-models',projectKey:'windows-remote-model',name:'WINDOWS_REMOTE_MODEL_PROJECT',roots:[${JSON.stringify(remoteModelsInput.workspace)}]}})`);
     await navigate('/', 'desktop-sidebar');
     await until(() => evaluate(`[...document.querySelectorAll('[data-testid="project-item"]')].some(e=>e.textContent.includes('WINDOWS_REMOTE_MODEL_PROJECT'))`));
     await evaluate(`[...document.querySelectorAll('[data-testid="project-item"]')].find(e=>e.textContent.includes('WINDOWS_REMOTE_MODEL_PROJECT')).querySelector('[data-testid="project-new-conversation-button"]').click()`);
@@ -795,6 +997,7 @@ async function main() {
     await click('chat-message-input');
     await request('Input.insertText', { text: 'WINDOWS_REMOTE_MODEL_MESSAGE' });
     await until(() => evaluate(`document.querySelector('[data-testid="send-message-button"]')?.disabled===false`));
+    if (kworkerProbe) streamingTimings.sent = Date.now();
     await click('send-message-button');
     await until(() => evaluate(`document.body.innerText.includes('WINDOWS_REMOTE_MODEL_DONE')`), 30000);
     assert.equal(fs.readFileSync(path.join(profile, 'credentials.json'), 'utf8'), beforeCredentials);
@@ -812,6 +1015,59 @@ async function main() {
     assert.equal(fs.readFileSync(path.join(profile, 'credentials.json'), 'utf8'), beforeCredentials);
     await screenshot('windows-remote-model-failure.png');
     return {passed:true, remoteFailureVisible:true, remoteSave:true, remoteConversation:true, windowsCredentialsEmpty:true, windowsSettingsUnchanged:true};
+  }
+  if (taskHostProbe) {
+    stage = 'task-host-first-message';
+    await navigate('/', 'desktop-sidebar');
+    if (kworkerProbe) await evaluate(`sessionStorage.setItem('kcoder-studio:work-mode-v1','kworker');window.dispatchEvent(new Event('kcoder-studio:work-mode-changed'));true`);
+    if(toolSelectionsProbe){
+      disabledSpecs=await evaluate(`(async()=>{const request=(method,params={})=>window.__KCODER_STUDIO_E2E__.invokeRuntimeCommand('local_executor_request',{method:'runtime.settings.request',params:{serverId:'local',method,params}});const before=await request('settings/tools/selection/read');const selected=before.modes.find(mode=>mode.mode==='kcoder').allowedTools;const specs=selected.filter(name=>name.startsWith('Spec'));if(!specs.length)throw Error('Owned fixture has no enabled Spec tools');const after=await request('settings/tools/selection/save',{mode:'kcoder',allowedTools:selected.filter(name=>!name.startsWith('Spec')),expectedRevision:before.revision});if(after.modes.find(mode=>mode.mode==='kcoder').allowedTools.some(name=>name.startsWith('Spec')))throw Error('Spec selection was not saved');return specs})()`);
+    }
+    // Use an actual owned project instead of replacing the renderer's IPC handler.
+    await evaluate(`window.__KCODER_STUDIO_E2E__.invokeRuntimeCommand('local_executor_request',{method:'runtime.projects.upsert_local',params:{deviceId:'local',projectKey:'windows-task-host',name:'WINDOWS_TASK_HOST_PROJECT',roots:[${JSON.stringify(workspace)}]}})`);
+    await reload('desktop-sidebar');
+    await evaluate(`(()=>{const Original=window.WebSocket;window.__kcoderDropOwnedTurnEvents=false;window.__kcoderDroppedTerminals=0;window.__kcoderReceiptRefreshes=0;window.addEventListener('kcoder:turn-receipt-reconciled',()=>window.__kcoderReceiptRefreshes++);window.WebSocket=class extends Original{constructor(...args){super(...args);this.addEventListener('message',event=>{if(!window.__kcoderDropOwnedTurnEvents)return;let frame;try{frame=JSON.parse(event.data)}catch{return}if(frame.method==='turn/completed')window.__kcoderDroppedTerminals++;if(['turn/started','turn/completed','item/delta','item/completed'].includes(frame.method))event.stopImmediatePropagation()})}};return true})()`);
+    await until(() => evaluate(`(()=>{const row=[...document.querySelectorAll('[data-testid="project-item"]')].find(item=>item.textContent.includes('WINDOWS_TASK_HOST_PROJECT'));const button=row?.querySelector('[data-testid="project-new-conversation-button"]');if(!button||button.disabled)return false;button.click();return true})()`));
+    await until(() => exists('chat-message-input'));
+    await traceIpc();
+    await click('chat-message-input');
+    await evaluate(`document.querySelector('[data-testid="chat-message-input"]').focus();true`);
+    await request('Input.insertText', { text: 'WINDOWS_TASK_HOST_CHECK' });
+    await until(() => evaluate(`document.querySelector('[data-testid="send-message-button"]')?.disabled===false`));
+    await click('send-message-button');
+    if(streamingProbe){
+      await until(()=>evaluate(`document.body.innerText.includes('WINDOWS_STREAM_FIRST')`),90000);
+      streamingTimings.visibleFirst=Date.now();
+      await until(()=>evaluate(`document.body.innerText.includes('WINDOWS_HISTORY_REPLY')&&Boolean(document.querySelector('[data-testid="send-message-button"]'))`),90000);
+      fs.writeFileSync(path.join(artifacts,'windows-history-dom.json'),JSON.stringify({streamingTimings,wireTrace,ipc:await evaluate('window.__kcoderProbeIpc || []')}));
+      assert.ok(streamingTimings.visibleFirst<streamingTimings.providerFinished,`First text was buffered until completion: ${JSON.stringify(streamingTimings)}`);
+      assert.equal(await evaluate(`(document.body.innerText.match(/WINDOWS_STREAM_FIRST/g)||[]).length`),1,'History reconciliation must not duplicate live output');
+      if (kworkerProbe) assert.equal(officeToolAdvertised, false, 'KWorker must not advertise the removed Office tools');
+      return {passed:true,actualWindowsElectron:true,kworker:kworkerProbe,officeToolAdvertised,streamingTimings,firstVisibleDelayMs:streamingTimings.visibleFirst-streamingTimings.providerFirst,modelRequests,paidModelRequests:0};
+    }
+    await until(async () => taskHostFailure || await evaluate(`document.body.innerText.includes('WINDOWS_HISTORY_REPLY') || document.body.innerText.includes('APP_SERVER_HOST_')`), 90000);
+    assert.equal(taskHostFailure,undefined,taskHostFailure);
+    const text = await evaluate('document.body.innerText');
+    assert.ok(text.includes('WINDOWS_HISTORY_REPLY'), text.slice(-3000));
+    if(toolSelectionsProbe){
+      await until(()=>advertisedToolNames.length===2);
+      assert.equal(modelRequests,2,'One input and one rejected tool result must settle without replay');
+      assert.ok(disabledSpecs.length>=11,'The complete built-in Spec group must be disabled');
+      for(const names of advertisedToolNames){assert.ok(names.includes('read'),'Unrelated enabled tools remain available');assert.ok(!names.some(name=>name.startsWith('Spec')),'Disabled Spec tools were exposed to the model');}
+      assert.ok(forbiddenSpecDenied,'A forged SpecInit call must be rejected by the Engine registry');
+      return {passed:true,actualWindowsElectron:true,kcoderToolSelection:true,disabledSpecs,forbiddenSpecCallRejected:true,modelRequests,paidModelRequests:0};
+    }
+    assert.equal(modelRequests, 1);
+    await until(() => evaluate(`document.querySelector('[data-testid="message-assistant-waiting"]')===null && Boolean(document.querySelector('[data-testid="send-message-button"]'))`));
+    stage='task-host-follow-up';
+    await evaluate(`window.__kcoderDropOwnedTurnEvents=true`);
+    await evaluate(`document.querySelector('[data-testid="chat-message-input"]').focus();true`);
+    await request('Input.insertText',{text:'WINDOWS_TASK_HOST_FOLLOW_UP'});
+    await until(() => evaluate(`document.querySelector('[data-testid="send-message-button"]')?.disabled===false`));
+    await click('send-message-button');
+    await until(() => evaluate(`window.__kcoderDroppedTerminals>0 && window.__kcoderReceiptRefreshes>0 && [...document.querySelectorAll('[data-testid="message-assistant"]')].filter(node=>node.textContent.includes('WINDOWS_HISTORY_REPLY')).length===2 && document.querySelector('[data-testid="message-assistant-waiting"]')===null`),90000);
+    assert.equal(modelRequests,2);
+    return { passed:true, actualWindowsElectron:true, ordinaryTaskHost:true, automaticWorkspace:true, twoRepliesVisible:true, lostTerminalRecovered:true, modelRequests, paidModelRequests:0 };
   }
   if (modelScopeProbe) {
     const fill = async (id, value) => evaluate(`(() => { const e=document.querySelector(${JSON.stringify(selector(id))}); const proto=e.tagName==='TEXTAREA'?HTMLTextAreaElement.prototype:HTMLInputElement.prototype; Object.getOwnPropertyDescriptor(proto,'value').set.call(e,${JSON.stringify(value)}); e.dispatchEvent(new Event('input',{bubbles:true})); e.dispatchEvent(new Event('change',{bubbles:true})); return true; })()`);
@@ -953,7 +1209,7 @@ async function main() {
       await request('Input.insertText', { text: 'TEXT_AFTER_ONLY_IMAGE' });
       await click('send-message-button'); await waitReplies(3);
       const address = { deviceId: 'local', workspacePath: seed.canonical, taskId: pictureId };
-      const rpc = (method, params) => evaluate(`window.__TAURI_INTERNALS__.invoke('local_executor_request',${JSON.stringify({ method, params })})`);
+      const rpc = (method, params) => evaluate(`window.__KCODER_STUDIO_E2E__.invokeRuntimeCommand('local_executor_request',${JSON.stringify({ method, params })})`);
       stage = 'workflow-goal-delete';
       for (const mode of ['standard', 'strict']) {
         await rpc('runtime.tasks.goal.set', { address, objective: 'WINDOWS_GOAL_DELETE', mode, status: 'active' });
@@ -1011,7 +1267,7 @@ async function main() {
     await assertHistory(allIds);
     stage = 'history-archive-one';
     await click(`runtime-local-task-archive-${oldIds[1]}`);
-    await until(() => evaluate(`window.__TAURI_INTERNALS__.invoke('local_executor_request',{method:'runtime.archived_conversations.list',params:{}}).then(result=>result.items.some(item=>item.taskId===${JSON.stringify(oldIds[1])}))`), 30000);
+    await until(() => evaluate(`window.__KCODER_STUDIO_E2E__.invokeRuntimeCommand('local_executor_request',{method:'runtime.archived_conversations.list',params:{}}).then(result=>result.items.some(item=>item.taskId===${JSON.stringify(oldIds[1])}))`), 30000);
     await reload('desktop-sidebar');
     await assertHistory(allIds.filter(id => id !== oldIds[1]));
     await screenshot('windows-project-history.png');
@@ -1068,6 +1324,9 @@ async function seedProjectHistory(projectPath, steerOnly = false, pluginPath = n
     connections.push(ws);
     let next = 0;
     const pending = new Map();
+    const rejectPending = () => { for (const [id, waiter] of pending) { clearTimeout(waiter.timer); waiter.reject(Error('Owned fixture websocket closed')); pending.delete(id); } };
+    ws.addEventListener('close', rejectPending);
+    ws.addEventListener('error', rejectPending);
     const events = [];
     ws.addEventListener('message', event => {
       const message = JSON.parse(event.data);
@@ -1135,7 +1394,17 @@ async function seedProjectHistory(projectPath, steerOnly = false, pluginPath = n
   }
   catch (error) {
     await captureFailure?.().catch(() => {});
-    result = { passed: false, stage, error: error.message, ...(nativeInputObservations ? {nativeInputObservations} : {}), ...(accountsProbe ? { screenText: failureText } : {}),
+    startupObservation={...startupObservation,gatewayPhases:gatewayStartupRecords(appOutput),elapsedMs:appStartedAt?Date.now()-appStartedAt:0,outputBytes:Buffer.byteLength(appOutput),nativeAvailabilityCodes:['OFFICE_NATIVE_UNAVAILABLE','CHANNEL_NATIVE_UNAVAILABLE','NATIVE_COMPONENT_IMAGE_UNAVAILABLE'].filter(code=>appOutput.includes(code)),devToolsLineObserved:/DevTools listening on/.test(appOutput)};
+    if(directInstall&&app?.pid&&app.exitCode===null){
+      const observed=spawnSync('powershell.exe',['-NoProfile','-NonInteractive','-Command',`$p=Get-Process -Id ${app.pid};@{pid=$p.Id;cpuSeconds=$p.CPU;workingSetBytes=$p.WorkingSet64;responding=$p.Responding;hasWindow=($p.MainWindowHandle -ne 0);startedUtc=$p.StartTime.ToUniversalTime().ToString('o')}|ConvertTo-Json -Compress`],{encoding:'utf8',windowsHide:true,timeout:10000});
+      if(observed.status===0){try{startupObservation.process=JSON.parse(observed.stdout)}catch{}}
+    }
+    if(officeNativeProbe&&app?.pid&&app.exitCode===null){
+      const observed=spawnSync('powershell.exe',['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',path.join(__dirname,'windows-office-startup-observation.ps1'),'-ProcessId',String(app.pid),'-StartedAtMilliseconds',String(appStartedAt),'-OwnedRoot',artifacts],{encoding:'utf8',windowsHide:true,timeout:15000});
+      if(observed.status===0){try{startupObservation.native=JSON.parse(observed.stdout)}catch{}}
+      else startupObservation.nativeObserverExit=observed.status;
+    }
+    result = { passed: false, stage, startupObservation, error: error.message, stack: error.stack?.split('\n').slice(1,5), ...(nativeInputObservations ? {nativeInputObservations} : {}), ...(accountsProbe ? { screenText: failureText } : {}),
       diagnostics: appOutput.split('\n').filter(line => /error|fail|panic|timed out/i.test(line) || (accountsProbe && line.includes('[app-server]')))
         .map(line => line.replace(/([?&](?:token|password|key)=)[^&\s]+/gi, '$1[redacted]')).slice(-12) };
     process.exitCode = 1;
@@ -1151,7 +1420,14 @@ async function seedProjectHistory(projectPath, steerOnly = false, pluginPath = n
       if (restored.status !== 0 || JSON.parse(restored.stdout.trim() || '{}').restored !== true) { result = {...result, passed:false, error:'Native input foreground restoration failed'};process.exitCode=1; }
     }
     stopApp();
+    if(backgroundChild&&backgroundChild.exitCode===null)backgroundChild.kill();
     if (app && app.exitCode === null) await new Promise(resolve => { app.once('exit', resolve); setTimeout(resolve, 5000).unref(); });
+    if (taskHostProbe) {
+      const stopped = spawnSync('powershell.exe', ['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',
+        path.join(__dirname,'windows-task-host-cleanup.ps1'),'-OwnedRoot',root], {windowsHide:true,timeout:20000,encoding:'utf8'});
+      if (stopped.status !== 0) { result={...result,passed:false,cleanupError:'Owned task host cleanup unconfirmed'};process.exitCode=1; }
+    }
+    if (runtimeAutomation) await runtimeAutomation.close();
     if (modelFixture) {
       modelFixture.closeAllConnections();
       await new Promise(resolve => modelFixture.close(resolve));

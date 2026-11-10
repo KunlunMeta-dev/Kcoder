@@ -298,10 +298,10 @@ pub fn persist_loaded_skill_metadata(
             .insert("pinned".to_string(), Value::Bool(false));
         delta.usage.entry(name.clone()).or_insert(usage);
 
-        if !crate::sandbox::path_starts_with(source, &project_root)
+        if !kcoder_shell_isolation::sandbox::path_starts_with(source, &project_root)
             && let Some(external) = external_dirs
                 .iter()
-                .find(|dir| crate::sandbox::path_starts_with(source, dir))
+                .find(|dir| kcoder_shell_isolation::sandbox::path_starts_with(source, dir))
         {
             let delta = roots.entry(project_root.clone()).or_default();
             let mut provenance = SkillMetadataPatch::default();

@@ -38,6 +38,7 @@ import { useTaskSending } from "./useTaskSending";
 import { releaseLocalAttachmentPreview } from "./attachmentPreparation";
 const wrappedInputSetters = new WeakSet<object>();
 import { TaskMessageQueue } from "@/runtime/task-message-queue";
+import type { QueuedTaskMessage } from "@/runtime/task-message-queue";
 import { MAX_QUEUED_TASK_MESSAGES } from "@/protocol/task-message-limits";
 
 function renderSendingHook(context: Parameters<typeof useTaskSending>[0]) {
@@ -49,6 +50,21 @@ function renderSendingHook(context: Parameters<typeof useTaskSending>[0]) {
   context.pendingAttachmentSubmissions ??= { current: new Map() };
   context.removedPendingAttachments ??= { current: new Set() };
   context.messageQueue.getSnapshot ??= () => context.queuedMessages;
+  const queue = context.messageQueue as typeof context.messageQueue & {
+    freezePermissionMode?: (
+      id: string,
+      requestedMode: "default" | "ask" | "auto" | "accept_edits" | "dont_ask" | "bypass" | "yolo",
+      persist: (items: QueuedTaskMessage[]) => Promise<void>,
+    ) => Promise<"default" | "ask" | "auto" | "accept_edits" | "dont_ask" | "bypass" | "yolo">;
+  };
+  queue.freezePermissionMode ??= async (id, requestedMode, persist) => {
+    const current = queue.first();
+    if (!current || current.id !== id) throw new Error("queued message missing");
+    const permissionMode = current.permissionMode ?? requestedMode;
+    current.permissionMode = permissionMode;
+    await persist([{ ...current, staging: undefined }]);
+    return permissionMode;
+  };
   if (!wrappedInputSetters.has(context.setInput)) {
     const originalSetInput = context.setInput;
     const intent = context.inputIntentRef;
@@ -125,7 +141,7 @@ describe("useTaskSending queue delivery", () => {
       queued.content,
       queued.attachments,
       undefined,
-      { clientMessageId: queued.id },
+      { clientMessageId: queued.id, permissionMode: "default" },
     );
   });
 
@@ -313,7 +329,7 @@ describe("useTaskSending queue delivery", () => {
         },
       ],
       undefined,
-      { clientMessageId: failed.id },
+      { clientMessageId: failed.id, permissionMode: "default" },
     );
     expect(task.send).toHaveBeenNthCalledWith(
       2,
@@ -327,7 +343,7 @@ describe("useTaskSending queue delivery", () => {
         },
       ],
       undefined,
-      { clientMessageId: failed.id },
+      { clientMessageId: failed.id, permissionMode: "default" },
     );
     expect(afterRetry.input).toBe("TASK_FLOW_DRAFT_B_MUST_SURVIVE");
     expect(afterRetry.attachments).toEqual([attachmentB]);
@@ -754,7 +770,7 @@ describe("useTaskSending queue delivery", () => {
       persisted.content,
       persisted.attachments,
       undefined,
-      { clientMessageId: persisted.id },
+      { clientMessageId: persisted.id, permissionMode: "default" },
     );
     expect(renderSendingHook(context).input).toBe("draft B still here");
     expect(renderSendingHook(context).failedSubmissions).toHaveLength(0);
@@ -860,6 +876,7 @@ describe("useTaskSending queue delivery", () => {
       acceptanceClient: vi.fn(async () => client),
       uncertainSend: null,
       reconcileSendAcceptance: vi.fn(async () => {}),
+      reconcileSubmissionHistory: vi.fn(async () => true),
     };
     const context = {
       task,
@@ -1143,6 +1160,7 @@ describe("useTaskSending queue delivery", () => {
         }
       },
     );
+    const setInput = vi.fn();
     const context = {
       task,
       demo: false,
@@ -1159,7 +1177,7 @@ describe("useTaskSending queue delivery", () => {
       messageQueue: { persistProjection: async (operation: () => Promise<void>) => operation(), first: vi.fn(), remove: vi.fn() },
       queuedMessages: [],
       input: "recover this after reload",
-      setInput: vi.fn(),
+      setInput,
       goalEditExpectationRef: { current: null },
       attachments: [],
       setAttachments: vi.fn(),
@@ -1173,6 +1191,14 @@ describe("useTaskSending queue delivery", () => {
       expect(onFailedSubmissionsChange).toHaveBeenCalledTimes(1),
     );
     expect(task.send).not.toHaveBeenCalled();
+    // Real draft effects see inputIntentRef: do not expose an empty draft
+    // before the recovery record's persistence promise has settled.
+    expect(context.inputIntentRef.current.value).toBe("recover this after reload");
+    expect(setInput).not.toHaveBeenCalled();
+    expect(context.onDraftChange).not.toHaveBeenCalled();
+    expect(renderSendingHook(context).failedSubmissions[0]).toMatchObject({
+      content: "recover this after reload", phase: "preparing", retrying: true,
+    });
     expect(persisted).toEqual([
       expect.objectContaining({
         id: expect.stringMatching(/^composer-/),
@@ -1194,5 +1220,102 @@ describe("useTaskSending queue delivery", () => {
       }),
     ]);
     expect(persisted).toBeUndefined();
+  });
+
+  // Controlled hook/persistence callbacks, not a mounted React/browser test.
+  it.each(["recovery", "draft"] as const)(
+    "keeps a durable recovery route when the %s write fails",
+    async (failingWrite) => {
+      const text = "original draft survives a local write failure";
+      const disk: { composerDraft?: string; failed?: Array<{ id: string; content: string }> } = { composerDraft: text };
+      const task = {
+        send: vi.fn(async () => {}),
+        getSnapshot: vi.fn(() => ({ sendAcceptanceUnknown: false })),
+        isDisposed: vi.fn(() => false),
+      };
+      const setInput = vi.fn();
+      const context = {
+        task, demo: false,
+        snapshot: { threadId: "thread-local-write-fault", connected: true, running: false, interaction: null },
+        messageQueue: new TaskMessageQueue(), queuedMessages: [],
+        input: text, setInput, attachments: [], setAttachments: vi.fn(),
+        goalEditExpectationRef: { current: null }, mountedRef: { current: true },
+        setQueueError: vi.fn(), sendingQueued: { current: false },
+        executeSlashCommand: vi.fn(async () => false),
+        onFailedSubmissionsChange: vi.fn(async (rows: Array<{ id: string; content: string }> | undefined) => {
+          if (failingWrite === "recovery") throw new Error("owned recovery write failed");
+          disk.failed = rows ? structuredClone(rows) : undefined;
+        }),
+        onDraftChange: vi.fn(async (draft: string | undefined) => {
+          disk.composerDraft = draft;
+          throw new Error("draft clear result unavailable after recovery committed");
+        }),
+      } as unknown as Parameters<typeof useTaskSending>[0];
+      await renderSendingHook(context).submit();
+      expect(task.send).not.toHaveBeenCalled();
+      if (failingWrite === "recovery") {
+        expect(context.inputIntentRef.current.value).toBe(text);
+        expect(setInput).not.toHaveBeenCalled();
+        expect(context.onDraftChange).not.toHaveBeenCalled();
+        expect(disk.composerDraft).toBe(text);
+      } else {
+        expect(disk.composerDraft).toBeUndefined();
+        expect(disk.failed).toEqual([expect.objectContaining({ content: text, id: expect.stringMatching(/^composer-/) })]);
+        const id = disk.failed![0].id;
+        expect(renderSendingHook(context).failedSubmissions[0].id).toBe(id);
+        // Simulate hook reload with only the actually committed recovery row.
+        capturedEffects.refs = [];
+        capturedEffects.refIndex = 0;
+        const restoredTask = { ...task, send: vi.fn(async () => {}) };
+        const restored = renderSendingHook({ ...context, task: restoredTask,
+          input: "", setInput: vi.fn(), initialFailedSubmissions: disk.failed,
+          inputIntentRef: { current: { value: "", revision: 0 } },
+        } as unknown as Parameters<typeof useTaskSending>[0]);
+        expect(restored.failedSubmissions).toEqual([expect.objectContaining({ id, content: text })]);
+        expect(restoredTask.send).not.toHaveBeenCalled();
+        await restored.retryFailedSubmission(id);
+        expect(restoredTask.send).toHaveBeenCalledTimes(1);
+        expect(restoredTask.send).toHaveBeenCalledWith(text, [], undefined, { clientMessageId: id, permissionMode: "default" });
+      }
+    },
+  );
+
+  it("preserves a newer input revision while the first recovery write is held", async () => {
+    let release!: () => void;
+    let committed: Array<{ id: string; content: string }> | undefined;
+    const held = new Promise<void>(resolve => { release = resolve; });
+    const task = {
+      send: vi.fn(async () => {}),
+      getSnapshot: vi.fn(() => ({ sendAcceptanceUnknown: false })),
+      isDisposed: vi.fn(() => false),
+    };
+    let first = true;
+    const context = {
+      task, demo: false,
+      snapshot: { threadId: "thread-new-revision", connected: true, running: false, interaction: null },
+      messageQueue: new TaskMessageQueue(), queuedMessages: [],
+      input: "send original A", setInput: vi.fn(), attachments: [], setAttachments: vi.fn(),
+      goalEditExpectationRef: { current: null }, mountedRef: { current: true },
+      setQueueError: vi.fn(), sendingQueued: { current: false },
+      executeSlashCommand: vi.fn(async () => false),
+      onDraftChange: vi.fn(async (_draft: string | undefined) => {}),
+      onFailedSubmissionsChange: vi.fn(async (rows: Array<{ id: string; content: string }> | undefined) => {
+        if (first) { first = false; await held; }
+        committed = rows ? structuredClone(rows) : undefined;
+      }),
+    } as unknown as Parameters<typeof useTaskSending>[0];
+    const operation = renderSendingHook(context).submit();
+    await vi.waitFor(() => expect(context.onFailedSubmissionsChange).toHaveBeenCalledTimes(1));
+    const id = renderSendingHook(context).failedSubmissions[0].id;
+    expect(committed).toBeUndefined();
+    context.setInput("newer draft B");
+    context.input = "newer draft B";
+    renderSendingHook(context);
+    release();
+    await operation;
+    expect(context.inputIntentRef.current.value).toBe("newer draft B");
+    expect(context.onDraftChange).not.toHaveBeenCalled();
+    expect(task.send).toHaveBeenCalledTimes(1);
+    expect(task.send).toHaveBeenCalledWith("send original A", [], undefined, { clientMessageId: id, permissionMode: "default" });
   });
 });

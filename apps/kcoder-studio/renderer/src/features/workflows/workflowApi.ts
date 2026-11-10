@@ -1,4 +1,4 @@
-import { requestLocalExecutor } from '@/tauri/localExecutor'
+import { requestLocalExecutor } from '@/host/localExecutor'
 import type { WorkflowStorageCapacity, WorkflowVersionVerification } from './WorkflowVerification'
 import type { WorkflowVersionReferenceView } from './WorkflowVerificationHistory'
 
@@ -54,6 +54,7 @@ export interface WorkflowList {
 }
 export interface WorkflowReadOptions {
   signal?: AbortSignal
+  workspacePath?: string
 }
 function request<T>(
   serverId: string,
@@ -61,9 +62,9 @@ function request<T>(
   params: object,
   options?: WorkflowReadOptions
 ) {
-  const scope = { serverId, method, params }
-  return options
-    ? requestLocalExecutor<T>('runtime.workflows.request', scope, options)
+  const scope = { serverId, ...(options?.workspacePath !== undefined ? { workspacePath: options.workspacePath } : {}), method, params }
+  return options?.signal
+    ? requestLocalExecutor<T>('runtime.workflows.request', scope, { signal: options.signal })
     : requestLocalExecutor<T>('runtime.workflows.request', scope)
 }
 interface WorkflowUnchanged {
@@ -258,8 +259,8 @@ export const workflowApi = {
     }
     throw new Error('Workflow request pagination did not terminate')
   },
-  respond: (serverId: string, runId: string, requestId: string, value: unknown) =>
-    request<{ accepted: boolean }>(serverId, 'workflow/runs/respond', { runId, requestId, value }),
+  respond: (serverId: string, runId: string, requestId: string, value: unknown, options?: Pick<WorkflowReadOptions, 'workspacePath'>) =>
+    request<{ accepted: boolean }>(serverId, 'workflow/runs/respond', { runId, requestId, value }, options),
   move: (
     serverId: string,
     id: string,

@@ -1,7 +1,7 @@
-import { invoke } from '@tauri-apps/api/core'
-import { isTauriRuntime } from './runtime-environment'
+import { invoke } from '@/lib/runtime-commands'
+import { isGatewayRuntime } from './runtime-environment'
 import type { NativeWorkspacePath } from './native-workspace-path-picker'
-import { readDroppedFiles } from '@/tauri/droppedFiles'
+import { readDroppedFiles } from '@/host/droppedFiles'
 
 const FILE_URI_CLIPBOARD_TYPES = ['text/uri-list', 'public.file-url'] as const
 const IMAGE_EXTENSIONS = new Set([
@@ -51,7 +51,7 @@ export function readClipboardFileUriPaths(dataTransfer: DataTransfer): string[] 
 export async function readNativeClipboardWorkspacePaths(
   clipboardData: DataTransfer
 ): Promise<NativeWorkspacePath[]> {
-  if (!isTauriRuntime()) return []
+  if (!isGatewayRuntime()) return []
 
   return invoke<NativeWorkspacePath[]>('read_clipboard_workspace_paths', {
     fallbackPaths: readClipboardFileUriPaths(clipboardData),
@@ -61,7 +61,7 @@ export async function readNativeClipboardWorkspacePaths(
 export async function readNativeDroppedWorkspacePaths(
   dataTransfer: DataTransfer
 ): Promise<NativeWorkspacePath[]> {
-  if (!isTauriRuntime()) return []
+  if (!isGatewayRuntime()) return []
 
   return invoke<NativeWorkspacePath[]>('read_dropped_workspace_paths', {
     fallbackPaths: readClipboardFileUriPaths(dataTransfer),
@@ -69,7 +69,7 @@ export async function readNativeDroppedWorkspacePaths(
 }
 
 export async function inspectNativeWorkspacePaths(paths: string[]): Promise<NativeWorkspacePath[]> {
-  if (!isTauriRuntime() || paths.length === 0) return []
+  if (!isGatewayRuntime() || paths.length === 0) return []
   return invoke<NativeWorkspacePath[]>('inspect_workspace_paths', { paths })
 }
 
@@ -123,7 +123,7 @@ export async function resolveDataTransferWorkspacePaths(
 ): Promise<ResolvedWorkspacePathTransfer> {
   const files = Array.from(dataTransfer.files)
   if (
-    !isTauriRuntime() ||
+    !isGatewayRuntime() ||
     workspaceSource === 'remote' ||
     (files.length > 0 && files.every(isWorkspaceImageFile))
   ) {
@@ -140,7 +140,7 @@ export async function resolveDataTransferWorkspacePaths(
     }
     return partitionLocalWorkspaceTransfer(entries, files)
   } catch (error) {
-    console.warn(`[Wework workspace transfer] native ${source} path inspection failed`, error)
+    console.warn(`[KCoder workspace transfer] native ${source} path inspection failed`, error)
     return {
       attachmentFiles: files.filter(isWorkspaceImageFile),
       referenceEntries: [],
@@ -167,7 +167,7 @@ export async function resolveStoredWorkspacePaths(
       referenceEntries,
     }
   } catch (error) {
-    console.warn('[Wework workspace transfer] stored path inspection failed', error)
+    console.warn('[KCoder workspace transfer] stored path inspection failed', error)
     return { attachmentFiles: [], referenceEntries: [] }
   }
 }

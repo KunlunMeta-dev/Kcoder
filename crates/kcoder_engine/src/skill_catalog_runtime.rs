@@ -20,13 +20,27 @@ impl QueryEngine {
         }
         let ctx = self.base_tool_context(1, 1, 1, None);
         let training = recover_read_lock(&self.settings, "settings").training_mode;
+        let office = self.office_tool_policy_active();
         let registry = recover_read_lock(&self.skill_registry, "skill_registry");
         // iter_all applies the registry's live trust gate and includes conditional
         // skills that get_active/skill can load, unlike the user-only UI catalog.
         let mut candidates = registry
             .iter_all()
             .filter(|skill| !ctx.is_skill_blocked(&skill.name))
+            .filter(|skill| {
+                skill
+                    .requires_tools
+                    .iter()
+                    .all(|name| available_tools.contains(name))
+            })
             .filter(|skill| !(training && skill.name.rsplit(':').next() == Some("kcoder-settings")))
+            // Omit branded passive metadata from the office system prompt only.
+            // Discovery and explicit activation retain the original registry and identifiers.
+            .filter(|skill| {
+                !office
+                    || (!skill.name.to_ascii_lowercase().contains("kcoder")
+                        && !skill.description.to_ascii_lowercase().contains("kcoder"))
+            })
             .collect::<Vec<_>>();
         candidates.sort_by(|left, right| left.name.cmp(&right.name));
         let total = candidates.len();
@@ -111,7 +125,7 @@ mod tests {
                 requests: Arc::clone(&requests),
             }))
             .tool_registry(tools)
-            .build();
+            .build_with_profile_directory();
         (engine, requests)
     }
 

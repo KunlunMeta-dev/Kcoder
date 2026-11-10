@@ -96,6 +96,14 @@ pub struct Goal {
     pub token_budget: Option<u64>,
     pub tokens_used: u64,
     pub time_used_seconds: u64,
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub(crate) native_task_budget_holds:
+        std::collections::BTreeMap<String, crate::goal_remote_budget::GoalNativeTaskHold>,
+    #[serde(default, skip_serializing_if = "crate::goal_remote_budget::is_zero")]
+    pub(crate) native_budget_user_epoch: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) native_hold_budget_limit_cause:
+        Option<crate::goal_remote_budget::NativeHoldBudgetLimitCause>,
     /// Execution epoch: zero at creation, then one increment per admitted outer Engine turn.
     /// API retries and tool iterations do not increment it.
     #[serde(default)]
@@ -159,6 +167,13 @@ struct GoalWire {
     tokens_used: u64,
     time_used_seconds: u64,
     #[serde(default)]
+    native_task_budget_holds:
+        std::collections::BTreeMap<String, crate::goal_remote_budget::GoalNativeTaskHold>,
+    #[serde(default)]
+    native_budget_user_epoch: u64,
+    #[serde(default)]
+    native_hold_budget_limit_cause: Option<crate::goal_remote_budget::NativeHoldBudgetLimitCause>,
+    #[serde(default)]
     turn_count: u64,
     #[serde(default)]
     continuation_count: u32,
@@ -213,6 +228,8 @@ impl<'de> Deserialize<'de> for Goal {
                 "Answer verification requires Strict goal mode",
             ));
         }
+        crate::goal_remote_budget::validate_persisted_holds(&wire.native_task_budget_holds)
+            .map_err(serde::de::Error::custom)?;
         Ok(Self {
             goal_id: wire.goal_id,
             objective: wire.objective,
@@ -226,6 +243,9 @@ impl<'de> Deserialize<'de> for Goal {
             token_budget: wire.token_budget,
             tokens_used: wire.tokens_used,
             time_used_seconds: wire.time_used_seconds,
+            native_task_budget_holds: wire.native_task_budget_holds,
+            native_budget_user_epoch: wire.native_budget_user_epoch,
+            native_hold_budget_limit_cause: wire.native_hold_budget_limit_cause,
             turn_count: wire.turn_count,
             continuation_count: wire.continuation_count,
             complete_rejected_count: wire.complete_rejected_count,
@@ -320,6 +340,9 @@ impl Goal {
             token_budget,
             tokens_used: 0,
             time_used_seconds: 0,
+            native_task_budget_holds: Default::default(),
+            native_budget_user_epoch: 0,
+            native_hold_budget_limit_cause: None,
             turn_count: 0,
             continuation_count: 0,
             complete_rejected_count: 0,
@@ -585,6 +608,7 @@ pub enum GoalEventKind {
     VerificationPassed,
     VerificationRejected,
     BudgetLimited,
+    NativeBudgetReconciled,
     UsageLimited,
     Complete,
     Cancelled,
@@ -604,6 +628,7 @@ impl GoalEventKind {
             Self::VerificationPassed => "verification_passed",
             Self::VerificationRejected => "verification_rejected",
             Self::BudgetLimited => "budget_limited",
+            Self::NativeBudgetReconciled => "native_budget_reconciled",
             Self::UsageLimited => "usage_limited",
             Self::Complete => "complete",
             Self::Cancelled => "cancelled",

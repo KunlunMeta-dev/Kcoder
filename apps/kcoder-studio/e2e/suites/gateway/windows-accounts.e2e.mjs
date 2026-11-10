@@ -34,6 +34,7 @@ await runE2E(import.meta.url, {
     await execute('/usr/bin/python3', ['-I', '-c', code, accountState, testUsername], { cwd: repoRoot, timeout: 10000 });
   });
   await execute('scp', ['-o', `ControlPath=${control}`, resolve(repoRoot, 'apps/kcoder-studio/e2e/harness/windows-studio-ui-probe.cjs'), `${target}:${directory.replaceAll('\\', '/')}/probe.cjs`], { timeout: 15000 });
+  await execute('scp', ['-o', `ControlPath=${control}`, resolve(repoRoot, 'apps/kcoder-studio/e2e/harness/windows-cdp-document.cjs'), `${target}:${directory.replaceAll('\\', '/')}/windows-cdp-document.cjs`], { timeout: 15000 });
   assert.ok(!installation.includes("'"));
   const args = psArgs(`& node '${directory}\\probe.cjs' '${installation}\\resources\\bin\\kcoder.exe' '${installation}' '${directory}' '${directory}' --installed-resources --accounts;if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}`);
   const output = await new Promise((resolveOutput, reject) => {

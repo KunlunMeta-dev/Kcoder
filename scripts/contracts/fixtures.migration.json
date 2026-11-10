@@ -1,0 +1,1273 @@
+{
+  "MigrationAssetPlanParams": {
+    "valid": [
+      {
+        "name": "disabled_asset",
+        "value": {
+          "jobId": "job",
+          "expectedSequence": 1,
+          "itemId": "skill",
+          "targetName": "imported-review"
+        }
+      },
+      {
+        "name": "explicit_disabled_memory_mapping",
+        "value": {
+          "jobId": "job",
+          "expectedSequence": 1,
+          "itemId": "memory",
+          "targetName": "reviewed-note",
+          "memoryMapping": "current_workspace",
+          "enableAfterImport": false
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "no_source_override",
+        "value": {
+          "jobId": "job",
+          "expectedSequence": 1,
+          "itemId": "skill",
+          "targetName": "imported-review",
+          "sourcePath": "/other"
+        }
+      }
+    ]
+  },
+  "MigrationAssetPreviewParams": {
+    "valid": [
+      {
+        "name": "first_chunk",
+        "value": {
+          "jobId": "job",
+          "itemId": "skill"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "no_arbitrary_file",
+        "value": {
+          "jobId": "job",
+          "itemId": "skill",
+          "path": "auth.json"
+        }
+      }
+    ]
+  },
+  "MigrationAssetPreviewResult": {
+    "valid": [
+      {
+        "name": "last_chunk",
+        "value": {
+          "itemId": "skill",
+          "text": "Fixture",
+          "totalBytes": 7,
+          "nextOffset": null
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "private_source_binding",
+        "value": {
+          "itemId": "skill",
+          "text": "Fixture",
+          "totalBytes": 7,
+          "nextOffset": null,
+          "sourceBinding": {
+            "root": "/private"
+          }
+        }
+      }
+    ]
+  },
+  "MigrationMcpPlanParams": {
+    "valid": [
+      {
+        "name": "disabled_import",
+        "value": {
+          "jobId": "job",
+          "expectedSequence": 1,
+          "itemId": "mcp",
+          "targetName": "documents"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "source_path_override",
+        "value": {
+          "jobId": "job",
+          "expectedSequence": 1,
+          "itemId": "mcp",
+          "targetName": "documents",
+          "sourcePath": "/other"
+        }
+      },
+      {
+        "name": "credential_value_in_request",
+        "value": {
+          "jobId": "job",
+          "expectedSequence": 1,
+          "itemId": "mcp",
+          "targetName": "documents",
+          "secret": "forbidden"
+        }
+      }
+    ]
+  },
+  "MigrationDiscoverResult": {
+    "valid": [
+      {
+        "name": "no_sources",
+        "value": {
+          "sources": [],
+          "problems": []
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "raw_paths",
+        "value": {
+          "sources": [],
+          "path": "/private"
+        }
+      }
+    ]
+  },
+  "MigrationProviderPlanParams": {
+    "valid": [
+      {
+        "name": "explicit_limits",
+        "value": {
+          "jobId": "job",
+          "expectedSequence": 2,
+          "itemId": "item",
+          "targetName": "Imported",
+          "contextWindowTokens": 128000,
+          "outputHeadroomTokens": 8192,
+          "maxOutputTokens": 8192
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "implicit_limits",
+        "value": {
+          "jobId": "job",
+          "expectedSequence": 2,
+          "itemId": "item",
+          "targetName": "Imported"
+        }
+      },
+      {
+        "name": "credentials",
+        "value": {
+          "jobId": "job",
+          "expectedSequence": 2,
+          "itemId": "item",
+          "targetName": "Imported",
+          "contextWindowTokens": 128000,
+          "outputHeadroomTokens": 8192,
+          "maxOutputTokens": 8192,
+          "key": "forbidden"
+        }
+      }
+    ]
+  },
+  "MigrationProviderOperationParams": {
+    "valid": [
+      {
+        "name": "bound_plan",
+        "value": {
+          "jobId": "job",
+          "planId": "plan",
+          "expectedSequence": 3
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing_revision",
+        "value": {
+          "jobId": "job",
+          "planId": "plan"
+        }
+      },
+      {
+        "name": "arbitrary_target",
+        "value": {
+          "jobId": "job",
+          "planId": "plan",
+          "expectedSequence": 3,
+          "path": "/other"
+        }
+      }
+    ]
+  },
+  "MigrationCancelParams": {
+    "valid": [
+      {
+        "name": "cancel_owned_job",
+        "value": {
+          "jobId": "job",
+          "expectedSequence": 3
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing_revision",
+        "value": {
+          "jobId": "job"
+        }
+      }
+    ]
+  },
+  "MigrationJobReadResult": {
+    "valid": [
+      {
+        "name": "empty_job",
+        "value": {
+          "job": {
+            "jobId": "job",
+            "sourceId": "source",
+            "status": "ready",
+            "sequence": 2,
+            "totalItems": 0,
+            "committedItems": 0,
+            "requiresActionItems": 0
+          },
+          "source": "codex",
+          "plans": [],
+          "issues": []
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "private_binding",
+        "value": {
+          "job": {
+            "jobId": "job",
+            "sourceId": "source",
+            "status": "ready",
+            "sequence": 2,
+            "totalItems": 0,
+            "committedItems": 0,
+            "requiresActionItems": 0
+          },
+          "source": "codex",
+          "plans": [],
+          "issues": [],
+          "sourceBinding": {
+            "root": "/private"
+          }
+        }
+      }
+    ]
+  },
+  "MigrationOperationParams": {
+    "valid": [
+      {
+        "name": "owned_job",
+        "value": {
+          "jobId": "job"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "foreign_owner",
+        "value": {
+          "jobId": "job",
+          "owner": "other"
+        }
+      }
+    ]
+  },
+  "MigrationDiscoverParams": {
+    "valid": [
+      {
+        "name": "default_sources",
+        "value": {}
+      },
+      {
+        "name": "explicit_source",
+        "value": {
+          "sources": [
+            "claude-code",
+            "codex"
+          ]
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown_product",
+        "value": {
+          "sources": [
+            "unknown"
+          ]
+        }
+      },
+      {
+        "name": "arbitrary_path",
+        "value": {
+          "path": "/another-user"
+        }
+      }
+    ]
+  },
+  "MigrationScanParams": {
+    "valid": [
+      {
+        "name": "bound_source",
+        "value": {
+          "sourceId": "source-handle"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "arbitrary_owner",
+        "value": {
+          "sourceId": "source-handle",
+          "owner": "other"
+        }
+      },
+      {
+        "name": "credentials_in_request",
+        "value": {
+          "sourceId": "source-handle",
+          "credentials": {}
+        }
+      }
+    ]
+  },
+  "MigrationPlanParams": {
+    "valid": [
+      {
+        "name": "selected_items",
+        "value": {
+          "jobId": "job",
+          "selectedItemIds": [
+            "item"
+          ]
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "untyped_selection",
+        "value": {
+          "jobId": "job",
+          "selectedItemIds": "all"
+        }
+      },
+      {
+        "name": "raw_source_override",
+        "value": {
+          "jobId": "job",
+          "selectedItemIds": [],
+          "sourcePath": "/private"
+        }
+      }
+    ]
+  },
+  "MigrationApplyParams": {
+    "valid": [
+      {
+        "name": "stable_request",
+        "value": {
+          "planId": "plan",
+          "requestId": "request"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing_request_identity",
+        "value": {
+          "planId": "plan"
+        }
+      },
+      {
+        "name": "extra_secret",
+        "value": {
+          "planId": "plan",
+          "requestId": "request",
+          "secret": "forbidden"
+        }
+      }
+    ]
+  },
+  "MigrationJobSummary": {
+    "valid": [
+      {
+        "name": "partial_result",
+        "value": {
+          "jobId": "job",
+          "sourceId": "source",
+          "status": "completed_with_issues",
+          "sequence": 3,
+          "totalItems": 2,
+          "committedItems": 1,
+          "requiresActionItems": 1
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown_status",
+        "value": {
+          "jobId": "job",
+          "sourceId": "source",
+          "status": "done",
+          "sequence": 3,
+          "totalItems": 2,
+          "committedItems": 1,
+          "requiresActionItems": 1
+        }
+      },
+      {
+        "name": "negative_sequence",
+        "value": {
+          "jobId": "job",
+          "sourceId": "source",
+          "status": "ready",
+          "sequence": -1,
+          "totalItems": 0,
+          "committedItems": 0,
+          "requiresActionItems": 0
+        }
+      }
+    ]
+  },
+  "MigrationPluginDiscoverParams": {
+    "valid": [
+      {
+        "name": "native_selection_or_fact",
+        "value": {
+          "sources": [
+            "claude-code"
+          ],
+          "cursor": null
+        }
+      },
+      {
+        "name": "explicit_project_discovery",
+        "value": {
+          "sources": [
+            "codex"
+          ],
+          "includeProject": true
+        }
+      },
+      {
+        "name": "explicit_uploaded_data_only",
+        "value": {
+          "sources": [
+            "claude-code"
+          ],
+          "includeUploaded": true
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "source_path_is_not_authority",
+        "value": {
+          "sources": [
+            "claude-code"
+          ],
+          "cursor": null,
+          "sourcePath": "untrusted"
+        }
+      },
+      {
+        "name": "uploaded_choice_is_boolean",
+        "value": {
+          "sources": [
+            "codex"
+          ],
+          "includeUploaded": "true"
+        }
+      }
+    ]
+  },
+  "MigrationPluginDiscoverResult": {
+    "valid": [
+      {
+        "name": "native_selection_or_fact",
+        "value": {
+          "candidates": [
+            {
+              "candidateId": "plug-fixture",
+              "source": "claude-code",
+              "name": "sample",
+              "installedVersion": "1.0.0",
+              "scope": "user",
+              "sourceEnabled": true,
+              "pending": []
+            }
+          ],
+          "nextCursor": null,
+          "problems": []
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "source_path_is_not_authority",
+        "value": {
+          "candidates": [
+            {
+              "candidateId": "plug-fixture",
+              "source": "claude-code",
+              "name": "sample",
+              "installedVersion": "1.0.0",
+              "scope": "user",
+              "sourceEnabled": true,
+              "pending": []
+            }
+          ],
+          "nextCursor": null,
+          "problems": [],
+          "sourcePath": "untrusted"
+        }
+      }
+    ]
+  },
+  "MigrationPluginPlanParams": {
+    "valid": [
+      {
+        "name": "native_selection_or_fact",
+        "value": {
+          "requestId": "11111111-1111-4111-8111-111111111111",
+          "candidateId": "plug-fixture",
+          "targetName": "sample"
+        }
+      },
+      {
+        "name": "actual_workspace_mapping_only",
+        "value": {
+          "requestId": "original-op",
+          "candidateId": "plug-owned",
+          "projectMapping": "current_workspace"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "source_path_is_not_authority",
+        "value": {
+          "requestId": "11111111-1111-4111-8111-111111111111",
+          "candidateId": "plug-fixture",
+          "targetName": "sample",
+          "sourcePath": "untrusted"
+        }
+      }
+    ]
+  },
+  "MigrationPluginReadParams": {
+    "valid": [
+      {
+        "name": "native_selection_or_fact",
+        "value": {
+          "operationId": "11111111-1111-4111-8111-111111111111"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "source_path_is_not_authority",
+        "value": {
+          "operationId": "11111111-1111-4111-8111-111111111111",
+          "sourcePath": "untrusted"
+        }
+      }
+    ]
+  },
+  "MigrationPluginOperationParams": {
+    "valid": [
+      {
+        "name": "native_selection_or_fact",
+        "value": {
+          "operationId": "11111111-1111-4111-8111-111111111111",
+          "expectedSequence": 0
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "source_path_is_not_authority",
+        "value": {
+          "operationId": "11111111-1111-4111-8111-111111111111",
+          "expectedSequence": 0,
+          "sourcePath": "untrusted"
+        }
+      }
+    ]
+  },
+  "MigrationPluginListParams": {
+    "valid": [
+      {
+        "name": "native_selection_or_fact",
+        "value": {
+          "cursor": null
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "source_path_is_not_authority",
+        "value": {
+          "cursor": null,
+          "sourcePath": "untrusted"
+        }
+      }
+    ]
+  },
+  "MigrationPluginStateResult": {
+    "valid": [
+      {
+        "name": "native_selection_or_fact",
+        "value": {
+          "job": {
+            "operationId": "11111111-1111-4111-8111-111111111111",
+            "sequence": 0,
+            "stage": "prepared",
+            "source": "claude-code",
+            "name": "sample",
+            "installedVersion": "1.0.0",
+            "scope": "user",
+            "sourceEnabled": true,
+            "targetId": "sample@migrated-fixture",
+            "packageFiles": null,
+            "packageBytes": null,
+            "capabilities": [],
+            "readiness": [],
+            "pending": [],
+            "imported": false,
+            "cancelRequested": false,
+            "cancelRevision": 0
+          },
+          "workerRunning": false,
+          "workerError": null
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "source_path_is_not_authority",
+        "value": {
+          "job": {
+            "operationId": "11111111-1111-4111-8111-111111111111",
+            "sequence": 0,
+            "stage": "prepared",
+            "source": "claude-code",
+            "name": "sample",
+            "installedVersion": "1.0.0",
+            "scope": "user",
+            "sourceEnabled": true,
+            "targetId": "sample@migrated-fixture",
+            "packageFiles": null,
+            "packageBytes": null,
+            "capabilities": [],
+            "readiness": [],
+            "pending": [],
+            "imported": false,
+            "cancelRequested": false,
+            "cancelRevision": 0
+          },
+          "workerRunning": false,
+          "workerError": null,
+          "sourcePath": "untrusted"
+        }
+      }
+    ]
+  },
+  "MigrationPluginListResult": {
+    "valid": [
+      {
+        "name": "native_selection_or_fact",
+        "value": {
+          "items": [
+            {
+              "operationId": "11111111-1111-4111-8111-111111111111",
+              "sequence": 0,
+              "stage": "prepared",
+              "source": "claude-code",
+              "name": "sample",
+              "installedVersion": "1.0.0",
+              "scope": "user",
+              "sourceEnabled": true,
+              "targetId": "sample@migrated-fixture",
+              "packageFiles": null,
+              "packageBytes": null,
+              "capabilities": [],
+              "readiness": [],
+              "pending": [],
+              "imported": false,
+              "cancelRequested": false,
+              "cancelRevision": 0
+            }
+          ],
+          "nextCursor": null
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "source_path_is_not_authority",
+        "value": {
+          "items": [
+            {
+              "operationId": "11111111-1111-4111-8111-111111111111",
+              "sequence": 0,
+              "stage": "prepared",
+              "source": "claude-code",
+              "name": "sample",
+              "installedVersion": "1.0.0",
+              "scope": "user",
+              "sourceEnabled": true,
+              "targetId": "sample@migrated-fixture",
+              "packageFiles": null,
+              "packageBytes": null,
+              "capabilities": [],
+              "readiness": [],
+              "pending": [],
+              "imported": false,
+              "cancelRequested": false,
+              "cancelRevision": 0
+            }
+          ],
+          "nextCursor": null,
+          "sourcePath": "untrusted"
+        }
+      }
+    ]
+  },
+  "MigrationConfigurationLayersParams": {
+    "valid": [
+      {
+        "name": "source-page",
+        "value": {
+          "target": {
+            "kind": "source",
+            "sourceId": "opaque-source"
+          },
+          "pageIndex": 0
+        }
+      },
+      {
+        "name": "saved-item",
+        "value": {
+          "target": {
+            "kind": "job",
+            "jobId": "owned-job",
+            "itemId": "item-1"
+          },
+          "pageIndex": 1
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "raw-path",
+        "value": {
+          "target": {
+            "kind": "source",
+            "sourceId": "source",
+            "path": "/private"
+          }
+        }
+      },
+      {
+        "name": "mixed-target",
+        "value": {
+          "target": {
+            "kind": "source",
+            "sourceId": "source",
+            "jobId": "peer"
+          }
+        }
+      },
+      {
+        "name": "missing-target",
+        "value": {}
+      },
+      {
+        "name": "negative-page",
+        "value": {
+          "target": {
+            "kind": "job",
+            "jobId": "owned-job",
+            "itemId": "item-1"
+          },
+          "pageIndex": -1
+        }
+      }
+    ]
+  },
+  "MigrationConfigurationLayersResult": {
+    "valid": [
+      {
+        "name": "safe-origins",
+        "value": {
+          "target": {
+            "kind": "job",
+            "jobId": "owned-job",
+            "itemId": "item-1"
+          },
+          "status": "available",
+          "pageIndex": 0,
+          "adapterRevision": "claude-settings-layers/v1",
+          "layers": [
+            {
+              "scope": "user",
+              "present": true
+            },
+            {
+              "scope": "project",
+              "present": false
+            },
+            {
+              "scope": "local",
+              "present": true
+            }
+          ],
+          "fields": [
+            {
+              "field": "/env/ANTHROPIC_API_KEY",
+              "ordinal": 0,
+              "scopes": [
+                "local"
+              ],
+              "private": true,
+              "supported": true
+            },
+            {
+              "field": null,
+              "ordinal": 1,
+              "scopes": [
+                "user"
+              ],
+              "private": false,
+              "supported": false
+            }
+          ],
+          "totalFields": 2,
+          "nextPage": null,
+          "unobserved": [
+            "managed_settings",
+            "command_line_settings",
+            "source_process_environment",
+            "git_worktree_local_routing",
+            "separate_mcp_namespaces"
+          ]
+        }
+      },
+      {
+        "name": "old-job-unavailable",
+        "value": {
+          "target": {
+            "kind": "job",
+            "jobId": "owned-job",
+            "itemId": "item-1"
+          },
+          "status": "unavailable",
+          "pageIndex": 0,
+          "adapterRevision": null,
+          "layers": [],
+          "fields": [],
+          "totalFields": 0,
+          "nextPage": null,
+          "unobserved": []
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "raw-value",
+        "value": {
+          "target": {
+            "kind": "job",
+            "jobId": "owned-job",
+            "itemId": "item-1"
+          },
+          "status": "available",
+          "pageIndex": 0,
+          "adapterRevision": "claude-settings-layers/v1",
+          "layers": [
+            {
+              "scope": "user",
+              "present": true
+            },
+            {
+              "scope": "project",
+              "present": false
+            },
+            {
+              "scope": "local",
+              "present": true
+            }
+          ],
+          "fields": [
+            {
+              "field": "/env/ANTHROPIC_API_KEY",
+              "ordinal": 0,
+              "scopes": [
+                "local"
+              ],
+              "private": true,
+              "supported": true
+            },
+            {
+              "field": null,
+              "ordinal": 1,
+              "scopes": [
+                "user"
+              ],
+              "private": false,
+              "supported": false
+            }
+          ],
+          "totalFields": 2,
+          "nextPage": null,
+          "unobserved": [
+            "managed_settings",
+            "command_line_settings",
+            "source_process_environment",
+            "git_worktree_local_routing",
+            "separate_mcp_namespaces"
+          ],
+          "value": "secret"
+        }
+      },
+      {
+        "name": "unknown-scope",
+        "value": {
+          "target": {
+            "kind": "job",
+            "jobId": "owned-job",
+            "itemId": "item-1"
+          },
+          "status": "available",
+          "pageIndex": 0,
+          "adapterRevision": "claude-settings-layers/v1",
+          "layers": [
+            {
+              "scope": "process",
+              "present": true
+            }
+          ],
+          "fields": [
+            {
+              "field": "/env/ANTHROPIC_API_KEY",
+              "ordinal": 0,
+              "scopes": [
+                "local"
+              ],
+              "private": true,
+              "supported": true
+            },
+            {
+              "field": null,
+              "ordinal": 1,
+              "scopes": [
+                "user"
+              ],
+              "private": false,
+              "supported": false
+            }
+          ],
+          "totalFields": 2,
+          "nextPage": null,
+          "unobserved": [
+            "managed_settings",
+            "command_line_settings",
+            "source_process_environment",
+            "git_worktree_local_routing",
+            "separate_mcp_namespaces"
+          ]
+        }
+      },
+      {
+        "name": "unknown-status",
+        "value": {
+          "target": {
+            "kind": "job",
+            "jobId": "owned-job",
+            "itemId": "item-1"
+          },
+          "status": "effective",
+          "pageIndex": 0,
+          "adapterRevision": "claude-settings-layers/v1",
+          "layers": [
+            {
+              "scope": "user",
+              "present": true
+            },
+            {
+              "scope": "project",
+              "present": false
+            },
+            {
+              "scope": "local",
+              "present": true
+            }
+          ],
+          "fields": [
+            {
+              "field": "/env/ANTHROPIC_API_KEY",
+              "ordinal": 0,
+              "scopes": [
+                "local"
+              ],
+              "private": true,
+              "supported": true
+            },
+            {
+              "field": null,
+              "ordinal": 1,
+              "scopes": [
+                "user"
+              ],
+              "private": false,
+              "supported": false
+            }
+          ],
+          "totalFields": 2,
+          "nextPage": null,
+          "unobserved": [
+            "managed_settings",
+            "command_line_settings",
+            "source_process_environment",
+            "git_worktree_local_routing",
+            "separate_mcp_namespaces"
+          ]
+        }
+      }
+    ]
+  },
+  "MigrationCodexLayersSelectParams": {
+    "valid": [
+      {
+        "name": "explicit-project-selection",
+        "value": {
+          "sourceId": "opaque-existing-user",
+          "includeProject": true
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "raw-root",
+        "value": {
+          "sourceId": "opaque",
+          "includeProject": true,
+          "root": "/private"
+        }
+      },
+      {
+        "name": "missing-consent-field",
+        "value": {
+          "sourceId": "opaque"
+        }
+      }
+    ]
+  },
+  "MigrationCodexLayersSelectResult": {
+    "valid": [
+      {
+        "name": "derived-opaque-reference",
+        "value": {
+          "source": {
+            "sourceId": "opaque-codex-layer",
+            "kind": "codex",
+            "displayName": "Codex selected project layers",
+            "formatRevision": "codex-selected-layers/v1",
+            "availableCategories": [
+              "provider"
+            ],
+            "scope": "codex-project-layers"
+          },
+          "replacesSourceIds": [
+            "opaque-existing-user"
+          ]
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "raw-source-path",
+        "value": {
+          "source": {
+            "sourceId": "opaque-codex-layer",
+            "kind": "codex",
+            "displayName": "Codex selected project layers",
+            "formatRevision": "codex-selected-layers/v1",
+            "availableCategories": [
+              "provider"
+            ],
+            "scope": "codex-project-layers"
+          },
+          "replacesSourceIds": [],
+          "path": "/private"
+        }
+      }
+    ]
+  },
+  "MigrationCodexLayersReadResult": {
+    "valid": [
+      {
+        "name": "static-origin-page",
+        "value": {
+          "target": {
+            "kind": "job",
+            "jobId": "owned",
+            "itemId": "item"
+          },
+          "status": "available",
+          "pageIndex": 0,
+          "adapterRevision": "codex-selected-layers/v1",
+          "layers": [
+            {
+              "index": 0,
+              "kind": "user",
+              "present": true
+            },
+            {
+              "index": 1,
+              "kind": "profile",
+              "present": true
+            },
+            {
+              "index": 2,
+              "kind": "project",
+              "present": false
+            }
+          ],
+          "fields": [
+            {
+              "field": "/model_providers/env_key",
+              "layer": 0,
+              "providerIndex": 0,
+              "supported": true,
+              "ignored": false,
+              "private": false
+            }
+          ],
+          "totalFields": 1,
+          "nextPage": null,
+          "unobserved": [
+            "command_line_overrides",
+            "source_process_environment",
+            "system_cloud_managed_defaults",
+            "managed_requirements",
+            "separate_mcp_namespaces",
+            "git_worktree_runtime_routing"
+          ]
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown-role",
+        "value": {
+          "target": {
+            "kind": "job",
+            "jobId": "owned",
+            "itemId": "item"
+          },
+          "status": "available",
+          "pageIndex": 0,
+          "adapterRevision": "codex-selected-layers/v1",
+          "layers": [
+            {
+              "index": 0,
+              "kind": "runtime",
+              "present": true
+            }
+          ],
+          "fields": [
+            {
+              "field": "/model_providers/env_key",
+              "layer": 0,
+              "providerIndex": 0,
+              "supported": true,
+              "ignored": false,
+              "private": false
+            }
+          ],
+          "totalFields": 1,
+          "nextPage": null,
+          "unobserved": [
+            "command_line_overrides",
+            "source_process_environment",
+            "system_cloud_managed_defaults",
+            "managed_requirements",
+            "separate_mcp_namespaces",
+            "git_worktree_runtime_routing"
+          ]
+        }
+      },
+      {
+        "name": "raw-configuration",
+        "value": {
+          "target": {
+            "kind": "job",
+            "jobId": "owned",
+            "itemId": "item"
+          },
+          "status": "available",
+          "pageIndex": 0,
+          "adapterRevision": "codex-selected-layers/v1",
+          "layers": [
+            {
+              "index": 0,
+              "kind": "user",
+              "present": true
+            },
+            {
+              "index": 1,
+              "kind": "profile",
+              "present": true
+            },
+            {
+              "index": 2,
+              "kind": "project",
+              "present": false
+            }
+          ],
+          "fields": [
+            {
+              "field": "/model_providers/env_key",
+              "layer": 0,
+              "providerIndex": 0,
+              "supported": true,
+              "ignored": false,
+              "private": false
+            }
+          ],
+          "totalFields": 1,
+          "nextPage": null,
+          "unobserved": [
+            "command_line_overrides",
+            "source_process_environment",
+            "system_cloud_managed_defaults",
+            "managed_requirements",
+            "separate_mcp_namespaces",
+            "git_worktree_runtime_routing"
+          ],
+          "content": "PRIVATE_CANARY"
+        }
+      }
+    ]
+  }
+}

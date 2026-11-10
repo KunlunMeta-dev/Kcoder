@@ -13,6 +13,7 @@ pub(crate) fn max_inline_viewport_height(available_height: u16) -> u16 {
 pub(crate) struct ReplLayoutAreas {
     pub(crate) message: Rect,
     pub(crate) bottom_overlay: Option<Rect>,
+    pub(crate) transcript_actions: Rect,
     pub(crate) status: Option<Rect>,
     pub(crate) pending_input: Option<Rect>,
     pub(crate) input: Rect,
@@ -114,6 +115,7 @@ pub(crate) fn split_repl_layout(area: Rect, heights: ReplLayoutHeights) -> ReplL
     ReplLayoutAreas {
         message: vertical[0],
         bottom_overlay: (bottom_overlay_height > 0).then_some(vertical[1]),
+        transcript_actions: vertical[2],
         status: (status_height > 0).then_some(vertical[3]),
         pending_input: (pending_input_height > 0).then_some(vertical[4]),
         input: vertical[5],

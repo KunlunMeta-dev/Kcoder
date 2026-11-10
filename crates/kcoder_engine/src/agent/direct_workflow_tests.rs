@@ -45,7 +45,7 @@ fn engine(root: &Path) -> (QueryEngine, Arc<AtomicUsize>, Arc<AtomicUsize>) {
     let engine = crate::test_support::engine_builder::TestEngineBuilder::new(root)
         .settings(settings)
         .tool_registry(registry)
-        .build();
+        .build_with_profile_directory();
     (engine, calls, maximum)
 }
 #[tokio::test]
@@ -98,7 +98,7 @@ async fn direct_workflow_reads_return_content_instead_of_conversation_placeholde
     std::fs::write(root.path().join("data.txt"), "machine-readable-data\n").unwrap();
     let engine = crate::test_support::engine_builder::TestEngineBuilder::new(root.path())
         .tool_registry(ToolRegistry::new().register(kcoder_tools::FileReadTool))
-        .build();
+        .build_with_profile_directory();
     engine
         .permissions
         .write()
@@ -115,4 +115,74 @@ async fn direct_workflow_reads_return_content_instead_of_conversation_placeholde
         assert!(encoded.contains("machine-readable-data"));
         assert!(!encoded.contains("File unchanged"));
     }
+}
+
+#[tokio::test]
+async fn background_workflow_tool_retains_original_turn_and_still_observes_revocation() {
+    use crate::integrations::core::{
+        NativeToolAuthorization, NativeToolAuthorizationError, NativeToolAuthorizationRequest,
+    };
+    use std::sync::atomic::AtomicBool;
+    struct Guard {
+        attempt: kcoder_types::TurnAttemptIdentity,
+        revoked: AtomicBool,
+    }
+    #[async_trait::async_trait]
+    impl NativeToolAuthorization for Guard {
+        async fn authorize(
+            &self,
+            request: &NativeToolAuthorizationRequest<'_>,
+        ) -> Result<(), NativeToolAuthorizationError> {
+            if request.execution.and_then(|execution| execution.attempt()) != Some(&self.attempt) {
+                return Err(NativeToolAuthorizationError::Unavailable);
+            }
+            if self.revoked.load(Ordering::SeqCst) {
+                return Err(NativeToolAuthorizationError::Denied);
+            }
+            Ok(())
+        }
+    }
+    let root = tempfile::tempdir().unwrap();
+    let (engine, calls, _) = engine(root.path());
+    engine
+        .permissions
+        .write()
+        .unwrap()
+        .allow_for_session("mcp__fixture__lookup");
+    let attempt = kcoder_types::TurnAttemptIdentity {
+        thread_id: engine.session_id(),
+        turn_id: "workflow-owner".into(),
+        attempt_id: "attempt-owner".into(),
+    };
+    let guard = Arc::new(Guard {
+        attempt: attempt.clone(),
+        revoked: AtomicBool::new(false),
+    });
+    let engine = engine.with_native_tool_authorization(guard.clone());
+    let runner = engine
+        .state
+        .history_attempt_scope(attempt)
+        .unwrap()
+        .run(async { QueryEngineAgentRunner::new(engine.clone()) })
+        .await;
+    assert!(engine.state.current_history_attempt_identity().is_none());
+    let output = runner
+        .run_workflow_tool("original", "mcp__fixture__lookup", serde_json::json!({}))
+        .await
+        .unwrap();
+    assert!(!output.0.is_error);
+    assert!(output.1);
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+    assert!(
+        engine.state.current_history_attempt_identity().is_none(),
+        "Background origin cannot leak into the caller"
+    );
+    guard.revoked.store(true, Ordering::SeqCst);
+    let denied = runner
+        .run_workflow_tool("revoked", "mcp__fixture__lookup", serde_json::json!({}))
+        .await
+        .unwrap();
+    assert!(denied.0.is_error);
+    assert!(!denied.1);
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
 }

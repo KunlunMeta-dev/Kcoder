@@ -108,7 +108,7 @@ pub(super) const QUESTION_DIALOG_FOOTER_SEPARATOR: &str = " | ";
 const QUESTION_DIALOG_FOOTER_SPACER_LINES: usize = 1;
 pub(super) const QUESTION_DIALOG_OTHER_OPTION_LABEL: &str = "None of the above";
 const QUESTION_DIALOG_OTHER_OPTION_DESCRIPTION: &str =
-    "Optionally, describe the better answer in your next message.";
+    "Write your own answer here; no suggested choice is required.";
 fn permission_detail_line_count(dialog: &PermissionDialog) -> usize {
     if dialog.detail_lines.is_empty() {
         return 1;
@@ -299,9 +299,49 @@ pub(super) fn question_dialog_render_window(
     let has_hidden_below = first_option.saturating_add(visible_options) < option_count;
     lines.push(Line::from(""));
     let footer_tip_rows = footer_lines.saturating_sub(QUESTION_DIALOG_FOOTER_SPACER_LINES);
+    if let Some(state) = dialog
+        .states
+        .get(dialog.focused)
+        .filter(|state| state.editing_custom)
+    {
+        let graphemes = unicode_segmentation::UnicodeSegmentation::graphemes(
+            state.custom_answer.as_str(),
+            true,
+        )
+        .collect::<Vec<_>>();
+        let cursor = state.custom_cursor.min(graphemes.len());
+        let start = cursor.saturating_sub(width.saturating_sub(10) / 2);
+        let mut value = String::from("Answer: ");
+        for index in start..=graphemes.len() {
+            if index == cursor {
+                value.push('▏');
+            }
+            if let Some(piece) = graphemes.get(index) {
+                let visible = piece.replace('\n', "↵");
+                if unicode_width::UnicodeWidthStr::width(value.as_str())
+                    + unicode_width::UnicodeWidthStr::width(visible.as_str())
+                    >= width
+                {
+                    break;
+                }
+                value.push_str(&visible);
+            }
+        }
+        lines.push(Line::styled(
+            value,
+            Style::default().fg(KCODER_UI_THEME.accent_primary),
+        ));
+    }
     for line in question_dialog_footer_lines(dialog, width, has_hidden_above, has_hidden_below)
         .into_iter()
-        .take(footer_tip_rows)
+        .take(
+            footer_tip_rows.saturating_sub(usize::from(
+                dialog
+                    .states
+                    .get(dialog.focused)
+                    .is_some_and(|state| state.editing_custom),
+            )),
+        )
     {
         lines.push(line);
     }
@@ -313,14 +353,20 @@ pub(super) fn question_dialog_render_window(
 }
 
 fn question_dialog_has_other_option(question: &kcoder_tools::Question) -> bool {
-    !question.multi_select
-        && !question.options.is_empty()
-        && !question.options.iter().any(|option| {
-            option
-                .label
-                .trim()
-                .eq_ignore_ascii_case(QUESTION_DIALOG_OTHER_OPTION_LABEL)
-        })
+    !question.options.iter().any(|option| {
+        option
+            .label
+            .trim()
+            .eq_ignore_ascii_case(QUESTION_DIALOG_OTHER_OPTION_LABEL)
+    })
+}
+
+pub(super) fn question_dialog_is_custom_option(
+    question: &kcoder_tools::Question,
+    index: usize,
+) -> bool {
+    question_dialog_option_label(question, index)
+        .is_some_and(|label| label == QUESTION_DIALOG_OTHER_OPTION_LABEL)
 }
 
 pub(super) fn question_dialog_option_count(question: &kcoder_tools::Question) -> usize {
@@ -372,13 +418,14 @@ fn question_dialog_initial_state(
                 selected.push(index);
             }
         }
-        if selected.is_empty() {
+        if selected.is_empty() && !question.multi_select {
             selected.push(0);
         }
         QuestionDialogState {
-            cursor: selected[0],
+            cursor: selected.first().copied().unwrap_or(0),
             selected,
             scroll_top: 0,
+            ..Default::default()
         }
     }
 }
@@ -596,6 +643,12 @@ fn question_dialog_option_rows(
 fn question_dialog_footer_reserved_lines(dialog: &QuestionDialog, width: usize) -> usize {
     QUESTION_DIALOG_FOOTER_SPACER_LINES
         .saturating_add(question_dialog_footer_tip_lines(dialog, width, false, false).len())
+        .saturating_add(usize::from(
+            dialog
+                .states
+                .get(dialog.focused)
+                .is_some_and(|state| state.editing_custom),
+        ))
 }
 
 fn question_dialog_footer_tips(
@@ -607,6 +660,18 @@ fn question_dialog_footer_tips(
     let question_count = dialog.request.questions.len();
     let is_last_question = dialog.focused.saturating_add(1) >= question_count;
     let mut tips = Vec::new();
+    if dialog
+        .states
+        .get(dialog.focused)
+        .is_some_and(|state| state.editing_custom)
+    {
+        tips.push(QuestionDialogFooterTip::highlighted(
+            "enter to submit your answer",
+        ));
+        tips.push(QuestionDialogFooterTip::new("shift+enter for newline"));
+        tips.push(QuestionDialogFooterTip::new("esc back to choices"));
+        return tips;
+    }
 
     if has_hidden_above || has_hidden_below {
         let tip = match (has_hidden_above, has_hidden_below) {
@@ -760,7 +825,17 @@ fn question_dialog_current_answer(dialog: &QuestionDialog) -> Option<(String, St
     let answer = dialog
         .selected
         .iter()
-        .filter_map(|&index| question_dialog_option_label(question, index))
+        .filter_map(|&index| {
+            if question_dialog_is_custom_option(question, index) {
+                dialog
+                    .states
+                    .get(dialog.focused)
+                    .map(|state| state.custom_answer.clone())
+                    .filter(|text| !text.trim().is_empty())
+            } else {
+                question_dialog_option_label(question, index)
+            }
+        })
         .collect::<Vec<_>>()
         .join(", ");
     Some((question.question.clone(), answer))
@@ -807,6 +882,45 @@ pub(super) fn question_dialog_save_current_state(dialog: &mut QuestionDialog) {
     }
 }
 
+pub(super) fn question_dialog_begin_custom(dialog: &mut QuestionDialog) {
+    question_dialog_save_current_state(dialog);
+    if !dialog.selected.contains(&dialog.cursor) {
+        dialog.selected.push(dialog.cursor);
+    }
+    if let Some(state) = dialog.states.get_mut(dialog.focused) {
+        state.editing_custom = true;
+        state.custom_cursor = unicode_segmentation::UnicodeSegmentation::graphemes(
+            state.custom_answer.as_str(),
+            true,
+        )
+        .count();
+    }
+    question_dialog_save_current_state(dialog);
+}
+
+pub(super) fn question_dialog_insert_custom(dialog: &mut QuestionDialog, text: &str) {
+    let Some(state) = dialog
+        .states
+        .get_mut(dialog.focused)
+        .filter(|state| state.editing_custom)
+    else {
+        return;
+    };
+    let normalized = text.replace("\r\n", "\n").replace('\r', "\n");
+    let sanitized = super::sanitize_tui_text(&normalized);
+    let offset = byte_index_for_grapheme(&state.custom_answer, state.custom_cursor);
+    state.custom_answer.insert_str(offset, &sanitized);
+    state.custom_cursor = unicode_segmentation::UnicodeSegmentation::graphemes(
+        &state.custom_answer[..offset + sanitized.len()],
+        true,
+    )
+    .count();
+    dialog
+        .request
+        .answers
+        .remove(&dialog.request.questions[dialog.focused].question);
+}
+
 pub(super) fn question_dialog_restore_focused_state(
     dialog: &mut QuestionDialog,
     area: Option<Rect>,
@@ -833,7 +947,7 @@ pub(super) fn question_dialog_restore_focused_state(
     }
     dialog.cursor = dialog.cursor.min(option_count.saturating_sub(1));
     dialog.selected.retain(|&index| index < option_count);
-    if dialog.selected.is_empty() {
+    if dialog.selected.is_empty() && !question.multi_select {
         dialog.selected.push(dialog.cursor);
     }
     sync_question_dialog_scroll(dialog, area);

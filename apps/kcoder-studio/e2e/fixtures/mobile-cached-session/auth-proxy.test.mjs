@@ -1,0 +1,48 @@
+import assert from "node:assert/strict";
+import http from "node:http";
+import { once } from "node:events";
+import { test } from "node:test";
+import { createFixtureProxy } from "./auth-proxy.mjs";
+
+test("fixture auth confines access and strips credentials before proxying source", async t => {
+  const received = [];
+  const upstream = http.createServer((request, response) => {
+    received.push({ url: request.url, cookie: request.headers.cookie, authorization: request.headers.authorization });
+    response.setHeader("Content-Type", "text/html");
+    response.end('<script src="/index.tsx.bundle"></script><script>const chunk="/../../../mobile/node_modules/expo-font/build/index.bundle";const font="/assets/?unstable_path=font.otf";</script>');
+  }).listen(0, "127.0.0.1");
+  await once(upstream, "listening");
+  t.after(() => new Promise(resolve => upstream.close(resolve)));
+  const prefix = "/fixtures/cache-auth-test";
+  const token = "test-only-credential-".repeat(3);
+  const proxy = createFixtureProxy({ prefix, token, publicOrigin: "https://fixture.invalid", upstreamPort: upstream.address().port });
+  proxy.server.listen(0, "127.0.0.1");
+  await once(proxy.server, "listening");
+  t.after(proxy.close);
+  const base = `http://127.0.0.1:${proxy.server.address().port}`;
+  assert.equal((await fetch(base + prefix + "/")).status, 401);
+  assert.equal((await fetch(base + prefix + "/index.tsx.bundle")).status, 401);
+  assert.equal((await fetch(base + prefix + "/login?token=wrong")).status, 401);
+  assert.equal(received.length, 0);
+  const login = await fetch(base + prefix + "/login?token=" + token + "&theme=light&returnTo=https://evil.invalid", { redirect: "manual" });
+  assert.equal(login.status, 303);
+  assert.equal(login.headers.get("location"), prefix + "/?theme=light");
+  const setCookie = login.headers.get("set-cookie");
+  for (const flag of ["HttpOnly", "SameSite=Strict", "Secure", `Path=${prefix}/`]) assert(setCookie.includes(flag));
+  assert(!setCookie.includes(token));
+  const cookie = setCookie.split(";")[0];
+  const page = await fetch(base + prefix + "/", { headers: { cookie, authorization: "Bearer private" } });
+  assert.equal(page.status, 200);
+  const html = await page.text();
+  assert(html.includes(`src="${prefix}/index.tsx.bundle"`));
+  assert(html.includes(`"${prefix}/node_modules/expo-font/build/index.bundle"`));
+  assert(!html.includes('"/mobile/node_modules/'));
+  assert(!html.includes("/../../../mobile/node_modules/"));
+  assert(html.includes(`"${prefix}/assets/?unstable_path=font.otf"`));
+  assert.deepEqual(received, [{ url: "/", cookie: undefined, authorization: undefined }]);
+  assert.equal((await fetch(base + "/other/", { headers: { cookie } })).status, 404);
+  assert.equal((await fetch(base + prefix + "/json/list", { headers: { cookie } })).status, 404);
+  assert.equal((await fetch(base + prefix + "/", { method: "POST", headers: { cookie } })).status, 405);
+  assert.equal((await fetch(base + prefix + "/", { headers: { cookie: cookie.replace(/=.+$/, "=tampered") } })).status, 401);
+  assert.equal(received.length, 1);
+});

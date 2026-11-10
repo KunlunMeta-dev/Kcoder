@@ -251,7 +251,8 @@ mod tests {
 
     #[test]
     fn default_minimax_profile_uses_its_config_owned_context_budget() {
-        let budget = ContextBudget::from_settings(&Settings::default());
+        let budget =
+            ContextBudget::from_settings(&crate::test_support::engine_builder::fixture_settings());
         assert_eq!(budget.total, 1_048_576);
         assert_eq!(budget.system, 2_000);
         assert_eq!(budget.tools, 4_000);
@@ -289,7 +290,8 @@ mod tests {
 
     #[test]
     fn tool_cleanup_threshold_does_not_move_summary_or_prefire() {
-        let budget = ContextBudget::from_settings(&Settings::default());
+        let budget =
+            ContextBudget::from_settings(&crate::test_support::engine_builder::fixture_settings());
         assert_eq!(budget.auto_compact_threshold(), 711_432);
         assert_eq!(budget.tool_result_compact_threshold(), 569_145);
         assert_eq!(budget.prefire_threshold(), 696_432);

@@ -74,7 +74,7 @@ await runE2E(import.meta.url, {
     await selected.click();
     await page.getByTestId('message-assistant').filter({ hasText: 'W2_INITIAL' }).waitFor();
     // Complete a deliberate baseline scan before observing ordinary send traffic.
-    await page.evaluate(() => window.__TAURI_INTERNALS__.invoke('local_executor_request', { method: 'runtime.tasks.list', params: {} }));
+    await page.evaluate(() => window.__ELECTRON_INTERNALS__.invoke('local_executor_request', { method: 'runtime.tasks.list', params: {} }));
     await page.waitForTimeout(150);
     await page.evaluate(() => {
       const list = document.querySelector('[data-testid="sidebar-worklists-scroll"]');

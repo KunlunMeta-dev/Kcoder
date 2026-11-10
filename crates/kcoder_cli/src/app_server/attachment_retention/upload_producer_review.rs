@@ -210,25 +210,29 @@ fn kill_upload_at(temp: &TempDir, phase: &str, entry_id: &str) -> Result<()> {
         format!("v2-upload-{phase}")
     };
     let mut process = Command::new(std::env::current_exe()?)
-        .args(["--exact", "app_server::attachment_retention::tests::upload_producer_review::retained_upload_crash_child", "--test-threads=1"])
+        .args([
+            "--exact",
+            "tests::upload_producer_review::retained_upload_crash_child",
+            "--test-threads=1",
+        ])
         .env("KCODER_TEST_RETAINED_UPLOAD_CHILD", "armed")
         .env(INIT_CRASH_CHILD_ARM_ENV, INIT_CRASH_CHILD_ARM_VALUE)
         .env(INIT_CRASH_CHILD_ROOT_ENV, temp.path())
         .env(INIT_CRASH_CHILD_STEP_ENV, &step)
         .env("KCODER_TEST_UPLOAD_CRASH_PHASE", phase)
         .env("KCODER_TEST_UPLOAD_CRASH_ID", entry_id)
-        .stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn()?;
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()?;
     let deadline = Instant::now() + Duration::from_secs(8);
     while !temp.path().join(INIT_CRASH_READY_FILE).exists() {
         if let Some(status) = process.try_wait()? {
             let output = process.wait_with_output()?;
             anyhow::bail!(
-                "{phase}: child ended early {status}: {}",
-                format!(
-                    "{} {}",
-                    String::from_utf8_lossy(&output.stdout),
-                    String::from_utf8_lossy(&output.stderr)
-                )
+                "{phase}: child ended early {status}: {} {}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
             );
         }
         if Instant::now() >= deadline {

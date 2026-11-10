@@ -12,7 +12,7 @@ vi.mock('@/features/workbench/useWorkbench', () => ({
   useWorkbench: () => ({ projectChat: { addExistingAttachment } }),
 }))
 
-vi.mock('@/tauri/appshots', () => ({ subscribeToAppshots }))
+vi.mock('@/host/appshots', () => ({ subscribeToAppshots }))
 
 describe('AppshotBridge', () => {
   beforeEach(() => {
@@ -20,9 +20,9 @@ describe('AppshotBridge', () => {
     subscribeToAppshots.mockResolvedValue(vi.fn())
   })
 
-  test('opens Wework and adds the captured window to the current attachments', async () => {
-    const onOpenWework = vi.fn()
-    render(<AppshotBridge onOpenWework={onOpenWework} />)
+  test('opens Studio and adds the captured window to the current attachments', async () => {
+    const onOpenStudio = vi.fn()
+    render(<AppshotBridge onOpenStudio={onOpenStudio} />)
     await waitFor(() => expect(subscribeToAppshots).toHaveBeenCalledOnce())
 
     const attachment: Attachment = {
@@ -39,7 +39,7 @@ describe('AppshotBridge', () => {
     const onAttachments = subscribeToAppshots.mock.calls[0][0]
     onAttachments([attachment])
 
-    expect(onOpenWework).toHaveBeenCalledOnce()
+    expect(onOpenStudio).toHaveBeenCalledOnce()
     expect(addExistingAttachment).toHaveBeenCalledWith(attachment)
   })
 })

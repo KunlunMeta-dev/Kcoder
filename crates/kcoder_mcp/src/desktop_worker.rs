@@ -170,10 +170,10 @@ fn cleanup_input(
 }
 impl Drop for WindowsDesktopWorker {
     fn drop(&mut self) {
-        if !self.cleaned {
-            if let Err(error) = cleanup_input(&self.child, &self.input, self.session_id) {
-                tracing::warn!(%error, "desktop fallback cleanup was not confirmed");
-            }
+        if !self.cleaned
+            && let Err(error) = cleanup_input(&self.child, &self.input, self.session_id)
+        {
+            tracing::warn!(%error, "desktop fallback cleanup was not confirmed");
         }
     }
 }

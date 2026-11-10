@@ -8,10 +8,15 @@ import { repoRoot, runE2E, waitFor } from '../../harness/run-context.mjs';
 import { materializeWorkspace } from '../../harness/workspace-fixture.mjs';
 
 // Fixed model transport; all assertions concern real versioned scripts and store state.
+const nativeSourceLeases = process.env.KCODER_E2E_NATIVE_PLUGIN_SOURCE_LEASE === '1';
 await runE2E(import.meta.url, {
-  testId: 'plugin-version-update-uninstall-retained-conversations', tier: 'full-integration',
+  testId: nativeSourceLeases ? 'native-plugin-source-original-version-lease-update-disable-revoke' : 'plugin-version-update-uninstall-retained-conversations', tier: 'full-integration',
   modelPolicy: 'model-independent real plugin scripts, atomic store and live thread snapshots',
 }, async context => {
+  if (nativeSourceLeases) {
+    const { verifyNativePluginSourceLeases } = await import('../../harness/native-plugin-source-leases.mjs');
+    return verifyNativePluginSourceLeases(context);
+  }
   const { path: workspace } = await materializeWorkspace(context, 'minimal', { instanceId: 'versions' });
   const source = context.pathInState('source with spaces');
   await mkdir(resolve(source, '.claude-plugin'), { recursive: true });

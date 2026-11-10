@@ -1,12 +1,17 @@
 //! Bounded derived pointer into the authoritative attempt ledger, never a second error log.
-use super::*;
+use anyhow::{Context, Result, ensure};
 use kcoder_app_protocol::{
     ThreadRecentError, ThreadRecentErrorCategory as Category, ThreadRecentErrorKind as Kind,
     ThreadRecentErrorSource as Source,
 };
+use kcoder_cli_storage::private_files::{error_is_not_found, write_private_artifact_file};
+use kcoder_engine::QueryEngine;
 use kcoder_state::turn_attempt_store::TurnAttemptStore;
 use kcoder_types::{ProviderFailureCategory, TurnAttemptIdentity, TurnAttemptStatus};
 use std::io::Read;
+
+#[path = "recent_error/latest_attempt.rs"]
+mod latest_attempt;
 
 const INDEX: &str = "recent-turn-error.json";
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -16,7 +21,7 @@ struct Pointer {
     identity: Option<TurnAttemptIdentity>,
 }
 
-pub(super) fn before_finish(
+pub fn before_finish(
     engine: &QueryEngine,
     identity: &TurnAttemptIdentity,
     status: TurnAttemptStatus,
@@ -41,7 +46,7 @@ pub(super) fn before_finish(
     )
 }
 
-pub(super) fn initialize_empty(engine: &QueryEngine, thread_id: &str) -> Result<()> {
+pub fn initialize_empty(engine: &QueryEngine, thread_id: &str) -> Result<()> {
     if engine.state.message_count() != 0 {
         return Ok(());
     }
@@ -61,22 +66,54 @@ pub(super) fn initialize_empty(engine: &QueryEngine, thread_id: &str) -> Result<
     }
 }
 
-fn read(engine: &QueryEngine, thread_id: &str) -> Result<Option<ThreadRecentError>> {
+fn read(
+    engine: &QueryEngine,
+    thread_id: &str,
+) -> Result<(
+    Option<ThreadRecentError>,
+    Option<kcoder_app_protocol::TurnStatus>,
+)> {
     let root = engine.session_storage_dir_for(thread_id);
     let directory = kcoder_config::PrivateDirectory::open_existing(&root)?;
     let mut bytes = Vec::new();
-    directory
-        .open_regular_file(std::ffi::OsStr::new(INDEX))?
-        .take(4097)
-        .read_to_end(&mut bytes)?;
+    let pointer_file = match directory.open_regular_file(std::ffi::OsStr::new(INDEX)) {
+        Ok(file) => Some(file),
+        Err(error) if error_is_not_found(&error) => None,
+        Err(error) => return Err(error),
+    };
+    let pointer_exists = pointer_file.is_some();
+    if let Some(file) = pointer_file {
+        file.take(4097).read_to_end(&mut bytes)?;
+    }
     ensure!(
         bytes.len() <= 4096,
         "recent error pointer exceeds its limit"
     );
-    let pointer: Pointer = serde_json::from_slice(&bytes)?;
-    ensure!(pointer.version == 1, "unsupported recent error pointer");
-    let Some(identity) = pointer.identity else {
-        return Ok(None);
+    let identity = if pointer_exists {
+        let pointer: Pointer = serde_json::from_slice(&bytes)?;
+        ensure!(pointer.version == 1, "unsupported recent error pointer");
+        pointer.identity
+    } else {
+        None
+    };
+    let Some(store) = TurnAttemptStore::open_existing(&root, thread_id)? else {
+        ensure!(
+            pointer_exists && identity.is_none(),
+            "attempt ledger missing"
+        );
+        return Ok((None, None));
+    };
+    if let Some(pointer_identity) = identity {
+        ensure!(
+            pointer_identity.thread_id == thread_id,
+            "recent error thread mismatch"
+        );
+        store
+            .load(&pointer_identity)?
+            .context("recent error source missing")?;
+    }
+    let Some(identity) = latest_attempt::identity(&store)? else {
+        return Ok((None, None));
     };
     ensure!(
         identity.thread_id == thread_id,
@@ -90,8 +127,6 @@ fn read(engine: &QueryEngine, thread_id: &str) -> Result<Option<ThreadRecentErro
             .is_some_and(|value| value > 0),
         "invalid recent error turn identity"
     );
-    let store =
-        TurnAttemptStore::open_existing(&root, thread_id)?.context("attempt ledger missing")?;
     let record = store
         .load(&identity)?
         .context("recent error source missing")?;
@@ -101,7 +136,9 @@ fn read(engine: &QueryEngine, thread_id: &str) -> Result<Option<ThreadRecentErro
     let kind = match completion.status {
         TurnAttemptStatus::Failed => Kind::Failed,
         TurnAttemptStatus::Interrupted => Kind::Interrupted,
-        TurnAttemptStatus::Completed => return Ok(None),
+        TurnAttemptStatus::Completed => {
+            return Ok((None, Some(kcoder_app_protocol::TurnStatus::Completed)));
+        }
         _ => anyhow::bail!("recent error source is not a failure"),
     };
     let (source, category) = match completion
@@ -121,167 +158,31 @@ fn read(engine: &QueryEngine, thread_id: &str) -> Result<Option<ThreadRecentErro
         Some(_) => (Source::Provider, Category::Provider),
         None => (Source::Execution, Category::Execution),
     };
-    Ok(Some(ThreadRecentError {
-        turn_id: identity.turn_id,
-        attempt_id: Some(identity.attempt_id),
-        kind,
-        source,
-        category,
-        at_ms: completion.finished_at_ms,
-    }))
+    let status = match kind {
+        Kind::Failed => kcoder_app_protocol::TurnStatus::Failed,
+        Kind::Interrupted => kcoder_app_protocol::TurnStatus::Interrupted,
+    };
+    Ok((
+        Some(ThreadRecentError {
+            turn_id: identity.turn_id,
+            attempt_id: Some(identity.attempt_id),
+            kind,
+            source,
+            category,
+            at_ms: completion.finished_at_ms,
+        }),
+        Some(status),
+    ))
 }
 
-pub(super) fn decorate(
-    engine: &QueryEngine,
-    thread: &mut kcoder_app_protocol::Thread,
-    negotiated: bool,
-) {
+pub fn decorate(engine: &QueryEngine, thread: &mut kcoder_app_protocol::Thread, negotiated: bool) {
     if !negotiated {
         return;
     }
     let summary = thread
         .run_summary
         .get_or_insert_with(|| kcoder_app_protocol::ThreadRunFacts::default().summary());
-    summary.recent_error = read(engine, &thread.id).ok();
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::app_server::thread_runtime::test_support::test_runtime;
-
-    fn thread(id: &str) -> kcoder_app_protocol::Thread {
-        serde_json::from_value(
-            json!({ "id": id, "status": "idle", "createdAt": "1", "updatedAt": "1" }),
-        )
-        .unwrap()
-    }
-
-    #[tokio::test]
-    async fn projection_reads_committed_attempt_without_exposing_private_exception_text() {
-        let root = tempfile::tempdir().unwrap();
-        let runtime = test_runtime("recent-error", &root.path().join("history.jsonl"));
-        let engine = runtime.engine();
-        let id = engine.session_id();
-        let identity = TurnAttemptIdentity {
-            thread_id: id.clone(),
-            turn_id: "turn-1".into(),
-            attempt_id: "turn-1".into(),
-        };
-        let mut value = thread(&id);
-        decorate(&engine, &mut value, true);
-        assert_eq!(
-            value.run_summary.as_ref().unwrap().recent_error,
-            None,
-            "legacy/missing pointer is unknown"
-        );
-        turn_attempts::begin(
-            &engine,
-            &identity,
-            false,
-            None,
-            hex_sha256(b"fixture-fence"),
-            hex_sha256(b"fixture-request"),
-        )
-        .unwrap();
-        decorate(&engine, &mut value, true);
-        assert_eq!(value.run_summary.as_ref().unwrap().recent_error, Some(None));
-        before_finish(&engine, &identity, TurnAttemptStatus::Failed).unwrap();
-        decorate(&engine, &mut value, true);
-        assert_eq!(
-            value.run_summary.as_ref().unwrap().recent_error,
-            None,
-            "uncommitted source is unknown"
-        );
-        turn_attempts::finish(
-            &engine,
-            &identity,
-            "failed",
-            Some("private prompt Authorization: Bearer hidden-secret"),
-            None,
-            &turn_attempts::PartialOutput::default(),
-        )
-        .unwrap();
-        decorate(&engine, &mut value, true);
-        let error = value
-            .run_summary
-            .as_ref()
-            .unwrap()
-            .recent_error
-            .as_ref()
-            .unwrap()
-            .as_ref()
-            .unwrap();
-        assert_eq!(error.kind, Kind::Failed);
-        assert_eq!(error.category, Category::Execution);
-        let encoded = serde_json::to_string(&value).unwrap();
-        for secret in ["private prompt", "Authorization", "hidden-secret"] {
-            assert!(!encoded.contains(secret));
-        }
-        // A later interrupted turn is visible, but its badge must disappear
-        // after a subsequent successful completion (including after reload).
-        for (number, status) in [(2, "interrupted"), (3, "completed")] {
-            let next = TurnAttemptIdentity {
-                thread_id: id.clone(),
-                turn_id: format!("turn-{number}"),
-                attempt_id: format!("turn-{number}"),
-            };
-            turn_attempts::begin(
-                &engine,
-                &next,
-                false,
-                None,
-                hex_sha256(b"fixture-fence"),
-                hex_sha256(b"fixture-request"),
-            )
-            .unwrap();
-            if status == "completed" {
-                before_finish(&engine, &next, TurnAttemptStatus::Completed).unwrap();
-                decorate(&engine, &mut value, true);
-                assert_eq!(
-                    value.run_summary.as_ref().unwrap().recent_error,
-                    None,
-                    "success not yet committed must remain unknown"
-                );
-            }
-            turn_attempts::finish(
-                &engine,
-                &next,
-                status,
-                None,
-                None,
-                &turn_attempts::PartialOutput::default(),
-            )
-            .unwrap();
-            value = thread(&id);
-            decorate(&engine, &mut value, true);
-            if status == "interrupted" {
-                assert_eq!(
-                    value
-                        .run_summary
-                        .as_ref()
-                        .unwrap()
-                        .recent_error
-                        .as_ref()
-                        .unwrap()
-                        .as_ref()
-                        .unwrap()
-                        .kind,
-                    Kind::Interrupted
-                );
-            } else {
-                assert_eq!(value.run_summary.as_ref().unwrap().recent_error, Some(None));
-            }
-        }
-        let mut legacy = thread(&id);
-        decorate(&engine, &mut legacy, false);
-        assert!(legacy.run_summary.is_none());
-        write_private_artifact_file(
-            &engine.session_storage_dir_for(&id).join(INDEX),
-            b"{corrupt",
-        )
-        .unwrap();
-        decorate(&engine, &mut value, true);
-        assert_eq!(value.run_summary.unwrap().recent_error, None);
-    }
+    let observation = read(engine, &thread.id).ok();
+    summary.recent_error = observation.as_ref().map(|(error, _)| error.clone());
+    summary.latest_turn_status = observation.and_then(|(_, status)| status);
 }

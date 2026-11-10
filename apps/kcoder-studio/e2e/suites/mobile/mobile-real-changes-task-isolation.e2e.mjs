@@ -39,7 +39,8 @@ await runE2E(import.meta.url, {
   const homeUrl = first.url();
   const firstUrl = await createTask(first, "MOBILE_CHANGES_TASK_ONE");
   const firstId = threadId(firstUrl);
-  await first.getByTestId("workspace-tab-switcher").click();
+  await first.getByTestId("task-more").click();
+  await first.getByTestId("task-menu-workspace").click();
   await first.getByTestId("workspace-tab-changes").click();
   await first.getByTestId("changes-panel").waitFor({ state: "visible" });
   await first.getByTestId("workspace-tab-switcher").getByText("变更", { exact: true }).waitFor({ state: "visible" });
@@ -103,7 +104,8 @@ function threadId(url) {
 }
 
 async function assertActivePanel(page, panelId) {
-  await page.getByTestId("workspace-tab-switcher").click();
+  await page.getByTestId("task-more").click();
+  await page.getByTestId("task-menu-workspace").click();
   const tab = page.getByTestId(`workspace-tab-${panelId}`);
   await tab.waitFor({ state: "visible", timeout: 30_000 });
   await tab.locator("svg").nth(1).waitFor({ state: "visible", timeout: 10_000 });

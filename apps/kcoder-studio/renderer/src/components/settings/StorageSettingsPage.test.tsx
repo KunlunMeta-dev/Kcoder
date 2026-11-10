@@ -94,6 +94,8 @@ describe('StorageSettingsPage scan scope', () => {
     vi.mocked(fetchGatewayServers).mockResolvedValue([servers[1]])
     vi.mocked(readStorageReport).mockResolvedValue(report('/srv/kcoder', 2048))
     render(<StorageSettingsPage />)
+  await waitFor(() => expect(screen.getByTestId('storage-target').querySelector(`option[value="${servers[1].id}"]`)).not.toBeNull())
+  fireEvent.change(screen.getByTestId('storage-target'), { target: { value: servers[1].id } })
 
     const account = await screen.findByTestId('storage-scan-account')
     expect(account).toHaveTextContent('alice')
@@ -155,6 +157,8 @@ test('account replacement clears old storage and reloads identity on the same ta
   vi.mocked(fetchGatewayServers).mockResolvedValue([servers[1]])
   vi.mocked(readStorageReport).mockResolvedValue(report('/alice', 100))
   render(<StorageSettingsPage />)
+  await waitFor(() => expect(screen.getByTestId('storage-target').querySelector(`option[value="${servers[1].id}"]`)).not.toBeNull())
+  fireEvent.change(screen.getByTestId('storage-target'), { target: { value: servers[1].id } })
   await screen.findByTestId('storage-scan-account')
   vi.mocked(fetchGatewayServers).mockResolvedValue([
     {

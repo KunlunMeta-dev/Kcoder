@@ -1,6 +1,6 @@
 import '@/i18n'
 import { act, render, screen } from '@testing-library/react'
-import { listen } from '@tauri-apps/api/event'
+import { listen } from '@/lib/runtime-events'
 import { describe, expect, test } from 'vitest'
 import { KCoderGatewayRuntime as Runtime } from './gatewayRuntime'
 import { KCoderGatewayRuntime as InstalledRuntime } from './installGatewayRuntime'

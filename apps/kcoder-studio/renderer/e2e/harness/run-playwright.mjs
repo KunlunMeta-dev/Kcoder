@@ -29,14 +29,15 @@ const READY_TIMEOUT_MS = 120_000
 
 export class OwnedPlaywrightRun {
   static async create(options = {}) {
-    await enforceRetention(artifactBoundary)
+    const base = options.artifactBase ? resolve(options.artifactBase) : sourceRoot
+    await enforceRetention(options.artifactBase ? base : artifactBoundary)
     const timestamp = new Date()
       .toISOString()
       .replace(/[-:]/g, '')
       .replace('T', '-')
       .replace('Z', 'Z')
     const runRoot = resolve(
-      sourceRoot,
+      base,
       `${timestamp}-p${process.pid}-${randomBytes(4).toString('hex')}`
     )
     const run = new OwnedPlaywrightRun(runRoot, options)
@@ -67,6 +68,7 @@ export class OwnedPlaywrightRun {
     this.finishPromise = null
     this.manifestWrite = Promise.resolve()
     this.stopRecordOptions = options.stopRecordOptions ?? {}
+    this.retentionBoundary = options.artifactBase ? resolve(options.artifactBase) : artifactBoundary
   }
 
   async startServices() {
@@ -101,7 +103,6 @@ export class OwnedPlaywrightRun {
       this.childEnvironment({
         VITE_KCODER_STUDIO_E2E: 'true',
         VITE_KCODER_STUDIO_RUNTIME_MODE: 'backend',
-        VITE_LOGIN_MODE: 'password',
         KCODER_STUDIO_E2E_VITE_PUBLIC_DIR: resolve(this.stateDir, 'vite-public'),
         KCODER_STUDIO_RESPONSE_API_MOCK_URL: serviceUrls.responses,
         KCODER_STUDIO_SITES_UPSTREAM_MOCK_URL: serviceUrls.sites,
@@ -137,7 +138,7 @@ export class OwnedPlaywrightRun {
           KCODER_STUDIO_CONNECTOR_UPSTREAM_MOCK_URL: urls.connector,
           KCODER_STUDIO_E2E_ARTIFACTS_ROOT: this.artifactsDir,
         },
-        ['PLAYWRIGHT_BROWSERS_PATH', 'KCODER_STUDIO_E2E_BROWSER_EXECUTABLE']
+        ['PLAYWRIGHT_BROWSERS_PATH', 'KCODER_STUDIO_E2E_BROWSER_EXECUTABLE', 'KCODER_E2E_RENDERER_ROOT']
       )
     )
     const { code, signal } = await waitForExit(record.child)
@@ -255,7 +256,7 @@ export class OwnedPlaywrightRun {
       { mode: 0o600 }
     )
     await this.writeManifest(finalError ? 'failed' : status, finalError)
-    await enforceRetention(artifactBoundary)
+    await enforceRetention(this.retentionBoundary)
     this.finished = true
     this.finishing = false
     if (cleanupErrors.length) throw new AggregateError(cleanupErrors, 'owned E2E cleanup failed')
@@ -463,7 +464,7 @@ function waitForExit(child) {
 }
 
 export async function runOwnedPlaywright(args, options = {}) {
-  const run = await OwnedPlaywrightRun.create()
+  const run = await OwnedPlaywrightRun.create(options)
   let failure = null
   let rejectSignal
   const signalTarget = options.signalTarget ?? process

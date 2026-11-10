@@ -2,12 +2,17 @@ import { DesktopCommandMenu, type DesktopCommand } from './DesktopCommandMenu'
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { Button } from '@/components/ui/button'
 import { useTranslation } from '@/hooks/useTranslation'
+import { DesktopWindowControls } from '@/components/layout/DesktopWindowControls'
+import {
+  requestDesktopSidebarToggle,
+  useDesktopSidebarCollapsed,
+} from '@/components/layout/useDesktopSidebarCollapsed'
 
 type DesktopMenuItem = { index: number; label: string; id?: string; entries?: DesktopCommand[] }
 type DesktopMenuBridge = {
   list(locale?: string): Promise<DesktopMenuItem[]>
   invoke?(index: number, position: number): Promise<void>
-  setTheme?(dark: boolean): Promise<void>
+  setTheme?(dark: boolean, backgroundColor?: string): Promise<void>
   setVisible(visible: boolean): Promise<void>
   open(index: number, x: number, y: number): Promise<void>
 }
@@ -54,6 +59,7 @@ function commandMenuAnchor(button: HTMLButtonElement): DOMRect {
 
 export function DesktopMenuBar() {
   const { t, i18n } = useTranslation('common')
+  const { sidebarCollapsed, setSidebarCollapsed } = useDesktopSidebarCollapsed()
   const [bridge] = useState(
     () => (window as Window & { kcoderDesktopMenu?: DesktopMenuBridge }).kcoderDesktopMenu
   )
@@ -61,6 +67,7 @@ export function DesktopMenuBar() {
   const [anchor, setAnchor] = useState<DOMRect | null>(null)
   const [focused, setFocused] = useState(0)
   const [opened, setOpened] = useState<number | null>(null)
+  const chromeRef = useRef<HTMLDivElement>(null)
   const bar = useRef<HTMLDivElement>(null)
   const buttons = useRef<Array<HTMLButtonElement | null>>([])
   const restoreFocus = useRef<() => void>(() => {})
@@ -230,12 +237,21 @@ export function DesktopMenuBar() {
 
   useEffect(() => {
     if (!bridge?.setTheme) return
+    const chrome = chromeRef.current
+    if (!chrome) return
+    const root = document.documentElement
+    let previousTheme = ''
     const sync = () => {
-      void bridge.setTheme?.(document.documentElement.classList.contains('dark')).catch(() => {})
+      const dark = root.classList.contains('dark')
+      const backgroundColor = getComputedStyle(chrome).backgroundColor
+      const theme = `${dark}:${backgroundColor}`
+      if (theme === previousTheme) return
+      previousTheme = theme
+      void bridge.setTheme?.(dark, backgroundColor).catch(() => {})
     }
     sync()
     const observer = new MutationObserver(sync)
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
+    observer.observe(root, { attributes: true, attributeFilter: ['class', 'data-theme', 'style'] })
     return () => observer.disconnect()
   }, [bridge])
 
@@ -260,10 +276,12 @@ export function DesktopMenuBar() {
     }
   }
 
-  if (!items.length) return null
+  if (!bridge) return null
+  // Keep the divider below the native overlay, including at non-default page zoom.
   return (
     <div
-      className="flex h-10 shrink-0 items-center gap-4 border-b border-border/60 bg-background pl-3 pr-[144px] select-none [-webkit-app-region:drag]"
+      ref={chromeRef}
+      className="flex h-[calc(env(titlebar-area-y,0px)+env(titlebar-area-height,39px)+1px)] shrink-0 items-center gap-4 border-b border-border/60 bg-background pl-3 pr-[144px] select-none [-webkit-app-region:drag]"
       data-testid="desktop-brand-chrome"
     >
       <div
@@ -278,59 +296,67 @@ export function DesktopMenuBar() {
         </span>
       </div>
       <span className="h-4 w-px bg-border/70" aria-hidden="true" />
-      <div
-        ref={bar}
-        role="menubar"
-        aria-label={t('desktopMenu.label')}
-        data-testid="desktop-menu-bar"
-        className="flex h-8 min-w-0 items-center gap-1 overflow-x-auto text-text-secondary [-webkit-app-region:no-drag]"
-        onFocusCapture={event => {
-          if (
-            !bar.current?.contains(event.relatedTarget) &&
-            !(
-              event.relatedTarget instanceof Element &&
-              event.relatedTarget.closest('[data-desktop-command-menu]')
-            )
-          ) {
-            restoreFocus.current = rememberFocus(event.relatedTarget)
-          }
+      <DesktopWindowControls
+        toggleTestId="desktop-titlebar-sidebar-toggle"
+        onToggleSidebar={() => {
+          if (!requestDesktopSidebarToggle()) setSidebarCollapsed(!sidebarCollapsed)
         }}
-      >
-        {items.map((item, position) => (
-          <Button
-            key={item.index}
-            ref={element => {
-              buttons.current[position] = element
-            }}
-            type="button"
-            variant="ghost"
-            role="menuitem"
-            aria-haspopup="menu"
-            aria-expanded={opened === position}
-            tabIndex={focused === position ? 0 : -1}
-            data-testid={`desktop-menu-${item.index}`}
-            className="h-7 shrink-0 rounded-lg border-transparent px-2.5 py-0 text-sm font-normal text-text-secondary hover:bg-text-primary/5 hover:text-text-primary active:translate-y-0 aria-expanded:bg-text-primary/10 aria-expanded:text-text-primary aria-expanded:shadow-sm focus-visible:ring-blue-500/50 focus-visible:ring-offset-0"
-            onFocus={() => setFocused(position)}
-            onMouseEnter={event => {
-              if (opened !== null && bridge?.invoke && items[position].entries) {
-                setAnchor(commandMenuAnchor(event.currentTarget))
-                setOpened(position)
-              }
-            }}
-            onPointerDown={event => event.preventDefault()}
-            onMouseDown={event => event.preventDefault()}
-            onClick={event => {
-              void openMenu(
-                position,
-                event.detail === 0 && document.activeElement === event.currentTarget
+      />
+      {items.length > 0 && (
+        <div
+          ref={bar}
+          role="menubar"
+          aria-label={t('desktopMenu.label')}
+          data-testid="desktop-menu-bar"
+          className="flex h-8 min-w-0 items-center gap-1 overflow-x-auto text-text-secondary [-webkit-app-region:no-drag]"
+          onFocusCapture={event => {
+            if (
+              !bar.current?.contains(event.relatedTarget) &&
+              !(
+                event.relatedTarget instanceof Element &&
+                event.relatedTarget.closest('[data-desktop-command-menu]')
               )
-            }}
-            onKeyDown={event => onMenuKeyDown(event, position)}
-          >
-            {item.label}
-          </Button>
-        ))}
-      </div>
+            ) {
+              restoreFocus.current = rememberFocus(event.relatedTarget)
+            }
+          }}
+        >
+          {items.map((item, position) => (
+            <Button
+              key={item.index}
+              ref={element => {
+                buttons.current[position] = element
+              }}
+              type="button"
+              variant="ghost"
+              role="menuitem"
+              aria-haspopup="menu"
+              aria-expanded={opened === position}
+              tabIndex={focused === position ? 0 : -1}
+              data-testid={`desktop-menu-${item.index}`}
+              className="h-7 shrink-0 rounded-lg border-transparent px-2.5 py-0 text-sm font-normal text-text-secondary hover:bg-text-primary/5 hover:text-text-primary active:translate-y-0 aria-expanded:bg-text-primary/10 aria-expanded:text-text-primary aria-expanded:shadow-sm focus-visible:ring-blue-500/50 focus-visible:ring-offset-0"
+              onFocus={() => setFocused(position)}
+              onMouseEnter={event => {
+                if (opened !== null && bridge?.invoke && items[position].entries) {
+                  setAnchor(commandMenuAnchor(event.currentTarget))
+                  setOpened(position)
+                }
+              }}
+              onPointerDown={event => event.preventDefault()}
+              onMouseDown={event => event.preventDefault()}
+              onClick={event => {
+                void openMenu(
+                  position,
+                  event.detail === 0 && document.activeElement === event.currentTarget
+                )
+              }}
+              onKeyDown={event => onMenuKeyDown(event, position)}
+            >
+              {item.label}
+            </Button>
+          ))}
+        </div>
+      )}
       {opened !== null && bridge?.invoke && items[opened]?.entries && anchor && (
         <DesktopCommandMenu
           label={items[opened].label}

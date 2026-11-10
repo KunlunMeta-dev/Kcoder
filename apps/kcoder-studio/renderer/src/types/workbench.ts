@@ -199,7 +199,24 @@ export interface CloudWorkStatus {
   updatedAt: string | null
 }
 
+export interface ExpertTaskSelection {
+  deviceId: string
+  workspacePath: string
+  reference: import('../../../shared/generated/contracts').AgentDefinitionRef
+  title: string
+}
+export interface ExpertTaskDraft extends ExpertTaskSelection {
+  draftKey: number
+  projectId?: number | null
+  entry?: 'expert' | 'task'
+}
+export type SelectDraftExpert = (
+  expert: ExpertTaskSelection | null,
+  owner: { draftKey: number; projectId: number | null }
+) => void
+
 export interface WorkbenchState {
+  expertDraft?: ExpertTaskDraft | null
   user: User | null
   defaultTeam: Team | null
   projects: ProjectWithTasks[]

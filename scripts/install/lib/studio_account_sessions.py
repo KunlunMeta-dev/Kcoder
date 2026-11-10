@@ -4,7 +4,7 @@ import signal
 import time
 
 
-def supervise(store, identity, start, interval=1.0, stop_requested=None):
+def supervise(store, identity, start, interval=1.0, stop_requested=None, policy_channel=None):
     """Keep the root-owned account revision check outside the unprivileged child."""
     ready_read, ready_write = os.pipe()
     pid = os.fork()
@@ -18,6 +18,8 @@ def supervise(store, identity, start, interval=1.0, stop_requested=None):
         finally:
             os._exit(1)
     os.close(ready_write)
+    if policy_channel is not None:
+        policy_channel.parent_started(pid)
     previous = {}
     stop = False
 
@@ -36,12 +38,27 @@ def supervise(store, identity, start, interval=1.0, stop_requested=None):
             if observed:
                 return observed.si_status if observed.si_code == os.CLD_EXITED else 1
             try:
-                valid = store.session_current(identity)
+                valid = store.session_current(identity) and (policy_channel is None or policy_channel.current())
             except Exception:
                 valid = False
             if stop or not valid:
                 break
-            time.sleep(interval)
+            if policy_channel is None or policy_channel.parent is None:
+                time.sleep(interval)
+            else:
+                try:
+                    policy_channel.poll(interval)
+                except Exception:
+                    # EOF may precede waitid visibility by a few milliseconds
+                    # during a successful child exit. Preserve its real status;
+                    # a live child that drops authority still fails closed.
+                    deadline = time.monotonic() + 0.05
+                    while time.monotonic() < deadline:
+                        observed = os.waitid(os.P_PID, pid, os.WEXITED | os.WNOHANG | os.WNOWAIT)
+                        if observed:
+                            return observed.si_status if observed.si_code == os.CLD_EXITED else 1
+                        time.sleep(0.005)
+                    break
     finally:
         os.close(ready_read)
         # This child created its own session before acknowledging the pipe.
@@ -69,4 +86,6 @@ def supervise(store, identity, start, interval=1.0, stop_requested=None):
             pass
         for kind, handler in previous.items():
             signal.signal(kind, handler)
+        if policy_channel is not None:
+            policy_channel.close()
     return 1

@@ -7,6 +7,7 @@ from pathlib import Path
 import sys
 import unittest
 from unittest.mock import patch
+from types import SimpleNamespace
 
 
 ENTRY_PATH = Path(__file__).resolve().parents[1] / "installers" / "studio-account-entry.py"
@@ -62,7 +63,7 @@ class AccountRetentionParentTests(unittest.TestCase):
                 "TMPDIR": home + "/tmp",
             }
 
-        def supervise(_store, identity, start):
+        def supervise(_store, identity, start, *, policy_channel):
             self.assertEqual(identity["id"], PRINCIPAL_ID)
             start()
             return 0
@@ -100,6 +101,7 @@ class AccountRetentionParentTests(unittest.TestCase):
             patch.object(entry, "trusted_runtime", return_value="/fake/kcoder"),
             patch.object(entry, "AccountStore", FakeAccountStore),
             patch.object(entry, "ensure_binding", return_value=binding),
+            patch.object(entry, "OrganizationChannel", return_value=SimpleNamespace(snapshot=None, child_fd=lambda: None)),
             patch.object(entry, "start_knowledge_worker"),
             patch.object(entry, "drop_to_worker", side_effect=drop_to_worker),
             patch.object(entry, "supervise", side_effect=supervise),

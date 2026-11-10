@@ -138,6 +138,7 @@ async fn isolated_shell_loads_path_from_the_private_snapshot_copy() {
         1_000,
         limits.clone(),
         ShellSpawnPolicy {
+            owned_command_program: None,
             snapshot_path: Some(&snapshot),
             snapshot_copy_root: None,
             isolation_root: Some(runtime_root.path()),
@@ -284,6 +285,7 @@ async fn ordinary_sandbox_shell_restores_a_snapshot_below_deny_read() {
         2_000,
         limits.clone(),
         ShellSpawnPolicy {
+            owned_command_program: None,
             snapshot_path: selection.path.as_deref(),
             snapshot_copy_root: Some(&copy_root),
             isolation_root: None,

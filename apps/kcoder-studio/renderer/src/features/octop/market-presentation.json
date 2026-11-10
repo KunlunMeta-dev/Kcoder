@@ -1,0 +1,1460 @@
+{
+  "tech-test-automation": {
+    "color": "#2563eb",
+    "icon": "cpu",
+    "rank": 0,
+    "label": {
+      "zh": "自动化测试专家",
+      "en": "Tech Test Automation Expert"
+    },
+    "taskExamples": {
+      "zh": [
+        "每天「09:00」帮我完成「TDD 方法论与测试策略」并把结果发给我，任务创建后立即启用",
+        "每个工作日「18:00」帮我完成「自动生成测试用例」并把结果发给我",
+        "每周一「10:00」帮我完成「跨语言测试编写与运行」并把结果发给我",
+        "每周五「17:00」帮我完成「E2E 测试编排与执行」并把结果发给我",
+        "每天「08:00」帮我完成「API 接口测试自动化」并把结果发给我",
+        "每月 1 日「09:30」帮我完成「QA 测试计划与报告生成」并把结果发给我"
+      ],
+      "en": [
+        "Every day at 09:00, help me complete “Workflow step 1” and send the result — enable immediately",
+        "Every weekday at 18:00, help me complete “Workflow step 2” and send the result",
+        "Every Monday at 10:00, help me complete “Workflow step 3” and send the result",
+        "Every Friday at 17:00, help me complete “Workflow step 4” and send the result",
+        "Every day at 08:00, help me complete “Workflow step 5” and send the result",
+        "On the 1st of each month at 09:30, help me complete “Workflow step 6” and send the result"
+      ]
+    }
+  },
+  "healthcare-clinical-support": {
+    "color": "#dc2626",
+    "icon": "heart",
+    "rank": 1,
+    "label": {
+      "zh": "临床辅助专家",
+      "en": "Healthcare Clinical Support Expert"
+    },
+    "taskExamples": {
+      "zh": [
+        "每天「09:00」帮我完成「AI辅助诊断推理」并把结果发给我，任务创建后立即启用",
+        "每个工作日「18:00」帮我完成「用药安全评估」并把结果发给我",
+        "每周一「10:00」帮我完成「循证医学指南查询」并把结果发给我",
+        "每周五「17:00」帮我完成「药学专业咨询」并把结果发给我",
+        "每天「08:00」帮我完成「医学影像辅助分析」并把结果发给我",
+        "每月 1 日「09:30」帮我完成「医学术语通俗解读」并把结果发给我"
+      ],
+      "en": [
+        "Every day at 09:00, help me complete “Workflow step 1” and send the result — enable immediately",
+        "Every weekday at 18:00, help me complete “Workflow step 2” and send the result",
+        "Every Monday at 10:00, help me complete “Workflow step 3” and send the result",
+        "Every Friday at 17:00, help me complete “Workflow step 4” and send the result",
+        "Every day at 08:00, help me complete “Workflow step 5” and send the result",
+        "On the 1st of each month at 09:30, help me complete “Workflow step 6” and send the result"
+      ]
+    }
+  },
+  "healthcare-health-report": {
+    "color": "#dc2626",
+    "icon": "heart",
+    "rank": 2,
+    "label": {
+      "zh": "健康报告专家",
+      "en": "Healthcare Health Report Expert"
+    },
+    "taskExamples": {
+      "zh": [
+        "每天「09:00」帮我完成「全维度健康数据采集」并把结果发给我，任务创建后立即启用",
+        "每个工作日「18:00」帮我完成「结构化健康摘要生成」并把结果发给我",
+        "每周一「10:00」帮我完成「健康数据深度分析」并把结果发给我",
+        "每周五「17:00」帮我完成「体检报告通俗解读」并把结果发给我",
+        "每天「08:00」帮我完成「个人健康档案记录」并把结果发给我",
+        "每月 1 日「09:30」帮我完成「健康数据持续跟踪管理」并把结果发给我"
+      ],
+      "en": [
+        "Every day at 09:00, help me complete “Workflow step 1” and send the result — enable immediately",
+        "Every weekday at 18:00, help me complete “Workflow step 2” and send the result",
+        "Every Monday at 10:00, help me complete “Workflow step 3” and send the result",
+        "Every Friday at 17:00, help me complete “Workflow step 4” and send the result",
+        "Every day at 08:00, help me complete “Workflow step 5” and send the result",
+        "On the 1st of each month at 09:30, help me complete “Workflow step 6” and send the result"
+      ]
+    }
+  },
+  "healthcare-medical-record-analysis": {
+    "color": "#dc2626",
+    "icon": "heart",
+    "rank": 3,
+    "label": {
+      "zh": "病历分析专家",
+      "en": "Healthcare Medical Record Analysis Expert"
+    },
+    "taskExamples": {
+      "zh": [
+        "每天「09:00」帮我完成「病历结构化整理」并把结果发给我，任务创建后立即启用",
+        "每个工作日「18:00」帮我完成「病历文本规范化」并把结果发给我",
+        "每周一「10:00」帮我完成「病历文本辅助诊断」并把结果发给我",
+        "每周五「17:00」帮我完成「医疗实体识别与提取」并把结果发给我",
+        "每天「08:00」帮我完成「医疗文档通俗解读」并把结果发给我",
+        "每月 1 日「09:30」帮我完成「症状分析与就医建议」并把结果发给我"
+      ],
+      "en": [
+        "Every day at 09:00, help me complete “Workflow step 1” and send the result — enable immediately",
+        "Every weekday at 18:00, help me complete “Workflow step 2” and send the result",
+        "Every Monday at 10:00, help me complete “Workflow step 3” and send the result",
+        "Every Friday at 17:00, help me complete “Workflow step 4” and send the result",
+        "Every day at 08:00, help me complete “Workflow step 5” and send the result",
+        "On the 1st of each month at 09:30, help me complete “Workflow step 6” and send the result"
+      ]
+    }
+  },
+  "healthcare-nursing-plan": {
+    "color": "#dc2626",
+    "icon": "heart",
+    "rank": 4,
+    "label": {
+      "zh": "护理方案专家",
+      "en": "Healthcare Nursing Plan Expert"
+    },
+    "taskExamples": {
+      "zh": [
+        "每天「09:00」帮我完成「护理理论选择与论证」并把结果发给我，任务创建后立即启用",
+        "每个工作日「18:00」帮我完成「临床护理计划制定」并把结果发给我",
+        "每周一「10:00」帮我完成「专病照护方案设计」并把结果发给我",
+        "每周五「17:00」帮我完成「护理监护路径规划」并把结果发给我",
+        "每天「08:00」帮我完成「康复方案制定」并把结果发给我",
+        "每月 1 日「09:30」帮我完成「护理信息通俗化转译」并把结果发给我"
+      ],
+      "en": [
+        "Every day at 09:00, help me complete “Workflow step 1” and send the result — enable immediately",
+        "Every weekday at 18:00, help me complete “Workflow step 2” and send the result",
+        "Every Monday at 10:00, help me complete “Workflow step 3” and send the result",
+        "Every Friday at 17:00, help me complete “Workflow step 4” and send the result",
+        "Every day at 08:00, help me complete “Workflow step 5” and send the result",
+        "On the 1st of each month at 09:30, help me complete “Workflow step 6” and send the result"
+      ]
+    }
+  },
+  "hr-resume-screening": {
+    "color": "#7c3aed",
+    "icon": "user",
+    "rank": 5,
+    "label": {
+      "zh": "简历筛选专家",
+      "en": "Hr Resume Screening Expert"
+    },
+    "taskExamples": {
+      "zh": [
+        "每天「09:00」帮我完成「简历量化筛选」并把结果发给我，任务创建后立即启用",
+        "每个工作日「18:00」帮我完成「简历结构化解析」并把结果发给我",
+        "每周一「10:00」帮我完成「四阶段招聘评估」并把结果发给我",
+        "每周五「17:00」帮我完成「JD 智能匹配与排序」并把结果发给我",
+        "每天「08:00」帮我完成「批量简历评分排名」并把结果发给我",
+        "每月 1 日「09:30」帮我完成「循证面试策略设计」并把结果发给我"
+      ],
+      "en": [
+        "Every day at 09:00, help me complete “Workflow step 1” and send the result — enable immediately",
+        "Every weekday at 18:00, help me complete “Workflow step 2” and send the result",
+        "Every Monday at 10:00, help me complete “Workflow step 3” and send the result",
+        "Every Friday at 17:00, help me complete “Workflow step 4” and send the result",
+        "Every day at 08:00, help me complete “Workflow step 5” and send the result",
+        "On the 1st of each month at 09:30, help me complete “Workflow step 6” and send the result"
+      ]
+    }
+  },
+  "legal-contract-drafting": {
+    "color": "#0f766e",
+    "icon": "file-text",
+    "rank": 6,
+    "label": {
+      "zh": "合同起草专家",
+      "en": "Legal Contract Drafting Expert"
+    },
+    "taskExamples": {
+      "zh": [
+        "每天「09:00」帮我完成「合同模板选择与生成」并把结果发给我，任务创建后立即启用",
+        "每个工作日「18:00」帮我完成「专业合同内容生成」并把结果发给我",
+        "每周一「10:00」帮我完成「法律文书撰写指导」并把结果发给我",
+        "每周五「17:00」帮我完成「财税法律文书起草」并把结果发给我",
+        "每天「08:00」帮我完成「保密协议专项起草」并把结果发给我",
+        "每月 1 日「09:30」帮我完成「法律文书模板库输出」并把结果发给我"
+      ],
+      "en": [
+        "Every day at 09:00, help me complete “Workflow step 1” and send the result — enable immediately",
+        "Every weekday at 18:00, help me complete “Workflow step 2” and send the result",
+        "Every Monday at 10:00, help me complete “Workflow step 3” and send the result",
+        "Every Friday at 17:00, help me complete “Workflow step 4” and send the result",
+        "Every day at 08:00, help me complete “Workflow step 5” and send the result",
+        "On the 1st of each month at 09:30, help me complete “Workflow step 6” and send the result"
+      ]
+    }
+  },
+  "legal-litigation-strategy": {
+    "color": "#0f766e",
+    "icon": "file-text",
+    "rank": 7,
+    "label": {
+      "zh": "诉讼策略专家",
+      "en": "Legal Litigation Strategy Expert"
+    },
+    "taskExamples": {
+      "zh": [
+        "每天「09:00」帮我完成「诉讼准备与流程指引」并把结果发给我，任务创建后立即启用",
+        "每个工作日「18:00」帮我完成「风险评估与成本分析」并把结果发给我",
+        "每周一「10:00」帮我完成「争议焦点与应诉策略」并把结果发给我",
+        "每周五「17:00」帮我完成「证据矩阵与案件建模」并把结果发给我",
+        "每天「08:00」帮我完成「诉讼文书起草」并把结果发给我",
+        "每月 1 日「09:30」帮我完成「全流程法律支持」并把结果发给我"
+      ],
+      "en": [
+        "Every day at 09:00, help me complete “Workflow step 1” and send the result — enable immediately",
+        "Every weekday at 18:00, help me complete “Workflow step 2” and send the result",
+        "Every Monday at 10:00, help me complete “Workflow step 3” and send the result",
+        "Every Friday at 17:00, help me complete “Workflow step 4” and send the result",
+        "Every day at 08:00, help me complete “Workflow step 5” and send the result",
+        "On the 1st of each month at 09:30, help me complete “Workflow step 6” and send the result"
+      ]
+    }
+  },
+  "lifestyle-meditation-mindfulness": {
+    "color": "#f97316",
+    "icon": "heart",
+    "rank": 8,
+    "label": {
+      "zh": "冥想正念专家",
+      "en": "Lifestyle Meditation Mindfulness Expert"
+    },
+    "taskExamples": {
+      "zh": [
+        "每天「09:00」帮我完成「冥想习惯养成与打卡」并把结果发给我，任务创建后立即启用",
+        "每个工作日「18:00」帮我完成「每日 3-5 分钟微练习」并把结果发给我",
+        "每周一「10:00」帮我完成「呼吸法工具箱」并把结果发给我",
+        "每周五「17:00」帮我完成「佛教禅修与东方哲学对话（处理层…」并把结果发给我",
+        "每天「08:00」帮我完成「睡前放松流程（输出层 / 失眠…」并把结果发给我",
+        "每月 1 日「09:30」帮我完成「即时压力缓解（输出层 / 工作…」并把结果发给我"
+      ],
+      "en": [
+        "Every day at 09:00, help me complete “Workflow step 1” and send the result — enable immediately",
+        "Every weekday at 18:00, help me complete “Workflow step 2” and send the result",
+        "Every Monday at 10:00, help me complete “Workflow step 3” and send the result",
+        "Every Friday at 17:00, help me complete “Workflow step 4” and send the result",
+        "Every day at 08:00, help me complete “Workflow step 5” and send the result",
+        "On the 1st of each month at 09:30, help me complete “Workflow step 6” and send the result"
+      ]
+    }
+  },
+  "lifestyle-mental-counseling": {
+    "color": "#f97316",
+    "icon": "heart",
+    "rank": 9,
+    "label": {
+      "zh": "心理咨询陪伴专家",
+      "en": "Lifestyle Mental Counseling Expert"
+    },
+    "taskExamples": {
+      "zh": [
+        "每天「09:00」帮我完成「日常情绪记录与自我调节」并把结果发给我，任务创建后立即启用",
+        "每个工作日「18:00」帮我完成「临床循证心理评估」并把结果发给我",
+        "每周一「10:00」帮我完成「CBT 量表与结构化治疗」并把结果发给我",
+        "每周五「17:00」帮我完成「关系议题与生活困扰」并把结果发给我",
+        "每天「08:00」帮我完成「多流派会诊（处理层 / 复杂议…」并把结果发给我",
+        "每月 1 日「09:30」帮我完成「真人咨询师筛选与转介」并把结果发给我"
+      ],
+      "en": [
+        "Every day at 09:00, help me complete “Workflow step 1” and send the result — enable immediately",
+        "Every weekday at 18:00, help me complete “Workflow step 2” and send the result",
+        "Every Monday at 10:00, help me complete “Workflow step 3” and send the result",
+        "Every Friday at 17:00, help me complete “Workflow step 4” and send the result",
+        "Every day at 08:00, help me complete “Workflow step 5” and send the result",
+        "On the 1st of each month at 09:30, help me complete “Workflow step 6” and send the result"
+      ]
+    }
+  },
+  "media-script-breakdown": {
+    "color": "#db2777",
+    "icon": "video",
+    "rank": 10,
+    "label": {
+      "zh": "脚本拆解专家",
+      "en": "Media Script Breakdown Expert"
+    },
+    "taskExamples": {
+      "zh": [
+        "每天「09:00」帮我完成「四幕剧本与分镜脚本生成」并把结果发给我，任务创建后立即启用",
+        "每个工作日「18:00」帮我完成「剧本到分镜表格转换」并把结果发给我",
+        "每周一「10:00」帮我完成「短剧剧本创作」并把结果发给我",
+        "每周五「17:00」帮我完成「短视频分镜与情绪设计」并把结果发给我",
+        "每天「08:00」帮我完成「视频脚本结构化输出」并把结果发给我",
+        "每月 1 日「09:30」帮我完成「影视项目与制作流程管理」并把结果发给我"
+      ],
+      "en": [
+        "Every day at 09:00, help me complete “Workflow step 1” and send the result — enable immediately",
+        "Every weekday at 18:00, help me complete “Workflow step 2” and send the result",
+        "Every Monday at 10:00, help me complete “Workflow step 3” and send the result",
+        "Every Friday at 17:00, help me complete “Workflow step 4” and send the result",
+        "Every day at 08:00, help me complete “Workflow step 5” and send the result",
+        "On the 1st of each month at 09:30, help me complete “Workflow step 6” and send the result"
+      ]
+    }
+  },
+  "media-storyboard-design": {
+    "color": "#db2777",
+    "icon": "video",
+    "rank": 11,
+    "label": {
+      "zh": "分镜设计专家",
+      "en": "Media Storyboard Design Expert"
+    },
+    "taskExamples": {
+      "zh": [
+        "每天「09:00」帮我完成「剧本到分镜表格转换」并把结果发给我，任务创建后立即启用",
+        "每个工作日「18:00」帮我完成「电影感镜头运动设计」并把结果发给我",
+        "每周一「10:00」帮我完成「Seedance 视频提示词设计」并把结果发给我",
+        "每周五「17:00」帮我完成「画面提示词参数化构建」并把结果发给我",
+        "每天「08:00」帮我完成「专业四幕分镜脚本生成」并把结果发给我",
+        "每月 1 日「09:30」帮我完成「视频脚本与画面提示词输出」并把结果发给我"
+      ],
+      "en": [
+        "Every day at 09:00, help me complete “Workflow step 1” and send the result — enable immediately",
+        "Every weekday at 18:00, help me complete “Workflow step 2” and send the result",
+        "Every Monday at 10:00, help me complete “Workflow step 3” and send the result",
+        "Every Friday at 17:00, help me complete “Workflow step 4” and send the result",
+        "Every day at 08:00, help me complete “Workflow step 5” and send the result",
+        "On the 1st of each month at 09:30, help me complete “Workflow step 6” and send the result"
+      ]
+    }
+  },
+  "media-video-editing": {
+    "color": "#db2777",
+    "icon": "video",
+    "rank": 12,
+    "label": {
+      "zh": "视频剪辑专家",
+      "en": "Media Video Editing Expert"
+    },
+    "taskExamples": {
+      "zh": [
+        "每天「09:00」帮我完成「AI 对话式视频剪辑」并把结果发给我，任务创建后立即启用",
+        "每个工作日「18:00」帮我完成「自动精彩片段提取」并把结果发给我",
+        "每周一「10:00」帮我完成「自然语言驱动 FFmpeg」并把结果发给我",
+        "每周五「17:00」帮我完成「多功能视频编辑」并把结果发给我",
+        "每天「08:00」帮我完成「脚本字幕标题自动生成」并把结果发给我",
+        "每月 1 日「09:30」帮我完成「程序化视频创作」并把结果发给我"
+      ],
+      "en": [
+        "Every day at 09:00, help me complete “Workflow step 1” and send the result — enable immediately",
+        "Every weekday at 18:00, help me complete “Workflow step 2” and send the result",
+        "Every Monday at 10:00, help me complete “Workflow step 3” and send the result",
+        "Every Friday at 17:00, help me complete “Workflow step 4” and send the result",
+        "Every day at 08:00, help me complete “Workflow step 5” and send the result",
+        "On the 1st of each month at 09:30, help me complete “Workflow step 6” and send the result"
+      ]
+    }
+  },
+  "mysticism-tarot-divination": {
+    "color": "#7c3aed",
+    "icon": "sparkles",
+    "rank": 13,
+    "label": {
+      "zh": "塔罗占卜专家",
+      "en": "Mysticism Tarot Divination Expert"
+    },
+    "taskExamples": {
+      "zh": [
+        "每天「09:00」帮我完成「加密随机抽牌」并把结果发给我，任务创建后立即启用",
+        "每个工作日「18:00」帮我完成「牌阵设计与位置释义」并把结果发给我",
+        "每周一「10:00」帮我完成「韦特经典体系解读」并把结果发给我",
+        "每周五「17:00」帮我完成「反思治愈派情感支持」并把结果发给我",
+        "每天「08:00」帮我完成「牌阵丰富度补全（按需）」并把结果发给我",
+        "每月 1 日「09:30」帮我完成「占星内容创作（输出层，按需）」并把结果发给我"
+      ],
+      "en": [
+        "Every day at 09:00, help me complete “Workflow step 1” and send the result — enable immediately",
+        "Every weekday at 18:00, help me complete “Workflow step 2” and send the result",
+        "Every Monday at 10:00, help me complete “Workflow step 3” and send the result",
+        "Every Friday at 17:00, help me complete “Workflow step 4” and send the result",
+        "Every day at 08:00, help me complete “Workflow step 5” and send the result",
+        "On the 1st of each month at 09:30, help me complete “Workflow step 6” and send the result"
+      ]
+    }
+  },
+  "mysticism-zodiac-fortune": {
+    "color": "#7c3aed",
+    "icon": "sparkles",
+    "rank": 14,
+    "label": {
+      "zh": "生肖星座运势专家",
+      "en": "Mysticism Zodiac Fortune Expert"
+    },
+    "taskExamples": {
+      "zh": [
+        "每天「09:00」帮我完成「星座主驱动每日运势」并把结果发给我，任务创建后立即启用",
+        "每个工作日「18:00」帮我完成「任意日期运势查询」并把结果发给我",
+        "每周一「10:00」帮我完成「周月运势 + 元素形态」并把结果发给我",
+        "每周五「17:00」帮我完成「星座 + 生肖跨体系融合」并把结果发给我",
+        "每天「08:00」帮我完成「本命盘深度咨询」并把结果发给我",
+        "每月 1 日「09:30」帮我完成「28 星宿合盘配对（按需）」并把结果发给我"
+      ],
+      "en": [
+        "Every day at 09:00, help me complete “Workflow step 1” and send the result — enable immediately",
+        "Every weekday at 18:00, help me complete “Workflow step 2” and send the result",
+        "Every Monday at 10:00, help me complete “Workflow step 3” and send the result",
+        "Every Friday at 17:00, help me complete “Workflow step 4” and send the result",
+        "Every day at 08:00, help me complete “Workflow step 5” and send the result",
+        "On the 1st of each month at 09:30, help me complete “Workflow step 6” and send the result"
+      ]
+    }
+  },
+  "legal-legal-research": {
+    "color": "#0f766e",
+    "icon": "file-text",
+    "rank": 15,
+    "label": {
+      "zh": "法规检索专家",
+      "en": "Legal Legal Research Expert"
+    },
+    "taskExamples": {
+      "zh": [
+        "每天「09:00」帮我完成「法律知识库检索」并把结果发给我，任务创建后立即启用",
+        "每个工作日「18:00」帮我完成「案例与法规专项检索」并把结果发给我",
+        "每周一「10:00」帮我完成「多类纠纷法条查询」并把结果发给我",
+        "每周五「17:00」帮我完成「法条体系关联定位」并把结果发给我",
+        "每天「08:00」帮我完成「类案检索与裁判验证」并把结果发给我",
+        "每月 1 日「09:30」帮我完成「不确定法律概念分析」并把结果发给我"
+      ],
+      "en": [
+        "Every day at 09:00, help me complete “Workflow step 1” and send the result — enable immediately",
+        "Every weekday at 18:00, help me complete “Workflow step 2” and send the result",
+        "Every Monday at 10:00, help me complete “Workflow step 3” and send the result",
+        "Every Friday at 17:00, help me complete “Workflow step 4” and send the result",
+        "Every day at 08:00, help me complete “Workflow step 5” and send the result",
+        "On the 1st of each month at 09:30, help me complete “Workflow step 6” and send the result"
+      ]
+    }
+  },
+  "finance-financial-report-analysis": {
+    "color": "#059669",
+    "icon": "candlestick-chart",
+    "rank": 16,
+    "label": {
+      "zh": "财报分析专家",
+      "en": "Finance Financial Report Analysis Expert"
+    },
+    "taskExamples": {
+      "zh": [
+        "每天「09:00」帮我完成「获取A股/中国市场财务数据」并把结果发给我，任务创建后立即启用",
+        "每个工作日「18:00」帮我完成「补充美股/全球市场数据」并把结果发给我",
+        "每周一「10:00」帮我完成「三表深度解读」并把结果发给我",
+        "每周五「17:00」帮我完成「财务造假风险识别」并把结果发给我",
+        "每天「08:00」帮我完成「交互式分析报告」并把结果发给我",
+        "每月 1 日「09:30」帮我完成「三表报告自动生成」并把结果发给我"
+      ],
+      "en": [
+        "Every day at 09:00, help me complete “Workflow step 1” and send the result — enable immediately",
+        "Every weekday at 18:00, help me complete “Workflow step 2” and send the result",
+        "Every Monday at 10:00, help me complete “Workflow step 3” and send the result",
+        "Every Friday at 17:00, help me complete “Workflow step 4” and send the result",
+        "Every day at 08:00, help me complete “Workflow step 5” and send the result",
+        "On the 1st of each month at 09:30, help me complete “Workflow step 6” and send the result"
+      ]
+    }
+  },
+  "finance-quant-backtesting": {
+    "color": "#059669",
+    "icon": "candlestick-chart",
+    "rank": 17,
+    "label": {
+      "zh": "量化回测专家",
+      "en": "Finance Quant Backtesting Expert"
+    },
+    "taskExamples": {
+      "zh": [
+        "每天「09:00」帮我完成「获取历史行情与因子数据」并把结果发给我，任务创建后立即启用",
+        "每个工作日「18:00」帮我完成「策略回测执行」并把结果发给我",
+        "每周一「10:00」帮我完成「多因子量化选股」并把结果发给我",
+        "每周五「17:00」帮我完成「策略编写与因子分析」并把结果发给我",
+        "每天「08:00」帮我完成「多引擎回测与风控」并把结果发给我",
+        "每月 1 日「09:30」帮我完成「生成回测报告」并把结果发给我"
+      ],
+      "en": [
+        "Every day at 09:00, help me complete “Workflow step 1” and send the result — enable immediately",
+        "Every weekday at 18:00, help me complete “Workflow step 2” and send the result",
+        "Every Monday at 10:00, help me complete “Workflow step 3” and send the result",
+        "Every Friday at 17:00, help me complete “Workflow step 4” and send the result",
+        "Every day at 08:00, help me complete “Workflow step 5” and send the result",
+        "On the 1st of each month at 09:30, help me complete “Workflow step 6” and send the result"
+      ]
+    }
+  },
+  "academic-statistical-analysis": {
+    "color": "#4f46e5",
+    "icon": "book-open",
+    "rank": 18,
+    "label": {
+      "zh": "统计分析专家",
+      "en": "Academic Statistical Analysis Expert"
+    },
+    "taskExamples": {
+      "zh": [
+        "每天「09:00」帮我完成「统计方法选择与建模」并把结果发给我，任务创建后立即启用",
+        "每个工作日「18:00」帮我完成「高级统计建模与模拟」并把结果发给我",
+        "每周一「10:00」帮我完成「标准化数据分析流程」并把结果发给我",
+        "每周五「17:00」帮我完成「统计检验与模型诊断」并把结果发给我",
+        "每天「08:00」帮我完成「中文数据分析报告」并把结果发给我",
+        "每月 1 日「09:30」帮我完成「统计图表生成与验证」并把结果发给我"
+      ],
+      "en": [
+        "Every day at 09:00, help me complete “Workflow step 1” and send the result — enable immediately",
+        "Every weekday at 18:00, help me complete “Workflow step 2” and send the result",
+        "Every Monday at 10:00, help me complete “Workflow step 3” and send the result",
+        "Every Friday at 17:00, help me complete “Workflow step 4” and send the result",
+        "Every day at 08:00, help me complete “Workflow step 5” and send the result",
+        "On the 1st of each month at 09:30, help me complete “Workflow step 6” and send the result"
+      ]
+    }
+  },
+  "finance-business-analysis": {
+    "color": "#059669",
+    "icon": "candlestick-chart",
+    "rank": 19,
+    "label": {
+      "zh": "经营分析专家",
+      "en": "Finance Business Analysis Expert"
+    },
+    "taskExamples": {
+      "zh": [
+        "每天「09:00」帮我完成「获取经营数据」并把结果发给我，任务创建后立即启用",
+        "每个工作日「18:00」帮我完成「自动化数据分析」并把结果发给我",
+        "每周一「10:00」帮我完成「杜邦体系深度拆解」并把结果发给我",
+        "每周五「17:00」帮我完成「预算执行差异分析」并把结果发给我",
+        "每天「08:00」帮我完成「KPI 模型与决策仪表盘」并把结果发给我",
+        "每月 1 日「09:30」帮我完成「智能图表生成」并把结果发给我"
+      ],
+      "en": [
+        "Every day at 09:00, help me complete “Workflow step 1” and send the result — enable immediately",
+        "Every weekday at 18:00, help me complete “Workflow step 2” and send the result",
+        "Every Monday at 10:00, help me complete “Workflow step 3” and send the result",
+        "Every Friday at 17:00, help me complete “Workflow step 4” and send the result",
+        "Every day at 08:00, help me complete “Workflow step 5” and send the result",
+        "On the 1st of each month at 09:30, help me complete “Workflow step 6” and send the result"
+      ]
+    }
+  },
+  "finance-investment-research": {
+    "color": "#059669",
+    "icon": "candlestick-chart",
+    "rank": 20,
+    "label": {
+      "zh": "投研报告专家",
+      "en": "Finance Investment Research Expert"
+    },
+    "taskExamples": {
+      "zh": [
+        "每天「09:00」帮我完成「获取A股市场数据」并把结果发给我，任务创建后立即启用",
+        "每个工作日「18:00」帮我完成「获取美股/全球市场数据」并把结果发给我",
+        "每周一「10:00」帮我完成「个股基本面深度研究」并把结果发给我",
+        "每周五「17:00」帮我完成「行业深度研究」并把结果发给我",
+        "每天「08:00」帮我完成「估值建模分析」并把结果发给我",
+        "每月 1 日「09:30」帮我完成「生成专业投研报告」并把结果发给我"
+      ],
+      "en": [
+        "Every day at 09:00, help me complete “Workflow step 1” and send the result — enable immediately",
+        "Every weekday at 18:00, help me complete “Workflow step 2” and send the result",
+        "Every Monday at 10:00, help me complete “Workflow step 3” and send the result",
+        "Every Friday at 17:00, help me complete “Workflow step 4” and send the result",
+        "Every day at 08:00, help me complete “Workflow step 5” and send the result",
+        "On the 1st of each month at 09:30, help me complete “Workflow step 6” and send the result"
+      ]
+    }
+  },
+  "marketing-event-planning": {
+    "color": "#ca8a04",
+    "icon": "trending-up",
+    "rank": 21,
+    "label": {
+      "zh": "活动策划专家",
+      "en": "Marketing Event Planning Expert"
+    },
+    "taskExamples": {
+      "zh": [
+        "每天「09:00」帮我完成「商业活动整体策划」并把结果发给我，任务创建后立即启用",
+        "每个工作日「18:00」帮我完成「落地执行 SOP 生成」并把结果发给我",
+        "每周一「10:00」帮我完成「运营规划与供应商管理」并把结果发给我",
+        "每周五「17:00」帮我完成「活动全流程管理与效果评估」并把结果发给我",
+        "每天「08:00」帮我完成「营销活动页面与方案生成」并把结果发给我",
+        "每月 1 日「09:30」帮我完成「创意策略与概念开发」并把结果发给我"
+      ],
+      "en": [
+        "Every day at 09:00, help me complete “Workflow step 1” and send the result — enable immediately",
+        "Every weekday at 18:00, help me complete “Workflow step 2” and send the result",
+        "Every Monday at 10:00, help me complete “Workflow step 3” and send the result",
+        "Every Friday at 17:00, help me complete “Workflow step 4” and send the result",
+        "Every day at 08:00, help me complete “Workflow step 5” and send the result",
+        "On the 1st of each month at 09:30, help me complete “Workflow step 6” and send the result"
+      ]
+    }
+  },
+  "marketing-user-growth": {
+    "color": "#ca8a04",
+    "icon": "trending-up",
+    "rank": 22,
+    "label": {
+      "zh": "用户增长专家",
+      "en": "Marketing User Growth Expert"
+    },
+    "taskExamples": {
+      "zh": [
+        "每天「09:00」帮我完成「增长体系设计与北极星指标」并把结果发给我，任务创建后立即启用",
+        "每个工作日「18:00」帮我完成「获客闭环与实验框架」并把结果发给我",
+        "每周一「10:00」帮我完成「转化漏斗分析」并把结果发给我",
+        "每周五「17:00」帮我完成「新用户入职与激活优化」并把结果发给我",
+        "每天「08:00」帮我完成「客户留存与赢回策略」并把结果发给我",
+        "每月 1 日「09:30」帮我完成「流失风险预警」并把结果发给我"
+      ],
+      "en": [
+        "Every day at 09:00, help me complete “Workflow step 1” and send the result — enable immediately",
+        "Every weekday at 18:00, help me complete “Workflow step 2” and send the result",
+        "Every Monday at 10:00, help me complete “Workflow step 3” and send the result",
+        "Every Friday at 17:00, help me complete “Workflow step 4” and send the result",
+        "Every day at 08:00, help me complete “Workflow step 5” and send the result",
+        "On the 1st of each month at 09:30, help me complete “Workflow step 6” and send the result"
+      ]
+    }
+  },
+  "tech-code-refactoring": {
+    "color": "#2563eb",
+    "icon": "cpu",
+    "rank": 23,
+    "label": {
+      "zh": "代码重构专家",
+      "en": "Tech Code Refactoring Expert"
+    },
+    "taskExamples": {
+      "zh": [
+        "每天「09:00」帮我完成「深度代码结构分析」并把结果发给我，任务创建后立即启用",
+        "每个工作日「18:00」帮我完成「技术债务与架构反模式检测」并把结果发给我",
+        "每周一「10:00」帮我完成「整洁代码与 SOLID 原则评审」并把结果发给我",
+        "每周五「17:00」帮我完成「重构模式与技术选型」并把结果发给我",
+        "每天「08:00」帮我完成「系统架构与模块化设计」并把结果发给我",
+        "每月 1 日「09:30」帮我完成「代码简化与重构执行」并把结果发给我"
+      ],
+      "en": [
+        "Every day at 09:00, help me complete “Workflow step 1” and send the result — enable immediately",
+        "Every weekday at 18:00, help me complete “Workflow step 2” and send the result",
+        "Every Monday at 10:00, help me complete “Workflow step 3” and send the result",
+        "Every Friday at 17:00, help me complete “Workflow step 4” and send the result",
+        "Every day at 08:00, help me complete “Workflow step 5” and send the result",
+        "On the 1st of each month at 09:30, help me complete “Workflow step 6” and send the result"
+      ]
+    }
+  },
+  "marketing-competitor-analysis": {
+    "color": "#ca8a04",
+    "icon": "trending-up",
+    "rank": 24,
+    "label": {
+      "zh": "竞品分析专家",
+      "en": "Marketing Competitor Analysis Expert"
+    },
+    "taskExamples": {
+      "zh": [
+        "每天「09:00」帮我完成「市场基础调研」并把结果发给我，任务创建后立即启用",
+        "每个工作日「18:00」帮我完成「企业市场趋势与用户洞察」并把结果发给我",
+        "每周一「10:00」帮我完成「B2B 竞争情报收集」并把结果发给我",
+        "每周五「17:00」帮我完成「SWOT 分析与结构化对比」并把结果发给我",
+        "每天「08:00」帮我完成「竞品分析报告输出」并把结果发给我",
+        "每月 1 日「09:30」帮我完成「竞品持续监控」并把结果发给我"
+      ],
+      "en": [
+        "Every day at 09:00, help me complete “Workflow step 1” and send the result — enable immediately",
+        "Every weekday at 18:00, help me complete “Workflow step 2” and send the result",
+        "Every Monday at 10:00, help me complete “Workflow step 3” and send the result",
+        "Every Friday at 17:00, help me complete “Workflow step 4” and send the result",
+        "Every day at 08:00, help me complete “Workflow step 5” and send the result",
+        "On the 1st of each month at 09:30, help me complete “Workflow step 6” and send the result"
+      ]
+    }
+  },
+  "academic-paper-search": {
+    "color": "#4f46e5",
+    "icon": "book-open",
+    "rank": 25,
+    "label": {
+      "zh": "论文检索专家",
+      "en": "Academic Paper Search Expert"
+    },
+    "taskExamples": {
+      "zh": [
+        "每天「09:00」帮我完成「多数据库学术检索」并把结果发给我，任务创建后立即启用",
+        "每个工作日「18:00」帮我完成「跨平台系统性文献检索」并把结果发给我",
+        "每周一「10:00」帮我完成「文献批量下载与索引」并把结果发给我",
+        "每周五「17:00」帮我完成「科研文献智能监测」并把结果发给我",
+        "每天「08:00」帮我完成「知网高级检索」并把结果发给我",
+        "每月 1 日「09:30」帮我完成「引用管理与规范化」并把结果发给我"
+      ],
+      "en": [
+        "Every day at 09:00, help me complete “Workflow step 1” and send the result — enable immediately",
+        "Every weekday at 18:00, help me complete “Workflow step 2” and send the result",
+        "Every Monday at 10:00, help me complete “Workflow step 3” and send the result",
+        "Every Friday at 17:00, help me complete “Workflow step 4” and send the result",
+        "Every day at 08:00, help me complete “Workflow step 5” and send the result",
+        "On the 1st of each month at 09:30, help me complete “Workflow step 6” and send the result"
+      ]
+    }
+  },
+  "design-ui-prototype": {
+    "color": "#db2777",
+    "icon": "palette",
+    "rank": 26,
+    "label": {
+      "zh": "UI 原型设计专家",
+      "en": "Design Ui Prototype Expert"
+    },
+    "taskExamples": {
+      "zh": [
+        "每天「09:00」帮我完成「需求分析与 PRD 输出」并把结果发给我，任务创建后立即启用",
+        "每个工作日「18:00」帮我完成「设计稿解析与像素还原」并把结果发给我",
+        "每周一「10:00」帮我完成「设计系统与规范制定」并把结果发给我",
+        "每周五「17:00」帮我完成「UI 设计质量审查」并把结果发给我",
+        "每天「08:00」帮我完成「低保真线框图绘制」并把结果发给我",
+        "每月 1 日「09:30」帮我完成「高保真原型生成」并把结果发给我"
+      ],
+      "en": [
+        "Every day at 09:00, help me complete “Workflow step 1” and send the result — enable immediately",
+        "Every weekday at 18:00, help me complete “Workflow step 2” and send the result",
+        "Every Monday at 10:00, help me complete “Workflow step 3” and send the result",
+        "Every Friday at 17:00, help me complete “Workflow step 4” and send the result",
+        "Every day at 08:00, help me complete “Workflow step 5” and send the result",
+        "On the 1st of each month at 09:30, help me complete “Workflow step 6” and send the result"
+      ]
+    }
+  },
+  "ecommerce-product-copywriting": {
+    "color": "#16a34a",
+    "icon": "globe",
+    "rank": 27,
+    "label": {
+      "zh": "商品文案专家",
+      "en": "Ecommerce Product Copywriting Expert"
+    },
+    "taskExamples": {
+      "zh": [
+        "每天「09:00」帮我完成「淘宝商品文案生成」并把结果发给我，任务创建后立即启用",
+        "每个工作日「18:00」帮我完成「全平台上架文案生成」并把结果发给我",
+        "每周一「10:00」帮我完成「电商爆款文案优化」并把结果发给我",
+        "每周五「17:00」帮我完成「跨境电商多语种文案」并把结果发给我",
+        "每天「08:00」帮我完成「SEO 优化产品描述」并把结果发给我",
+        "每月 1 日「09:30」帮我完成「中文文案去 AI 味优化」并把结果发给我"
+      ],
+      "en": [
+        "Every day at 09:00, help me complete “Workflow step 1” and send the result — enable immediately",
+        "Every weekday at 18:00, help me complete “Workflow step 2” and send the result",
+        "Every Monday at 10:00, help me complete “Workflow step 3” and send the result",
+        "Every Friday at 17:00, help me complete “Workflow step 4” and send the result",
+        "Every day at 08:00, help me complete “Workflow step 5” and send the result",
+        "On the 1st of each month at 09:30, help me complete “Workflow step 6” and send the result"
+      ]
+    }
+  },
+  "ecommerce-promotion-planning": {
+    "color": "#16a34a",
+    "icon": "globe",
+    "rank": 28,
+    "label": {
+      "zh": "促销策划专家",
+      "en": "Ecommerce Promotion Planning Expert"
+    },
+    "taskExamples": {
+      "zh": [
+        "每天「09:00」帮我完成「跨平台促销日历定档」并把结果发给我，任务创建后立即启用",
+        "每个工作日「18:00」帮我完成「折扣机制方法论设计」并把结果发给我",
+        "每周一「10:00」帮我完成「多平台机制注册与配置」并把结果发给我",
+        "每周五「17:00」帮我完成「节日 FOMO 创意素材」并把结果发给我",
+        "每天「08:00」帮我完成「销量预测与备货预警」并把结果发给我",
+        "每月 1 日「09:30」帮我完成「广告预算再分配」并把结果发给我"
+      ],
+      "en": [
+        "Every day at 09:00, help me complete “Workflow step 1” and send the result — enable immediately",
+        "Every weekday at 18:00, help me complete “Workflow step 2” and send the result",
+        "Every Monday at 10:00, help me complete “Workflow step 3” and send the result",
+        "Every Friday at 17:00, help me complete “Workflow step 4” and send the result",
+        "Every day at 08:00, help me complete “Workflow step 5” and send the result",
+        "On the 1st of each month at 09:30, help me complete “Workflow step 6” and send the result"
+      ]
+    }
+  },
+  "education-quiz-generation": {
+    "color": "#2563eb",
+    "icon": "book-open",
+    "rank": 29,
+    "label": {
+      "zh": "题库生成专家",
+      "en": "Education Quiz Generation Expert"
+    },
+    "taskExamples": {
+      "zh": [
+        "每天「09:00」帮我完成「多题型批量生成」并把结果发给我，任务创建后立即启用",
+        "每个工作日「18:00」帮我完成「学科试卷组卷」并把结果发给我",
+        "每周一「10:00」帮我完成「教材同步智能出题」并把结果发给我",
+        "每周五「17:00」帮我完成「考点结构化与题型匹配」并把结果发给我",
+        "每天「08:00」帮我完成「举一反三练习生成」并把结果发给我",
+        "每月 1 日「09:30」帮我完成「综合测试与评估生成」并把结果发给我"
+      ],
+      "en": [
+        "Every day at 09:00, help me complete “Workflow step 1” and send the result — enable immediately",
+        "Every weekday at 18:00, help me complete “Workflow step 2” and send the result",
+        "Every Monday at 10:00, help me complete “Workflow step 3” and send the result",
+        "Every Friday at 17:00, help me complete “Workflow step 4” and send the result",
+        "Every day at 08:00, help me complete “Workflow step 5” and send the result",
+        "On the 1st of each month at 09:30, help me complete “Workflow step 6” and send the result"
+      ]
+    }
+  },
+  "marketing-social-media-operation": {
+    "color": "#ca8a04",
+    "icon": "trending-up",
+    "rank": 30,
+    "label": {
+      "zh": "社媒运营专家",
+      "en": "Marketing Social Media Operation Expert"
+    },
+    "taskExamples": {
+      "zh": [
+        "每天「09:00」帮我完成「热门内容抓取与趋势分析」并把结果发给我，任务创建后立即启用",
+        "每个工作日「18:00」帮我完成「运营策略与涨粉规划」并把结果发给我",
+        "每周一「10:00」帮我完成「多平台自媒体文案生成」并把结果发给我",
+        "每周五「17:00」帮我完成「内容优化与互动率提升」并把结果发给我",
+        "每天「08:00」帮我完成「微信公众号爆文创作」并把结果发给我",
+        "每月 1 日「09:30」帮我完成「全链路运营闭环」并把结果发给我"
+      ],
+      "en": [
+        "Every day at 09:00, help me complete “Workflow step 1” and send the result — enable immediately",
+        "Every weekday at 18:00, help me complete “Workflow step 2” and send the result",
+        "Every Monday at 10:00, help me complete “Workflow step 3” and send the result",
+        "Every Friday at 17:00, help me complete “Workflow step 4” and send the result",
+        "Every day at 08:00, help me complete “Workflow step 5” and send the result",
+        "On the 1st of each month at 09:30, help me complete “Workflow step 6” and send the result"
+      ]
+    }
+  },
+  "media-short-video-copy": {
+    "color": "#db2777",
+    "icon": "video",
+    "rank": 31,
+    "label": {
+      "zh": "短视频文案专家",
+      "en": "Media Short Video Copy Expert"
+    },
+    "taskExamples": {
+      "zh": [
+        "每天「09:00」帮我完成「竞品文案提取与分析」并把结果发给我，任务创建后立即启用",
+        "每个工作日「18:00」帮我完成「多平台视频脚本创作」并把结果发给我",
+        "每周一「10:00」帮我完成「爆款脚本与文案生成」并把结果发给我",
+        "每周五「17:00」帮我完成「黄金3秒口播脚本」并把结果发给我",
+        "每天「08:00」帮我完成「短视频脚本一站式生成」并把结果发给我",
+        "每月 1 日「09:30」帮我完成「爆款标题生成与优化」并把结果发给我"
+      ],
+      "en": [
+        "Every day at 09:00, help me complete “Workflow step 1” and send the result — enable immediately",
+        "Every weekday at 18:00, help me complete “Workflow step 2” and send the result",
+        "Every Monday at 10:00, help me complete “Workflow step 3” and send the result",
+        "Every Friday at 17:00, help me complete “Workflow step 4” and send the result",
+        "Every day at 08:00, help me complete “Workflow step 5” and send the result",
+        "On the 1st of each month at 09:30, help me complete “Workflow step 6” and send the result"
+      ]
+    }
+  },
+  "content-creation-novel-writing": {
+    "color": "#c026d3",
+    "icon": "pen-tool",
+    "rank": 32,
+    "label": {
+      "zh": "网文/小说创作专家",
+      "en": "Content Creation Novel Writing Expert"
+    },
+    "taskExamples": {
+      "zh": [
+        "每天「09:00」帮我完成「题材选定与连贯爽文骨架」并把结果发给我，任务创建后立即启用",
+        "每个工作日「18:00」帮我完成「长篇分章与去 AI 痕迹深度润色」并把结果发给我",
+        "每周一「10:00」帮我完成「番茄平台垂直特化改写」并把结果发给我",
+        "每周五「17:00」帮我完成「严谨结构化引擎与伏笔/时间线管理」并把结果发给我",
+        "每天「08:00」帮我完成「番茄爆款方法论与多平台变现」并把结果发给我",
+        "每月 1 日「09:30」帮我完成「风格续写已有作品（处理层 /…」并把结果发给我"
+      ],
+      "en": [
+        "Every day at 09:00, help me complete “Workflow step 1” and send the result — enable immediately",
+        "Every weekday at 18:00, help me complete “Workflow step 2” and send the result",
+        "Every Monday at 10:00, help me complete “Workflow step 3” and send the result",
+        "Every Friday at 17:00, help me complete “Workflow step 4” and send the result",
+        "Every day at 08:00, help me complete “Workflow step 5” and send the result",
+        "On the 1st of each month at 09:30, help me complete “Workflow step 6” and send the result"
+      ]
+    }
+  },
+  "academic-gaokao-expert": {
+    "color": "#4f46e5",
+    "icon": "book-open",
+    "rank": 33,
+    "label": {
+      "zh": "高考专家",
+      "en": "Academic Gaokao Expert"
+    },
+    "taskExamples": {
+      "zh": [
+        "每天「09:00」帮我完成「建立腾讯文档志愿工作台」并把结果发给我，任务创建后立即启用",
+        "每个工作日「18:00」帮我完成「查询地区分数线与批次基准」并把结果发给我",
+        "每周一「10:00」帮我完成「查询一分一段与位次区间」并把结果发给我",
+        "每周五「17:00」帮我完成「生成选校选专业方案」并把结果发给我",
+        "每天「08:00」帮我完成「做专业背后的行研与企业调研」并把结果发给我",
+        "每月 1 日「09:30」帮我完成「衔接简历与面试准备」并把结果发给我"
+      ],
+      "en": [
+        "Every day at 09:00, help me complete “Workflow step 1” and send the result — enable immediately",
+        "Every weekday at 18:00, help me complete “Workflow step 2” and send the result",
+        "Every Monday at 10:00, help me complete “Workflow step 3” and send the result",
+        "Every Friday at 17:00, help me complete “Workflow step 4” and send the result",
+        "Every day at 08:00, help me complete “Workflow step 5” and send the result",
+        "On the 1st of each month at 09:30, help me complete “Workflow step 6” and send the result"
+      ]
+    }
+  },
+  "mysticism-bazi-analysis": {
+    "color": "#7c3aed",
+    "icon": "sparkles",
+    "rank": 34,
+    "label": {
+      "zh": "八字命理专家",
+      "en": "Mysticism Bazi Analysis Expert"
+    },
+    "taskExamples": {
+      "zh": [
+        "每天「09:00」帮我完成「高精度排盘」并把结果发给我，任务创建后立即启用",
+        "每个工作日「18:00」帮我完成「主驱动通排（通用解读）」并把结果发给我",
+        "每周一「10:00」帮我完成「子平真诠体系深读」并把结果发给我",
+        "每周五「17:00」帮我完成「多维度命理咨询」并把结果发给我",
+        "每天「08:00」帮我完成「跨术对照交叉验证」并把结果发给我",
+        "每月 1 日「09:30」帮我完成「八字起名」并把结果发给我"
+      ],
+      "en": [
+        "Every day at 09:00, help me complete “Workflow step 1” and send the result — enable immediately",
+        "Every weekday at 18:00, help me complete “Workflow step 2” and send the result",
+        "Every Monday at 10:00, help me complete “Workflow step 3” and send the result",
+        "Every Friday at 17:00, help me complete “Workflow step 4” and send the result",
+        "Every day at 08:00, help me complete “Workflow step 5” and send the result",
+        "On the 1st of each month at 09:30, help me complete “Workflow step 6” and send the result"
+      ]
+    }
+  },
+  "ecommerce-product-selection": {
+    "color": "#16a34a",
+    "icon": "globe",
+    "rank": 35,
+    "label": {
+      "zh": "选品分析专家",
+      "en": "Ecommerce Product Selection Expert"
+    },
+    "taskExamples": {
+      "zh": [
+        "每天「09:00」帮我完成「多平台爆款产品筛选」并把结果发给我，任务创建后立即启用",
+        "每个工作日「18:00」帮我完成「淘宝产品数据采集」并把结果发给我",
+        "每周一「10:00」帮我完成「亚马逊市场验证与竞品分析」并把结果发给我",
+        "每周五「17:00」帮我完成「跨境电商榜单与利润分析」并把结果发给我",
+        "每天「08:00」帮我完成「海外平台选品与货源搜索」并把结果发给我",
+        "每月 1 日「09:30」帮我完成「1688 货源筛选与商机趋势」并把结果发给我"
+      ],
+      "en": [
+        "Every day at 09:00, help me complete “Workflow step 1” and send the result — enable immediately",
+        "Every weekday at 18:00, help me complete “Workflow step 2” and send the result",
+        "Every Monday at 10:00, help me complete “Workflow step 3” and send the result",
+        "Every Friday at 17:00, help me complete “Workflow step 4” and send the result",
+        "Every day at 08:00, help me complete “Workflow step 5” and send the result",
+        "On the 1st of each month at 09:30, help me complete “Workflow step 6” and send the result"
+      ]
+    }
+  },
+  "finance-risk-assessment": {
+    "color": "#059669",
+    "icon": "candlestick-chart",
+    "rank": 36,
+    "label": {
+      "zh": "风控评估专家",
+      "en": "Finance Risk Assessment Expert"
+    },
+    "taskExamples": {
+      "zh": [
+        "每天「09:00」帮我完成「数据准备（获取层 — AI 原…」并把结果发给我，任务创建后立即启用",
+        "每个工作日「18:00」帮我完成「信用风控建模」并把结果发给我",
+        "每周一「10:00」帮我完成「量化风险分析」并把结果发给我",
+        "每周五「17:00」帮我完成「A股风险与欺诈预警」并把结果发给我",
+        "每天「08:00」帮我完成「合规风险审查」并把结果发给我",
+        "每月 1 日「09:30」帮我完成「仓位与持仓风控」并把结果发给我"
+      ],
+      "en": [
+        "Every day at 09:00, help me complete “Workflow step 1” and send the result — enable immediately",
+        "Every weekday at 18:00, help me complete “Workflow step 2” and send the result",
+        "Every Monday at 10:00, help me complete “Workflow step 3” and send the result",
+        "Every Friday at 17:00, help me complete “Workflow step 4” and send the result",
+        "Every day at 08:00, help me complete “Workflow step 5” and send the result",
+        "On the 1st of each month at 09:30, help me complete “Workflow step 6” and send the result"
+      ]
+    }
+  },
+  "legal-contract-generation": {
+    "color": "#0f766e",
+    "icon": "file-text",
+    "rank": 37,
+    "label": {
+      "zh": "合同生成专家",
+      "en": "Legal Contract Generation Expert"
+    },
+    "taskExamples": {
+      "zh": [
+        "每天「09:00」帮我完成「需求确认与法律咨询」并把结果发给我，任务创建后立即启用",
+        "每个工作日「18:00」帮我完成「模板获取与条款参考」并把结果发给我",
+        "每周一「10:00」帮我完成「合同起草」并把结果发给我",
+        "每周五「17:00」帮我完成「合规性审查」并把结果发给我",
+        "每天「08:00」帮我完成「风险识别与条款优化」并把结果发给我",
+        "每月 1 日「09:30」帮我完成「附属文书生成」并把结果发给我"
+      ],
+      "en": [
+        "Every day at 09:00, help me complete “Workflow step 1” and send the result — enable immediately",
+        "Every weekday at 18:00, help me complete “Workflow step 2” and send the result",
+        "Every Monday at 10:00, help me complete “Workflow step 3” and send the result",
+        "Every Friday at 17:00, help me complete “Workflow step 4” and send the result",
+        "Every day at 08:00, help me complete “Workflow step 5” and send the result",
+        "On the 1st of each month at 09:30, help me complete “Workflow step 6” and send the result"
+      ]
+    }
+  },
+  "lifestyle-health-data-analysis": {
+    "color": "#f97316",
+    "icon": "heart",
+    "rank": 38,
+    "label": {
+      "zh": "健康数据分析专家",
+      "en": "Lifestyle Health Data Analysis Expert"
+    },
+    "taskExamples": {
+      "zh": [
+        "每天「09:00」帮我完成「Garmin 数据接入」并把结果发给我，任务创建后立即启用",
+        "每个工作日「18:00」帮我完成「Apple Health 全量…」并把结果发给我",
+        "每周一「10:00」帮我完成「三星健康/安卓阵营数据接入」并把结果发给我",
+        "每周五「17:00」帮我完成「多设备聚合（输入层 / 数据控…」并把结果发给我",
+        "每天「08:00」帮我完成「长期趋势 + 慢病 + 中医养…」并把结果发给我",
+        "每月 1 日「09:30」帮我完成「指标解读教育」并把结果发给我"
+      ],
+      "en": [
+        "Every day at 09:00, help me complete “Workflow step 1” and send the result — enable immediately",
+        "Every weekday at 18:00, help me complete “Workflow step 2” and send the result",
+        "Every Monday at 10:00, help me complete “Workflow step 3” and send the result",
+        "Every Friday at 17:00, help me complete “Workflow step 4” and send the result",
+        "Every day at 08:00, help me complete “Workflow step 5” and send the result",
+        "On the 1st of each month at 09:30, help me complete “Workflow step 6” and send the result"
+      ]
+    }
+  },
+  "lifestyle-fitness-training": {
+    "color": "#f97316",
+    "icon": "heart",
+    "rank": 39,
+    "label": {
+      "zh": "健身训练计划专家",
+      "en": "Lifestyle Fitness Training Expert"
+    },
+    "taskExamples": {
+      "zh": [
+        "每天「09:00」帮我完成「信息收集与训练目标确认」并把结果发给我，任务创建后立即启用",
+        "每个工作日「18:00」帮我完成「耐力专项计划（处理层 / 跑步…」并把结果发给我",
+        "每周一「10:00」帮我完成「力量/居家专项（处理层 / 器…」并把结果发给我",
+        "每周五「17:00」帮我完成「周期化与体态纠偏（处理层 /…」并把结果发给我",
+        "每天「08:00」帮我完成「动作纠正与执行指导」并把结果发给我",
+        "每月 1 日「09:30」帮我完成「训练打卡与历史追踪」并把结果发给我"
+      ],
+      "en": [
+        "Every day at 09:00, help me complete “Workflow step 1” and send the result — enable immediately",
+        "Every weekday at 18:00, help me complete “Workflow step 2” and send the result",
+        "Every Monday at 10:00, help me complete “Workflow step 3” and send the result",
+        "Every Friday at 17:00, help me complete “Workflow step 4” and send the result",
+        "Every day at 08:00, help me complete “Workflow step 5” and send the result",
+        "On the 1st of each month at 09:30, help me complete “Workflow step 6” and send the result"
+      ]
+    }
+  },
+  "lifestyle-nutrition-meal-plan": {
+    "color": "#f97316",
+    "icon": "heart",
+    "rank": 40,
+    "label": {
+      "zh": "营养餐规划专家",
+      "en": "Lifestyle Nutrition Meal Plan Expert"
+    },
+    "taskExamples": {
+      "zh": [
+        "每天「09:00」帮我完成「科学营养目标制定」并把结果发给我，任务创建后立即启用",
+        "每个工作日「18:00」帮我完成「周膳食全流程规划」并把结果发给我",
+        "每周一「10:00」帮我完成「中式饮食三餐推送（处理层 /…」并把结果发给我",
+        "每周五「17:00」帮我完成「食谱设计与厨师对话优化」并把结果发给我",
+        "每天「08:00」帮我完成「中式菜谱库匹配（处理层 / 中…」并把结果发给我",
+        "每月 1 日「09:30」帮我完成「每日卡路里日志与执行追踪」并把结果发给我"
+      ],
+      "en": [
+        "Every day at 09:00, help me complete “Workflow step 1” and send the result — enable immediately",
+        "Every weekday at 18:00, help me complete “Workflow step 2” and send the result",
+        "Every Monday at 10:00, help me complete “Workflow step 3” and send the result",
+        "Every Friday at 17:00, help me complete “Workflow step 4” and send the result",
+        "Every day at 08:00, help me complete “Workflow step 5” and send the result",
+        "On the 1st of each month at 09:30, help me complete “Workflow step 6” and send the result"
+      ]
+    }
+  },
+  "mysticism-lunar-almanac": {
+    "color": "#7c3aed",
+    "icon": "sparkles",
+    "rank": 41,
+    "label": {
+      "zh": "黄历择吉专家",
+      "en": "Mysticism Lunar Almanac Expert"
+    },
+    "taskExamples": {
+      "zh": [
+        "每天「09:00」帮我完成「公农历转换与黄历主驱动」并把结果发给我，任务创建后立即启用",
+        "每个工作日「18:00」帮我完成「黄道吉日与传统节日补全」并把结果发给我",
+        "每周一「10:00」帮我完成「工程化择日复算」并把结果发给我",
+        "每周五「17:00」帮我完成「彭祖百忌与神煞方位深读」并把结果发给我",
+        "每天「08:00」帮我完成「节日民俗与跨文化对照」并把结果发给我",
+        "每月 1 日「09:30」帮我完成「佛道多历对照（按需）」并把结果发给我"
+      ],
+      "en": [
+        "Every day at 09:00, help me complete “Workflow step 1” and send the result — enable immediately",
+        "Every weekday at 18:00, help me complete “Workflow step 2” and send the result",
+        "Every Monday at 10:00, help me complete “Workflow step 3” and send the result",
+        "Every Friday at 17:00, help me complete “Workflow step 4” and send the result",
+        "Every day at 08:00, help me complete “Workflow step 5” and send the result",
+        "On the 1st of each month at 09:30, help me complete “Workflow step 6” and send the result"
+      ]
+    }
+  },
+  "mysticism-yijing-divination": {
+    "color": "#7c3aed",
+    "icon": "sparkles",
+    "rank": 42,
+    "label": {
+      "zh": "易经起卦专家",
+      "en": "Mysticism Yijing Divination Expert"
+    },
+    "taskExamples": {
+      "zh": [
+        "每天「09:00」帮我完成「易经主驱动起卦」并把结果发给我，任务创建后立即启用",
+        "每个工作日「18:00」帮我完成「京房纳甲六爻深断（文王卦）」并把结果发给我",
+        "每周一「10:00」帮我完成「梅花易数体用解读」并把结果发给我",
+        "每周五「17:00」帮我完成「小六壬日常吉凶速断」并把结果发给我",
+        "每天「08:00」帮我完成「卦象哲学决策辅助」并把结果发给我",
+        "每月 1 日「09:30」帮我完成「多起卦法 + 三层义理融会」并把结果发给我"
+      ],
+      "en": [
+        "Every day at 09:00, help me complete “Workflow step 1” and send the result — enable immediately",
+        "Every weekday at 18:00, help me complete “Workflow step 2” and send the result",
+        "Every Monday at 10:00, help me complete “Workflow step 3” and send the result",
+        "Every Friday at 17:00, help me complete “Workflow step 4” and send the result",
+        "Every day at 08:00, help me complete “Workflow step 5” and send the result",
+        "On the 1st of each month at 09:30, help me complete “Workflow step 6” and send the result"
+      ]
+    }
+  },
+  "mysticism-ziwei-doushu": {
+    "color": "#7c3aed",
+    "icon": "sparkles",
+    "rank": 43,
+    "label": {
+      "zh": "紫微斗数专家",
+      "en": "Mysticism Ziwei Doushu Expert"
+    },
+    "taskExamples": {
+      "zh": [
+        "每天「09:00」帮我完成「标准化排盘」并把结果发给我，任务创建后立即启用",
+        "每个工作日「18:00」帮我完成「紫微主驱动通排」并把结果发给我",
+        "每周一「10:00」帮我完成「精美咨询报告导出」并把结果发给我",
+        "每周五「17:00」帮我完成「北派飞星派专项」并把结果发给我",
+        "每天「08:00」帮我完成「紫微八字融合校验」并把结果发给我",
+        "每月 1 日「09:30」帮我完成「双人合盘配对（输出层，按需）」并把结果发给我"
+      ],
+      "en": [
+        "Every day at 09:00, help me complete “Workflow step 1” and send the result — enable immediately",
+        "Every weekday at 18:00, help me complete “Workflow step 2” and send the result",
+        "Every Monday at 10:00, help me complete “Workflow step 3” and send the result",
+        "Every Friday at 17:00, help me complete “Workflow step 4” and send the result",
+        "Every day at 08:00, help me complete “Workflow step 5” and send the result",
+        "On the 1st of each month at 09:30, help me complete “Workflow step 6” and send the result"
+      ]
+    }
+  },
+  "academic-literature-review": {
+    "color": "#4f46e5",
+    "icon": "book-open",
+    "rank": 44,
+    "label": {
+      "zh": "文献综述专家",
+      "en": "Academic Literature Review Expert"
+    },
+    "taskExamples": {
+      "zh": [
+        "每天「09:00」帮我完成「双轮深度调研」并把结果发给我，任务创建后立即启用",
+        "每个工作日「18:00」帮我完成「文献综述与论文分析」并把结果发给我",
+        "每周一「10:00」帮我完成「论文结构化深度拆解」并把结果发给我",
+        "每周五「17:00」帮我完成「系统性中英文文献回顾」并把结果发给我",
+        "每天「08:00」帮我完成「综述框架与大纲生成」并把结果发给我",
+        "每月 1 日「09:30」帮我完成「学术综述正文撰写」并把结果发给我"
+      ],
+      "en": [
+        "Every day at 09:00, help me complete “Workflow step 1” and send the result — enable immediately",
+        "Every weekday at 18:00, help me complete “Workflow step 2” and send the result",
+        "Every Monday at 10:00, help me complete “Workflow step 3” and send the result",
+        "Every Friday at 17:00, help me complete “Workflow step 4” and send the result",
+        "Every day at 08:00, help me complete “Workflow step 5” and send the result",
+        "On the 1st of each month at 09:30, help me complete “Workflow step 6” and send the result"
+      ]
+    }
+  },
+  "content-creation-lyrics-songwriting": {
+    "color": "#c026d3",
+    "icon": "pen-tool",
+    "rank": 45,
+    "label": {
+      "zh": "歌词创作专家",
+      "en": "Content Creation Lyrics Songwriting Expert"
+    },
+    "taskExamples": {
+      "zh": [
+        "每天「09:00」帮我完成「作词专业方法论与歌曲规划」并把结果发给我，任务创建后立即启用",
+        "每个工作日「18:00」帮我完成「情感弧线作词」并把结果发给我",
+        "每周一「10:00」帮我完成「参考歌曲风格仿写」并把结果发给我",
+        "每周五「17:00」帮我完成「Suno 元标签深度调优」并把结果发给我",
+        "每天「08:00」帮我完成「Suno 浏览器自动化生成歌曲」并把结果发给我",
+        "每月 1 日「09:30」帮我完成「完整 MV 视听输出」并把结果发给我"
+      ],
+      "en": [
+        "Every day at 09:00, help me complete “Workflow step 1” and send the result — enable immediately",
+        "Every weekday at 18:00, help me complete “Workflow step 2” and send the result",
+        "Every Monday at 10:00, help me complete “Workflow step 3” and send the result",
+        "Every Friday at 17:00, help me complete “Workflow step 4” and send the result",
+        "Every day at 08:00, help me complete “Workflow step 5” and send the result",
+        "On the 1st of each month at 09:30, help me complete “Workflow step 6” and send the result"
+      ]
+    }
+  },
+  "content-creation-screenwriting": {
+    "color": "#c026d3",
+    "icon": "pen-tool",
+    "rank": 46,
+    "label": {
+      "zh": "剧本创作专家",
+      "en": "Content Creation Screenwriting Expert"
+    },
+    "taskExamples": {
+      "zh": [
+        "每天「09:00」帮我完成「项目立项与剧本类型确认」并把结果发给我，任务创建后立即启用",
+        "每个工作日「18:00」帮我完成「短剧专业流水线（处理层 / 短…」并把结果发给我",
+        "每周一「10:00」帮我完成「电影/长剧经典编剧方法论（处理…」并把结果发给我",
+        "每周五「17:00」帮我完成「广播剧/有声剧脚本声场化（处理…」并把结果发给我",
+        "每天「08:00」帮我完成「多代理工程化流水线（处理层 /…」并把结果发给我",
+        "每月 1 日「09:30」帮我完成「3 轮 AI 审查与去 AI 味」并把结果发给我"
+      ],
+      "en": [
+        "Every day at 09:00, help me complete “Workflow step 1” and send the result — enable immediately",
+        "Every weekday at 18:00, help me complete “Workflow step 2” and send the result",
+        "Every Monday at 10:00, help me complete “Workflow step 3” and send the result",
+        "Every Friday at 17:00, help me complete “Workflow step 4” and send the result",
+        "Every day at 08:00, help me complete “Workflow step 5” and send the result",
+        "On the 1st of each month at 09:30, help me complete “Workflow step 6” and send the result"
+      ]
+    }
+  },
+  "design-prd-writing": {
+    "color": "#db2777",
+    "icon": "palette",
+    "rank": 47,
+    "label": {
+      "zh": "PRD 撰写专家",
+      "en": "Design Prd Writing Expert"
+    },
+    "taskExamples": {
+      "zh": [
+        "每天「09:00」帮我完成「需求探索与结构化」并把结果发给我，任务创建后立即启用",
+        "每个工作日「18:00」帮我完成「优先级排序与框架选型」并把结果发给我",
+        "每周一「10:00」帮我完成「PRD 结构化创建」并把结果发给我",
+        "每周五「17:00」帮我完成「PRD 专业撰写与润色」并把结果发给我",
+        "每天「08:00」帮我完成「PRD 转设计需求文档」并把结果发给我",
+        "每月 1 日「09:30」帮我完成「PRD 量化评审」并把结果发给我"
+      ],
+      "en": [
+        "Every day at 09:00, help me complete “Workflow step 1” and send the result — enable immediately",
+        "Every weekday at 18:00, help me complete “Workflow step 2” and send the result",
+        "Every Monday at 10:00, help me complete “Workflow step 3” and send the result",
+        "Every Friday at 17:00, help me complete “Workflow step 4” and send the result",
+        "Every day at 08:00, help me complete “Workflow step 5” and send the result",
+        "On the 1st of each month at 09:30, help me complete “Workflow step 6” and send the result"
+      ]
+    }
+  },
+  "ecommerce-user-profiling": {
+    "color": "#16a34a",
+    "icon": "globe",
+    "rank": 48,
+    "label": {
+      "zh": "用户画像专家",
+      "en": "Ecommerce User Profiling Expert"
+    },
+    "taskExamples": {
+      "zh": [
+        "每天「09:00」帮我完成「行为数据接入与口径核对」并把结果发给我，任务创建后立即启用",
+        "每个工作日「18:00」帮我完成「通用客户分层与精准营销分群（分…」并把结果发给我",
+        "每周一「10:00」帮我完成「RFM 专项细分 + 重点人群…」并把结果发给我",
+        "每周五「17:00」帮我完成「电商 LTV / 复购 / 会…」并把结果发给我",
+        "每天「08:00」帮我完成「把画像激活为广告投放人群（输出…」并把结果发给我",
+        "每月 1 日「09:30」帮我完成「把画像激活为客户留存与召回（输…」并把结果发给我"
+      ],
+      "en": [
+        "Every day at 09:00, help me complete “Workflow step 1” and send the result — enable immediately",
+        "Every weekday at 18:00, help me complete “Workflow step 2” and send the result",
+        "Every Monday at 10:00, help me complete “Workflow step 3” and send the result",
+        "Every Friday at 17:00, help me complete “Workflow step 4” and send the result",
+        "Every day at 08:00, help me complete “Workflow step 5” and send the result",
+        "On the 1st of each month at 09:30, help me complete “Workflow step 6” and send the result"
+      ]
+    }
+  },
+  "education-lesson-planning": {
+    "color": "#2563eb",
+    "icon": "book-open",
+    "rank": 49,
+    "label": {
+      "zh": "教案设计专家",
+      "en": "Education Lesson Planning Expert"
+    },
+    "taskExamples": {
+      "zh": [
+        "每天「09:00」帮我完成「专业教案撰写」并把结果发给我，任务创建后立即启用",
+        "每个工作日「18:00」帮我完成「教学工具与评估设计」并把结果发给我",
+        "每周一「10:00」帮我完成「分层教学与互动题设计」并把结果发给我",
+        "每周五「17:00」帮我完成「课程模块与单元规划」并把结果发给我",
+        "每天「08:00」帮我完成「备课资料自动整理」并把结果发给我",
+        "每月 1 日「09:30」帮我完成「教案PPT转化」并把结果发给我"
+      ],
+      "en": [
+        "Every day at 09:00, help me complete “Workflow step 1” and send the result — enable immediately",
+        "Every weekday at 18:00, help me complete “Workflow step 2” and send the result",
+        "Every Monday at 10:00, help me complete “Workflow step 3” and send the result",
+        "Every Friday at 17:00, help me complete “Workflow step 4” and send the result",
+        "Every day at 08:00, help me complete “Workflow step 5” and send the result",
+        "On the 1st of each month at 09:30, help me complete “Workflow step 6” and send the result"
+      ]
+    }
+  },
+  "education-student-assessment": {
+    "color": "#2563eb",
+    "icon": "book-open",
+    "rank": 50,
+    "label": {
+      "zh": "学生评估专家",
+      "en": "Education Student Assessment Expert"
+    },
+    "taskExamples": {
+      "zh": [
+        "每天「09:00」帮我完成「评估方案与Rubric设计」并把结果发给我，任务创建后立即启用",
+        "每个工作日「18:00」帮我完成「评分差距分析与提分计划」并把结果发给我",
+        "每周一「10:00」帮我完成「错题归类与薄弱环节诊断」并把结果发给我",
+        "每周五「17:00」帮我完成「全学段作业批改与反馈」并把结果发给我",
+        "每天「08:00」帮我完成「学员成长档案管理」并把结果发给我",
+        "每月 1 日「09:30」帮我完成「成绩单评语生成」并把结果发给我"
+      ],
+      "en": [
+        "Every day at 09:00, help me complete “Workflow step 1” and send the result — enable immediately",
+        "Every weekday at 18:00, help me complete “Workflow step 2” and send the result",
+        "Every Monday at 10:00, help me complete “Workflow step 3” and send the result",
+        "Every Friday at 17:00, help me complete “Workflow step 4” and send the result",
+        "Every day at 08:00, help me complete “Workflow step 5” and send the result",
+        "On the 1st of each month at 09:30, help me complete “Workflow step 6” and send the result"
+      ]
+    }
+  },
+  "education-training-program": {
+    "color": "#2563eb",
+    "icon": "book-open",
+    "rank": 51,
+    "label": {
+      "zh": "培训方案专家",
+      "en": "Education Training Program Expert"
+    },
+    "taskExamples": {
+      "zh": [
+        "每天「09:00」帮我完成「培训计划整体设计」并把结果发给我，任务创建后立即启用",
+        "每个工作日「18:00」帮我完成「结构化员工培训计划」并把结果发给我",
+        "每周一「10:00」帮我完成「专业培训课件开发」并把结果发给我",
+        "每周五「17:00」帮我完成「培训课程大纲与教学设计」并把结果发给我",
+        "每天「08:00」帮我完成「工作坊议程与日程规划」并把结果发给我",
+        "每月 1 日「09:30」帮我完成「培训记录转化学习材料」并把结果发给我"
+      ],
+      "en": [
+        "Every day at 09:00, help me complete “Workflow step 1” and send the result — enable immediately",
+        "Every weekday at 18:00, help me complete “Workflow step 2” and send the result",
+        "Every Monday at 10:00, help me complete “Workflow step 3” and send the result",
+        "Every Friday at 17:00, help me complete “Workflow step 4” and send the result",
+        "Every day at 08:00, help me complete “Workflow step 5” and send the result",
+        "On the 1st of each month at 09:30, help me complete “Workflow step 6” and send the result"
+      ]
+    }
+  },
+  "marketing-ad-copywriting": {
+    "color": "#ca8a04",
+    "icon": "trending-up",
+    "rank": 52,
+    "label": {
+      "zh": "广告文案专家",
+      "en": "Marketing Ad Copywriting Expert"
+    },
+    "taskExamples": {
+      "zh": [
+        "每天「09:00」帮我完成「营销策略与受众分析」并把结果发给我，任务创建后立即启用",
+        "每个工作日「18:00」帮我完成「文案框架与说服力构建」并把结果发给我",
+        "每周一「10:00」帮我完成「中文营销文案撰写」并把结果发给我",
+        "每周五「17:00」帮我完成「全平台广告文案生成」并把结果发给我",
+        "每天「08:00」帮我完成「高转化落地页生成」并把结果发给我",
+        "每月 1 日「09:30」帮我完成「电商爆款文案」并把结果发给我"
+      ],
+      "en": [
+        "Every day at 09:00, help me complete “Workflow step 1” and send the result — enable immediately",
+        "Every weekday at 18:00, help me complete “Workflow step 2” and send the result",
+        "Every Monday at 10:00, help me complete “Workflow step 3” and send the result",
+        "Every Friday at 17:00, help me complete “Workflow step 4” and send the result",
+        "Every day at 08:00, help me complete “Workflow step 5” and send the result",
+        "On the 1st of each month at 09:30, help me complete “Workflow step 6” and send the result"
+      ]
+    }
+  },
+  "ecommerce-pricing-analysis": {
+    "color": "#16a34a",
+    "icon": "globe",
+    "rank": 53,
+    "label": {
+      "zh": "定价分析专家",
+      "en": "Ecommerce Pricing Analysis Expert"
+    },
+    "taskExamples": {
+      "zh": [
+        "每天「09:00」帮我完成「全球比价」并把结果发给我，任务创建后立即启用",
+        "每个工作日「18:00」帮我完成「竞品价格长期追踪」并把结果发给我",
+        "每周一「10:00」帮我完成「通用定价方法论」并把结果发给我",
+        "每周五「17:00」帮我完成「跨境多币种定价（按需）」并把结果发给我",
+        "每天「08:00」帮我完成「Amazon 调价精化（按需）」并把结果发给我",
+        "每月 1 日「09:30」帮我完成「溢价论证与价值定价」并把结果发给我"
+      ],
+      "en": [
+        "Every day at 09:00, help me complete “Workflow step 1” and send the result — enable immediately",
+        "Every weekday at 18:00, help me complete “Workflow step 2” and send the result",
+        "Every Monday at 10:00, help me complete “Workflow step 3” and send the result",
+        "Every Friday at 17:00, help me complete “Workflow step 4” and send the result",
+        "Every day at 08:00, help me complete “Workflow step 5” and send the result",
+        "On the 1st of each month at 09:30, help me complete “Workflow step 6” and send the result"
+      ]
+    }
+  }
+}

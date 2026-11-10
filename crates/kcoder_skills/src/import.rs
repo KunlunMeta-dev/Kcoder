@@ -17,18 +17,7 @@ pub fn read_directory_package(source: &Path) -> Result<SkillPackage> {
         .context("Cannot resolve skill source directory")?;
     let directory = PrivateDirectory::open_existing(&source)
         .context("Select a directory containing SKILL.md")?;
-    let mut files = Vec::new();
-    let mut entries = 0;
-    let mut total = 0;
-    collect(
-        &source,
-        &directory,
-        Path::new(""),
-        0,
-        &mut entries,
-        &mut total,
-        &mut files,
-    )?;
+    let files = read_package_files(&directory, |_| Ok(()))?;
     let primary = files
         .iter()
         .find(|file| file.relative_path == Path::new("SKILL.md"))
@@ -45,47 +34,70 @@ pub fn read_directory_package(source: &Path) -> Result<SkillPackage> {
     Ok(package)
 }
 
+/// Read through an authorized directory handle. The host may reject private entries before reads.
+pub fn read_package_files(
+    directory: &PrivateDirectory,
+    validate_entry: impl Fn(&Path) -> Result<()>,
+) -> Result<Vec<SkillPackageFile>> {
+    let mut files = Vec::new();
+    let mut entries = 0;
+    let mut total = 0;
+    collect(
+        directory,
+        Path::new(""),
+        0,
+        &mut entries,
+        &mut total,
+        &mut files,
+        &validate_entry,
+    )?;
+    Ok(files)
+}
+
 fn collect(
-    path: &Path,
     directory: &PrivateDirectory,
     relative: &Path,
     depth: usize,
     entries: &mut usize,
     total: &mut usize,
     files: &mut Vec<SkillPackageFile>,
+    validate_entry: &impl Fn(&Path) -> Result<()>,
 ) -> Result<()> {
     if depth > 16 {
         bail!("Skill package directory nesting exceeds the limit");
     }
-    for entry in std::fs::read_dir(path).context("Cannot list skill source directory")? {
-        let entry = entry?;
+    directory.visit_entry_names_bounded(1024, |name| {
         *entries += 1;
         if *entries > 1024 {
             bail!("Skill package contains too many entries");
         }
-        let name = entry.file_name();
         if name == ".git" {
-            continue;
+            return Ok(());
         }
-        let kind = entry.file_type()?;
-        let child_relative = relative.join(&name);
+        let metadata = directory.entry_metadata(name)?;
+        let kind = metadata.file_type();
+        let child_relative = relative.join(name);
+        validate_entry(&child_relative)?;
         if kind.is_symlink() {
             bail!("Skill package must not contain symbolic links");
         }
         if kind.is_dir() {
-            let child = directory.open_child(&name, false)?;
+            let child = directory.open_child(name, false)?;
             collect(
-                &entry.path(),
                 &child,
                 &child_relative,
                 depth + 1,
                 entries,
                 total,
                 files,
+                validate_entry,
             )?;
         } else if kind.is_file() {
-            let file = directory.open_regular_file(&name)?;
+            let file = directory.open_single_link_regular_file(name)?;
             let metadata = file.metadata()?;
+            if metadata.len() > MAX_FILE_BYTES {
+                bail!("Skill package exceeds the file size limit");
+            }
             let mut content = Vec::new();
             file.take(MAX_FILE_BYTES + 1).read_to_end(&mut content)?;
             *total = total.saturating_add(content.len());
@@ -110,7 +122,8 @@ fn collect(
         } else {
             bail!("Skill package contains an unsupported file type");
         }
-    }
+        Ok(())
+    })?;
     Ok(())
 }
 

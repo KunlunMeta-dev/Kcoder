@@ -1,3 +1,4 @@
+import { inspectLinuxReleaseElf } from './linux-release-elf.mjs';
 import { verifyManifest } from "../../../scripts/release/artifact-manifest.mjs";
 import assert from "node:assert/strict";
 import { access, readFile, stat } from "node:fs/promises";
@@ -10,7 +11,7 @@ const packagedDir = process.env.KCODER_STUDIO_PACKAGED_DIR;
 test(
   "packaged Linux directory contains its renderer, executable sidecar, and complete third-party notices",
   { skip: packagedDir ? false : "set KCODER_STUDIO_PACKAGED_DIR after electron-builder" },
-  async () => {
+  async t => {
     const root = resolve(packagedDir);
     await verifyManifest(resolve(root, "resources"), { expectedCommit: process.env.KCODER_RELEASE_EXPECTED_COMMIT });
     const gatewayPackage = JSON.parse(await readFile(resolve(root, "resources/gateway/package.json"), "utf8"));
@@ -20,6 +21,7 @@ test(
     await access(resolve(root, "resources", "bin", "chrome", "chrome-linux64", "chrome"), constants.X_OK);
     await access(resolve(root, "resources", "bin", "chrome", "chrome-linux64", "ABOUT"), constants.R_OK);
     await access(resolve(root, "resources", "gateway", "dev-server.mjs"), constants.R_OK);
+    await access(resolve(root, "resources", "gateway", "shared", "generated", "validator.mjs"), constants.R_OK);
     await access(resolve(root, "resources", "renderer-dist", "index.html"), constants.R_OK);
     const license = await readFile(
       resolve(root, "resources", "licenses", "Wegent-Apache-2.0.txt"),
@@ -49,6 +51,8 @@ test(
     assert.match(changes, /^# KCoder Studio /);
     const sidecarSize = (await stat(resolve(root, "resources", "bin", "kcoder"))).size;
     assert.ok(sidecarSize > 1_000_000);
-    assert.ok(sidecarSize < 100_000_000, `release sidecar is unexpectedly large: ${sidecarSize}`);
+    const elf = await inspectLinuxReleaseElf(resolve(root, "resources", "bin", "kcoder"));
+    assert.equal(elf.bytes, sidecarSize);
+    t.diagnostic(`release sidecar structural inspection: ${JSON.stringify(elf)}`);
   },
 );

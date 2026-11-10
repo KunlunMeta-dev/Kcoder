@@ -14,7 +14,7 @@ const enabled = process.env.KCODER_E2E_PUBLIC_RELAY_VERIFY === "1";
 if (!enabled) throw new Error("Set KCODER_E2E_PUBLIC_RELAY_VERIFY=1 to run the manual public-relay probe");
 
 const baseUrl = new URL(requiredEnv("KCODER_RELAY_PUBLIC_URL"));
-const pairingToken = requiredEnv("KCODER_RELAY_GATEWAY_TOKEN");
+const pairingToken = requiredEnv("KCODER_E2E_MOBILE_PAIRING_TOKEN");
 assert.equal(baseUrl.protocol, "https:", "public pairing must use HTTPS");
 baseUrl.pathname = baseUrl.pathname.replace(/\/+$/, "");
 baseUrl.search = "";
@@ -41,7 +41,7 @@ await runE2E(import.meta.url, {
   const sessionResponse = await fetchWithTimeout(`${origin}/api/mobile/session`, {
     method: "POST",
     headers: { "content-type": "application/json", Origin: origin },
-    body: JSON.stringify({ token: pairingToken }),
+    body: JSON.stringify({ token: pairingToken, durableDeviceAuthorization: true }),
   });
   assert.equal(sessionResponse.status, 200, "current pairing token must exchange for a short-lived mobile session");
   const session = await sessionResponse.json();

@@ -21,6 +21,14 @@ pub struct WikiBudgetReservation {
     lease: String,
 }
 
+impl WikiBudgetReservation {
+    /// Stable original call locator for an additional native budget ledger.
+    /// This reference grants no right to read, execute or settle another call.
+    pub fn id(&self) -> &str {
+        &self.call
+    }
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WikiBudgetSummary {

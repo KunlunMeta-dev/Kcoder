@@ -4,6 +4,23 @@
 //! line. This crate contains no I/O or runtime state so desktop, web gateway,
 //! and server implementations can share the exact same contract.
 
+pub mod continuous_work;
+pub mod integrations;
+mod thread_lifetime;
+pub use thread_lifetime::*;
+mod thread_expert;
+pub use thread_expert::*;
+mod async_user_questions;
+pub use async_user_questions::*;
+mod mcp_apps;
+pub use kcoder_types::agent_definition::{
+    AgentDefinitionRef, AgentTaskBinding, AgentTaskSource, ChannelTaskSource,
+};
+pub mod web_sources;
+pub use mcp_apps::*;
+mod widgets;
+pub use kcoder_types::{ClientPresentationV1, StudioWorkMode};
+pub use widgets::*;
 mod computer_use;
 pub use computer_use::*;
 mod tool_images;
@@ -21,8 +38,75 @@ mod skills;
 pub use skills::*;
 mod mcp;
 pub use mcp::*;
+mod migration_codex_layers;
+pub use migration_codex_layers::*;
+mod migration_configuration_layers;
+pub use migration_configuration_layers::*;
+mod migration;
+mod migration_source_product;
+pub use migration_source_product::*;
+mod migration_source_upload;
+pub use migration_source_upload::*;
+mod migration_definitions;
+pub use migration_definitions::*;
+mod migration_projects;
+pub use migration_projects::*;
+mod migration_agents;
+pub use migration_agents::*;
+mod migration_instructions;
+pub use migration_instructions::*;
+mod migration_memory;
+pub use migration_memory::*;
+mod migration_plugin;
+pub use migration::*;
+pub use migration_plugin::*;
+mod migration_batch;
+pub use migration_batch::*;
+mod migration_batch_control;
+pub use migration_batch_control::*;
+mod migration_project_mcp;
+pub use migration_project_mcp::*;
+mod migration_resources;
+pub use migration_resources::*;
+mod migration_credentials;
+pub use migration_credentials::*;
+mod migration_history;
+pub use migration_history::*;
+mod migration_resource_attachment;
+pub use migration_resource_attachment::*;
+mod migration_history_budget;
+pub use migration_history_budget::*;
+mod migration_history_lifecycle;
+pub use migration_history_lifecycle::*;
+mod migration_continuation;
+pub use migration_continuation::*;
+mod migration_transcript;
+pub use migration_transcript::*;
+mod migration_search;
+pub use migration_search::*;
+mod migration_undo;
+pub use migration_undo::*;
+mod migration_reinterpretation;
+pub use migration_reinterpretation::*;
+mod migration_local_attachment;
+pub use migration_local_attachment::*;
+mod migration_upload_collection;
+pub use migration_upload_collection::*;
+mod migration_branch;
+pub use migration_branch::*;
+mod migration_branch_tools;
+pub use migration_branch_tools::*;
+mod migration_history_attachment;
+pub use migration_history_attachment::*;
+mod thread_mcp;
+pub use thread_mcp::*;
+
+/// Credentials are missing before a model turn can be admitted or snapshotted.
+pub const PROVIDER_AUTHENTICATION_REQUIRED: i64 = -32063;
 mod settings_templates;
 pub use settings_templates::*;
+mod execution_defaults;
+pub use execution_defaults::*;
 mod storage_diagnostics;
 pub use storage_diagnostics::*;
 mod workspace_operations;
@@ -31,19 +115,67 @@ mod thread_creations;
 pub use thread_creations::*;
 mod turn_receipts;
 pub use turn_receipts::*;
+mod turn_steer;
+pub use turn_steer::*;
 mod attachment_retention;
 pub use attachment_retention::*;
 mod retention_parent;
 pub use retention_parent::*;
+mod migration_source_observation;
+pub use migration_source_observation::*;
+mod migration_source_adoption;
+pub use migration_source_adoption::*;
+mod migration_source_bindings;
+pub use migration_source_bindings::*;
+mod migration_source_directory;
+pub use migration_source_directory::*;
+mod migration_source_credentials;
+pub use migration_source_credentials::*;
+mod migration_credential_sources;
+pub use migration_credential_sources::*;
+mod migration_source_operations;
+pub use migration_source_operations::*;
+mod migration_source_session;
+pub use migration_source_session::*;
+mod migration_source_transfer;
+pub use migration_source_transfer::*;
+mod retention_revocation;
+pub use retention_revocation::*;
 mod thread_resume_history;
 pub use thread_resume_history::*;
+mod thread_presence;
+pub use thread_presence::*;
+mod thread_runtime_handoff;
+pub use thread_runtime_handoff::*;
+mod thread_goal_status_batch;
+pub use thread_goal_status_batch::*;
+mod interaction_status;
+pub use interaction_status::*;
+mod task_interactions;
+pub use task_interactions::*;
+mod thread_transcript_snapshot;
+pub use thread_transcript_snapshot::*;
+mod thread_transcript_observation;
+pub use thread_transcript_observation::*;
+mod thread_model_selection;
+pub use thread_model_selection::*;
 mod workflow_canvas;
 pub use workflow_canvas::*;
+mod workflow_collaboration;
+pub use workflow_collaboration::*;
+mod web_search;
+pub use web_search::*;
 mod tool_profiles;
+mod tool_selections;
 pub use tool_profiles::*;
+pub use tool_selections::*;
 mod turn_file_changes;
 pub use turn_file_changes::*;
+mod turn_file_capture;
+pub use turn_file_capture::*;
 mod agent;
+mod agent_run;
+pub use agent_run::*;
 mod cron;
 mod history_refresh;
 mod plugin;
@@ -60,10 +192,52 @@ pub use resources::*;
 pub use tools_catalog::*;
 pub use usage::*;
 
+pub const CAPABILITY_STUDIO_WORK_MODES_V1: &str = "studioWorkModesV1";
+pub const CAPABILITY_INLINE_WIDGETS_V1: &str = "inlineWidgetsV1";
+pub const CAPABILITY_ISOLATED_WIDGETS_V1: &str = "isolatedWidgetsV1";
+
 pub const JSONRPC_VERSION: &str = "2.0";
 pub const PROTOCOL_VERSION: &str = "2026-07-27";
 pub const CAPABILITY_AGENT_CONVERSATION_STREAM_V1: &str = "agentConversationStreamV1";
 pub const CAPABILITY_WORKFLOW_CONVERSATION_V1: &str = "workflowConversationV1";
+pub const CAPABILITY_EXECUTION_DEFAULTS_V1: &str = "executionDefaultsV1";
+pub const CAPABILITY_MIGRATION_PROVIDERS_V1: &str = "migrationProvidersV1";
+pub const CAPABILITY_MIGRATION_MCP_V1: &str = "migrationMcpV1";
+pub const CAPABILITY_MIGRATION_ASSETS_V1: &str = "migrationAssetsV1";
+pub const CAPABILITY_MIGRATION_LOCAL_PLUGINS_V1: &str = "migrationLocalPluginsV1";
+pub const CAPABILITY_MIGRATION_RESOURCE_BUDGET_V1: &str = "migrationResourceBudgetV1";
+pub const CAPABILITY_MIGRATION_BATCH_V1: &str = "migrationBatchV1";
+pub const CAPABILITY_MIGRATION_PROJECT_MCP_INHERITANCE_V1: &str =
+    "migrationProjectMcpInheritanceV1";
+pub const CAPABILITY_MIGRATION_BATCH_WORKERS_V1: &str = "migrationBatchWorkersV1";
+pub const CAPABILITY_MIGRATION_BATCH_PLUGINS_V1: &str = "migrationBatchPluginsV1";
+pub const CAPABILITY_MIGRATION_REUSE_V1: &str = "migrationReuseV1";
+pub const CAPABILITY_MIGRATION_CREDENTIALS_V1: &str = "migrationCredentialsV1";
+pub const CAPABILITY_MIGRATION_MCP_CREDENTIALS_V1: &str = "migrationMcpCredentialsV1";
+pub const CAPABILITY_MIGRATION_BATCH_MCP_CREDENTIALS_V1: &str = "migrationBatchMcpCredentialsV1";
+pub const CAPABILITY_MIGRATION_BATCH_CREDENTIALS_V1: &str = "migrationBatchCredentialsV1";
+pub const CAPABILITY_MIGRATION_TEMPLATES_V1: &str = "migrationTemplatesV1";
+pub const CAPABILITY_MIGRATION_TEMPLATE_REUSE_V1: &str = "migrationTemplateReuseV1";
+pub const CAPABILITY_MIGRATION_HISTORY_FAMILY_INDEX_V1: &str = "migrationHistoryFamilyIndexV1";
+/// Native history workers admit at least 32 independent jobs.
+pub const CAPABILITY_MIGRATION_HISTORY_CONCURRENCY_32_V1: &str = "migrationHistoryConcurrency32V1";
+/// Native history workers admit at least 64 independent jobs.
+pub const CAPABILITY_MIGRATION_HISTORY_CONCURRENCY_64_V1: &str = "migrationHistoryConcurrency64V1";
+pub const CAPABILITY_MIGRATION_HISTORY_JOBS_V1: &str = "migrationHistoryJobsV1";
+pub const CAPABILITY_MIGRATION_CONTINUATION_V1: &str = "migrationContinuationV1";
+pub const CAPABILITY_MIGRATION_CONTINUATION_SOURCE_V1: &str = "migrationContinuationSourceV1";
+pub const CAPABILITY_MIGRATION_HISTORY_READ_V1: &str = "migrationHistoryReadV1";
+pub const CAPABILITY_MIGRATION_CONTINUATION_UNDO_V1: &str = "migrationContinuationUndoV1";
+pub const CAPABILITY_MIGRATION_HISTORY_SEARCH_V1: &str = "migrationHistorySearchV1";
+pub const CAPABILITY_MIGRATION_HISTORY_REINTERPRETATION_V1: &str =
+    "migrationHistoryReinterpretationV1";
+pub const CAPABILITY_MIGRATION_LOCAL_ATTACHMENTS_V1: &str = "migrationLocalAttachmentsV1";
+pub const CAPABILITY_MIGRATION_HISTORY_BRANCHES_V1: &str = "migrationHistoryBranchesV1";
+pub const CAPABILITY_MIGRATION_HISTORY_RECONSTRUCTION_V1: &str = "migrationHistoryReconstructionV1";
+pub const CAPABILITY_MIGRATION_BRANCH_TOOLS_V1: &str = "migrationBranchToolsV1";
+pub const CAPABILITY_MIGRATION_HISTORY_ATTACHMENTS_V1: &str = "migrationHistoryAttachmentsV1";
+pub const CAPABILITY_MIGRATION_HISTORY_TOOL_ATTACHMENTS_V1: &str =
+    "migrationHistoryToolAttachmentsV1";
 pub const THREAD_METADATA_SCHEMA: &str = "kcoder.thread-metadata";
 
 mod recent_error;
@@ -71,6 +245,181 @@ pub use recent_error::{
     ThreadRecentError, ThreadRecentErrorCategory, ThreadRecentErrorKind, ThreadRecentErrorSource,
 };
 pub mod method {
+    pub const MIGRATION_PROJECTS_DISCOVER: &str = "migration/projects/discover";
+    pub const MIGRATION_PROJECTS_SOURCES: &str = "migration/projects/sources";
+    pub const MIGRATION_PROJECTS_SOURCE_ROOTS: &str = "migration/projects/source-roots";
+    pub const MIGRATION_PROJECTS_TARGETS: &str = "migration/projects/targets";
+    pub const MIGRATION_PROJECTS_TARGET_ROOTS: &str = "migration/projects/target-roots";
+    pub const MIGRATION_PROJECTS_REPORT: &str = "migration/projects/report";
+    pub const MIGRATION_SOURCE_PRODUCT_RUN: &str = "migration/source/upload/product/run";
+    pub const MIGRATION_SOURCE_PRODUCT_READ: &str = "migration/source/upload/product/read";
+    pub const MIGRATION_SOURCE_PRODUCT_CANCEL: &str = "migration/source/upload/product/cancel";
+    pub const MIGRATION_SOURCE_PRODUCT_RESUME: &str = "migration/source/upload/product/resume";
+    pub const MIGRATION_SOURCE_UPLOADED_SELECT: &str = "migration/source/upload/select";
+    pub const MIGRATION_SOURCE_UPLOAD_PREPARE: &str = "migration/source/upload/prepare";
+    pub const MIGRATION_SOURCE_UPLOAD_PART: &str = "migration/source/upload/part";
+    pub const MIGRATION_SOURCE_UPLOAD_FINISH: &str = "migration/source/upload/finish";
+    pub const MIGRATION_SOURCE_UPLOAD_READ: &str = "migration/source/upload/read";
+    pub const MIGRATION_SOURCE_UPLOAD_FILES: &str = "migration/source/upload/files";
+    pub const MIGRATION_SOURCE_UPLOAD_CANCEL: &str = "migration/source/upload/cancel";
+    pub const MIGRATION_SOURCE_UPLOAD_RESUME: &str = "migration/source/upload/resume";
+    pub const MIGRATION_DEFINITIONS_DISCOVER: &str = "migration/definitions/discover";
+    pub const MIGRATION_INSTRUCTION_CAPTURE: &str = "migration/instructions/capture";
+    pub const MIGRATION_INSTRUCTION_PAGE: &str = "migration/instructions/page";
+    pub const MIGRATION_INSTRUCTION_BODY: &str = "migration/instructions/body";
+    pub const MIGRATION_DEFINITION_REPORT: &str = "migration/definitions/report";
+    pub const MIGRATION_DEFINITION_BODY: &str = "migration/definitions/body";
+    pub const MIGRATION_AGENT_PREVIEW: &str = "migration/agent/preview";
+    pub const MIGRATION_MEMORY_DISCOVER: &str = "migration/memory/discover";
+    pub const MIGRATION_MEMORY_SOURCES: &str = "migration/memory/sources";
+    pub const MIGRATION_MEMORY_LIST: &str = "migration/memory/list";
+    pub const MIGRATION_MEMORY_READ: &str = "migration/memory/read";
+    pub const MIGRATION_MEMORY_CONTROL: &str = "migration/memory/control";
+    pub const MIGRATION_MEMORY_CONTROL_READ: &str = "migration/memory/control/read";
+    pub const MIGRATION_SOURCE_BINDINGS: &str = "migration/source/bindings";
+    pub const MIGRATION_SOURCE_DIRECTORY_SELECT: &str = "migration/source/directory/select";
+    pub const MIGRATION_CODEX_LAYERS_SELECT: &str = "migration/codex/layers/select";
+    pub const MIGRATION_CODEX_LAYERS_READ: &str = "migration/codex/layers/read";
+    pub const MIGRATION_UPLOAD_COLLECTION_PREPARE: &str =
+        "migration/history/upload-collection/prepare";
+    pub const MIGRATION_UPLOAD_COLLECTION_READ: &str = "migration/history/upload-collection/read";
+    pub const MIGRATION_UPLOAD_COLLECTION_LIST: &str = "migration/history/upload-collection/list";
+    pub const MIGRATION_UPLOAD_COLLECTION_RUN: &str = "migration/history/upload-collection/run";
+    pub const MIGRATION_UPLOAD_COLLECTION_CANCEL: &str =
+        "migration/history/upload-collection/cancel";
+    pub const MIGRATION_UPLOAD_COLLECTION_RESUME: &str =
+        "migration/history/upload-collection/resume";
+    pub const MIGRATION_UPLOAD_COLLECTION_ATTACHMENT: &str =
+        "migration/history/upload-collection/attachment";
+
+    pub const MIGRATION_CONFIGURATION_LAYERS: &str = "migration/configuration/layers";
+    pub const MIGRATION_LOCAL_ATTACHMENT_PREPARE: &str =
+        "migration/history/local-attachment/prepare";
+    pub const MIGRATION_LOCAL_ATTACHMENT_BEGIN: &str = "migration/history/local-attachment/begin";
+    pub const MIGRATION_LOCAL_ATTACHMENT_PART: &str = "migration/history/local-attachment/part";
+    pub const MIGRATION_LOCAL_ATTACHMENT_FINISH: &str = "migration/history/local-attachment/finish";
+    pub const MIGRATION_LOCAL_ATTACHMENT_READ: &str = "migration/history/local-attachment/read";
+    pub const MIGRATION_LOCAL_ATTACHMENT_RESUME: &str = "migration/history/local-attachment/resume";
+    pub const MIGRATION_LOCAL_ATTACHMENT_RUN: &str = "migration/history/local-attachment/run";
+    pub const MIGRATION_LOCAL_ATTACHMENT_CANCEL: &str = "migration/history/local-attachment/cancel";
+    pub const MIGRATION_LOCAL_ATTACHMENT_LIST: &str = "migration/history/local-attachment/list";
+    pub const MIGRATION_LOCAL_ATTACHMENT_CHUNK: &str = "migration/history/local-attachment/chunk";
+    pub const MIGRATION_HISTORY_REINTERPRET_PREVIEW: &str = "migration/history/reinterpret/preview";
+    pub const MIGRATION_HISTORY_REINTERPRET_CREATE: &str = "migration/history/reinterpret/create";
+    pub const MIGRATION_HISTORY_UNDO_LOOKUP: &str = "migration/history/undo/lookup";
+    pub const MIGRATION_HISTORY_UNDO_PREVIEW: &str = "migration/history/undo/preview";
+    pub const MIGRATION_HISTORY_UNDO_CREATE: &str = "migration/history/undo/create";
+    pub const MIGRATION_HISTORY_UNDO_READ: &str = "migration/history/undo/read";
+    pub const MIGRATION_HISTORY_UNDO_RUN: &str = "migration/history/undo/run";
+    pub const MIGRATION_HISTORY_UNDO_CANCEL: &str = "migration/history/undo/cancel";
+    pub const MIGRATION_HISTORY_SEARCH: &str = "migration/history/search";
+    pub const MIGRATION_HISTORY_VIEW_OPEN: &str = "migration/history/view/open";
+    pub const MIGRATION_HISTORY_VIEW_READ: &str = "migration/history/view/read";
+    pub const MIGRATION_HISTORY_VIEW_RENEW: &str = "migration/history/view/renew";
+    pub const MIGRATION_HISTORY_VIEW_RELEASE: &str = "migration/history/view/release";
+    pub const MIGRATION_ARCHIVE_RETIREMENT_PREVIEW: &str = "migration/history/retirement/preview";
+    pub const MIGRATION_ARCHIVE_RETIREMENT_PREPARE: &str = "migration/history/retirement/prepare";
+    pub const MIGRATION_ARCHIVE_RETIREMENT_READ: &str = "migration/history/retirement/read";
+    pub const MIGRATION_ARCHIVE_RETIREMENT_LIST: &str = "migration/history/retirement/list";
+    pub const MIGRATION_ARCHIVE_RETIREMENT_RUN: &str = "migration/history/retirement/run";
+    pub const MIGRATION_ARCHIVE_RETIREMENT_CANCEL: &str = "migration/history/retirement/cancel";
+    pub const MIGRATION_ARCHIVE_RETIREMENT_RESUME: &str = "migration/history/retirement/resume";
+    pub const MIGRATION_CONTINUATION_CREATE: &str = "migration/history/continuation/create";
+    pub const MIGRATION_CONTINUATION_SOURCE: &str = "migration/history/continuation/source";
+    pub const MIGRATION_CONTINUATION_READ: &str = "migration/history/continuation/read";
+    pub const MIGRATION_CONTINUATION_RUN: &str = "migration/history/continuation/run";
+    pub const MIGRATION_CONTINUATION_RESUME: &str = "migration/history/continuation/resume";
+    pub const MIGRATION_CONTINUATION_CANCEL: &str = "migration/history/continuation/cancel";
+    pub const MIGRATION_TOOL_ATTACHMENTS_READ: &str = "migration/history/tool-attachments/read";
+    pub const MIGRATION_TOOL_ATTACHMENTS_RUN: &str = "migration/history/tool-attachments/run";
+    pub const MIGRATION_TOOL_ATTACHMENTS_RESUME: &str = "migration/history/tool-attachments/resume";
+    pub const MIGRATION_TOOL_ATTACHMENTS_CANCEL: &str = "migration/history/tool-attachments/cancel";
+    pub const MIGRATION_TOOL_ATTACHMENTS_CHUNK: &str = "migration/history/tool-attachments/chunk";
+    pub const MIGRATION_TOOL_ATTACHMENTS_ITEMS: &str = "migration/history/tool-attachments/items";
+    pub const MIGRATION_HISTORY_ATTACHMENT_READ: &str = "migration/history/attachment/read";
+    pub const MIGRATION_HISTORY_ATTACHMENT_RUN: &str = "migration/history/attachment/run";
+    pub const MIGRATION_HISTORY_ATTACHMENT_RESUME: &str = "migration/history/attachment/resume";
+    pub const MIGRATION_HISTORY_ATTACHMENT_CANCEL: &str = "migration/history/attachment/cancel";
+    pub const MIGRATION_HISTORY_ATTACHMENT_CHUNK: &str = "migration/history/attachment/chunk";
+    pub const MIGRATION_BRANCH_TOOLS_READ: &str = "migration/history/branch/tools/read";
+    pub const MIGRATION_BRANCH_TOOLS_RUN: &str = "migration/history/branch/tools/run";
+    pub const MIGRATION_BRANCH_TOOLS_RESUME: &str = "migration/history/branch/tools/resume";
+    pub const MIGRATION_BRANCH_TOOLS_CANCEL: &str = "migration/history/branch/tools/cancel";
+    pub const MIGRATION_BRANCH_TOOLS_PAGE: &str = "migration/history/branch/tools/page";
+    pub const MIGRATION_BRANCH_PREPARE: &str = "migration/history/branch/prepare";
+    pub const MIGRATION_BRANCH_READ: &str = "migration/history/branch/read";
+    pub const MIGRATION_BRANCH_RUN: &str = "migration/history/branch/run";
+    pub const MIGRATION_BRANCH_CANCEL: &str = "migration/history/branch/cancel";
+    pub const MIGRATION_BRANCH_RESUME: &str = "migration/history/branch/resume";
+    pub const MIGRATION_BRANCH_PAGE: &str = "migration/history/branch/page";
+    pub const MIGRATION_BRANCH_BLOCKS: &str = "migration/history/branch/blocks";
+    pub const MIGRATION_BRANCH_TEXT: &str = "migration/history/branch/text";
+    pub const MIGRATION_HISTORY_TRANSCRIPT: &str = "migration/history/transcript";
+    pub const MIGRATION_HISTORY_BLOCKS: &str = "migration/history/blocks";
+    pub const MIGRATION_HISTORY_TEXT: &str = "migration/history/text";
+    pub const MIGRATION_HISTORY_FAMILIES_DISCOVER: &str = "migration/history/families/discover";
+    pub const MIGRATION_HISTORY_DISCOVER: &str = "migration/history/discover";
+    pub const MIGRATION_HISTORY_SOURCES: &str = "migration/history/sources";
+    pub const MIGRATION_HISTORY_CREATE: &str = "migration/history/create";
+    pub const MIGRATION_HISTORY_RESOURCES_ATTACHMENT_READ: &str =
+        "migration/history/resources/attachment/read";
+    pub const MIGRATION_HISTORY_RESOURCES_READ: &str = "migration/history/resources/read";
+    pub const MIGRATION_HISTORY_RESOURCES_INCREASE: &str = "migration/history/resources/increase";
+    pub const MIGRATION_HISTORY_RESOURCES_ATTACH: &str = "migration/history/resources/attach";
+    pub const MIGRATION_HISTORY_READ: &str = "migration/history/read";
+    pub const MIGRATION_HISTORY_RUN: &str = "migration/history/run";
+    pub const MIGRATION_HISTORY_CANCEL: &str = "migration/history/cancel";
+    pub const MIGRATION_HISTORY_RESUME: &str = "migration/history/resume";
+    pub const MIGRATION_HISTORY_JOBS: &str = "migration/history/jobs";
+    pub const MIGRATION_PLUGIN_DISCOVER: &str = "migration/plugin/discover";
+    pub const MIGRATION_PLUGIN_PLAN: &str = "migration/plugin/plan";
+    pub const MIGRATION_PLUGIN_CAPTURE: &str = "migration/plugin/capture";
+    pub const MIGRATION_PLUGIN_READ: &str = "migration/plugin/read";
+    pub const MIGRATION_PLUGIN_APPLY: &str = "migration/plugin/apply";
+    pub const MIGRATION_PLUGIN_UNDO: &str = "migration/plugin/undo";
+    pub const MIGRATION_PLUGIN_CANCEL: &str = "migration/plugin/cancel";
+    pub const MIGRATION_PLUGIN_RESUME: &str = "migration/plugin/resume";
+    pub const MIGRATION_PLUGIN_LIST: &str = "migration/plugin/list";
+    pub const MIGRATION_DISCOVER: &str = "migration/discover";
+    pub const MIGRATION_SCAN: &str = "migration/scan";
+    pub const MIGRATION_READ: &str = "migration/read";
+    pub const MIGRATION_ITEMS: &str = "migration/items";
+    pub const MIGRATION_PROVIDER_PLAN: &str = "migration/provider/plan";
+    pub const MIGRATION_PROVIDER_APPLY: &str = "migration/provider/apply";
+    pub const MIGRATION_PROVIDER_ROLLBACK: &str = "migration/provider/rollback";
+    pub const MIGRATION_MCP_PLAN: &str = "migration/mcp/plan";
+    pub const MIGRATION_MCP_APPLY: &str = "migration/mcp/apply";
+    pub const MIGRATION_MCP_ROLLBACK: &str = "migration/mcp/rollback";
+    pub const MIGRATION_ASSET_PLAN: &str = "migration/asset/plan";
+    pub const MIGRATION_ASSET_APPLY: &str = "migration/asset/apply";
+    pub const MIGRATION_ASSET_ROLLBACK: &str = "migration/asset/rollback";
+    pub const MIGRATION_ASSET_PREVIEW: &str = "migration/asset/preview";
+    pub const MIGRATION_CANCEL: &str = "migration/cancel";
+    pub const MIGRATION_BATCH_SCAN: &str = "migration/batch/scan";
+    pub const MIGRATION_BATCH_PLAN: &str = "migration/batch/plan";
+    pub const MIGRATION_BATCH_APPLY: &str = "migration/batch/apply";
+    pub const MIGRATION_BATCH_RUN: &str = "migration/batch/run";
+    pub const MIGRATION_BATCH_READ: &str = "migration/batch/read";
+    pub const MIGRATION_BATCH_CONTROL_READ: &str = "migration/batch/control/read";
+    pub const MIGRATION_BATCH_CONTROL_CANCEL: &str = "migration/batch/control/cancel";
+    pub const MIGRATION_BATCH_CREDENTIAL_SOURCES: &str = "migration/batch/credential-sources";
+    pub const MIGRATION_BATCH_RESOURCES_ATTACHMENT_READ: &str =
+        "migration/batch/resources/attachment/read";
+    pub const MIGRATION_BATCH_RESOURCES_READ: &str = "migration/batch/resources/read";
+    pub const MIGRATION_BATCH_RESOURCES_ATTACH: &str = "migration/batch/resources/attach";
+    pub const MIGRATION_BATCH_RESOURCES_INCREASE: &str = "migration/batch/resources/increase";
+    pub const MIGRATION_BATCH_ROLLBACK: &str = "migration/batch/rollback";
+    pub const MIGRATION_BATCH_ITEM_PLAN: &str = "migration/batch/item/plan";
+    pub const MIGRATION_PROJECT_MCP_CATALOG: &str = "migration/project/mcp/catalog";
+    pub const MIGRATION_JOBS_LIST: &str = "migration/jobs/list";
+    pub const MIGRATION_CREDENTIAL_PLAN: &str = "migration/credential/plan";
+    pub const MIGRATION_CREDENTIAL_APPLY: &str = "migration/credential/apply";
+    pub const MIGRATION_CREDENTIAL_UNDO: &str = "migration/credential/undo";
+    pub const MIGRATION_MCP_CREDENTIAL_READ: &str = "migration/mcp/credential/read";
+    pub const MIGRATION_MCP_CREDENTIAL_PLAN: &str = "migration/mcp/credential/plan";
+    pub const MIGRATION_MCP_CREDENTIAL_APPLY: &str = "migration/mcp/credential/apply";
+    pub const MIGRATION_MCP_CREDENTIAL_UNDO: &str = "migration/mcp/credential/undo";
+    pub const MIGRATION_BATCH_MCP_CREDENTIAL_READ: &str = "migration/batch/mcp/credential/read";
     pub const HOOK_CONFIGURATION_READ: &str = "hooks/config/read";
     pub const HOOK_CONFIGURATION_UPDATE: &str = "hooks/config/update";
     pub const SKILL_LIST: &str = "skills/list";
@@ -79,12 +428,18 @@ pub mod method {
     pub const SKILL_REMOVE: &str = "skills/remove";
     pub const MCP_LIST: &str = "mcp/list";
     pub const MCP_INSTALL: &str = "mcp/install";
+    pub const MCP_SET_ENABLED: &str = "mcp/setEnabled";
     pub const MCP_REMOVE: &str = "mcp/remove";
     pub const MCP_LOGOUT: &str = "mcp/logout";
+    pub const MCP_PROVIDER_REVOCATION: &str = "mcp/providerRevocation";
     pub const MCP_LOGIN: &str = "mcp/login";
     pub const MCP_CALLBACK: &str = "mcp/callback";
     pub const MCP_CANCEL: &str = "mcp/cancel";
     pub const TOOLS_CATALOG: &str = "tools/catalog";
+    pub const ASYNC_QUESTION_LIST: &str = "asyncQuestion/list";
+    pub const ASYNC_QUESTION_ANSWER: &str = "asyncQuestion/answer";
+    pub const ASYNC_QUESTION_CANCEL: &str = "asyncQuestion/cancel";
+    pub const ASYNC_QUESTION_CHANGED: &str = "asyncQuestion/changed";
     pub const AUTOMATION_RUN_STARTED: &str = "automation/runStarted";
     pub const AUTOMATION_RUN_FAILED: &str = "automation/runFailed";
     pub const AUTOMATION_STATE_CHANGED: &str = "automation/stateChanged";
@@ -96,6 +451,7 @@ pub mod method {
     pub const PROVIDERS_DELETE: &str = "runtime.providers.delete";
     pub const PROVIDERS_VALIDATE: &str = "runtime.providers.validate";
     pub const PROVIDERS_PROBE: &str = "runtime.providers.probe";
+    pub const PROVIDERS_DISCOVER_MODELS: &str = "runtime.providers.discoverModels";
     pub const PROVIDERS_CLEAR_USER_OVERRIDE: &str = "runtime.providers.clearUserOverride";
     pub const INITIALIZE: &str = "initialize";
     pub const SERVER_RESOURCES_READ: &str = "server/resources/read";
@@ -103,9 +459,13 @@ pub mod method {
     pub const THREAD_START: &str = "thread/start";
     pub const THREAD_LIST: &str = "thread/list";
     pub const THREAD_HISTORY_REFRESH: &str = "thread/history/refresh";
+    pub const THREAD_PRESENCE_READ: &str = "thread/presence/read";
+    pub const THREAD_GOAL_STATUS_READ_MANY: &str = "thread/goal/status/readMany";
+    pub const INTERACTION_STATUS_READ: &str = "interaction/status/read";
     pub const THREAD_READ: &str = "thread/read";
     pub const THREAD_READ_INDEXED: &str = "thread/read/indexed";
     pub const THREAD_RESUME: &str = "thread/resume";
+    pub const THREAD_MODEL_SELECT: &str = crate::METHOD_THREAD_MODEL_SELECT;
     pub const THREAD_FORK: &str = "thread/fork";
     pub const THREAD_COMPACT: &str = "thread/compact";
     pub const THREAD_ROLLBACK: &str = "thread/rollback";
@@ -126,9 +486,13 @@ pub mod method {
     pub const THREAD_CREATION_READ: &str = "thread/creation/read";
     pub const TURN_RECEIPT_READ: &str = "turn/receipt/read";
     pub const TURN_INTERRUPT: &str = "turn/interrupt";
+    pub const TURN_STEER: &str = "turn/steer";
+    pub const TURN_STEER_APPLIED: &str = "turn/steer/applied";
+    pub const TURN_STEER_DROPPED: &str = "turn/steer/dropped";
     pub const TURN_SHORTEN_WAIT: &str = "turn/shorten_wait";
     pub const AGENT_LIST: &str = "agent/list";
     pub const AGENT_STEER: &str = "agent/steer";
+    pub const AGENT_CONTINUE: &str = "agent/continue";
     pub const AGENT_STEER_APPLIED: &str = "agent/steer/applied";
     pub const AGENT_MESSAGE_READ: &str = "agent/message/read";
     pub const AGENT_MESSAGES_LIST: &str = "agent/messages/list";
@@ -225,6 +589,8 @@ pub mod method {
     pub const WORKFLOW_UPSERT_NODE: &str = "workflow/upsertNode";
     pub const WORKFLOW_DELETE: &str = "workflow/delete";
     pub const WORKFLOW_REMOVE_NODE: &str = "workflow/removeNode";
+    pub const SETTINGS_TOOL_SELECTIONS_READ: &str = "settings/tools/selection/read";
+    pub const SETTINGS_TOOL_SELECTIONS_SAVE: &str = "settings/tools/selection/save";
     pub const SETTINGS_TOOLS_READ: &str = "settings/tools/read";
     pub const SETTINGS_TOOLS_SAVE: &str = "settings/tools/save";
     pub const SETTINGS_TEMPLATES_LIST: &str = "settings/templates/list";
@@ -232,6 +598,8 @@ pub mod method {
     pub const SETTINGS_TEMPLATES_SAVE: &str = "settings/templates/save";
     pub const SETTINGS_TEMPLATES_DELETE: &str = "settings/templates/delete";
     pub const SETTINGS_TEMPLATES_DEFAULT: &str = "settings/templates/default";
+    pub const SETTINGS_EXECUTION_DEFAULTS_READ: &str = "settings/execution-defaults/read";
+    pub const SETTINGS_EXECUTION_DEFAULTS_SAVE: &str = "settings/execution-defaults/save";
     /// Storage and diagnostics surfaces used by KCoder Studio.
     pub const DIAGNOSTICS_STORAGE_READ: &str = "diagnostics/storage/read";
     pub const DIAGNOSTICS_STORAGE_CANCEL: &str = "diagnostics/storage/cancel";
@@ -390,6 +758,7 @@ pub enum Message {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "json-schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct ImplementationInfo {
     pub name: String,
@@ -397,6 +766,7 @@ pub struct ImplementationInfo {
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "json-schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct ClientCapabilities {
     #[serde(default)]
@@ -414,6 +784,7 @@ pub struct ServerCapabilities {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "json-schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct InitializeParams {
     pub protocol_version: String,
@@ -552,11 +923,24 @@ pub struct AttachmentUploadChunkParams {
     pub retention: Option<AttachmentRetentionUploadContinuation>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AttachmentUploadFinishParams {
     pub upload_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub retention: Option<AttachmentRetentionUploadContinuation>,
+    /// Explicit Office acceptance metadata. Native upload completion, not this
+    /// scope or any JSON path, establishes ownership of the source bytes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub office_input: Option<kcoder_types::integrations::core::IntegrationRequest>,
+}
+
+/// Legacy upload callers receive Saved unchanged; opted-in Office callers
+/// receive only the closed public material receipt, never the staging path.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum AttachmentUploadFinishResult {
+    Saved(AttachmentSaveResult),
+    Office(kcoder_types::integrations::office::OfficeMaterialReceipt),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -620,6 +1004,8 @@ pub struct BrowserStartParams {
     pub width: u32,
     #[serde(default = "default_browser_height")]
     pub height: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub profile: Option<browser_profiles::BrowserProfileSelection>,
 }
 
 fn default_browser_width() -> u32 {
@@ -638,6 +1024,8 @@ pub struct BrowserStartResult {
     pub height: u32,
     #[serde(default, skip_serializing_if = "is_false")]
     pub sandbox_disabled: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub profile: Option<kcoder_types::browser_profiles::BrowserAccountProfile>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -646,6 +1034,7 @@ pub struct BrowserSessionParams {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "json-schema", derive(schemars::JsonSchema))]
 pub struct BrowserActionParams {
     pub session_id: String,
     #[serde(flatten)]
@@ -653,6 +1042,7 @@ pub struct BrowserActionParams {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "json-schema", derive(schemars::JsonSchema))]
 #[serde(tag = "action", rename_all = "snake_case")]
 pub enum BrowserAction {
     Navigate {
@@ -849,6 +1239,20 @@ pub struct TerminalExitParams {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ThreadStartParams {
+    /// Initial expert selection; later changes take effect on the next turn.
+    /// Requires agentDefinitionsV1 and never expands tool authorization.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent_definition: Option<kcoder_types::agent_definition::AgentDefinitionRef>,
+    /// Temporary stdio MCP launches; requires threadMcpServersV1 and is never persisted as settings.
+    #[serde(
+        default,
+        skip_serializing_if = "Vec::is_empty",
+        deserialize_with = "thread_mcp::deserialize_thread_mcp_servers"
+    )]
+    pub mcp_servers: Vec<ThreadMcpServerV1>,
+    /// Studio intent; absent means the legacy KCoder mode.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub studio_work_mode: Option<StudioWorkMode>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub workflow_definition_id: Option<String>,
     /// Stable creation operation identity; requires threadCreationReceiptsV1.
@@ -1021,6 +1425,10 @@ pub struct ThreadReadParams {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ThreadMessage {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub file_changes_capture: Option<TurnFileChangesCapture>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub review_evidence: Option<TurnReviewEvidence>,
     pub id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub client_message_id: Option<String>,
@@ -1059,6 +1467,12 @@ pub struct ThreadReadResult {
     pub has_more_before: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub before_cursor: Option<String>,
+    /// Omitted unless this connection opted into threadTranscriptSnapshotV1.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transcript_snapshot_v1: Option<ThreadTranscriptSnapshotV1>,
+    /// Omitted unless opted into threadTranscriptObservationV1 and this read has complete proof.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transcript_observation_v1: Option<ThreadTranscriptObservationV1>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -1358,11 +1772,16 @@ pub const CAPABILITY_GOAL_CANCELLATION_V1: &str = "goalCancellationV1";
 pub const CAPABILITY_RETRY_MODEL_CONFIGURATION_V1: &str = "retryModelConfigurationV1";
 pub const CAPABILITY_THREAD_RUN_SUMMARY_V1: &str = "threadRunSummaryV1";
 pub const CAPABILITY_THREAD_STREAM_CONTEXT_V1: &str = "threadStreamContextV1";
+pub const CAPABILITY_INTERACTION_STATUS_READ_V1: &str = "interactionStatusReadV1";
 
 /// Client capability that makes an interaction reply name the interaction it
 /// answers. Without it the transport id is the only correlation, and an id
 /// issued by an earlier connection generation can collide with a new one.
 pub const CAPABILITY_INTERACTION_BINDING_V1: &str = "interactionBindingV1";
+/// Bind permission requests to the exact tool call; request field is opt-in.
+pub const CAPABILITY_APPROVAL_TOOL_CALL_IDENTITY_V1: &str = "approvalToolCallIdentityV1";
+/// A client explicitly opts out of user-question and plan-confirmation tools.
+pub const CAPABILITY_DISABLE_USER_ELICITATION_V1: &str = "disableUserElicitationV1";
 
 /// Client capability that lets a client declare a deliberate re-submission of an
 /// already committed message identity. Without it, submitting a committed
@@ -1420,6 +1839,9 @@ pub struct ThreadRunFacts {
 #[serde(rename_all = "camelCase")]
 pub struct ThreadRunSummary {
     pub main_turn: ThreadMainTurn,
+    /// Latest committed attempt only; absent for new, legacy, or unconfirmed history.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latest_turn_status: Option<TurnStatus>,
     /// Absent = unknown (old or unreadable evidence); null = confirmed no failure.
     #[serde(
         default,
@@ -1486,6 +1908,7 @@ impl ThreadRunFacts {
                 None => ThreadMainTurn::Unknown,
             },
             recent_error: None,
+            latest_turn_status: None,
             pending_approvals: self.pending_approvals,
             pending_questions: self.pending_questions,
             active_jobs: self.active_jobs,
@@ -1500,6 +1923,13 @@ impl ThreadRunFacts {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Thread {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub channel_task_source: Option<kcoder_types::agent_definition::ChannelTaskSource>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent_definition: Option<kcoder_types::agent_definition::AgentTaskBinding>,
+    /// Studio intent; absent means the legacy KCoder mode.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub studio_work_mode: Option<StudioWorkMode>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub workflow_definition_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1542,11 +1972,30 @@ pub enum UserInput {
     Image { url: String },
 }
 
+pub const CAPABILITY_CHANNEL_TOOL_RESTRICTIONS_V1: &str = "channelToolRestrictionsV1";
+
+pub const CAPABILITY_UNATTENDED_TURNS_V1: &str = "unattendedTurnsV1";
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TurnStartParams {
+    /// Restrict only this turn to existing tool permissions without human interaction.
+    /// This never grants permissions or changes the persisted task policy.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub retention: Option<TurnRetentionAuthorizationV1>,
+    pub unattended: Option<bool>,
+    /// Immutable channel policy for this unattended turn; never changes tool schemas.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub channel_tool_restrictions:
+        Option<kcoder_types::channel_tool_restrictions::ChannelToolRestrictions>,
+    /// Current foreground client declaration; never inherited from history.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub client_presentation: Option<ClientPresentationV1>,
+    /// Per-request async question declaration. Gateways must overwrite it from the
+    /// capability negotiated for the requesting client.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub async_user_questions: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub retention: Option<TurnRetentionRequestV1>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub computer_use: Option<ComputerUseTurnAuthorization>,
     /// Current requires retryModelConfigurationV1 and an exact failed attempt.
@@ -1718,6 +2167,9 @@ pub struct Turn {
     pub id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub attempt_id: Option<String>,
+    /// Locator only; reading the canonical reviewed-memory snapshot rechecks authorization.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub memory_snapshot_id: Option<String>,
     pub thread_id: String,
     pub status: TurnStatus,
 }
@@ -1797,6 +2249,10 @@ pub struct TurnStartedParams {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TurnCompletedParams {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub file_changes_capture: Option<TurnFileChangesCapture>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub review_evidence: Option<TurnReviewEvidence>,
     #[serde(flatten)]
     pub context: EventContext,
     pub turn: Turn,
@@ -1830,17 +2286,25 @@ pub struct ItemCompletedParams {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "json-schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct ApprovalRequestParams {
+    /// Present only when approvalToolCallIdentityV1 was negotiated.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool_call_id: Option<String>,
     pub server_id: String,
     pub thread_id: String,
     pub turn_id: String,
     pub approval_id: String,
+    /// Opaque app-server lifetime that prevents a transport id from being reused after restart.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub app_server_epoch: Option<String>,
     pub action: ApprovalAction,
     pub reason: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "json-schema", derive(schemars::JsonSchema))]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ApprovalAction {
     Command { command: String },
@@ -1848,6 +2312,7 @@ pub enum ApprovalAction {
     Tool { name: String, input: Value },
 }
 
+#[cfg_attr(feature = "json-schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ApprovalDecision {
@@ -1857,6 +2322,7 @@ pub enum ApprovalDecision {
     Cancel,
 }
 
+#[cfg_attr(feature = "json-schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ApprovalResponse {
@@ -1890,6 +2356,8 @@ pub struct ApprovalResolvedParams {
     pub approval_id: String,
     pub thread_id: String,
     pub turn_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub app_server_epoch: Option<String>,
     pub decision: ApprovalDecision,
     pub reason: String,
 }
@@ -1901,6 +2369,9 @@ pub struct QuestionRequestParams {
     pub thread_id: String,
     pub turn_id: String,
     pub question_id: String,
+    /// Opaque app-server lifetime that prevents a transport id from being reused after restart.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub app_server_epoch: Option<String>,
     pub questions: Vec<Question>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub annotations: Option<Value>,
@@ -1933,12 +2404,14 @@ pub struct QuestionOption {
     pub preview: Option<String>,
 }
 
+#[cfg_attr(feature = "json-schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct QuestionAnswer {
     #[serde(default)]
     pub answers: Vec<String>,
 }
 
+#[cfg_attr(feature = "json-schema", derive(schemars::JsonSchema))]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct QuestionResponse {
@@ -1974,6 +2447,8 @@ pub struct QuestionResolvedParams {
     pub question_id: String,
     pub thread_id: String,
     pub turn_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub app_server_epoch: Option<String>,
     pub reason: String,
 }
 
@@ -2075,3 +2550,11 @@ pub use knowledge::*;
 
 mod knowledge_archive;
 pub use knowledge_archive::*;
+
+mod turn_review_evidence;
+pub use turn_review_evidence::*;
+pub mod task_comparison;
+pub use task_comparison::*;
+pub mod task_delivery;
+pub use task_delivery::*;
+pub mod browser_profiles;

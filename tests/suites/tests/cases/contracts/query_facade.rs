@@ -59,7 +59,13 @@ impl Provider for PublicQueryProvider {
 #[tokio::test]
 async fn public_query_facade_runs_a_real_turn_through_its_exported_api() {
     let temporary = tempfile::tempdir().unwrap();
-    let settings = Settings::default();
+    // Fresh installations configure no Provider; declare the context limits a
+    // configured Provider would supply, or the Engine refuses the turn.
+    let settings = Settings {
+        context_window_tokens: Some(128_000),
+        context_output_headroom: Some(16_000),
+        ..Settings::default()
+    };
     let state = AppState::new(temporary.path());
     state.add_message(Message::user_text("通过 kcoder_query 发起请求"));
     let engine = kcoder_query::QueryEngine::new_for_client(

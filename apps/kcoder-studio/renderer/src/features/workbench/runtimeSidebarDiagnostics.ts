@@ -1,7 +1,8 @@
+import { isRuntimeDebugEnabled } from '@/lib/diagnosticPreferences'
 import type { RuntimeWorkListResponse } from '@/types/api'
 
 export function debugRuntimeSidebarState(event: string, details: Record<string, unknown>): void {
-  if (globalThis.localStorage?.getItem('wework:debug-runtime') !== '1') return
+  if (!isRuntimeDebugEnabled()) return
 
   console.info('[KCoder Studio] Runtime sidebar state', {
     event,

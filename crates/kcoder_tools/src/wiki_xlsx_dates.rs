@@ -1,6 +1,6 @@
 //! Decode stored Excel booleans and date/time serials without evaluating formulas.
 use super::{attr, error, text_event};
-use crate::ToolError;
+use crate::DocumentParseError;
 use chrono::{Duration, NaiveDate};
 use quick_xml::{Reader, events::Event};
 use std::collections::HashMap;
@@ -15,7 +15,7 @@ pub(super) enum Format {
     Duration,
 }
 
-pub(super) fn styles(xml: &str) -> Result<Vec<Format>, ToolError> {
+pub(super) fn styles(xml: &str) -> Result<Vec<Format>, DocumentParseError> {
     let mut reader = Reader::from_str(xml);
     let mut custom = HashMap::new();
     let mut formats = Vec::new();
@@ -113,7 +113,11 @@ fn classify(code: &str) -> Format {
     }
 }
 
-pub(super) fn render(value: &str, format: Format, epoch_1904: bool) -> Result<String, ToolError> {
+pub(super) fn render(
+    value: &str,
+    format: Format,
+    epoch_1904: bool,
+) -> Result<String, DocumentParseError> {
     if format == Format::Number || value.is_empty() {
         return Ok(value.into());
     }

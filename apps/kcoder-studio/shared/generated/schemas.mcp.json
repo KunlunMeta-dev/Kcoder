@@ -1,0 +1,248 @@
+{
+  "McpConnectionAttempt": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "definitions": {
+      "McpConnectionAttemptStatus": {
+        "description": "Latest runtime connection observation, including failure after initialization.",
+        "enum": [
+          "ready",
+          "unavailable",
+          "timedOut"
+        ],
+        "type": "string"
+      },
+      "McpFailureReason": {
+        "enum": [
+          "connectionFailed",
+          "protocolFailed",
+          "authorizationRequired",
+          "timedOut",
+          "unavailable"
+        ],
+        "type": "string"
+      }
+    },
+    "description": "Safe connection observation details; legacy peers may omit the failure category.",
+    "properties": {
+      "failureReason": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/McpFailureReason"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "status": {
+        "$ref": "#/definitions/McpConnectionAttemptStatus"
+      }
+    },
+    "required": [
+      "status"
+    ],
+    "title": "McpConnectionAttempt",
+    "type": "object"
+  },
+  "McpFailureReason": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "connectionFailed",
+      "protocolFailed",
+      "authorizationRequired",
+      "timedOut",
+      "unavailable"
+    ],
+    "title": "McpFailureReason",
+    "type": "string",
+    "x-error-codes": {
+      "authorizationRequired": "mcp_authorization_required",
+      "connectionFailed": "mcp_connection_failed",
+      "protocolFailed": "mcp_protocol_failed",
+      "timedOut": "mcp_timeout",
+      "unavailable": "mcp_unavailable"
+    }
+  },
+  "McpServerParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "name": {
+        "type": "string"
+      },
+      "pluginId": {
+        "default": null,
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "name"
+    ],
+    "title": "McpServerParams",
+    "type": "object"
+  },
+  "McpServerSummary": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "definitions": {
+      "McpAuthorizationStatus": {
+        "enum": [
+          "notApplicable",
+          "configuredHeader",
+          "notAuthorized",
+          "authorized",
+          "expired",
+          "reauthorizationRequired",
+          "unavailable"
+        ],
+        "type": "string"
+      },
+      "McpConnectionAttemptStatus": {
+        "description": "Latest runtime connection observation, including failure after initialization.",
+        "enum": [
+          "ready",
+          "unavailable",
+          "timedOut"
+        ],
+        "type": "string"
+      },
+      "McpFailureReason": {
+        "enum": [
+          "connectionFailed",
+          "protocolFailed",
+          "authorizationRequired",
+          "timedOut",
+          "unavailable"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "authorization": {
+        "$ref": "#/definitions/McpAuthorizationStatus"
+      },
+      "enabled": {
+        "type": "boolean"
+      },
+      "lastConnectionAttempt": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/McpConnectionAttemptStatus"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "lastConnectionFailure": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/McpFailureReason"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "name": {
+        "type": "string"
+      },
+      "pluginId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "transport": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "authorization",
+      "name",
+      "transport"
+    ],
+    "title": "McpServerSummary",
+    "type": "object"
+  },
+  "McpSetEnabledParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "enabled": {
+        "type": "boolean"
+      },
+      "name": {
+        "type": "string"
+      },
+      "pluginId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "enabled",
+      "name"
+    ],
+    "title": "McpSetEnabledParams",
+    "type": "object"
+  },
+  "McpSetEnabledResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "properties": {
+      "appliesToNewConversations": {
+        "type": "boolean"
+      },
+      "enabled": {
+        "type": "boolean"
+      },
+      "name": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "appliesToNewConversations",
+      "enabled",
+      "name"
+    ],
+    "title": "McpSetEnabledResult",
+    "type": "object"
+  },
+  "ThreadMcpServerV1": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "description": "A client-provided stdio server whose environment is private to its connection.",
+    "properties": {
+      "args": {
+        "default": [],
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "command": {
+        "type": "string"
+      },
+      "env": {
+        "additionalProperties": {
+          "type": "string"
+        },
+        "default": {},
+        "type": "object"
+      },
+      "name": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "command",
+      "name"
+    ],
+    "title": "ThreadMcpServerV1",
+    "type": "object"
+  }
+}

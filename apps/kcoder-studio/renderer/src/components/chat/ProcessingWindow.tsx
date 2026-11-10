@@ -133,7 +133,7 @@ export function ProcessingWindow({
 
   return (
     <div
-      className="relative min-w-0 w-full max-w-[600px]"
+      className="relative min-w-0 w-full"
       data-testid="processing-window"
       data-state-key={stateKey}
     >

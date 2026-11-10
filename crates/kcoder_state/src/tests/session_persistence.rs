@@ -22,6 +22,8 @@
         let tmp = TempDir::new().unwrap();
         let path = tmp.path().join("legacy-origin.jsonl");
         let entry = HistoryEntry {
+            web_sources: Vec::new(),
+            history_attempt: None,
             session_id: "legacy".into(), timestamp_ms: 1, uuid: None, parent_uuid: None,
             message: Message::user_text("Earlier conversation summary: literal")
                 .with_origin(kcoder_types::MessageOrigin::Unknown),
@@ -64,6 +66,8 @@
         let tmp = TempDir::new().unwrap();
         let path = tmp.path().join("legacy.jsonl");
         let entry = HistoryEntry {
+            web_sources: Vec::new(),
+            history_attempt: None,
             session_id: "legacy".into(),
             timestamp_ms: 1234,
             uuid: None,
@@ -906,6 +910,8 @@
             append_history_entry(
                 &history,
                 &HistoryEntry {
+                    web_sources: Vec::new(),
+                    history_attempt: None,
                     session_id: "indexed".to_string(),
                     timestamp_ms: index,
                     uuid: Some(format!("uuid-{index}")),
@@ -941,6 +947,8 @@
         let history = tmp.path().join("session.jsonl");
         let exit_diagnostic = exit_diagnostic_path_for_history(&history);
         let entry = HistoryEntry {
+            web_sources: Vec::new(),
+            history_attempt: None,
             session_id: "session".to_string(),
             timestamp_ms: now_millis(),
             uuid: Some(generate_transcript_uuid()),

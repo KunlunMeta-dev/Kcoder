@@ -62,7 +62,7 @@ impl AppState {
                 owner: inner.session_id.clone(),
                 path: inner.history_path.clone(),
                 messages: inner.messages.clone(),
-                ids: inner.message_history_ids.clone(),
+                ids: inner.message_history_ids.to_vec(),
                 cut,
                 turn,
                 boundary: (cut == 0 || anchor.is_some()).then(generate_transcript_uuid),

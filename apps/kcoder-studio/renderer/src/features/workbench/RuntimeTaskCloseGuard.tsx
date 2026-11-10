@@ -4,9 +4,9 @@ import { createPortal, flushSync } from 'react-dom'
 import { Button } from '@/components/ui/button'
 import { useEscapeKey } from '@/hooks/useEscapeKey'
 import { useTranslation } from '@/hooks/useTranslation'
-import { isTauriRuntime } from '@/lib/runtime-environment'
-import { updateAppPreferences } from '@/tauri/appPreferences'
-import { closeMainWindowToTray, installRuntimeTaskCloseGuard } from '@/tauri/runtimeTaskCloseGuard'
+import { isGatewayRuntime } from '@/lib/runtime-environment'
+import { updateAppPreferences } from '@/host/appPreferences'
+import { closeMainWindowToTray, installRuntimeTaskCloseGuard } from '@/host/runtimeTaskCloseGuard'
 import { useRuntimeTaskLifecycleStoreSnapshot } from './runtimeTaskLifecycle'
 
 export function RuntimeTaskCloseGuard() {
@@ -16,7 +16,7 @@ export function RuntimeTaskCloseGuard() {
   const [closing, setClosing] = useState(false)
 
   useEffect(() => {
-    if (!isTauriRuntime()) return undefined
+    if (!isGatewayRuntime()) return undefined
 
     let unlisten: (() => void) | undefined
     let cancelled = false

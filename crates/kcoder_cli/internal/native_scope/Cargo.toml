@@ -1,0 +1,43 @@
+[package]
+name = "kcoder_native_scope"
+description = "Native integration scope, identity and storage validation."
+version = { workspace = true }
+edition = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+rust-version = { workspace = true }
+
+[features]
+native-identity-test-hooks = []
+
+[dependencies]
+anyhow = { workspace = true }
+chrono = { workspace = true }
+fs2 = "0.4"
+kcoder_config = { path = "../../../kcoder_config" }
+kcoder_types = { path = "../../../kcoder_types" }
+libc = { workspace = true }
+url = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+ring = "0.17.14"
+uuid = { workspace = true }
+tokio-util = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[target."cfg(target_os = \"linux\")".dependencies]
+libc = { workspace = true }
+
+[target."cfg(windows)".dependencies]
+kcoder_app_protocol = { path = "../../../kcoder_app_protocol" }
+kcoder_process_supervisor = { path = "../../../kcoder_process_supervisor" }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Security", "Win32_Security_Authorization", "Win32_Storage_FileSystem", "Win32_System_IO", "Win32_System_Pipes", "Win32_System_Threading"] }
+
+[lib]
+path = "../../src/internal/native_scope/lib.rs"

@@ -195,9 +195,25 @@ enum FixtureAnswer {
     Ok,
     Text(String),
     Custom(fn(&mut std::net::TcpStream)),
+    Tool {
+        id: String,
+        name: String,
+        input: Value,
+    },
 }
 
 fn serving_fixture_decided<F>(decide: F) -> (String, FixtureCalls, std::thread::JoinHandle<()>)
+where
+    F: Fn(usize, &Value) -> FixtureAnswer + Send + 'static,
+{
+    serving_fixture_decided_bounded(decide, None, Duration::from_secs(3))
+}
+
+fn serving_fixture_decided_bounded<F>(
+    decide: F,
+    max_calls: Option<usize>,
+    idle_timeout: Duration,
+) -> (String, FixtureCalls, std::thread::JoinHandle<()>)
 where
     F: Fn(usize, &Value) -> FixtureAnswer + Send + 'static,
 {
@@ -211,7 +227,8 @@ where
         let mut last_call = Instant::now();
         let deadline = Instant::now() + Duration::from_secs(45);
         while Instant::now() < deadline
-            && (requests.is_empty() || last_call.elapsed() < Duration::from_secs(3))
+            && max_calls.is_none_or(|limit| requests.len() < limit)
+            && (requests.is_empty() || last_call.elapsed() < idle_timeout)
         {
             let mut socket = match listener.accept() {
                 Ok((socket, _)) => socket,
@@ -255,11 +272,20 @@ where
             match decide(requests.len() - 1, requests.last().unwrap()) {
                 FixtureAnswer::Custom(behaviour) => behaviour(&mut socket),
                 FixtureAnswer::Text(text) => {
-                    let delta=json!({"choices":[{"index":0,"delta":{"content":text},"finish_reason":null}]});
-                    let stop=json!({"choices":[{"index":0,"delta":{},"finish_reason":"stop"}]});
-                    let body=format!("data: {delta}\n\ndata: {stop}\n\ndata: [DONE]\n\n");
+                    let delta = json!({"choices":[{"index":0,"delta":{"content":text},"finish_reason":null}]});
+                    let stop = json!({"choices":[{"index":0,"delta":{},"finish_reason":"stop"}]});
+                    let body = format!("data: {delta}\n\ndata: {stop}\n\ndata: [DONE]\n\n");
                     write!(socket,"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",body.len()).unwrap();
-                },
+                }
+                FixtureAnswer::Tool { id, name, input } => {
+                    let delta = json!({"choices":[{"index":0,"delta":{"role":"assistant",
+                        "tool_calls":[{"index":0,"id":id,"type":"function","function":{
+                            "name":name,"arguments":input.to_string()}}]},"finish_reason":null}]});
+                    let stop =
+                        json!({"choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}]});
+                    let body = format!("data: {delta}\n\ndata: {stop}\n\ndata: [DONE]\n\n");
+                    write!(socket,"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",body.len()).unwrap();
+                }
                 FixtureAnswer::Ok => {
                     let body = "data: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"ok\"},\"finish_reason\":null}]}\n\ndata: {\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n";
                     write!(

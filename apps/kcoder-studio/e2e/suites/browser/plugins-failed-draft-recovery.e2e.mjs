@@ -160,8 +160,8 @@ await runE2E(import.meta.url, {
     await page.keyboard.insertText("Fixture draft must fail before thread creation.");
     await page.evaluate(() => {
       window.__recoveryArchiveCalls = [];
-      const invoke = window.__TAURI_INTERNALS__.invoke;
-      window.__TAURI_INTERNALS__.invoke = function(command, args) {
+      const invoke = window.__ELECTRON_INTERNALS__.invoke;
+      window.__ELECTRON_INTERNALS__.invoke = function(command, args) {
         if (command === "local_executor_request" && args?.method === "runtime.tasks.archive") {
           window.__recoveryArchiveCalls.push(args.method);
         }

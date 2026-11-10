@@ -1,0 +1,357 @@
+{
+  "ClientPresentationV1": [
+    {
+      "decoded": {
+        "inlineWidgets": false,
+        "version": 1
+      },
+      "name": "default_explicit_version",
+      "value": {
+        "version": 1
+      }
+    },
+    {
+      "decoded": {
+        "inlineWidgets": true,
+        "studioWorkMode": "kworker",
+        "version": 1
+      },
+      "name": "office_widgets",
+      "value": {
+        "inlineWidgets": true,
+        "studioWorkMode": "kworker",
+        "version": 1
+      }
+    },
+    {
+      "decoded": {
+        "inlineWidgets": false,
+        "studioWorkMode": "kcoder",
+        "version": 1
+      },
+      "name": "coding_explicit",
+      "value": {
+        "inlineWidgets": false,
+        "studioWorkMode": "kcoder",
+        "version": 1
+      }
+    }
+  ],
+  "StudioWorkMode": [
+    {
+      "decoded": "kcoder",
+      "name": "coding",
+      "value": "kcoder"
+    },
+    {
+      "decoded": "kworker",
+      "name": "everyday_work",
+      "value": "kworker"
+    }
+  ],
+  "ThreadStreamContextV1": [
+    {
+      "decoded": {
+        "activeTurn": null,
+        "serverId": "server",
+        "throughSequence": 5
+      },
+      "name": "idle",
+      "value": {
+        "activeTurn": null,
+        "serverId": "server",
+        "throughSequence": 5
+      }
+    },
+    {
+      "decoded": {
+        "activeTurn": {
+          "attemptId": "attempt",
+          "id": "turn",
+          "status": "running",
+          "threadId": "thread"
+        },
+        "serverId": "server",
+        "throughSequence": 7
+      },
+      "name": "running",
+      "value": {
+        "activeTurn": {
+          "attemptId": "attempt",
+          "id": "turn",
+          "status": "running",
+          "threadId": "thread"
+        },
+        "serverId": "server",
+        "throughSequence": 7
+      }
+    }
+  ],
+  "WidgetContentReadParams": [
+    {
+      "decoded": {
+        "offset": 0,
+        "revision": 1,
+        "threadId": "thread-1",
+        "widgetId": "waaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "name": "retained-widget",
+      "value": {
+        "offset": 0,
+        "revision": 1,
+        "threadId": "thread-1",
+        "widgetId": "waaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    }
+  ],
+  "WidgetContentReadResult": [
+    {
+      "decoded": {
+        "bytes": 3,
+        "dataBase64": "YWJj",
+        "nextOffset": 3,
+        "offset": 0,
+        "revision": 1,
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "widgetId": "waaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "name": "retained-widget",
+      "value": {
+        "bytes": 3,
+        "dataBase64": "YWJj",
+        "nextOffset": 3,
+        "offset": 0,
+        "revision": 1,
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "widgetId": "waaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    }
+  ],
+  "WidgetInputPreview": [
+    {
+      "decoded": {
+        "bytes": 6,
+        "complete": false,
+        "format": "svg",
+        "source": "<svg/>",
+        "title": "Diagram",
+        "truncated": false
+      },
+      "name": "bounded-source",
+      "value": {
+        "bytes": 6,
+        "complete": false,
+        "format": "svg",
+        "source": "<svg/>",
+        "title": "Diagram",
+        "truncated": false
+      }
+    }
+  ],
+  "WidgetListParams": [
+    {
+      "decoded": {
+        "limit": 50,
+        "offset": 0,
+        "threadId": "thread-1"
+      },
+      "name": "retained-widget",
+      "value": {
+        "limit": 50,
+        "offset": 0,
+        "threadId": "thread-1"
+      }
+    }
+  ],
+  "WidgetListResult": [
+    {
+      "decoded": {
+        "nextOffset": null,
+        "widgets": [
+          {
+            "attemptId": "attempt-1",
+            "bytes": 128,
+            "createdAtMs": 1,
+            "executionMode": "managed",
+            "format": "html",
+            "libraries": [
+              "chart_js"
+            ],
+            "revision": 1,
+            "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "summary": "Quarterly sales",
+            "threadId": "thread-1",
+            "title": "Sales",
+            "toolCallId": "call-1",
+            "turnId": "turn-1",
+            "widgetId": "waaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          }
+        ]
+      },
+      "name": "retained-widget",
+      "value": {
+        "nextOffset": null,
+        "widgets": [
+          {
+            "attemptId": "attempt-1",
+            "bytes": 128,
+            "createdAtMs": 1,
+            "executionMode": "managed",
+            "format": "html",
+            "libraries": [
+              "chart_js"
+            ],
+            "revision": 1,
+            "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "summary": "Quarterly sales",
+            "threadId": "thread-1",
+            "title": "Sales",
+            "toolCallId": "call-1",
+            "turnId": "turn-1",
+            "widgetId": "waaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          }
+        ]
+      }
+    }
+  ],
+  "WidgetReadParams": [
+    {
+      "decoded": {
+        "revision": 1,
+        "threadId": "thread-1",
+        "widgetId": "waaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "name": "retained-widget",
+      "value": {
+        "revision": 1,
+        "threadId": "thread-1",
+        "widgetId": "waaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    }
+  ],
+  "WidgetReadResult": [
+    {
+      "decoded": {
+        "widget": {
+          "attemptId": "attempt-1",
+          "bytes": 128,
+          "createdAtMs": 1,
+          "executionMode": "managed",
+          "format": "html",
+          "libraries": [
+            "chart_js"
+          ],
+          "revision": 1,
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "summary": "Quarterly sales",
+          "threadId": "thread-1",
+          "title": "Sales",
+          "toolCallId": "call-1",
+          "turnId": "turn-1",
+          "widgetId": "waaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      "name": "retained-widget",
+      "value": {
+        "widget": {
+          "attemptId": "attempt-1",
+          "bytes": 128,
+          "createdAtMs": 1,
+          "executionMode": "managed",
+          "format": "html",
+          "libraries": [
+            "chart_js"
+          ],
+          "revision": 1,
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "summary": "Quarterly sales",
+          "threadId": "thread-1",
+          "title": "Sales",
+          "toolCallId": "call-1",
+          "turnId": "turn-1",
+          "widgetId": "waaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      }
+    }
+  ],
+  "WidgetRef": [
+    {
+      "decoded": {
+        "attemptId": "attempt-1",
+        "bytes": 128,
+        "createdAtMs": 1,
+        "executionMode": "managed",
+        "format": "html",
+        "libraries": [
+          "chart_js"
+        ],
+        "revision": 1,
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "summary": "Quarterly sales",
+        "threadId": "thread-1",
+        "title": "Sales",
+        "toolCallId": "call-1",
+        "turnId": "turn-1",
+        "widgetId": "waaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "name": "retained-widget",
+      "value": {
+        "attemptId": "attempt-1",
+        "bytes": 128,
+        "createdAtMs": 1,
+        "executionMode": "managed",
+        "format": "html",
+        "libraries": [
+          "chart_js"
+        ],
+        "revision": 1,
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "summary": "Quarterly sales",
+        "threadId": "thread-1",
+        "title": "Sales",
+        "toolCallId": "call-1",
+        "turnId": "turn-1",
+        "widgetId": "waaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    }
+  ],
+  "WidgetRenderReceiptParams": [
+    {
+      "decoded": {
+        "attemptId": "attempt-1",
+        "errorCode": null,
+        "status": "rendered",
+        "toolCallId": "call-1",
+        "turnId": "turn-1",
+        "widget": {
+          "revision": 1,
+          "threadId": "thread-1",
+          "widgetId": "waaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      "name": "retained-widget",
+      "value": {
+        "attemptId": "attempt-1",
+        "status": "rendered",
+        "toolCallId": "call-1",
+        "turnId": "turn-1",
+        "widget": {
+          "revision": 1,
+          "threadId": "thread-1",
+          "widgetId": "waaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      }
+    }
+  ],
+  "WidgetRenderReceiptResult": [
+    {
+      "decoded": {
+        "accepted": true
+      },
+      "name": "retained-widget",
+      "value": {
+        "accepted": true
+      }
+    }
+  ]
+}

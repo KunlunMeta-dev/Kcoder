@@ -5,14 +5,8 @@ use super::*;
 mod runtime_wiring;
 pub(super) use runtime_wiring::*;
 
-mod entry_modes;
-pub(super) use entry_modes::*;
+pub(super) use kcoder_cli_commands::{credentials::*, entry_modes::*, settings_overrides::*};
 
-mod settings_overrides;
-pub(super) use settings_overrides::*;
-
-mod credentials;
-pub(super) use credentials::*;
-
-mod extension_preflight;
-pub(super) use extension_preflight::*;
+pub(super) use kcoder_cli_support::{
+    extension_preflight::*, headless_questioner::HeadlessUserQuestioner, session_history::*,
+};

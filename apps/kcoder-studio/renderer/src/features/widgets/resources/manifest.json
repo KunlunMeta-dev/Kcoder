@@ -1,0 +1,70 @@
+[
+  {
+    "id": "chart_js",
+    "package": "chart.js",
+    "version": "4.5.1",
+    "file": "chartjs.js",
+    "source": "dist/chart.umd.min.js",
+    "license": "chart_js.LICENSE",
+    "sha256": "48444a82d4edcb5bec0f1965faacdde18d9c17db3063d042abada2f705c9f54a",
+    "bytes": 208522,
+    "url": "https://github.com/chartjs/Chart.js",
+    "bundledLicenses": [
+      {
+        "package": "@kurkle/color",
+        "version": "0.3.4",
+        "file": "kurkle_color.LICENSE",
+        "packageFile": "LICENSE.md",
+        "sha256": "89ba0032731489153d552db918b727feb05128cf9eca20092875a9ad14147671"
+      }
+    ],
+    "licenseSource": "LICENSE.md",
+    "licenseSha256": "41a84aa2caba645f966a18d9c2056b73e6d3a81d80bc0046bc0011a2634d4cce"
+  },
+  {
+    "id": "d3",
+    "package": "d3",
+    "version": "7.9.0",
+    "file": "d3.js",
+    "source": "dist/d3.min.js",
+    "license": "d3.LICENSE",
+    "sha256": "f2094bbf6141b359722c4fe454eb6c4b0f0e42cc10cc7af921fc158fceb86539",
+    "bytes": 279706,
+    "url": "https://github.com/d3/d3",
+    "licenseSource": "LICENSE",
+    "licenseSha256": "3e6849627f74ff73c257a3ae1efb574015d94fc1035c05ec3c15805165efcbc4"
+  },
+  {
+    "id": "topojson",
+    "package": "topojson-client",
+    "version": "3.1.0",
+    "file": "topojson.js",
+    "source": "dist/topojson-client.min.js",
+    "license": "topojson.LICENSE",
+    "sha256": "25cd02ae486cc5063e0215a4e4cfb15de83700c87ac48bac4d57dc6aaf3ebb89",
+    "bytes": 7169,
+    "url": "https://github.com/topojson/topojson-client",
+    "licenseSource": "LICENSE",
+    "licenseSha256": "4c4d15b635e04e691825a76db7d33f7f2033b55669a7430011694f31e6c65999"
+  },
+  {
+    "id": "world_atlas",
+    "package": "world-atlas",
+    "version": "2.0.2",
+    "file": "countries-110m.json",
+    "source": "countries-110m.json",
+    "license": "world_atlas.LICENSE",
+    "sha256": "2516c915867c7baf18ddec727aec46c315541a07cfb3d79a6559b05d5e94eee8",
+    "bytes": 107761,
+    "url": "https://github.com/topojson/world-atlas",
+    "dataSource": "Natural Earth",
+    "dataVersion": "4.1.0",
+    "scale": "1:110m",
+    "coordinates": "spherical longitude/latitude decimal degrees",
+    "countryId": "ISO 3166-1 numeric",
+    "dataLicense": "public domain",
+    "dataLicenseUrl": "https://www.naturalearthdata.com/about/terms-of-use/",
+    "licenseSource": "LICENSE",
+    "licenseSha256": "8048290dfdb6e83fbed17e8985c8cfc4ce9da9b842642f3d3e497280790cfa31"
+  }
+]

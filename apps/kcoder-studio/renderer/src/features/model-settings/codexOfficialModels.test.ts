@@ -1,14 +1,49 @@
 import { describe, expect, test } from 'vitest'
-import { codexModelPickerLabel, codexOfficialModelName, normalizeCodexOfficialModelList } from './codexOfficialModels'
+import {
+  codexModelPickerLabel,
+  codexOfficialModelName,
+  normalizeCodexOfficialModelList,
+} from './codexOfficialModels'
 
 describe('codexOfficialModels', () => {
   test('keeps execution identities distinct while displaying bare models', () => {
-    const result = normalizeCodexOfficialModelList({ providers: [
-      { id: 'first', type: 'provider', data: [{ id: 'first::same', model: 'same' }, { id: 'first::other', model: 'other' }] },
-      { id: 'second', type: 'provider', data: [{ id: 'second::same', model: 'same' }] },
-    ] })
-    expect(result.models.map(codexOfficialModelName)).toEqual(['first::same', 'first::other', 'second::same'])
+    const result = normalizeCodexOfficialModelList({
+      providers: [
+        {
+          id: 'first',
+          type: 'provider',
+          data: [
+            { id: 'first::same', model: 'same' },
+            { id: 'first::other', model: 'other' },
+          ],
+        },
+        { id: 'second', type: 'provider', data: [{ id: 'second::same', model: 'same' }] },
+      ],
+    })
+    expect(result.models.map(codexOfficialModelName)).toEqual([
+      'first::same',
+      'first::other',
+      'second::same',
+    ])
     expect(result.models.map(model => model.displayName)).toEqual(['same', 'other', 'same'])
+  })
+  test('preserves runtime support for in-turn model switching', () => {
+    const result = normalizeCodexOfficialModelList({
+      supportsTurnModelSwitch: true,
+      providers: [
+        { id: 'profile', type: 'provider', data: [{ id: 'profile::model', model: 'model' }] },
+      ],
+    })
+    expect(result.supportsTurnModelSwitch).toBe(true)
+  })
+  test('preserves negotiated in-turn model-switch support from the runtime catalog', () => {
+    const result = normalizeCodexOfficialModelList({
+      supportsTurnModelSwitch: true,
+      providers: [
+        { id: 'profile', type: 'provider', data: [{ id: 'profile::model', model: 'model' }] },
+      ],
+    })
+    expect(result.supportsTurnModelSwitch).toBe(true)
   })
   test('preserves provider order and unknown model order while applying picker order', () => {
     const models = normalizeCodexOfficialModelList({
@@ -123,10 +158,15 @@ describe('codexOfficialModels', () => {
   })
 })
 
-
 test('model mode capability requires an explicit boolean true', () => {
   for (const value of [undefined, false, 'true', 1, null]) {
-    expect(normalizeCodexOfficialModelList({ data: [], supportsModelSelectionMode: value }).supportsModelSelectionMode).toBe(false)
+    expect(
+      normalizeCodexOfficialModelList({ data: [], supportsModelSelectionMode: value })
+        .supportsModelSelectionMode
+    ).toBe(false)
   }
-  expect(normalizeCodexOfficialModelList({ data: [], supportsModelSelectionMode: true }).supportsModelSelectionMode).toBe(true)
+  expect(
+    normalizeCodexOfficialModelList({ data: [], supportsModelSelectionMode: true })
+      .supportsModelSelectionMode
+  ).toBe(true)
 })

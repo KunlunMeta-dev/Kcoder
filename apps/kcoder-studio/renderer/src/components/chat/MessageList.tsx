@@ -1,3 +1,8 @@
+import { isConversationMentionUri } from '@/lib/conversation-mentions'
+import { normalizeReviewEvidence } from '../../../../shared/reviewEvidence'
+import { useWidgetMessageActivity } from './widgets/widgetContext'
+import { WidgetMessageBoundary, WidgetMessageArtifacts } from './widgets/WidgetMessageBoundary'
+import { conversationBlockGap } from '../../../../shared/conversationReading'
 import { isActiveToolCallStatus } from '@wegent/chat-core'
 import { failureRecoveryFacts } from '../../../../shared/failureRecoveryFacts'
 import { Fragment, memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
@@ -46,7 +51,7 @@ import {
   isTextAttachment,
 } from '@/lib/attachments'
 import { openLocalFile } from '@/lib/local-terminal'
-import { isTauriRuntime } from '@/lib/runtime-environment'
+import { isGatewayRuntime } from '@/lib/runtime-environment'
 import { splitRuntimeUserMessage, visibleRuntimeUserMessage } from '@/lib/runtime-user-message'
 import { parseChatError } from '@/lib/chat-error'
 import { decodeProviderFailure } from '@wegent/chat-core'
@@ -56,6 +61,7 @@ import { ImSourceBadge } from '@/components/common/ImSourceBadge'
 import { cn } from '@/lib/utils'
 import { AssistantMarkdown } from './AssistantMarkdown'
 import { AssistantThinkingIndicator } from './AssistantThinkingIndicator'
+import { resolveAssistantReplyTypography } from './assistantReplyTypography'
 import { ProviderRetryStatus } from './ProviderRetryStatus'
 import { useProviderRetryActivity } from './useProviderRetryActivity'
 import { useGeneratingToolBlocks } from './useGeneratingToolBlocks'
@@ -65,8 +71,13 @@ import { AttachmentImagePreview } from './AttachmentImagePreview'
 import { ToolBlocksDisplay } from './blocks/ToolBlocksDisplay'
 import { getDurationText } from './blocks/processingDuration'
 import { usePersistentProcessingExpansion } from './blocks/processingExpansionState'
+import { useConversationPreferences } from '@/features/appearance/useConversationPreferences'
 import { isContextCompactionToolName, isGuidanceToolName } from './blocks/toolBlockKinds'
-import { CODEX_IMPLEMENT_PLAN_RESPONSE_LABEL } from './requestUserInputMessages'
+import {
+  CODEX_IMPLEMENT_PLAN_RESPONSE_LABEL,
+  isRequestUserInputBlock,
+  requestUserInputBlockKey,
+} from './requestUserInputMessages'
 import type { RequestUserInputPayload } from './RequestUserInputCard'
 import { buildProcessingDisplayRows, isWebSearchToolName } from './blocks/toolBlockActivity'
 import { WebSearchSourcesChip } from './blocks/WebSearchSources'
@@ -74,8 +85,11 @@ import { getWebSearchSourceItems } from './blocks/webSearchActivity'
 import { CodexMemoryCitations, CodexReferenceList } from './CodexTurnArtifacts'
 import { getAssistantReferences } from './codexReferences'
 import { FileChangesCard } from './FileChangesCard'
+import { normalizeTurnFileCapture } from '../../../../shared/turnFileCapture'
 import { composerPathReference, composerSkillFilePath } from './composer/composerMentions'
 import { getMessagePretextIntrinsicHeight } from './messagePretextLayout'
+import { adjustVirtualMessageAboveViewport } from './messageVirtualScroll'
+import { getMessageWidgetOwnership, type MessageWidgetOwnership } from './messageWidgetOwnership'
 import type { AssistantPlanOpenRequest } from './AssistantPlanCard'
 import {
   cacheConversationVirtualMeasurements,
@@ -86,6 +100,7 @@ interface MessageListProps {
   messages: WorkbenchMessage[]
   scrollElementRef?: RefObject<HTMLDivElement | null>
   initialDistanceFromBottomPx?: number
+  followBottom?: boolean
   className?: string
   conversationKey?: string | number | null
   processingWindowEnabled?: boolean
@@ -195,6 +210,7 @@ export const MessageList = memo(function MessageList({
   messages,
   scrollElementRef,
   initialDistanceFromBottomPx = 0,
+  followBottom = true,
   className,
   conversationKey,
   processingWindowEnabled = false,
@@ -227,6 +243,7 @@ export const MessageList = memo(function MessageList({
   renderGapAfterMessage,
 }: MessageListProps) {
   const { t } = useTranslation('common')
+  const readingPreferences = useConversationPreferences()
   const providerRetry = useProviderRetryActivity(providerRetryTarget, providerRetryTask)
   const listRef = useRef<HTMLDivElement>(null)
   const layoutWidthUpdateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -235,8 +252,12 @@ export const MessageList = memo(function MessageList({
   const [layoutWidth, setLayoutWidth] = useState(0)
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null)
   const [submittingEditMessageId, setSubmittingEditMessageId] = useState<string | null>(null)
-  const isTauri = isTauriRuntime()
+  const isGateway = isGatewayRuntime()
   const visibleMessages = useMemo(() => messages.filter(shouldRenderMessage), [messages])
+  const widgetOwnership = useMemo(
+    () => getMessageWidgetOwnership(visibleMessages),
+    [visibleMessages]
+  )
   const editableLastUserMessageId = useMemo(
     () =>
       editableLastUserMessage(
@@ -265,7 +286,7 @@ export const MessageList = memo(function MessageList({
   const listLayoutClass = className
     ? 'mx-auto flex min-w-0 flex-col gap-4 pb-2 pt-8'
     : 'mx-auto flex w-full min-w-0 max-w-3xl flex-col gap-4 px-6 pb-2 pt-8'
-  const virtualMessages = isTauri && Boolean(scrollElementRef)
+  const virtualMessages = isGateway && Boolean(scrollElementRef)
   const virtualMeasurementKey = conversationKey == null ? null : String(conversationKey)
   const forcedVirtualMessageIndex = useMemo(
     () =>
@@ -318,7 +339,9 @@ export const MessageList = memo(function MessageList({
     paddingStart: MESSAGE_LIST_PADDING_TOP_PX,
     paddingEnd: MESSAGE_LIST_PADDING_BOTTOM_PX,
     overscan: VIRTUAL_MESSAGE_OVERSCAN,
-    anchorTo: 'end',
+    // The conversation owner revokes bottom following on explicit user input.
+    // A physical clamp to the bottom must not let the virtualizer reacquire it.
+    anchorTo: followBottom ? 'end' : 'start',
     rangeExtractor: range => {
       const indexes =
         range.count <= VIRTUAL_MESSAGE_FULL_MEASUREMENT_COUNT
@@ -331,6 +354,14 @@ export const MessageList = memo(function MessageList({
     },
     initialMeasurementsCache,
   })
+
+  useLayoutEffect(() => {
+    messageVirtualizer.shouldAdjustScrollPositionOnItemSizeChange =
+      adjustVirtualMessageAboveViewport
+    return () => {
+      messageVirtualizer.shouldAdjustScrollPositionOnItemSizeChange = undefined
+    }
+  }, [messageVirtualizer])
 
   useEffect(
     () => () => {
@@ -378,7 +409,7 @@ export const MessageList = memo(function MessageList({
   }, [virtualMessages])
 
   useEffect(() => {
-    if (isTauri && (!onAddSelectionToConversation || !onAskSelectionInSidebar)) return
+    if (isGateway && (!onAddSelectionToConversation || !onAskSelectionInSidebar)) return
 
     const updateSelectionState = (preserveCapturedSelection = false) => {
       const selection = document.getSelection?.()
@@ -394,7 +425,7 @@ export const MessageList = memo(function MessageList({
       const selectionTouchesList =
         isNodeInsideElement(selection.anchorNode, root) ||
         isNodeInsideElement(selection.focusNode, root)
-      setIsTextSelectionActive(!isTauri && selectionTouchesList)
+      setIsTextSelectionActive(!isGateway && selectionTouchesList)
       if (!onAddSelectionToConversation || !onAskSelectionInSidebar) return
 
       const range = selection.getRangeAt(0)
@@ -457,7 +488,7 @@ export const MessageList = memo(function MessageList({
       window.removeEventListener('scroll', handleScroll, true)
       window.removeEventListener('blur', handleBlur)
     }
-  }, [conversationKey, isTauri, onAddSelectionToConversation, onAskSelectionInSidebar])
+  }, [conversationKey, isGateway, onAddSelectionToConversation, onAskSelectionInSidebar])
 
   const applySelectionAction = (action: (text: string) => void) => {
     if (!textSelection) return
@@ -479,7 +510,15 @@ export const MessageList = memo(function MessageList({
           ? {
               height:
                 messageVirtualizer.getTotalSize() +
-                (hasTransientTailStatus ? MESSAGE_LIST_GAP_PX + 32 : 0),
+                (hasTransientTailStatus
+                  ? MESSAGE_LIST_GAP_PX +
+                    (shouldShowWaitingIndicator
+                      ? getAssistantPendingHeight(
+                          readingPreferences,
+                          processingWindowEnabled === true
+                        )
+                      : 32)
+                  : 0),
             }
           : undefined
       }
@@ -535,16 +574,25 @@ export const MessageList = memo(function MessageList({
         const { index } = row
         const message = visibleMessages[index]
         const nextMessage = visibleMessages[index + 1]
+        const containMessage = !isGateway && !disableContentVisibility && !isTextSelectionActive
         const article = (
           <article
             className={cn(
               'min-w-0',
-              !isTauri &&
-                !disableContentVisibility &&
-                !isTextSelectionActive &&
-                '[content-visibility:auto]',
+              // Skipped rows keep their last rendered height (auto) and use the
+              // pretext estimate before first paint, so scrolling never
+              // collapses off-screen messages to zero and shifts the list.
+              containMessage &&
+                '[content-visibility:auto] [contain-intrinsic-size:auto_var(--message-intrinsic-height,220px)]',
               message.role === 'user' && 'flex justify-end'
             )}
+            style={
+              containMessage
+                ? ({
+                    '--message-intrinsic-height': `${Math.ceil(messageIntrinsicHeights.get(message.id) ?? 220)}px`,
+                  } as React.CSSProperties)
+                : undefined
+            }
             data-message-id={message.id}
             data-testid={`message-${message.role}`}
           >
@@ -575,6 +623,7 @@ export const MessageList = memo(function MessageList({
             ) : (
               <AssistantMessage
                 message={message}
+                widgetOwnership={widgetOwnership.get(message.id)}
                 conversationKey={conversationKey}
                 processingWindowEnabled={processingWindowEnabled}
                 hideThinkingIndicator={Boolean(providerRetry)}
@@ -620,13 +669,18 @@ export const MessageList = memo(function MessageList({
               ? {
                   position: 'absolute',
                   left: 0,
-                  top: messageVirtualizer.getTotalSize() + MESSAGE_LIST_GAP_PX,
+                  // The virtualizer total includes bottom padding, whereas a
+                  // following message starts immediately after the last row.
+                  top:
+                    messageVirtualizer.getTotalSize() -
+                    MESSAGE_LIST_PADDING_BOTTOM_PX +
+                    MESSAGE_LIST_GAP_PX,
                   width: '100%',
                 }
               : undefined
           }
         >
-          <AssistantThinkingIndicator />
+          <AssistantWaitingPlaceholder windowed={processingWindowEnabled === true} />
         </article>
       )}
       {providerRetry && (
@@ -637,7 +691,10 @@ export const MessageList = memo(function MessageList({
               ? {
                   position: 'absolute',
                   left: 0,
-                  top: messageVirtualizer.getTotalSize() + MESSAGE_LIST_GAP_PX,
+                  top:
+                    messageVirtualizer.getTotalSize() -
+                    MESSAGE_LIST_PADDING_BOTTOM_PX +
+                    MESSAGE_LIST_GAP_PX,
                   width: '100%',
                 }
               : undefined
@@ -662,6 +719,57 @@ function getVirtualMeasurementSnapshot(
   if (snapshot.some(item => typeof item.key === 'string' && !messageIds.has(item.key))) return []
 
   return snapshot
+}
+
+function getAssistantPendingHeight(
+  preferences: ReturnType<typeof useConversationPreferences>,
+  windowed: boolean
+) {
+  if (windowed) return 64
+  const lineHeight = resolveAssistantReplyTypography(
+    preferences.conversationFontScale,
+    preferences.conversationLineSpacing
+  ).body.lineHeight
+  return (
+    32 +
+    conversationBlockGap[preferences.conversationBlockSpacing ?? 'normal'] +
+    parseFloat(String(lineHeight))
+  )
+}
+
+function AssistantWaitingPlaceholder({ windowed }: { windowed: boolean }) {
+  const preferences = useConversationPreferences()
+  const typography = resolveAssistantReplyTypography(
+    preferences.conversationFontScale,
+    preferences.conversationLineSpacing
+  )
+  const indicator = (
+    <div className="flex min-h-8 items-center text-sm">
+      <AssistantThinkingIndicator />
+    </div>
+  )
+
+  if (windowed) {
+    return (
+      <div className="min-w-0 text-chat">
+        <div className="min-h-8" aria-hidden="true" />
+        <div className="min-w-0 border-l-2 border-border/60 pl-3 pr-7 text-text-muted">
+          {indicator}
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div
+      className="flex min-w-0 flex-col text-chat"
+      style={{ gap: conversationBlockGap[preferences.conversationBlockSpacing ?? 'normal'] }}
+    >
+      {indicator}
+      {/* Reserve the reply below the status so the status itself never moves. */}
+      <div style={{ minHeight: typography.body.lineHeight }} aria-hidden="true" />
+    </div>
+  )
 }
 
 function selectableMessageBodiesForRange(root: HTMLElement, range: Range): HTMLElement[] {
@@ -701,6 +809,7 @@ function areMessageListPropsEqual(previous: MessageListProps, next: MessageListP
     previous.initialDistanceFromBottomPx !== next.initialDistanceFromBottomPx
       ? 'initialDistanceFromBottomPx'
       : null,
+    previous.followBottom !== next.followBottom ? 'followBottom' : null,
     previous.className !== next.className ? 'className' : null,
     previous.conversationKey !== next.conversationKey ? 'conversationKey' : null,
     previous.processingWindowEnabled !== next.processingWindowEnabled
@@ -767,6 +876,8 @@ function shouldRenderMessage(message: WorkbenchMessage): boolean {
     return true
   if (isCancelledAssistantMessage(message)) return true
   if (message.fileChanges) return true
+  if (normalizeReviewEvidence(message.reviewEvidence)) return true
+  if (normalizeTurnFileCapture(message.fileChangesCapture)) return true
   if (message.references?.length || message.memoryCitations?.length) {
     return true
   }
@@ -1676,7 +1787,7 @@ function MessageHoverActions({
       className={[
         'flex min-h-5 select-none items-center gap-1 text-xs text-text-muted transition-opacity duration-150',
         visible ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0',
-        align === 'right' ? 'justify-end' : 'justify-start',
+        align === 'right' ? 'justify-end' : 'mt-1 justify-start',
       ].join(' ')}
     >
       {align === 'right' ? (
@@ -1698,7 +1809,7 @@ function MessageHoverActions({
 }
 
 const CODEX_MENTION_LINK_PATTERN =
-  /\[([@$])([^\]]+)]\(((?:skill:\/\/[^)]+SKILL\.md)|(?:\/[^)\n]*SKILL\.md)|(?:app:\/\/[^)]+)|(?:plugin:\/\/[^)]+)|(?:file:\/\/[^)]+)|(?:folder:\/\/[^)]+)|(?:cloud:\/\/[^)]+)|(?:wework-conversation:\/\/[^)]+))\)/g
+  /\[([@$])([^\]]+)]\(((?:skill:\/\/[^)]+SKILL\.md)|(?:\/[^)\n]*SKILL\.md)|(?:app:\/\/[^)]+)|(?:plugin:\/\/[^)]+)|(?:file:\/\/[^)]+)|(?:folder:\/\/[^)]+)|(?:cloud:\/\/[^)]+)|(?:(?:kcoder|wework)-conversation:\/\/[^)]+))\)/g
 
 function codexMentionTokenTestId(name: string): string {
   return name.replace(/[^a-zA-Z0-9_-]/g, '-')
@@ -1720,7 +1831,7 @@ function codexMentionKind(
   if (href.startsWith('file://')) return 'file'
   if (href.startsWith('folder://')) return 'folder'
   if (href.startsWith('cloud://')) return 'cloud'
-  if (href.startsWith('wework-conversation://')) return 'conversation'
+  if (isConversationMentionUri(href)) return 'conversation'
   return 'skill'
 }
 
@@ -1867,6 +1978,7 @@ function getWebSearchToolBlocks(blocks: ProcessingBlock[]) {
 
 function AssistantMessage({
   message,
+  widgetOwnership,
   conversationKey,
   processingWindowEnabled,
   hideThinkingIndicator = false,
@@ -1888,6 +2000,7 @@ function AssistantMessage({
   onFork,
 }: {
   message: WorkbenchMessage
+  widgetOwnership?: MessageWidgetOwnership
   conversationKey?: string | number | null
   processingWindowEnabled?: boolean
   hideThinkingIndicator?: boolean
@@ -1921,6 +2034,11 @@ function AssistantMessage({
   onFork?: () => Promise<void> | void
 }) {
   const { t } = useTranslation('chat')
+  const fileCapture = normalizeTurnFileCapture(message.fileChangesCapture, {
+    turnId: message.turnId ?? undefined,
+    attemptId: message.attemptId,
+  })
+  const conversationPreferences = useConversationPreferences()
   const isCancelled = isCancelledAssistantMessage(message)
   const stoppedElapsedDuration =
     isCancelled && message.stoppedNotice !== false ? getStoppedElapsedDuration(message) : null
@@ -1960,10 +2078,31 @@ function AssistantMessage({
   )
   const canShowFinalArtifacts = !isAssistantRunning && message.status !== 'unknown'
   const hasStreamedResponse = hasBlocks || hasVisibleContent
-  const shouldShowProcessingSummary = hasBlocks || (isAssistantRunning && hasStreamedResponse)
+  const shouldShowProcessingSummary =
+    hasBlocks || (!processingWindowEnabled && isAssistantRunning && hasStreamedResponse)
   const processingStateKey = getMessageDisplayStateKey(conversationKey, message)
+  const hasThinkingBlocks = processingSegments.some(
+    segment => segment.kind === 'thinking' && segment.blocks.length > 0
+  )
+  const hasToolBlocks = processingSegments.some(
+    segment => segment.kind === 'tool' && segment.blocks.length > 0
+  )
+  const [initialFinalProcessingExpanded, setInitialFinalProcessingExpanded] = useState<
+    boolean | null
+  >(null)
+  if (
+    initialFinalProcessingExpanded === null &&
+    (hasThinkingBlocks || hasToolBlocks) &&
+    conversationPreferences.hydration === 'ready'
+  ) {
+    setInitialFinalProcessingExpanded(
+      (hasThinkingBlocks && !conversationPreferences.thinkingCollapsedByDefault) ||
+        (hasToolBlocks && !conversationPreferences.toolsCollapsedByDefault)
+    )
+  }
   const [finalProcessingExpanded, setFinalProcessingExpanded] = usePersistentProcessingExpansion(
-    `${processingStateKey}:final-processing`
+    `${processingStateKey}:final-processing`,
+    initialFinalProcessingExpanded ?? false
   )
   const [finalProcessingCompletedAt] = useState(() => Date.now())
   const usesFinalProcessingShell =
@@ -2012,10 +2151,14 @@ function AssistantMessage({
               .map(block => (block.type === 'thinking' ? block.content : ''))
               .join('\n\n')}
             running={runningProcessingSegments[index]}
+            startedAt={segment.blocks[0]?.createdAt}
+            completedAt={segment.blocks.at(-1)?.completedAt}
           />
         ) : (
           <ToolBlocksDisplay
-            key={`${segment.kind}:${segment.blocks[0]?.id ?? 'empty'}`}
+            key={`${segment.kind}:${requestUserInputBlockKey(
+              segment.blocks.find(isRequestUserInputBlock) ?? segment.blocks[0]
+            )}`}
             blocks={segment.blocks}
             fileEditDurationBlocks={displayBlocks}
             isStreaming={isStreaming}
@@ -2048,6 +2191,7 @@ function AssistantMessage({
       data-testid={windowPendingContent ? 'assistant-pending-content' : 'assistant-message-content'}
     >
       <AssistantMarkdown
+        conversationReading
         content={visibleContent}
         isStreaming={isStreaming}
         onOpenFile={openFileFromLink}
@@ -2057,10 +2201,24 @@ function AssistantMessage({
   ) : null
   const thinkingIndicator =
     shouldShowThinking && !hasVisibleContent && !hideThinkingIndicator ? (
-      <AssistantThinkingIndicator />
+      <div className="flex min-h-8 items-center text-sm">
+        <AssistantThinkingIndicator />
+      </div>
     ) : null
+  const hasWidgetActivity = useWidgetMessageActivity(
+    {
+      terminal: false,
+      turnId: message.turnId,
+      attemptId: message.attemptId,
+      subtaskId: message.subtaskId,
+    },
+    isAssistantRunning || isCancelled || message.status === 'failed' || message.status === 'unknown'
+  )
   const hasWindowedActivity =
-    hasBlocks || (windowPendingContent && hasVisibleContent) || Boolean(thinkingIndicator)
+    hasWidgetActivity ||
+    hasBlocks ||
+    (windowPendingContent && hasVisibleContent) ||
+    Boolean(thinkingIndicator)
   const processingTimeline = processingWindowEnabled ? (
     hasWindowedActivity ? (
       <ProcessingGroup
@@ -2071,10 +2229,28 @@ function AssistantMessage({
         {renderedProcessingSegments}
         {windowPendingContent && responseContent}
         {thinkingIndicator}
+        <WidgetMessageArtifacts
+          content={visibleContent}
+          preview
+          excludedToolIds={displayBlocks.flatMap(block =>
+            block.type === 'tool' ? [block.id] : []
+          )}
+        />
       </ProcessingGroup>
     ) : null
   ) : (
-    renderedProcessingSegments
+    <>
+      {renderedProcessingSegments}
+      {isAssistantRunning && (
+        <WidgetMessageArtifacts
+          content={visibleContent}
+          preview
+          excludedToolIds={displayBlocks.flatMap(block =>
+            block.type === 'tool' ? [block.id] : []
+          )}
+        />
+      )}
+    </>
   )
   const finalProcessingDuration = getDurationText(
     displayBlocks,
@@ -2085,121 +2261,193 @@ function AssistantMessage({
   )
 
   return (
-    <div className="min-w-0 max-w-full text-chat text-text-primary">
-      <div
-        className="w-full max-w-full"
-        data-testid="message-hover-region"
-        onPointerEnter={() => setAreHoverActionsVisible(true)}
-        onPointerLeave={() => setAreHoverActionsVisible(false)}
-      >
-        <div className="w-full max-w-full">
-          {shouldShowStoppedNotice ? (
-            <div
-              data-testid="assistant-stopped-notice"
-              className="mb-3 w-full pb-1 text-xs text-text-muted"
-            >
-              {stoppedElapsedDuration
-                ? t('assistant_status.stopped_after', {
-                    duration: stoppedElapsedDuration,
-                  })
-                : t('assistant_status.stopped')}
-            </div>
-          ) : null}
-          {usesFinalProcessingShell ? (
-            <div className="mb-3 min-w-0 w-full border-b border-border pb-2">
-              <button
-                type="button"
-                data-testid="final-processing-toggle"
-                aria-expanded={finalProcessingExpanded}
-                className="flex min-h-8 items-center gap-1 text-sm text-text-muted hover:text-text-secondary"
-                onClick={() => setFinalProcessingExpanded(value => !value)}
-              >
-                <span>{finalProcessingDuration || t('toolStatus.processed')}</span>
-                <ChevronDown
-                  className={`h-4 w-4 transition-transform ${finalProcessingExpanded ? '' : '-rotate-90'}`}
-                  strokeWidth={2}
-                  aria-hidden="true"
-                />
-              </button>
-              {finalProcessingExpanded ? <div className="mt-1">{processingTimeline}</div> : null}
-            </div>
-          ) : (
-            processingTimeline
-          )}
-          {!processingWindowEnabled && thinkingIndicator}
-          {generatedImages.length > 0 && (!processingWindowEnabled || canShowFinalArtifacts) ? (
-            <GeneratedImageGallery images={generatedImages} />
-          ) : null}
-          {message.contentTruncated ? (
-            <ContentTruncatedNotice
-              originalChars={message.contentOriginalChars}
-              onLoadFullTranscript={onLoadFullTranscript}
-              loadingFullTranscript={loadingFullTranscript}
-            />
-          ) : null}
-          {!windowPendingContent && responseContent}
-          {canShowFinalArtifacts && hasVisibleContent && webSearchSources.length > 0 && (
-            <WebSearchSourcesChip sources={webSearchSources} />
-          )}
-          {canShowFinalArtifacts && memoryCitations.length > 0 && (
-            <CodexMemoryCitations citations={memoryCitations} onOpenFile={onOpenWorkspaceFile} />
-          )}
-          {canShowFinalArtifacts && references.length > 0 && (
-            <CodexReferenceList references={references} onOpenFile={openFileFromLink} />
-          )}
-          {message.status === 'unknown' && (
-            <div
-              role="status"
-              data-testid="assistant-attempt-unknown"
-              className="text-sm text-text-muted"
-            >
-              {t('toolStatus.unknown')}
-            </div>
-          )}
-          {message.status === 'failed' && !isCancelled && (
-            <AssistantErrorCard
-              error={message.error}
-              errorType={message.errorType}
-              rawError={hiddenErrorContent}
-              message={message}
-              onRetry={onRetryFailedMessage}
-              onSwitchModel={onSwitchModelForFailedMessage}
-            />
-          )}
-          {canShowFinalArtifacts &&
-          message.fileChanges &&
-          message.subtaskId &&
-          onLoadFileChangesDiff &&
-          onRevertFileChanges ? (
-            <FileChangesCard
-              subtaskId={message.subtaskId}
-              summary={message.fileChanges}
-              deviceOnline={devices.some(
-                device =>
-                  device.device_id === message.fileChanges?.device_id && device.status === 'online'
-              )}
-              onLoadDiff={onLoadFileChangesDiff}
-              onRevert={onRevertFileChanges}
-              onOpenReview={onOpenFileChangesReview}
-              diffPreviewDisabled={
-                fileChangesDiffPreviewDisabledSubtaskId === String(message.subtaskId)
-              }
-            />
-          ) : null}
-        </div>
-        {message.status !== 'streaming' &&
-          message.status !== 'unknown' &&
+    <WidgetMessageBoundary
+      identity={{
+        terminal:
+          canShowFinalArtifacts &&
           !isCancelled &&
-          (hasVisibleContent || message.status === 'failed') && (
-            <MessageHoverActions
-              message={message}
-              align="left"
-              visible={areHoverActionsVisible}
-              onFork={onFork}
-            />
-          )}
+          message.status !== 'failed' &&
+          widgetOwnership?.attemptActive !== true &&
+          widgetOwnership?.ownsWidgets !== false,
+        active:
+          !isCancelled &&
+          widgetOwnership?.ownsWidgets !== false &&
+          (isAssistantRunning || widgetOwnership?.attemptActive === true),
+        ownsWidgets: widgetOwnership?.ownsWidgets,
+        turnId: message.turnId,
+        attemptId: message.attemptId,
+        subtaskId: message.subtaskId,
+      }}
+    >
+      <div
+        className="min-w-0 max-w-full text-chat text-text-primary"
+        style={
+          isAssistantRunning
+            ? {
+                minHeight: getAssistantPendingHeight(
+                  conversationPreferences,
+                  processingWindowEnabled === true
+                ),
+              }
+            : undefined
+        }
+      >
+        <div
+          className="w-full max-w-full"
+          data-testid="message-hover-region"
+          onPointerEnter={() => setAreHoverActionsVisible(true)}
+          onPointerLeave={() => setAreHoverActionsVisible(false)}
+        >
+          <div className="w-full max-w-full">
+            <div
+              data-conversation-segments
+              style={{
+                gap: conversationBlockGap[
+                  conversationPreferences.conversationBlockSpacing ?? 'normal'
+                ],
+              }}
+              className="flex min-w-0 flex-col"
+            >
+              {shouldShowStoppedNotice ? (
+                <div
+                  data-testid="assistant-stopped-notice"
+                  className="mb-3 w-full pb-1 text-xs text-text-muted"
+                >
+                  {stoppedElapsedDuration
+                    ? t('assistant_status.stopped_after', {
+                        duration: stoppedElapsedDuration,
+                      })
+                    : t('assistant_status.stopped')}
+                </div>
+              ) : null}
+              {usesFinalProcessingShell ? (
+                <div className="mb-3 min-w-0 w-full border-b border-border pb-2">
+                  <button
+                    type="button"
+                    data-testid="final-processing-toggle"
+                    aria-expanded={finalProcessingExpanded}
+                    className="flex min-h-8 items-center gap-1 text-sm text-text-muted hover:text-text-secondary"
+                    onClick={() => setFinalProcessingExpanded(value => !value)}
+                  >
+                    <span>{finalProcessingDuration || t('toolStatus.processed')}</span>
+                    <ChevronDown
+                      className={`h-4 w-4 transition-transform ${finalProcessingExpanded ? '' : '-rotate-90'}`}
+                      strokeWidth={2}
+                      aria-hidden="true"
+                    />
+                  </button>
+                  {finalProcessingExpanded ? (
+                    <div
+                      data-conversation-segments
+                      style={{
+                        gap: conversationBlockGap[
+                          conversationPreferences.conversationBlockSpacing ?? 'normal'
+                        ],
+                      }}
+                      className="mt-1 flex flex-col"
+                    >
+                      {processingTimeline}
+                    </div>
+                  ) : null}
+                </div>
+              ) : (
+                processingTimeline
+              )}
+              {!processingWindowEnabled && thinkingIndicator && (
+                <AssistantWaitingPlaceholder windowed={false} />
+              )}
+              {generatedImages.length > 0 && (!processingWindowEnabled || canShowFinalArtifacts) ? (
+                <GeneratedImageGallery images={generatedImages} />
+              ) : null}
+              {message.contentTruncated ? (
+                <ContentTruncatedNotice
+                  originalChars={message.contentOriginalChars}
+                  onLoadFullTranscript={onLoadFullTranscript}
+                  loadingFullTranscript={loadingFullTranscript}
+                />
+              ) : null}
+              {!windowPendingContent && responseContent}
+              <WidgetMessageArtifacts
+                content={visibleContent}
+                expected={displayBlocks.some(
+                  block =>
+                    block.type === 'tool' &&
+                    block.toolName === 'show_widget' &&
+                    block.status === 'done' &&
+                    block.toolInput?.action !== 'read'
+                )}
+              />
+            </div>
+            {canShowFinalArtifacts && hasVisibleContent && webSearchSources.length > 0 && (
+              <WebSearchSourcesChip sources={webSearchSources} />
+            )}
+            {canShowFinalArtifacts && memoryCitations.length > 0 && (
+              <CodexMemoryCitations citations={memoryCitations} onOpenFile={onOpenWorkspaceFile} />
+            )}
+            {canShowFinalArtifacts && references.length > 0 && (
+              <CodexReferenceList references={references} onOpenFile={openFileFromLink} />
+            )}
+            {message.status === 'unknown' && (
+              <div
+                role="status"
+                data-testid="assistant-attempt-unknown"
+                className="text-sm text-text-muted"
+              >
+                {t('toolStatus.unknown')}
+              </div>
+            )}
+            {message.status === 'failed' && !isCancelled && (
+              <AssistantErrorCard
+                error={message.error}
+                errorType={message.errorType}
+                rawError={hiddenErrorContent}
+                message={message}
+                onRetry={onRetryFailedMessage}
+                onSwitchModel={onSwitchModelForFailedMessage}
+              />
+            )}
+            {canShowFinalArtifacts &&
+            message.fileChanges &&
+            message.subtaskId &&
+            onLoadFileChangesDiff &&
+            onRevertFileChanges ? (
+              <FileChangesCard
+                subtaskId={message.subtaskId}
+                summary={
+                  fileCapture &&
+                  (fileCapture.state !== 'changed' ||
+                    fileCapture.artifactId !== message.fileChanges.artifact_id)
+                    ? { ...message.fileChanges, revertible: false }
+                    : message.fileChanges
+                }
+                deviceOnline={devices.some(
+                  device =>
+                    device.device_id === message.fileChanges?.device_id &&
+                    device.status === 'online'
+                )}
+                onLoadDiff={onLoadFileChangesDiff}
+                onRevert={onRevertFileChanges}
+                onOpenReview={onOpenFileChangesReview}
+                diffPreviewDisabled={
+                  fileChangesDiffPreviewDisabledSubtaskId === String(message.subtaskId)
+                }
+              />
+            ) : null}
+          </div>
+          {message.status !== 'streaming' &&
+            message.status !== 'unknown' &&
+            !isCancelled &&
+            (hasVisibleContent || message.status === 'failed') && (
+              <MessageHoverActions
+                message={message}
+                align="left"
+                visible={areHoverActionsVisible}
+                onFork={onFork}
+              />
+            )}
+        </div>
       </div>
-    </div>
+    </WidgetMessageBoundary>
   )
 }
 

@@ -13,8 +13,13 @@ use std::time::Instant;
 use tracing::debug;
 
 mod history;
+pub(crate) mod incremental;
+mod partitioned;
+mod projection;
 mod protocol;
 mod usage;
+pub(crate) use history::fingerprint_serializable;
+pub(crate) use projection::CompactionMessageProjection;
 
 #[allow(unused_imports)]
 pub(crate) use history::CompactionSplit;
@@ -25,10 +30,7 @@ pub(crate) use history::{
 pub use history::{
     CompactBoundary, latest_compact_boundary, messages_after_latest_compact_boundary,
 };
-use history::{
-    build_compacted_messages, fingerprint_messages, format_compact_summary_message,
-    truncate_head_for_ptl_retry,
-};
+use history::{build_compacted_messages, fingerprint_messages, format_compact_summary_message};
 use protocol::{
     build_compact_prompt, build_compact_repair_prompt, build_compact_system_prompt,
     build_structured_compact_prompt, compaction_api_error, is_prompt_too_long_error,
@@ -37,7 +39,6 @@ use protocol::{
     validate_compact_response_with_metadata, validate_structured_compact_response,
 };
 
-const MAX_PTL_RETRIES: usize = 3;
 /// Inline retries for transport-level summarize failures (dropped SSE
 /// connections, decode errors, proxy resets). The summarize request is
 /// idempotent, so a brief network blip should not consume the engine's
@@ -167,6 +168,7 @@ pub struct PrefireNote {
     covered_fingerprint: Option<[u8; 32]>,
     /// Unwrapped validated summary; never recover it by splitting human-readable markers.
     summary: String,
+    retained_summary: Option<String>,
 }
 
 impl PrefireNote {
@@ -175,7 +177,13 @@ impl PrefireNote {
             covered: prefix.len(),
             covered_fingerprint: fingerprint_messages(prefix),
             summary,
+            retained_summary: None,
         }
+    }
+
+    pub(crate) fn with_retained_summary(mut self, retained: Option<String>) -> Self {
+        self.retained_summary = retained;
+        self
     }
 
     /// True when the complete covered prefix still has the same SHA-256 identity.
@@ -212,6 +220,7 @@ pub struct ConversationCompactor {
     request_class: crate::request_admission::RequestClass,
     budget: ContextBudget,
     usage_state: Option<kcoder_state::AppState>,
+    message_projection: Option<Arc<dyn CompactionMessageProjection>>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -228,11 +237,20 @@ impl ConversationCompactor {
             request_class: crate::request_admission::RequestClass::Foreground,
             budget,
             usage_state: None,
+            message_projection: None,
         }
     }
 
     pub fn with_usage_tracking(mut self, state: kcoder_state::AppState) -> Self {
         self.usage_state = Some(state);
+        self
+    }
+
+    pub(crate) fn with_message_projection(
+        mut self,
+        projection: Arc<dyn CompactionMessageProjection>,
+    ) -> Self {
+        self.message_projection = Some(projection);
         self
     }
 
@@ -287,9 +305,10 @@ impl ConversationCompactor {
         let boundary = latest_compact_boundary(&messages);
         let compact_start = boundary.as_ref().map(|b| b.summary_index).unwrap_or(0);
         let prior_summary = boundary.as_ref().map(|b| b.summary.clone());
-        let mut messages_to_summarize =
-            messages.into_iter().skip(compact_start).collect::<Vec<_>>();
-        let mut ptl_attempts = 0;
+        let messages_to_summarize = messages.into_iter().skip(compact_start).collect::<Vec<_>>();
+        let mut recovery = partitioned::PartitionedRecovery::default();
+        let mut partition_recovery_required = false;
+        let mut force_distill = false;
         let mut transport_attempts = 0;
         let mut protocol_repair_attempts: usize = 0;
         let mut protocol_diagnostics = Vec::new();
@@ -315,9 +334,16 @@ impl ConversationCompactor {
                 recent_budget,
                 emergency_split,
             );
-            if split.old.is_empty() {
+            let plan = incremental::summary_plan(
+                &split.old,
+                &self.budget,
+                !emergency_split && custom_instructions.is_none() && !force_distill,
+            );
+            if split.old.is_empty() || plan.no_work {
                 // Nothing old enough to summarize.
-                let messages = if latest_compact_boundary(&split.recent).is_some() {
+                let messages = if plan.no_work {
+                    messages_to_summarize.clone()
+                } else if latest_compact_boundary(&split.recent).is_some() {
                     split.recent
                 } else {
                     build_compacted_messages(prior_summary.as_deref(), None, split.recent)
@@ -339,7 +365,9 @@ impl ConversationCompactor {
             // prefix, summarize only the uncovered delta (prepended with the
             // pass-1 summary) instead of the whole old segment.
             let matching_note = prefire.as_ref().filter(|note| {
-                note.covered <= split.old.len() && note.matches(&messages_to_summarize)
+                note.covered <= split.old.len()
+                    && note.matches(&messages_to_summarize)
+                    && note.retained_summary == plan.retained_summary
             });
             // No delta requires no merge request. New hook instructions still require a
             // fresh pass, and cached text must pass the same current protocol validator.
@@ -369,14 +397,16 @@ impl ConversationCompactor {
                         true,
                     )
                 }
-                _ => (split.old.clone(), false),
+                _ => (split.old[plan.source_start..].to_vec(), false),
             };
+            debug!(strategy = ?plan.strategy, summarized_messages = old_for_call.len(),
+                retained_summary = plan.retained_summary.is_some(), "selected context summary plan");
 
             let request_started_at = Instant::now();
             let outcome = if let Some(summary) = complete_summary {
                 Ok(summary)
-            } else {
-                self.summarize_old_messages_with_protocol(
+            } else if partition_recovery_required {
+                self.summarize_partitioned_history(
                     &old_for_call,
                     &effective_summary_model,
                     summary_max_tokens,
@@ -386,12 +416,50 @@ impl ConversationCompactor {
                         output_format,
                         repair_reason: protocol_repair_reason.as_deref(),
                     },
+                    &mut recovery,
                 )
                 .await
+            } else {
+                let outcome = self
+                    .summarize_old_messages_with_protocol(
+                        &old_for_call,
+                        &effective_summary_model,
+                        summary_max_tokens,
+                        custom_instructions.as_deref(),
+                        debug_session_id.as_deref(),
+                        CompactProtocolOptions {
+                            output_format,
+                            repair_reason: protocol_repair_reason.as_deref(),
+                        },
+                    )
+                    .await;
+                match outcome {
+                    Err(error) if is_prompt_too_long_error(&error) => {
+                        partition_recovery_required = true;
+                        self.summarize_partitioned_history(
+                            &old_for_call,
+                            &effective_summary_model,
+                            summary_max_tokens,
+                            custom_instructions.as_deref(),
+                            debug_session_id.as_deref(),
+                            CompactProtocolOptions {
+                                output_format,
+                                repair_reason: protocol_repair_reason.as_deref(),
+                            },
+                            &mut recovery,
+                        )
+                        .await
+                    }
+                    other => other,
+                }
             };
             match outcome {
                 Ok(summary) => {
-                    let new_messages = build_compacted_messages(None, Some(&summary), split.recent);
+                    let new_messages = build_compacted_messages(
+                        plan.retained_summary.as_deref(),
+                        Some(&summary),
+                        split.recent,
+                    );
                     // Usage values on retained assistant messages describe the
                     // *pre-compaction* prompt. Keeping them would make
                     // TokenCounter anchor on that stale, much larger prompt
@@ -401,6 +469,11 @@ impl ConversationCompactor {
                     let new_messages = strip_assistant_usage(&new_messages);
                     let post_compact_tokens = TokenCounter::count(&new_messages);
                     if post_compact_tokens >= pre_compact_tokens {
+                        if plan.retained_summary.is_some() && !force_distill {
+                            force_distill = true;
+                            partition_recovery_required = false;
+                            continue;
+                        }
                         anyhow::bail!(
                             "compaction did not reduce context: pre_tokens={}, post_tokens={}",
                             pre_compact_tokens,
@@ -409,7 +482,10 @@ impl ConversationCompactor {
                     }
                     break CompactionResult {
                         messages: new_messages,
-                        summary,
+                        summary: history::combine_compact_summaries(
+                            plan.retained_summary.as_deref(),
+                            Some(&summary),
+                        ),
                         pre_compact_tokens,
                         post_compact_tokens,
                         did_compact: true,
@@ -419,19 +495,6 @@ impl ConversationCompactor {
                     };
                 }
                 Err(e) => {
-                    // If the summary request itself failed because the prompt
-                    // was too long, drop the oldest round and retry.
-                    if is_prompt_too_long_error(&e) {
-                        if ptl_attempts >= MAX_PTL_RETRIES {
-                            return Err(
-                                e.context("compaction failed: prompt too long after retries")
-                            );
-                        }
-                        ptl_attempts += 1;
-                        messages_to_summarize =
-                            truncate_head_for_ptl_retry(messages_to_summarize, split.old.len())?;
-                        continue;
-                    }
                     if is_transient_compaction_transport_error(&e)
                         && transport_attempts < MAX_TRANSPORT_RETRIES
                     {
@@ -575,15 +638,45 @@ impl ConversationCompactor {
         debug_session_id: Option<&str>,
         protocol: CompactProtocolOptions<'_>,
     ) -> Result<String> {
+        let projected;
+        let request_messages = if let Some(projection) = &self.message_projection {
+            projected = projection.project(old_messages).await?;
+            projected.as_slice()
+        } else {
+            old_messages
+        };
+        self.summarize_prepared_messages(
+            request_messages,
+            old_messages,
+            model,
+            summary_max_tokens,
+            custom_instructions,
+            debug_session_id,
+            protocol,
+        )
+        .await
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    async fn summarize_prepared_messages(
+        &self,
+        request_messages: &[Message],
+        source_messages: &[Message],
+        model: &str,
+        summary_max_tokens: u32,
+        custom_instructions: Option<&str>,
+        debug_session_id: Option<&str>,
+        protocol: CompactProtocolOptions<'_>,
+    ) -> Result<String> {
         let prompt = match (protocol.repair_reason, protocol.output_format) {
             (Some(reason), format) => {
-                build_compact_repair_prompt(old_messages, custom_instructions, reason, format)
+                build_compact_repair_prompt(request_messages, custom_instructions, reason, format)
             }
             (None, CompactOutputFormat::TaggedText) => {
-                build_compact_prompt(old_messages, custom_instructions)
+                build_compact_prompt(request_messages, custom_instructions)
             }
             (None, CompactOutputFormat::StructuredJson) => {
-                build_structured_compact_prompt(old_messages, custom_instructions)
+                build_structured_compact_prompt(request_messages, custom_instructions)
             }
         };
         let mut request = MessagesRequest::new(model, vec![Message::user_text(prompt)])
@@ -779,12 +872,14 @@ impl ConversationCompactor {
         let validation = match protocol.output_format {
             CompactOutputFormat::TaggedText => validate_compact_response_with_metadata(
                 &summary,
-                old_messages,
+                source_messages,
                 stop_reason.as_deref(),
             ),
-            CompactOutputFormat::StructuredJson => {
-                validate_structured_compact_response(&summary, old_messages, stop_reason.as_deref())
-            }
+            CompactOutputFormat::StructuredJson => validate_structured_compact_response(
+                &summary,
+                source_messages,
+                stop_reason.as_deref(),
+            ),
         };
         match validation {
             Ok(validated) => Ok(validated),

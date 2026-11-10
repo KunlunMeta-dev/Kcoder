@@ -58,6 +58,8 @@ function makeRuntime(close = vi.fn()) {
     getSnapshot: () => ({ threadId: "thread-1", running: true, interaction: null }),
     isDisposed: () => false,
     hasLiveTerminalSessions: () => false,
+    markInteractionsDisconnected() {},
+    setInteractionLedgerObserver() {},
     close,
   };
 }

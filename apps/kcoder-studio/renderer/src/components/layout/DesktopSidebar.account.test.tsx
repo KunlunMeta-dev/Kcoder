@@ -3,7 +3,7 @@ import { openLocalWorkspace } from '@/lib/local-terminal'
 import { screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
-import { enableTauri, renderSidebar } from './sidebar/DesktopSidebar.test-support'
+import { enableGateway, renderSidebar } from './sidebar/DesktopSidebar.test-support'
 const experimentalFeatures = vi.hoisted(() => ({ enabled: true }))
 vi.mock('@/features/experimental-features/useExperimentalFeaturesEnabled', () => ({
   useExperimentalFeaturesEnabled: () => experimentalFeatures.enabled,
@@ -15,7 +15,7 @@ describe('DesktopSidebar account', () => {
   beforeEach(() => {
     experimentalFeatures.enabled = true
     localStorage.clear()
-    enableTauri()
+    enableGateway()
     Element.prototype.scrollIntoView = vi.fn()
     vi.mocked(openLocalWorkspace).mockReset()
   })
@@ -66,6 +66,60 @@ describe('DesktopSidebar account', () => {
     expect(screen.getByTestId('cloud-connection-dialog')).toBeInTheDocument()
     expect(screen.getByTestId('cloud-backend-url-input')).toHaveValue('http://localhost:8000')
     expect(screen.queryByTestId('settings-menu')).not.toBeInTheDocument()
+  })
+
+  test('signs in and out of KCoder through the existing account menu', async () => {
+    const user = userEvent.setup()
+    const meta = document.createElement('meta')
+    meta.name = 'kcoder-rpc-token'
+    meta.content = 'fixture'
+    document.head.append(meta)
+    let account: { id: string; username: string } | null = null
+    const portalUrl = 'https://relay.example/_relay/account/'
+    const fetcher = vi.spyOn(globalThis, 'fetch').mockImplementation(async (url, init) => {
+      if (String(url) === 'https://relay.example/_relay/account/studio-login') {
+        expect(init?.credentials).toBe('omit')
+        if (String(init?.body) === 'username=123&password=123') {
+          return Response.json({ error: 'REGISTRATION_PASSWORD_RESET_REQUIRED' }, { status: 403 })
+        }
+        expect(String(init?.body)).toBe('username=123&password=fixture-replacement-password')
+        return Response.json({ code: 'a'.repeat(43) })
+      }
+      expect(String(url)).toMatch(/\/api\/kcoder-account$/)
+      if (init?.method === 'POST') {
+        expect(JSON.parse(String(init.body))).toEqual({ invitation: 'a'.repeat(43) })
+        account = { id: 'fixture', username: 'kcoder-fixture' }
+      }
+      if (init?.method === 'DELETE') account = null
+      return Response.json({ available: true, portalUrl, account })
+    })
+    try {
+      const onLogout = vi.fn()
+      const first = renderSidebar({ onLogout })
+      const menu = screen.getByTestId('settings-button')
+      await user.click(menu)
+      expect(await screen.findByTestId('login-menu-button')).toHaveTextContent('登录 KCoder')
+      await user.click(screen.getByTestId('login-menu-button'))
+      await user.type(screen.getByLabelText('账号', { exact: true }), '123')
+      await user.type(screen.getByLabelText('密码', { exact: true }), '123')
+      await user.click(screen.getByRole('button', { name: '登录 KCoder' }))
+      expect(await screen.findByRole('alert')).toHaveTextContent('请联系管理员获取重置邀请')
+      await user.clear(screen.getByLabelText('密码', { exact: true }))
+      await user.type(screen.getByLabelText('密码', { exact: true }), 'fixture-replacement-password')
+      await user.click(screen.getByRole('button', { name: '登录 KCoder' }))
+      expect(await screen.findByText('kcoder-fixture')).toBeInTheDocument()
+      first.unmount()
+      renderSidebar({ onLogout })
+      expect(await screen.findByText('kcoder-fixture')).toBeInTheDocument()
+      await user.click(screen.getByTestId('settings-button'))
+      await user.click(screen.getByTestId('logout-menu-button'))
+      await user.click(screen.getByRole('button', { name: '退出 KCoder 账号' }))
+      expect(screen.queryByText('kcoder-fixture')).not.toBeInTheDocument()
+      expect(onLogout).not.toHaveBeenCalled()
+    } finally {
+      fetcher.mockRestore()
+      meta.remove()
+    }
   })
 
   test('shows the cloud username and email after login', async () => {
@@ -276,6 +330,30 @@ describe('DesktopSidebar account', () => {
 
     expect(onOpenGlobalImNotificationSettings).toHaveBeenCalledTimes(1)
     expect(onToggleGlobalImNotification).not.toHaveBeenCalled()
+  })
+
+  test('configures Gateway reminders without legacy cloud login', async () => {
+    const gatewayMarker = document.createElement('meta')
+    gatewayMarker.name = 'kcoder-rpc-token'
+    gatewayMarker.content = 'cookie'
+    document.head.append(gatewayMarker)
+    const onOpenGlobalImNotificationSettings = vi.fn()
+
+    try {
+      renderSidebar({ onOpenGlobalImNotificationSettings }, {
+        status: 'disconnected',
+        isConnected: false,
+      })
+      await userEvent.click(screen.getByTestId('sidebar-global-im-notification-button'))
+      const action = screen.getByTestId('sidebar-global-im-notification-primary-button')
+      expect(action).toHaveTextContent('选择 IM 会话')
+      await userEvent.click(action)
+
+      expect(onOpenGlobalImNotificationSettings).toHaveBeenCalledOnce()
+      expect(screen.queryByTestId('cloud-connection-dialog')).not.toBeInTheDocument()
+    } finally {
+      gatewayMarker.remove()
+    }
   })
 
   test('keeps the away reminder bell neutral when cloud is disconnected', async () => {

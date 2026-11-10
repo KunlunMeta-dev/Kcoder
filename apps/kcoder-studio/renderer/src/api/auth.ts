@@ -1,15 +1,4 @@
-import type { User } from '@/types/api'
-import type { HttpClient } from './http'
-
-export interface LoginRequest {
-  user_name: string
-  password: string
-}
-
-export interface LoginResponse {
-  access_token: string
-  token_type: string
-}
+import { isKCoderGatewayPage } from '@/kcoder/gatewayRpc'
 
 const TOKEN_KEY = 'auth_token'
 const TOKEN_EXPIRE_KEY = 'auth_token_expire'
@@ -45,50 +34,10 @@ export function setToken(token: string) {
 }
 
 export function getToken(): string | null {
-  return localStorage.getItem(TOKEN_KEY)
+  return isKCoderGatewayPage() ? null : localStorage.getItem(TOKEN_KEY)
 }
-
-export function getTokenExpire(): number | null {
-  const exp = localStorage.getItem(TOKEN_EXPIRE_KEY)
-  return exp ? Number(exp) : null
-}
-
 export function removeToken() {
   localStorage.removeItem(TOKEN_KEY)
   localStorage.removeItem(TOKEN_EXPIRE_KEY)
   removeTokenCookie()
-}
-
-export function isAuthenticated(): boolean {
-  const token = getToken()
-  const exp = getTokenExpire()
-  if (!token || !exp) return false
-  return Date.now() < exp
-}
-
-export function createAuthApi(client: HttpClient) {
-  return {
-    async login(data: LoginRequest): Promise<User> {
-      const res = await client.post<LoginResponse>('/auth/login', data)
-      setToken(res.access_token)
-      return client.get('/users/me')
-    },
-    async setupAdminPassword(password: string): Promise<User> {
-      const res = await client.post<LoginResponse>('/auth/admin-password/setup', { password })
-      setToken(res.access_token)
-      return client.get('/users/me')
-    },
-    logout() {
-      removeToken()
-    },
-    getCurrentUser(): Promise<User> {
-      return client.get('/users/me')
-    },
-    getCurrentUserWithoutAuthRedirect(): Promise<User> {
-      return client.get('/users/me', { redirectOnUnauthorized: false })
-    },
-    async loginWithOidcToken(accessToken: string): Promise<void> {
-      setToken(accessToken)
-    },
-  }
 }

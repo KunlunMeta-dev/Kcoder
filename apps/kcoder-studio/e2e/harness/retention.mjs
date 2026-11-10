@@ -1,5 +1,5 @@
-import { readdir, readFile, rm, stat } from "node:fs/promises";
-import { dirname, resolve, sep } from "node:path";
+import { lstat, readdir, readFile, rm, stat } from "node:fs/promises";
+import { resolve, sep } from "node:path";
 
 export const DEFAULT_RETENTION = Object.freeze({
   successfulMaxCount: 5,
@@ -9,15 +9,25 @@ export const DEFAULT_RETENTION = Object.freeze({
   totalMaxBytes: 2 * 1024 * 1024 * 1024,
 });
 
+const FILE_STAT_CONCURRENCY = 8;
+
 export async function enforceRetention(boundary, policy = DEFAULT_RETENTION, now = Date.now()) {
   const root = resolve(boundary);
   const runs = await discoverCompletedRuns(root);
   const removalPlan = planRetention(runs, now, policy);
+  const removed = [];
   for (const run of removalPlan) {
     assertWithinBoundary(root, run.path);
-    await rm(run.path, { recursive: true, force: true });
+    try {
+      await rm(run.path, { recursive: true });
+      removed.push(run.path);
+    } catch (error) {
+      // A sibling account or concurrent cleanup must not block an owned run.
+      if (["EACCES", "EPERM", "ENOENT"].includes(error?.code)) continue;
+      throw error;
+    }
   }
-  return removalPlan.map(run => run.path);
+  return removed;
 }
 
 export function planRetention(runs, now = Date.now(), policy = DEFAULT_RETENTION) {
@@ -49,38 +59,73 @@ export function planRetention(runs, now = Date.now(), policy = DEFAULT_RETENTION
 }
 
 async function discoverCompletedRuns(boundary) {
-  let files;
+  const runs = [];
   try {
-    files = await filesUnder(boundary);
+    await discoverRunsInDirectory(boundary, boundary, runs);
   } catch (error) {
     if (error?.code === "ENOENT") return [];
     throw error;
   }
-  const manifests = files.filter(path => path.endsWith(`${sep}manifest.json`));
-  const runs = [];
-  for (const manifestPath of manifests) {
+  return runs;
+}
+
+async function discoverRunsInDirectory(directory, boundary, runs) {
+  let entries;
+  try {
+    entries = await readdir(directory, { withFileTypes: true });
+  } catch (error) {
+    // A sibling run can disappear or be private to a different test account.
+    // Keep that subtree opaque without preventing an owned test from starting.
+    if (directory !== boundary && ["ENOENT", "EACCES", "EPERM"].includes(error?.code)) return;
+    throw error;
+  }
+  const manifestEntry = entries.find(entry => entry.name === "manifest.json");
+  if (manifestEntry) {
+    if (!manifestEntry.isFile()) return;
     try {
-      const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
-      if (!['passed', 'failed'].includes(manifest.status) || !manifest.source) continue;
-      const path = dirname(manifestPath);
-      assertWithinBoundary(boundary, path);
+      // Readable evidence from another POSIX account is not ours to delete.
+      if (process.getuid && (await lstat(directory)).uid !== process.getuid()) return;
+      const manifest = JSON.parse(await readFile(resolve(directory, manifestEntry.name), "utf8"));
+      if (!['passed', 'failed'].includes(manifest.status) || !manifest.source) return;
+      if (manifest.cleanupSteps?.some(step => step.status === "failed") ||
+          manifest.scratchDirectories?.some(item => item.requireCleanupConfirmation && !item.cleanupConfirmed)) return;
+      assertWithinBoundary(boundary, directory);
       runs.push({
-        path,
+        path: directory,
         source: manifest.source,
         status: manifest.status,
         endedAtMs: Date.parse(manifest.endedAt || manifest.startedAt),
-        sizeBytes: await directorySize(path),
+        sizeBytes: await directorySize(directory),
       });
     } catch {
       // A partial/malformed run is retained for diagnosis; retention never guesses ownership.
     }
+    return;
   }
-  return runs;
+
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    await discoverRunsInDirectory(resolve(directory, entry.name), boundary, runs);
+  }
 }
 
 async function directorySize(root) {
   let total = 0;
-  for (const path of await filesUnder(root)) total += (await stat(path)).size;
+  const files = await filesUnder(root);
+  let nextFile = 0;
+  const workerCount = Math.min(FILE_STAT_CONCURRENCY, files.length);
+  const subtotals = await Promise.all(Array.from({ length: workerCount }, async () => {
+    let subtotal = 0;
+    while (true) {
+      const index = nextFile;
+      nextFile += 1;
+      if (index >= files.length) break;
+      const fileStat = await stat(files[index]);
+      subtotal += fileStat.size;
+    }
+    return subtotal;
+  }));
+  for (const subtotal of subtotals) total += subtotal;
   return total;
 }
 

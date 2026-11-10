@@ -1,0 +1,562 @@
+{
+  "TaskDeliveryFailureParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "TaskDeliveryRecipient": {
+        "additionalProperties": false,
+        "properties": {
+          "deviceId": {
+            "type": "string"
+          },
+          "taskId": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "deviceId",
+          "taskId",
+          "threadId"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "checkId": {
+        "type": "string"
+      },
+      "deliveryId": {
+        "type": "string"
+      },
+      "owner": {
+        "allOf": [
+          {
+            "$ref": "#/definitions/TaskDeliveryRecipient"
+          }
+        ],
+        "description": "Routing labels checked by Gateway; only the owned thread grants Native authority."
+      },
+      "threadId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "checkId",
+      "deliveryId",
+      "owner",
+      "threadId"
+    ],
+    "title": "TaskDeliveryFailureParams",
+    "type": "object"
+  },
+  "TaskDeliveryFailureResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "TaskDeliveryRecipient": {
+        "additionalProperties": false,
+        "properties": {
+          "deviceId": {
+            "type": "string"
+          },
+          "taskId": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "deviceId",
+          "taskId",
+          "threadId"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "checkId": {
+        "type": "string"
+      },
+      "headCommit": {
+        "type": "string"
+      },
+      "prompt": {
+        "description": "Untrusted forge text for the original task's unsent draft only.",
+        "type": "string"
+      },
+      "rawEvidence": {
+        "type": "string"
+      },
+      "recipient": {
+        "$ref": "#/definitions/TaskDeliveryRecipient"
+      },
+      "threadId": {
+        "type": "string"
+      },
+      "truncated": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "checkId",
+      "headCommit",
+      "prompt",
+      "rawEvidence",
+      "recipient",
+      "threadId",
+      "truncated"
+    ],
+    "title": "TaskDeliveryFailureResult",
+    "type": "object"
+  },
+  "TaskDeliveryPrepareParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "TaskDeliveryRecipient": {
+        "additionalProperties": false,
+        "properties": {
+          "deviceId": {
+            "type": "string"
+          },
+          "taskId": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "deviceId",
+          "taskId",
+          "threadId"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "baseBranch": {
+        "type": "string"
+      },
+      "comparisonId": {
+        "default": null,
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "owner": {
+        "allOf": [
+          {
+            "$ref": "#/definitions/TaskDeliveryRecipient"
+          }
+        ],
+        "description": "Routing labels checked by Gateway; only the owned thread grants Native authority."
+      },
+      "threadId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "baseBranch",
+      "owner",
+      "threadId"
+    ],
+    "title": "TaskDeliveryPrepareParams",
+    "type": "object"
+  },
+  "TaskDeliveryReadParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "TaskDeliveryRecipient": {
+        "additionalProperties": false,
+        "properties": {
+          "deviceId": {
+            "type": "string"
+          },
+          "taskId": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "deviceId",
+          "taskId",
+          "threadId"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "deliveryId": {
+        "type": "string"
+      },
+      "owner": {
+        "allOf": [
+          {
+            "$ref": "#/definitions/TaskDeliveryRecipient"
+          }
+        ],
+        "description": "Routing labels checked by Gateway; only the owned thread grants Native authority."
+      },
+      "threadId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "deliveryId",
+      "owner",
+      "threadId"
+    ],
+    "title": "TaskDeliveryReadParams",
+    "type": "object"
+  },
+  "TaskDeliveryRequestParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "TaskDeliveryRecipient": {
+        "additionalProperties": false,
+        "properties": {
+          "deviceId": {
+            "type": "string"
+          },
+          "taskId": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "deviceId",
+          "taskId",
+          "threadId"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "body": {
+        "type": "string"
+      },
+      "deliveryId": {
+        "type": "string"
+      },
+      "owner": {
+        "allOf": [
+          {
+            "$ref": "#/definitions/TaskDeliveryRecipient"
+          }
+        ],
+        "description": "Routing labels checked by Gateway; only the owned thread grants Native authority."
+      },
+      "requestId": {
+        "type": "string"
+      },
+      "threadId": {
+        "type": "string"
+      },
+      "title": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "body",
+      "deliveryId",
+      "owner",
+      "requestId",
+      "threadId",
+      "title"
+    ],
+    "title": "TaskDeliveryRequestParams",
+    "type": "object"
+  },
+  "TaskDeliveryResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "TaskDeliveryCheck": {
+        "additionalProperties": false,
+        "properties": {
+          "checkId": {
+            "type": "string"
+          },
+          "detailsUrl": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "headCommit": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/definitions/TaskDeliveryCiState"
+          }
+        },
+        "required": [
+          "checkId",
+          "headCommit",
+          "name",
+          "state"
+        ],
+        "type": "object"
+      },
+      "TaskDeliveryCiState": {
+        "enum": [
+          "unknown",
+          "none",
+          "waiting",
+          "skipped",
+          "neutral",
+          "failed",
+          "passed"
+        ],
+        "type": "string"
+      },
+      "TaskDeliveryDraft": {
+        "additionalProperties": false,
+        "properties": {
+          "body": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "body",
+          "title"
+        ],
+        "type": "object"
+      },
+      "TaskDeliveryPullRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "headCommit": {
+            "type": "string"
+          },
+          "matchesRequest": {
+            "type": "boolean"
+          },
+          "number": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "reviewState": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "headCommit",
+          "matchesRequest",
+          "number",
+          "reviewState",
+          "state",
+          "url"
+        ],
+        "type": "object"
+      },
+      "TaskDeliveryRecipient": {
+        "additionalProperties": false,
+        "properties": {
+          "deviceId": {
+            "type": "string"
+          },
+          "taskId": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "deviceId",
+          "taskId",
+          "threadId"
+        ],
+        "type": "object"
+      },
+      "TaskDeliveryRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "draftSha256": {
+            "type": "string"
+          },
+          "prompt": {
+            "description": "Prepared intent only; the normal task send receipt proves acceptance.",
+            "type": "string"
+          },
+          "requestId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "draftSha256",
+          "prompt",
+          "requestId"
+        ],
+        "type": "object"
+      },
+      "TaskDeliverySource": {
+        "additionalProperties": false,
+        "properties": {
+          "baseBranch": {
+            "type": "string"
+          },
+          "baseCommit": {
+            "type": "string"
+          },
+          "branch": {
+            "type": "string"
+          },
+          "diffSha256": {
+            "type": "string"
+          },
+          "dirty": {
+            "type": "boolean"
+          },
+          "headCommit": {
+            "type": "string"
+          },
+          "repository": {
+            "type": "string"
+          },
+          "workingSha256": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "baseBranch",
+          "baseCommit",
+          "branch",
+          "diffSha256",
+          "dirty",
+          "headCommit",
+          "repository",
+          "workingSha256"
+        ],
+        "type": "object"
+      },
+      "TaskDeliveryStatus": {
+        "additionalProperties": false,
+        "properties": {
+          "checks": {
+            "items": {
+              "$ref": "#/definitions/TaskDeliveryCheck"
+            },
+            "type": "array"
+          },
+          "checksTruncated": {
+            "type": "boolean"
+          },
+          "ciState": {
+            "$ref": "#/definitions/TaskDeliveryCiState"
+          },
+          "limitation": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "pullRequest": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/TaskDeliveryPullRequest"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "pushState": {
+            "description": "notPushed/pushed/unknown are independent from PR and CI state.",
+            "type": "string"
+          },
+          "sourceChanged": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "checks",
+          "checksTruncated",
+          "ciState",
+          "pushState",
+          "sourceChanged"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "comparisonId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "deliveryId": {
+        "type": "string"
+      },
+      "draft": {
+        "$ref": "#/definitions/TaskDeliveryDraft"
+      },
+      "nativeEvidenceIds": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "recipient": {
+        "$ref": "#/definitions/TaskDeliveryRecipient"
+      },
+      "request": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/TaskDeliveryRequest"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "source": {
+        "$ref": "#/definitions/TaskDeliverySource"
+      },
+      "status": {
+        "$ref": "#/definitions/TaskDeliveryStatus"
+      },
+      "threadId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "deliveryId",
+      "draft",
+      "nativeEvidenceIds",
+      "recipient",
+      "source",
+      "status",
+      "threadId"
+    ],
+    "title": "TaskDeliveryResult",
+    "type": "object"
+  }
+}

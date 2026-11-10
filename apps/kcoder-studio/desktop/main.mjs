@@ -1,3 +1,7 @@
+import { createDesktopSessionRenewal } from './session-renewal.mjs';
+import { preparePackagedStartupResources } from './packaged-resource-startup.mjs';
+import { createResourcePreparationOwner } from './resource-preparation-owner.mjs';
+import { createStartupWindow, runDesktopStartup, startOwnedGateway } from './startup-window.mjs';
 import { app, nativeImage, BrowserWindow, dialog, ipcMain, Menu, Tray, session, shell, powerMonitor } from "electron";
 import { registerDownloads } from "./download-controller.mjs";
 import { createDesktopTray } from "./tray-controller.mjs";
@@ -10,12 +14,22 @@ import { fileURLToPath } from "node:url";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join } from "node:path";
 import { startGateway } from "./gateway-process.mjs";
+import { showGatewayStorageRecovery } from './gateway-startup-failure.mjs';
+import { createDesktopGatewayConfig } from "./gateway-env.mjs";
+import { studioDataDirectory } from '../src/studio-login-link.js';
 import { resolveDesktopPort } from "./desktop-port.mjs";
 import { packagedRuntimePaths } from "./packaged-paths.mjs";
 import { allowRendererPermission, isTrustedGatewayUrl } from "./security-policy.mjs";
+import { configureWidgetProcessIsolation, createNativeWidgetIsolationController } from "./widget-isolation/controller.mjs";
+
+configureWidgetProcessIsolation(app);
 
 let gateway = null;
 let mainWindow = null;
+let startupWindow = null;
+let initialGatewayPending = null;
+const startupAbort = new AbortController();
+const resourcePreparation = createResourcePreparationOwner();
 let stopping = null;
 let quitting = false;
 let desktopTray = null;
@@ -24,12 +38,21 @@ const additionalWindows = new Set();
 let primaryHiddenForOtherWindows = false;
 let stopSessionRenewal = () => {};
 let stopDownloads = () => {};
+let widgetIsolation = null;
 
 function stopGateway() {
+  startupAbort.abort();
+  widgetIsolation?.dispose();
+  widgetIsolation = null;
   stopSessionRenewal();
   stopDownloads();
   if (stopping) return stopping;
-  stopping = gateway?.stop().catch((error) => console.error("Failed to stop KCoder Studio gateway", error)) ?? Promise.resolve();
+  const pending = initialGatewayPending;
+  stopping = Promise.all([
+    resourcePreparation.stop(),
+    gateway?.stop().catch((error) => console.error("Failed to stop KCoder Studio gateway", error)),
+    pending?.then(instance => instance.stop(), () => {}).catch(() => console.error('Failed to stop pending KCoder Studio gateway')),
+  ]);
   gateway = null;
   return stopping;
 }
@@ -37,6 +60,8 @@ function stopGateway() {
 function requestQuit(exitCode = 0) {
   if (quitting) return;
   quitting = true;
+  startupWindow?.dispose();
+  startupWindow = null;
   desktopTray?.dispose();
   void stopGateway().finally(() => app.exit(exitCode));
 }
@@ -51,9 +76,21 @@ function safeExternalUrl(value) {
 }
 
 async function createMainWindow() {
-  const gatewayEnv = { ...process.env };
+  const desktopGatewayConfig = await createDesktopGatewayConfig(process.env);
+  if (quitting) return;
+  const gatewayEnv = { ...desktopGatewayConfig.env };
+  for (const name of Object.keys(gatewayEnv)) {
+    if (["KCODER_NATIVE_OFFICE_BINDING_V1","KCODER_NATIVE_CONNECTIVITY_BINDING_V1","KCODER_NATIVE_COMPONENT_IMAGE_BINDING_V1"].includes(name.toUpperCase())) delete gatewayEnv[name];
+  }
+  let connectivityPrivateEnvironment;
+  let componentImagePrivateEnvironment;
+  let bundledRelayUrl;
   gatewayEnv.KCODER_STUDIO_DESKTOP_HOST = "1";
-  gatewayEnv.KCODER_STUDIO_SERVERS_STORE ||= join(app.getPath("userData"), "servers.json");
+  if (!gatewayEnv.KCODER_STUDIO_DATA_DIR && !gatewayEnv.KCODER_STUDIO_SERVERS_STORE) {
+    gatewayEnv.KCODER_STUDIO_DATA_DIR = app.getPath("userData");
+  }
+  gatewayEnv.KCODER_STUDIO_SERVERS_STORE ||= join(
+    studioDataDirectory({ dataDirectory: gatewayEnv.KCODER_STUDIO_DATA_DIR }), 'servers.json');
   // Match the repository's source-tree CLI launchers: development builds retain bundled
   // provider profiles while user/project profiles override same-name entries. Packaged builds
   // continue to honor the strict provider_profiles ownership rule.
@@ -62,6 +99,7 @@ async function createMainWindow() {
     userDataDir: app.getPath("userData"),
     configuredPort: gatewayEnv.KCODER_STUDIO_DESKTOP_PORT,
   });
+  if (quitting) return;
   let gatewayScript;
   let gatewayCwd;
   if (app.isPackaged) {
@@ -74,6 +112,15 @@ async function createMainWindow() {
       gatewayEnv.KCODER_E2E_PROCESS_SUPERVISOR_BIN ||= runtimePaths.supervisor;
     }
     gatewayEnv.KCODER_STUDIO_WORKSPACE ||= app.getPath("home");
+    const resources = await resourcePreparation.run(() => preparePackagedStartupResources({
+      resourcesPath: process.resourcesPath,
+      metadataPath: join(app.getAppPath(), "package.json"),
+      signal: startupAbort.signal,
+    }));
+    if (!resources || quitting) return;
+    bundledRelayUrl = resources.relayPublicUrl;
+    connectivityPrivateEnvironment = resources.channel;
+    componentImagePrivateEnvironment = resources.component;
     const requestedProfile = gatewayEnv.KCODER_STUDIO_DESKTOP_PROFILE?.trim();
     if (
       requestedProfile &&
@@ -100,6 +147,8 @@ async function createMainWindow() {
   }
   const gatewayOptions = {
     env: gatewayEnv,
+    privateEnvironment: { ...connectivityPrivateEnvironment, ...componentImagePrivateEnvironment },
+    token: desktopGatewayConfig.token,
     gatewayScript,
     cwd: gatewayCwd,
     port: desktopPort,
@@ -107,20 +156,17 @@ async function createMainWindow() {
     onStdout: (chunk) => process.stdout.write(`[gateway] ${chunk}`),
     onStderr: (chunk) => process.stderr.write(`[gateway] ${chunk}`),
   };
+  Object.assign(gatewayEnv, {
+    KCODER_STUDIO_RELAY_CONFIG_DIR: app.getPath('userData'),
+    KCODER_STUDIO_DESKTOP_RELAY_CONFIG_FILE: process.env.KCODER_STUDIO_DESKTOP_RELAY_CONFIG_FILE,
+    KCODER_STUDIO_DESKTOP_RELAY_REGISTRATION_KEY: process.env.KCODER_STUDIO_DESKTOP_RELAY_REGISTRATION_KEY ?? process.env.KCODER_RELAY_REGISTRATION_KEY,
+    ...(app.isPackaged ? { KCODER_STUDIO_RELAY_RESOURCES_PATH: process.resourcesPath } : {}),
+    KCODER_STUDIO_RELAY_DEFAULT_URL: process.env.KCODER_STUDIO_DESKTOP_RELAY_URL ?? process.env.KCODER_RELAY_PUBLIC_URL ?? bundledRelayUrl ?? '',
+  });
   let gatewayOrigin = null;
   const desktopSession = session.fromPartition(desktopPartition);
   let expectedWebContentsId = null;
   const restartTimes = [];
-  let renewalTimer;
-  let renewalPending;
-  let renewalStopped = false;
-  const scheduleRenewal = (delay) => {
-    clearTimeout(renewalTimer);
-    if (!renewalStopped) {
-      renewalTimer = setTimeout(() => { void renewDesktopSession(); }, delay);
-      renewalTimer.unref?.();
-    }
-  };
   const restoreLoginPages = async () => {
     for (const window of [mainWindow, ...additionalWindows]) {
       if (!window || window.isDestroyed()) continue;
@@ -134,29 +180,20 @@ async function createMainWindow() {
       await window.loadURL(target.href);
     }
   };
-  const renewDesktopSession = () => {
-    if (renewalPending || renewalStopped || quitting || !gateway) return renewalPending;
-    const instance = gateway;
-    renewalPending = (async () => {
-      try {
-        await instance.renewSession();
-        if (renewalStopped || quitting || gateway !== instance) return;
-        await installGatewaySession(instance);
-        await restoreLoginPages();
-      } catch {
-        if (!renewalStopped && !quitting) {
-          console.warn('KCoder Studio desktop session renewal failed; retrying');
-          scheduleRenewal(30000);
-        }
-      } finally { renewalPending = null; }
-    })();
-    return renewalPending;
-  };
+  const sessionRenewal = createDesktopSessionRenewal({
+    observe: process.env.KCODER_E2E_AUTH_OBSERVE === '1'
+      ? value => console.log('KCODER_AUTH_OBSERVE ' + JSON.stringify(value)) : undefined,
+    getGateway: () => gateway,
+    canRun: () => !quitting,
+    installSession: instance => installGatewaySession(instance),
+    recoverLoginPages: restoreLoginPages,
+    warn: message => console.warn(message),
+  });
+  const renewDesktopSession = sessionRenewal.renew;
   const onResume = () => { void renewDesktopSession(); };
   powerMonitor.on('resume', onResume);
   stopSessionRenewal = () => {
-    renewalStopped = true;
-    clearTimeout(renewalTimer);
+    sessionRenewal.stop();
     powerMonitor.removeListener('resume', onResume);
   };
   const bindLoginRecovery = window => {
@@ -178,7 +215,6 @@ async function createMainWindow() {
       sameSite: "strict",
       path: "/",
     });
-    scheduleRenewal(Math.max(50, Math.floor(instance.sessionTtlMs / 2)));
   };
   const monitorGateway = (instance) => {
     void instance.exit.then(async ({ code, signal }) => {
@@ -204,6 +240,7 @@ async function createMainWindow() {
       }
       gateway = replacement;
       await installGatewaySession(replacement);
+      sessionRenewal.installed(replacement);
       monitorGateway(replacement);
       // A same-origin restart has already installed a fresh HttpOnly session.
       // Retain the WebView's unsent drafts and refresh the existing runtime;
@@ -216,17 +253,32 @@ async function createMainWindow() {
         await mainWindow.loadURL(`${replacement.baseUrl}${route}`);
       }
       console.warn(`KCoder Studio gateway restarted after code=${String(code)} signal=${String(signal)}`);
-    }).catch((error) => {
+    }).catch(async (error) => {
       if (quitting) return;
       console.error("KCoder Studio gateway recovery failed", error);
       if (!process.env.KCODER_STUDIO_DESKTOP_SMOKE_MS) {
-        dialog.showErrorBox("KCoder Studio 网关恢复失败", error instanceof Error ? error.message : String(error));
+        const recovered = await showGatewayStorageRecovery({ error, dialog, shell, locale: app.getLocale(),
+          dataDirectory: app.getPath('userData') }).catch(() => false);
+        if (!recovered) dialog.showErrorBox("KCoder Studio 网关恢复失败", error instanceof Error ? error.message : String(error));
       }
       requestQuit(1);
     });
   };
-  gateway = await startGateway(gatewayOptions);
-  await installGatewaySession(gateway);
+  if (quitting) return;
+  const pendingInitial = startGateway({ ...gatewayOptions, signal: startupAbort.signal });
+  initialGatewayPending = pendingInitial;
+  let initialGateway;
+  try {
+    initialGateway = await startOwnedGateway({ start: () => pendingInitial, isQuitting: () => quitting });
+    if (!initialGateway) return;
+    if (quitting) { await initialGateway.stop(); return; }
+    gateway = initialGateway;
+  } finally {
+    if (initialGatewayPending === pendingInitial) initialGatewayPending = null;
+  }
+  await installGatewaySession(initialGateway);
+  sessionRenewal.installed(initialGateway);
+  if (quitting) return;
   desktopSession.setPermissionRequestHandler((webContents, permission, callback, details) => {
     callback(allowRendererPermission({
       permission,
@@ -249,6 +301,11 @@ async function createMainWindow() {
   stopDownloads = registerDownloads({ session: desktopSession, ipcMain,
     getWindow: contents => [mainWindow, ...additionalWindows].find(window => window && !window.isDestroyed() && window.webContents === contents),
     getGatewayOrigin: () => gatewayOrigin ?? "", downloadsDirectory: app.getPath("downloads"),
+  });
+  widgetIsolation?.dispose();
+  widgetIsolation = createNativeWidgetIsolationController({ app, ipcMain,
+    getWindow: contents => [mainWindow, ...additionalWindows].find(window => window && !window.isDestroyed() && window.webContents === contents),
+    getGatewayOrigin: () => gatewayOrigin ?? '', verifiedPlatforms: ['win32'],
   });
   const customMenu = process.platform === "win32" || (!app.isPackaged && process.env.KCODER_STUDIO_TEST_WINDOWS_MENU === "1");
   mainWindow = new BrowserWindow({
@@ -387,10 +444,19 @@ if (!app.requestSingleInstanceLock()) {
     process.on(signal, () => requestQuit(0));
   }
 
-  app.whenReady().then(createMainWindow).catch(async (error) => {
+  app.whenReady().then(() => runDesktopStartup({
+    createWindow: () => createStartupWindow({ BrowserWindow, session, locale: app.getLocale(), icon: desktopIconPaths().window, onClose: () => requestQuit(0) }),
+    publish: owned => { startupWindow = owned; },
+    clear: owned => { if (startupWindow === owned) startupWindow = null; },
+    isQuitting: () => quitting,
+    startMain: createMainWindow,
+  })).catch(async (error) => {
+    if (quitting) return;
     console.error(error);
     if (!process.env.KCODER_STUDIO_DESKTOP_SMOKE_MS) {
-      dialog.showErrorBox("KCoder Studio 启动失败", error instanceof Error ? error.message : String(error));
+      const recovered = await showGatewayStorageRecovery({ error, dialog, shell, locale: app.getLocale(),
+        dataDirectory: error.storageDataDirectory ?? app.getPath('userData') }).catch(() => false);
+      if (!recovered) dialog.showErrorBox("KCoder Studio 启动失败", error instanceof Error ? error.message : String(error));
     }
     requestQuit(1);
   });

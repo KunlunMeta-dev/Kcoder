@@ -1,10 +1,10 @@
-import { requestLocalExecutor } from '@/tauri/localExecutor'
+import { requestLocalExecutor } from '@/host/localExecutor'
 import { readModelConfiguration } from '../../../../shared/modelConfiguration'
 import { ComputerUseSubmit } from '@/features/computer-use/ComputerUseSubmit'
 import { ComputerUseStatus } from '@/features/computer-use/ComputerUseStatus'
 import { WorkflowReusePicker } from '@/features/workflows/WorkflowReusePicker'
 import type { WorkflowComposerIntent } from '@/features/workflows/useWorkflowComposerIntent'
-import { Layers, GitBranch } from 'lucide-react'
+import { Files, Layers, GitBranch } from 'lucide-react'
 import { SettingsSelect } from '@/components/settings/SettingsSelect'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
@@ -31,7 +31,12 @@ import type {
   UnifiedModel,
   UnifiedSkill,
 } from '@/types/api'
-import type { GuidanceWorkbenchMessage, QueuedWorkbenchMessage } from '@/types/workbench'
+import type {
+  GuidanceWorkbenchMessage,
+  QueuedWorkbenchMessage,
+  WorkbenchMessage,
+} from '@/types/workbench'
+import { composerInputHistory } from './composer/composerInputHistory'
 import type { CodeCommentContext, WorkspaceFileApi, WorkspaceTarget } from '@/types/workspace-files'
 import { parseComposerSlashInput } from './composer/composerAutocomplete'
 import type { CloudProject } from '@/api/deliveries'
@@ -48,6 +53,11 @@ import { ExecutionModeInfo } from './composer/ExecutionModeInfo'
 import type { ComposerExecutionMode } from './composer/composerExecutionModes'
 import { ProjectChatComposer } from './composer/ProjectChatComposer'
 import { TaskPlanProgress } from './composer/TaskPlanProgress'
+import {
+  ComposerStatusItem,
+  ComposerStatusNotice,
+  ComposerStatusRegion,
+} from './composer/ComposerStatusRegion'
 
 export type ProjectCreateMode = 'scratch' | 'existing' | 'git'
 
@@ -71,6 +81,7 @@ export interface ProjectChatControls {
   onModelSelectorOpenChange?: (open: boolean) => void
   setSelectedModel: (model: UnifiedModel | null) => void
   setSelectedModelAndOptions?: (model: UnifiedModel, options: ModelOptions) => void
+  queueActiveTurnModelSelection?: (model: UnifiedModel) => Promise<boolean>
   setSelectedModelOption: (optionId: string, value: string) => void
   getSelectedModel?: () => UnifiedModel | null
   getSelectedModelOptions?: () => ModelOptions
@@ -116,6 +127,8 @@ export interface ProjectWorkControls {
 }
 
 export interface ChatInputProps {
+  historyMessages?: readonly WorkbenchMessage[]
+  inputHistoryScope?: string
   workflowNavigationActive?: boolean
   workflowIntent?: WorkflowComposerIntent & { onChange: (value: WorkflowComposerIntent) => void }
   sessionMode?: RuntimeSessionMode
@@ -173,6 +186,7 @@ export interface ChatInputProps {
   onShortenWait?: () => void
   shortenWaitAvailable?: boolean
   toolbarLeadingContext?: ReactNode
+  projectContext?: ReactNode
   onCompactContext?: () => void | Promise<void>
   goal?: RuntimeGoal | null
   goalContinuing?: boolean
@@ -208,20 +222,32 @@ function isSameModel(left: UnifiedModel | null | undefined, right: UnifiedModel 
   return left?.name === right?.name && left?.type === right?.type
 }
 
-function PluginTrialTemplateStrip({ templates }: { templates: PluginPathComponent[] }) {
+function PluginTrialTemplateStrip({
+  templates,
+  presentation,
+}: {
+  templates: PluginPathComponent[]
+  presentation?: 'detail' | 'embedded'
+}) {
   const { t } = useTranslation('common')
   const visibleTemplates = templates.filter(template => !template.unavailableReason).slice(0, 8)
   if (visibleTemplates.length === 0) return null
 
-  return (
+  const detail = (
     <section
-      className="mb-2 rounded-2xl border border-border/70 bg-background px-3 py-3 shadow-[0_10px_32px_rgba(0,0,0,0.06)]"
+      className={
+        presentation === 'embedded' || presentation === 'detail'
+          ? 'min-w-0'
+          : 'studio-card-spacing mb-2 rounded-2xl border border-border/70 bg-background shadow-[0_10px_32px_rgba(0,0,0,0.06)]'
+      }
       data-testid="plugin-trial-template-strip"
       aria-label={t('workbench.plugin_trial_templates', '模板')}
     >
-      <div className="mb-2 text-sm font-medium leading-5 text-text-muted">
-        {t('workbench.plugin_trial_templates', '模板')}
-      </div>
+      {!presentation && (
+        <div className="mb-2 text-sm font-medium leading-5 text-text-muted">
+          {t('workbench.plugin_trial_templates', '模板')}
+        </div>
+      )}
       <div className="flex gap-3 overflow-x-auto pb-1">
         {visibleTemplates.map(template => (
           <div
@@ -255,9 +281,27 @@ function PluginTrialTemplateStrip({ templates }: { templates: PluginPathComponen
       </div>
     </section>
   )
+
+  if (presentation === 'detail') return detail
+  if (presentation === 'embedded') {
+    return (
+      <ComposerStatusItem
+        id="templates"
+        title={t('workbench.plugin_trial_templates', 'Templates')}
+        count={visibleTemplates.length}
+        icon={Files}
+        order={70}
+      >
+        {detail}
+      </ComposerStatusItem>
+    )
+  }
+  return detail
 }
 
 export function ChatInput({
+  historyMessages,
+  inputHistoryScope,
   value,
   onChange,
   onSubmit,
@@ -296,6 +340,7 @@ export function ChatInput({
   onShortenWait,
   shortenWaitAvailable,
   toolbarLeadingContext,
+  projectContext,
   onCompactContext,
   goal,
   goalContinuing = false,
@@ -409,6 +454,25 @@ export function ChatInput({
     if (!pendingModelSelection) return
     const { model, options } = pendingModelSelection
     setPendingModelSelection(null)
+    if (model && controls.activeModel && controls.queueActiveTurnModelSelection) {
+      void controls
+        .queueActiveTurnModelSelection(model)
+        .then(queued => {
+          applyModelSelection(model, options)
+          if (!queued) {
+            setSlashSubmitError(
+              t(
+                'workbench.model_switch_next_message',
+                'This runtime will use the selected model for your next message.'
+              )
+            )
+          }
+        })
+        .catch(error => {
+          setSlashSubmitError(error instanceof Error ? error.message : String(error))
+        })
+      return
+    }
     applyModelSelection(model, options)
   }
 
@@ -646,7 +710,10 @@ export function ChatInput({
     void Promise.resolve(onSubmit(valueOverride, options)).finally(() => onResumeQueue?.())
   }
 
+  const inputHistory = useMemo(() => composerInputHistory(historyMessages ?? []), [historyMessages])
   const composerProps = {
+    inputHistory,
+    inputHistoryScope: inputHistoryScope ?? projectChat?.scopeKey,
     executionModes,
     value,
     onChange: (nextValue: string) => {
@@ -820,6 +887,7 @@ export function ChatInput({
     <ComputerUseStatus
       serverId={projectWork.currentRuntimeTask.deviceId}
       taskId={projectWork.currentRuntimeTask.taskId}
+      presentation={variant === 'desktop' ? 'embedded' : undefined}
       onStop={onPause}
       onRecover={async previousTurnId => {
         await requestLocalExecutor('runtime.computerUse.recover', {
@@ -842,6 +910,7 @@ export function ChatInput({
       queuePaused={queuePaused}
       onResumeQueue={onResumeQueue}
       onCancelGuidanceMessage={onCancelGuidanceMessage}
+      presentation={variant === 'desktop' ? 'embedded' : undefined}
     />
   )
   const queueResumeDialog = pendingQueuedSend ? (
@@ -866,98 +935,110 @@ export function ChatInput({
   ) : null
 
   if (variant === 'desktop') {
+    const ownerKey = JSON.stringify([
+      projectWork?.currentRuntimeTask?.deviceId ?? '',
+      projectWork?.currentRuntimeTask?.taskId ?? controls.scopeKey ?? projectChat?.scopeKey ?? '',
+      projectWork?.currentRuntimeTask?.threadId ?? null,
+    ])
     return (
       <div className="w-full">
-        <TaskPlanProgress plan={taskPlan} />
-        {queuePanel}
-        {errorBanner}
-        {desktopStatus}
-        <PluginTrialTemplateStrip templates={controls.trialTemplates ?? []} />
-        {displayedGoal && !goalDraftActive && (
-          <GoalStatusBar
-            goal={displayedGoal}
-            continuing={goalContinuing}
-            onEditGoal={onEditGoal}
-            onPauseGoal={onPauseGoal}
-            onResumeGoal={onResumeGoal}
-            onClearGoal={onClearGoal}
+        <ComposerStatusNotice>{errorBanner}</ComposerStatusNotice>
+        <ComposerStatusRegion ownerKey={ownerKey}>
+          <TaskPlanProgress plan={taskPlan} presentation="embedded" />
+          {queuePanel}
+          {desktopStatus}
+          <PluginTrialTemplateStrip
+            templates={controls.trialTemplates ?? []}
+            presentation="embedded"
           />
-        )}
-        <ProjectChatComposer
-          {...composerProps}
-          models={controls.models}
-          selectedModel={controls.selectedModel}
-          activeModel={controls.activeModel}
-          selectedModelOptions={controls.selectedModelOptions}
-          modelSelectorOpenSignal={controls.modelSelectorOpenSignal}
-          onModelSelectorOpenChange={controls.onModelSelectorOpenChange}
-          isModelSelectionReady={controls.isModelSelectionReady ?? true}
-          attachments={controls.attachments}
-          codeComments={codeComments}
-          uploadingFiles={controls.uploadingFiles}
-          onCancelUpload={controls.cancelUpload}
-          attachmentErrors={controls.errors}
-          contextUsage={controls.contextUsage}
-          onSelectModel={model => requestModelSelection(model)}
-          onSelectModelAndOptions={(model, options) => requestModelSelection(model, options)}
-          onSelectModelOption={controls.setSelectedModelOption}
-          onBlockedModelSelect={controls.onBlockedModelSelect}
-          onFileSelect={files => {
-            void controls.handleFileSelect(files)
-          }}
-          planModeActive={planModeActive}
-          onSetPlanMode={selectPlanMode}
-          onClearPlanMode={handleClearPlanMode}
-          onSetGoal={selectGoal}
-          onCompactContext={handleCompactContext}
-          goalDraftActive={goalDraftActive}
-          goalDraftMode={goalDraftMode}
-          onCancelGoalDraft={onCancelGoalDraft}
-          onRemoveAttachment={attachmentId => {
-            void controls.removeAttachment(attachmentId)
-          }}
-          onClearCodeComments={onClearCodeComments}
-          projectWork={
-            projectWork ?? {
-              projects: [],
-              devices: [],
-              runtimeWork: null,
-              currentProject: null,
-              currentProjectId: undefined,
-              currentStandaloneDeviceId: null,
-              selectedDeviceWorkspaceId: null,
-              pendingProjectWorkspaceProjectId: null,
-              executionMode: 'current_workspace',
-              executionModeLocked: false,
-              onSelectProject: () => {},
-              onSelectStandaloneDevice: () => {},
-              onSelectProjectWorkspace: () => {},
-              onBindProjectWorkspace: () => {},
-              onExecutionModeChange: () => {},
-              onCreateProjectMode: undefined,
+          {displayedGoal && !goalDraftActive && (
+            <GoalStatusBar
+              goal={displayedGoal}
+              continuing={goalContinuing}
+              presentation="embedded"
+              onEditGoal={onEditGoal}
+              onPauseGoal={onPauseGoal}
+              onResumeGoal={onResumeGoal}
+              onClearGoal={onClearGoal}
+            />
+          )}
+          <ProjectChatComposer
+            {...composerProps}
+            models={controls.models}
+            selectedModel={controls.selectedModel}
+            activeModel={controls.activeModel}
+            selectedModelOptions={controls.selectedModelOptions}
+            modelSelectorOpenSignal={controls.modelSelectorOpenSignal}
+            onModelSelectorOpenChange={controls.onModelSelectorOpenChange}
+            isModelSelectionReady={controls.isModelSelectionReady ?? true}
+            attachments={controls.attachments}
+            codeComments={codeComments}
+            uploadingFiles={controls.uploadingFiles}
+            onCancelUpload={controls.cancelUpload}
+            attachmentErrors={controls.errors}
+            contextUsage={controls.contextUsage}
+            onSelectModel={model => requestModelSelection(model)}
+            onSelectModelAndOptions={(model, options) => requestModelSelection(model, options)}
+            onSelectModelOption={controls.setSelectedModelOption}
+            onBlockedModelSelect={controls.onBlockedModelSelect}
+            onFileSelect={files => {
+              void controls.handleFileSelect(files)
+            }}
+            planModeActive={planModeActive}
+            onSetPlanMode={selectPlanMode}
+            onClearPlanMode={handleClearPlanMode}
+            onSetGoal={selectGoal}
+            onCompactContext={handleCompactContext}
+            goalDraftActive={goalDraftActive}
+            goalDraftMode={goalDraftMode}
+            onCancelGoalDraft={onCancelGoalDraft}
+            onRemoveAttachment={attachmentId => {
+              void controls.removeAttachment(attachmentId)
+            }}
+            onClearCodeComments={onClearCodeComments}
+            projectWork={
+              projectWork ?? {
+                projects: [],
+                devices: [],
+                runtimeWork: null,
+                currentProject: null,
+                currentProjectId: undefined,
+                currentStandaloneDeviceId: null,
+                selectedDeviceWorkspaceId: null,
+                pendingProjectWorkspaceProjectId: null,
+                executionMode: 'current_workspace',
+                executionModeLocked: false,
+                onSelectProject: () => {},
+                onSelectStandaloneDevice: () => {},
+                onSelectProjectWorkspace: () => {},
+                onBindProjectWorkspace: () => {},
+                onExecutionModeChange: () => {},
+                onCreateProjectMode: undefined,
+              }
             }
-          }
-          showProjectWorkBar={showProjectWorkBar}
-          onListLocalSkills={controls.listLocalSkills}
-          onListLocalApps={controls.listLocalApps}
-          isStreaming={isStreaming}
-          onPause={onPause}
-          onShortenWait={onShortenWait}
-          shortenWaitAvailable={shortenWaitAvailable}
-          toolbarLeadingContext={toolbarLeadingContext}
-          modeStatus={
-            <>
-              {settingsTemplateSelect}
-              {settingsTemplateBadgeChip}
-              {computerUseControl}
-              {workflowModeControl}
-              {workflowReuseControl}
-              {executionModePill}
-            </>
-          }
-        />
-        {queueResumeDialog}
-        {modelSwitchWarningDialog}
+            showProjectWorkBar={showProjectWorkBar}
+            onListLocalSkills={controls.listLocalSkills}
+            onListLocalApps={controls.listLocalApps}
+            isStreaming={isStreaming}
+            onPause={onPause}
+            onShortenWait={onShortenWait}
+            shortenWaitAvailable={shortenWaitAvailable}
+            toolbarLeadingContext={toolbarLeadingContext}
+            projectContext={projectContext}
+            modeStatus={
+              <>
+                {settingsTemplateSelect}
+                {settingsTemplateBadgeChip}
+                {computerUseControl}
+                {workflowModeControl}
+                {workflowReuseControl}
+                {executionModePill}
+              </>
+            }
+          />
+          {queueResumeDialog}
+          {modelSwitchWarningDialog}
+        </ComposerStatusRegion>
       </div>
     )
   }
@@ -1163,7 +1244,7 @@ function ModelSwitchWarningDialog({
         <p className="mt-2 text-sm leading-5 text-text-secondary">
           {t(
             'workbench.model_switch_warning_effect',
-            'The new model will be used for the next message. If a response is in progress, it will continue with the current model.'
+            'The current response and running tools continue with the current model. KCoder targets that support live switching apply the new model after a tool result; other runtimes use it for the next message.'
           )}
         </p>
         <div className="mt-5 flex justify-end gap-2">

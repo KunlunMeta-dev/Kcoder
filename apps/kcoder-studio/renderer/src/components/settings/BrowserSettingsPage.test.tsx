@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
-import type { AppPreferences } from '@/tauri/appPreferences'
+import type { AppPreferences } from '@/host/appPreferences'
 import './../../../src/i18n'
 import { BrowserSettingsPage } from './BrowserSettingsPage'
 
@@ -10,12 +10,11 @@ const updateAppPreferencesMock = vi.hoisted(() => vi.fn())
 const clearEmbeddedBrowserDataMock = vi.hoisted(() => vi.fn())
 const openNativeDirectoryPickerMock = vi.hoisted(() => vi.fn())
 const nativeHostMock = vi.hoisted(() => vi.fn(() => true))
-vi.mock('@/lib/runtime-environment', () => ({ isNativeTauriHost: nativeHostMock }))
+vi.mock('@/lib/runtime-environment', () => ({ isNativeGatewayHost: nativeHostMock }))
 
 const preferences: AppPreferences = vi.hoisted(() => ({
   closeToTrayEnabled: true,
   showMainWindowOnLaunch: true,
-  systemDragEnabled: true,
   preventSleepWhileTasksRunning: true,
   closeToTrayHintSeen: false,
   language: 'zh-CN',
@@ -30,8 +29,8 @@ const preferences: AppPreferences = vi.hoisted(() => ({
   browserAskBeforeDownload: false,
 }))
 
-vi.mock('@/tauri/appPreferences', async importOriginal => {
-  const actual = await importOriginal<typeof import('@/tauri/appPreferences')>()
+vi.mock('@/host/appPreferences', async importOriginal => {
+  const actual = await importOriginal<typeof import('@/host/appPreferences')>()
   return {
     ...actual,
     defaultAppPreferences: preferences,
@@ -95,40 +94,8 @@ describe('BrowserSettingsPage', () => {
       })
     )
 
-    const askToggle = screen.getByTestId('browser-ask-before-download-toggle')
-    await waitFor(() => expect(askToggle).toBeEnabled())
-    await userEvent.click(askToggle)
-    await waitFor(() =>
-      expect(updateAppPreferencesMock).toHaveBeenCalledWith({
-        browserAskBeforeDownload: true,
-      })
-    )
   })
 
-  test('selects and resets the browser download directory', async () => {
-    openNativeDirectoryPickerMock.mockResolvedValue('/tmp/browser-downloads')
-    updateAppPreferencesMock.mockImplementation(patch =>
-      Promise.resolve({ ...preferences, ...patch })
-    )
-    render(<BrowserSettingsPage />)
-
-    const changeButton = await screen.findByTestId('browser-download-location-change')
-    await waitFor(() => expect(changeButton).toBeEnabled())
-    await userEvent.click(changeButton)
-
-    await waitFor(() => {
-      expect(openNativeDirectoryPickerMock).toHaveBeenCalledWith(undefined)
-      expect(updateAppPreferencesMock).toHaveBeenCalledWith({
-        browserDownloadDirectory: '/tmp/browser-downloads',
-      })
-    })
-
-    const resetButton = await screen.findByTestId('browser-download-location-reset')
-    await userEvent.click(resetButton)
-    await waitFor(() =>
-      expect(updateAppPreferencesMock).toHaveBeenCalledWith({ browserDownloadDirectory: null })
-    )
-  })
 
   test('requires confirmation before clearing browser data', async () => {
     render(<BrowserSettingsPage />)

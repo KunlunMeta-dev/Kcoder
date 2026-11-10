@@ -33,7 +33,9 @@ fn stdio_app_server_streams_a_deterministic_turn() {
             "jsonrpc": "2.0", "id": 1, "method": "initialize",
             "params": {"protocolVersion": "2026-07-27", "clientInfo": {"name": "integration-test", "version": "1"}}
         }),
-        json!({"jsonrpc": "2.0", "id": 2, "method": "thread/start", "params": {}})
+        json!({"jsonrpc": "2.0", "id": 2, "method": "thread/start", "params": {
+            "model": "integration-test::deterministic-scenario"
+        }})
     ]);
 
     let deadline = Instant::now() + Duration::from_secs(30);
@@ -80,7 +82,18 @@ fn stdio_app_server_streams_a_deterministic_turn() {
     let fork_response = server.response(4);
     let forked: Response<ThreadForkResult> = serde_json::from_value(fork_response.clone()).unwrap();
     let fork_thread_id = match forked.payload {
-        kcoder_app_protocol::ResponsePayload::Success { result } => result.thread.id,
+        kcoder_app_protocol::ResponsePayload::Success { result } => {
+            assert_eq!(
+                result.thread.selected_model.as_deref(),
+                Some("integration-test::deterministic-scenario")
+            );
+            assert_eq!(
+                result.thread.model_selection_mode,
+                Some(kcoder_types::ModelSelectionMode::Explicit)
+            );
+            assert!(result.thread.channel_task_source.is_none());
+            result.thread.id
+        }
         kcoder_app_protocol::ResponsePayload::Error { error } => {
             panic!("thread/fork failed: {}", error.message)
         }
@@ -767,7 +780,6 @@ fn stdio_app_server_allocates_new_turn_id_for_a_forkable_replacement_after_rewin
         let response = server.response(id);
         assert_eq!(response.get("error").is_none(), accepted, "{response}");
     }
-
 
     server.send(json!({
         "jsonrpc": "2.0", "id": 7, "method": "thread/read",

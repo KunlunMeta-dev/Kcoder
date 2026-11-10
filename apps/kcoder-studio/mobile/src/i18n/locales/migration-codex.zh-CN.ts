@@ -1,0 +1,20 @@
+export const migrationCodexZhCN = {
+  "migration_codex.title": "Codex 项目层级详情",
+  "migration_codex.merge": "合并项目模型覆盖…",
+  "migration_codex.replacement": "此模型快照替代单文件模型选择。MCP 仍需单独审查，不在这里合并。",
+  "migration_codex.scope": "所选 Codex 项目快照",
+  "migration_codex.boundary": "仅反映明确选择的受信任静态文件，不代表来源进程的最终配置。CLI 参数、进程环境、受管策略及完整 Git/工作树运行时路由仍未观察。不显示配置值或来源路径。",
+  "migration_codex.precedence": "用户层 → 明确选择的 profile → 项目根到工作目录。近层支持的模型字段胜出；项目层的 Provider、认证和 profile 路由不会提升为用户权限。",
+  "migration_codex.user": "用户层",
+  "migration_codex.profile": "所选 profile",
+  "migration_codex.project": "项目层 {n}",
+  "migration_codex.provider": "Provider {n}",
+  "migration_codex.ignored": "此快照未采用，保留原有路由权限边界",
+  "migration_codex.origin": "字段来源",
+  "migration_codex.command_line_overrides": "CLI 覆盖",
+  "migration_codex.source_process_environment": "来源进程环境",
+  "migration_codex.system_cloud_managed_defaults": "系统/云端默认值",
+  "migration_codex.managed_requirements": "受管要求",
+  "migration_codex.separate_mcp_namespaces": "独立 MCP 命名空间",
+  "migration_codex.git_worktree_runtime_routing": "Git/工作树运行时路由"
+};

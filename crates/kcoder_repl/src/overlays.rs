@@ -56,6 +56,9 @@ pub(crate) struct QuestionDialogState {
     pub(crate) selected: Vec<usize>,
     pub(crate) cursor: usize,
     pub(crate) scroll_top: usize,
+    pub(crate) custom_answer: String,
+    pub(crate) custom_cursor: usize,
+    pub(crate) editing_custom: bool,
 }
 
 #[derive(Debug)]

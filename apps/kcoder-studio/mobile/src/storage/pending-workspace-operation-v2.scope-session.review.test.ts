@@ -78,6 +78,8 @@ class ReviewRpcClient {
 
   constructor(readonly profileId: string, readonly cwd: string, private readonly closeError: Error | null) {}
 
+  getAppServerId(): undefined { return undefined; }
+
   supportsExperimental(capability: string): boolean {
     if (fixture.capabilityDisabled && capability === "workspaceOperationReceiptsV2") return false;
     return ["workspaceOperationReceiptsV2", "threadCreationReceiptsV1", "turnReceiptsV1"].includes(capability);

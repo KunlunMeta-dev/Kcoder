@@ -149,8 +149,13 @@ impl Drop for PrivateTempDir {
 /// Create a private temporary directory under the application's configuration
 /// directory using a local date partition and an unpredictable leaf name.
 pub fn create_private_temp_dir(prefix: &str) -> Result<PrivateTempDir> {
+    create_private_temp_dir_in(&crate::Settings::config_dir()?, prefix)
+}
+/// Native owners with an isolated profile/root keep worker resources in that
+/// exact hierarchy instead of falling back to the process home.
+pub fn create_private_temp_dir_in(config_dir: &Path, prefix: &str) -> Result<PrivateTempDir> {
     create_private_temp_dir_at_with(
-        &crate::Settings::config_dir()?,
+        config_dir,
         prefix,
         Local::now().date_naive(),
         |bytes| {
@@ -176,15 +181,16 @@ fn create_private_temp_dir_at_with(
     tmp_root.verify_private_temp_directory()?;
     let _manager_lock = acquire_manager_lock(&tmp_root)?;
 
-    if run_cleanup && cleanup_is_due(&config_dir.join(TEMP_ROOT_NAME)) {
-        if let Err(error) = cleanup_expired_locked(
+    if run_cleanup
+        && cleanup_is_due(&config_dir.join(TEMP_ROOT_NAME))
+        && let Err(error) = cleanup_expired_locked(
             &tmp_root,
             Local::now().date_naive(),
             SystemTime::now(),
             TEMP_DIR_TTL,
-        ) {
-            tracing::warn!(error = %error, "private temp cleanup skipped");
-        }
+        )
+    {
+        tracing::warn!(error = %error, "private temp cleanup skipped");
     }
 
     let year = date.format("%Y").to_string();

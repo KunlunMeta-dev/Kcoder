@@ -60,6 +60,18 @@ export async function closeBrowser(this: GatewayRuntimeCore, labelValue: unknown
   return this.browserRuntime.closeBrowser(labelValue)
 }
 
+export async function closeBrowserForAccountSwitch(this: GatewayRuntimeCore, labelValue: unknown) {
+  return this.browserRuntime.closeForAccountSwitch(labelValue)
+}
+
+export async function browserHandoff(this: GatewayRuntimeCore, raw: unknown) {
+  const args = record(raw)
+  if (args.mode === 'read') return this.browserRuntime.readHandoff(args.label)
+  if (args.mode !== 'human' && args.mode !== 'automation')
+    throw new Error('BROWSER_PROFILE_CONTROL_INVALID')
+  return this.browserRuntime.setHandoff(args.label, args.mode)
+}
+
 export async function clearBrowserData(this: GatewayRuntimeCore) {
   return this.browserRuntime.clearBrowserData()
 }
@@ -79,7 +91,7 @@ export async function status(this: GatewayRuntimeCore) {
     ready: true,
     deviceId: server.id,
     runtimeInstanceId: `kcoder-gateway:${server.id}`,
-    // Wework gates device usability on its executor protocol version. The gateway implements
+    // Studio gates device usability on its executor protocol version. The gateway implements
     // that surface independently from the renderer package version.
     version: '1.8.6-kcoder.1',
   }
@@ -179,9 +191,18 @@ export async function executeDeviceCommand(
     command === 'workspace_rename_entry' ||
     command === 'workspace_delete_entry'
   ) {
-    const client = await this.commandClient(server, this.compatibility.fileWorkspace(params))
+    const workspace =
+      command === 'workspace_tree'
+        ? (text(params.workspacePath) ?? this.compatibility.fileWorkspace(params))
+        : this.compatibility.fileWorkspace(params)
+    const client = await this.commandClient(server, workspace)
     if (client.supportsExperimental?.('workspaceFiles') === false) {
       throw new Error('KCoder app-server 不支持工作区文件访问')
+    }
+    if (command === 'workspace_tree' && text(params.workspacePath)) {
+      const fields = { ...params }
+      delete fields.workspacePath
+      return client.request('device/execute', fields)
     }
     return client.request('device/execute', params)
   }

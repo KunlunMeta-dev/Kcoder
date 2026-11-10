@@ -11,10 +11,10 @@ const api = vi.hoisted(() => ({
   install: vi.fn(),
   revalidationEnabled: true,
 }))
-vi.mock('@tauri-apps/api/core', () => ({
-  isTauri: () => false,
+vi.mock('@/lib/client-resource-url', () => ({
+  isGateway: () => false,
   invoke: vi.fn(),
-  convertFileSrc: (path: string) => path,
+  clientResourceUrl: (path: string) => path,
 }))
 vi.mock('@/api/local/codexPlugins', () => ({
   createLocalCodexPluginApi: () => ({

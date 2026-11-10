@@ -1,3 +1,5 @@
+use crate::headless::HeadlessWorkObservation;
+use kcoder_cli_support::failure_policy::{is_retryable_failure, recommended_retry_after_ms};
 use kcoder_engine::{EngineEvent, QueryEngine};
 use kcoder_state::{GoalStatus, TaskStatus, TodoStatus};
 use kcoder_types::ContentBlock;
@@ -60,6 +62,10 @@ pub(super) struct HeadlessOutcome {
     retry_after_ms: Option<u64>,
     retryable: bool,
     resume_safe: bool,
+    /// Goal this run belongs to, captured when the outcome is finalized.
+    goal_id: Option<String>,
+    /// Work observed at the last turn boundary; `None` when no work is bound.
+    work: Option<HeadlessWorkObservation>,
 }
 
 impl Default for HeadlessOutcome {
@@ -80,6 +86,8 @@ impl Default for HeadlessOutcome {
             retry_after_ms: None,
             retryable: false,
             resume_safe: false,
+            goal_id: None,
+            work: None,
         }
     }
 }
@@ -236,6 +244,7 @@ impl HeadlessOutcome {
 
     pub(super) fn finalize(&mut self, engine: &QueryEngine) {
         let goal_status = engine.state.goal().map(|goal| goal.status);
+        self.goal_id = engine.state.goal().map(|goal| goal.goal_id);
         let final_text =
             kcoder_engine::goal_continuation::latest_assistant_text(&engine.state.messages());
         let mut work_remaining = engine
@@ -345,6 +354,13 @@ impl HeadlessOutcome {
         outcome
     }
 
+    /// Remember the work observed at a turn boundary. The terminal result then
+    /// reports the same identity the `work_observation` line carried, so a
+    /// consumer never has to parse notices to correlate the outcome.
+    pub(super) fn record_work_observation(&mut self, observation: HeadlessWorkObservation) {
+        self.work = Some(observation);
+    }
+
     pub(super) fn is_success(&self) -> bool {
         self.run_status == RunStatus::Completed && self.task_status == TaskOutcomeStatus::Completed
     }
@@ -371,6 +387,16 @@ impl HeadlessOutcome {
         let retry_after_ms = (!self.is_success())
             .then_some(self.retry_after_ms)
             .flatten();
+        // Work identity stays null when no work is bound, so a work-free run
+        // keeps describing itself exactly as before.
+        let (work_id, work_phase, waiting) = match &self.work {
+            Some(work) => (
+                Some(work.work_id.clone()),
+                Some(work.phase.clone()),
+                work.waiting.clone(),
+            ),
+            None => (None, None, None),
+        };
         let mut event = serde_json::json!({
             "type": "result",
             "subtype": if self.is_success() { "success" } else { "error" },
@@ -387,6 +413,10 @@ impl HeadlessOutcome {
             "provider_retry_count": self.provider_retry_count,
             "retry_after_ms": retry_after_ms,
             "work_remaining": self.work_remaining,
+            "goal_id": self.goal_id,
+            "work_id": work_id,
+            "work_phase": work_phase,
+            "waiting": waiting,
         });
         if let Some(error) = &self.error {
             event["error"] = Value::String(error.clone());
@@ -452,44 +482,6 @@ fn matches_status_line(line: &str, marker: &str) -> bool {
         || rest.starts_with(" -")
         || rest.starts_with(" —")
         || rest.starts_with(" –")
-}
-
-pub(super) fn is_retryable_failure(error: &str) -> bool {
-    let lower = error.to_ascii_lowercase();
-    [
-        "stream idle",
-        "timeout",
-        "timed out",
-        "rate limit",
-        "overload",
-        "429",
-        "529",
-        "500",
-        "502",
-        "503",
-        "504",
-        "connection",
-        "network",
-        "temporarily",
-        "unavailable",
-    ]
-    .iter()
-    .any(|marker| lower.contains(marker))
-}
-
-pub(super) fn recommended_retry_after_ms(error: &str) -> Option<u64> {
-    if !is_retryable_failure(error) {
-        return None;
-    }
-    let lower = error.to_ascii_lowercase();
-    if lower.contains("429") || lower.contains("rate limit") || lower.contains("too many requests")
-    {
-        Some(30_000)
-    } else if lower.contains("529") || lower.contains("overload") {
-        Some(5_000)
-    } else {
-        Some(1_000)
-    }
 }
 
 fn truncate_chars(value: &str, max_chars: usize) -> String {
@@ -559,7 +551,7 @@ mod tests {
             };
             let mut outcome = HeadlessOutcome::default();
             outcome.observe_event(&event);
-            let wire = crate::headless::engine_event_json(event);
+            let wire = kcoder_cli_support::engine_event_json(event);
             let result = outcome.to_json("session".into());
             assert!(!outcome.is_success());
             assert_eq!(wire["type"], "error");

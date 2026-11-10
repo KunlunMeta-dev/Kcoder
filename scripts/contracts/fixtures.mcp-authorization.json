@@ -1,0 +1,249 @@
+{
+  "McpProviderRevocationParams": {
+    "valid": [
+      {
+        "name": "prepare",
+        "value": {
+          "action": "prepare",
+          "requestId": "original-revocation",
+          "server": {
+            "name": "owned-original",
+            "pluginId": null
+          }
+        }
+      },
+      {
+        "name": "commit",
+        "value": {
+          "action": "commit",
+          "requestId": "original-revocation",
+          "server": {
+            "name": "owned-original",
+            "pluginId": null
+          },
+          "intentRef": {
+            "id": "native-original-intent",
+            "revision": "native-only-revision"
+          }
+        }
+      },
+      {
+        "name": "read",
+        "value": {
+          "action": "read",
+          "requestId": "original-revocation",
+          "server": {
+            "name": "owned-original",
+            "pluginId": null
+          }
+        }
+      },
+      {
+        "name": "cancel",
+        "value": {
+          "action": "cancel",
+          "requestId": "original-revocation",
+          "server": {
+            "name": "owned-original",
+            "pluginId": null
+          },
+          "intentRef": {
+            "id": "native-original-intent",
+            "revision": "native-only-revision"
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "commit_needs_native_original",
+        "value": {
+          "action": "commit",
+          "requestId": "original",
+          "server": {
+            "name": "owned-original",
+            "pluginId": null
+          }
+        }
+      },
+      {
+        "name": "no_private_input",
+        "value": {
+          "action": "prepare",
+          "requestId": "original",
+          "server": {
+            "name": "owned-original",
+            "pluginId": null
+          },
+          "token": "forbidden-public-fixture"
+        }
+      }
+    ]
+  },
+  "McpProviderRevocationPhase": {
+    "valid": [
+      {
+        "name": "prepared",
+        "value": "prepared"
+      },
+      {
+        "name": "accepted",
+        "value": "accepted"
+      },
+      {
+        "name": "unknown",
+        "value": "unknown"
+      },
+      {
+        "name": "unsupported",
+        "value": "unsupported"
+      },
+      {
+        "name": "rejected",
+        "value": "rejected"
+      }
+    ],
+    "invalid": [
+      {
+        "name": "not_a_global_revocation_claim",
+        "value": "revoked"
+      }
+    ]
+  },
+  "McpProviderRevocationReason": {
+    "valid": [
+      {
+        "name": "awaitingConfirmation",
+        "value": "awaitingConfirmation"
+      },
+      {
+        "name": "providerAccepted",
+        "value": "providerAccepted"
+      },
+      {
+        "name": "outcomeUnconfirmed",
+        "value": "outcomeUnconfirmed"
+      },
+      {
+        "name": "endpointNotAdvertised",
+        "value": "endpointNotAdvertised"
+      },
+      {
+        "name": "authenticationUnsupported",
+        "value": "authenticationUnsupported"
+      },
+      {
+        "name": "tokenTypeUnsupported",
+        "value": "tokenTypeUnsupported"
+      },
+      {
+        "name": "authorizationUnavailable",
+        "value": "authorizationUnavailable"
+      },
+      {
+        "name": "sourceChanged",
+        "value": "sourceChanged"
+      },
+      {
+        "name": "credentialsChanged",
+        "value": "credentialsChanged"
+      },
+      {
+        "name": "providerRejected",
+        "value": "providerRejected"
+      },
+      {
+        "name": "intentExpired",
+        "value": "intentExpired"
+      },
+      {
+        "name": "preparationCancelled",
+        "value": "preparationCancelled"
+      },
+      {
+        "name": "originalReceiptUnavailable",
+        "value": "originalReceiptUnavailable"
+      }
+    ],
+    "invalid": [
+      {
+        "name": "untrusted_reason",
+        "value": "remote-private-message"
+      }
+    ]
+  },
+  "McpProviderRevocationSourceState": {
+    "valid": [
+      {
+        "name": "matches",
+        "value": "matches"
+      },
+      {
+        "name": "changed",
+        "value": "changed"
+      },
+      {
+        "name": "unavailable",
+        "value": "unavailable"
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unobserved_is_not_match",
+        "value": "ready"
+      }
+    ]
+  },
+  "McpProviderRevocationReceipt": {
+    "valid": [
+      {
+        "name": "original_prepared",
+        "value": {
+          "requestId": "original-revocation",
+          "intentRef": {
+            "id": "native-original-intent",
+            "revision": "native-only-revision"
+          },
+          "phase": "prepared",
+          "reason": "awaitingConfirmation",
+          "localCredentialsRemoved": false,
+          "currentSourceMatches": true,
+          "sourceState": "matches"
+        }
+      },
+      {
+        "name": "unknown_without_replay",
+        "value": {
+          "requestId": "original-revocation",
+          "intentRef": {
+            "id": "native-original-intent",
+            "revision": "native-only-revision"
+          },
+          "phase": "unknown",
+          "reason": "outcomeUnconfirmed",
+          "localCredentialsRemoved": false,
+          "currentSourceMatches": true,
+          "sourceState": "matches"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "no_private_result",
+        "value": {
+          "requestId": "original-revocation",
+          "intentRef": {
+            "id": "native-original-intent",
+            "revision": "native-only-revision"
+          },
+          "phase": "prepared",
+          "reason": "awaitingConfirmation",
+          "localCredentialsRemoved": false,
+          "currentSourceMatches": true,
+          "sourceState": "matches",
+          "accessToken": "forbidden-public-fixture"
+        }
+      }
+    ]
+  }
+}

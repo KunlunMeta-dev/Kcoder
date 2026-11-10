@@ -3,7 +3,7 @@ import {
   APP_PREFERENCES_CHANGED_EVENT,
   getAppPreferences,
   type AppPreferences,
-} from '@/tauri/appPreferences'
+} from '@/host/appPreferences'
 
 export function useExperimentalFeaturesEnabled(): boolean {
   const [enabled, setEnabled] = useState(false)

@@ -66,7 +66,7 @@ export type LocalModelSettingsEventConfig = Omit<LocalModelConfig, 'apiKey'> & {
 export type LocalModelCatalogSnapshot = Pick<LocalModelConfig, 'id' | 'updatedAt'>
 
 export const LOCAL_MODEL_SETTINGS_STORAGE_KEY = 'wework.localModelSettings.v1'
-export const LOCAL_MODEL_SETTINGS_CHANGED_EVENT = 'wework:local-model-settings-changed'
+export const LOCAL_MODEL_SETTINGS_CHANGED_EVENT = 'kcoder:local-model-settings-changed'
 export const LOCAL_MODEL_NAME_PREFIX = 'local-model:'
 export const DEFAULT_LOCAL_MODEL_REQUEST_PATH = '/responses'
 export const DEFAULT_LOCAL_MODEL_CHAT_COMPLETIONS_REQUEST_PATH = '/chat/completions'

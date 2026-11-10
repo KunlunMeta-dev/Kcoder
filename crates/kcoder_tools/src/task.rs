@@ -1,9 +1,11 @@
-use crate::{LifecycleHookResult, Tool, ToolContext, ToolError, ToolOutput, parse_input};
+use crate::{LifecycleHookResult, Tool, ToolContext, ToolError, ToolOutput};
 use async_trait::async_trait;
 use kcoder_state::{Task, TaskKind, TaskStatus};
+pub use kcoder_tool_input::builtin::task::{
+    TaskCreateInput, TaskGetInput, TaskListInput, TaskOutputInput, TaskStopInput, TaskUpdateInput,
+    TaskUpdateStatus,
+};
 use kcoder_types::ContentBlock;
-use schemars::JsonSchema;
-use serde::Deserialize;
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 use tokio::time::{Duration, Instant, sleep};
@@ -12,115 +14,25 @@ use tokio::time::{Duration, Instant, sleep};
 #[derive(Debug, Default)]
 pub struct TaskCreateTool;
 
-#[derive(Debug, Deserialize, JsonSchema)]
-pub struct TaskCreateInput {
-    /// Brief user-visible task title.
-    pub subject: String,
-    /// What needs to be done and why it matters.
-    pub description: String,
-    /// Present-continuous form shown in the spinner when in progress, e.g.
-    /// `Running tests`.
-    #[serde(rename = "activeForm")]
-    pub active_form: Option<String>,
-    /// Optional arbitrary metadata object. Values must be valid JSON.
-    pub metadata: Option<HashMap<String, Value>>,
-}
-
 /// Update a task in the task list.
 #[derive(Debug, Default)]
 pub struct TaskUpdateTool;
-
-#[derive(Debug, Deserialize, JsonSchema)]
-pub struct TaskUpdateInput {
-    /// ID of the task to update.
-    #[serde(rename = "taskId")]
-    pub task_id: String,
-    /// Optional replacement subject.
-    pub subject: Option<String>,
-    /// Optional replacement description.
-    pub description: Option<String>,
-    /// Optional replacement present-continuous form shown while in progress.
-    #[serde(rename = "activeForm")]
-    pub active_form: Option<String>,
-    /// Optional new status enum: `pending`, `in_progress`, `completed`, or
-    /// `deleted`.
-    pub status: Option<TaskUpdateStatus>,
-    /// Task IDs that this task blocks. Must be a JSON array of strings.
-    #[serde(rename = "addBlocks")]
-    pub add_blocks: Option<Vec<String>>,
-    /// Task IDs that block this task. Must be a JSON array of strings.
-    #[serde(rename = "addBlockedBy")]
-    pub add_blocked_by: Option<Vec<String>>,
-    /// Optional owner name or agent identifier.
-    pub owner: Option<String>,
-    /// Metadata keys to merge into the task. Set a key to null to delete it.
-    /// Values must be valid JSON.
-    pub metadata: Option<HashMap<String, Value>>,
-}
-
-#[derive(Debug, Deserialize, JsonSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum TaskUpdateStatus {
-    Pending,
-    InProgress,
-    Completed,
-    Deleted,
-}
 
 /// List all tasks in the task list.
 #[derive(Debug, Default)]
 pub struct TaskListTool;
 
-#[derive(Debug, Deserialize, JsonSchema)]
-pub struct TaskListInput {}
-
 /// Get a task by ID from the task list.
 #[derive(Debug, Default)]
 pub struct TaskGetTool;
-
-#[derive(Debug, Deserialize, JsonSchema)]
-pub struct TaskGetInput {
-    /// The ID of the task to retrieve.
-    #[serde(rename = "taskId")]
-    pub task_id: String,
-}
 
 /// Read output/logs from a background task.
 #[derive(Debug, Default)]
 pub struct TaskOutputTool;
 
-#[derive(Debug, Deserialize, JsonSchema)]
-pub struct TaskOutputInput {
-    /// Exact run to inspect; defaults to the run active when this call starts.
-    #[serde(default)]
-    pub run_id: Option<String>,
-    /// ID of the background task to inspect.
-    pub task_id: String,
-    /// JSON boolean. Set true only when the result is on the current critical
-    /// path; false performs a non-blocking status/output check.
-    #[serde(default = "default_block")]
-    pub block: bool,
-    /// Maximum wait time in milliseconds when `block=true`. Use a JSON integer.
-    #[serde(default)]
-    pub timeout: Option<u64>,
-}
-
-fn default_block() -> bool {
-    false
-}
-
 /// Stop a running background task by ID.
 #[derive(Debug, Default)]
 pub struct TaskStopTool;
-
-#[derive(Debug, Deserialize, JsonSchema)]
-pub struct TaskStopInput {
-    /// ID of the background task to stop. Omit only when using the deprecated
-    /// `shell_id` alias.
-    pub task_id: Option<String>,
-    /// Deprecated alias for task_id. Prefer `task_id`.
-    pub shell_id: Option<String>,
-}
 
 use kcoder_types::TaskMetadata as TaskPayload;
 
@@ -263,7 +175,7 @@ impl Tool for TaskCreateTool {
     }
 
     fn input_schema(&self) -> Value {
-        crate::clean_schema(schemars::schema_for!(TaskCreateInput))
+        TaskCreateInput::schema()
     }
 
     fn is_concurrency_safe(&self, _input: &Value) -> bool {
@@ -271,7 +183,7 @@ impl Tool for TaskCreateTool {
     }
 
     async fn call(&self, input: Value, ctx: &ToolContext) -> Result<ToolOutput, ToolError> {
-        let input: TaskCreateInput = parse_input(&input)?;
+        let input: TaskCreateInput = TaskCreateInput::parse(&input)?;
         let id = make_task_id(ctx);
         let payload = payload_with_defaults(&input.subject, &input.description);
         let mut payload = payload;
@@ -383,7 +295,7 @@ impl Tool for TaskUpdateTool {
     }
 
     fn input_schema(&self) -> Value {
-        crate::clean_schema(schemars::schema_for!(TaskUpdateInput))
+        TaskUpdateInput::schema()
     }
 
     fn is_concurrency_safe(&self, _input: &Value) -> bool {
@@ -391,7 +303,7 @@ impl Tool for TaskUpdateTool {
     }
 
     async fn call(&self, input: Value, ctx: &ToolContext) -> Result<ToolOutput, ToolError> {
-        let input: TaskUpdateInput = parse_input(&input)?;
+        let input: TaskUpdateInput = TaskUpdateInput::parse(&input)?;
 
         let Some(mut task) = ctx.state.task(&input.task_id) else {
             return Ok(ToolOutput::text(
@@ -601,7 +513,7 @@ impl Tool for TaskListTool {
     }
 
     fn input_schema(&self) -> Value {
-        crate::clean_schema(schemars::schema_for!(TaskListInput))
+        TaskListInput::schema()
     }
 
     fn is_read_only(&self) -> bool {
@@ -613,7 +525,7 @@ impl Tool for TaskListTool {
     }
 
     async fn call(&self, input: Value, ctx: &ToolContext) -> Result<ToolOutput, ToolError> {
-        let _: TaskListInput = parse_input(&input)?;
+        let _: TaskListInput = TaskListInput::parse(&input)?;
         let tasks = ctx.state.tasks();
         let completed_ids: HashSet<String> = tasks
             .values()
@@ -663,7 +575,7 @@ impl Tool for TaskGetTool {
     }
 
     fn input_schema(&self) -> Value {
-        crate::clean_schema(schemars::schema_for!(TaskGetInput))
+        TaskGetInput::schema()
     }
 
     fn is_read_only(&self) -> bool {
@@ -675,7 +587,7 @@ impl Tool for TaskGetTool {
     }
 
     async fn call(&self, input: Value, ctx: &ToolContext) -> Result<ToolOutput, ToolError> {
-        let input: TaskGetInput = parse_input(&input)?;
+        let input: TaskGetInput = TaskGetInput::parse(&input)?;
 
         let Some(task) = ctx.state.task(&input.task_id) else {
             return Ok(ToolOutput::text(
@@ -717,7 +629,7 @@ impl Tool for TaskOutputTool {
     }
 
     fn input_schema(&self) -> Value {
-        let mut schema = crate::clean_schema(schemars::schema_for!(TaskOutputInput));
+        let mut schema = TaskOutputInput::schema();
         if let Value::Object(ref mut map) = schema
             && let Some(Value::Object(props)) = map.get_mut("properties")
         {
@@ -743,7 +655,7 @@ impl Tool for TaskOutputTool {
     }
 
     async fn call(&self, input: Value, ctx: &ToolContext) -> Result<ToolOutput, ToolError> {
-        let input: TaskOutputInput = parse_input(&input)?;
+        let input: TaskOutputInput = TaskOutputInput::parse(&input)?;
 
         let binding = BackgroundReadBinding::capture(ctx, &input.task_id, input.run_id.as_deref())?;
         let task = binding.read(ctx)?;
@@ -987,7 +899,7 @@ impl Tool for TaskStopTool {
     }
 
     fn input_schema(&self) -> Value {
-        crate::clean_schema(schemars::schema_for!(TaskStopInput))
+        TaskStopInput::schema()
     }
 
     fn is_concurrency_safe(&self, _input: &Value) -> bool {
@@ -995,7 +907,7 @@ impl Tool for TaskStopTool {
     }
 
     async fn call(&self, input: Value, ctx: &ToolContext) -> Result<ToolOutput, ToolError> {
-        let input: TaskStopInput = parse_input(&input)?;
+        let input: TaskStopInput = TaskStopInput::parse(&input)?;
         let id = input.task_id.or(input.shell_id);
 
         let Some(id) = id else {

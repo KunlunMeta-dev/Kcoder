@@ -20,13 +20,9 @@ fn workspace_receipts_v2_stdio_request(
 
 #[cfg(target_os = "linux")]
 fn workspace_receipts_v2_stdio_tempdir() -> tempfile::TempDir {
-    let private_parent = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../target/private-phone-latency-implementation")
-        .canonicalize()
-        .expect("private workspace receipt fixture parent must already exist");
     tempfile::Builder::new()
         .prefix("workspace-receipts-v2-stdio-")
-        .tempdir_in(private_parent)
+        .tempdir()
         .expect("create private stdio fixture")
 }
 
@@ -401,13 +397,8 @@ fn workspace_receipts_v2_stdio_scope_from_another_workspace_root_cannot_read_rea
         RetentionAuthorityServer::spawn(&second_fixture, &retention_authority_local_os_args());
     let initialized = second_server.initialize();
     assert!(initialized.get("error").is_none(), "{initialized}");
-    let second_scope = workspace_receipts_v2_stdio_scope(
-        &mut second_server,
-        54,
-        &context,
-        target_id,
-        None,
-    );
+    let second_scope =
+        workspace_receipts_v2_stdio_scope(&mut second_server, 54, &context, target_id, None);
     assert!(second_scope.get("error").is_none(), "{second_scope}");
     assert_ne!(
         second_scope["result"]["rootId"], first_scope["result"]["rootId"],
@@ -473,26 +464,16 @@ fn workspace_receipts_v2_stdio_family_tracks_gateway_namespace_and_stored_target
 
     let mut alias_context = context.clone();
     alias_context["targetFingerprint"] = json!("different-alias-or-default-target");
-    let alias = workspace_receipts_v2_stdio_scope(
-        &mut server,
-        62,
-        &alias_context,
-        target_id,
-        account,
-    );
+    let alias =
+        workspace_receipts_v2_stdio_scope(&mut server, 62, &alias_context, target_id, account);
     assert!(alias.get("error").is_none(), "{alias}");
     assert_eq!(alias["result"]["familyId"], family_id);
     assert_ne!(alias["result"]["scopeId"], scope_id);
 
     let mut device_context = context.clone();
     device_context["deviceId"] = json!("different-mobile-device");
-    let device = workspace_receipts_v2_stdio_scope(
-        &mut server,
-        63,
-        &device_context,
-        target_id,
-        account,
-    );
+    let device =
+        workspace_receipts_v2_stdio_scope(&mut server, 63, &device_context, target_id, account);
     assert!(device.get("error").is_none(), "{device}");
     assert_eq!(device["result"]["familyId"], family_id);
     assert_ne!(device["result"]["scopeId"], scope_id);
@@ -509,16 +490,10 @@ fn workspace_receipts_v2_stdio_family_tracks_gateway_namespace_and_stored_target
     assert_ne!(account_change["result"]["scopeId"], scope_id);
 
     let mut namespace_context = context.clone();
-    namespace_context["gatewayNamespaceId"] = json!(
-        "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
-    );
-    let namespace = workspace_receipts_v2_stdio_scope(
-        &mut server,
-        65,
-        &namespace_context,
-        target_id,
-        account,
-    );
+    namespace_context["gatewayNamespaceId"] =
+        json!("abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789");
+    let namespace =
+        workspace_receipts_v2_stdio_scope(&mut server, 65, &namespace_context, target_id, account);
     assert!(namespace.get("error").is_none(), "{namespace}");
     assert_ne!(namespace["result"]["familyId"], family_id);
     assert_ne!(namespace["result"]["scopeId"], scope_id);

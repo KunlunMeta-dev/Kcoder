@@ -1121,7 +1121,7 @@ mod tests {
                 observer_queue_size: 64,
                 observer_model: Some("observer-mini".to_string()),
             },
-            ..Settings::default()
+            ..crate::test_support::fixture_settings()
         };
         let engine = test_engine(tmp.path(), settings);
         let mut app = ReplApp::default();

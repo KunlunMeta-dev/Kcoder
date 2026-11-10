@@ -1,12 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react'
-import { beforeEach, describe, expect, test, vi } from 'vitest'
+import { beforeEach, describe, expect, test } from 'vitest'
 import { AppearanceProvider } from './AppearanceProvider'
 import { WorkbenchBackground } from './WorkbenchBackground'
-
-vi.mock('@tauri-apps/api/core', () => ({
-  convertFileSrc: vi.fn((path: string) => `asset://localhost/${path}`),
-  isTauri: vi.fn(() => true),
-}))
 
 describe('WorkbenchBackground', () => {
   beforeEach(() => localStorage.clear())
@@ -15,7 +10,7 @@ describe('WorkbenchBackground', () => {
     localStorage.setItem(
       'wework.appearance',
       JSON.stringify({
-        backgroundImagePath: '/app-data/background.png',
+        backgroundImagePath: 'data:image/png;base64,YWJj',
         backgroundVisibility: 100,
         backgroundBlur: 12,
       })
@@ -36,7 +31,7 @@ describe('WorkbenchBackground', () => {
   test('hides a background image that cannot be loaded', () => {
     localStorage.setItem(
       'wework.appearance',
-      JSON.stringify({ backgroundImagePath: '/app-data/background.png' })
+      JSON.stringify({ backgroundImagePath: 'data:image/png;base64,YWJj' })
     )
 
     render(

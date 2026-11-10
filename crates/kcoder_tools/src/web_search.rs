@@ -1,366 +1,68 @@
+pub mod account_admission;
+#[cfg(test)]
 mod exa;
+mod http;
+mod lifecycle;
+mod policy;
+mod receipts;
+mod routing;
+mod runtime;
+pub use kcoder_web::search::request::{LivecrawlMode, SearchType, WebSearchInput};
+pub use kcoder_web::search::{SearchFailure, constraints, provider_results};
+#[cfg(test)]
+use kcoder_web::search::{bing::validate_bing_page, request::filter_results};
+pub use policy::SearchDispatchGuard;
+pub use routing::BundledSearchBackend;
+pub use runtime::{WebSearchRuntime, WebSearchRuntimeSnapshot};
 
 use crate::{Tool, ToolContext, ToolError, ToolOutput, parse_input};
 use async_trait::async_trait;
-use base64::Engine as _;
-use schemars::JsonSchema;
-use serde::Deserialize;
 use serde_json::Value;
-use std::sync::OnceLock;
-use std::time::{Duration, Instant};
+#[cfg(test)]
+use std::time::Duration;
 
-const MAX_RETRIES: u32 = 3;
-const MAX_BING_RESPONSE_BYTES: usize = 4 * 1024 * 1024;
-const BING_SEARCH_URL: &str = "https://www.bing.com/search";
+#[cfg(test)]
+use kcoder_web::providers::bing::ENDPOINT as BING_SEARCH_URL;
 
-/// Whether web tools should bypass `http_proxy`/`https_proxy` env vars, like
-/// `WebFetch` does. A local development proxy is often only
-/// reachable for the model host and cannot reach bing.com / general sites;
-/// setting `KCODER_WEB_NO_PROXY=1` lets WebSearch/WebBrowser connect directly.
-pub(crate) fn web_no_proxy_enabled() -> bool {
-    static ENABLED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *ENABLED.get_or_init(|| {
-        match std::env::var("KCODER_WEB_NO_PROXY")
-            .ok()
-            .map(|v| v.trim().to_ascii_lowercase())
-            .as_deref()
-        {
-            Some("1" | "true" | "yes" | "on") => true,
-            Some("0" | "false" | "no" | "off") => false,
-            _ => false,
-        }
-    })
+#[cfg(test)]
+async fn search_bing_page(
+    client: &reqwest::Client,
+    input: &WebSearchInput,
+    search_url: &str,
+    max_retries: u32,
+    guard: Option<&SearchDispatchGuard>,
+    ctx: Option<&ToolContext>,
+) -> Result<kcoder_types::web_search::WebSearchPageV1, SearchFailure> {
+    kcoder_web::providers::bing::search_page(
+        &http::SearchHttp { client, guard, ctx },
+        input,
+        search_url,
+        max_retries,
+        ctx.is_none(),
+    )
+    .await
 }
 
-/// Hint appended to connect/timeout errors so users can diagnose proxy issues.
-pub(crate) fn proxy_diagnostic_hint(err: &reqwest::Error) -> String {
-    if err.is_connect() || err.is_timeout() {
-        let proxy_set = std::env::var("http_proxy").is_ok() || std::env::var("https_proxy").is_ok();
-        if proxy_set {
-            return " (if `http_proxy`/`https_proxy` is set, the proxy may be \
-                    unreachable; set `KCODER_WEB_NO_PROXY=1` to bypass)"
-                .to_string();
-        }
-    }
-    String::new()
+/// Legacy direct-mode override for the compatibility client. Native requests
+/// use the shared target policy and capture its effective environment per call.
+pub(crate) fn web_no_proxy_enabled() -> bool {
+    std::env::var("KCODER_WEB_NO_PROXY")
+        .ok()
+        .is_some_and(|value| {
+            matches!(
+                value.trim().to_ascii_lowercase().as_str(),
+                "1" | "true" | "yes" | "on"
+            )
+        })
 }
 
 /// Search the web for current information.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct WebSearchTool {
-    client: reqwest::Client,
+    runtime: std::sync::Arc<WebSearchRuntime>,
 }
 
-impl Default for WebSearchTool {
-    fn default() -> Self {
-        let mut builder = reqwest::Client::builder()
-            .timeout(Duration::from_secs(30))
-            .connect_timeout(Duration::from_secs(10));
-        if web_no_proxy_enabled() {
-            builder = builder.no_proxy();
-        }
-        Self {
-            client: builder
-                .build()
-                .expect("failed to build WebSearch HTTP client"),
-        }
-    }
-}
-
-#[derive(Debug, Deserialize, JsonSchema)]
-#[serde(rename_all = "snake_case")]
-pub struct WebSearchInput {
-    /// Search query text. Be specific enough to retrieve relevant current
-    /// results.
-    pub query: String,
-    /// Optional allowlist of domains such as `["example.com"]`. Must be a JSON
-    /// array of strings. Use only when results must come from specific sites.
-    pub allowed_domains: Option<Vec<String>>,
-    /// Optional denylist of domains such as `["example.com"]`. Must be a JSON
-    /// array of strings.
-    pub blocked_domains: Option<Vec<String>>,
-    /// Number of search results to return. Use a JSON integer. Accepts 1 through 20; defaults to 8.
-    pub num_results: Option<usize>,
-    /// Live crawl mode. Use `fallback` for cached-first behavior or
-    /// `preferred` to prioritize live crawling. Defaults to `fallback`.
-    pub livecrawl: Option<LivecrawlMode>,
-    /// Search depth. Use `auto` by default, `fast` for quick lookups, or
-    /// `deep` for comprehensive research.
-    pub search_type: Option<SearchType>,
-    /// Maximum characters of returned search context. Use a JSON integer.
-    /// Defaults to 10000.
-    pub context_max_characters: Option<usize>,
-}
-
-#[derive(Debug, Deserialize, JsonSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum LivecrawlMode {
-    #[serde(alias = "Fallback")]
-    Fallback,
-    #[serde(alias = "Preferred")]
-    Preferred,
-}
-
-#[derive(Debug, Deserialize, JsonSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum SearchType {
-    #[serde(alias = "Auto")]
-    Auto,
-    #[serde(alias = "Fast")]
-    Fast,
-    #[serde(alias = "Deep")]
-    Deep,
-}
-
-#[derive(Debug, Clone)]
-struct SearchResult {
-    title: String,
-    url: String,
-    snippet: String,
-}
-
-static ALGO_BLOCK_RE: OnceLock<regex::Regex> = OnceLock::new();
-static H2_LINK_RE: OnceLock<regex::Regex> = OnceLock::new();
-static SNIPPET_LINECLAMP_RE: OnceLock<regex::Regex> = OnceLock::new();
-static SNIPPET_CAPTION_P_RE: OnceLock<regex::Regex> = OnceLock::new();
-static SNIPPET_CAPTION_FALLBACK_RE: OnceLock<regex::Regex> = OnceLock::new();
-static TAG_RE: OnceLock<regex::Regex> = OnceLock::new();
-static BING_U_RE: OnceLock<regex::Regex> = OnceLock::new();
-
-fn algo_block_re() -> &'static regex::Regex {
-    ALGO_BLOCK_RE.get_or_init(|| {
-        regex::Regex::new(r#"(?is)<li\s+class="b_algo"[^>]*>([\s\S]*?)</li>"#).unwrap()
-    })
-}
-
-fn h2_link_re() -> &'static regex::Regex {
-    H2_LINK_RE.get_or_init(|| {
-        regex::Regex::new(r#"(?is)<h2[^>]*>\s*<a[^>]+href="([^"]+)"[^>]*>([\s\S]*?)</a>"#).unwrap()
-    })
-}
-
-fn snippet_lineclamp_re() -> &'static regex::Regex {
-    SNIPPET_LINECLAMP_RE.get_or_init(|| {
-        regex::Regex::new(r#"(?is)<p[^>]*class="b_lineclamp[^"]*"[^>]*>([\s\S]*?)</p>"#).unwrap()
-    })
-}
-
-fn snippet_caption_p_re() -> &'static regex::Regex {
-    SNIPPET_CAPTION_P_RE.get_or_init(|| {
-        regex::Regex::new(
-            r#"(?is)<div[^>]*class="b_caption[^"]*"[^>]*>[\s\S]*?<p[^>]*>([\s\S]*?)</p>"#,
-        )
-        .unwrap()
-    })
-}
-
-fn snippet_caption_fallback_re() -> &'static regex::Regex {
-    SNIPPET_CAPTION_FALLBACK_RE.get_or_init(|| {
-        regex::Regex::new(r#"(?is)<div[^>]*class="b_caption[^"]*"[^>]*>([\s\S]*?)</div>"#).unwrap()
-    })
-}
-
-fn tag_re() -> &'static regex::Regex {
-    TAG_RE.get_or_init(|| regex::Regex::new(r"<[^>]+>").unwrap())
-}
-
-fn bing_u_re() -> &'static regex::Regex {
-    BING_U_RE.get_or_init(|| regex::Regex::new(r"[?&]u=([a-zA-Z0-9+/_=-]+)").unwrap())
-}
-
-fn strip_tags(html: &str) -> String {
-    tag_re().replace_all(html, " ").trim().to_string()
-}
-
-fn decode_html(text: &str) -> String {
-    html_escape::decode_html_entities(text).to_string()
-}
-
-/// Resolve a Bing redirect URL to the actual target URL.
-///
-/// Bing uses URLs like `https://www.bing.com/ck/a?...&u=a1aHR0cHM6Ly9leGFtcGxlLmNvbQ...`.
-/// The `u` parameter is a base64-encoded URL prefixed with `a1` (https) or `a0` (http).
-fn resolve_bing_url(raw: &str) -> Option<String> {
-    let parsed = reqwest::Url::parse(raw).ok()?;
-    if !matches!(parsed.scheme(), "http" | "https") || parsed.host_str().is_none() {
-        return None;
-    }
-    let is_bing = parsed
-        .host_str()
-        .is_some_and(|host| host_matches(host, "bing.com"));
-    if is_bing && let Some(caps) = bing_u_re().captures(raw) {
-        let encoded = caps.get(1)?.as_str();
-        if encoded.len() >= 3 {
-            let b64 = encoded[2..].replace('-', "+").replace('_', "/");
-            // Bing sometimes omits base64 padding; use an engine that tolerates
-            // missing padding, mirroring browser Buffer behaviour.
-            let engine = base64::engine::GeneralPurpose::new(
-                &base64::alphabet::STANDARD,
-                base64::engine::GeneralPurposeConfig::new()
-                    .with_decode_padding_mode(base64::engine::DecodePaddingMode::Indifferent),
-            );
-            let decoded = engine
-                .decode(b64)
-                .ok()
-                .and_then(|bytes| String::from_utf8(bytes).ok())?;
-            let target = reqwest::Url::parse(&decoded).ok()?;
-            if matches!(target.scheme(), "http" | "https") && target.host_str().is_some() {
-                return Some(decoded);
-            }
-        }
-    }
-
-    if !is_bing {
-        return Some(raw.to_string());
-    }
-
-    None
-}
-
-fn extract_snippet(block: &str) -> String {
-    let raw = if let Some(caps) = snippet_lineclamp_re().captures(block) {
-        caps.get(1).map(|m| m.as_str())
-    } else if let Some(caps) = snippet_caption_p_re().captures(block) {
-        caps.get(1).map(|m| m.as_str())
-    } else if let Some(caps) = snippet_caption_fallback_re().captures(block) {
-        caps.get(1).map(|m| m.as_str())
-    } else {
-        None
-    };
-    raw.map(|s| decode_html(&strip_tags(s))).unwrap_or_default()
-}
-
-fn extract_bing_results(html: &str) -> Vec<SearchResult> {
-    let mut results = Vec::new();
-    for block_caps in algo_block_re().captures_iter(html) {
-        let block = block_caps.get(1).map(|m| m.as_str()).unwrap_or("");
-        let Some(link_caps) = h2_link_re().captures(block) else {
-            continue;
-        };
-        let raw_url = decode_html(link_caps.get(1).map(|m| m.as_str()).unwrap_or(""));
-        let title_html = link_caps.get(2).map(|m| m.as_str()).unwrap_or("");
-        let Some(url) = resolve_bing_url(&raw_url) else {
-            continue;
-        };
-        let title = decode_html(&strip_tags(title_html));
-        if title.trim().is_empty()
-            || results
-                .iter()
-                .any(|result: &SearchResult| result.url == url)
-        {
-            continue;
-        }
-        let snippet = extract_snippet(block);
-        results.push(SearchResult {
-            title,
-            url,
-            snippet,
-        });
-    }
-    results
-}
-
-/// Reject challenge pages and parser drift instead of reporting a successful empty search.
-fn validate_bing_page(html: &str) -> Result<Vec<SearchResult>, ToolError> {
-    let lower = html.to_ascii_lowercase();
-    let results = extract_bing_results(html);
-    let challenge_element = lower.contains("id=\"b_captcha")
-        || lower.contains("id='b_captcha")
-        || lower.contains("id=\"bnp_captcha");
-    let challenge_text = [
-        "verify you are human",
-        "unusual traffic",
-        "challenge-platform",
-    ]
-    .iter()
-    .any(|marker| lower.contains(marker));
-    if challenge_element || (results.is_empty() && challenge_text) {
-        return Err(ToolError::Execution(
-            "Bing returned an anti-bot challenge; no search results were accepted".into(),
-        ));
-    }
-    if !results.is_empty() {
-        return Ok(results);
-    }
-    let empty_marker =
-        regex::Regex::new(r#"(?is)<li\b[^>]*class=["'][^"']*\bb_no\b[^"']*["']"#).unwrap();
-    if lower.contains("b_results") && empty_marker.is_match(html) && !algo_block_re().is_match(html)
-    {
-        return Ok(results);
-    }
-    Err(ToolError::Execution("Bing returned an unrecognized search page or changed result markup; this is not a confirmed empty search".into()))
-}
-
-async fn read_bounded_bing_response(mut response: reqwest::Response) -> Result<String, ToolError> {
-    if response
-        .content_length()
-        .is_some_and(|size| size > MAX_BING_RESPONSE_BYTES as u64)
-    {
-        return Err(ToolError::Execution(
-            "Bing response exceeds the 4 MiB limit".into(),
-        ));
-    }
-    let mut bytes = Vec::new();
-    while let Some(chunk) = response
-        .chunk()
-        .await
-        .map_err(|e| ToolError::Execution(format!("failed to read search response: {e}")))?
-    {
-        if chunk.len() > MAX_BING_RESPONSE_BYTES.saturating_sub(bytes.len()) {
-            return Err(ToolError::Execution(
-                "Bing response exceeds the 4 MiB limit".into(),
-            ));
-        }
-        bytes.extend_from_slice(&chunk);
-    }
-    String::from_utf8(bytes)
-        .map_err(|_| ToolError::Execution("Bing returned invalid UTF-8 HTML".into()))
-}
-
-fn host_matches(host: &str, domain: &str) -> bool {
-    host == domain || host.ends_with(&format!(".{domain}"))
-}
-
-fn normalized_domains(domains: &Option<Vec<String>>) -> Vec<&str> {
-    domains
-        .as_ref()
-        .map(|domains| {
-            domains
-                .iter()
-                .map(|domain| domain.trim())
-                .filter(|domain| !domain.is_empty())
-                .collect()
-        })
-        .unwrap_or_default()
-}
-
-fn domains_conflict(input: &WebSearchInput) -> bool {
-    !normalized_domains(&input.allowed_domains).is_empty()
-        && !normalized_domains(&input.blocked_domains).is_empty()
-}
-
-fn filter_results(results: Vec<SearchResult>, input: &WebSearchInput) -> Vec<SearchResult> {
-    let allowed = normalized_domains(&input.allowed_domains);
-    let blocked = normalized_domains(&input.blocked_domains);
-    results
-        .into_iter()
-        .filter(|r| {
-            let Ok(url) = reqwest::Url::parse(&r.url) else {
-                return false;
-            };
-            let Some(host) = url.host_str() else {
-                return false;
-            };
-            if !allowed.is_empty() && !allowed.iter().any(|domain| host_matches(host, domain)) {
-                return false;
-            }
-            if blocked.iter().any(|domain| host_matches(host, domain)) {
-                return false;
-            }
-            true
-        })
-        .collect()
-}
+type SearchResult = kcoder_types::web_search::WebSearchHitV1;
 
 fn format_results(
     results: &[SearchResult],
@@ -369,134 +71,81 @@ fn format_results(
     context_max: usize,
 ) -> String {
     let reminder = "\n\nREMINDER: You MUST include the sources above in your response to the user using markdown hyperlinks.";
-    let mut body = format!("Web search results for query: \"{}\"\n\n", query);
-
+    let footer = format!("\nSearch completed in {duration_ms}ms.");
+    let marker = "\n[search results truncated]";
+    let budget = context_max
+        .saturating_sub(reminder.chars().count() + footer.chars().count() + marker.chars().count());
+    if budget < 100 {
+        return format!("[search results truncated]{reminder}");
+    }
+    let query = crate::truncate::truncate_chars_with_marker(query, 199, "…");
+    let mut body = format!("Web search results for query: \"{query}\"\n\n");
+    let mut truncated = false;
     if results.is_empty() {
-        body.push_str("No search results found. This does not establish that a page or repository is absent; verify its exact URL and access permissions.\n\n");
+        body.push_str("No search results found. This does not establish that a page or repository is absent; verify its exact URL and access permissions.\n");
     } else {
         body.push_str("Links:\n");
-        for result in results {
-            body.push_str(&format!("  - [{}]({})", result.title, result.url));
-            if !result.snippet.trim().is_empty() {
-                body.push_str(&format!(": {}", result.snippet));
+        for (index, result) in results.iter().enumerate() {
+            let title = result
+                .title
+                .replace('\\', "\\\\")
+                .replace('[', "\\[")
+                .replace(']', "\\]")
+                .replace(['\r', '\n'], " ");
+            let url = result.url.replace('(', "%28").replace(')', "%29");
+            let mut entry = format!("  - [{title}]({url})");
+            let mut metadata = String::new();
+            if !result.source_id.is_empty() {
+                metadata.push_str(&format!(
+                    "\n    Source ID: {} (search snippet)",
+                    result.source_id
+                ));
             }
-            body.push('\n');
-        }
-        body.push('\n');
-    }
-    body.push_str(&format!("Search completed in {}ms.", duration_ms));
-
-    let body = if body.chars().count() + reminder.chars().count() > context_max {
-        let body_budget = context_max.saturating_sub(reminder.chars().count());
-        if body_budget == 0 {
-            "[search results truncated]".to_string()
-        } else {
-            crate::truncate::truncate_chars_with_marker(&body, body_budget, "\n[truncated]")
-        }
-    } else {
-        body
-    };
-
-    format!("{body}{reminder}")
-}
-
-fn retry_delay(attempt: u32) -> Duration {
-    Duration::from_millis(500 * 2_u64.pow(attempt.min(4)))
-}
-
-fn is_retryable(status: reqwest::StatusCode, err: Option<&reqwest::Error>) -> bool {
-    if let Some(e) = err {
-        return e.is_timeout() || e.is_connect();
-    }
-    status.is_server_error() || status == reqwest::StatusCode::TOO_MANY_REQUESTS
-}
-
-async fn search_bing(
-    client: &reqwest::Client,
-    input: &WebSearchInput,
-    search_url: &str,
-) -> Result<String, ToolError> {
-    let language = if input
-        .query
-        .chars()
-        .any(|c| ('\u{4e00}'..='\u{9fff}').contains(&c))
-    {
-        "zh-CN"
-    } else {
-        "en-US"
-    };
-    let url = reqwest::Url::parse_with_params(
-        search_url,
-        &[("q", input.query.as_str()), ("setmkt", language)],
-    )
-    .map_err(|e| ToolError::Execution(format!("invalid search URL: {e}")))?;
-
-    let started = Instant::now();
-    let mut attempts = 0;
-    let mut last_error = String::new();
-    for attempt in 0..=MAX_RETRIES {
-        if attempt > 0 {
-            tokio::time::sleep(retry_delay(attempt - 1)).await;
-        }
-
-        attempts += 1;
-        let request_result = client
-            .get(url.clone())
-            .header(
-                reqwest::header::USER_AGENT,
-                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 \
-                 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0",
-            )
-            .header(
-                reqwest::header::ACCEPT,
-                "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-            )
-            .header(reqwest::header::ACCEPT_LANGUAGE, language)
-            .send()
-            .await;
-
-        let response = match request_result {
-            Ok(resp) => resp,
-            Err(e) => {
-                last_error = format!(
-                    "failed to fetch search results: {e}{}",
-                    proxy_diagnostic_hint(&e)
-                );
-                if !is_retryable(reqwest::StatusCode::OK, Some(&e)) {
-                    break;
-                }
+            if let Some(published) = &result.published_at {
+                metadata.push_str(&format!("\n    Published: {published}"));
+            }
+            if let Some(author) = &result.author {
+                metadata.push_str(&format!("\n    Author: {author}"));
+            }
+            let remaining = budget.saturating_sub(body.chars().count());
+            let required = entry.chars().count() + metadata.chars().count() + 1;
+            if required > remaining {
+                truncated = true;
                 continue;
             }
-        };
-
-        let status = response.status();
-        if status.is_success() {
-            let html = read_bounded_bing_response(response).await?;
-            let raw_results = validate_bing_page(&html)?;
-            let filtered = filter_results(raw_results, input);
-            let num = input.num_results.unwrap_or(8).min(filtered.len());
-            let selected: Vec<_> = filtered.into_iter().take(num).collect();
-            let duration_ms = started.elapsed().as_millis() as u64;
-
-            let context_max = input.context_max_characters.unwrap_or(10_000);
-            return Ok(format_results(
-                &selected,
-                &input.query,
-                duration_ms,
-                context_max,
-            ));
-        }
-
-        last_error = format!("Bing returned HTTP {status} for {url}");
-        if !is_retryable(status, None) {
-            break;
+            let share = remaining / (results.len() - index).max(1);
+            let snippet_budget = share.saturating_sub(required + 2).min(remaining - required);
+            if !result.snippet.trim().is_empty() && snippet_budget > 8 {
+                let snippet = crate::truncate::truncate_chars_with_marker(
+                    &result.snippet,
+                    snippet_budget.saturating_sub(1),
+                    "…",
+                );
+                truncated |= snippet.chars().count() < result.snippet.chars().count();
+                entry.push_str(": ");
+                entry.push_str(&snippet);
+            } else if !result.snippet.trim().is_empty() {
+                truncated = true;
+            }
+            entry.push_str(&metadata);
+            entry.push('\n');
+            body.push_str(&entry);
         }
     }
+    if body.chars().count() > budget {
+        body = crate::truncate::truncate_chars_with_marker(&body, budget.saturating_sub(1), "…");
+        truncated = true;
+    }
+    if truncated {
+        body.push_str(marker);
+    }
+    body.push_str(&footer);
+    body.push_str(reminder);
+    body
+}
 
-    Err(ToolError::Execution(format!(
-        "search failed after {} attempts: {}",
-        attempts, last_error
-    )))
+fn normalize_input(input: Value) -> Result<WebSearchInput, ToolError> {
+    kcoder_web::search::request::normalize_input(parse_input(&input)?)
 }
 
 #[async_trait]
@@ -506,8 +155,8 @@ impl Tool for WebSearchTool {
     }
 
     fn description(&self) -> String {
-        "Allows KCoder to search the web and use the results to inform responses. \
-         Provides up-to-date information for current events and recent data. \
+        "Search the public web for relevant source pages. \
+         Helps find current source material for recent events and data. \
          Returns search result information formatted as search result blocks, \
          including links as markdown hyperlinks. Use this tool for accessing \
          information beyond the model's knowledge cutoff. The search service returns \
@@ -532,62 +181,55 @@ impl Tool for WebSearchTool {
         true
     }
 
-    async fn call(&self, input: Value, _ctx: &ToolContext) -> Result<ToolOutput, ToolError> {
-        let mut input: WebSearchInput = parse_input(&input)?;
-        input.query = input.query.trim().to_string();
-
-        if input.query.chars().count() < 2 {
-            return Err(ToolError::InvalidInput(
-                "Error: Missing query. query must contain at least 2 non-whitespace characters."
-                    .to_string(),
-            ));
-        }
-
-        if input
-            .num_results
-            .is_some_and(|count| !(1..=20).contains(&count))
-        {
-            return Err(ToolError::InvalidInput(
-                "num_results must be between 1 and 20".into(),
-            ));
-        }
-
-        if domains_conflict(&input) {
-            return Err(ToolError::InvalidInput(
-                "Cannot specify both allowed_domains and blocked_domains in the same request"
-                    .to_string(),
-            ));
-        }
-
-        let text = match std::env::var("KCODER_WEB_SEARCH_PROVIDER")
-            .as_deref()
-            .unwrap_or("exa")
-        {
-            "exa" => tokio::time::timeout(
-                Duration::from_secs(45),
-                exa::search(&self.client, &input, exa::ENDPOINT),
-            )
-            .await
-            .map_err(|_| ToolError::Execution("Web search timed out after 45 seconds".into()))??,
-            "bing" => tokio::time::timeout(
-                Duration::from_secs(45),
-                search_bing(&self.client, &input, BING_SEARCH_URL),
-            )
-            .await
-            .map_err(|_| ToolError::Execution("Bing search timed out after 45 seconds".into()))??,
-            _ => {
-                return Err(ToolError::InvalidInput(
-                    "KCODER_WEB_SEARCH_PROVIDER must be exa or bing".into(),
-                ));
-            }
+    async fn call(&self, input: Value, ctx: &ToolContext) -> Result<ToolOutput, ToolError> {
+        let request = normalize_input(input.clone())?;
+        let runtime = ctx
+            .web_search_runtime
+            .clone()
+            .unwrap_or_else(|| self.runtime.clone());
+        let response = runtime.execute(request, ctx).await?;
+        let normalized = normalize_input(input.clone())?;
+        let text = routing::format_response(&response, &normalized);
+        let output = if matches!(
+            response.status,
+            kcoder_types::web_search::WebSearchStatus::Failed
+                | kcoder_types::web_search::WebSearchStatus::Cancelled
+        ) {
+            ToolOutput::error(text)
+        } else {
+            ToolOutput::text(text)
         };
-        Ok(ToolOutput::text(text))
+        Ok(output.with_web_search_sources(self, &input, ctx, &response))
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use kcoder_web::search::{
+        bing::{extract_bing_results, resolve_bing_url},
+        request::domains_conflict,
+    };
+    use std::time::Instant;
+    const MAX_RETRIES: u32 = 3;
+
+    async fn search_bing(
+        client: &reqwest::Client,
+        input: &WebSearchInput,
+        search_url: &str,
+    ) -> Result<String, ToolError> {
+        let started = Instant::now();
+        let page = search_bing_page(client, input, search_url, MAX_RETRIES, None, None)
+            .await
+            .map_err(|error| ToolError::Execution(error.to_string()))?;
+        Ok(format_results(
+            &page.results,
+            &input.query,
+            started.elapsed().as_millis() as u64,
+            input.context_max_characters.unwrap_or(10_000),
+        ))
+    }
+
     use crate::{Tool, ToolContext};
     use kcoder_state::AppState;
     use serde_json::json;
@@ -661,51 +303,6 @@ mod tests {
         );
         assert_eq!(validate_bing_page(&sample_bing_html()).unwrap().len(), 1);
         assert!(validate_bing_page(r#"<li class="b_algo"><h2>Changed markup</h2></li>"#).is_err());
-    }
-
-    #[tokio::test]
-    async fn bing_bounded_reader_rejects_declared_and_streamed_oversize() {
-        use tokio::io::{AsyncReadExt, AsyncWriteExt};
-        for declared in [true, false] {
-            let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-            let address = listener.local_addr().unwrap();
-            let server = tokio::spawn(async move {
-                let (mut socket, _) = listener.accept().await.unwrap();
-                let mut request = [0; 2048];
-                assert!(socket.read(&mut request).await.unwrap() > 0);
-                let header = if declared {
-                    format!(
-                        "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
-                        MAX_BING_RESPONSE_BYTES + 1
-                    )
-                } else {
-                    "HTTP/1.1 200 OK\r\nConnection: close\r\n\r\n".to_string()
-                };
-                socket.write_all(header.as_bytes()).await.unwrap();
-                if !declared {
-                    let _ = socket
-                        .write_all(&vec![b'x'; MAX_BING_RESPONSE_BYTES + 1])
-                        .await;
-                }
-            });
-            let response = reqwest::Client::builder()
-                .no_proxy()
-                .timeout(Duration::from_secs(5))
-                .build()
-                .unwrap()
-                .get(format!("http://{address}"))
-                .send()
-                .await
-                .unwrap();
-            assert!(
-                read_bounded_bing_response(response)
-                    .await
-                    .unwrap_err()
-                    .to_string()
-                    .contains("4 MiB")
-            );
-            server.await.unwrap();
-        }
     }
 
     #[test]
@@ -790,11 +387,13 @@ mod tests {
                 title: "A".to_string(),
                 url: "https://example.com/page".to_string(),
                 snippet: "...".to_string(),
+                ..Default::default()
             },
             SearchResult {
                 title: "B".to_string(),
                 url: "https://bad.example/page".to_string(),
                 snippet: "...".to_string(),
+                ..Default::default()
             },
         ];
         let input = WebSearchInput {
@@ -805,6 +404,7 @@ mod tests {
             livecrawl: None,
             search_type: None,
             context_max_characters: None,
+            constraints: Default::default(),
         };
         let filtered = filter_results(results, &input);
         assert_eq!(filtered.len(), 1);
@@ -818,11 +418,13 @@ mod tests {
                 title: "A".to_string(),
                 url: "https://example.com/page".to_string(),
                 snippet: "...".to_string(),
+                ..Default::default()
             },
             SearchResult {
                 title: "B".to_string(),
                 url: "https://other.com/page".to_string(),
                 snippet: "...".to_string(),
+                ..Default::default()
             },
         ];
         let input = WebSearchInput {
@@ -833,6 +435,7 @@ mod tests {
             livecrawl: None,
             search_type: None,
             context_max_characters: None,
+            constraints: Default::default(),
         };
         let filtered = filter_results(results, &input);
         assert_eq!(filtered.len(), 1);
@@ -845,6 +448,7 @@ mod tests {
             title: "A".to_string(),
             url: "https://example.com/page".to_string(),
             snippet: "...".to_string(),
+            ..Default::default()
         }];
         let input = WebSearchInput {
             query: "q".to_string(),
@@ -854,6 +458,7 @@ mod tests {
             livecrawl: None,
             search_type: None,
             context_max_characters: None,
+            constraints: Default::default(),
         };
 
         assert!(!domains_conflict(&input));
@@ -870,6 +475,7 @@ mod tests {
             livecrawl: None,
             search_type: None,
             context_max_characters: None,
+            constraints: Default::default(),
         };
 
         assert!(domains_conflict(&input));
@@ -881,6 +487,7 @@ mod tests {
             title: "Result Title".to_string(),
             url: "https://example.com/page".to_string(),
             snippet: "Useful snippet.".to_string(),
+            ..Default::default()
         }];
 
         let text = format_results(&results, "rust news", 12, 10_000);
@@ -898,6 +505,7 @@ mod tests {
             title: "标题".to_string(),
             url: "https://example.com/page".to_string(),
             snippet: "你好世界".repeat(100),
+            ..Default::default()
         }];
 
         let text = format_results(&results, "查询", 12, 5);
@@ -905,6 +513,35 @@ mod tests {
         assert!(text.contains("truncated"));
         assert!(text.contains("REMINDER: You MUST include the sources above"));
         assert!(std::str::from_utf8(text.as_bytes()).is_ok());
+    }
+
+    #[test]
+    fn bounded_search_context_keeps_complete_links_and_escapes_link_titles() {
+        let results = vec![SearchResult {
+            title: "Title ] with [ brackets".into(),
+            url: "https://example.com/path(with-parentheses)".into(),
+            snippet: "中文摘要".repeat(2000),
+            ..Default::default()
+        }];
+        let text = format_results(&results, &"long query ".repeat(400), 12, 1000);
+        assert!(text.chars().count() <= 1000, "{}", text.chars().count());
+        assert!(text.contains(
+            "[Title \\] with \\[ brackets](https://example.com/path%28with-parentheses%29)"
+        ));
+        assert!(text.contains("truncated"));
+    }
+
+    #[test]
+    fn over_budget_url_is_omitted_instead_of_returning_a_broken_link() {
+        let results = vec![SearchResult {
+            title: "Long URL".into(),
+            url: format!("https://example.com/{}", "x".repeat(3000)),
+            ..Default::default()
+        }];
+        let text = format_results(&results, "source query", 12, 1000);
+        assert!(text.contains("truncated"));
+        assert!(!text.contains("https://example.com/"));
+        assert!(text.chars().count() <= 1000);
     }
 
     #[tokio::test]
@@ -917,6 +554,52 @@ mod tests {
                 .await;
             assert!(matches!(result, Err(ToolError::InvalidInput(_))));
         }
+    }
+
+    #[tokio::test]
+    async fn rejects_malformed_filters_and_unbounded_inputs_before_network_call() {
+        let tool = WebSearchTool::default();
+        let context = ToolContext::new(AppState::new("."));
+        for invalid in [
+            json!({"query":"guide", "allowed_domains":["https://example.com"]}),
+            json!({"query":"guide", "allowed_domains":["*.example.com"]}),
+            json!({"query":"guide", "allowed_domains":["example.com:443"]}),
+            json!({"query":"guide", "allowed_domains":[".."]}),
+            json!({"query":"guide", "blocked_domains":vec!["example.com";129]}),
+            json!({"query":"guide\ninternal instruction"}),
+            json!({"query":"中".repeat(1400)}),
+            json!({"query":"guide", "context_max_characters":999}),
+            json!({"query":"guide", "context_max_characters":40001}),
+        ] {
+            assert!(matches!(
+                tool.call(invalid, &context).await,
+                Err(ToolError::InvalidInput(_))
+            ));
+        }
+    }
+
+    #[test]
+    fn domain_matching_normalizes_case_and_preserves_label_boundaries() {
+        let input = serde_json::from_value(
+            json!({"query":"official guide", "allowed_domains":[" EXAMPLE.COM. "]}),
+        )
+        .unwrap();
+        let results = [
+            "https://example.com/a",
+            "https://docs.example.com/a",
+            "https://notexample.com/a",
+            "https://example.com.attacker.invalid/a",
+        ]
+        .into_iter()
+        .map(|url| SearchResult {
+            title: "Source".into(),
+            url: url.into(),
+            ..Default::default()
+        })
+        .collect();
+        let filtered = filter_results(results, &input);
+        assert_eq!(filtered.len(), 2);
+        assert_eq!(filtered[1].url, "https://docs.example.com/a");
     }
 
     #[tokio::test]
@@ -946,9 +629,10 @@ mod tests {
             livecrawl: None,
             search_type: Some(SearchType::Fast),
             context_max_characters: Some(10_000),
+            constraints: Default::default(),
         };
 
-        let result = search_bing(&tool.client, &input, BING_SEARCH_URL)
+        let result = search_bing(&tool.runtime.client, &input, BING_SEARCH_URL)
             .await
             .expect("live Bing request should succeed");
 
@@ -1026,6 +710,7 @@ mod tests {
             livecrawl: None,
             search_type: None,
             context_max_characters: None,
+            constraints: Default::default(),
         };
         let search_url = format!("http://{}/search", addr);
         let result = search_bing(&client, &input, &search_url).await;
@@ -1037,3 +722,6 @@ mod tests {
         assert_eq!(count.load(Ordering::SeqCst), 2);
     }
 }
+
+#[cfg(test)]
+mod bing_redirect_tests;

@@ -20,11 +20,11 @@ export function RetainedPanel({
     <View
       accessibilityElementsHidden={!active}
       importantForAccessibility={active ? "auto" : "no-hide-descendants"}
-      pointerEvents={active ? "auto" : "none"}
       style={[
         styles.retainedPanel,
         !active && styles.hiddenPanel,
         bottomInset > 0 && { paddingBottom: bottomInset },
+        { pointerEvents: active ? "auto" : "none" },
       ]}
     >
       {children}
@@ -53,6 +53,7 @@ export function PanelMenu({
     body: string,
   ) => (
     <Pressable
+      testID={`workspace-new-panel-option-${kind}`}
       accessibilityRole="button"
       accessibilityState={{ disabled: !canAdd }}
       disabled={!canAdd}

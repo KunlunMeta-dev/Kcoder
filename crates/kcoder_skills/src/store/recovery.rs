@@ -241,7 +241,8 @@ pub(crate) fn recover_locked(
                 journal.phase = TransactionPhase::Committed;
                 write_journal(&transaction_dir, &journal)?;
             }
-            let _ = remove_tree(&transaction_dir);
+            store.hit("before_recovery_cleanup")?;
+            remove_tree(&transaction_dir)?;
             diagnostics.push(SkillStoreDiagnostic::Recovered {
                 transaction_id: journal.transaction_id,
             });

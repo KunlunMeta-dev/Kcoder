@@ -691,7 +691,7 @@ pub(super) fn test_engine(provider: Arc<dyn Provider>, cwd: &std::path::Path) ->
     TestEngineBuilder::new(cwd)
         .provider(provider)
         .skill_registry(SkillRegistry::empty())
-        .build()
+        .build_with_profile_directory()
 }
 
 pub(super) fn test_engine_with_settings(
@@ -703,5 +703,5 @@ pub(super) fn test_engine_with_settings(
         .provider(provider)
         .settings(settings)
         .skill_registry(SkillRegistry::empty())
-        .build()
+        .build_with_profile_directory()
 }

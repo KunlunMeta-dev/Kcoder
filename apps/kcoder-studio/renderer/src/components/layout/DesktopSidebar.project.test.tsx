@@ -10,7 +10,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { DesktopSidebar } from './DesktopSidebar'
 import {
   createSidebarProps,
-  enableTauri,
+  enableGateway,
   localDevice,
   renderSidebar,
 } from './sidebar/DesktopSidebar.test-support'
@@ -25,7 +25,7 @@ describe('DesktopSidebar project', () => {
   beforeEach(() => {
     experimentalFeatures.enabled = true
     localStorage.clear()
-    enableTauri()
+    enableGateway()
     Element.prototype.scrollIntoView = vi.fn()
     vi.mocked(openLocalWorkspace).mockReset()
   })

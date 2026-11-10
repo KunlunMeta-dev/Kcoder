@@ -1,0 +1,243 @@
+{
+  "BrowserAccountProfile": [
+    {
+      "decoded": {
+        "archived": false,
+        "draft": {
+          "accountLabel": null,
+          "id": "office",
+          "label": "Office account",
+          "purpose": "business"
+        },
+        "revision": 1
+      },
+      "name": "current",
+      "value": {
+        "archived": false,
+        "draft": {
+          "accountLabel": null,
+          "id": "office",
+          "label": "Office account",
+          "purpose": "business"
+        },
+        "revision": 1
+      }
+    }
+  ],
+  "BrowserAccountProfileDraft": [
+    {
+      "decoded": {
+        "accountLabel": null,
+        "id": "office",
+        "label": "Office account",
+        "purpose": "business"
+      },
+      "name": "current",
+      "value": {
+        "accountLabel": null,
+        "id": "office",
+        "label": "Office account",
+        "purpose": "business"
+      }
+    }
+  ],
+  "BrowserAccountProfilePage": [
+    {
+      "decoded": {
+        "items": [
+          {
+            "archived": false,
+            "draft": {
+              "accountLabel": null,
+              "id": "office",
+              "label": "Office account",
+              "purpose": "business"
+            },
+            "revision": 1
+          }
+        ],
+        "nextCursor": null
+      },
+      "name": "current",
+      "value": {
+        "items": [
+          {
+            "archived": false,
+            "draft": {
+              "accountLabel": null,
+              "id": "office",
+              "label": "Office account",
+              "purpose": "business"
+            },
+            "revision": 1
+          }
+        ],
+        "nextCursor": null
+      }
+    }
+  ],
+  "BrowserControlMode": [
+    {
+      "decoded": "human",
+      "name": "current",
+      "value": "human"
+    }
+  ],
+  "BrowserControlReadParams": [
+    {
+      "decoded": {
+        "session_id": "s"
+      },
+      "name": "original-session",
+      "value": {
+        "session_id": "s"
+      }
+    }
+  ],
+  "BrowserHandoffParams": [
+    {
+      "decoded": {
+        "expectedRevision": 1,
+        "mode": "human",
+        "sessionId": "s"
+      },
+      "name": "current",
+      "value": {
+        "expectedRevision": 1,
+        "mode": "human",
+        "sessionId": "s"
+      }
+    }
+  ],
+  "BrowserHandoffState": [
+    {
+      "decoded": {
+        "mode": "human",
+        "observedUrl": "http://fixture.test/",
+        "revision": 2,
+        "sessionId": "s"
+      },
+      "name": "current",
+      "value": {
+        "mode": "human",
+        "observedUrl": "http://fixture.test/",
+        "revision": 2,
+        "sessionId": "s"
+      }
+    }
+  ],
+  "BrowserHumanActionParams": [
+    {
+      "decoded": {
+        "action": {
+          "action": "click",
+          "session_id": "s",
+          "x": 1,
+          "y": 2
+        },
+        "expectedRevision": 2
+      },
+      "name": "current",
+      "value": {
+        "action": {
+          "action": "click",
+          "session_id": "s",
+          "x": 1,
+          "y": 2
+        },
+        "expectedRevision": 2
+      }
+    }
+  ],
+  "BrowserProfilePurpose": [
+    {
+      "decoded": "business",
+      "name": "current",
+      "value": "business"
+    }
+  ],
+  "BrowserProfileSelection": [
+    {
+      "decoded": {
+        "expectedRevision": 1,
+        "operationId": "start-1",
+        "profileId": "office",
+        "scope": {
+          "accountId": "a",
+          "identityGeneration": "g",
+          "targetId": "t",
+          "targetRevision": "r",
+          "workspaceId": null
+        }
+      },
+      "name": "explicit-owner-bound-selection",
+      "value": {
+        "expectedRevision": 1,
+        "operationId": "start-1",
+        "profileId": "office",
+        "scope": {
+          "accountId": "a",
+          "identityGeneration": "g",
+          "targetId": "t",
+          "targetRevision": "r",
+          "workspaceId": null
+        }
+      }
+    }
+  ],
+  "BrowserProfilesArchiveParams": [
+    {
+      "decoded": {
+        "archived": true,
+        "expectedRevision": 1,
+        "profileId": "office"
+      },
+      "name": "current",
+      "value": {
+        "archived": true,
+        "expectedRevision": 1,
+        "profileId": "office"
+      }
+    }
+  ],
+  "BrowserProfilesListParams": [
+    {
+      "decoded": {
+        "after": null,
+        "includeArchived": false
+      },
+      "name": "current",
+      "value": {}
+    }
+  ],
+  "BrowserProfilesMethod": [
+    {
+      "decoded": "integrations/browserProfiles/list",
+      "name": "current",
+      "value": "integrations/browserProfiles/list"
+    }
+  ],
+  "BrowserProfilesSaveParams": [
+    {
+      "decoded": {
+        "draft": {
+          "accountLabel": null,
+          "id": "office",
+          "label": "Office account",
+          "purpose": "business"
+        },
+        "expectedRevision": 0
+      },
+      "name": "current",
+      "value": {
+        "draft": {
+          "accountLabel": null,
+          "id": "office",
+          "label": "Office account",
+          "purpose": "business"
+        },
+        "expectedRevision": 0
+      }
+    }
+  ]
+}

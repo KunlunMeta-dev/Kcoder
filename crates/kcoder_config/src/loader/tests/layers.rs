@@ -1,6 +1,38 @@
 use super::*;
 
 #[test]
+fn mcp_activation_denials_accumulate_across_layers_without_mutating_their_sources() {
+    let temp = TempDir::new().unwrap();
+    let config = temp.path().join("config");
+    let project = temp.path().join("project");
+    let executable = temp.path().join("executable");
+    write(
+        &config.join("settings.json"),
+        r#"{"mcp_disabled_servers":["user-disabled"]}"#,
+    );
+    write(
+        &project.join(".kcoder/settings.json"),
+        r#"{"mcp_disabled_servers":[]}"#,
+    );
+    let overlay = temp.path().join("overlay.json");
+    write(&overlay, r#"{"mcp_disabled_servers":["overlay-disabled"]}"#);
+    let settings = SettingsLoader::new(&project)
+        .with_config_dir(&config)
+        .with_executable_dir(&executable)
+        .with_overlay_files([overlay])
+        .load()
+        .unwrap()
+        .settings;
+    assert!(!settings.mcp_server_enabled("user-disabled"));
+    assert!(!settings.mcp_server_enabled("overlay-disabled"));
+    assert!(settings.mcp_server_enabled("other-service"));
+    assert_eq!(
+        fs::read_to_string(project.join(".kcoder/settings.json")).unwrap(),
+        r#"{"mcp_disabled_servers":[]}"#
+    );
+}
+
+#[test]
 fn inherited_output_defaults_fit_smaller_windows_without_changing_explicit_layer_limits() {
     for explicit_layer in 0..=5 {
         let limits = if explicit_layer == 0 {
@@ -22,7 +54,9 @@ fn inherited_output_defaults_fit_smaller_windows_without_changing_explicit_layer
                 temp.path().join("overlay.jsonc"),
             ];
             let mut documents = vec![serde_json::json!({}); layer_paths.len()];
-            documents[0] = serde_json::json!({"providers": {"kunlunmeta": {
+            documents[0] = serde_json::json!({"active_provider": "kunlunmeta", "providers": {"kunlunmeta": {
+                "api_format": "anthropic_messages", "endpoint": "https://fixture.invalid",
+                "default_model": "fixture-model", "output_headroom_tokens": 4096,
                 "extra_body": {"private_future_field": {"value": "UNTOUCHED"}}
             }}});
             documents[4] = serde_json::json!({"providers": {"kunlunmeta": {
@@ -84,7 +118,7 @@ fn inherited_output_defaults_fit_smaller_windows_without_changing_explicit_layer
 
 #[test]
 fn omitted_custom_provider_output_budget_is_bounded_by_its_context_window() {
-    let document = serde_json::json!({"providers": {"private": {
+    let document = serde_json::json!({"active_provider": "private", "providers": {"private": {
         "api_format": "openai_chat_completions",
         "endpoint": "https://private.invalid/v1",
         "default_model": "private-model",
@@ -111,7 +145,7 @@ fn resolved_document_preserves_an_explicit_empty_provider_catalog() {
 }
 
 #[test]
-fn resolved_document_selects_only_declared_providers() {
+fn resolved_document_does_not_auto_select_a_declared_provider() {
     let profile = serde_json::to_value(crate::default_active_provider_config()).unwrap();
     let settings = super::validate_and_resolve_settings_document(&serde_json::json!({
         "providers": {"remote-only": profile}
@@ -125,12 +159,13 @@ fn resolved_document_selects_only_declared_providers() {
             .collect::<Vec<_>>(),
         ["remote-only"]
     );
-    assert_eq!(settings.active_provider.as_deref(), Some("remote-only"));
+    assert!(settings.active_provider.is_none());
+    assert!(settings.model.is_empty());
     assert!(
         super::validate_and_resolve_settings_document(&serde_json::json!({}))
             .unwrap()
             .providers
-            .contains_key("kunlunmeta")
+            .is_empty()
     );
     assert!(
         super::validate_and_resolve_settings_document(&serde_json::json!({
@@ -454,7 +489,8 @@ fn empty_provider_layers_preserve_other_explicit_names_without_restoring_default
             .collect::<Vec<_>>(),
         ["fixture"]
     );
-    assert_eq!(loaded.settings.active_provider.as_deref(), Some("fixture"));
+    assert!(loaded.settings.active_provider.is_none());
+    assert!(loaded.settings.model.is_empty());
     write(
         &paths.project_settings,
         r#"{"providers":{},"active_provider":"removed"}"#,
@@ -500,7 +536,7 @@ fn user_providers_are_authoritative_over_embedded_defaults() {
     assert!(!loaded.settings.providers.contains_key("kimi"));
     assert!(!loaded.settings.providers.contains_key("openai-chat"));
 
-    // Files without provider declarations continue to use the single embedded kunlunmeta provider.
+    // A standalone model string does not create an implicit Provider deployment.
     let config2 = temp.path().join("config2");
     fs::create_dir_all(&config2).unwrap();
     write(&config2.join("settings.json"), r#"{"model":"anything"}"#);
@@ -508,8 +544,8 @@ fn user_providers_are_authoritative_over_embedded_defaults() {
         .with_config_dir(&config2)
         .load()
         .unwrap();
-    assert_eq!(loaded.settings.providers.len(), 1);
-    assert!(loaded.settings.providers.contains_key("kunlunmeta"));
+    assert!(loaded.settings.providers.is_empty());
+    assert!(loaded.settings.active_provider.is_none());
 }
 
 #[test]
@@ -523,7 +559,12 @@ fn bundled_kunlunmeta_can_be_merged_with_user_providers_for_source_launches() {
         r#"{
                 "providers": {
                     "kunlunmeta": {
-                        "model": "user-selected-model"
+                        "api_format": "anthropic_messages",
+                        "endpoint": "https://fixture.invalid",
+                        "model": "user-selected-model",
+                        "context_window_tokens": 200000,
+                        "output_headroom_tokens": 20000,
+                        "max_output_tokens": 12000
                     },
                     "kunlunmeta-deepseek-v4-flash": {
                         "provider": "kunlunmeta",
@@ -557,10 +598,7 @@ fn bundled_kunlunmeta_can_be_merged_with_user_providers_for_source_launches() {
         loaded.settings.providers["kunlunmeta"].default_model,
         "user-selected-model"
     );
-    assert_eq!(
-        loaded.settings.providers.len(),
-        crate::default_providers().len() + 1
-    );
+    assert_eq!(loaded.settings.providers.len(), 2);
 }
 
 #[test]
@@ -627,7 +665,7 @@ fn nested_objects_merge_without_erasing_sibling_values() {
 }
 
 #[test]
-fn no_settings_files_load_the_builtin_deployment_profile() {
+fn no_settings_files_load_without_models_or_providers() {
     let temp = TempDir::new().unwrap();
     let config = temp.path().join("config");
     let project = temp.path().join("project");
@@ -639,32 +677,36 @@ fn no_settings_files_load_the_builtin_deployment_profile() {
         .unwrap();
 
     assert!(loaded.loaded_sources.is_empty());
-    assert_eq!(
-        loaded.settings.active_provider.as_deref(),
-        Some(crate::DEFAULT_ACTIVE_PROVIDER)
-    );
-    assert_eq!(loaded.settings.provider.as_deref(), Some("kunlunmeta"));
-    assert_eq!(loaded.settings.model, crate::DEFAULT_MODEL);
-    assert_eq!(
-        loaded.settings.max_tokens,
-        Some(kcoder_types::DEFAULT_MODEL_OUTPUT_TOKENS)
-    );
-    assert_eq!(loaded.settings.context_output_headroom, Some(100_000));
-    assert_eq!(
-        loaded.settings.base_url.as_deref(),
-        Some(crate::DEFAULT_KUNLUNMETA_ENDPOINT)
-    );
+    assert!(loaded.settings.providers.is_empty());
+    assert!(loaded.settings.active_provider.is_none());
+    assert!(loaded.settings.provider.is_none());
+    assert!(loaded.settings.model.is_empty());
+    assert!(loaded.settings.context_window_tokens.is_none());
+    assert!(loaded.settings.context_output_headroom.is_none());
+    assert!(loaded.settings.base_url.is_none());
+    // Starting or reopening a clean profile must not materialize a deployment.
+    assert!(!config.join("settings.json").exists());
+    let reloaded = SettingsLoader::new(&project)
+        .with_config_dir(&config)
+        .load()
+        .unwrap();
+    assert!(reloaded.settings.providers.is_empty());
+    assert!(reloaded.settings.model.is_empty());
 }
 
 #[test]
-fn user_and_project_settings_override_builtin_provider() {
+fn project_settings_override_an_explicit_user_provider() {
     let temp = TempDir::new().unwrap();
     let config = temp.path().join("config");
     let project = temp.path().join("project");
     fs::create_dir_all(project.join(".kcoder")).unwrap();
     write(
         &config.join("settings.json"),
-        r#"{"providers":{"kunlunmeta":{"default_model":"stale-user-model","max_output_tokens":1}}}"#,
+        r#"{"active_provider":"kunlunmeta","providers":{"kunlunmeta":{
+            "api_format":"anthropic_messages","endpoint":"https://fixture.invalid",
+            "default_model":"stale-user-model","context_window_tokens":32000,
+            "output_headroom_tokens":4096,"max_output_tokens":1
+        }}}"#,
     );
 
     let loaded = SettingsLoader::new(&project)
@@ -758,10 +800,10 @@ fn development_overlay_configures_dedicated_summary_and_moa_profiles() {
         .unwrap();
 
     assert_eq!(loaded.settings.summary_profile, None);
-    assert_eq!(
-        loaded.settings.providers["kunlunmeta"].default_model,
-        "MiniMax-M3"
-    );
+    assert!(!loaded.settings.providers.contains_key("openai-chat"));
+    assert_eq!(loaded.settings.providers.len(), 2);
+    assert!(loaded.settings.active_provider.is_none());
+    assert!(loaded.settings.model.is_empty());
     let preset = &loaded.settings.moa.presets["default"];
     assert_eq!(preset.reference_models[0].profile, None);
     assert_eq!(preset.reference_models[0].provider, "current");
@@ -944,4 +986,27 @@ fn missing_config_version_defaults_to_v1_and_future_version_is_rejected() {
         .to_string();
     assert!(error.contains("future"), "{error}");
     assert!(error.contains("config_version=2"), "{error}");
+}
+
+#[test]
+fn legacy_active_provider_without_a_deployment_is_not_synthesized() {
+    let temp = TempDir::new().unwrap();
+    let config = temp.path().join("config");
+    let project = temp.path().join("project");
+    fs::create_dir_all(&project).unwrap();
+    for document in [
+        serde_json::json!({"active_provider": "kunlunmeta"}),
+        serde_json::json!({"active_provider": "kunlunmeta", "providers": {}}),
+    ] {
+        write(&config.join("settings.json"), &document.to_string());
+        let before = fs::read(config.join("settings.json")).unwrap();
+        assert!(
+            SettingsLoader::new(&project)
+                .with_config_dir(&config)
+                .load()
+                .is_err()
+        );
+        assert!(super::validate_and_resolve_settings_document(&document).is_err());
+        assert_eq!(fs::read(config.join("settings.json")).unwrap(), before);
+    }
 }

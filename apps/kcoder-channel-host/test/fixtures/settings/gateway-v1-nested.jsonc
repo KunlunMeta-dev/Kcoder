@@ -1,0 +1,11 @@
+// Nested Gateway settings used before the explicit v2 migration boundary.
+{
+  "$schema": "./studio-settings.schema.json",
+  "meta": { "config_version": 1, "note": "keep metadata" },
+  "channels": {
+    // Keep the explicit choice and unrelated domain fields.
+    "mirror_client_turns": false,
+    "future_option": 3,
+  },
+  "other_domain": { "value": "keep" },
+}

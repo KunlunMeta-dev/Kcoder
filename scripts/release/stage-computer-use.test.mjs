@@ -6,11 +6,15 @@ import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { verifyComputerUseRuntime,stageComputerUseRuntime } from './stage-computer-use.mjs';
 const hash=bytes=>createHash('sha256').update(bytes).digest('hex');
-async function fixture(root,status='prototype',noticeStatus='complete',clipboardVersion=1,clearVersion=1){
+async function fixture(root,status='prototype',noticeStatus='complete',clipboardVersion=1,clearVersion=1,bytecodeVersion=1,screenshotVersion=1){
  await mkdir(join(root,'runtime/python'),{recursive:true});
  await mkdir(join(root,'source/src/windows_mcp'),{recursive:true});
  const files={'runtime/python/python.exe':'binary','launch.py':'launcher','source/src/windows_mcp/kcoder_clipboard.py':'wrapper','source/src/windows_mcp/kcoder_clipboard_guard.py':'guard','source/src/windows_mcp/kcoder_clear.py':'clear','worker.toml':'[server]\ntransport="stdio"',
-  'runtime-manifest.json':JSON.stringify({schemaVersion:1,inputTrackingVersion:1,...(clipboardVersion===null?{}:{clipboardRecoveryVersion:clipboardVersion}),...(clearVersion===null?{}:{clearTextVersion:clearVersion}),status,pythonVersion:'3.14.6',python:'runtime/python/python.exe'})};
+  'runtime/python/kcoder-bootstrap.zip':'bootstrap fixture',
+  'runtime/python/python314._pth':'kcoder-bootstrap.zip\nLib\nDLLs\n.\nimport site\n',
+  'runtime/python/python._pth':'kcoder-bootstrap.zip\nLib\nDLLs\n.\nimport site\n',
+  'source/src/windows_mcp/kcoder_screenshot_frame.py':'screenshot helper',
+  'runtime-manifest.json':JSON.stringify({schemaVersion:1,inputTrackingVersion:1,...(clipboardVersion===null?{}:{clipboardRecoveryVersion:clipboardVersion}),...(clearVersion===null?{}:{clearTextVersion:clearVersion}),...(bytecodeVersion===null?{}:{bytecodePolicyVersion:bytecodeVersion}),screenshotFrameVersion:screenshotVersion??undefined,status,pythonVersion:'3.14.6',python:'runtime/python/python.exe'})};
  if(status==='release-ready'){
   files['runtime/python/LICENSE.txt']='fixture notice';
   files['runtime/python/python.dll']='fixture native';
@@ -25,11 +29,52 @@ async function fixture(root,status='prototype',noticeStatus='complete',clipboard
 }
 test('prototype is auditable but cannot enter production package',async()=>{
  const temp=await mkdtemp(join(tmpdir(),'kcoder-cu-stage-'));
- try{const source=join(temp,'source');const pin=await fixture(source);assert.equal((await verifyComputerUseRuntime(source,pin)).files,7);
+ try{const source=join(temp,'source');const pin=await fixture(source);assert.equal((await verifyComputerUseRuntime(source,pin)).files,11);
  await assert.rejects(stageComputerUseRuntime({source,destination:join(temp,'out'),expectedHash:pin}),/readiness/);
  await stageComputerUseRuntime({source,destination:join(temp,'dev'),expectedHash:pin,allowPrototype:true});
  assert.equal((await readFile(join(temp,'dev/launch.py'),'utf8')),'launcher');
  }finally{await rm(temp,{recursive:true,force:true});}
+});
+test('new packages reject stale screenshot workers and incomplete inventories', async () => {
+ const temp=await mkdtemp(join(tmpdir(),'kcoder-cu-screenshot-'));
+ try {
+  for (const version of [null,2]) {
+   const source=join(temp,`source-${version}`);
+   const pin=await fixture(source,'prototype','complete',1,1,1,version);
+   await assert.rejects(verifyComputerUseRuntime(source,pin),/screenshot frame policy/);
+  }
+  const source=join(temp,'missing-helper');await fixture(source);
+  const missing='source/src/windows_mcp/kcoder_screenshot_frame.py';
+  const path=join(source,'files.sha256.json');const inventory=JSON.parse(await readFile(path,'utf8'));
+  delete inventory.files[missing];await rm(join(source,missing));
+  const bytes=JSON.stringify(inventory);await writeFile(path,bytes);
+  await assert.rejects(verifyComputerUseRuntime(source,hash(bytes)),/Missing desktop screenshot frame resource/);
+ } finally { await rm(temp,{recursive:true,force:true}); }
+});
+
+test('new packages require the bytecode policy and its exact sealed startup paths', async () => {
+ const temp=await mkdtemp(join(tmpdir(),'kcoder-cu-bytecode-'));
+ try {
+  for(const version of [null,0,2]) {
+   const source=join(temp,`source-${version}`);const pin=await fixture(source,'prototype','complete',1,1,version);
+   await assert.rejects(verifyComputerUseRuntime(source,pin),/bytecode startup policy/);
+  }
+  for(const leaf of ['kcoder-bootstrap.zip','python314._pth','python._pth']) {
+   const source=join(temp,`missing-${leaf}`);await fixture(source);
+   const missing=`runtime/python/${leaf}`;
+   const path=join(source,'files.sha256.json');const inventory=JSON.parse(await readFile(path,'utf8'));
+   delete inventory.files[missing];await rm(join(source,missing));
+   const bytes=JSON.stringify(inventory);await writeFile(path,bytes);
+   await assert.rejects(verifyComputerUseRuntime(source,hash(bytes)),/Missing Python startup policy resource/);
+  }
+  const source=join(temp,'bad-search-path');await fixture(source);
+  const path=join(source,'files.sha256.json');const inventory=JSON.parse(await readFile(path,'utf8'));
+  const policy='runtime/python/python314._pth';const text='Lib\nimport site\n';
+  await writeFile(join(source,policy),text);
+  inventory.files[policy]={bytes:Buffer.byteLength(text),sha256:hash(text)};
+  const bytes=JSON.stringify(inventory);await writeFile(path,bytes);
+  await assert.rejects(verifyComputerUseRuntime(source,hash(bytes)),/startup search path policy/);
+ } finally { await rm(temp,{recursive:true,force:true}); }
 });
 test('release-ready exact files stage atomically and tampering is rejected',async()=>{
  const temp=await mkdtemp(join(tmpdir(),'kcoder-cu-stage-'));

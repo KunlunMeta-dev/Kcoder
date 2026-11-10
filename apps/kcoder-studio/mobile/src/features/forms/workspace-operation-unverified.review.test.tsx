@@ -1,6 +1,16 @@
+vi.mock("@/storage/interface-version", () => ({ useInterfaceVersion: () => "modern" }));
+vi.mock("@/features/task/NewTaskDraft", () => ({ NewTaskDraft: "NewTaskDraft" }));
+vi.mock("@/features/task/useNewTaskDraftConnection", () => ({ useNewTaskDraftConnection: () => ({ ready: true, client: null, error: null, supportsPermissions: true, retry() {} }) }));
+vi.mock("@/features/task/useNewTaskDraftAttachments", () => ({ useNewTaskDraftAttachments: () => ({ items: [], available: false, busy: false, locked: false, error: null, sheetOpen: false, open() {}, close() {}, select: async () => {}, remove: async () => {}, freeze: () => ({}), unlockUnsent: async () => {}, releaseUnclaimed: async () => {} }) }));
+vi.mock("@/features/interface/ConversationV3", () => ({ ConversationV3Background: () => null, ConversationV3WelcomeMark: () => null, ConversationV3Header: "ConversationV3Header" }));
 // Real route functions and JSX handlers under a deterministic hook host.
 // This is not a mounted React or browser test; workspace, task, and ACK APIs are controlled mocks.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+vi.hoisted(() => { Object.defineProperty(globalThis, "__DEV__", { value: false, configurable: true }); });
+// Route imports reach the new-draft composer; native file IO is outside this route harness.
+vi.mock("expo-file-system", () => ({ File: class File {} }));
+vi.mock("expo-file-system/legacy", () => ({ cacheDirectory: "/fixture", EncodingType: { Base64: "base64" }, deleteAsync: vi.fn(), readAsStringAsync: vi.fn(), writeAsStringAsync: vi.fn() }));
+vi.mock("expo-sharing", () => ({ shareAsync: vi.fn(), isAvailableAsync: vi.fn(async () => false) }));
 import { isValidElement, type ReactElement, type ReactNode } from "react";
 import type { GatewayProfile, KCoderServer } from "@/gateway/types";
 import { setLocalePreference } from "@/i18n";
@@ -21,6 +31,7 @@ const host = vi.hoisted(() => {
       push: (value: unknown) => pushes.push(value),
       back: () => {},
     },
+    navigation: { addListener: () => () => {} },
     insets: { top: 0, bottom: 0, left: 0, right: 0 },
     states: [] as unknown[],
     setters: [] as Array<((update: unknown) => void) | undefined>,
@@ -46,6 +57,7 @@ const api = vi.hoisted(() => {
   const workspaceOpenDeliveryReads: any[] = [];
   const workspaceOpenDeliveryMarks: any[] = [];
   const workspaceOpenDeliveryConfirmations: any[] = [];
+  let newWorkspacePreference: { cwd: string; isolation: "local" | "worktree" } | null = null;
   const task = {
     getSnapshot: () => ({ threadId: "task-created-once", title: "Created once" }),
     isDisposed: () => false,
@@ -65,6 +77,7 @@ const api = vi.hoisted(() => {
     workspaceOpenDeliveryReads.length = 0;
     workspaceOpenDeliveryMarks.length = 0;
     workspaceOpenDeliveryConfirmations.length = 0;
+    newWorkspacePreference = null;
     acknowledgmentHandler = null;
   };
   return {
@@ -77,6 +90,8 @@ const api = vi.hoisted(() => {
     workspaceOpenDeliveryReads,
     workspaceOpenDeliveryMarks,
     workspaceOpenDeliveryConfirmations,
+    setNewWorkspacePreference: (value: { cwd: string; isolation: "local" | "worktree" } | null) => { newWorkspacePreference = value; },
+    loadNewWorkspacePreference: async () => newWorkspacePreference,
     reset,
     queueAcknowledgment: (result: string) => acknowledgmentResults.push(result),
     holdAcknowledgment: (handler: (receipt: any, context: any) => Promise<string>) => { acknowledgmentHandler = handler; },
@@ -166,6 +181,7 @@ vi.mock("react", async importOriginal => {
       host.memos[index] = { value: callback, deps };
       return callback;
     },
+    useSyncExternalStore: (_subscribe: () => () => void, getSnapshot: () => unknown) => getSnapshot(),
     useEffect: (effect: () => void | (() => void), deps: unknown[] = []) => {
       const index = host.effectIndex++;
       const previous = host.effects[index];
@@ -175,8 +191,7 @@ vi.mock("react", async importOriginal => {
   };
 });
 
-vi.mock("expo-router", () => ({ useLocalSearchParams: () => host.params, useRouter: () => host.router }));
-vi.mock("@react-navigation/native", () => ({ useIsFocused: () => true }));
+vi.mock("expo-router", () => ({ useLocalSearchParams: () => host.params, useRouter: () => host.router, useIsFocused: () => true, useNavigation: () => host.navigation }));
 vi.mock("react-native-safe-area-context", () => ({ useSafeAreaInsets: () => host.insets }));
 vi.mock("react-native", () => ({
   ActivityIndicator: "ActivityIndicator",
@@ -186,14 +201,14 @@ vi.mock("react-native", () => ({
   Platform: { OS: "ios" },
   Pressable: "Pressable",
   ScrollView: "ScrollView",
-  StyleSheet: { create: (styles: unknown) => styles, hairlineWidth: 1, absoluteFillObject: {} },
+  StyleSheet: { create: (styles: unknown) => styles, hairlineWidth: 1, absoluteFill: {} },
   Text: "Text",
   TextInput: "TextInput",
   View: "View",
 }));
 vi.mock("lucide-react-native", () => Object.fromEntries([
   "Archive", "Check", "ChevronDown", "ChevronLeft", "FolderGit2", "FolderOpen", "FolderPlus",
-  "Github", "RotateCcw", "Search", "Server", "Sparkles", "Trash2", "X",
+  "Github", "RotateCcw", "Search", "Server", "SlidersHorizontal", "Sparkles", "Trash2", "X",
 ].map(name => [name, name])));
 vi.mock("@/components/ui", () => ({ Button: "Button", EmptyState: "EmptyState", Field: "Field", StatusDot: "StatusDot" }));
 vi.mock("@/components/use-modal-focus-trap", () => ({ useModalFocusTrap: () => null }));
@@ -218,7 +233,7 @@ vi.mock("@/state/profile-coordinator", () => ({ profileAuthorizationScopeKey: (p
 vi.mock("@/storage/workspace-profile-fence", () => ({ captureWorkspaceProfileIdentity: (profile: any) => ({ id: profile.id, baseUrl: profile.baseUrl, authorizationGeneration: profile.authorizationGeneration, deviceId: profile.deviceId }) }));
 vi.mock("@/storage/workspace-preferences", () => ({ saveWorkspaceState: async () => {}, workspaceStateAuthorizationScope: (profile: any, server: any) => JSON.stringify([profile.id, profile.authorizationGeneration, server.id]) }));
 vi.mock("@/storage/new-workspace-preferences", () => ({
-  loadNewWorkspacePreference: async () => null,
+  loadNewWorkspacePreference: () => api.loadNewWorkspacePreference(),
   saveNewWorkspacePreference: async () => {},
   reasoningEffortLabel: (value: string) => value,
 }));
@@ -233,8 +248,14 @@ vi.mock("@/storage/pending-workspace-operation-v2", () => ({
   loadWorkspaceOpenDelivery: (profile: any, server: any, kind: any, sourcePath: any) => api.loadWorkspaceOpenDelivery(profile, server, kind, sourcePath),
   markWorkspaceOpenDelivery: (profile: any, server: any, receipt: any) => api.markWorkspaceOpenDelivery(profile, server, receipt),
 }));
-vi.mock("@/storage/pending-thread-creation", () => ({
+vi.mock("@/storage/pending-thread-creation", () => ({ originalCreationInput: (value: any) => value.input, loadPendingThreadCreation: async () => null, pendingThreadCreationKey: () => "test-pending-key",
   readWorkspaceTaskHandoff: (handoff: any) => api.readWorkspaceTaskHandoff(handoff),
+}));
+vi.mock("@/runtime/task-runtime/workspaces", () => ({
+  listWorkspaceCatalog: async () => ({
+    options: [{ path: "/srv/project", label: "Review project", kind: "workspace" }],
+    managedWorktrees: [],
+  }),
 }));
 vi.mock("@/runtime/task-runtime", () => ({
   defaultModelOption: (models: any[]) => models.find(model => model.isDefault) ?? models[0],
@@ -382,24 +403,27 @@ function startOpenRoute(activeProfile = profile(), activeServer = server()): unk
 }
 
 async function readyNewRoute(): Promise<unknown> {
+  // The former advanced form selected these target preferences. Seed the same
+  // target-owned draft defaults so this test exercises the surviving route API.
+  api.setNewWorkspacePreference({ cwd: "/srv/project", isolation: "worktree" });
   if (!host.route) startNewRoute();
   let tree = await settleRoute();
-  const path = byTestId(tree, "workspace-path");
-  if (path?.props.value !== "/srv/project") path?.props.onChangeText?.("/srv/project");
+  const draft = byTestId(tree, "new-task-draft");
+  draft?.props.setInput?.("Create one task from the prepared worktree");
   tree = commitRoute();
-  byTestId(tree, "workspace-isolation-worktree")?.props.onPress?.();
-  tree = commitRoute();
-  byTestId(tree, "new-workspace-prompt")?.props.onChangeText?.("Create one task from the prepared worktree");
   await vi.waitFor(() => {
     tree = commitRoute();
     expect(api.workspaceTaskHandoffLookups.length).toBeGreaterThan(0);
-    expect(byTestId(tree, "create-workspace")?.props.disabled).toBe(false);
+    expect(byTestId(tree, "new-task-draft")?.props.ready).toBe(true);
   });
   return tree;
 }
 
 async function readyOpenRoute(): Promise<unknown> {
   let tree = await settleRoute();
+  const path = byTestId(tree, "open-project-path");
+  if (path?.props.value !== "/srv/project") path?.props.onChangeText?.("/srv/project");
+  tree = commitRoute();
   await vi.waitFor(() => {
     tree = commitRoute();
     expect(api.workspaceOpenDeliveryReads.length).toBeGreaterThan(0);
@@ -426,20 +450,20 @@ describe("V2 unverified workspace route consumers", () => {
     api.queueAcknowledgment("consumed");
     await readyNewRoute();
     let tree = commitRoute();
-    const createButton = byTestId(tree, "create-workspace");
-    expect(createButton?.props.disabled).toBe(false);
-    press(createButton);
+    const draft = byTestId(tree, "new-task-draft");
+    expect(draft?.props.ready).toBe(true);
+    draft?.props.submit?.();
 
     await vi.waitFor(() => expect(api.acknowledgements).toHaveLength(1));
     await drainMicrotasks();
     tree = commitRoute();
     expect(byTestId(tree, "retry-created-workspace-scope")).toBeDefined();
-    expect(byTestId(tree, "create-workspace")?.props.disabled).toBe(true);
+    expect(byTestId(tree, "new-task-draft")?.props.ready).toBe(false);
     expect(host.replacements).toHaveLength(0);
     expect(api.worktreeOperations).toHaveLength(1);
     expect(api.worktreeOperations[0]).toMatchObject({ profile: { authorizationGeneration: "generation-A" }, server: { id: "server-1" }, path: "/srv/project" });
     expect(api.creationClaims).toHaveLength(1);
-    press(byTestId(tree, "create-workspace"));
+    byTestId(tree, "new-task-draft")?.props.submit?.();
     expect(api.creationClaims).toHaveLength(1);
 
     const retry = byTestId(tree, "retry-created-workspace-scope");
@@ -492,13 +516,13 @@ describe("V2 unverified workspace route consumers", () => {
     });
   });
 
-  it("does not navigate or publish an old created task when its ACK finishes after the form owner changes", async () => {
+  it("does not navigate or publish an old created task when its ACK finishes after the draft owner changes", async () => {
     let release!: (result: string) => void;
     const heldAck = new Promise<string>(resolve => { release = resolve; });
     api.holdAcknowledgment(() => heldAck);
     await readyNewRoute();
     let tree = commitRoute();
-    press(byTestId(tree, "create-workspace"));
+    byTestId(tree, "new-task-draft")?.props.submit?.();
     await vi.waitFor(() => expect(api.acknowledgements).toHaveLength(1));
     expect(api.acknowledgements[0]?.context.profile.authorizationGeneration).toBe("generation-A");
 

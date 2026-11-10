@@ -1,0 +1,563 @@
+{
+  "MigrationInstructionCaptureParams": {
+    "valid": [
+      {
+        "name": "explicit_static_subset",
+        "value": {
+          "captureId": "bdaeb662-a7fe-4412-974c-18c4f9e78005",
+          "source": "claude-code",
+          "format": "static_v2",
+          "sourceRoot": "/owned/source",
+          "sourceCwd": "/owned/source/project",
+          "includeDescendants": true,
+          "confirmStaticSubset": true
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown_property",
+        "value": {
+          "captureId": "bdaeb662-a7fe-4412-974c-18c4f9e78005",
+          "source": "claude-code",
+          "format": "static_v2",
+          "sourceRoot": "/owned/source",
+          "sourceCwd": "/owned/source/project",
+          "includeDescendants": true,
+          "confirmStaticSubset": true,
+          "executionAuthority": true
+        }
+      },
+      {
+        "name": "missing_confirmation",
+        "value": {
+          "captureId": "bdaeb662-a7fe-4412-974c-18c4f9e78005",
+          "source": "claude-code",
+          "format": "static_v2",
+          "sourceRoot": "/owned/source",
+          "sourceCwd": "/owned/source/project",
+          "includeDescendants": true
+        }
+      },
+      {
+        "name": "false_confirmation",
+        "value": {
+          "captureId": "bdaeb662-a7fe-4412-974c-18c4f9e78005",
+          "source": "claude-code",
+          "format": "static_v2",
+          "sourceRoot": "/owned/source",
+          "sourceCwd": "/owned/source/project",
+          "includeDescendants": true,
+          "confirmStaticSubset": false
+        }
+      },
+      {
+        "name": "blank_directory",
+        "value": {
+          "captureId": "bdaeb662-a7fe-4412-974c-18c4f9e78005",
+          "source": "claude-code",
+          "format": "static_v2",
+          "sourceRoot": " ﻿ ",
+          "sourceCwd": "/owned/source/project",
+          "includeDescendants": true,
+          "confirmStaticSubset": true
+        }
+      },
+      {
+        "name": "control_directory",
+        "value": {
+          "captureId": "bdaeb662-a7fe-4412-974c-18c4f9e78005",
+          "source": "claude-code",
+          "format": "static_v2",
+          "sourceRoot": "/owned\nsource",
+          "sourceCwd": "/owned/source/project",
+          "includeDescendants": true,
+          "confirmStaticSubset": true
+        }
+      },
+      {
+        "name": "oversized_utf8_directory",
+        "value": {
+          "captureId": "bdaeb662-a7fe-4412-974c-18c4f9e78005",
+          "source": "claude-code",
+          "format": "static_v2",
+          "sourceRoot": "汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉",
+          "sourceCwd": "/owned/source/project",
+          "includeDescendants": true,
+          "confirmStaticSubset": true
+        }
+      },
+      {
+        "name": "noncanonical_uuid",
+        "value": {
+          "captureId": "BDAEB662-A7FE-4412-974C-18C4F9E78005",
+          "source": "claude-code",
+          "format": "static_v2",
+          "sourceRoot": "/owned/source",
+          "sourceCwd": "/owned/source/project",
+          "includeDescendants": true,
+          "confirmStaticSubset": true
+        }
+      }
+    ]
+  },
+  "MigrationInstructionCaptureResult": {
+    "valid": [
+      {
+        "name": "explicit_static_subset",
+        "value": {
+          "captureId": "bdaeb662-a7fe-4412-974c-18c4f9e78005",
+          "source": "claude-code",
+          "formatRevision": "scoped-instructions/v2",
+          "sourceRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "totalItems": 1,
+          "completeAuthorizedStaticChain": true,
+          "dynamicScopePresent": false,
+          "remainingMs": 599000
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown_property",
+        "value": {
+          "captureId": "bdaeb662-a7fe-4412-974c-18c4f9e78005",
+          "source": "claude-code",
+          "formatRevision": "scoped-instructions/v2",
+          "sourceRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "totalItems": 1,
+          "completeAuthorizedStaticChain": true,
+          "dynamicScopePresent": false,
+          "remainingMs": 599000,
+          "executionAuthority": true
+        }
+      }
+    ]
+  },
+  "MigrationInstructionReadTarget": {
+    "valid": [
+      {
+        "name": "explicit_static_subset",
+        "value": {
+          "kind": "source",
+          "captureId": "bdaeb662-a7fe-4412-974c-18c4f9e78005"
+        }
+      },
+      {
+        "name": "original_saved_job",
+        "value": {
+          "kind": "job",
+          "jobId": "mig-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      {
+        "name": "received_graph_receipt",
+        "value": {
+          "kind": "received",
+          "requestId": "bdaeb662-a7fe-4412-974c-18c4f9e78005",
+          "manifestSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "entryId": "e0000-0000"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown_property",
+        "value": {
+          "kind": "source",
+          "captureId": "bdaeb662-a7fe-4412-974c-18c4f9e78005",
+          "executionAuthority": true
+        }
+      },
+      {
+        "name": "foreign_authority",
+        "value": {
+          "kind": "source",
+          "captureId": "bdaeb662-a7fe-4412-974c-18c4f9e78005",
+          "profile": "/private"
+        }
+      }
+    ]
+  },
+  "MigrationInstructionPageParams": {
+    "valid": [
+      {
+        "name": "explicit_static_subset",
+        "value": {
+          "target": {
+            "kind": "source",
+            "captureId": "bdaeb662-a7fe-4412-974c-18c4f9e78005"
+          },
+          "pageIndex": 0
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown_property",
+        "value": {
+          "target": {
+            "kind": "source",
+            "captureId": "bdaeb662-a7fe-4412-974c-18c4f9e78005"
+          },
+          "pageIndex": 0,
+          "executionAuthority": true
+        }
+      }
+    ]
+  },
+  "MigrationSourceInstructionPageParams": {
+    "valid": [
+      {
+        "name": "explicit_static_subset",
+        "value": {
+          "captureId": "bdaeb662-a7fe-4412-974c-18c4f9e78005",
+          "pageIndex": 0
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown_property",
+        "value": {
+          "captureId": "bdaeb662-a7fe-4412-974c-18c4f9e78005",
+          "pageIndex": 0,
+          "executionAuthority": true
+        }
+      },
+      {
+        "name": "cannot_read_target_job",
+        "value": {
+          "target": {
+            "kind": "job",
+            "jobId": "mig-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          }
+        }
+      }
+    ]
+  },
+  "MigrationInstructionPageResult": {
+    "valid": [
+      {
+        "name": "explicit_static_subset",
+        "value": {
+          "target": {
+            "kind": "source",
+            "captureId": "bdaeb662-a7fe-4412-974c-18c4f9e78005"
+          },
+          "pageIndex": 0,
+          "items": [
+            {
+              "itemId": "instruction-owned",
+              "displayName": "CLAUDE.md",
+              "source": "claude-code",
+              "scoped": true,
+              "formatRevision": "scoped-instructions/v2",
+              "sourceRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "relativePath": "CLAUDE.md",
+              "relativeScope": "",
+              "role": "shared",
+              "trigger": "launch",
+              "disposition": "selected",
+              "bytes": 4,
+              "completeAuthorizedStaticChain": true,
+              "reasonCode": null
+            }
+          ],
+          "totalItems": 1,
+          "nextPage": null
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown_property",
+        "value": {
+          "target": {
+            "kind": "source",
+            "captureId": "bdaeb662-a7fe-4412-974c-18c4f9e78005"
+          },
+          "pageIndex": 0,
+          "items": [
+            {
+              "itemId": "instruction-owned",
+              "displayName": "CLAUDE.md",
+              "source": "claude-code",
+              "scoped": true,
+              "formatRevision": "scoped-instructions/v2",
+              "sourceRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "relativePath": "CLAUDE.md",
+              "relativeScope": "",
+              "role": "shared",
+              "trigger": "launch",
+              "disposition": "selected",
+              "bytes": 4,
+              "completeAuthorizedStaticChain": true,
+              "reasonCode": null
+            }
+          ],
+          "totalItems": 1,
+          "nextPage": null,
+          "executionAuthority": true
+        }
+      }
+    ]
+  },
+  "MigrationInstructionBodyParams": {
+    "valid": [
+      {
+        "name": "explicit_static_subset",
+        "value": {
+          "target": {
+            "kind": "source",
+            "captureId": "bdaeb662-a7fe-4412-974c-18c4f9e78005"
+          },
+          "itemId": "instruction-owned",
+          "representation": "compiled",
+          "offset": 0
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown_property",
+        "value": {
+          "target": {
+            "kind": "source",
+            "captureId": "bdaeb662-a7fe-4412-974c-18c4f9e78005"
+          },
+          "itemId": "instruction-owned",
+          "representation": "compiled",
+          "offset": 0,
+          "executionAuthority": true
+        }
+      }
+    ]
+  },
+  "MigrationSourceInstructionBodyParams": {
+    "valid": [
+      {
+        "name": "explicit_static_subset",
+        "value": {
+          "captureId": "bdaeb662-a7fe-4412-974c-18c4f9e78005",
+          "itemId": "instruction-owned",
+          "representation": "original",
+          "offset": 0
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown_property",
+        "value": {
+          "captureId": "bdaeb662-a7fe-4412-974c-18c4f9e78005",
+          "itemId": "instruction-owned",
+          "representation": "original",
+          "offset": 0,
+          "executionAuthority": true
+        }
+      },
+      {
+        "name": "cannot_supply_path",
+        "value": {
+          "captureId": "bdaeb662-a7fe-4412-974c-18c4f9e78005",
+          "itemId": "instruction-owned",
+          "representation": "original",
+          "offset": 0,
+          "path": "/private"
+        }
+      }
+    ]
+  },
+  "MigrationInstructionBodyResult": {
+    "valid": [
+      {
+        "name": "explicit_static_subset",
+        "value": {
+          "target": {
+            "kind": "source",
+            "captureId": "bdaeb662-a7fe-4412-974c-18c4f9e78005"
+          },
+          "itemId": "instruction-owned",
+          "representation": "original",
+          "formatRevision": "scoped-instructions/v2",
+          "offset": 0,
+          "encoding": "utf8",
+          "bytesBase64": "Z3VpZGU=",
+          "text": "guide",
+          "totalBytes": 5,
+          "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "nextOffset": null,
+          "enabledByPreview": false
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown_property",
+        "value": {
+          "target": {
+            "kind": "source",
+            "captureId": "bdaeb662-a7fe-4412-974c-18c4f9e78005"
+          },
+          "itemId": "instruction-owned",
+          "representation": "original",
+          "formatRevision": "scoped-instructions/v2",
+          "offset": 0,
+          "encoding": "utf8",
+          "bytesBase64": "Z3VpZGU=",
+          "text": "guide",
+          "totalBytes": 5,
+          "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "nextOffset": null,
+          "enabledByPreview": false,
+          "executionAuthority": true
+        }
+      },
+      {
+        "name": "preview_never_enables",
+        "value": {
+          "target": {
+            "kind": "source",
+            "captureId": "bdaeb662-a7fe-4412-974c-18c4f9e78005"
+          },
+          "itemId": "instruction-owned",
+          "representation": "original",
+          "formatRevision": "scoped-instructions/v2",
+          "offset": 0,
+          "encoding": "utf8",
+          "bytesBase64": "Z3VpZGU=",
+          "text": "guide",
+          "totalBytes": 5,
+          "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "nextOffset": null,
+          "enabledByPreview": true
+        }
+      }
+    ]
+  },
+  "MigrationInstructionScopeChoice": {
+    "valid": [
+      {
+        "name": "explicit_static_subset",
+        "value": {
+          "itemId": "instruction-owned",
+          "targetRelativeScope": "child"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown_property",
+        "value": {
+          "itemId": "instruction-owned",
+          "targetRelativeScope": "child",
+          "executionAuthority": true
+        }
+      },
+      {
+        "name": "reject_'..'",
+        "value": {
+          "itemId": "instruction-owned",
+          "targetRelativeScope": ".."
+        }
+      },
+      {
+        "name": "reject_'child/../other'",
+        "value": {
+          "itemId": "instruction-owned",
+          "targetRelativeScope": "child/../other"
+        }
+      },
+      {
+        "name": "reject_'/root'",
+        "value": {
+          "itemId": "instruction-owned",
+          "targetRelativeScope": "/root"
+        }
+      },
+      {
+        "name": "reject_'child//other'",
+        "value": {
+          "itemId": "instruction-owned",
+          "targetRelativeScope": "child//other"
+        }
+      },
+      {
+        "name": "reject_'child/'",
+        "value": {
+          "itemId": "instruction-owned",
+          "targetRelativeScope": "child/"
+        }
+      },
+      {
+        "name": "reject_'child\\\\other'",
+        "value": {
+          "itemId": "instruction-owned",
+          "targetRelativeScope": "child\\other"
+        }
+      },
+      {
+        "name": "reject_'child:other'",
+        "value": {
+          "itemId": "instruction-owned",
+          "targetRelativeScope": "child:other"
+        }
+      },
+      {
+        "name": "reject_'child\\nother'",
+        "value": {
+          "itemId": "instruction-owned",
+          "targetRelativeScope": "child\nother"
+        }
+      },
+      {
+        "name": "reject_'a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/b'",
+        "value": {
+          "itemId": "instruction-owned",
+          "targetRelativeScope": "a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/a/b"
+        }
+      }
+    ]
+  },
+  "MigrationSourceInstructionMapping": {
+    "valid": [
+      {
+        "name": "explicit_static_subset",
+        "value": {
+          "entryId": "e0000-0000",
+          "items": [
+            {
+              "itemId": "instruction-owned",
+              "targetRelativeScope": ""
+            }
+          ],
+          "archiveIncompleteChain": false
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown_property",
+        "value": {
+          "entryId": "e0000-0000",
+          "items": [
+            {
+              "itemId": "instruction-owned",
+              "targetRelativeScope": ""
+            }
+          ],
+          "archiveIncompleteChain": false,
+          "executionAuthority": true
+        }
+      },
+      {
+        "name": "empty_mapping",
+        "value": {
+          "entryId": "e0000-0000",
+          "items": []
+        }
+      }
+    ]
+  }
+}

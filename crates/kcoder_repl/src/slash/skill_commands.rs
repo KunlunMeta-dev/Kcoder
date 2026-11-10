@@ -22,7 +22,7 @@ impl SlashCommand for SkillCommand {
     async fn run(&self, args: &str, app: &mut ReplApp, engine: &QueryEngine) -> SlashResult {
         let args = args.trim();
         if args.is_empty() {
-            let active = engine.active_skills.read().unwrap().clone();
+            let active = engine.effective_active_skill_names();
             app.push_message(
                 MessageRole::System,
                 format!("Active skills: {}", active.join(", ")),
@@ -47,6 +47,12 @@ impl SlashCommand for SkillCommand {
         }
 
         let name = first;
+        if !engine.skill_available_in_current_request(name) {
+            app.push_message(MessageRole::System, format!(
+                "Skill '{name}' is unavailable in the current mode. Use /skills to list available skills."
+            ));
+            return SlashResult::Handled;
+        }
         let rest: Vec<&str> = tokens.collect();
         let skill_info = {
             let registry = engine.skill_registry.read().unwrap();
@@ -92,24 +98,15 @@ impl SlashCommand for SkillsCommand {
         "/skills"
     }
     async fn run(&self, _args: &str, app: &mut ReplApp, engine: &QueryEngine) -> SlashResult {
-        let skill_infos: Vec<_> = {
-            let registry = engine.skill_registry.read().unwrap();
-            registry
-                .names()
-                .into_iter()
-                .map(|name| {
-                    let description = registry
-                        .get(&name)
-                        .map(|skill| skill.description.clone())
-                        .unwrap_or_default();
-                    (name, description)
-                })
-                .collect()
-        };
+        let skill_infos = engine
+            .client_skill_catalog()
+            .into_iter()
+            .map(|skill| (skill.name, skill.description))
+            .collect::<Vec<_>>();
         if skill_infos.is_empty() {
             app.push_message(MessageRole::System, "No skills found.");
         } else {
-            let active = engine.active_skills.read().unwrap();
+            let active = engine.effective_active_skill_names();
             let lines: Vec<String> = skill_infos
                 .into_iter()
                 .map(|(name, description)| {
@@ -244,6 +241,57 @@ mod tests {
         let mut app = ReplApp::default();
         ToolsCommand.run("", &mut app, engine).await;
         app.messages.last().unwrap().text.clone()
+    }
+
+    #[tokio::test]
+    async fn cli_skill_menu_and_explicit_activation_do_not_offer_inline_workflows() {
+        let dir = tempfile::tempdir().unwrap();
+        for name in ["kworker-visualization", "ordinary"] {
+            let path = dir.path().join(".kcoder/skills").join(name);
+            std::fs::create_dir_all(&path).unwrap();
+            std::fs::write(
+                path.join("SKILL.md"),
+                format!("---\nname: {name}\ndescription: Fixture\n---\nBODY"),
+            )
+            .unwrap();
+        }
+        let engine = crate::test_support::test_engine_with_default_tools(dir.path());
+        engine
+            .active_skills
+            .write()
+            .unwrap()
+            .push("kworker-visualization".into());
+        let mut app = ReplApp::default();
+        SkillsCommand.run("", &mut app, &engine).await;
+        let menu = &app.messages.last().unwrap().text;
+        assert!(menu.contains("ordinary"));
+        assert!(!menu.contains("kworker-visualization"));
+        SkillCommand.run("", &mut app, &engine).await;
+        assert!(
+            !app.messages
+                .last()
+                .unwrap()
+                .text
+                .contains("kworker-visualization")
+        );
+        SkillCommand
+            .run("kworker-visualization", &mut app, &engine)
+            .await;
+        assert!(
+            app.messages
+                .last()
+                .unwrap()
+                .text
+                .contains("unavailable in the current mode")
+        );
+        SkillCommand.run("ordinary", &mut app, &engine).await;
+        assert!(
+            app.messages
+                .last()
+                .unwrap()
+                .text
+                .contains("Activated skill: ordinary")
+        );
     }
 
     #[tokio::test]

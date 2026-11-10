@@ -5,10 +5,23 @@ use super::*;
 pub(super) fn handle_mouse_event(mouse: MouseEvent, app: &mut ReplApp) -> Option<UserAction> {
     trace_tui_lab_mouse_event("input", mouse, app);
     app.last_mouse_pos = Some((mouse.column, mouse.row));
+    if matches!(
+        mouse.kind,
+        MouseEventKind::Down(MouseButton::Left)
+            | MouseEventKind::ScrollUp
+            | MouseEventKind::ScrollDown
+    ) {
+        app.clear_transcript_selection();
+    }
     if app.handle_copy_mouse(mouse) {
         return None;
     }
     if app.handle_outline_mouse(mouse) {
+        return None;
+    }
+    if matches!(mouse.kind, MouseEventKind::Down(MouseButton::Left))
+        && app.click_scroll_to_bottom(mouse.column, mouse.row)
+    {
         return None;
     }
     if app.active_overlay.is_none()
@@ -308,11 +321,13 @@ pub(super) fn handle_left_mouse_click(
         if let Some(dialog) = app.pending_question.as_mut() {
             let multi_select = dialog.request.questions[dialog.focused].multi_select;
             set_question_dialog_cursor(dialog, index, Some(dialog_area), !multi_select);
+            if question_dialog_is_custom_option(&dialog.request.questions[dialog.focused], index) {
+                question_dialog_begin_custom(dialog);
+                return None;
+            }
             if multi_select {
                 if dialog.selected.contains(&index) {
-                    if dialog.selected.len() > 1 {
-                        dialog.selected.retain(|selected| *selected != index);
-                    }
+                    dialog.selected.retain(|selected| *selected != index);
                 } else {
                     dialog.selected.push(index);
                     dialog.selected.sort_unstable();

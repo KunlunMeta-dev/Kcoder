@@ -17,9 +17,14 @@ use std::{
 
 const MAX_RECORD_BYTES: usize = 1024 * 1024;
 const MAX_SNAPSHOT_BYTES: usize = 512 * 1024;
+#[path = "turn_attempt_store/agent_snapshot.rs"]
+mod agent_snapshot;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TurnAttemptRecord {
+    /// Non-secret presentation snapshot, frozen with Accepted for safe continuation.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub client_presentation: Option<kcoder_types::ClientPresentationV1>,
     pub version: u8,
     pub identity: TurnAttemptIdentity,
     pub parent_attempt_id: Option<String>,
@@ -384,6 +389,17 @@ fn leaf(identity: &TurnAttemptIdentity, kind: &str) -> OsString {
     .into()
 }
 fn validate_record(record: &TurnAttemptRecord) -> Result<()> {
+    if let Some(value) = record.client_presentation.as_ref() {
+        ensure!(
+            value.version == 1,
+            "unsupported saved client presentation version"
+        );
+        ensure!(
+            !value.inline_widgets
+                || value.studio_work_mode == Some(kcoder_types::StudioWorkMode::Kworker),
+            "saved inline widgets require kworker mode"
+        );
+    }
     record.identity.validate().map_err(anyhow::Error::msg)?;
     ensure!(record.version == 1, "unsupported attempt record version");
     ensure!(
@@ -462,6 +478,7 @@ mod tests {
             input_context_hash: "a".repeat(64),
             request_fingerprint: None,
             retained_input: None,
+            client_presentation: None,
             status: TurnAttemptStatus::Accepted,
             completion: None,
         }

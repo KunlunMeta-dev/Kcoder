@@ -51,7 +51,7 @@ mod tests {
     #[test]
     fn token_estimate_cache_hits_and_invalidates_on_content_not_length() {
         let root = tempfile::tempdir().unwrap();
-        let engine = TestEngineBuilder::new(root.path()).build();
+        let engine = TestEngineBuilder::new(root.path()).build_with_profile_directory();
         engine
             .state
             .set_messages(vec![Message::user_text("before")]);
@@ -82,7 +82,7 @@ mod tests {
     #[test]
     fn token_estimate_cache_does_not_cross_state_identity_or_wait_for_its_lock() {
         let root = tempfile::tempdir().unwrap();
-        let engine = TestEngineBuilder::new(root.path()).build();
+        let engine = TestEngineBuilder::new(root.path()).build_with_profile_directory();
         engine.state.set_messages(vec![Message::user_text("first")]);
         engine.estimated_token_count();
         let mut other = engine.clone();

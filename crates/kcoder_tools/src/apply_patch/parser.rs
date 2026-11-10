@@ -1,6 +1,6 @@
 /// One file-level operation in a patch.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum Hunk {
+pub enum Hunk {
     Add {
         path: String,
         lines: Vec<String>,
@@ -18,11 +18,11 @@ pub(crate) enum Hunk {
 /// One `@@`-anchored change region inside an Update hunk. `old_lines` and
 /// `new_lines` already interleave shared context lines (space prefix).
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub(crate) struct Chunk {
-    pub(crate) context: Vec<String>,
-    pub(crate) old_lines: Vec<String>,
-    pub(crate) new_lines: Vec<String>,
-    pub(crate) end_of_file: bool,
+pub struct Chunk {
+    pub context: Vec<String>,
+    pub old_lines: Vec<String>,
+    pub new_lines: Vec<String>,
+    pub end_of_file: bool,
 }
 
 const BEGIN: &str = "*** Begin Patch";
@@ -35,7 +35,7 @@ const EOF_MARKER: &str = "*** End of File";
 
 /// Parse full patch text. Lenient: tolerates blank lines, whitespace padding
 /// around markers, a quoted-heredoc wrapper (`<<'EOF' … EOF`), and CRLF.
-pub(crate) fn parse_patch(raw: &str) -> Result<Vec<Hunk>, String> {
+pub fn parse_patch(raw: &str) -> Result<Vec<Hunk>, String> {
     let body = strip_heredoc(raw).replace("\r\n", "\n");
     let lines: Vec<&str> = body.lines().collect();
     let mut index = 0usize;

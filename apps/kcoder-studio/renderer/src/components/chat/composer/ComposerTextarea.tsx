@@ -46,6 +46,7 @@ import { ComposerMentionMenu, type MentionMenuRow } from './ComposerMentionMenu'
 import { useWorkspaceMentionSearch } from './useWorkspaceMentionSearch'
 import { useComposerMentionCandidates } from './useComposerMentionCandidates'
 import type { ComposerTextareaProps } from './composerTextareaTypes'
+import { ComposerInputHistory } from './composerInputHistory'
 
 export type { ComposerSubmitOptions } from './composerTextareaTypes'
 
@@ -57,6 +58,8 @@ interface ActiveComposerMenu {
 export function ComposerTextarea({
   textOnly = false,
   value,
+  inputHistory = [],
+  inputHistoryScope,
   onChange,
   onSubmit,
   canSend,
@@ -105,6 +108,10 @@ export function ComposerTextarea({
   const mountedRef = useRef(true)
   const editorRef = useRef<ComposerEditorHandle | null>(null)
   const valueRef = useRef(value)
+  const inputHistoryRef = useRef({
+    scope: inputHistoryScope,
+    navigation: new ComposerInputHistory(),
+  })
   const activeMenuRef = useRef<ActiveComposerMenu | null>(null)
   const highlightedIndexRef = useRef(0)
   const showSkillMenuRef = useRef(false)
@@ -550,6 +557,7 @@ export function ComposerTextarea({
       const editor = editorRef.current
       const current = snapshot ?? editor?.getSnapshot()
       if (!current) return
+      if (inputHistoryRef.current.navigation.isBrowsing(current.value)) return
 
       const nextTrigger = chooseNearestTrigger([
         findStandaloneTrigger(
@@ -984,6 +992,7 @@ export function ComposerTextarea({
 
   const handleEditorSnapshot = useCallback(
     (snapshot: ComposerEditorSnapshot) => {
+      inputHistoryRef.current.navigation.observe(snapshot.value)
       valueRef.current = snapshot.value
       setSlashCommandError(null)
       updateAutocompleteTrigger(snapshot)
@@ -1001,10 +1010,45 @@ export function ComposerTextarea({
   const handleEditorKeyDown = useCallback(
     (event: KeyboardEvent, snapshot: ComposerEditorSnapshot) => {
       if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-        if (!showSkillMenuRef.current && !showSlashMenuRef.current) return false
-        if (activeOptionCountRef.current <= 0) return false
+        if (
+          disabled ||
+          modelMenuOpen ||
+          event.shiftKey ||
+          event.ctrlKey ||
+          event.altKey ||
+          event.metaKey ||
+          isComposing ||
+          isImeComposingEvent(event)
+        )
+          return false
+        if (showSkillMenuRef.current || showSlashMenuRef.current) {
+          if (activeOptionCountRef.current <= 0) return false
+          event.preventDefault()
+          return moveHighlightedIndex(event.key === 'ArrowDown' ? 1 : -1)
+        }
+        if (snapshot.selectionStart !== snapshot.selectionEnd) return false
+        if (inputHistoryRef.current.scope !== inputHistoryScope) {
+          inputHistoryRef.current = {
+            scope: inputHistoryScope,
+            navigation: new ComposerInputHistory(),
+          }
+        }
+        const history = inputHistoryRef.current.navigation
+        const direction = event.key === 'ArrowUp' ? 'up' : 'down'
+        if (!history.isBrowsing(snapshot.value) && (direction === 'down' || !inputHistory.length))
+          return false
+        const next = history.move(
+          direction,
+          inputHistory,
+          snapshot,
+          history.isBrowsing(snapshot.value) ||
+            Boolean(editorRef.current?.isAtVerticalBoundary(direction))
+        )
+        if (!next) return false
         event.preventDefault()
-        return moveHighlightedIndex(event.key === 'ArrowDown' ? 1 : -1)
+        commitEditorValue(next.value, next.selectionOffset)
+        closeAutocompleteMenu()
+        return true
       }
 
       if (event.key === 'Escape') {
@@ -1144,6 +1188,10 @@ export function ComposerTextarea({
       commitEditorValue,
       filteredSlashCommands,
       isComposing,
+      inputHistory,
+      inputHistoryScope,
+      disabled,
+      modelMenuOpen,
       moveHighlightedIndex,
       onSubmit,
       selectHighlightedMention,

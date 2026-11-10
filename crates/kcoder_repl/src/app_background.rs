@@ -561,15 +561,28 @@ impl ReplApp {
         projection.messages
     }
 
+    #[cfg(test)]
     pub(super) fn apply_agent_live_snapshot(
         &mut self,
         snapshot: kcoder_engine::agent_live_view::AgentLiveSnapshot,
+    ) -> bool {
+        self.apply_agent_web_snapshot(snapshot, &[])
+    }
+
+    pub(super) fn apply_agent_web_snapshot(
+        &mut self,
+        snapshot: kcoder_engine::agent_live_view::AgentLiveSnapshot,
+        receipts: &[kcoder_types::web_sources::WebSourcesV1],
     ) -> bool {
         self.preserve_review_before_content_change();
         let Some(view) = self.agent_view.as_mut() else {
             return false;
         };
-        let mut transcript = Self::project_agent_transcript(&snapshot.messages);
+        let mut projection = ReplApp::default();
+        projection.replace_transcript_from_history(&snapshot.messages);
+        projection.messages.native_web_sources = view.transcript.native_web_sources.clone();
+        projection.append_bound_web_sources(&snapshot.messages, receipts);
+        let mut transcript = projection.messages;
         if snapshot.text_truncated {
             transcript.push(DisplayMessage { role: MessageRole::System, text: "Live preview shows the latest 256 KiB; the complete response will appear when committed.".into() });
         }
@@ -599,6 +612,9 @@ impl ReplApp {
             text: format!("Agent status: {}", snapshot.phase),
         });
         view.transcript.reconcile_projection(&transcript);
+        view.transcript
+            .native_web_sources
+            .extend(&transcript.native_web_sources);
         view.live_revision = Some(snapshot.revision);
         view.load_error = None;
         self.invalidate_agent_transcript_rendering();
@@ -629,7 +645,8 @@ impl ReplApp {
         let id = view.agent_id.clone();
         let previous = if force { None } else { view.live_revision };
         if let Some(snapshot) = engine.subagent_live_snapshot(&id, previous) {
-            return self.apply_agent_live_snapshot(snapshot);
+            let receipts = web_sources::receipts_for_child(engine, &id);
+            return self.apply_agent_web_snapshot(snapshot, &receipts);
         }
         if engine.has_subagent_live_view(&id) {
             return false;
@@ -680,7 +697,14 @@ impl ReplApp {
             .as_ref()
             .map(|view| view.pending_steers.clone())
             .unwrap_or_default();
-        let mut transcript = Self::project_agent_transcript(&messages);
+        let receipts = web_sources::receipts_for_child(engine, &id);
+        let mut projection = ReplApp::default();
+        projection.replace_transcript_from_history(&messages);
+        if let Some(view) = self.agent_view.as_ref() {
+            projection.messages.native_web_sources = view.transcript.native_web_sources.clone();
+        }
+        projection.append_bound_web_sources(&messages, &receipts);
+        let mut transcript = projection.messages;
         for pending in &pending_steers {
             if !transcript
                 .iter()
@@ -701,6 +725,9 @@ impl ReplApp {
             return false;
         };
         view.transcript.reconcile_projection(&transcript);
+        view.transcript
+            .native_web_sources
+            .extend(&transcript.native_web_sources);
         view.fingerprint = Some(fingerprint);
         view.load_error = None;
         self.invalidate_agent_transcript_rendering();

@@ -26,6 +26,17 @@ const streamingTextBlock: ProcessingBlock = {
 }
 
 describe('ToolBlockItem', () => {
+  test('labels a restored missing workflow result without claiming tool failure', () => {
+    const { container } = render(<ToolBlockItem block={{
+      id: 'lost-workflow-help', subtaskId: 1, type: 'tool', toolName: 'WorkflowDraft',
+      status: 'unknown', rawStatus: 'result_unrecorded', createdAt: 1,
+      toolOutput: 'The final tool result was not saved.',
+    }} />)
+    expect(screen.getByText(/未记录结果|Result not recorded/)).toBeInTheDocument()
+    expect(screen.queryByText(/失败|Failed/)).not.toBeInTheDocument()
+    expect(container.querySelector('.animate-spin')).toBeNull()
+  })
+
   test('shows unknown tool history without running or success indicators', () => {
     const { container } = render(
       <ToolBlockItem
@@ -162,8 +173,9 @@ describe('ToolBlockItem', () => {
     const preview = screen.getByTestId('thinking-live-preview')
 
     expect(preview).toHaveTextContent('正在思考')
-    expect(preview.firstElementChild).toHaveTextContent('正在思考')
-    expect(preview.firstElementChild?.tagName).toBe('SPAN')
+    expect(preview.firstElementChild?.tagName.toLowerCase()).toBe('svg')
+    expect(preview.firstElementChild).toHaveAttribute('aria-hidden', 'true')
+    expect(preview.children[1]).toHaveTextContent('正在思考')
     expect(preview).toHaveTextContent('Latest visible thought')
     expect(screen.queryByText('First step. Latest visible thought')).not.toBeInTheDocument()
     expect(screen.queryByTestId('thinking-toggle-button')).not.toBeInTheDocument()
@@ -185,8 +197,9 @@ describe('ToolBlockItem', () => {
     const toggle = screen.getByTestId('thinking-toggle-button')
 
     expect(toggle).toHaveAttribute('aria-expanded', 'false')
-    expect(toggle.firstElementChild).toHaveTextContent('思考过程')
-    expect(toggle.firstElementChild?.tagName).toBe('SPAN')
+    expect(toggle.firstElementChild?.tagName.toLowerCase()).toBe('svg')
+    expect(toggle.firstElementChild).toHaveAttribute('aria-hidden', 'true')
+    expect(toggle.children[1]).toHaveTextContent('思考过程')
     expect(screen.queryByTestId('thinking-detail')).not.toBeInTheDocument()
 
     await user.click(toggle)

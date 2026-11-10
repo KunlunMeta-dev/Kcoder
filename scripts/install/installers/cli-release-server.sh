@@ -13,7 +13,6 @@ cargo_bin="${KCODER_SERVER_CARGO_BIN:-cargo}"
 target_dir="${KCODER_SERVER_TARGET_DIR:-$repo_dir/target}"
 env_file="${KCODER_SERVER_ENV_FILE:-$repo_dir/.env}"
 development_settings="$repo_dir/crates/kcoder_config/setting_dev_user.jsonc"
-kunlunmeta_base_url="${KCODER_SERVER_KUNLUNMETA_BASE_URL:-http://127.0.0.1:8000}"
 source "$repo_dir/scripts/install/lib/ripgrep.sh"
 
 current_user="$(id -un)"
@@ -215,15 +214,6 @@ env_has_key() {
     grep -Eq "^[[:space:]]*(export[[:space:]]+)?($pattern)[[:space:]]*=" "$env_file"
 }
 
-install_source_dotenv() {
-  local config_dir="$1"
-  if [[ ! -f "$env_file" || -e "$config_dir/.env" ]]; then
-    return
-  fi
-  mkdir -p "$config_dir"
-  install -m 0600 "$env_file" "$config_dir/.env"
-}
-
 import_root_provider() {
   local provider="$1"
   run_profile_command "$root_home" "$root_config_dir" "$root_command" \
@@ -231,30 +221,19 @@ import_root_provider() {
 }
 
 import_development_settings() {
-  # Development settings are the sole source for the development profile. Remove only
-  # that profile's user layer; retain credentials in the isolated directory and refresh them from repository dotenv below.
-  rm -f "$root_config_dir/settings.json"
+  # Import development behavior only. Saved model deployments belong to the profile.
+  if [[ -e "$root_config_dir/settings.json" ]]; then
+    return
+  fi
   run_profile_command "$root_home" "$root_config_dir" "$root_command" \
     config migrate >/dev/null
   run_profile_command "$root_home" "$root_config_dir" "$root_command" \
     config import --scope user --file "$development_settings" >/dev/null
-
-  # An old import expanded the selected provider into top-level runtime fields.
-  # Continue calibrating these high-priority fields so they cannot hide the current server provider endpoint.
-  run_profile_command "$root_home" "$root_config_dir" "$root_command" \
-    config set --scope user providers.kunlunmeta.endpoint "$kunlunmeta_base_url" >/dev/null
-  run_profile_command "$root_home" "$root_config_dir" "$root_command" \
-    config set --scope user providers.kunlunmeta.no_proxy true >/dev/null
-  run_profile_command "$root_home" "$root_config_dir" "$root_command" \
-    config set --scope user base_url "$kunlunmeta_base_url" >/dev/null
-  run_profile_command "$root_home" "$root_config_dir" "$root_command" \
-    config set --scope user provider_no_proxy true >/dev/null
+  echo "Initialized development settings in $root_config_dir."
 }
 
 if [[ "$import_development" == 1 ]]; then
-  install_source_dotenv "$root_config_dir"
   import_development_settings
-  echo "Imported development settings into isolated $root_config_dir."
 
   if [[ -f "$env_file" ]]; then
     if env_has_key 'KUNLUNMETA_BASE_API_KEY'; then

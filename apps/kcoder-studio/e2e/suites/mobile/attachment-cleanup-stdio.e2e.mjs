@@ -323,7 +323,7 @@ async function runSuite() {
 }
 
 async function createPrivateEvidenceRoot() {
-  const privateBase = resolve(repoRoot, "target/private-attachment-cleanup-stdio");
+  const privateBase = resolve(repoRoot, "target/evidence/2026/10/08/private-attachment-cleanup-stdio");
   await mkdir(privateBase, { recursive: true, mode: 0o700 });
   return mkdtemp(resolve(privateBase, "run-"));
 }

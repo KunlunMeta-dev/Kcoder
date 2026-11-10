@@ -1,6 +1,6 @@
 import { createContext, useContext } from 'react'
 import { Bot, File, Globe, ListChecks, Search, Terminal, Wrench } from 'lucide-react'
-import { requestLocalExecutor } from '@/tauri/localExecutor'
+import { requestLocalExecutor } from '@/host/localExecutor'
 
 export const toolCatalogIcons = {
   tool: Wrench,

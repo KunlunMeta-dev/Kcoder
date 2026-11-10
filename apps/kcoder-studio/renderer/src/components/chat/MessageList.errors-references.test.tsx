@@ -6,15 +6,17 @@ import { runtimeMessagesToWorkbenchMessages } from '@/features/workbench/runtime
 import { clearPersistentProcessingExpansions } from './blocks/processingExpansionState'
 import '@/i18n'
 
-const tauriCoreMock = vi.hoisted(() => ({
-  convertFileSrc: vi.fn((path: string) => `asset://localhost/${path.replace(/^\/+/, '')}`),
+const runtimeCommandMock = vi.hoisted(() => ({
+  clientResourceUrl: vi.fn((path: string) => `asset://localhost/${path.replace(/^\/+/, '')}`),
   invoke: vi.fn(),
-  isTauri: vi.fn(() => false),
+  isGateway: vi.fn(() => false),
 }))
 const openExternalUrlMock = vi.hoisted(() => vi.fn().mockResolvedValue(true))
 const requestEmbeddedBrowserOpenMock = vi.hoisted(() => vi.fn(() => true))
 
-vi.mock('@tauri-apps/api/core', () => tauriCoreMock)
+vi.mock('@/lib/client-resource-url', () => runtimeCommandMock)
+vi.mock('@/lib/runtime-commands', () => ({ invoke: runtimeCommandMock.invoke }))
+
 vi.mock('@/lib/external-links', async importOriginal => ({
   ...(await importOriginal<typeof import('@/lib/external-links')>()),
   openExternalUrl: openExternalUrlMock,
@@ -122,13 +124,13 @@ describe('MessageList', () => {
     clearPersistentProcessingExpansions()
     vi.unstubAllGlobals()
     vi.restoreAllMocks()
-    tauriCoreMock.convertFileSrc
+    runtimeCommandMock.clientResourceUrl
       .mockReset()
       .mockImplementation(
         (path: string) => `asset://localhost/${path.replace(/^\/+/, '')}`
       )
-    tauriCoreMock.invoke.mockReset()
-    tauriCoreMock.isTauri.mockReset().mockReturnValue(false)
+    runtimeCommandMock.invoke.mockReset()
+    runtimeCommandMock.isGateway.mockReset().mockReturnValue(false)
     openExternalUrlMock.mockClear()
     requestEmbeddedBrowserOpenMock.mockClear()
     localStorage.clear()
@@ -494,9 +496,9 @@ describe('MessageList', () => {
     expect(screen.queryByText(/cloud:\/\/projects\/3\/todos/)).not.toBeInTheDocument()
   })
 
-  test('renders conversation references in user messages without exposing the internal URI', () => {
+  test.each(['wework', 'kcoder'])('renders %s conversation references without exposing the internal URI', scheme => {
     const href =
-      'wework-conversation://%7B%22deviceId%22%3A%22local-device%22%2C%22taskId%22%3A%22runtime-42%22%7D'
+      `${scheme}-conversation://%7B%22deviceId%22%3A%22local-device%22%2C%22taskId%22%3A%22runtime-42%22%7D`
     render(
       <MessageList
         messages={[
@@ -516,6 +518,6 @@ describe('MessageList', () => {
     expect(conversationLink).toHaveAttribute('href', href)
     expect(screen.getByTestId(/^sent-conversation-icon-/)).toBeInTheDocument()
     expect(screen.getByTestId('message-user')).toHaveTextContent('修复登录流程 继续分析')
-    expect(screen.queryByText(/wework-conversation:\/\//)).not.toBeInTheDocument()
+    expect(screen.queryByText(/(?:wework|kcoder)-conversation:\/\//)).not.toBeInTheDocument()
   })
 })

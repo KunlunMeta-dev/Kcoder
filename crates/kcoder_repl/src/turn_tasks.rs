@@ -57,6 +57,10 @@ pub(super) fn start_manual_compaction(
     app: &mut ReplApp,
     tx: &AppEventSender,
 ) {
+    if app.has_unconfirmed_input() {
+        app.show_unconfirmed_input_notice();
+        return;
+    }
     let cancel = CancellationToken::new();
     let handle = spawn_manual_compaction(engine.clone(), tx.clone(), cancel.clone());
     app.foreground_operation_label = Some("Compacting context".to_string());
@@ -69,6 +73,13 @@ pub(super) fn start_moa_plan(
     tx: &AppEventSender,
     request: String,
 ) {
+    if app.has_unconfirmed_input() {
+        if app.input.is_empty() {
+            app.prefill_input(format!("/moa-plan {request}"));
+        }
+        app.show_unconfirmed_input_notice();
+        return;
+    }
     let cancel = CancellationToken::new();
     let operation_engine = engine.clone().with_cancel_token(cancel.clone());
     let operation_tx = tx.clone();
@@ -116,6 +127,44 @@ pub(super) fn start_side_question(
     tx: &AppEventSender,
     question: String,
 ) {
+    if app.has_unconfirmed_input() {
+        if app.input.is_empty() {
+            app.prefill_input(format!("/btw {question}"));
+        }
+        app.show_unconfirmed_input_notice();
+        return;
+    }
+    app.has_running_side_questions();
+    if app.side_question_tasks.len() >= 8 {
+        app.push_message(
+            MessageRole::System,
+            "Previous side questions are still closing. Please try again shortly.".to_string(),
+        );
+        return;
+    }
+    let Some(owner) = app.input_session_owner.clone() else {
+        if app.input.is_empty() {
+            app.prefill_input(format!("/btw {question}"));
+        }
+        app.push_message(
+            MessageRole::System,
+            "The current conversation is not ready. Please try again shortly.".to_string(),
+        );
+        return;
+    };
+    if !matches!(
+        engine.state.try_check_lifecycle_identity(&owner),
+        Ok(Some(true))
+    ) {
+        if app.input.is_empty() {
+            app.prefill_input(format!("/btw {question}"));
+        }
+        app.push_message(
+            MessageRole::System,
+            "The current conversation is not ready. Please try again shortly.".to_string(),
+        );
+        return;
+    }
     let Some((id, cancel)) = app.open_side_question(question.clone()) else {
         app.push_message(
             MessageRole::System,
@@ -125,8 +174,13 @@ pub(super) fn start_side_question(
     };
     let engine = engine.clone();
     let tx = tx.clone();
-    tokio::spawn(async move {
-        let event = match engine.run_side_question(&question, cancel).await {
+    let task_cancel = cancel.clone();
+    let task_owner = owner.clone();
+    let handle = tokio::spawn(async move {
+        let event = match engine
+            .run_side_question_for_lifecycle(&question, &task_owner, task_cancel)
+            .await
+        {
             Ok(answer) => AppEvent::SideQuestionCompleted { id, answer },
             Err(error) => AppEvent::SideQuestionFailed {
                 id,
@@ -134,6 +188,11 @@ pub(super) fn start_side_question(
             },
         };
         let _ = tx.send_ordered(event).await;
+    });
+    app.side_question_tasks.push(OwnedSideQuestion {
+        owner,
+        cancel,
+        handle,
     });
 }
 
@@ -213,6 +272,13 @@ pub(super) fn complete_finished_turn(
     tx: &AppEventSender,
     handle: Option<JoinHandle<()>>,
 ) -> HandledAppEvent {
+    if app
+        .active_turn
+        .as_mut()
+        .is_some_and(ActiveCell::settle_unobserved_tools)
+    {
+        app.bump_active_turn_render_revision();
+    }
     app.flush_active_turn();
     app.consolidate_finished_assistant_stream();
     app.set_loading(false);

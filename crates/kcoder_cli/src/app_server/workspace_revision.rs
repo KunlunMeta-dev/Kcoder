@@ -5,7 +5,7 @@ use sha2::{Digest, Sha256};
 use std::{fs::File, time::UNIX_EPOCH};
 
 /// Stable identity survives a rename, unlike change-time revisions.
-pub(super) fn file_identity(file: &File) -> Result<String> {
+pub fn file_identity(file: &File) -> Result<String> {
     #[cfg(unix)]
     {
         use std::os::unix::fs::MetadataExt;
@@ -32,11 +32,11 @@ pub(super) fn file_identity(file: &File) -> Result<String> {
     Ok(format!("{:?}", file.metadata()?.created()?))
 }
 
-pub(super) fn revision(file: &File) -> Result<String> {
+pub fn revision(file: &File) -> Result<String> {
     Ok(snapshot(file)?.1)
 }
 
-pub(super) fn snapshot(file: &File) -> Result<(std::fs::Metadata, String)> {
+pub fn snapshot(file: &File) -> Result<(std::fs::Metadata, String)> {
     let metadata = file.metadata()?;
     #[cfg(unix)]
     let identity = {

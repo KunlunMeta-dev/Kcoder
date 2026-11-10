@@ -1,7 +1,7 @@
-use super::AppServerPermissionPrompt;
 use futures::{Stream, StreamExt};
 use kcoder_app_protocol::{SessionModesResult, ThreadSessionMode, TurnExecutionMode};
 use kcoder_engine::{EngineEvent, QueryEngine};
+use kcoder_permissions::PermissionPrompt;
 use std::{pin::Pin, sync::Arc};
 use tokio_util::sync::CancellationToken;
 
@@ -12,7 +12,7 @@ impl Drop for MoaTurnGuard {
     }
 }
 
-pub(super) fn mode(engine: &QueryEngine) -> ThreadSessionMode {
+pub fn mode(engine: &QueryEngine) -> ThreadSessionMode {
     match engine.state.session_mode() {
         kcoder_state::SessionMode::Default => ThreadSessionMode::Default,
         kcoder_state::SessionMode::Orchestrate => ThreadSessionMode::Orchestrate,
@@ -20,7 +20,7 @@ pub(super) fn mode(engine: &QueryEngine) -> ThreadSessionMode {
     }
 }
 
-pub(super) fn set_mode(engine: &QueryEngine, requested: ThreadSessionMode) -> anyhow::Result<()> {
+pub fn set_mode(engine: &QueryEngine, requested: ThreadSessionMode) -> anyhow::Result<()> {
     match requested {
         ThreadSessionMode::Orchestrate => {
             engine.state.enter_orchestrate_before_first_message()?;
@@ -40,7 +40,7 @@ pub(super) fn set_mode(engine: &QueryEngine, requested: ThreadSessionMode) -> an
     Ok(())
 }
 
-pub(super) fn inspect(engine: &QueryEngine) -> SessionModesResult {
+pub fn inspect(engine: &QueryEngine) -> SessionModesResult {
     let (moa_plan_planners, moa_plan_error) = match engine.moa_plan_preflight() {
         Ok(preflight) => (preflight.planner_labels, None),
         Err(error) => (Vec::new(), Some(error.to_string())),
@@ -55,11 +55,11 @@ pub(super) fn inspect(engine: &QueryEngine) -> SessionModesResult {
     }
 }
 
-pub(super) fn stream(
+pub fn stream(
     engine: QueryEngine,
     model_message: kcoder_types::Message,
     prompt: String,
-    permissions: AppServerPermissionPrompt,
+    permissions: Box<dyn PermissionPrompt>,
     mode: TurnExecutionMode,
     cancel: CancellationToken,
 ) -> Pin<Box<dyn Stream<Item = EngineEvent> + Send>> {
@@ -74,7 +74,7 @@ pub(super) fn stream(
         return Box::pin(async_stream::stream! {
             let _moa_guard = (mode == TurnExecutionMode::Moa).then(|| MoaTurnGuard(engine.clone()));
             if mode == TurnExecutionMode::Moa { engine.enable_moa_for_next_turn(None); }
-            let mut stream = engine.submit_message_content_stream(model_message, prompt, &permissions);
+            let mut stream = engine.submit_message_content_stream_with_prompt(model_message, prompt, permissions.as_ref());
             while let Some(event) = stream.next().await { yield event; }
         });
     }
@@ -100,14 +100,47 @@ pub(super) fn stream(
     })
 }
 
-pub(super) fn continue_failed(
+pub fn stream_async_question_answer(
     engine: QueryEngine,
-    permissions: AppServerPermissionPrompt,
+    claim: kcoder_types::async_user_questions::AsyncQuestionDeliveryClaim,
+    receipt_id: u64,
+    permissions: Box<dyn PermissionPrompt>,
+) -> Pin<Box<dyn Stream<Item = EngineEvent> + Send>> {
+    let Some(steer_session) = engine.begin_turn_steering() else {
+        if let Some(owner) = engine.state.try_inspection_lifecycle_identity() {
+            let _ = engine.state.mark_async_question_delivery_failed(
+                &owner,
+                &claim,
+                "ordinary turn could not establish its steering session before input admission",
+            );
+        }
+        return Box::pin(futures::stream::once(async {
+            EngineEvent::Error(
+                "Async answer delivery could not enter the ordinary turn runtime.".into(),
+            )
+        }));
+    };
+    Box::pin(async_stream::stream! {
+        let mut stream = engine.submit_async_question_answer_stream_with_prompt(
+            claim,
+            receipt_id,
+            permissions.as_ref(),
+            steer_session,
+        );
+        while let Some(event) = stream.next().await {
+            yield event;
+        }
+    })
+}
+
+pub fn continue_failed(
+    engine: QueryEngine,
+    permissions: Box<dyn PermissionPrompt>,
 ) -> Pin<Box<dyn Stream<Item = EngineEvent> + Send>> {
     Box::pin(async_stream::stream! {
         // The user prompt and completed tool results are already in State. Do not
         // run UserPromptSubmit or append the prompt again on an explicit retry.
-        let mut stream = engine.run_turn_stream(&permissions);
+        let mut stream = engine.run_turn_stream_with_prompt(permissions.as_ref());
         while let Some(event) = stream.next().await { yield event; }
     })
 }

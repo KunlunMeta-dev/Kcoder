@@ -7,8 +7,6 @@ export interface RuntimeConfig {
   socketPath: string
   wegentBackendUrl: string
   runtimeMode: RuntimeMode
-  loginMode: 'password' | 'oidc' | 'all'
-  oidcLoginText: string
   cloudDeviceScalingWikiUrl: string
 }
 
@@ -46,10 +44,6 @@ function runtimeString(
   return typeof value === 'string' && value.length > 0 ? value : undefined
 }
 
-function isValidLoginMode(value: string): value is RuntimeConfig['loginMode'] {
-  return value === 'password' || value === 'oidc' || value === 'all'
-}
-
 function isValidRuntimeMode(value: string): value is RuntimeMode {
   return value === 'local-first' || value === 'backend'
 }
@@ -66,20 +60,6 @@ function resolveRuntimeMode(overrides: RuntimeConfigOverrides): RuntimeMode {
   }
 
   return 'local-first'
-}
-
-function resolveLoginMode(overrides: RuntimeConfigOverrides): RuntimeConfig['loginMode'] {
-  const runtimeValue = runtimeString(overrides, 'loginMode')
-  if (runtimeValue && isValidLoginMode(runtimeValue)) {
-    return runtimeValue
-  }
-
-  const envValue = import.meta.env.VITE_LOGIN_MODE
-  if (envValue && isValidLoginMode(envValue)) {
-    return envValue
-  }
-
-  return 'all'
 }
 
 function normalizeBasePath(value: string | undefined): string {
@@ -139,11 +119,29 @@ export function getConfiguredSocketBaseUrl(): string {
 
 export function getRuntimeConfig(): RuntimeConfig {
   const overrides = runtimeOverrides()
+  const gatewayPage = Boolean(
+    globalThis.document?.querySelector<HTMLMetaElement>('meta[name="kcoder-rpc-token"]')?.content
+  )
+  const gatewayPrefix = gatewayPage
+    ? document.querySelector<HTMLMetaElement>('meta[name="kcoder-app-base-path"]')?.content
+    : undefined
   const appBasePath = normalizeBasePath(
-    runtimeString(overrides, 'appBasePath') ||
+    gatewayPrefix ||
+      runtimeString(overrides, 'appBasePath') ||
       import.meta.env.VITE_APP_BASE_PATH ||
       import.meta.env.BASE_URL
   )
+  if (gatewayPage) {
+    return {
+      appBasePath,
+      apiBaseUrl: joinAppPath(appBasePath, '/api'),
+      socketBaseUrl: window.location.origin,
+      socketPath: joinAppPath(appBasePath, '/socket.io'),
+      wegentBackendUrl: '',
+      runtimeMode: 'local-first',
+      cloudDeviceScalingWikiUrl: '',
+    }
+  }
   const configuredBackendUrl =
     runtimeString(overrides, 'wegentBackendUrl') ||
     import.meta.env.VITE_WEGENT_BACKEND_URL?.trim() ||
@@ -163,9 +161,6 @@ export function getRuntimeConfig(): RuntimeConfig {
     socketPath,
     wegentBackendUrl,
     runtimeMode: resolveRuntimeMode(overrides),
-    loginMode: resolveLoginMode(overrides),
-    oidcLoginText:
-      runtimeString(overrides, 'oidcLoginText') || import.meta.env.VITE_OIDC_LOGIN_TEXT || '',
     cloudDeviceScalingWikiUrl:
       runtimeString(overrides, 'cloudDeviceScalingWikiUrl') ||
       import.meta.env.VITE_CLOUD_DEVICE_SCALING_WIKI_URL ||

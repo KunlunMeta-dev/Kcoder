@@ -28,7 +28,7 @@ impl ReplApp {
     }
 
     pub(super) fn time_until_next_viewport_draw(&self, now: Instant) -> Option<Duration> {
-        if self.transcript_viewport.fast_path_active() {
+        if self.transcript_viewport.fast_path_active() || self.transcript_selection_drag_active {
             self.frame_rate_limiter
                 .time_until_next_draw_with_interval(now, INTERACTION_MIN_FRAME_INTERVAL)
         } else {
@@ -182,7 +182,14 @@ impl ReplApp {
     }
 
     pub(super) fn needs_scheduled_frame_tick(&self) -> bool {
-        self.copy_needs_tick()
+        self.input_shutdown_pending
+            || self.input_preparation.has_deferred()
+            || self
+                .input_admission
+                .as_ref()
+                .is_some_and(|admission| admission.observer.is_some())
+            || self.input_start_retry_at.is_some()
+            || self.copy_needs_tick()
             || self.navigation_needs_tick()
             || self.spinner.is_running()
             || self.is_loading
@@ -201,6 +208,9 @@ impl ReplApp {
     }
 
     pub(super) fn next_frame_tick_delay(&self) -> Duration {
+        if self.input_shutdown_pending {
+            return Duration::from_millis(80);
+        }
         if self.copy_needs_tick() {
             return Duration::from_millis(60);
         }
@@ -219,6 +229,20 @@ impl ReplApp {
             (false, true) => Duration::from_millis(COMMIT_TICK_INTERVAL_MS),
             (false, false) => Duration::ZERO,
         };
+        if self.input_preparation.has_deferred()
+            || self
+                .input_admission
+                .as_ref()
+                .is_some_and(|admission| admission.observer.is_some())
+            || self.input_start_retry_at.is_some()
+        {
+            let retry_delay = Duration::from_millis(80);
+            delay = if delay.is_zero() {
+                retry_delay
+            } else {
+                delay.min(retry_delay)
+            };
+        }
         if needs_presentation {
             let presentation_delay = Duration::from_millis(STREAM_TEXT_PRESENTATION_INTERVAL_MS);
             delay = if delay.is_zero() {
@@ -272,6 +296,7 @@ impl ReplApp {
     }
 
     pub(super) fn clear_streaming_presentation_state(&mut self) {
+        self.pending_web_source_slots.clear();
         self.streaming_text_pending.clear();
         self.streaming_message_done_pending = false;
         self.deferred_turn_finish_pending = false;
@@ -358,6 +383,7 @@ impl ReplApp {
     ///
     /// Engine-side conversation state is cleared by the caller.
     pub(crate) fn reset_transcript_state_after_clear(&mut self) {
+        self.cancel_preparing_inputs();
         self.path_previews.clear();
         self.messages.clear();
         self.welcome_component_mounted = false;
@@ -622,6 +648,7 @@ impl ReplApp {
             transient,
             self.background_status_label(),
             self.goal_status_label(),
+            self.work_observation_label(),
             self.raw_output_status_label().to_string(),
             self.input_history_status_label(),
         ]
@@ -629,6 +656,13 @@ impl ReplApp {
         .filter(|part| !part.is_empty())
         .collect::<Vec<_>>()
         .join(" · ")
+    }
+
+    /// Target-side continuous work segment. It reports the stored phase from the
+    /// last observation only and stays empty when no work exists for this
+    /// workspace and session, so the footer never fabricates a phase.
+    pub(super) fn work_observation_label(&self) -> String {
+        self.work_observation.status_segment().unwrap_or_default()
     }
 
     pub(super) fn transient_status_label(&self) -> String {
@@ -658,9 +692,57 @@ impl ReplApp {
     }
 
     pub(crate) fn clear_user_message_queue(&mut self) -> usize {
-        let cleared = self.queued_user_message_count();
-        self.user_message_queue.clear();
-        self.rejected_turn_steers.clear();
-        cleared
+        let before = self.queued_user_message_count();
+        let active_admission = self.input_admission.as_ref().filter(|admission| {
+            self.input_session_owner
+                .as_ref()
+                .is_none_or(|owner| admission.owner.same_lifecycle(owner))
+        });
+        let accepted = active_admission.is_some() || self.has_current_input_uncertainty();
+        let expected_owner = active_admission
+            .map(|admission| &admission.owner)
+            .or(self.input_uncertainty_owner.as_ref());
+        let expected_id = active_admission.map(|admission| admission.id);
+        let original = if accepted {
+            self.rejected_turn_steers
+                .iter()
+                .chain(self.user_message_queue.iter())
+                .find(|queued| {
+                    let owned = queued
+                        .owner
+                        .as_ref()
+                        .zip(expected_owner)
+                        .is_some_and(|(actual, expected)| actual.same_lifecycle(expected));
+                    owned
+                        && match queued.action {
+                            QueuedInputAction::Admitting(id) | QueuedInputAction::Admitted(id) => {
+                                Some(id) == expected_id
+                            }
+                            QueuedInputAction::Uncertain => true,
+                            _ => false,
+                        }
+                })
+                .map(|queued| queued.display_message.clone())
+        } else {
+            None
+        };
+        self.cancel_preparing_inputs();
+        if accepted && original.is_none() {
+            // Unattributed original input cannot be safely removed from view.
+            self.user_message_queue
+                .retain(|queued| matches!(queued.action, QueuedInputAction::Uncertain));
+            self.rejected_turn_steers
+                .retain(|queued| matches!(queued.action, QueuedInputAction::Uncertain));
+        } else {
+            self.user_message_queue.clear();
+            self.rejected_turn_steers.clear();
+        }
+        if let Some(original) = original {
+            self.push_scheduled_user_message(&original);
+        }
+        if accepted {
+            self.show_cancelled_input_notice();
+        }
+        before.saturating_sub(self.queued_user_message_count())
     }
 }

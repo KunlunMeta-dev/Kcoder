@@ -2,6 +2,7 @@ import { describe, expect, test, vi } from 'vitest'
 import { KCoderGatewayRuntime as Runtime } from './gatewayRuntime'
 import { KCoderGatewayRuntime as InstalledRuntime } from './installGatewayRuntime'
 import { FakeGatewayClient, localGatewayServer } from './gatewayRuntime.test-support'
+import { notifyAccountContextChange } from './accountContextEvents'
 
 type Page = {
   threads: Array<Record<string, unknown>>
@@ -18,7 +19,8 @@ type WorkspaceResult = {
     threadsComplete?: boolean
     threadListIssueCount?: number
     threadListSyncFailed?: boolean
-    tasks: Array<{ taskId: string }>
+    threadListSyncFailed?: boolean
+    tasks: Array<{ taskId: string; goalStatus?: string | null; goalStatusObservation?: unknown }>
   }>
 }
 type ProgressiveResult = WorkspaceResult & { scanId: string; revision: number; complete: boolean }
@@ -48,7 +50,9 @@ function fixture(
   list: (serverId: string, path: string, cursor: unknown) => Promise<Page>,
   registry?: (serverId: string) => Promise<void>,
   targetIds = servers,
-  completenessCapability = false
+  completenessCapability = false,
+  goalStatusCapability = false,
+  goalBatch?: (ids: string[]) => Promise<unknown>
 ) {
   const clients: FakeGatewayClient[] = []
   const directory = targetIds.map(id => localGatewayServer({ id }))
@@ -64,15 +68,29 @@ function fixture(
       client.threadResumeSupported = true
       const supports = client.supportsExperimental.bind(client)
       client.supportsExperimental = capability =>
-        capability === 'threadListCompleteness' ? completenessCapability : supports(capability)
+        capability === 'threadListCompleteness' ? completenessCapability
+          : capability === 'threadGoalStatusBatchV1' ? goalStatusCapability : supports(capability)
       client.workspaceItems = paths.slice(1).map(workspacePath => ({ workspacePath }))
       const request = client.request.bind(client)
+      const goalRows = new Map<string, Record<string, unknown>>()
       client.request = async <T>(method: string, params: Record<string, unknown> = {}) => {
         if (method === 'runtime.workspaces.list') await registry?.(serverId)
         if (method === 'thread/list') {
           starts.push({ serverId, path, cursor: params.cursor, allowPartial: params.allowPartial })
-          return (await list(serverId, path, params.cursor)) as T
+          const page = await list(serverId, path, params.cursor)
+          for (const item of page.threads) {
+            if (typeof item.id === 'string' && item.goalStatusObservation &&
+                typeof item.goalStatusObservation === 'object')
+              goalRows.set(item.id, item.goalStatusObservation as Record<string, unknown>)
+          }
+          return page as T
         }
+        if (method === 'thread/goal/status/readMany' && goalBatch)
+          return (await goalBatch(params.threadIds as string[])) as T
+        if (method === 'thread/goal/status/readMany')
+          return { observations: (params.threadIds as string[]).map(threadId => ({
+            threadId, ...(goalRows.get(threadId) ?? { availability: 'unavailable' }),
+          })) } as T
         return request<T>(method, params)
       }
       clients.push(client)
@@ -85,6 +103,112 @@ function fixture(
 
 // Transport gates exercise real runtime scheduling and identity, not model behavior.
 describe.each([Runtime, InstalledRuntime])('bounded runtime workspace hydration', RuntimeClass => {
+  test('cold task readers join the sidebar scan instead of queueing duplicate workspace reads', async () => {
+    const gate = deferred()
+    const { runtime, starts } = fixture(RuntimeClass, async (_server, path) => {
+      await gate.promise
+      return { threads: [thread(path, 'cold-task')], nextCursor: null }
+    }, undefined, ['local'])
+    const read = vi.spyOn(runtime.taskListScans, 'read')
+    const listing = runtime.request('runtime.tasks.list', {})
+    await vi.waitFor(() => expect(starts.length).toBeGreaterThan(0))
+    const readers = Array.from({ length: 6 }, () => runtime.hydrateAllPersistedTasks())
+    try {
+      // Let all cold readers join while the original scan is still in progress.
+      await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(7))
+      gate.resolve()
+      await Promise.all([listing, ...readers])
+      expect(starts).toHaveLength(3)
+      // An explicit later read still goes to the target; this is not a result cache.
+      await runtime.hydrateAllPersistedTasks()
+      expect(starts).toHaveLength(6)
+    } finally {
+      gate.resolve()
+      await Promise.allSettled([listing, ...readers])
+      await dispose(runtime)
+    }
+  })
+
+  test('preserves negotiated Goal observations and treats malformed data as unavailable', async () => {
+    const { runtime } = fixture(RuntimeClass, async (_server, path) => ({
+      threads: [
+        { ...thread(path, 'active'), goalStatusObservation: { availability: 'available', status: 'active' } },
+        { ...thread(path, 'absent'), goalStatusObservation: { availability: 'available', status: null } },
+        { ...thread(path, 'unavailable'), goalStatusObservation: { availability: 'unavailable' } },
+        { ...thread(path, 'future'), goalStatusObservation: { availability: 'available', status: 'future' } },
+      ],
+      nextCursor: null,
+    }), undefined, ['local'], false, true)
+    try {
+      const result = (await runtime.request('runtime.tasks.list', {})) as WorkspaceResult
+      const tasks = result.workspaces[0].tasks
+      expect(tasks.find(task => task.taskId.endsWith('-active'))).toMatchObject({
+        goalStatus: 'active', goalStatusObservation: { availability: 'available', status: 'active' },
+      })
+      expect(tasks.find(task => task.taskId.endsWith('-absent'))).toMatchObject({
+        goalStatus: null, goalStatusObservation: { availability: 'available', status: null },
+      })
+      for (const suffix of ['-unavailable', '-future'])
+        expect(tasks.find(task => task.taskId.endsWith(suffix))).toMatchObject({
+          goalStatusObservation: { availability: 'unavailable' },
+        })
+    } finally {
+      await dispose(runtime)
+    }
+  })
+
+  test('does not use Goal observations from a target that did not negotiate them', async () => {
+    const { runtime } = fixture(RuntimeClass, async (_server, path) => ({
+      threads: [{ ...thread(path, 'legacy'), goalStatusObservation: { availability: 'available', status: 'active' } }],
+      nextCursor: null,
+    }), undefined, ['local'])
+    try {
+      const result = (await runtime.request('runtime.tasks.list', {})) as WorkspaceResult
+      expect(result.workspaces[0].tasks[0]).not.toHaveProperty('goalStatusObservation')
+      expect(result.workspaces[0].tasks[0]).not.toHaveProperty('goalStatus')
+    } finally {
+      await dispose(runtime)
+    }
+  })
+
+  test('keeps tasks visible with unknown Goal status when the batch read fails', async () => {
+    const { runtime } = fixture(RuntimeClass, async (_server, path) => ({
+      threads: [thread(path, 'unreachable')], nextCursor: null,
+    }), undefined, ['local'], false, true, async () => { throw new Error('read unavailable') })
+    try {
+      const result = (await runtime.request('runtime.tasks.list', {})) as WorkspaceResult
+      expect(result.workspaces[0].tasks).toHaveLength(1)
+      expect(result.workspaces[0].tasks[0].goalStatusObservation).toEqual({ availability: 'unavailable' })
+      expect(result.workspaces[0].threadListSyncFailed).not.toBe(true)
+    } finally {
+      await dispose(runtime)
+    }
+  })
+
+  test('does not publish an old account\'s Goal result after an account change', async () => {
+    const gate = deferred()
+    const entered = deferred()
+    const { runtime } = fixture(RuntimeClass, async (_server, path) => ({
+      threads: [thread(path, 'account')], nextCursor: null,
+    }), undefined, ['local'], false, true, async ids => {
+      entered.resolve()
+      await gate.promise
+      return { observations: ids.map(threadId => ({ threadId, availability: 'available', status: 'complete' })) }
+    })
+    try {
+      const listing = runtime.request('runtime.tasks.list', {}).catch(() => null)
+      await entered.promise
+      notifyAccountContextChange('local')
+      gate.resolve()
+      const result = await listing as WorkspaceResult | null
+      for (const workspace of result?.workspaces ?? [])
+        for (const task of workspace.tasks)
+          expect(task.goalStatus).not.toBe('complete')
+    } finally {
+      gate.resolve()
+      await dispose(runtime)
+    }
+  })
   test.each(['complete with issues', 'changed completeness', 'changed issue count'])(
     'rejects inconsistent snapshot metadata: %s',
     async invalid => {

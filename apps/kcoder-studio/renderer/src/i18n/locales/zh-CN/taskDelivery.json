@@ -1,0 +1,65 @@
+{
+  "title": "PR 与 CI 交付",
+  "unsupported": "当前目标不支持交付准备，请升级目标端后使用。",
+  "originalUnavailable": "原任务不可用。请重新打开原任务，再准备交付或添加 CI 反馈。",
+  "scope": "根据实际目标仓库和提交准备可编辑 PR 草稿。当前支持 GitHub.com，目标端需安装 git、gh 并完成认证。发布请求只加入原任务草稿，经你发送后沿正常工具权限执行。",
+  "base": "目标分支",
+  "prepare": "准备 PR 草稿",
+  "refresh": "核对原交付",
+  "loading": "正在读取交付依据…",
+  "failed": "无法读取交付。请核对仓库、目标分支和目标端前提；已编辑内容会保留。",
+  "requestUnknown": "请求回执未知。请核对原交付，不要重新发送发布操作。",
+  "queued": "发布请求已加入原任务草稿，请检查并发送后继续。",
+  "sourceChanged": "来源已变化。当前结果属于记录中的提交；请重新准备当前来源，旧提交的 CI 成功不适用于新提交。",
+  "dirty": "当前提交不包含尚未提交的修改。请先提交修改，再重新准备发布。",
+  "noPr": "尚未观察到与此提交匹配的 PR。",
+  "prTitle": "PR 标题",
+  "prBody": "PR 正文",
+  "queuePublication": "将发布请求加入原任务草稿",
+  "requestPrepared": "已有稳定的发布意图。其回执不证明已推送或已创建 PR；请核对原交付，本面板不会重新发送发布请求。",
+  "requestNotMatched": "已观察到 PR，但尚未确认原请求身份",
+  "queueFailure": "将此失败加入原任务草稿",
+  "checksTruncated": "只读取了有界检查列表；未读取的检查不能视为通过。",
+  "pages": "CI 检查分页",
+  "previous": "上一页",
+  "next": "下一页",
+  "push": {
+    "unknown": "推送状态未知",
+    "notPushed": "记录提交尚未推送到此分支",
+    "pushed": "记录提交已推送"
+  },
+  "ci": {
+    "unknown": "CI 未知",
+    "none": "未观察到 CI 检查",
+    "waiting": "CI 等待中",
+    "failed": "CI 失败",
+    "passed": "已观察的检查通过",
+    "skipped": "检查已跳过",
+    "neutral": "检查结果为中立"
+  },
+  "pr": {
+    "OPEN": "开放中",
+    "CLOSED": "已关闭",
+    "MERGED": "已合并",
+    "UNKNOWN": "PR 状态未知"
+  },
+  "review": {
+    "APPROVED": "审阅已批准",
+    "CHANGES_REQUESTED": "需修改",
+    "REVIEW_REQUIRED": "等待审阅",
+    "UNKNOWN": "审阅状态未知"
+  },
+  "limitations": {
+    "notRefreshed": "尚未核对远端状态。",
+    "githubUnavailable": "部分 GitHub 状态未知。请核对目标端 gh 安装、认证和仓库访问。",
+    "checksTruncated": "CI 读取范围不完整。"
+  },
+  "recipient": "发布与修正任务：{{taskId}}（{{deviceId}}）。",
+  "references": "来源与请求引用",
+  "deliveryIdentity": "交付身份",
+  "requestIdentity": "原请求身份",
+  "sourceThread": "来源会话",
+  "currentStatusUnknown": "当前 PR 与 CI 状态未知。保留上次观察的来源与草稿；核对所选方案后再刷新。",
+  "recoverRequest": "将已核对的原发布请求加入草稿",
+  "recoverUncertain": "上次追加草稿的结果未知。请先检查原任务草稿，再决定是否追加；不会自动重试。"
+}

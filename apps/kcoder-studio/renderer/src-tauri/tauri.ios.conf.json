@@ -1,4 +1,0 @@
-{
-  "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "identifier": "dev.kcoder.studio.dev"
-}

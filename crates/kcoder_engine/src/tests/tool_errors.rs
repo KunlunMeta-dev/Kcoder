@@ -544,7 +544,7 @@ fn unknown_tool_error_does_not_advertise_the_unfiltered_backing_registry() {
 #[test]
 fn draft_identity_errors_do_not_advertise_array_repairs() {
     let root = tempfile::tempdir().unwrap();
-    let engine = TestEngineBuilder::new(root.path()).build();
+    let engine = TestEngineBuilder::new(root.path()).build_with_profile_directory();
     let error = ToolError::InvalidInput(
         "This design conversation is bound to draft parent; supplied id other does not match"
             .into(),

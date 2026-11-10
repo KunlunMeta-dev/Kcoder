@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "adapterRevision": "codex-selected-layers/v1",
+  "fixtureKind": "synthetic-selected-static-hierarchy",
+  "reviewedOn": "2026-10-17",
+  "sourceVersionComparisonBaseline": "Codex CLI 0.163.0 structural comparison only; vendor binary not executed",
+  "nativeVendorAcceptance": false,
+  "officialReferences": [
+    "https://learn.chatgpt.com/docs/config-file/config-basic",
+    "https://learn.chatgpt.com/docs/config-file/config-advanced",
+    "https://learn.chatgpt.com/docs/config-file/config-reference"
+  ],
+  "semantics": [
+    "explicit user and optional selected profile precede trusted project-root-to-cwd slots",
+    "project provider/auth/profile fields do not become user authority",
+    "present/absent slots and routing markers remain bound",
+    "existing environment credential selector retains declared user/profile source"
+  ],
+  "unsupported": [
+    "MCP namespace and relative-path conversion in this composite view",
+    "unknown execution/list/managed semantics",
+    "custom markers outside .git/.hg/.sl",
+    "unconfirmed project roots",
+    "non-ASCII Windows trust-table paths pending precise native matching"
+  ],
+  "fixtures": [
+    {
+      "path": "fixtures/codex-layers/cwd/config.toml",
+      "sha256": "436950c74ae2154b86fd199db8b8781dc2c5f50440b41fec8f691b5f37cf42cf"
+    },
+    {
+      "path": "fixtures/codex-layers/repo-root/config.toml",
+      "sha256": "6a796c3a2cb2dff4f0a668d8fde79c99c9e42b1225d05734d1fd340b7cdd24d3"
+    },
+    {
+      "path": "fixtures/codex-layers/user/config.toml",
+      "sha256": "46f3dfc820b86394b61bdb9a80b82450a29ee69bb5c5dfbd060b6d0041b56e28"
+    },
+    {
+      "path": "fixtures/codex-layers/user/review.config.toml",
+      "sha256": "0123111a73b276b2e71ef30a37b242bbd9be17a5f30267ca05b93acf6d84157b"
+    }
+  ]
+}

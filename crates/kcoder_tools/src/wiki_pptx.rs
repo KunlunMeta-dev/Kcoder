@@ -3,16 +3,16 @@ use super::{
     MAX_EXTRACTED_BYTES, docx, error,
     xlsx::{attr, part},
 };
-use crate::ToolError;
+use crate::DocumentParseError;
 use quick_xml::{Reader, events::Event};
 use std::{collections::HashMap, io::Cursor};
 
 #[cfg(test)]
-pub(super) fn extract(bytes: &[u8]) -> Result<String, ToolError> {
+pub(super) fn extract(bytes: &[u8]) -> Result<String, DocumentParseError> {
     Ok(extract_with_units(bytes)?.0)
 }
 
-pub(super) fn extract_with_units(bytes: &[u8]) -> Result<(String, usize, usize), ToolError> {
+pub fn extract_with_units(bytes: &[u8]) -> Result<(String, usize, usize), DocumentParseError> {
     let mut zip = zip::ZipArchive::new(Cursor::new(bytes))
         .map_err(|_| error("Invalid or encrypted PowerPoint; save as unencrypted .pptx"))?;
     if zip.len() > 4096 {

@@ -23,6 +23,10 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, RwLock};
 use thiserror::Error;
 use tokio_util::sync::CancellationToken;
+mod native_invocation;
+mod native_transport;
+pub use native_transport::NativeTransportAuthorization;
+mod subagent_admission;
 
 /// Error returned by an agent runner.
 #[derive(Debug, Error)]
@@ -124,6 +128,8 @@ pub struct AgentRunOptions {
     pub delivery_max_attempts: u32,
     /// Run-owned observer called after model and role registry resolution.
     pub configuration_observer: Option<Arc<dyn AgentConfigurationObserver>>,
+    /// Native original-Workflow resume witness; never accepted from tool JSON.
+    pub workflow_recovery: Option<Arc<crate::workflow::WorkflowAgentRecovery>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -342,11 +348,13 @@ impl AgentRunResult {
                                         signal,
                                         cwd,
                                     } => Some((*exit_code, *signal, cwd.clone())),
-                                    ToolExecutionMetadata::Artifact { .. }
+                                    ToolExecutionMetadata::FileRead(_)
+                                    | ToolExecutionMetadata::McpApp(_)
+                                    | ToolExecutionMetadata::Widget(_)
+                                    | ToolExecutionMetadata::Artifact { .. }
                                     | ToolExecutionMetadata::ArtifactValidation(_)
-                                    | ToolExecutionMetadata::BackgroundResultDelivery { .. } => {
-                                        None
-                                    }
+                                    | ToolExecutionMetadata::BackgroundResultDelivery { .. }
+                                    | ToolExecutionMetadata::WebSources(_) => None,
                                 })
                         });
                         let process_exit_code =
@@ -364,9 +372,13 @@ impl AgentRunResult {
                                         sha256: sha256.clone(),
                                     })
                                 }
-                                ToolExecutionMetadata::Process { .. }
+                                ToolExecutionMetadata::FileRead(_)
+                                | ToolExecutionMetadata::McpApp(_)
+                                | ToolExecutionMetadata::Widget(_)
+                                | ToolExecutionMetadata::Process { .. }
                                 | ToolExecutionMetadata::ArtifactValidation(_)
-                                | ToolExecutionMetadata::BackgroundResultDelivery { .. } => None,
+                                | ToolExecutionMetadata::BackgroundResultDelivery { .. }
+                                | ToolExecutionMetadata::WebSources(_) => None,
                             })
                             .collect();
                         let raw_exit_code = trusted.is_some()
@@ -530,6 +542,7 @@ impl AgentRunOptions {
             delivery_lease_timeout_seconds: 120,
             delivery_max_attempts: 8,
             configuration_observer: None,
+            workflow_recovery: None,
         }
     }
 
@@ -634,6 +647,14 @@ pub trait AgentConfigurationObserver: fmt::Debug + Send + Sync {
 /// Trait for running a sub-agent from within a tool.
 #[async_trait]
 pub trait AgentRunner: Send + Sync {
+    /// Observe the original managed run before its worker can start. The native
+    /// host verifies its captured parent; this callback grants no tool authority.
+    fn observe_subagent_spawned(
+        &self,
+        _run: Option<&kcoder_types::BackgroundRunKey>,
+    ) -> Result<(), AgentError> {
+        Ok(())
+    }
     /// Safe model and registered-tool facts from the captured execution host.
     /// Older hosts return no facts rather than guessing from mutable Settings.
     fn workflow_model_configuration(
@@ -970,6 +991,20 @@ pub trait BackgroundJobSpawner: Send + Sync {
         self.respawn_subagent(id, description, work, max_concurrent)
     }
 
+    /// Unsupported managers must not silently start a different worker.
+    fn respawn_original_subagent(
+        &self,
+        expected: &kcoder_types::BackgroundRunKey,
+        _description: String,
+        _work: Pin<Box<dyn Future<Output = ToolOutput> + Send>>,
+        _cancel: Arc<dyn Fn() + Send + Sync>,
+        _max_concurrent: Option<usize>,
+    ) -> Result<String, SpawnError> {
+        Err(SpawnError::AlreadyExists {
+            id: expected.agent_id.clone(),
+        })
+    }
+
     /// Subscribe to background job lifecycle events.
     fn subscribe(&self) -> tokio::sync::broadcast::Receiver<background::BackgroundJobEvent>;
 
@@ -1007,6 +1042,11 @@ pub trait BackgroundJobSpawner: Send + Sync {
     /// Complete inline delivery. Implementations may evict ephemeral
     /// foreground tool records while retaining durable agent records.
     fn finish_foreground_delivery(&self, _id: &str) {}
+
+    /// Publish bounded lifecycle metadata, never raw tool output or reasoning.
+    fn report_tool_progress(&self, _id: &str, _message: &str) -> bool {
+        false
+    }
 
     /// Return whether this process still owns a live future for the job.
     fn is_running(&self, _id: &str) -> bool {
@@ -1229,6 +1269,32 @@ type RuntimeSettingsObserver = Arc<dyn Fn(&kcoder_config::Settings) + Send + Syn
 
 #[derive(Clone)]
 pub struct ToolContext {
+    selected_expert_skill_loads: Vec<crate::SelectedExpertSkillLoad>,
+    pub(crate) web_settings_reader: Option<crate::WebSettingsReader>,
+    #[cfg(feature = "web-network-test-fixture")]
+    pub(crate) web_network_test_dns: Option<crate::web_network::test_fixture::WebNetworkTestDns>,
+    pub(crate) native_web_source_identity: Option<kcoder_types::TurnAttemptIdentity>,
+    native_invocation: Option<Arc<native_invocation::NativeToolInvocation>>,
+    native_transport: Option<Arc<dyn NativeTransportAuthorization>>,
+    pub(crate) native_wiki_read_access: Option<Arc<dyn crate::wiki::NativeWikiReadAccess>>,
+    /// Host-only narrowing of a member command; never permission or tool input.
+    pub(crate) subagent_run_constraint: Option<kcoder_types::BackgroundRunKey>,
+    pub(crate) subagent_continuation: bool,
+    pub(crate) owned_command_program: Option<PathBuf>,
+    /// Native-only registration before a pinned workflow dispatches any work.
+    pub(crate) workflow_native_launch_observer:
+        Option<Arc<dyn crate::workflow::WorkflowNativeLaunchObserver>>,
+    /// Exact native graph/inputs, never populated from model or RPC JSON.
+    pub(crate) workflow_native_definition: Option<Arc<crate::workflow::WorkflowNativeDefinition>>,
+    pub(crate) tool_search_backend: Option<Arc<dyn crate::tool_search::ToolSearchBackend>>,
+    pub(crate) bundled_search_backend: Option<Arc<dyn crate::web_search::BundledSearchBackend>>,
+    pub(crate) web_search_runtime: Option<Arc<crate::web_search::WebSearchRuntime>>,
+    pub(crate) web_dispatch_check:
+        Option<Arc<dyn Fn() -> Result<(), crate::ToolError> + Send + Sync>>,
+    pub(crate) web_network_authority: Option<crate::web_network::WebNetworkAuthority>,
+    pub(crate) web_resources: Arc<crate::web_resources::WebResources>,
+    /// Set only by the owning host after presentation negotiation for this turn.
+    inline_widgets_authorized: bool,
     /// Trusted host-injected desktop binding; never populated from tool JSON.
     desktop_owner: Option<kcoder_types::computer_use::DesktopOwner>,
     desktop_authorization_active: Option<Arc<std::sync::atomic::AtomicBool>>,
@@ -1445,6 +1511,20 @@ impl ToolContext {
 
     pub fn new(state: AppState) -> Self {
         Self {
+            subagent_run_constraint: None,
+            subagent_continuation: false,
+            owned_command_program: None,
+            workflow_native_launch_observer: None,
+            workflow_native_definition: None,
+            tool_search_backend: None,
+            bundled_search_backend: None,
+            web_search_runtime: None,
+            web_dispatch_check: None,
+            web_network_authority: None,
+            #[cfg(feature = "web-network-test-fixture")]
+            web_network_test_dns: None,
+            web_resources: Arc::new(crate::web_resources::WebResources::new(&state)),
+            inline_widgets_authorized: false,
             desktop_owner: None,
             desktop_authorization_active: None,
             session_inspection_store: Arc::default(),
@@ -1452,6 +1532,7 @@ impl ToolContext {
             state,
             file_edit_surface: kcoder_config::FileEditSurface::default(),
             runtime_settings: None,
+            web_settings_reader: None,
             settings_persistence_path: None,
             settings_persistence_order: None,
             runtime_settings_observer: None,
@@ -1463,6 +1544,7 @@ impl ToolContext {
             blocked_skill_names: Vec::new(),
             external_skill_dirs: Vec::new(),
             trust_external_skills: false,
+            selected_expert_skill_loads: Vec::new(),
             skill_guard_policy: SkillGuardPolicy::default(),
             auto_lessons_learned: false,
             record_project_skill_telemetry: true,
@@ -1497,8 +1579,29 @@ impl ToolContext {
             shell_environment_snapshot: None,
             cron_scheduler: None,
             tool_call_id: None,
+            native_web_source_identity: None,
+            native_invocation: None,
+            native_transport: None,
+            native_wiki_read_access: None,
             skill_mutation_actor: None,
         }
+    }
+
+    /// Host-only presentation identity for one actual turn. This grants no execution authority.
+    pub fn with_native_web_source_identity(
+        mut self,
+        identity: Option<kcoder_types::TurnAttemptIdentity>,
+    ) -> Self {
+        self.native_web_source_identity = identity.filter(|identity| {
+            identity.validate().is_ok() && identity.thread_id == self.state.session_id()
+        });
+        self
+    }
+
+    /// Host-owned command lifecycle policy, never deserialized from tool input.
+    pub fn with_owned_command_program(mut self, program: Option<PathBuf>) -> Self {
+        self.owned_command_program = program;
+        self
     }
 
     pub fn view(&self) -> ToolContextView<'_> {
@@ -1643,6 +1746,27 @@ impl ToolContext {
         self
     }
 
+    pub fn with_selected_expert_skill_loads(
+        mut self,
+        entries: Vec<crate::SelectedExpertSkillLoad>,
+    ) -> Self {
+        self.selected_expert_skill_loads = entries;
+        self
+    }
+
+    pub(crate) fn selected_expert_skill_load_approved(
+        &self,
+        name: &str,
+        source: &Path,
+    ) -> Result<bool, crate::ToolError> {
+        for entry in &self.selected_expert_skill_loads {
+            if entry.approves(name, source)? {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+
     pub fn with_skill_guard_policy(mut self, policy: SkillGuardPolicy) -> Self {
         self.skill_guard_policy = policy;
         self
@@ -1703,6 +1827,33 @@ impl ToolContext {
         self
     }
 
+    pub fn with_subagent_run_constraint(mut self, run: kcoder_types::BackgroundRunKey) -> Self {
+        self.subagent_run_constraint = Some(run);
+        self
+    }
+
+    pub fn with_subagent_continuation(mut self, run: kcoder_types::BackgroundRunKey) -> Self {
+        self.subagent_run_constraint = Some(run);
+        self.subagent_continuation = true;
+        self
+    }
+
+    pub fn with_workflow_native_launch_observer(
+        mut self,
+        observer: Arc<dyn crate::workflow::WorkflowNativeLaunchObserver>,
+    ) -> Self {
+        self.workflow_native_launch_observer = Some(observer);
+        self
+    }
+
+    pub fn with_workflow_native_definition(
+        mut self,
+        definition: Arc<crate::workflow::WorkflowNativeDefinition>,
+    ) -> Self {
+        self.workflow_native_definition = Some(definition);
+        self
+    }
+
     pub fn with_agent_runtime_identity(
         mut self,
         provider: impl Into<String>,
@@ -1715,6 +1866,23 @@ impl ToolContext {
 
     pub fn with_background_job_manager(mut self, manager: Arc<dyn BackgroundJobSpawner>) -> Self {
         self.background_job_manager = Some(manager);
+        self
+    }
+
+    pub fn inline_widgets_authorized(&self) -> bool {
+        self.inline_widgets_authorized
+    }
+
+    pub fn with_tool_search_backend(
+        mut self,
+        backend: Option<Arc<dyn crate::tool_search::ToolSearchBackend>>,
+    ) -> Self {
+        self.tool_search_backend = backend;
+        self
+    }
+
+    pub fn with_inline_widgets_authorized(mut self, enabled: bool) -> Self {
+        self.inline_widgets_authorized = enabled;
         self
     }
 
@@ -2021,13 +2189,11 @@ impl ToolContext {
             .background_job_manager
             .as_ref()
             .ok_or_else(|| ToolError::Execution("background job manager not available".into()))?;
-        manager
-            .spawn_subagent(
-                description.into(),
-                Box::pin(work),
-                self.max_concurrent_subagents,
-            )
-            .map_err(spawn_error_to_tool_error)
+        self.with_admitted_subagent(work, |work| {
+            manager
+                .spawn_subagent(description.into(), work, self.max_concurrent_subagents)
+                .map_err(spawn_error_to_tool_error)
+        })
     }
 
     /// Spawn a sub-agent background job using a caller-provided public ID.
@@ -2044,14 +2210,16 @@ impl ToolContext {
             .background_job_manager
             .as_ref()
             .ok_or_else(|| ToolError::Execution("background job manager not available".into()))?;
-        manager
-            .spawn_subagent_with_id(
-                id.into(),
-                description.into(),
-                Box::pin(work),
-                self.max_concurrent_subagents,
-            )
-            .map_err(spawn_error_to_tool_error)
+        self.with_admitted_subagent(work, |work| {
+            manager
+                .spawn_subagent_with_id(
+                    id.into(),
+                    description.into(),
+                    work,
+                    self.max_concurrent_subagents,
+                )
+                .map_err(spawn_error_to_tool_error)
+        })
     }
 
     pub fn spawn_cancellable_subagent_background_with_id(
@@ -2068,15 +2236,17 @@ impl ToolContext {
             .background_job_manager
             .as_ref()
             .ok_or_else(|| ToolError::Execution("background job manager not available".into()))?;
-        manager
-            .spawn_cancellable_subagent_with_id(
-                id.into(),
-                description.into(),
-                Box::pin(work),
-                cancel,
-                self.max_concurrent_subagents,
-            )
-            .map_err(spawn_error_to_tool_error)
+        self.with_admitted_subagent(work, |work| {
+            manager
+                .spawn_cancellable_subagent_with_id(
+                    id.into(),
+                    description.into(),
+                    work,
+                    cancel,
+                    self.max_concurrent_subagents,
+                )
+                .map_err(spawn_error_to_tool_error)
+        })
     }
 
     /// Spawn a workflow background job with a stable public run ID.
@@ -2194,14 +2364,16 @@ impl ToolContext {
             .background_job_manager
             .as_ref()
             .ok_or_else(|| ToolError::Execution("background job manager not available".into()))?;
-        manager
-            .spawn_subagent_foreground_with_id(
-                id.into(),
-                description.into(),
-                Box::pin(work),
-                self.max_concurrent_subagents,
-            )
-            .map_err(spawn_error_to_tool_error)
+        self.with_admitted_subagent(work, |work| {
+            manager
+                .spawn_subagent_foreground_with_id(
+                    id.into(),
+                    description.into(),
+                    work,
+                    self.max_concurrent_subagents,
+                )
+                .map_err(spawn_error_to_tool_error)
+        })
     }
 
     pub fn spawn_cancellable_subagent_foreground_with_id(
@@ -2218,15 +2390,17 @@ impl ToolContext {
             .background_job_manager
             .as_ref()
             .ok_or_else(|| ToolError::Execution("background job manager not available".into()))?;
-        manager
-            .spawn_cancellable_subagent_foreground_with_id(
-                id.into(),
-                description.into(),
-                Box::pin(work),
-                cancel,
-                self.max_concurrent_subagents,
-            )
-            .map_err(spawn_error_to_tool_error)
+        self.with_admitted_subagent(work, |work| {
+            manager
+                .spawn_cancellable_subagent_foreground_with_id(
+                    id.into(),
+                    description.into(),
+                    work,
+                    cancel,
+                    self.max_concurrent_subagents,
+                )
+                .map_err(spawn_error_to_tool_error)
+        })
     }
 
     /// Re-open an existing sub-agent id for another background turn.
@@ -2243,14 +2417,16 @@ impl ToolContext {
             .background_job_manager
             .as_ref()
             .ok_or_else(|| ToolError::Execution("background job manager not available".into()))?;
-        manager
-            .respawn_subagent(
-                id.into(),
-                description.into(),
-                Box::pin(work),
-                self.max_concurrent_subagents,
-            )
-            .map_err(spawn_error_to_tool_error)
+        self.with_admitted_subagent(work, |work| {
+            manager
+                .respawn_subagent(
+                    id.into(),
+                    description.into(),
+                    work,
+                    self.max_concurrent_subagents,
+                )
+                .map_err(spawn_error_to_tool_error)
+        })
     }
 
     pub fn respawn_cancellable_subagent_background(
@@ -2267,15 +2443,35 @@ impl ToolContext {
             .background_job_manager
             .as_ref()
             .ok_or_else(|| ToolError::Execution("background job manager not available".into()))?;
-        manager
-            .respawn_cancellable_subagent(
-                id.into(),
-                description.into(),
-                Box::pin(work),
-                cancel,
-                self.max_concurrent_subagents,
-            )
-            .map_err(spawn_error_to_tool_error)
+        self.with_admitted_subagent(work, |work| {
+            if self.subagent_continuation {
+                let expected = self
+                    .subagent_run_constraint
+                    .as_ref()
+                    .ok_or_else(|| ToolError::Execution("subagent_run_changed".into()))?;
+                if id.into() != expected.agent_id {
+                    return Err(ToolError::Execution("subagent_run_changed".into()));
+                }
+                return manager
+                    .respawn_original_subagent(
+                        expected,
+                        description.into(),
+                        work,
+                        cancel,
+                        self.max_concurrent_subagents,
+                    )
+                    .map_err(spawn_error_to_tool_error);
+            }
+            manager
+                .respawn_cancellable_subagent(
+                    id.into(),
+                    description.into(),
+                    work,
+                    cancel,
+                    self.max_concurrent_subagents,
+                )
+                .map_err(spawn_error_to_tool_error)
+        })
     }
 
     /// Subscribe to background job events.

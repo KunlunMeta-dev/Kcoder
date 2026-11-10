@@ -1,10 +1,9 @@
-mod private_values;
 use crate::client::McpClient;
 use crate::model::McpToolDefinition;
 use crate::result_content::convert_result;
 use async_trait::async_trait;
+pub use kcoder_mcp_policy::{PrivateValues, mcp_tool_name};
 use kcoder_tools::{Tool, ToolContext, ToolError, ToolOutput, ToolSource};
-pub use private_values::PrivateValues;
 use serde_json::Value;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -17,31 +16,69 @@ pub type McpServerHandle = Arc<Mutex<McpClient>>;
 /// A tool that proxies calls to an external MCP server.
 pub struct McpTool {
     server_name: String,
+    native_origin: Option<Arc<crate::native_origin::NativeMcpConnectionOrigin>>,
     exposed_name: String,
     handle: McpServerHandle,
     definition: McpToolDefinition,
     plugin_id: Option<String>,
     private_values: Arc<PrivateValues>,
     required_trust: Option<(std::path::PathBuf, std::path::PathBuf)>,
+    app_authorizer: Option<Arc<dyn Fn() -> bool + Send + Sync>>,
+    session_lease: Option<tokio_util::sync::CancellationToken>,
+    credential_context: Option<crate::server_policy::CredentialContext>,
 }
 
 impl McpTool {
+    /// Redacted source definition for the bound UI host, never reconstructed from text.
+    pub fn app_definition(&self) -> &McpToolDefinition {
+        &self.definition
+    }
+    pub fn app_authority_current(&self) -> bool {
+        self.app_source_authorized()
+    }
     pub fn new(
         server_name: impl Into<String>,
         handle: McpServerHandle,
         definition: McpToolDefinition,
     ) -> Self {
+        let native_origin = handle
+            .try_lock()
+            .ok()
+            .and_then(|client| client.native_origin());
         let server_name = server_name.into();
         let exposed_name = mcp_tool_name(&server_name, &definition.name);
         Self {
             server_name,
+            native_origin,
             exposed_name,
             handle,
             definition,
             plugin_id: None,
             required_trust: None,
+            app_authorizer: None,
+            session_lease: None,
+            credential_context: None,
             private_values: Arc::new(PrivateValues::default()),
         }
+    }
+
+    pub fn with_credential_context(
+        mut self,
+        context: crate::server_policy::CredentialContext,
+    ) -> Self {
+        self.credential_context = Some(context);
+        self
+    }
+
+    /// Native boundary inspection may observe the actual mutex without keeping
+    /// this shared connection alive after its owner releases it.
+    pub fn native_connection_gate(&self) -> std::sync::Weak<tokio::sync::Mutex<crate::McpClient>> {
+        Arc::downgrade(&self.handle)
+    }
+
+    /// Original connection birth evidence. Missing is unknown, never a name lookup.
+    pub fn native_origin(&self) -> Option<&Arc<crate::native_origin::NativeMcpConnectionOrigin>> {
+        self.native_origin.as_ref()
     }
 
     /// Host-supplied values belong only to this exact plugin/server operation.
@@ -53,6 +90,9 @@ impl McpTool {
         }
         self.definition.description = values.text(&self.definition.description);
         values.json(&mut self.definition.input_schema);
+        if let Some(meta) = self.definition.meta.as_mut() {
+            values.json(meta);
+        }
         self.private_values = values;
         Ok(self)
     }
@@ -67,6 +107,172 @@ impl McpTool {
         self
     }
 
+    /// A session host may revoke all inherited tool clones without granting Apps authority.
+    pub fn with_session_lease(mut self, token: tokio_util::sync::CancellationToken) -> Self {
+        self.session_lease = Some(token);
+        self
+    }
+
+    /// The host rechecks plugin/connection authority at resource-read time.
+    /// A plugin-bound UI is disabled until this callback is supplied.
+    pub fn with_app_authorizer(mut self, authorizer: Arc<dyn Fn() -> bool + Send + Sync>) -> Self {
+        self.app_authorizer = Some(authorizer);
+        self
+    }
+
+    fn app_source_authorized(&self) -> bool {
+        if self
+            .native_origin
+            .as_ref()
+            .is_some_and(|origin| !origin.is_live())
+        {
+            return false;
+        }
+        if self
+            .session_lease
+            .as_ref()
+            .is_some_and(|lease| lease.is_cancelled())
+        {
+            return false;
+        }
+        if self
+            .plugin_id
+            .as_ref()
+            .is_some_and(|plugin| self.private_values.contains(plugin))
+        {
+            return false;
+        }
+        if self.plugin_id.is_some() && self.app_authorizer.is_none() {
+            return false;
+        }
+        if self
+            .app_authorizer
+            .as_ref()
+            .is_some_and(|authorize| !authorize())
+        {
+            return false;
+        }
+        self.required_trust
+            .as_ref()
+            .is_none_or(|(directory, config)| {
+                kcoder_config::FolderTrustStore::trust_all_from_environment()
+                    || kcoder_config::FolderTrustStore::load(config).check(directory)
+                        == kcoder_config::FolderTrust::Trusted
+            })
+    }
+
+    /// Copy provenance, trust and private-value redaction into a dedicated Apps
+    /// connection. The original model/terminal handle is never upgraded.
+    pub async fn connect_for_app(
+        &self,
+        config: &crate::McpServerConfig,
+        store: Option<Arc<crate::authorization_store::OAuthTokenStore>>,
+        authorizer: Arc<dyn Fn() -> bool + Send + Sync>,
+    ) -> anyhow::Result<(McpServerHandle, Vec<McpTool>)> {
+        anyhow::ensure!(
+            config.name == self.server_name && authorizer(),
+            "MCP Apps source is no longer authorized"
+        );
+        let (handle, _) = crate::connect_server_for_apps_in(
+            config,
+            store,
+            Arc::clone(&self.private_values),
+            self.credential_context.as_ref(),
+        )
+        .await?;
+        let definitions = handle.lock().await.list_tools().await?;
+        anyhow::ensure!(authorizer(), "MCP Apps source changed while connecting");
+        let mut tools = Vec::with_capacity(definitions.len());
+        for definition in definitions {
+            let mut tool = McpTool::new(&self.server_name, Arc::clone(&handle), definition);
+            tool.plugin_id = self.plugin_id.clone();
+            tool.required_trust = self.required_trust.clone();
+            tool.app_authorizer = Some(Arc::clone(&authorizer));
+            tool.session_lease = self.session_lease.clone();
+            tool.credential_context = self.credential_context.clone();
+            tools.push(tool.with_private_values(Arc::clone(&self.private_values))?);
+        }
+        Ok((handle, tools))
+    }
+
+    /// Read through this original Apps connection, never through a host URL/file API.
+    pub async fn read_app_resource_result(
+        &self,
+        uri: &str,
+        ctx: &ToolContext,
+    ) -> anyhow::Result<Value> {
+        anyhow::ensure!(
+            ctx.inline_widgets_authorized(),
+            "MCP Apps resource read requires presentation authority"
+        );
+        let mut client = tokio::select! { biased; _ = ctx.cancelled()=>return Err(crate::failure::interrupted(None,kcoder_types::mcp_failure::McpCallInterruptionReason::Cancelled,false)), client=self.handle.lock()=>client };
+        anyhow::ensure!(
+            client.workspace_allows(&ctx.state.cwd()),
+            "MCP server is restricted to its source workspace"
+        );
+        anyhow::ensure!(
+            client.apps_support_enabled() && self.app_source_authorized(),
+            "MCP Apps source is no longer authorized"
+        );
+        ctx.verify_native_transport_authorization().await?;
+        ctx.verify_native_resource_authorization(uri).await?;
+        let mut value = client
+            .read_resource_with_cancellation(uri, ctx.abort_token.as_ref())
+            .await?;
+        anyhow::ensure!(
+            self.app_source_authorized(),
+            "MCP Apps source authority was revoked"
+        );
+        self.private_values.json(&mut value);
+        Ok(value)
+    }
+
+    /// The Engine must authorize and serialize this action before entry. Recheck
+    /// live source and declared app visibility immediately before dispatch.
+    pub async fn call_app_result(
+        &self,
+        input: Value,
+        ctx: &ToolContext,
+    ) -> anyhow::Result<crate::CallToolResult> {
+        anyhow::ensure!(
+            ctx.inline_widgets_authorized() && self.definition.visible_to_app(),
+            "MCP App tool is unavailable to this client"
+        );
+        let mut client = tokio::select! {
+            biased;
+            _ = ctx.cancelled() => return Err(crate::failure::interrupted(None, kcoder_types::mcp_failure::McpCallInterruptionReason::Cancelled, false)),
+            client = self.handle.lock() => client,
+        };
+        anyhow::ensure!(
+            self.app_source_authorized(),
+            "MCP Apps source authority was revoked"
+        );
+        let definitions = client
+            .list_tools_with_cancellation(ctx.abort_token.as_ref())
+            .await?;
+        anyhow::ensure!(
+            definitions.iter().any(|definition| {
+                let mut schema = definition.input_schema.clone();
+                self.private_values.json(&mut schema);
+                definition.name == self.definition.name
+                    && definition.visible_to_app()
+                    && schema == self.definition.input_schema
+            }),
+            "MCP App tool visibility or schema changed; refresh the view before calling"
+        );
+        anyhow::ensure!(
+            self.app_source_authorized(),
+            "MCP Apps source authority was revoked"
+        );
+        ctx.verify_native_transport_authorization().await?;
+        let result = client
+            .call_tool_with_cancellation(&self.definition.name, input, ctx.abort_token.as_ref())
+            .await?;
+        let mut value = serde_json::to_value(result)?;
+        self.private_values.json(&mut value);
+        Ok(serde_json::from_value(value)?)
+    }
+
     /// Attach the exact plugin identity supplied by the host contribution snapshot.
     pub fn with_plugin_source(mut self, plugin_id: impl Into<String>) -> Self {
         self.plugin_id = Some(plugin_id.into());
@@ -76,6 +282,28 @@ impl McpTool {
 
 #[async_trait]
 impl Tool for McpTool {
+    fn is_app_visible(&self) -> bool {
+        self.native_origin
+            .as_ref()
+            .is_none_or(|origin| origin.is_live())
+            && self.definition.visible_to_app()
+            && self
+                .session_lease
+                .as_ref()
+                .is_none_or(|lease| !lease.is_cancelled())
+    }
+
+    fn is_model_visible(&self) -> bool {
+        self.native_origin
+            .as_ref()
+            .is_none_or(|origin| origin.is_live())
+            && self.definition.visible_to_model()
+            && self
+                .session_lease
+                .as_ref()
+                .is_none_or(|lease| !lease.is_cancelled())
+    }
+
     fn input_schema_is_stable(&self) -> bool {
         true
     }
@@ -113,11 +341,35 @@ impl Tool for McpTool {
     }
 
     async fn call(&self, input: Value, ctx: &ToolContext) -> Result<ToolOutput, ToolError> {
+        let call = self.call_session(input, ctx);
+        match &self.session_lease {
+            Some(lease) => tokio::select! {
+                biased;
+                _ = lease.cancelled() => Ok(ToolOutput::error("Session MCP authority was revoked. If an operation was already dispatched its outcome may be unknown; reconcile before retrying.")),
+                result = call => result,
+            },
+            None => call.await,
+        }
+    }
+}
+
+impl McpTool {
+    async fn call_session(&self, input: Value, ctx: &ToolContext) -> Result<ToolOutput, ToolError> {
         let mut client = tokio::select! {
             biased;
             _ = ctx.cancelled() => return Ok(interruption_output(&crate::failure::interrupted(None, kcoder_types::mcp_failure::McpCallInterruptionReason::Cancelled, false))),
             client = self.handle.lock() => client,
         };
+        if !client.workspace_allows(&ctx.state.cwd()) {
+            return Ok(ToolOutput::error(
+                "MCP server is restricted to its source workspace",
+            ));
+        }
+        if self.app_authorizer.is_some() && !self.app_source_authorized() {
+            return Ok(ToolOutput::error(
+                "MCP Apps source authority was revoked; call refused",
+            ));
+        }
         // Check after acquiring the shared transport: a queued call must not
         // use a decision made before another client revoked folder trust.
         if let Some((directory, config_dir)) = &self.required_trust
@@ -129,17 +381,114 @@ impl Tool for McpTool {
                 "MCP project directory trust was revoked; call refused",
             ));
         }
+        let verified = ctx.verify_native_transport_authorization().await;
+        verified?;
         debug!(
             "calling MCP tool {}::{}",
             self.server_name, self.definition.name
         );
 
+        let mut app_input = ctx.inline_widgets_authorized().then(|| input.clone());
+        if let Some(value) = app_input.as_mut() {
+            self.private_values.json(value);
+        }
         match client
             .call_tool_with_cancellation(&self.definition.name, input, ctx.abort_token.as_ref())
             .await
         {
             Ok(result) => {
+                // UI-only metadata is retained separately and never mirrored into model text.
+                let ui = self.definition.ui_metadata().ok();
+                let mut view = None;
+                let mut ui_unavailable = false;
+                if ctx.inline_widgets_authorized()
+                    && client.apps_support_enabled()
+                    && !result.is_error
+                    && let Some(uri) = ui.as_ref().and_then(|ui| ui.resource_uri.as_deref())
+                {
+                    if self.app_source_authorized()
+                        && ctx.verify_native_resource_authorization(uri).await.is_ok()
+                    {
+                        match client
+                            .read_ui_resource(
+                                &self.server_name,
+                                self.plugin_id.as_deref(),
+                                &self.definition.name,
+                                uri,
+                                result.structured_content.clone(),
+                                result.meta.clone(),
+                                ctx.abort_token.as_ref(),
+                            )
+                            .await
+                        {
+                            Ok(mut value) if self.app_source_authorized() => {
+                                value
+                                    .csp
+                                    .connect_domains
+                                    .retain(|origin| !self.private_values.contains(origin));
+                                value
+                                    .csp
+                                    .resource_domains
+                                    .retain(|origin| !self.private_values.contains(origin));
+                                value
+                                    .csp
+                                    .frame_domains
+                                    .retain(|origin| !self.private_values.contains(origin));
+                                value
+                                    .csp
+                                    .base_uri_domains
+                                    .retain(|origin| !self.private_values.contains(origin));
+                                value.html = self.private_values.text(&value.html);
+                                if let Some(data) = value.structured_content.as_mut() {
+                                    self.private_values.json(data);
+                                }
+                                if let Some(data) = value.result_meta.as_mut() {
+                                    self.private_values.json(data);
+                                }
+                                value.tool_input = app_input.clone();
+                                value.tool_content = result
+                                    .content
+                                    .iter()
+                                    .map(|block| {
+                                        serde_json::to_value(block).expect("MCP content serializes")
+                                    })
+                                    .collect();
+                                for block in &mut value.tool_content {
+                                    self.private_values.json(block);
+                                }
+                                let input_bytes = value.tool_input.as_ref().map_or(0, |input| {
+                                    serde_json::to_vec(input)
+                                        .map_or(usize::MAX, |bytes| bytes.len())
+                                });
+                                let content_bytes = serde_json::to_vec(&value.tool_content)
+                                    .map_or(usize::MAX, |bytes| bytes.len());
+                                if input_bytes <= kcoder_types::mcp_apps::MCP_APP_DATA_MAX_BYTES
+                                    && content_bytes <= 256 * 1024
+                                    && serde_json::to_vec(&value).is_ok_and(|bytes| {
+                                        bytes.len()
+                                            <= kcoder_types::mcp_apps::MCP_APP_VIEW_MAX_BYTES
+                                    })
+                                {
+                                    view = Some(value);
+                                } else {
+                                    ui_unavailable = true;
+                                }
+                            }
+                            _ => ui_unavailable = true,
+                        }
+                    } else {
+                        ui_unavailable = true;
+                    }
+                }
                 let mut output = convert_result(result);
+                if let Some(view) = view {
+                    output
+                        .execution_metadata
+                        .push(kcoder_tools::ToolExecutionMetadata::McpApp(view));
+                }
+                if ui_unavailable {
+                    output.content.push(kcoder_types::ContentBlock::Text { text: "The MCP tool returned its result, but its inline view is unavailable or no longer authorized. Do not repeat the external action to recreate the view.".into() });
+                }
                 for block in &mut output.content {
                     if let kcoder_types::ContentBlock::Text { text } = block {
                         *text = self.private_values.text(text);
@@ -180,65 +529,6 @@ fn interruption_output(error: &anyhow::Error) -> ToolOutput {
     ToolOutput::error(value.to_string())
 }
 
-pub fn mcp_tool_name(server_name: &str, tool_name: &str) -> String {
-    let server = sanitize_tool_name_part(server_name, "server");
-    let tool = sanitize_tool_name_part(tool_name, "tool");
-    let name = format!("mcp__{}__{}", server, tool);
-    // Strict providers (Anthropic) cap tool names at 64 characters; an
-    // overlong name rejects the whole request. Truncate with a stable hash
-    // suffix so two tools that only differ past the cut point don't collapse
-    // into the same registry entry.
-    const MAX_LEN: usize = 64;
-    if name.len() <= MAX_LEN {
-        return name;
-    }
-    let hash = stable_name_hash(&name);
-    // Fixed syntax and hash consume 24 bytes:
-    // `mcp__` (5) + `__` (2) + `_` (1) + 16 hex digits. The sanitized
-    // components are ASCII, so an 18/22 split uses the remaining 40 bytes
-    // exactly and can never exceed MAX_LEN.
-    let server_part: String = server.chars().take(18).collect();
-    let tool_part: String = tool.chars().take(22).collect();
-    format!("mcp__{}__{}_{:016x}", server_part, tool_part, hash)
-}
-
-/// FNV-1a 64-bit: stable across runs, no extra dependencies.
-fn stable_name_hash(name: &str) -> u64 {
-    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
-    for byte in name.as_bytes() {
-        hash ^= u64::from(*byte);
-        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
-    }
-    hash
-}
-
-fn sanitize_tool_name_part(value: &str, fallback: &str) -> String {
-    let mut out = String::with_capacity(value.len());
-    let mut previous_was_separator = false;
-    for ch in value.chars() {
-        let next = if ch.is_ascii_alphanumeric() || ch == '_' || ch == '-' {
-            ch
-        } else {
-            '_'
-        };
-        if next == '_' {
-            if previous_was_separator {
-                continue;
-            }
-            previous_was_separator = true;
-        } else {
-            previous_was_separator = false;
-        }
-        out.push(next);
-    }
-    let out = out.trim_matches('_');
-    if out.is_empty() {
-        fallback.to_string()
-    } else {
-        out.to_string()
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -262,6 +552,7 @@ mod tests {
                 DisconnectedTransport,
             )))),
             McpToolDefinition {
+                meta: None,
                 name: name.into(),
                 description: name.into(),
                 input_schema: serde_json::json!({"type": "object"}),
@@ -372,61 +663,5 @@ mod tests {
                 .get(&name)
                 .is_none()
         );
-    }
-
-    #[test]
-    fn mcp_tool_name_is_namespaced_to_avoid_builtin_collisions() {
-        assert_eq!(mcp_tool_name("files", "read"), "mcp__files__read");
-    }
-
-    #[test]
-    fn mcp_tool_name_sanitizes_invalid_characters() {
-        assert_eq!(
-            mcp_tool_name("local server", "shell/run"),
-            "mcp__local_server__shell_run"
-        );
-        assert_eq!(mcp_tool_name("!!!", "???"), "mcp__server__tool");
-    }
-
-    #[test]
-    fn mcp_tool_name_stays_within_provider_limit_and_avoids_collisions() {
-        let long_server = "a".repeat(60);
-        let long_tool_a = format!("{}one", "read_file_version_".repeat(5));
-        let long_tool_b = format!("{}two", "read_file_version_".repeat(5));
-        let name_a = mcp_tool_name(&long_server, &long_tool_a);
-        let name_b = mcp_tool_name(&long_server, &long_tool_b);
-        assert!(
-            name_a.len() <= 64,
-            "name exceeds the Anthropic tool name limit: {name_a}"
-        );
-        assert_eq!(name_a.len(), 64, "the truncation budget should be exact");
-        assert!(
-            name_a.starts_with("mcp__") && name_b.starts_with("mcp__"),
-            "namespace prefix must be preserved"
-        );
-        assert_ne!(name_a, name_b, "truncated names must keep a unique suffix");
-    }
-
-    #[test]
-    fn mcp_tool_name_hashes_the_full_sanitized_name() {
-        let prefix = "a".repeat(48);
-        let name_a = mcp_tool_name("server", &format!("{prefix}x"));
-        let name_b = mcp_tool_name("server", &format!("{prefix}y"));
-
-        assert_ne!(
-            name_a, name_b,
-            "differences after the display prefix must survive in the hash"
-        );
-        assert!(name_a.len() <= 64 && name_b.len() <= 64);
-    }
-
-    #[test]
-    fn mcp_tool_name_avoids_known_32_bit_hash_collision() {
-        let shared = "x".repeat(40);
-        let name_a = mcp_tool_name("server", &format!("{shared}xvUzwImeobPC"));
-        let name_b = mcp_tool_name("server", &format!("{shared}hBQDcdtkeIlp"));
-
-        assert_ne!(name_a, name_b, "known FNV-1a 32-bit collision");
-        assert!(name_a.len() <= 64 && name_b.len() <= 64);
     }
 }

@@ -19,7 +19,15 @@ impl PrivateValues {
         let values = values.into_iter().collect::<Vec<_>>();
         ensure!(values.len() <= 32, "private MCP value count exceeds limit");
         let mut patterns = BTreeSet::new();
-        for value in values {
+        for value in values.into_iter().flat_map(|value| {
+            // Servers can echo an authorization token without its scheme prefix.
+            let token = value.split_once(' ').and_then(|(scheme, token)| {
+                (scheme.eq_ignore_ascii_case("bearer") || scheme.eq_ignore_ascii_case("basic"))
+                    .then(|| token.trim().to_owned())
+                    .filter(|token| !token.is_empty())
+            });
+            std::iter::once(value).chain(token)
+        }) {
             if value.is_empty() {
                 continue;
             }
@@ -36,14 +44,14 @@ impl PrivateValues {
                 "https://redaction.invalid/?value=",
                 "https://redaction.invalid/",
             ] {
-                if let Ok(url) = reqwest::Url::parse(&format!("{prefix}{value}"))
+                if let Ok(url) = url::Url::parse(&format!("{prefix}{value}"))
                     && let Some(encoded) = url.as_str().strip_prefix(prefix)
                 {
                     patterns.insert(encoded.to_owned());
                     patterns.insert(lower_percent_hex(encoded));
                 }
             }
-            if let Ok(url) = reqwest::Url::parse(&value) {
+            if let Ok(url) = url::Url::parse(&value) {
                 patterns.insert(url.to_string());
             }
             let escaped = serde_json::to_string(&value)?;
@@ -124,6 +132,21 @@ fn lower_percent_hex(text: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn masks_bearer_and_basic_tokens_even_when_the_scheme_is_not_echoed() {
+        for scheme in ["Bearer", "bearer", "Basic"] {
+            let token = "SYNTHETIC_NATIVE_AUTH_TOKEN";
+            let values = PrivateValues::new([format!("{scheme} {token}")]).unwrap();
+            for echo in [
+                token.to_owned(),
+                STANDARD.encode(token),
+                format!("{scheme} {token}"),
+            ] {
+                assert!(!values.text(&echo).contains(token));
+                assert!(!values.text(&echo).contains(&STANDARD.encode(token)));
+            }
+        }
+    }
     #[test]
     fn masks_raw_url_json_and_structured_values_without_reprocessing_markers() {
         let secret = "synthetic /private+值";

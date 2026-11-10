@@ -146,7 +146,7 @@ fn compact_background_fixture() -> CompactBackgroundFixture {
                         "agent_type":"general", "message":"AGENT_BARRIER_WORK: return the completed report",
                         "max_turns": 2, "run_in_background": true
                     }));
-                } else if last_user.contains("All tracked background sub-agents have finished") {
+                } else if last_user.contains("All tracked background work has finished") {
                     followup_tx.send(()).unwrap();
                     if tool_result_count(&request, "compaction-followup-read") == 0 {
                         compact_fixture_tool(&mut socket, "read", "compaction-followup-read", json!({"file_path":"fixture.txt"}));
@@ -290,7 +290,7 @@ fn manual_compaction_preserves_agent_completion_and_automatic_tool_batch_on_resu
     assert!(
         !fixture.calls.lock().unwrap().iter().any(|call| call
             .to_string()
-            .contains("All tracked background sub-agents have finished")),
+            .contains("All tracked background work has finished")),
         "scheduler must wait for manual compact"
     );
     fixture.summary.release();

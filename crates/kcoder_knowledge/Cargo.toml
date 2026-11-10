@@ -9,8 +9,11 @@ rust-version.workspace = true
 
 [dependencies]
 kcoder_types = { path = "../kcoder_types" }
+kcoder_config = { path = "../kcoder_config" }
 anyhow = { workspace = true }
-rusqlite = { workspace = true }
+chrono = { workspace = true }
+rusqlite = { workspace = true, features = ["limits", "hooks"] }
+sqlite-vfs = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 uuid = { workspace = true }
 serde_json = { workspace = true }
@@ -19,4 +22,3 @@ tokio = { workspace = true }
 tokio-util = { workspace = true }
 sha2 = { workspace = true }
 tempfile = { workspace = true }
-

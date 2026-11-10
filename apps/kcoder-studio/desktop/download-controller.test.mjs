@@ -15,6 +15,7 @@ function fixture() {
       },
     };
   const contents = {
+    session,
     mainFrame: { url: "http://127.0.0.1:12345/" },
     isDestroyed: () => false,
     downloadURL(url) {
@@ -129,4 +130,61 @@ test("unknown frames, external URLs and path filenames are rejected before downl
     { url: "blob:http://127.0.0.1:12345/id", filename: "../file" },
   ])
     await assert.rejects(f.invoke(params));
+});
+
+test("a rejected URL chain settles only its original pending request", async () => {
+  const f = fixture();
+  const rejected = assert.rejects(f.invoke({
+    url: "blob:http://127.0.0.1:12345/rejected", filename: "export.json",
+  }), /Application download was rejected/);
+  const item = f.item();
+  item.getURLChain = () => [f.contents.url, "https://example.test/redirect"];
+  let blocked = false;
+  f.session.emit("will-download", { preventDefault() { blocked = true; } }, item, f.contents);
+  await rejected;
+  assert.equal(blocked, true);
+  assert.equal(item.options, undefined);
+  const next = f.invoke({ url: "blob:http://127.0.0.1:12345/next", filename: "next.json" });
+  const replacement = f.item();
+  f.session.emit("will-download", { preventDefault() { assert.fail("valid replacement rejected"); } }, replacement, f.contents);
+  item.emit("done", {}, "completed");
+  replacement.emit("done", {}, "completed");
+  assert.deepEqual(await next, { status: "completed", filename: "next.json" });
+});
+
+test("lost main-frame authority rejects its exact unclaimed download", async () => {
+  const f = fixture();
+  const rejected = assert.rejects(f.invoke({
+    url: "blob:http://127.0.0.1:12345/owned", filename: "export.json",
+  }), /Application download was rejected/);
+  const item = f.item();
+  f.contents.mainFrame = { url: "http://127.0.0.1:12345/replaced-frame" };
+  f.event.senderFrame = f.contents.mainFrame;
+  f.session.emit("will-download", { preventDefault() {} }, item, f.contents);
+  await rejected;
+  assert.equal(item.options, undefined);
+});
+
+test("a different native Session cannot mint this host's download ticket", async () => {
+  const f = fixture();
+  f.contents.session = new EventEmitter();
+  await assert.rejects(f.invoke({
+    url: "blob:http://127.0.0.1:12345/owned", filename: "export.json",
+  }), /main application frame/);
+  assert.equal(f.contents.url, undefined);
+});
+
+test("unrelated and duplicate items cannot settle the original active download", async () => {
+  const f = fixture();
+  const params = { url: "blob:http://127.0.0.1:12345/owned", filename: "export.json" };
+  const pending = f.invoke(params);
+  const unrelated = f.item();
+  unrelated.getURL = () => "blob:http://127.0.0.1:12345/unrelated";
+  f.session.emit("will-download", { preventDefault() {} }, unrelated, f.contents);
+  await assert.rejects(f.invoke(params), /already pending/);
+  const item = f.item();
+  f.session.emit("will-download", { preventDefault() { assert.fail("original rejected"); } }, item, f.contents);
+  f.session.emit("will-download", { preventDefault() {} }, f.item(), f.contents);
+  item.emit("done", {}, "completed");
+  assert.deepEqual(await pending, { status: "completed", filename: "export.json" });
 });

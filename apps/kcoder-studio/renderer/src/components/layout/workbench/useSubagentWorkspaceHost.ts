@@ -90,6 +90,12 @@ export function useSubagentWorkspaceHost(
   } | null>(null)
   const [drafts, setDrafts] = useState<Record<string, string>>({})
   const generation = useRef(0)
+  const refreshFlight = useRef<{
+    scope: string
+    generation: number
+    trailing: boolean
+    promise: Promise<void>
+  } | null>(null)
   const authority = useRef<{ scope: string; journalScope: string } | null>(null)
   const snapshotRevisions = useRef(new Map<string, string>())
   const current = useRef({ api, address, taskScope })
@@ -119,39 +125,84 @@ export function useSubagentWorkspaceHost(
   const valid = (scope: string, requestGeneration: number) =>
     current.current.taskScope === scope && generation.current === requestGeneration
 
-  const refreshList = useCallback(async () => {
-    const host = current.current
-    if (!host.api || !host.address || host.taskScope !== taskScope) return
-    const captured = generation.current
-    try {
-      const value = await host.api.listRuntimeSubagents({ address: host.address })
-      if (valid(taskScope, captured)) {
-        if (
-          authority.current?.scope === taskScope &&
-          authority.current.journalScope !== value.journalScope
-        ) {
-          generation.current += 1
-          setSelected(null)
-          setCommands(null)
-          setDrafts({})
-          journalRef.current = null
-          snapshotRevisions.current.clear()
-        }
-        authority.current = { scope: taskScope, journalScope: value.journalScope }
-        setObservation({ scope: taskScope, value, generation: generation.current, connected: true })
+  const refreshList = useCallback(
+    (cause: 'poll' | 'event' = 'event') => {
+      const host = current.current
+      if (!host.api || !host.address || host.taskScope !== taskScope) return Promise.resolve()
+      const captured = generation.current
+      const existing = refreshFlight.current
+      if (existing?.scope === taskScope && existing.generation === captured) {
+        if (cause === 'event') existing.trailing = true
+        return existing.promise
       }
-    } catch {
-      if (valid(taskScope, captured))
-        setObservation(previous =>
-          previous?.scope === taskScope ? { ...previous, connected: false } : null
+
+      const flight = {
+        scope: taskScope,
+        generation: captured,
+        trailing: false,
+        promise: Promise.resolve(),
+      }
+      const readOnce = async () => {
+        const currentHost = current.current
+        if (
+          !currentHost.api ||
+          !currentHost.address ||
+          currentHost.taskScope !== taskScope ||
+          !valid(taskScope, captured)
         )
-    }
-  }, [taskScope])
+          return
+        try {
+          const value = await currentHost.api.listRuntimeSubagents({ address: currentHost.address })
+          if (valid(taskScope, captured)) {
+            if (
+              authority.current?.scope === taskScope &&
+              authority.current.journalScope !== value.journalScope
+            ) {
+              generation.current += 1
+              setSelected(null)
+              setCommands(null)
+              setDrafts({})
+              journalRef.current = null
+              snapshotRevisions.current.clear()
+            }
+            authority.current = { scope: taskScope, journalScope: value.journalScope }
+            setObservation({
+              scope: taskScope,
+              value,
+              generation: generation.current,
+              connected: true,
+            })
+          }
+        } catch {
+          if (valid(taskScope, captured))
+            setObservation(previous =>
+              previous?.scope === taskScope ? { ...previous, connected: false } : null
+            )
+        }
+      }
+
+      const run = async () => {
+        do {
+          flight.trailing = false
+          await readOnce()
+        } while (flight.trailing && valid(taskScope, captured))
+      }
+      flight.promise = Promise.resolve()
+        .then(run)
+        .finally(() => {
+          if (refreshFlight.current === flight) refreshFlight.current = null
+        })
+      refreshFlight.current = flight
+      return flight.promise
+    },
+    [taskScope]
+  )
   useEffect(() => {
     generation.current += 1
+    const effectGeneration = generation.current
     snapshotRevisions.current.clear()
     const initial = setTimeout(() => void refreshList(), 0)
-    const timer = setInterval(() => void refreshList(), 2000)
+    const timer = setInterval(() => void refreshList('poll'), 2000)
     const stop = listenAccountContextChanges(target => {
       if (target !== address?.deviceId) return
       generation.current += 1
@@ -166,11 +217,16 @@ export function useSubagentWorkspaceHost(
     })
     return () => {
       generation.current += 1
+      if (
+        refreshFlight.current?.scope === taskScope &&
+        refreshFlight.current.generation === effectGeneration
+      )
+        refreshFlight.current = null
       clearTimeout(initial)
       clearInterval(timer)
       stop()
     }
-  }, [refreshList, address?.deviceId])
+  }, [refreshList, address?.deviceId, taskScope])
 
   const requireHost = () => {
     if (!currentObservation || !valid(taskScope, currentObservation.generation))

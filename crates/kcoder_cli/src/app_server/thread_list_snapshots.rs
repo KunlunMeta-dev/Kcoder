@@ -17,14 +17,14 @@ struct Snapshot {
 
 /// Independent immutable scans shared by clients of one workspace connection.
 #[derive(Default)]
-pub(super) struct ThreadListSnapshots {
+pub struct ThreadListSnapshots {
     snapshots: BTreeMap<u64, Snapshot>,
     next_id: u64,
 }
 
 impl ThreadListSnapshots {
     #[cfg(test)]
-    pub(super) fn start(
+    pub fn start(
         &mut self,
         threads: Vec<Thread>,
         limit: usize,
@@ -34,7 +34,7 @@ impl ThreadListSnapshots {
         self.start_report(threads, limit, archived, query, 0, false)
     }
 
-    pub(super) fn start_report(
+    pub fn start_report(
         &mut self,
         mut threads: Vec<Thread>,
         limit: usize,
@@ -98,7 +98,7 @@ impl ThreadListSnapshots {
     }
 
     #[cfg(test)]
-    pub(super) fn page(
+    pub fn page(
         &mut self,
         cursor: &str,
         limit: usize,
@@ -108,7 +108,7 @@ impl ThreadListSnapshots {
         self.page_report(cursor, limit, archived, query, false)
     }
 
-    pub(super) fn page_report(
+    pub fn page_report(
         &mut self,
         cursor: &str,
         limit: usize,

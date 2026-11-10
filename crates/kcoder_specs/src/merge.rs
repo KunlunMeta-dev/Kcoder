@@ -35,6 +35,17 @@ pub(crate) fn prepare_change(
 ) -> Result<Vec<crate::archive_transaction::PreparedFile>> {
     let authoritative_inputs = snapshot_inputs(specs_dir, &specs_dir.join("specs"))?;
     let change_inputs = snapshot_inputs(specs_dir, &change_dir.join("specs"))?;
+    let base_path = crate::fingerprint::base_snapshot_path(change_dir);
+    let base_before = match std::fs::read(&base_path) {
+        Ok(bytes) => Some(bytes),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+        Err(error) => return Err(error).context("failed to read publication base"),
+    };
+    let base = crate::fingerprint::decode_change_base(change_dir, base_before.as_deref())?;
+    crate::project_knowledge::check_prepared_source_guards(
+        &base.knowledge_sources,
+        &authoritative_inputs,
+    )?;
     let mut specs: BTreeMap<String, Spec> = load_authoritative_specs(specs_dir)?
         .into_iter()
         .map(|s| (s.domain.clone(), s))
@@ -83,6 +94,14 @@ pub(crate) fn prepare_change(
                 specs_dir, &relative, &bytes,
             )?);
         }
+    }
+    // All guards are checked before commit; retain the established spec publication order.
+    if let Some(base_before) = base_before {
+        prepared.push(crate::archive_transaction::input_guard(
+            specs_dir,
+            base_path.strip_prefix(specs_dir)?,
+            &base_before,
+        )?);
     }
     Ok(prepared)
 }

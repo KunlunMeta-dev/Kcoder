@@ -327,7 +327,7 @@ mod tests {
             ("VendorA", "VENDOR_A_API_KEY"),
             ("VendorB", "VENDOR_B_API_KEY"),
         ] {
-            let mut profile = settings.providers["kunlunmeta"].clone();
+            let mut profile = crate::default_active_provider_config();
             profile.default_model = "shared-model-name".to_string();
             profile.credential_env = vec![env.to_string()];
             settings.providers.insert(provider.to_string(), profile);

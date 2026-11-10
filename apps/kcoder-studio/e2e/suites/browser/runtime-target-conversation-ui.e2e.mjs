@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, open, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { startApprovalModelFixture } from "../../harness/approval-model.mjs";
 import { startChromium } from "../../harness/chromium.mjs";
@@ -92,6 +92,7 @@ await runE2E(
     const gateway = await startGateway(context, {
       workspace,
       serversFile,
+      serversStore: context.pathInState("studio/servers.json"),
       auth: true,
       env: { KCODER_CONFIG_DIR: kcoderConfigDir },
     });
@@ -103,6 +104,29 @@ await runE2E(
     });
     const browserErrors = [];
     const failedRequests = [];
+    const uploadProbe = { armed: false, held: null, cancelled: false };
+    await page.routeWebSocket("**/rpc*", (route) => {
+      const upstream = route.connectToServer();
+      let heldChunkId;
+      route.onMessage((message) => {
+        const frame = JSON.parse(String(message));
+        if (uploadProbe.armed && frame.method === "attachment/upload/chunk") {
+          uploadProbe.armed = false;
+          heldChunkId = frame.id;
+        }
+        if (frame.method === "attachment/upload/cancel") uploadProbe.cancelled = true;
+        upstream.send(message);
+      });
+      upstream.onMessage((message) => {
+        const frame = JSON.parse(String(message));
+        if (heldChunkId !== undefined && frame.id === heldChunkId) {
+          heldChunkId = undefined;
+          uploadProbe.held = () => route.send(message);
+          return;
+        }
+        route.send(message);
+      });
+    });
     page.on("pageerror", (error) =>
       browserErrors.push(`pageerror: ${error.stack || error.message}`),
     );
@@ -148,6 +172,7 @@ await runE2E(
       prompt: KCODER_PROMPT,
       reply: KCODER_REPLY,
       screenshot: "kcoder-conversation.png",
+      uploadProbe,
     });
     await page.goto(gateway.baseUrl, { waitUntil: "domcontentloaded" });
     const row = page.getByTestId(`runtime-local-task-row-${kcoder.taskId}`);
@@ -196,7 +221,7 @@ await runE2E(
         "advanced-actions-state-failure.json",
         await page.evaluate(async () => ({
           body: document.body.innerText.slice(0, 12000),
-          workspaces: await window.__TAURI_INTERNALS__
+          workspaces: await window.__ELECTRON_INTERNALS__
             ?.invoke("local_executor_request", {
               method: "runtime.tasks.list",
               params: {},
@@ -255,6 +280,7 @@ async function verifyPluginManagement(page, workspace) {
   await page.waitForFunction(expected =>
     document.querySelector('[data-testid="plugins-install-target"]')?.textContent?.includes(expected),
   workspace, { timeout: 30000 });
+  await page.locator('[data-testid="plugins-install-target"] summary').click();
   assert.ok((await page.getByTestId("plugins-install-target").innerText()).includes(workspace),
     "Plugin management must retain the conversation workspace target");
   for (const tab of ["skills", "mcp", "hooks", "plugins"]) {
@@ -467,6 +493,11 @@ async function verifyAdvancedConversationActions(page, context, options) {
   const renameInput = page.getByTestId(
     `rename-runtime-local-task-input-${options.sourceTaskId}`,
   );
+  await renameInput.waitFor({ state: "hidden", timeout: 10_000 });
+  await sourceRow.click({ button: "right" });
+  await page
+    .getByTestId(`runtime-local-task-menu-rename-${options.sourceTaskId}`)
+    .click();
   await renameInput.waitFor({ state: "visible", timeout: 10_000 });
   await renameInput.fill(KCODER_RENAMED_TITLE);
   await page
@@ -713,7 +744,7 @@ async function runtimeTaskIds(page) {
 
 async function traceForkRequest(page) {
   await page.evaluate(() => {
-    const internals = window.__TAURI_INTERNALS__;
+    const internals = window.__ELECTRON_INTERNALS__;
     if (!internals || typeof internals.invoke !== "function") {
       throw new Error("KCoder Gateway invoke bridge is unavailable");
     }
@@ -759,7 +790,7 @@ async function verifyRuntimeTargetSettings(page, context) {
     assert.equal(
       await page.getByTestId(testId).count(),
       0,
-      `HTTP Gateway General 设置不应显示原生 Tauri 控件 ${testId}`,
+      `HTTP Gateway General 设置不应显示原生 Electron 控件 ${testId}`,
     );
   }
   await page.goto(`${origin}/settings/kcoder-servers`, {
@@ -925,6 +956,7 @@ async function runConversation(page, context, options) {
   );
   await newConversation.waitFor({ state: "visible", timeout: 20_000 });
   await newConversation.click();
+  await verifyAttachmentRecovery(page, context, options.uploadProbe);
   await uploadConversationAttachments(page);
   await sendPrompt(page, options.prompt);
   await assertConversationVisible(page, options.prompt, options.reply, 60_000);
@@ -940,6 +972,58 @@ async function runConversation(page, context, options) {
   await assertConversationVisible(page, options.prompt, options.reply, 60_000);
   await assertUserAttachmentsVisible(page, options.prompt, 30_000);
   return { taskId, prompt: options.prompt, reply: options.reply };
+}
+
+async function verifyAttachmentRecovery(page, context, probe) {
+  const oversized = context.pathInState("oversized-attachment.csv");
+  const handle = await open(oversized, "wx", 0o600);
+  try {
+    await handle.truncate(101 * 1024 * 1024);
+  } finally {
+    await handle.close();
+  }
+  // The harness uses a local Chromium over CDP; Playwright's transfer wrapper
+  // refuses files over 50 MiB even when both processes share this owned path.
+  const cdp = await page.context().newCDPSession(page);
+  try {
+    const { root } = await cdp.send("DOM.getDocument");
+    const { nodeId } = await cdp.send("DOM.querySelector", {
+      nodeId: root.nodeId,
+      selector: '[data-testid="attachment-file-input"]',
+    });
+    assert.ok(nodeId, "The actual composer file input must be mounted");
+    await cdp.send("DOM.setFileInputFiles", { nodeId, files: [oversized] });
+  } finally {
+    await cdp.detach();
+  }
+  await page.getByTestId("attachment-error-badge").waitFor({ timeout: 10_000 });
+  await page.getByTestId("dismiss-attachment-error").click();
+  assert.equal(await page.getByTestId("attachment-error-badge").count(), 0);
+
+  probe.armed = true;
+  await page.getByTestId("attachment-file-input").setInputFiles({
+    name: "cancel-large-attachment.csv",
+    mimeType: "text/csv",
+    buffer: Buffer.alloc(4 * 1024 * 1024, 65),
+  });
+  const deadline = Date.now() + 20_000;
+  while (!probe.held && Date.now() < deadline) await page.waitForTimeout(50);
+  assert.ok(probe.held, "The real first chunk receipt must be held before cancellation");
+  await page.getByTestId("cancel-upload-button").click({ timeout: 5_000 });
+  await page.getByTestId("uploading-attachment-badge").waitFor({ state: "detached", timeout: 5_000 });
+  probe.held();
+  const cancelDeadline = Date.now() + 10_000;
+  while (!probe.cancelled && Date.now() < cancelDeadline) await page.waitForTimeout(50);
+  assert.equal(probe.cancelled, true, "Cancellation must reach the original app-server upload");
+  assert.equal(await page.getByTestId("attachment-badge").count(), 0);
+  assert.equal(await page.getByTestId("attachment-error-badge").count(), 0);
+  await context.writeArtifactJson("composer-attachment-recovery.json", {
+    oversizedBytes: 101 * 1024 * 1024,
+    oversizedErrorDismissed: true,
+    stalledChunkCancelled: true,
+    lateReceiptReleased: true,
+    scope: "Browser UI, real Gateway and app-server; model-independent, not native Electron",
+  });
 }
 
 async function uploadConversationAttachments(page) {
@@ -1194,7 +1278,7 @@ async function verifyWorkspaceMarkdownImage(
 
 async function traceWorkspaceImageRequests(page) {
   await page.evaluate(() => {
-    const internals = window.__TAURI_INTERNALS__;
+    const internals = window.__ELECTRON_INTERNALS__;
     if (!internals || typeof internals.invoke !== "function") {
       throw new Error("KCoder Gateway invoke bridge is unavailable");
     }

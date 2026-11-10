@@ -1,6 +1,6 @@
 import { beforeEach, expect, test, vi } from 'vitest'
-vi.mock('@/tauri/localExecutor', () => ({ requestLocalExecutor: vi.fn(async () => ({})) }))
-import { requestLocalExecutor } from '@/tauri/localExecutor'
+vi.mock('@/host/localExecutor', () => ({ requestLocalExecutor: vi.fn(async () => ({})) }))
+import { requestLocalExecutor } from '@/host/localExecutor'
 import { readToolProfile, saveToolProfile } from '../toolProfiles'
 const request = vi.mocked(requestLocalExecutor)
 beforeEach(() => request.mockClear())

@@ -135,139 +135,14 @@ pub(crate) fn library_root(ctx: &ToolContext) -> Result<PathBuf, ToolError> {
         })
 }
 
-use crate::{Tool, ToolOutput, parse_input};
+use crate::{Tool, ToolOutput};
 use async_trait::async_trait;
-use kcoder_types::workflow::{WorkflowDefinition, WorkflowNode};
+use kcoder_tool_input::builtin::workflow_draft::{Action, Input, ResponseDetail};
+use kcoder_types::workflow::WorkflowDefinition;
 use kcoder_workflow::store::WorkflowStore;
-use serde::Deserialize;
 use serde_json::{Value, json};
 #[derive(Debug, Default)]
 pub struct WorkflowDraftTool;
-#[derive(Deserialize, schemars::JsonSchema)]
-#[serde(rename_all = "snake_case")]
-enum Action {
-    Help,
-    PreviewRunArchive,
-    ArchiveRuns,
-    ReadArchivedRun,
-    Capacity,
-    MigrateStorage,
-    RollbackStorage,
-    Verification,
-    VersionReferences,
-    ArchiveVersion,
-    ReadHistory,
-    List,
-    Update,
-    Clone,
-    Versions,
-    Export,
-    Import,
-    Create,
-    UpsertNode,
-    PatchNodes,
-    RemoveNode,
-    Read,
-    Save,
-}
-#[derive(Deserialize, schemars::JsonSchema)]
-#[serde(rename_all = "snake_case")]
-enum ResponseDetail {
-    Full,
-    Changes,
-}
-#[derive(Deserialize, schemars::JsonSchema)]
-#[serde(deny_unknown_fields)]
-struct Input {
-    action: Action,
-    /// Exact run IDs selected for preview_run_archive/archive_runs; never choose history automatically.
-    run_ids: Option<Vec<String>>,
-    /// Content token returned by preview_run_archive for the exact selected IDs.
-    preview_token: Option<String>,
-    /// Required true only after explicit user confirmation of the selected history archive.
-    confirm: Option<bool>,
-    /// ID for read_archived_run.
-    run_id: Option<String>,
-    /// Optional on-demand help selector; does not execute this node.
-    node_kind: Option<kcoder_types::workflow::WorkflowNodeKind>,
-    /// For tool help, inspect only the actual currently registered safe target contract.
-    tool_name: Option<String>,
-    /// For mutations, changes returns metadata and only affected nodes; full (default) returns the entire definition. Read/export always return the complete definition.
-    response_detail: Option<ResponseDetail>,
-    id: Option<String>,
-    title: Option<String>,
-    #[serde(default)]
-    description: String,
-    #[schemars(range(min = 1))]
-    expected_revision: Option<u64>,
-    node: Option<WorkflowNode>,
-    /// Lossless JSON text alternative to node, for providers that rewrite nested argument types.
-    node_json: Option<String>,
-    /// Lossless JSON text alternative to nodes; must encode an array of partial node objects.
-    nodes_json: Option<String>,
-    /// Lossless JSON text alternative to input_schema; numbers/booleans/arrays remain native JSON types.
-    input_schema_json: Option<String>,
-    /// Lossless JSON text alternative to definition for import.
-    definition_json: Option<String>,
-    /// Partial node fields for patch_nodes. Omit nodes/nodes_json for a deletion-only patch. Omitted fields and config keys are preserved.
-    #[schemars(with = "Option<Vec<WorkflowNode>>")]
-    nodes: Option<Vec<Value>>,
-    /// IDs to delete in the same patch; nodes is optional for deletion-only edits. Rewire remaining dependents explicitly. Clearing all nodes leaves an unpublished empty draft.
-    #[serde(default)]
-    remove_node_ids: Vec<String>,
-    definition: Option<WorkflowDefinition>,
-    node_id: Option<String>,
-    offset: Option<usize>,
-    #[schemars(range(min = 1, max = 32))]
-    limit: Option<usize>,
-    /// Workflow input JSON Schema object or boolean, not a JSON-encoded string. Omit/null clears it on update.
-    input_schema: Option<Value>,
-    #[schemars(range(min = 1))]
-    version: Option<u64>,
-}
-impl Input {
-    fn decode_json_fields(&mut self) -> Result<(), ToolError> {
-        fn decode<T: serde::de::DeserializeOwned>(
-            value: &mut Option<T>,
-            text: Option<String>,
-            field: &str,
-        ) -> Result<(), ToolError> {
-            if let Some(text) = text {
-                if value.is_some() {
-                    return Err(ToolError::InvalidInput(format!(
-                        "{field} and {field}_json are mutually exclusive"
-                    )));
-                }
-                if text.len() > 128 * 1024 {
-                    return Err(ToolError::InvalidInput(format!(
-                        "{field}_json exceeds 128 KiB"
-                    )));
-                }
-                *value =
-                    Some(serde_json::from_str(&text).map_err(|error| {
-                        ToolError::InvalidInput(format!("{field}_json: {error}"))
-                    })?);
-            }
-            Ok(())
-        }
-        decode(&mut self.node, self.node_json.take(), "node")?;
-        decode(&mut self.nodes, self.nodes_json.take(), "nodes")?;
-        decode(
-            &mut self.definition,
-            self.definition_json.take(),
-            "definition",
-        )?;
-        decode(
-            &mut self.input_schema,
-            self.input_schema_json.take(),
-            "input_schema",
-        )?;
-        if self.input_schema.as_ref().is_some_and(Value::is_null) {
-            self.input_schema = None;
-        }
-        Ok(())
-    }
-}
 
 #[async_trait]
 impl Tool for WorkflowDraftTool {
@@ -295,13 +170,14 @@ Only after an explicit history management request use preview_run_archive with s
             description
                 .push_str(" For requested reuse, list by title, resolve ambiguous matches in conversation, and read the selected saved version before using Workflow with definition_id and version. Derive args from the user request and declared defaults; ask for missing or ambiguous required inputs before execution. Do not invent values or execute merely to discover missing inputs.");
         }
+        description.push_str(" Collaboration: action=collaboration_presets returns non-executing role contracts. On an empty existing draft, action=apply_collaboration requires id/expected_revision and collaboration_plan (or lossless collaboration_plan_json). It atomically adds explicit inputs, models, read-only roles, DAG-ordered scoped writers and independent checks. It does not save or execute; use normal save then an explicitly requested fixed-version Workflow run. expectedArtifacts remains human-readable; config.artifactRequirements is enforced against actual native reports. Per-role modelSelection is resolved by the original Agent runner; verifiers keep the actual parent model and unsupported/unobserved models refuse before requests.");
         description
     }
     fn input_schema_is_stable(&self) -> bool {
         true
     }
     fn input_schema(&self) -> Value {
-        let mut schema = crate::clean_schema(schemars::schema_for!(Input));
+        let mut schema = Input::schema();
         schema["properties"]["title"]["description"] = json!(
             "Required for create and update. On update, preserve the current title when only changing other fields."
         );
@@ -352,8 +228,13 @@ impl WorkflowDraftTool {
                 }
             }
         }
-        let mut input: Input = parse_input(&input)?;
+        let mut input = Input::parse(&input)?;
         input.decode_json_fields()?;
+        if matches!(input.action, Action::CollaborationPresets) {
+            return Ok(ToolOutput::text(
+                kcoder_workflow::collaboration::presets::catalog().to_string(),
+            ));
+        }
         if matches!(input.action, Action::Help) {
             let contract = input.tool_name.as_deref().and_then(|name| {
                 ctx.agent_runner
@@ -494,6 +375,11 @@ impl WorkflowDraftTool {
             Ok(())
         };
         let result = match input.action {
+            Action::ApplyCollaboration => crate::workflow::collaboration::apply_draft(ctx,
+                input.id.as_deref().ok_or_else(|| ToolError::InvalidInput("id is required".into()))?,
+                input.expected_revision.ok_or_else(|| ToolError::InvalidInput("expected_revision is required".into()))?,
+                input.collaboration_plan.as_ref().ok_or_else(|| ToolError::InvalidInput("collaboration_plan or collaboration_plan_json is required".into()))?,
+            ).map_err(anyhow::Error::new),
             Action::PreviewRunArchive | Action::ArchiveRuns | Action::ReadArchivedRun => unreachable!(),
             Action::VersionReferences | Action::ArchiveVersion => {
                 let version=input.version.ok_or_else(||missing("version"))?;
@@ -509,6 +395,7 @@ impl WorkflowDraftTool {
             Action::RollbackStorage => { store.rollback_storage().map_err(|e| ToolError::Execution(e.to_string()))?; return Ok(ToolOutput::text(json!({"backend":"legacy_json", "rolledBack":true}).to_string())); },
             Action::Capacity => return Ok(ToolOutput::text(serde_json::to_string(&store.capacity().map_err(|e| ToolError::Execution(e.to_string()))?).map_err(|e| ToolError::Execution(e.to_string()))?)),
             Action::Verification => return Ok(ToolOutput::text(serde_json::to_string(&store.verification_page(id()?, input.version.ok_or_else(|| missing("version"))?, input.offset.unwrap_or(0), input.limit.unwrap_or(32)).map_err(|e| ToolError::Execution(e.to_string()))?).map_err(|e| ToolError::Execution(e.to_string()))?)),
+            Action::CollaborationPresets => unreachable!(),
             Action::Help => unreachable!("help returns before opening profile storage"),
             Action::List => {
                 let limit = input.limit.unwrap_or(32);

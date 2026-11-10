@@ -67,7 +67,7 @@
     }
   },
   "proposedInvocation": {
-    "cwd": "target/phone-ux-upstream-integration-20261008",
+    "cwd": "target/worktree/2026/10/08/phone-ux-upstream-integration-20261008",
     "env": {
       "KCODER_E2E_CHROMIUM_NO_SANDBOX": "1"
     },
@@ -117,7 +117,7 @@
     "resultSha256": "e0ec33327a1584adbb4426f190edcbceb9be8568b3b4f991e837ac11dd472226"
   },
   "bundlePreflightInvocation": {
-    "cwd": "target/phone-ux-upstream-integration-20261008",
+    "cwd": "target/worktree/2026/10/08/phone-ux-upstream-integration-20261008",
     "env": {
       "KCODER_B4_BUILD_ONLY": "1"
     },

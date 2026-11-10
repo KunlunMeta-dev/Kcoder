@@ -4,6 +4,7 @@ import { access, readFile, readdir, stat } from "node:fs/promises";
 import { resolve } from "node:path";
 import test from "node:test";
 import { assertWindowsX64Executable } from "./build-windows.mjs";
+import { verifyComputerUseRuntime } from "../../../scripts/release/stage-computer-use.mjs";
 
 const packagedDir = process.env.KCODER_STUDIO_WINDOWS_PACKAGED_DIR;
 
@@ -11,7 +12,10 @@ test("Windows full desktop package contains native runtime, Gateway, renderer an
   skip: packagedDir ? false : "set KCODER_STUDIO_WINDOWS_PACKAGED_DIR after packaging",
 }, async () => {
   const root = resolve(packagedDir);
-  await verifyManifest(resolve(root, "resources"), { expectedCommit: process.env.KCODER_RELEASE_EXPECTED_COMMIT });
+  const manifest = await verifyManifest(resolve(root, "resources"), { expectedCommit: process.env.KCODER_RELEASE_EXPECTED_COMMIT });
+  const inventory = manifest.resources.find(file => file.path === "computer-use/files.sha256.json");
+  assert.ok(inventory, "full Windows installers must include the sealed Computer Use resources");
+  await verifyComputerUseRuntime(resolve(root, "resources/computer-use"), inventory.sha256);
   const gatewayPackage = JSON.parse(await readFile(resolve(root, "resources/gateway/package.json"), "utf8"));
   assert.equal(gatewayPackage.type, "module", "external Gateway must declare its own module scope");
   for (const path of ["kcoder-studio.exe", "resources/bin/kcoder.exe", "resources/bin/kcoder-process-supervisor.exe", "resources/bin/chrome/chrome-win64/chrome.exe", "resources/bin/pdf/pdftotext.exe"]) {
@@ -27,6 +31,8 @@ test("Windows full desktop package contains native runtime, Gateway, renderer an
   await access(resolve(root, "resources/bin/pdf/COPYING"));
   await access(resolve(root, "resources/bin/pdf/COPYING3"));
   await access(resolve(root, "resources/gateway/src/server-config.js"));
+  await access(resolve(root, "resources/gateway/shared/generated/validator.mjs"));
+  await access(resolve(root, "resources/gateway/shared/migrationInstructions.mjs"));
   await access(resolve(root, "使用说明.txt"));
   const asar = await readFile(resolve(root, "resources/app.asar"));
   const contents = asar.toString("utf8");

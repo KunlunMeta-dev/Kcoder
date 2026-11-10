@@ -30,6 +30,9 @@ struct Header {
     proof: Vec<u8>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     declined_row_limit: Option<usize>,
+    /// Captured from the exact successfully decoded source stream at publication.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    committed_source_token: Option<[u8; 32]>,
 }
 
 #[derive(Debug)]
@@ -169,6 +172,7 @@ impl TranscriptPageStore {
                     ready: false,
                     proof: vec![],
                     declined_row_limit: None,
+                    committed_source_token: None,
                 },
             )?;
         } else if objects == LEGACY_SCHEMA {
@@ -225,6 +229,7 @@ impl TranscriptPageStore {
                 ready: false,
                 proof: vec![],
                 declined_row_limit: None,
+                committed_source_token: None,
             },
         )?;
         tx.commit()?;
@@ -308,6 +313,42 @@ impl TranscriptPageStore {
 
     /// Publish only after the caller has finished all rows and revalidated sources.
     pub fn publish(&mut self, generation: &str, proof: &[u8]) -> Result<()> {
+        self.publish_inner(generation, proof, None)
+    }
+
+    /// Never obtain this observation via a later independent source read.
+    /// The caller must pass the observation produced by the same stream that built these rows.
+    pub fn publish_with_source_observation(
+        &mut self,
+        generation: &str,
+        proof: &[u8],
+        observation: &super::HistorySourceObservation,
+    ) -> Result<()> {
+        let token = observation
+            .has_known_commit_boundary()
+            .then(|| *observation.cache_key());
+        self.publish_inner(generation, proof, token)
+    }
+
+    pub fn committed_source_token(
+        &self,
+        generation: &str,
+        proof: &[u8],
+    ) -> Result<Option<[u8; 32]>> {
+        let header = read_header(&self.connection)?;
+        ensure!(
+            header.ready && header.generation == generation && header.proof == proof,
+            "stale transcript snapshot"
+        );
+        Ok(header.committed_source_token)
+    }
+
+    fn publish_inner(
+        &mut self,
+        generation: &str,
+        proof: &[u8],
+        token: Option<[u8; 32]>,
+    ) -> Result<()> {
         ensure!(
             self.writable && !proof.is_empty() && proof.len() <= 8192,
             "invalid transcript publication"
@@ -322,6 +363,7 @@ impl TranscriptPageStore {
         );
         header.ready = true;
         header.proof = proof.to_vec();
+        header.committed_source_token = token;
         write_header(&tx, &header)?;
         tx.commit()?;
         Ok(())
@@ -505,6 +547,10 @@ fn read_header(connection: &Connection) -> Result<Header> {
         "invalid transcript header"
     );
     ensure!(
+        header.committed_source_token.is_none() || header.ready,
+        "unpublished transcript source token"
+    );
+    ensure!(
         header
             .declined_row_limit
             .is_none_or(|limit| (1..=MAX_ROW).contains(&limit)
@@ -530,6 +576,107 @@ fn write_header(connection: &Connection, header: &Header) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn transcript_snapshot_source_token_is_same_observation_and_survives_reopen() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("source.jsonl");
+        let source = crate::history_store::HistorySource::bind(&path).unwrap();
+        source.append(b"first\n").unwrap();
+        let observation = super::super::HistorySourceObservation::read(&path, 4096).unwrap();
+        assert!(observation.has_known_commit_boundary());
+        let expected = *observation.cache_key();
+        // The publication receives the completed parser's observation, never this later source.
+        source.append(b"second\n").unwrap();
+        assert_ne!(
+            *super::super::HistorySourceObservation::read(&path, 4096)
+                .unwrap()
+                .cache_key(),
+            expected
+        );
+        let mut store = TranscriptPageStore::open(root.path(), "snapshot", true)
+            .unwrap()
+            .unwrap();
+        let generation = store.begin().unwrap();
+        store
+            .append(&generation, &[json!({"content":"first"})])
+            .unwrap();
+        assert!(store.committed_source_token(&generation, b"proof").is_err());
+        store
+            .publish_with_source_observation(&generation, b"proof", &observation)
+            .unwrap();
+        drop(store);
+        let store = TranscriptPageStore::open(root.path(), "snapshot", false)
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            store.committed_source_token(&generation, b"proof").unwrap(),
+            Some(expected)
+        );
+        assert!(
+            store
+                .committed_source_token(&generation, b"other-proof")
+                .is_err()
+        );
+        assert!(
+            store
+                .committed_source_token("other-generation", b"proof")
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn transcript_snapshot_unknown_source_and_legacy_header_never_mint_a_token() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("legacy.jsonl");
+        std::fs::write(&path, b"legacy\n").unwrap();
+        let observation = super::super::HistorySourceObservation::read(&path, 4096).unwrap();
+        assert!(!observation.has_known_commit_boundary());
+        let mut store = TranscriptPageStore::open(root.path(), "snapshot", true)
+            .unwrap()
+            .unwrap();
+        let generation = store.begin().unwrap();
+        store
+            .append(&generation, &[json!({"content":"legacy"})])
+            .unwrap();
+        store
+            .publish_with_source_observation(&generation, b"proof", &observation)
+            .unwrap();
+        assert_eq!(
+            store.committed_source_token(&generation, b"proof").unwrap(),
+            None
+        );
+        // Serialize an actual old header with no new member, preserving its checksum.
+        let header = read_header(&store.connection).unwrap();
+        let mut body = serde_json::to_value(header).unwrap();
+        body.as_object_mut()
+            .unwrap()
+            .remove("committed_source_token");
+        let body = serde_json::to_string(&body).unwrap();
+        let digest = Sha256::digest(body.as_bytes());
+        store
+            .connection
+            .execute(
+                "UPDATE page_header SET body=?1,sha=?2 WHERE id=1",
+                params![body, digest.as_slice()],
+            )
+            .unwrap();
+        drop(store);
+        let store = TranscriptPageStore::open(root.path(), "snapshot", false)
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            store.committed_source_token(&generation, b"proof").unwrap(),
+            None
+        );
+        assert_eq!(
+            store
+                .page(&generation, b"proof", None, 1, 4096)
+                .unwrap()
+                .rows,
+            vec![json!({"content":"legacy"})]
+        );
+    }
+
     #[test]
     fn transcript_row_decline_is_proof_and_policy_bound_and_not_publishable() {
         let root = tempfile::tempdir().unwrap();

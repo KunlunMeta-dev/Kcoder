@@ -1,3 +1,4 @@
+import { WorkspacePageHeader } from '@/components/layout/WorkspacePageHeader'
 import { marketplaceBlockReason } from './plugin-availability'
 import { pluginFailureDetails } from './plugin-errors'
 import { PluginIcon, type PluginIconLoader } from './PluginIcon'
@@ -5,7 +6,6 @@ import './plugin-marketplace.css'
 import { ExternalLink, MessageCircle, MoreHorizontal } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import { useTranslation } from '@/hooks/useTranslation'
-import { DesktopTopBar } from '@/components/layout/DesktopTopBar'
 import type { InstalledPlugin } from '@/types/api'
 import type { InstalledPluginItem } from './PluginManagementRows'
 import { resolvePluginAssetUrl } from './plugin-assets'
@@ -318,27 +318,11 @@ export function PluginDetailView({
       data-testid="plugin-detail-page"
       className="plugin-marketplace-page min-w-0 flex-1 overflow-y-auto bg-background text-text-primary"
     >
-      <DesktopTopBar
+      <WorkspacePageHeader
+        title={plugin.name}
         testId="plugin-detail-topbar"
-        className="sticky top-0 z-40 h-12 bg-background/95 pl-5 pr-5 backdrop-blur-xl md:h-[52px] md:pl-7 md:pr-7"
-        dragRegionClassName="hidden md:block"
-        left={
-          <nav
-            className="flex items-center gap-2 text-sm font-medium leading-[18px] text-text-muted"
-            aria-label={t('pluginPresentation.navigation')}
-          >
-            <button
-              type="button"
-              data-testid="plugin-detail-back-button"
-              className="h-8 rounded-lg px-2 transition-colors hover:bg-surface hover:text-text-primary"
-              onClick={onBack}
-            >
-              {t('workbench.plugins_tab', '插件')}
-            </button>
-            <span className="text-text-muted">›</span>
-            <span className="truncate text-text-primary">{plugin.name}</span>
-          </nav>
-        }
+        onBack={onBack}
+        backTestId="plugin-detail-back-button"
       />
       <div className="mx-auto flex w-full max-w-[1040px] flex-col gap-7 px-5 pb-14 pt-5 sm:px-8 sm:py-4">
         <header className="flex flex-col gap-5 rounded-2xl border border-border bg-surface/40 p-5 sm:flex-row sm:items-end sm:justify-between">
@@ -419,7 +403,7 @@ export function PluginDetailView({
           <div
             role="status"
             data-testid="plugin-compatibility-warning"
-            className="rounded-xl border border-border bg-surface/50 p-3 text-sm text-text-secondary"
+            className="studio-card-spacing rounded-xl border border-border bg-surface/50 text-sm text-text-secondary"
           >
             <p>
               {blocked
@@ -450,7 +434,7 @@ export function PluginDetailView({
           <div
             role="alert"
             data-testid="plugin-detail-action-error"
-            className="mb-4 flex items-start gap-3 rounded-lg border border-red-200 p-3 text-sm text-red-600"
+            className="studio-card-spacing mb-4 flex items-start gap-3 rounded-lg border border-red-200 text-sm text-red-600"
           >
             <div className="min-w-0 flex-1 [overflow-wrap:anywhere]">
               <p>{actionError}</p>
@@ -500,7 +484,7 @@ export function PluginDetailView({
 
         {activationPanel}
 
-        <section className="space-y-5 rounded-2xl border border-border p-5">
+        <section className="studio-card-spacing space-y-5 rounded-2xl border border-border">
           <h2 className="text-base font-medium leading-6 text-text-muted">
             {t('workbench.plugin_detail_contents', '包含内容')} {componentItems.length}
           </h2>
@@ -568,7 +552,7 @@ export function PluginDetailView({
           </div>
         </section>
 
-        <section className="space-y-5 rounded-2xl border border-border p-5">
+        <section className="studio-card-spacing space-y-5 rounded-2xl border border-border">
           <h2 className="text-base font-medium leading-6 text-text-primary">
             {t('workbench.plugin_detail_info', '信息')}
           </h2>

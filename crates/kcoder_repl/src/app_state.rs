@@ -2,6 +2,10 @@
 
 use super::*;
 
+#[cfg(test)]
+#[path = "app_state.test.rs"]
+mod tests;
+
 /// Snapshot global `goal_pro` configuration into a new goal so mid-run configuration changes cannot affect existing goals.
 pub(crate) fn goal_pro_verifier_selection(engine: &QueryEngine) -> GoalVerifierSelection {
     let goal_pro = engine.settings.read().unwrap().goal_pro.clone();
@@ -200,7 +204,7 @@ impl PendingBackgroundFollowup {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub(super) struct QueuedUserMessage {
     pub(super) model_message: Message,
     pub(super) display_message: Message,
@@ -209,6 +213,17 @@ pub(super) struct QueuedUserMessage {
     pub(super) remote_image_urls: Vec<String>,
     pub(super) pending_pastes: Vec<(String, String)>,
     pub(super) action: QueuedInputAction,
+    pub(super) owner: Option<kcoder_state::AppStateLifecycleIdentity>,
+}
+
+impl std::fmt::Debug for QueuedUserMessage {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("QueuedUserMessage")
+            .field("action", &self.action)
+            .field("owner_bound", &self.owner.is_some())
+            .finish_non_exhaustive()
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -222,6 +237,11 @@ pub(super) enum QueuedInputAction {
     Plain,
     Slash,
     RunShell,
+    Preparing(u64),
+    Admitting(u64),
+    Admitted(u64),
+    Uncertain,
+    Held,
 }
 
 #[derive(Debug, Clone)]
@@ -249,6 +269,7 @@ impl QueuedUserMessage {
             remote_image_urls: Vec::new(),
             pending_pastes: Vec::new(),
             action: QueuedInputAction::Plain,
+            owner: None,
         }
     }
 
@@ -261,6 +282,7 @@ impl QueuedUserMessage {
             remote_image_urls: submitted.remote_image_urls.clone(),
             pending_pastes: submitted.pending_pastes.clone(),
             action: QueuedInputAction::Plain,
+            owner: None,
         }
     }
 
@@ -273,6 +295,7 @@ impl QueuedUserMessage {
             remote_image_urls: Vec::new(),
             pending_pastes: Vec::new(),
             action: QueuedInputAction::RunShell,
+            owner: None,
         }
     }
 
@@ -285,12 +308,13 @@ impl QueuedUserMessage {
             remote_image_urls: Vec::new(),
             pending_pastes: Vec::new(),
             action: QueuedInputAction::Slash,
+            owner: None,
         }
     }
 
     pub(super) fn into_turn_input(self) -> QueuedTurnInput {
         match self.action {
-            QueuedInputAction::Plain => QueuedTurnInput::User {
+            QueuedInputAction::Plain | QueuedInputAction::Admitted(_) => QueuedTurnInput::User {
                 model_message: self.model_message,
                 display_message: self.display_message,
             },
@@ -300,6 +324,12 @@ impl QueuedUserMessage {
             QueuedInputAction::RunShell => QueuedTurnInput::Shell {
                 command: shell_command_from_prompt(&self.restore_text).unwrap_or_default(),
             },
+            QueuedInputAction::Preparing(_)
+            | QueuedInputAction::Admitting(_)
+            | QueuedInputAction::Uncertain
+            | QueuedInputAction::Held => {
+                unreachable!("unprepared input cannot be scheduled")
+            }
         }
     }
 }
@@ -388,6 +418,19 @@ pub(super) struct SideQuestionOverlay {
     pub(super) scroll: u16,
     pub(super) cancel: CancellationToken,
     pub(super) started_at: Instant,
+}
+
+pub(super) struct OwnedSideQuestion {
+    pub(super) owner: kcoder_state::AppStateLifecycleIdentity,
+    pub(super) cancel: CancellationToken,
+    pub(super) handle: JoinHandle<()>,
+}
+
+impl Drop for OwnedSideQuestion {
+    fn drop(&mut self) {
+        self.cancel.cancel();
+        self.handle.abort();
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -636,13 +679,19 @@ pub struct ReplApp {
     pub(super) last_frame_area: Option<ratatui::layout::Rect>,
     /// Plain text rows visible in the last rendered transcript area.
     pub(super) last_transcript_visible_rows: Vec<String>,
+    /// Painted transcript cells before selection highlighting, bounded to one viewport.
+    pub(super) last_transcript_buffer: Option<ratatui::buffer::Buffer>,
     /// Active transcript mouse selection in visible row/column coordinates.
     pub(super) transcript_selection: Option<TranscriptSelection>,
     pub(super) transcript_selection_rows: Option<Vec<String>>,
+    /// Freeze only the selected body while model/tool events continue normally.
+    pub(super) transcript_selection_buffer: Option<ratatui::buffer::Buffer>,
     /// Whether the left mouse button is currently selecting transcript text.
     pub(super) transcript_selection_drag_active: bool,
     /// Last rendered transient bottom overlay area (`/` menu, shortcut help).
     pub(super) last_bottom_overlay_area: Option<ratatui::layout::Rect>,
+    /// Last painted return-to-bottom button, never an invisible whole-row target.
+    pub(super) last_scroll_to_bottom_area: Option<ratatui::layout::Rect>,
     /// Last rendered composer outer area.
     pub(super) last_composer_area: Option<ratatui::layout::Rect>,
     /// Last rendered composer inner content area.
@@ -694,6 +743,7 @@ pub struct ReplApp {
     pub(super) pending_subagent_steer_applied: HashMap<String, PendingSubagentSteerApplied>,
     pub(super) pending_subagent_associations: HashMap<String, (String, bool)>,
     pub(super) pending_send_message_inputs: HashMap<String, String>,
+    pub(super) pending_web_source_slots: Vec<DisplayMessage>,
     pub(super) agent_view: Option<AgentViewState>,
     pub(super) open_subagent_panel: Option<u64>,
     pub(super) next_subagent_panel_id: u64,
@@ -702,6 +752,24 @@ pub struct ReplApp {
     /// input goes to `pending_turn_steers`; slash commands, shell commands, and
     /// non-steerable foreground operations continue to use this queue.
     pub(super) user_message_queue: VecDeque<QueuedUserMessage>,
+    pub(super) input_preparation: crate::user_actions::InputPreparationQueue,
+    pub(super) input_admission: Option<crate::input_admission::PendingInputAdmission>,
+    pub(super) retired_input_admissions: Vec<crate::input_admission::PendingInputAdmission>,
+    pub(super) retired_queued_inputs: VecDeque<QueuedUserMessage>,
+    pub(super) retired_pending_steers: VecDeque<PendingTurnSteer>,
+    pub(super) next_input_admission_id: u64,
+    pub(super) input_session_owner: Option<kcoder_state::AppStateLifecycleIdentity>,
+    pub(super) input_shutdown_pending: bool,
+    pub(super) input_shutdown_deadline: Option<Instant>,
+    pub(super) input_shutdown_notice_until: Option<Instant>,
+    pub(super) input_shutdown_uncertain: bool,
+    pub(super) input_uncertainty_owner: Option<kcoder_state::AppStateLifecycleIdentity>,
+    pub(super) input_shutdown_timed_out: bool,
+    pub(super) input_unknown_diagnostic: Option<(String, String)>,
+    pub(super) input_start_retry_at: Option<Instant>,
+    /// Provider/model selection accepted during a live stream. It is applied
+    /// at the next acknowledged tool-result boundary or when the turn ends.
+    pub(super) pending_model_switch: Option<String>,
     pub(super) queued_model_error: Option<String>,
     /// Input accepted by the engine and waiting to enter the current regular turn.
     /// It remains here for rendering and recovery until the engine confirms that
@@ -761,6 +829,9 @@ pub struct ReplApp {
     /// Isolated one-shot answer shown outside the main transcript.
     pub(super) side_question_overlay: Option<SideQuestionOverlay>,
     pub(super) side_question_sequence: u64,
+    pub(super) side_question_tasks: Vec<OwnedSideQuestion>,
+    /// Local migration output never enters the Engine or model context.
+    pub(super) migration_task: Option<crate::migration_terminal::MigrationTask>,
     /// Single active overlay kind, kept in sync with the overlay payload
     /// fields above so routing can rely on one state machine.
     pub(super) active_overlay: Option<OverlayKind>,
@@ -799,6 +870,8 @@ pub struct ReplApp {
     /// immediately, then frame ticks reveal it at a bounded pace so large
     /// provider chunks do not pop in as a single wall of text.
     pub(super) streaming_text_pending: String,
+    pub(super) streaming_text_pending_cap: TuiTextCapState,
+    pub(super) active_text_cap: TuiTextCapState,
     /// The API has ended the current assistant message, but pending text still
     /// needs to be presented before final commit/consolidation.
     pub(super) streaming_message_done_pending: bool,
@@ -828,9 +901,11 @@ pub struct ReplApp {
     /// Live reasoning/thinking status text. Reasoning deltas stay out of
     /// streaming history and drive status instead.
     pub(super) streaming_thinking_status: String,
+    pub(super) streaming_thinking_status_cap: TuiTextCapState,
     /// Full live reasoning/thinking buffer used to build a compact summary
     /// when the reasoning block ends.
     pub(super) streaming_thinking_buffer: String,
+    pub(super) streaming_thinking_buffer_cap: TuiTextCapState,
     /// Frame-rate limiter to avoid redrawing faster than 15 FPS during
     /// streaming.
     pub(super) frame_rate_limiter: FrameRateLimiter,
@@ -880,6 +955,16 @@ pub struct ReplApp {
     pub(super) session_mode: SessionMode,
     /// Cached progress for active orchestration work, avoiding a PlanStore read on every frame.
     pub(super) orchestrate_progress_label: Option<String>,
+    /// Cached read-only observation of target-side continuous work for this
+    /// workspace and session, refreshed only from `refresh_engine_metadata` so
+    /// drawing never reads the work store.
+    pub(super) work_observation: work_observation::WorkObservationTracker,
+    /// Gate for `/work pause|resume|stop`: an unknown durable outcome blocks the
+    /// next submission until `/work observation` re-reads the store.
+    pub(super) work_control: work_control::WorkControlGate,
+    /// Gate for `/work input`: an unknown durable outcome blocks the next
+    /// requirement until `/work observation` re-reads the store.
+    pub(super) work_input: work_input::WorkInputGate,
     /// Current `/goal` status shown in the compact status area.
     pub(super) goal: Option<Goal>,
     /// Current TodoWrite checklist shown in the TUI status area.
@@ -939,8 +1024,11 @@ impl Default for ReplApp {
             last_transcript_visible_rows: Vec::new(),
             transcript_selection: None,
             transcript_selection_rows: None,
+            last_transcript_buffer: None,
+            transcript_selection_buffer: None,
             transcript_selection_drag_active: false,
             last_bottom_overlay_area: None,
+            last_scroll_to_bottom_area: None,
             last_composer_area: None,
             last_composer_content: None,
             force_viewport_redraw: false,
@@ -970,6 +1058,22 @@ impl Default for ReplApp {
             next_subagent_panel_id: 1,
             subagent_animation_started_at: Instant::now(),
             user_message_queue: VecDeque::new(),
+            input_preparation: crate::user_actions::InputPreparationQueue::default(),
+            input_admission: None,
+            retired_input_admissions: Vec::new(),
+            retired_queued_inputs: VecDeque::new(),
+            retired_pending_steers: VecDeque::new(),
+            next_input_admission_id: 0,
+            input_session_owner: None,
+            input_shutdown_pending: false,
+            input_shutdown_deadline: None,
+            input_shutdown_notice_until: None,
+            input_shutdown_uncertain: false,
+            input_uncertainty_owner: None,
+            input_shutdown_timed_out: false,
+            input_unknown_diagnostic: None,
+            input_start_retry_at: None,
+            pending_model_switch: None,
             queued_model_error: None,
             pending_turn_steers: VecDeque::new(),
             rejected_turn_steers: VecDeque::new(),
@@ -1001,11 +1105,14 @@ impl Default for ReplApp {
             copy_view: None,
             side_question_overlay: None,
             side_question_sequence: 0,
+            side_question_tasks: Vec::new(),
+            migration_task: None,
             active_overlay: None,
             slash_registry: Arc::new(slash::SlashRegistry::new()),
             render_markdown: true,
             raw_output_mode: false,
             code_theme: "auto".to_string(),
+            pending_web_source_slots: Vec::new(),
             active_turn: None,
             active_turn_render_revision: 0,
             active_turn_render_cache: None,
@@ -1013,6 +1120,8 @@ impl Default for ReplApp {
             fullscreen_transcript_render_cache: None,
             streaming_delta_redraw_seeded: false,
             streaming_text_pending: String::new(),
+            streaming_text_pending_cap: TuiTextCapState::default(),
+            active_text_cap: TuiTextCapState::default(),
             streaming_message_done_pending: false,
             deferred_turn_finish_pending: false,
             deferred_turn_finish_handle: None,
@@ -1021,7 +1130,9 @@ impl Default for ReplApp {
             streaming_transcript_start: None,
             recent_turn_transcript_start: None,
             streaming_thinking_status: String::new(),
+            streaming_thinking_status_cap: TuiTextCapState::default(),
             streaming_thinking_buffer: String::new(),
+            streaming_thinking_buffer_cap: TuiTextCapState::default(),
             frame_rate_limiter: FrameRateLimiter::default(),
             quit_shortcut_expires_at: None,
             quit_shortcut_key: None,
@@ -1047,6 +1158,9 @@ impl Default for ReplApp {
             plan_mode: None,
             session_mode: SessionMode::Default,
             orchestrate_progress_label: None,
+            work_observation: work_observation::WorkObservationTracker::default(),
+            work_control: work_control::WorkControlGate::default(),
+            work_input: work_input::WorkInputGate::default(),
             goal: None,
             todos: Vec::new(),
             token_count: 0,

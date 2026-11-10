@@ -192,6 +192,24 @@ export class InvertedTranscriptGeometry {
     };
   }
 
+  /** A data-only marker; DOM bindings and lifecycle authority never leave this instance. */
+  readingAnchor(): { messageId: string; offset: number; followsLatest: boolean } | null {
+    this.captureAnchor();
+    const anchor = this.currentAnchor();
+    return anchor ? { messageId: anchor.id, offset: anchor.offset, followsLatest: false } : null;
+  }
+
+  adoptReadingAnchor(marker: { messageId: string; offset: number; followsLatest: boolean }): boolean {
+    const current = this.lifetime();
+    const host = this.rawHost();
+    const row = this.rows.get(marker.messageId);
+    if (marker.followsLatest || !Number.isFinite(marker.offset) || !current.mounted ||
+        shouldAnchorLatest(current.intent) || !host?.isConnected || !row?.isConnected) return false;
+    this.anchor = { id: marker.messageId, offset: marker.offset, host, intent: current.intent,
+      generation: current.generation, binding: this.binding, owner: current.owner };
+    return true;
+  }
+
   userMoved(): void {
     this.cancelAnchor();
     this.captureAnchor();

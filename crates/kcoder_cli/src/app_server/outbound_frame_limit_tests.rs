@@ -91,6 +91,46 @@ fn projected_large_tool_result_keeps_terminal_state_in_frame_budget() {
 }
 
 #[test]
+fn desktop_snapshot_keeps_large_image_and_completes_when_escaped_preview_overflows() {
+    let mut projection = StreamProjection::new(
+        "server".into(),
+        "thread".into(),
+        "turn".into(),
+        Arc::new(AtomicU64::new(1)),
+    );
+    let mut output = kcoder_tools::ToolOutput::text("\u{0}".repeat(64 * 1024));
+    let image_bytes = kcoder_types::computer_use::DESKTOP_SCREENSHOT_BASE64_BYTES;
+    output.content.push(kcoder_types::ContentBlock::Image {
+        source: kcoder_types::ImageSource::base64("image/jpeg", "A".repeat(image_bytes)),
+    });
+    let frame = projection
+        .project(EngineEvent::ToolResult {
+            id: "desktop-call".into(),
+            name: "mcp__kcoder_computer_use__Snapshot".into(),
+            output,
+        })
+        .remove(0);
+    assert!(serde_json::to_vec(&frame).unwrap().len() > OUTBOUND_FRAME_LIMIT_BYTES);
+    let bytes = bounded_outbound_frame(frame.clone(), OUTBOUND_FRAME_LIMIT_BYTES).unwrap();
+    let value: Value = serde_json::from_slice(&bytes).unwrap();
+    let item = &value["params"]["item"];
+    assert_eq!(item["id"], "desktop-call");
+    assert_eq!(item["status"], "completed");
+    assert_eq!(item["outputTruncated"], true);
+    assert_eq!(item["outputImagesOmitted"], false);
+    assert_eq!(
+        item["outputImages"][0]["data"].as_str().unwrap().len(),
+        image_bytes
+    );
+    let bytes = bounded_outbound_frame(frame, 1024 * 1024).unwrap();
+    let value: Value = serde_json::from_slice(&bytes).unwrap();
+    let item = &value["params"]["item"];
+    assert_eq!(item["status"], "completed");
+    assert_eq!(item["outputImagesOmitted"], true);
+    assert_eq!(item["output"].as_str().unwrap().len(), 64 * 1024);
+}
+
+#[test]
 fn projected_large_thinking_keeps_all_text_without_dropped_frames() {
     let text = "\u{0}中🙂".repeat(400_000);
     let mut projection = StreamProjection::new(

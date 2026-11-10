@@ -24,6 +24,8 @@ export interface ThreadRecentError {
 }
 
 export interface ThreadRunSummary {
+  /** Absent does not establish whether a task has ever run. */
+  latestTurnStatus?: "completed" | "failed" | "interrupted";
   /** Absent is unknown; null is a confirmed absence of failures. */
   recentError?: ThreadRecentError | null;
   mainTurn: "idle" | "running" | "unknown";
@@ -56,11 +58,17 @@ const COUNT_KEYS = [
   "pendingFollowups",
   "pendingGoals",
 ] as const;
+const MAX_U32_COUNT = 0xffff_ffff;
 
 function count(value: unknown): number | null | undefined {
   if (value === null) return null;
-  if (typeof value === "number" && Number.isFinite(value) && value >= 0)
-    return Math.floor(value);
+  if (
+    typeof value === "number" &&
+    Number.isSafeInteger(value) &&
+    value >= 0 &&
+    value <= MAX_U32_COUNT
+  )
+    return value;
   return undefined;
 }
 
@@ -77,6 +85,8 @@ export function parseThreadRunSummary(
   if (mainTurn !== "idle" && mainTurn !== "running" && mainTurn !== "unknown")
     return undefined;
   const summary = { mainTurn } as ThreadRunSummary;
+  if (["completed", "failed", "interrupted"].includes(record.latestTurnStatus as string))
+    summary.latestTurnStatus = record.latestTurnStatus as ThreadRunSummary["latestTurnStatus"];
   if (record.recentError === null) summary.recentError = null;
   else {
     const recent = parseThreadRecentError(record.recentError);

@@ -46,6 +46,7 @@ import type {
   RuntimeSubagentArtifactRequest,
   RuntimeSubagentArtifactResponse,
   RuntimeTaskAddress,
+  RuntimeTaskCancelRequest,
   RuntimeTaskArchiveResponse,
   RuntimeTaskCancelResponse,
   RuntimeTaskShortenWaitResponse,
@@ -168,6 +169,8 @@ export function createRuntimeWorkApi(client: HttpClient) {
     },
     listRuntimeSubagents(data: {
       address: RuntimeTaskAddress
+      agentId?: string
+      expectedBackgroundRun?: RuntimeSubagentRun
     }): Promise<RuntimeSubagentListResponse> {
       void data
       return Promise.reject(
@@ -391,7 +394,7 @@ export function createRuntimeWorkApi(client: HttpClient) {
     ): Promise<RuntimeArchivedConversationCleanupResponse> {
       return client.post('/runtime-work/archived-conversations/cleanup', data)
     },
-    cancelRuntimeTask(address: RuntimeTaskAddress): Promise<RuntimeTaskCancelResponse> {
+    cancelRuntimeTask(address: RuntimeTaskCancelRequest): Promise<RuntimeTaskCancelResponse> {
       return client.post('/runtime-work/cancel', address)
     },
     shortenWaitRuntimeTask(address: RuntimeTaskAddress): Promise<RuntimeTaskShortenWaitResponse> {

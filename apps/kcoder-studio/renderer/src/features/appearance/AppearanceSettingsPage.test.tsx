@@ -40,6 +40,7 @@ describe('AppearanceSettingsPage', () => {
     expect(systemMode).not.toHaveClass('bg-primary', 'text-primary-contrast')
 
     expect(screen.getByTestId('appearance-accent-input')).toHaveValue('#2563eb')
+    expect(screen.queryByTestId('appearance-reduce-motion-toggle')).not.toBeInTheDocument()
     expect(screen.getByTestId('appearance-background-select-button')).toBeInTheDocument()
     expect(screen.queryByTestId('appearance-background-select-button-dark')).not.toBeInTheDocument()
     expect(screen.getByTestId('appearance-background-visibility-slider')).not.toBeDisabled()
@@ -125,7 +126,7 @@ describe('AppearanceSettingsPage', () => {
     await userEvent.click(sidebar)
 
     expect(sidebar).not.toBeChecked()
-    expect(localStorage.getItem('wework.appearance')).toContain('"backgroundInSidebar":false')
+    expect(localStorage.getItem('kcoder.appearance')).toContain('"backgroundInSidebar":false')
   })
 
   test('preserves common and themed settings when switching modes', async () => {

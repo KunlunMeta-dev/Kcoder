@@ -1,4 +1,5 @@
 import { t } from "@/i18n";
+import { MobileRpcError } from "@/gateway/rpc";
 import {
   isMobileSlashCommandInput,
   parseMobileGoalSlashAction,
@@ -158,7 +159,7 @@ export function useTaskCommands(context: ReturnType<typeof useTaskAgentState>) {
       const action = parseMobileGoalSlashAction(command.name, args);
       if (action.kind !== "edit") goalEditExpectationRef.current = null;
       if (action.kind === "status") {
-        setComposerNotice(goalStatusNotice(await task.getGoal()));
+        setComposerNotice(goalStatusNotice(await task.getGoal(true)));
       } else if (action.kind === "history") {
         setComposerNotice(goalHistoryNotice(await task.getGoalHistory(), mode));
       } else if (action.kind === "pause" || action.kind === "resume") {
@@ -259,7 +260,7 @@ export function useTaskCommands(context: ReturnType<typeof useTaskAgentState>) {
       if (action.kind !== "edit") clearInputIfOwned(inputIntent);
       return true;
     } catch (value) {
-      setQueueError(value instanceof Error ? value.message : String(value));
+      setQueueError(value instanceof MobileRpcError && value.reason === "remote" && value.code === -32601 ? t("task.goal_unsupported") : value instanceof Error ? value.message : String(value));
       return true;
     }
   };

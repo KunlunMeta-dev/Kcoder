@@ -125,6 +125,21 @@ test('SSH JSONC accepts comments and trailing commas but fails closed on invalid
   }
 });
 
+test('SSH configuration accepts the shared v1 baseline and schema reference without rewriting corrupt UTF-8', async t => {
+  const { store, filePath } = await fixture(t);
+  await writeFile(filePath, '{ // retained\n"$schema":"./ssh.schema.json","terminal":{"ssh":{"connections":[]}}}');
+  assert.deepEqual(await store.list(), []);
+  await store.upsert(profile);
+  const saved = await readFile(filePath, 'utf8');
+  assert.match(saved, /retained/);
+  assert.equal(JSON.parse(saved.replace('// retained', '')).meta.config_version, 1);
+  const bytes = Buffer.concat([Buffer.from('{"note":"'), Buffer.from([0xff]), Buffer.from('"}')]);
+  await writeFile(filePath, bytes);
+  await assert.rejects(store.list(), /SSH 连接配置不是有效的 JSONC/);
+  await assert.rejects(store.upsert(profile), /SSH 连接配置不是有效的 JSONC/);
+  assert.deepEqual(await readFile(filePath), bytes);
+});
+
 test('SSH regular-file reader rejects directories, symlinks and oversized data', async (t) => {
   const { filePath } = await fixture(t);
   await writeFile(filePath, '12345');

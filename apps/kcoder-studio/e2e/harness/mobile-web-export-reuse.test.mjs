@@ -7,6 +7,7 @@ import { RunContext } from "./run-context.mjs";
 import { reuseMobileWebExport } from "./mobile-web-export-reuse.mjs";
 
 const expectedSourceTreeSha256 = "2f673d69fc972b84851b52b50dead516f97fa8ca1fffcebf03024ed9aa2b3082";
+const expoMonorepoPng = "assets/________________apps/kcoder-studio/mobile/node_modules/@react-navigation/elements/lib/module/assets/back-icon-mask.0a328cd9c1afd0afe8e3b1ec5165b1b4.png";
 
 test("reuses the retained 37-file public export into fresh RunContext state and records provenance", async () => {
   await withFixture("mobile-web-export-reuse-success", async (context, fixture) => {
@@ -24,6 +25,11 @@ test("reuses the retained 37-file public export into fresh RunContext state and 
     assert.equal(
       await readFile(resolve(result.path, "assets/node_modules/@react-navigation/elements/lib/module/assets/back.png"), "utf8"),
       "fixture:5:assets/node_modules/@react-navigation/elements/lib/module/assets/back.png\n",
+    );
+    assert.deepEqual(
+      await readFile(resolve(result.path, expoMonorepoPng)),
+      fixture.contents.get(expoMonorepoPng),
+      "the exact Expo Metro monorepo path is allowed as a manifest-listed PNG asset",
     );
 
     const provenance = JSON.parse(await readFile(result.provenancePath, "utf8"));
@@ -164,6 +170,25 @@ test("rejects unlisted files and forbidden sensitive paths", async () => {
       /node_modules except manifest-listed static image assets/,
     );
   });
+
+  await withFixture("mobile-web-export-reuse-expo-monorepo-node-modules", async (context, fixture) => {
+    const rejectedPaths = [
+      ["assets/________________apps/kcoder-studio/mobile/node_modules/example/runtime.js", /node_modules except manifest-listed static image assets/],
+      ["assets/________________apps/kcoder-studio/mobile/node_modules/@scope/.env/image.png", /environment files/],
+      ["assets/________________apps/kcoder-studio/mobile/node_modules/@scope/api-key.png", /credentials or key material/],
+      ["assets/________________apps/kcoder-studio/mobile/node_modules/example/node_modules/@scope/image.png", /node_modules except manifest-listed static image assets/],
+      ["assets/________________apps/other/mobile/node_modules/@scope/image.png", /node_modules except manifest-listed static image assets/],
+    ];
+    for (const [index, [path, reason]] of rejectedPaths.entries()) {
+      fixture.manifest.files[0].path = path;
+      fixture.manifest.bundleSha256 = aggregate(fixture.manifest.files);
+      await writeManifest(fixture);
+      await assert.rejects(
+        reuseMobileWebExport(context, optionsFor(fixture, `reused-mobile-web-invalid-${index}`)),
+        reason,
+      );
+    }
+  });
 });
 
 function optionsFor(fixture, outputName) {
@@ -207,6 +232,7 @@ async function createFixture(context, bundleFileCount = 37) {
     "index.html",
     "assets/node_modules/@react-navigation/elements/lib/module/assets/back.png",
     "assets/node_modules/expo-router/assets/arrow.svg",
+    expoMonorepoPng,
     ...Array.from({ length: 30 }, (_, index) => `pages/page-${String(index).padStart(2, "0")}.html`),
   ];
   assert.ok(Number.isSafeInteger(bundleFileCount) && bundleFileCount > 0 && bundleFileCount <= allPaths.length);
@@ -217,7 +243,9 @@ async function createFixture(context, bundleFileCount = 37) {
   const files = [];
   for (let index = 0; index < paths.length; index += 1) {
     const path = paths[index];
-    const value = Buffer.from(path === "index.html" ? "<html>index</html>\n" : `fixture:${index}:${path}\n`);
+    const value = path === expoMonorepoPng
+      ? Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/pS8AAAAASUVORK5CYII=", "base64")
+      : Buffer.from(path === "index.html" ? "<html>index</html>\n" : `fixture:${index}:${path}\n`);
     contents.set(path, value);
     const destination = resolve(bundleRoot, ...path.split("/"));
     await mkdir(resolve(destination, ".."), { recursive: true, mode: 0o700 });

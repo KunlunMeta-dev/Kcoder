@@ -1,6 +1,43 @@
 #[cfg(unix)]
 struct DiagnosticProcessGuard(TestAppServer);
 
+#[cfg(unix)]
+#[test]
+fn idle_shutdown_without_cron_store_leaves_project_metadata_absent() {
+    let temp = tempfile::tempdir().unwrap();
+    let workspace = temp.path().join("workspace");
+    std::fs::create_dir(&workspace).unwrap();
+    let settings = temp.path().join("settings.jsonc");
+    write_test_settings(&settings);
+    let mut guard = DiagnosticProcessGuard(
+        TestAppServer::builder(&workspace, &settings)
+            .config_dir(&temp.path().join("config"))
+            .scenario("markdown-showcase")
+            .discard_stderr()
+            .spawn(),
+    );
+    let server = &mut guard.0;
+    assert!(server.initialize(1).get("result").is_some());
+    assert!(!workspace.join(".kcoder").exists());
+    server.send(json!({"id":2,"method":"server/resources/read","params":{}}));
+    let instance = server.response(2)["result"]["instanceId"].clone();
+    server.send(json!({"id":3,"method":"server/shutdown/idle","params":{"instanceId":instance}}));
+    assert_eq!(server.response(3)["result"]["accepted"], true);
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    loop {
+        if let Some(status) = server.child.try_wait().unwrap() {
+            assert!(status.success());
+            break;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "idle shutdown did not exit with stdin open"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    assert!(!workspace.join(".kcoder").exists());
+}
+
 // Idle lifecycle and instance binding do not depend on model behavior.
 #[cfg(unix)]
 #[test]
@@ -232,10 +269,11 @@ fn diagnostic_ephemeral_sigterm_releases_current_engine_owner_after_flush() {
         "completed"
     );
 
-    let child_history = find_named_file(&child_temp, &format!("{child}.jsonl"))
-        .expect("ephemeral history must live inside this child's private temporary directory");
+    let managed_temp = fixture.path().join("config/tmp");
+    let child_history = find_named_file(&managed_temp, &format!("{child}.jsonl"))
+        .expect("ephemeral history must live inside this child's application-managed private temporary directory");
     let ephemeral_root = child_history.parent().unwrap().to_path_buf();
-    assert!(ephemeral_root.starts_with(&child_temp));
+    assert!(ephemeral_root.starts_with(&managed_temp));
     assert!(
         ephemeral_root
             .file_name()

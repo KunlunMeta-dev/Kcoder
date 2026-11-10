@@ -1,0 +1,984 @@
+{
+  "MigrationInstructionBodyParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "InstructionRepresentation": {
+        "enum": [
+          "original",
+          "compiled"
+        ],
+        "type": "string"
+      },
+      "MigrationInstructionReadTarget": {
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "captureId": {
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "source"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "captureId",
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "jobId": {
+                "minLength": 1,
+                "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]+$",
+                "type": "string",
+                "x-max-utf8-bytes": 256
+              },
+              "kind": {
+                "enum": [
+                  "job"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "jobId",
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "entryId": {
+                "pattern": "^e[0-9]{4}-[0-9]{4}$",
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "received"
+                ],
+                "type": "string"
+              },
+              "manifestSha256": {
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              },
+              "requestId": {
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "entryId",
+              "kind",
+              "manifestSha256",
+              "requestId"
+            ],
+            "type": "object"
+          }
+        ]
+      }
+    },
+    "properties": {
+      "itemId": {
+        "minLength": 1,
+        "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]+$",
+        "type": "string",
+        "x-max-utf8-bytes": 256
+      },
+      "offset": {
+        "default": 0,
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "representation": {
+        "$ref": "#/definitions/InstructionRepresentation"
+      },
+      "target": {
+        "$ref": "#/definitions/MigrationInstructionReadTarget"
+      }
+    },
+    "required": [
+      "itemId",
+      "representation",
+      "target"
+    ],
+    "title": "MigrationInstructionBodyParams",
+    "type": "object"
+  },
+  "MigrationInstructionBodyResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "InstructionBodyEncoding": {
+        "enum": [
+          "utf8",
+          "binary"
+        ],
+        "type": "string"
+      },
+      "InstructionFormatRevision": {
+        "enum": [
+          "scoped-instructions/v1",
+          "scoped-instructions/v2"
+        ],
+        "type": "string"
+      },
+      "InstructionRepresentation": {
+        "enum": [
+          "original",
+          "compiled"
+        ],
+        "type": "string"
+      },
+      "MigrationInstructionReadTarget": {
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "captureId": {
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "source"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "captureId",
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "jobId": {
+                "minLength": 1,
+                "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]+$",
+                "type": "string",
+                "x-max-utf8-bytes": 256
+              },
+              "kind": {
+                "enum": [
+                  "job"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "jobId",
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "entryId": {
+                "pattern": "^e[0-9]{4}-[0-9]{4}$",
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "received"
+                ],
+                "type": "string"
+              },
+              "manifestSha256": {
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              },
+              "requestId": {
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "entryId",
+              "kind",
+              "manifestSha256",
+              "requestId"
+            ],
+            "type": "object"
+          }
+        ]
+      }
+    },
+    "properties": {
+      "bytesBase64": {
+        "type": "string"
+      },
+      "enabledByPreview": {
+        "enum": [
+          false
+        ],
+        "type": "boolean"
+      },
+      "encoding": {
+        "$ref": "#/definitions/InstructionBodyEncoding"
+      },
+      "formatRevision": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/InstructionFormatRevision"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "itemId": {
+        "type": "string"
+      },
+      "nextOffset": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "offset": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "representation": {
+        "$ref": "#/definitions/InstructionRepresentation"
+      },
+      "sha256": {
+        "type": "string"
+      },
+      "target": {
+        "$ref": "#/definitions/MigrationInstructionReadTarget"
+      },
+      "text": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "totalBytes": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "bytesBase64",
+      "enabledByPreview",
+      "encoding",
+      "itemId",
+      "offset",
+      "representation",
+      "sha256",
+      "target",
+      "totalBytes"
+    ],
+    "title": "MigrationInstructionBodyResult",
+    "type": "object"
+  },
+  "MigrationInstructionCaptureParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "InstructionCaptureFormat": {
+        "enum": [
+          "static_v2"
+        ],
+        "type": "string"
+      },
+      "MigrationSourceKind": {
+        "enum": [
+          "claude-code",
+          "codex"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "captureId": {
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+        "type": "string"
+      },
+      "confirmStaticSubset": {
+        "enum": [
+          true
+        ],
+        "type": "boolean"
+      },
+      "format": {
+        "$ref": "#/definitions/InstructionCaptureFormat"
+      },
+      "includeDescendants": {
+        "default": false,
+        "type": "boolean"
+      },
+      "source": {
+        "$ref": "#/definitions/MigrationSourceKind"
+      },
+      "sourceCwd": {
+        "minLength": 1,
+        "pattern": "^(?=.*\\S)[^\\u0000-\\u001f\\u007f-\\u009f]+$",
+        "type": "string",
+        "x-max-utf8-bytes": 4096
+      },
+      "sourceRoot": {
+        "minLength": 1,
+        "pattern": "^(?=.*\\S)[^\\u0000-\\u001f\\u007f-\\u009f]+$",
+        "type": "string",
+        "x-max-utf8-bytes": 4096
+      }
+    },
+    "required": [
+      "captureId",
+      "confirmStaticSubset",
+      "format",
+      "source",
+      "sourceCwd",
+      "sourceRoot"
+    ],
+    "title": "MigrationInstructionCaptureParams",
+    "type": "object"
+  },
+  "MigrationInstructionCaptureResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "InstructionFormatRevision": {
+        "enum": [
+          "scoped-instructions/v1",
+          "scoped-instructions/v2"
+        ],
+        "type": "string"
+      },
+      "MigrationSourceKind": {
+        "enum": [
+          "claude-code",
+          "codex"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "captureId": {
+        "type": "string"
+      },
+      "completeAuthorizedStaticChain": {
+        "type": "boolean"
+      },
+      "dynamicScopePresent": {
+        "type": "boolean"
+      },
+      "formatRevision": {
+        "$ref": "#/definitions/InstructionFormatRevision"
+      },
+      "remainingMs": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "source": {
+        "$ref": "#/definitions/MigrationSourceKind"
+      },
+      "sourceRevision": {
+        "type": "string"
+      },
+      "totalItems": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "captureId",
+      "completeAuthorizedStaticChain",
+      "dynamicScopePresent",
+      "formatRevision",
+      "remainingMs",
+      "source",
+      "sourceRevision",
+      "totalItems"
+    ],
+    "title": "MigrationInstructionCaptureResult",
+    "type": "object"
+  },
+  "MigrationInstructionPageParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "MigrationInstructionReadTarget": {
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "captureId": {
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "source"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "captureId",
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "jobId": {
+                "minLength": 1,
+                "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]+$",
+                "type": "string",
+                "x-max-utf8-bytes": 256
+              },
+              "kind": {
+                "enum": [
+                  "job"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "jobId",
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "entryId": {
+                "pattern": "^e[0-9]{4}-[0-9]{4}$",
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "received"
+                ],
+                "type": "string"
+              },
+              "manifestSha256": {
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              },
+              "requestId": {
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "entryId",
+              "kind",
+              "manifestSha256",
+              "requestId"
+            ],
+            "type": "object"
+          }
+        ]
+      }
+    },
+    "properties": {
+      "pageIndex": {
+        "default": 0,
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "target": {
+        "$ref": "#/definitions/MigrationInstructionReadTarget"
+      }
+    },
+    "required": [
+      "target"
+    ],
+    "title": "MigrationInstructionPageParams",
+    "type": "object"
+  },
+  "MigrationInstructionPageResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "InstructionFormatRevision": {
+        "enum": [
+          "scoped-instructions/v1",
+          "scoped-instructions/v2"
+        ],
+        "type": "string"
+      },
+      "InstructionSourceDisposition": {
+        "enum": [
+          "selected",
+          "empty",
+          "shadowed",
+          "requires_review"
+        ],
+        "type": "string"
+      },
+      "InstructionSourceRole": {
+        "enum": [
+          "shared",
+          "local",
+          "override",
+          "ordinary",
+          "fallback"
+        ],
+        "type": "string"
+      },
+      "InstructionSourceTrigger": {
+        "enum": [
+          "launch",
+          "on_read",
+          "on_cwd"
+        ],
+        "type": "string"
+      },
+      "MigrationInstructionItem": {
+        "additionalProperties": false,
+        "properties": {
+          "bytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "completeAuthorizedStaticChain": {
+            "type": "boolean"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "disposition": {
+            "$ref": "#/definitions/InstructionSourceDisposition"
+          },
+          "formatRevision": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/InstructionFormatRevision"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "itemId": {
+            "type": "string"
+          },
+          "reasonCode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "relativePath": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "relativeScope": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "role": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/InstructionSourceRole"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "scoped": {
+            "type": "boolean"
+          },
+          "source": {
+            "$ref": "#/definitions/MigrationSourceKind"
+          },
+          "sourceRevision": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "trigger": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/InstructionSourceTrigger"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "completeAuthorizedStaticChain",
+          "displayName",
+          "disposition",
+          "itemId",
+          "scoped",
+          "source"
+        ],
+        "type": "object"
+      },
+      "MigrationInstructionReadTarget": {
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "captureId": {
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "source"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "captureId",
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "jobId": {
+                "minLength": 1,
+                "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]+$",
+                "type": "string",
+                "x-max-utf8-bytes": 256
+              },
+              "kind": {
+                "enum": [
+                  "job"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "jobId",
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "entryId": {
+                "pattern": "^e[0-9]{4}-[0-9]{4}$",
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "received"
+                ],
+                "type": "string"
+              },
+              "manifestSha256": {
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              },
+              "requestId": {
+                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "entryId",
+              "kind",
+              "manifestSha256",
+              "requestId"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "MigrationSourceKind": {
+        "enum": [
+          "claude-code",
+          "codex"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "items": {
+        "items": {
+          "$ref": "#/definitions/MigrationInstructionItem"
+        },
+        "type": "array"
+      },
+      "nextPage": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "pageIndex": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "target": {
+        "$ref": "#/definitions/MigrationInstructionReadTarget"
+      },
+      "totalItems": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "items",
+      "pageIndex",
+      "target",
+      "totalItems"
+    ],
+    "title": "MigrationInstructionPageResult",
+    "type": "object"
+  },
+  "MigrationInstructionReadTarget": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "oneOf": [
+      {
+        "additionalProperties": false,
+        "properties": {
+          "captureId": {
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "source"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "captureId",
+          "kind"
+        ],
+        "type": "object"
+      },
+      {
+        "additionalProperties": false,
+        "properties": {
+          "jobId": {
+            "minLength": 1,
+            "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]+$",
+            "type": "string",
+            "x-max-utf8-bytes": 256
+          },
+          "kind": {
+            "enum": [
+              "job"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "jobId",
+          "kind"
+        ],
+        "type": "object"
+      },
+      {
+        "additionalProperties": false,
+        "properties": {
+          "entryId": {
+            "pattern": "^e[0-9]{4}-[0-9]{4}$",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "received"
+            ],
+            "type": "string"
+          },
+          "manifestSha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "requestId": {
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "entryId",
+          "kind",
+          "manifestSha256",
+          "requestId"
+        ],
+        "type": "object"
+      }
+    ],
+    "title": "MigrationInstructionReadTarget"
+  },
+  "MigrationInstructionScopeChoice": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "itemId": {
+        "minLength": 1,
+        "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]+$",
+        "type": "string",
+        "x-max-utf8-bytes": 256
+      },
+      "targetRelativeScope": {
+        "pattern": "^(?!(?:[^/]+/){64})(?!(?:.*?/)?\\.{1,2}(?:/|$))(?!.*[\\\\:])(?!/)(?!.*//)(?!.*[^/]/$)[^\\u0000-\\u001f\\u007f-\\u009f]*$",
+        "type": "string",
+        "x-max-utf8-bytes": 4096
+      }
+    },
+    "required": [
+      "itemId",
+      "targetRelativeScope"
+    ],
+    "title": "MigrationInstructionScopeChoice",
+    "type": "object"
+  },
+  "MigrationSourceInstructionBodyParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "InstructionRepresentation": {
+        "enum": [
+          "original",
+          "compiled"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "captureId": {
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+        "type": "string"
+      },
+      "itemId": {
+        "minLength": 1,
+        "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]+$",
+        "type": "string",
+        "x-max-utf8-bytes": 256
+      },
+      "offset": {
+        "default": 0,
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "representation": {
+        "$ref": "#/definitions/InstructionRepresentation"
+      }
+    },
+    "required": [
+      "captureId",
+      "itemId",
+      "representation"
+    ],
+    "title": "MigrationSourceInstructionBodyParams",
+    "type": "object"
+  },
+  "MigrationSourceInstructionMapping": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "MigrationInstructionScopeChoice": {
+        "additionalProperties": false,
+        "properties": {
+          "itemId": {
+            "minLength": 1,
+            "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]+$",
+            "type": "string",
+            "x-max-utf8-bytes": 256
+          },
+          "targetRelativeScope": {
+            "pattern": "^(?!(?:[^/]+/){64})(?!(?:.*?/)?\\.{1,2}(?:/|$))(?!.*[\\\\:])(?!/)(?!.*//)(?!.*[^/]/$)[^\\u0000-\\u001f\\u007f-\\u009f]*$",
+            "type": "string",
+            "x-max-utf8-bytes": 4096
+          }
+        },
+        "required": [
+          "itemId",
+          "targetRelativeScope"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "archiveIncompleteChain": {
+        "type": "boolean"
+      },
+      "entryId": {
+        "pattern": "^e[0-9]{4}-[0-9]{4}$",
+        "type": "string"
+      },
+      "items": {
+        "items": {
+          "$ref": "#/definitions/MigrationInstructionScopeChoice"
+        },
+        "maxItems": 128,
+        "minItems": 1,
+        "type": "array"
+      }
+    },
+    "required": [
+      "entryId",
+      "items"
+    ],
+    "title": "MigrationSourceInstructionMapping",
+    "type": "object"
+  },
+  "MigrationSourceInstructionPageParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "captureId": {
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+        "type": "string"
+      },
+      "pageIndex": {
+        "default": 0,
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "captureId"
+    ],
+    "title": "MigrationSourceInstructionPageParams",
+    "type": "object"
+  }
+}

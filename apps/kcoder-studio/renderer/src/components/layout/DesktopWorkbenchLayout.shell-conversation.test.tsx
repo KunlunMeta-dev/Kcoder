@@ -1,5 +1,6 @@
+import { installTestTransport, clearTestTransports } from '@/test/runtime-transport'
 import { getDesktopWorkbenchHoistedMocks } from './DesktopWorkbenchLayout.test-mocks'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, test, vi } from 'vitest'
 import type { WorkbenchMessage } from '@/types/workbench'
@@ -15,6 +16,41 @@ import { mockDesktopWorkbenchMainWidth } from './DesktopWorkbenchMain.workspace.
 const { experimentalFeatures, paneSessionMockRef } = getDesktopWorkbenchHoistedMocks()
 
 describe('DesktopWorkbenchLayout', () => {
+  test('closes task review portals when navigation hides the cached workbench', async () => {
+    render(
+      <DesktopWorkbenchLayout
+        {...baseProps}
+        state={{ ...baseProps.state, currentRuntimeTask: activeProjectRuntimeTask }}
+        messages={[
+          {
+            id: 'review-navigation-result',
+            role: 'assistant',
+            status: 'done',
+            content: 'Result ready for review.',
+            createdAt: '2026-10-27T00:00:00Z',
+          },
+        ]}
+      />
+    )
+    await userEvent.click(screen.getByTestId('task-review-toolbar-button'))
+    expect(screen.getByTestId('environment-task-review-dialog')).toBeVisible()
+
+    window.history.pushState({}, '', '/todo')
+    fireEvent.popState(window)
+
+    await waitFor(() =>
+      expect(screen.queryByTestId('environment-task-review-dialog')).not.toBeInTheDocument()
+    )
+    expect(
+      screen.getByTestId('desktop-workbench-content').closest('[aria-hidden="true"]')
+    ).toHaveStyle({ display: 'none' })
+
+    window.history.pushState({}, '', '/')
+    fireEvent.popState(window)
+    await waitFor(() => expect(screen.getByTestId('task-review-toolbar-button')).toBeVisible())
+    expect(screen.queryByTestId('environment-task-review-dialog')).not.toBeInTheDocument()
+  })
+
   test('opens the local-capable board route while cloud is disconnected', () => {
     window.history.pushState({}, '', '/todo')
 
@@ -319,6 +355,72 @@ describe('DesktopWorkbenchLayout', () => {
     expect(screen.getByTestId('project-work-menu')).toBeInTheDocument()
   })
 
+  test.each([
+    ['homepage', null],
+    ['project', { id: 1, name: 'gitlab-wegent', tasks: [] }],
+  ] as const)('shows expert selection in the actual empty %s composer', (_entry, project) => {
+    render(
+      <DesktopWorkbenchLayout
+        {...baseProps}
+        state={{ ...baseProps.state, currentProject: project ? { ...project, tasks: [] } : null }}
+      />
+    )
+
+    const control = within(screen.getByTestId('desktop-empty-composer-dock')).getByTestId(
+      'task-expert-control'
+    )
+    expect(control).toBeVisible()
+    expect(control).toHaveTextContent('专家选择')
+    expect(screen.getByTestId('composer-toolbar-actions')).toContainElement(control)
+    expect(screen.queryByTestId('composer-project-context')).not.toContainElement(control)
+  })
+
+  test('keeps the fixed expert in the composer toolbar and channel binding in the task header', () => {
+    render(
+      <DesktopWorkbenchLayout
+        {...baseProps}
+        state={{
+          ...baseProps.state,
+          currentRuntimeTask: {
+            ...activeProjectRuntimeTask,
+            runtimeHandle: {
+              agentDefinition: {
+                owner: { accountId: 'owner', targetId: 'target', workspaceId: null },
+                definition: {
+                  id: 'personal.contract',
+                  version: '1.0.0',
+                  definitionSha256: 'a'.repeat(64),
+                },
+                title: '合同起草专家',
+                source: 'expert',
+              },
+            },
+          },
+        }}
+        messages={[
+          {
+            id: 'expert-task-message',
+            role: 'assistant',
+            content: 'Ready',
+            status: 'done',
+            createdAt: '2026-11-02T00:00:00.000Z',
+          },
+        ]}
+      />
+    )
+
+    const toolbar = screen.getByTestId('composer-toolbar-actions')
+    expect(
+      within(toolbar).getByRole('button', {
+        name: '专家：合同起草专家 · 1.0.0',
+      })
+    ).toBeDisabled()
+    expect(screen.getAllByText('专家：合同起草专家 · 1.0.0')).toHaveLength(1)
+    const channelBinding = screen.getByRole('button', { name: '绑定通道' })
+    expect(screen.getByTestId('workspace-panel-floating-actions')).toContainElement(channelBinding)
+    expect(screen.getByTestId('composer-toolbar-actions')).not.toContainElement(channelBinding)
+  })
+
   test('keeps the empty composer at the intended desktop proportion', () => {
     render(<DesktopWorkbenchLayout {...baseProps} />)
 
@@ -329,7 +431,7 @@ describe('DesktopWorkbenchLayout', () => {
       'flex-col'
     )
     expect(screen.getByTestId('desktop-empty-composer-dock')).toHaveClass(
-      'w-[min(46rem,calc(100%_-_2rem))]',
+      'w-[min(var(--kcoder-chat-column-width,59.8rem),calc(100%_-_2rem))]',
       'min-w-0',
       'shrink-0'
     )
@@ -371,9 +473,9 @@ describe('DesktopWorkbenchLayout', () => {
     expect(screen.getByTestId('desktop-chat-scroll-content')).toHaveClass('flex-1', 'shrink-0')
     expect(screen.getByTestId('desktop-chat-scroll-content')).not.toHaveClass('justify-end')
     expect(screen.getByTestId('desktop-chat-scroll-content').firstElementChild).toHaveClass(
-      'w-[min(46rem,calc(100%_-_6rem))]',
+      'w-[min(var(--kcoder-chat-column-width,59.8rem),calc(100%_-_2rem))]',
       'min-w-0',
-      'max-w-[calc(100%_-_6rem)]',
+      'max-w-[calc(100%_-_2rem)]',
       'px-0'
     )
     expect(screen.getByTestId('desktop-chat-scroll-sticky-footer')).toHaveClass(
@@ -391,7 +493,7 @@ describe('DesktopWorkbenchLayout', () => {
     )
     expect(screen.getByTestId('desktop-floating-composer-layer')).toHaveClass(
       'relative',
-      'w-[min(46rem,calc(100%_-_2rem))]',
+      'w-[min(var(--kcoder-chat-column-width,59.8rem),calc(100%_-_2rem))]',
       'min-w-0',
       'max-w-[calc(100%_-_2rem)]'
     )
@@ -399,41 +501,44 @@ describe('DesktopWorkbenchLayout', () => {
     expect(screen.queryByTestId('project-work-button')).not.toBeInTheDocument()
   })
 
-  test.each([1024, 700])('renders subagent status below the top bar without shifting messages at width %i', width => {
-    mockDesktopWorkbenchMainWidth(width)
-    render(
-      <DesktopWorkbenchLayout
-        {...baseProps}
-        state={{ ...baseProps.state, currentRuntimeTask: activeProjectRuntimeTask }}
-        messages={[
-          {
-            id: 'message-1',
-            role: 'assistant',
-            content: 'Ready',
-            status: 'done',
-            createdAt: '2026-05-29T00:00:00.000Z',
-          },
-        ]}
-        subagentStatuses={[
-          {
-            id: 'subagent-1',
-            agentId: 'thread:019f17ae-8295-7072-84e0-94ca0ffa96e5',
-            agentPath: 'thread:019f17ae-8295-7072-84e0-94ca0ffa96e5',
-            agentName: 'worker',
-            status: 'running',
-            updatedAtMs: 12345,
-          },
-        ]}
-      />
-    )
+  test.each([1024, 700])(
+    'renders subagent status below the top bar without shifting messages at width %i',
+    width => {
+      mockDesktopWorkbenchMainWidth(width)
+      render(
+        <DesktopWorkbenchLayout
+          {...baseProps}
+          state={{ ...baseProps.state, currentRuntimeTask: activeProjectRuntimeTask }}
+          messages={[
+            {
+              id: 'message-1',
+              role: 'assistant',
+              content: 'Ready',
+              status: 'done',
+              createdAt: '2026-05-29T00:00:00.000Z',
+            },
+          ]}
+          subagentStatuses={[
+            {
+              id: 'subagent-1',
+              agentId: 'thread:019f17ae-8295-7072-84e0-94ca0ffa96e5',
+              agentPath: 'thread:019f17ae-8295-7072-84e0-94ca0ffa96e5',
+              agentName: 'worker',
+              status: 'running',
+              updatedAtMs: 12345,
+            },
+          ]}
+        />
+      )
 
-    expect(screen.queryByTestId('workbench-topbar-right-actions')).not.toBeInTheDocument()
-    const statusRow = screen.getByTestId('workbench-subagent-status-row')
-    expect(statusRow).toContainElement(screen.getByTestId('subagent-status-toggle-button'))
-    expect(statusRow).toHaveClass('absolute', 'right-3', 'top-3', 'w-max')
-    expect(screen.getByTestId('environment-info-panel-container')).toHaveClass('overflow-visible')
-    expect(screen.getByTestId('desktop-workbench-content')).toHaveClass('pt-11')
-  })
+      expect(screen.queryByTestId('workbench-topbar-right-actions')).not.toBeInTheDocument()
+      const statusRow = screen.getByTestId('workbench-subagent-status-row')
+      expect(statusRow).toContainElement(screen.getByTestId('subagent-status-toggle-button'))
+      expect(statusRow).toHaveClass('absolute', 'right-3', 'top-3', 'w-max')
+      expect(screen.getByTestId('environment-info-panel-container')).toHaveClass('overflow-visible')
+      expect(screen.getByTestId('desktop-workbench-content')).toHaveClass('pt-11')
+    }
+  )
 
   test('treats a selected runtime task with an empty transcript as a conversation', () => {
     render(
@@ -702,13 +807,8 @@ describe('DesktopWorkbenchLayout', () => {
     expect(screen.queryByTestId('workbench-topbar-right-actions')).not.toBeInTheDocument()
   })
 
-  test('keeps continue-in-im action with titlebar actions in Tauri', () => {
-    const previousTauriInternals = (window as typeof window & { __TAURI_INTERNALS__?: unknown })
-      .__TAURI_INTERNALS__
-    Object.defineProperty(window, '__TAURI_INTERNALS__', {
-      configurable: true,
-      value: {},
-    })
+  test('keeps continue-in-im action with titlebar actions in Gateway', () => {
+    installTestTransport(() => null)
 
     try {
       render(
@@ -745,14 +845,7 @@ describe('DesktopWorkbenchLayout', () => {
       )
       expect(screen.queryByTestId('workbench-topbar-right-actions')).not.toBeInTheDocument()
     } finally {
-      if (previousTauriInternals === undefined) {
-        delete (window as typeof window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__
-      } else {
-        Object.defineProperty(window, '__TAURI_INTERNALS__', {
-          configurable: true,
-          value: previousTauriInternals,
-        })
-      }
+      clearTestTransports()
     }
   })
 

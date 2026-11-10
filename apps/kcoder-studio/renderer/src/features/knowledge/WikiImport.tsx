@@ -19,6 +19,7 @@ import { Button } from '@/components/ui/button'
 import { useTranslation } from '@/hooks/useTranslation'
 import { knowledgeApi, type WikiJob, type WikiSource } from '@/kcoder/knowledgeApi'
 import { startSnapshotPolling } from '@/lib/snapshotPolling'
+import { useRetainedPageActive } from '@/components/layout/retainedPageState'
 
 export function WikiImport({
   serverId,
@@ -76,8 +77,10 @@ export function WikiImport({
       alive.current = false
     }
   }, [])
+  const pageActive = useRetainedPageActive()
   useEffect(() => {
     return startSnapshotPolling({
+      active: pageActive,
       isCurrent,
       retryDelayMs: 2000,
       poll: async (isLive, signal) => {
@@ -105,7 +108,7 @@ export function WikiImport({
         onJobsChanged?.(previousJobs.current ?? [], true)
       },
     })
-  }, [serverId, libraryId, isCurrent, onChanged, onJobsChanged, refresh, refreshSignal])
+  }, [pageActive, serverId, libraryId, isCurrent, onChanged, onJobsChanged, refresh, refreshSignal])
   const processBatch = async (entries: BatchEntry<File, WikiSource>[]) => {
     setBusy(true)
     setError('')
@@ -187,7 +190,7 @@ export function WikiImport({
     }
   }
   return (
-    <div className="mb-4 shrink-0 space-y-3">
+    <div className="mb-4 shrink-0 studio-card-stack">
       <WikiFileImportControls
         actions={actions}
         busy={busy || !canOrganize}

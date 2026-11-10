@@ -17,7 +17,7 @@ import { ComposerTextarea, type ComposerSubmitOptions } from './ComposerTextarea
 import { ProjectWorkBar } from './ProjectWorkBar'
 import { useAutoResizeTextarea } from './useAutoResizeTextarea'
 import { debugComposerEvent, textMetrics } from './composerDebug'
-import type { QuickPhrase } from '@/tauri/appPreferences'
+import type { QuickPhrase } from '@/host/appPreferences'
 import type { CloudProject } from '@/api/deliveries'
 import {
   resolveDataTransferWorkspacePaths,
@@ -36,6 +36,8 @@ interface ProjectChatComposerProps {
   sendTestId?: string
   pauseTestId?: string
   value: string
+  inputHistory?: readonly string[]
+  inputHistoryScope?: string
   onChange: (value: string) => void
   onSubmit: (submittedValue?: string, options?: ComposerSubmitOptions) => void
   disabled: boolean
@@ -88,6 +90,7 @@ interface ProjectChatComposerProps {
   onShortenWait?: () => void
   shortenWaitAvailable?: boolean
   toolbarLeadingContext?: ReactNode
+  projectContext?: ReactNode
   modeStatus?: ReactNode
 }
 
@@ -101,6 +104,8 @@ export function ProjectChatComposer({
   sendTestId,
   pauseTestId,
   value,
+  inputHistory,
+  inputHistoryScope,
   onChange,
   onSubmit,
   disabled,
@@ -153,6 +158,7 @@ export function ProjectChatComposer({
   onShortenWait,
   shortenWaitAvailable,
   toolbarLeadingContext,
+  projectContext,
   modeStatus,
 }: ProjectChatComposerProps) {
   const [isDraggingFiles, setIsDraggingFiles] = useState(false)
@@ -215,43 +221,51 @@ export function ProjectChatComposer({
       data-testid="project-chat-composer"
       className="relative w-full rounded-[26px] bg-surface shadow-[0_0_0_0.5px_rgba(13,13,13,0.12),0_3px_7.5px_rgba(0,0,0,0.04),0_0_20px_rgba(0,0,0,0.05)]"
     >
-      {showProjectWorkBar && projectWork && !textOnly && (
-        <ProjectWorkBar
-          projects={projectWork.projects}
-          devices={projectWork.devices}
-          runtimeWork={projectWork.runtimeWork}
-          currentProject={projectWork.currentProject}
-          currentProjectId={projectWork.currentProjectId}
-          currentStandaloneDeviceId={projectWork.currentStandaloneDeviceId}
-          selectedDeviceWorkspaceId={projectWork.selectedDeviceWorkspaceId}
-          pendingProjectWorkspaceProjectId={projectWork.pendingProjectWorkspaceProjectId}
-          executionMode={projectWork.executionMode}
-          executionModeLocked={projectWork.executionModeLocked}
-          isGitProject={projectWork.isGitProject}
-          onSelectProject={projectWork.onSelectProject}
-          onSelectStandaloneDevice={projectWork.onSelectStandaloneDevice}
-          onSelectProjectWorkspace={projectWork.onSelectProjectWorkspace}
-          onBindProjectWorkspace={projectWork.onBindProjectWorkspace}
-          onExecutionModeChange={projectWork.onExecutionModeChange}
-          onCreateProjectMode={projectWork.onCreateProjectMode}
-          branchName={projectWork.branchName}
-          branchLoading={projectWork.branchLoading}
-          onRefreshBranch={projectWork.onRefreshBranch}
-          onListBranches={projectWork.onListBranches}
-          onCheckoutBranch={projectWork.onCheckoutBranch}
-          onCreateBranch={projectWork.onCreateBranch}
-          worktreeBranch={projectWork.worktreeBranch}
-          onWorktreeBranchChange={projectWork.onWorktreeBranchChange}
-          projectMenuOpenSignal={projectWork.projectMenuOpenSignal}
-          projectMenuAnchorElement={projectWork.projectMenuAnchorElement}
-          className="min-h-10 rounded-t-[26px] bg-surface px-4"
-          buttonClassName="text-sm leading-[18px] text-text-secondary hover:bg-background/70 hover:text-text-primary"
-        />
+      {!textOnly && ((showProjectWorkBar && projectWork) || projectContext) && (
+        <div
+          data-testid="composer-project-context"
+          className="flex min-h-10 flex-wrap items-center gap-x-2 rounded-t-[26px] bg-surface px-4"
+        >
+          {showProjectWorkBar && projectWork && (
+            <ProjectWorkBar
+              projects={projectWork.projects}
+              devices={projectWork.devices}
+              runtimeWork={projectWork.runtimeWork}
+              currentProject={projectWork.currentProject}
+              currentProjectId={projectWork.currentProjectId}
+              currentStandaloneDeviceId={projectWork.currentStandaloneDeviceId}
+              selectedDeviceWorkspaceId={projectWork.selectedDeviceWorkspaceId}
+              pendingProjectWorkspaceProjectId={projectWork.pendingProjectWorkspaceProjectId}
+              executionMode={projectWork.executionMode}
+              executionModeLocked={projectWork.executionModeLocked}
+              isGitProject={projectWork.isGitProject}
+              onSelectProject={projectWork.onSelectProject}
+              onSelectStandaloneDevice={projectWork.onSelectStandaloneDevice}
+              onSelectProjectWorkspace={projectWork.onSelectProjectWorkspace}
+              onBindProjectWorkspace={projectWork.onBindProjectWorkspace}
+              onExecutionModeChange={projectWork.onExecutionModeChange}
+              onCreateProjectMode={projectWork.onCreateProjectMode}
+              branchName={projectWork.branchName}
+              branchLoading={projectWork.branchLoading}
+              onRefreshBranch={projectWork.onRefreshBranch}
+              onListBranches={projectWork.onListBranches}
+              onCheckoutBranch={projectWork.onCheckoutBranch}
+              onCreateBranch={projectWork.onCreateBranch}
+              worktreeBranch={projectWork.worktreeBranch}
+              onWorktreeBranchChange={projectWork.onWorktreeBranchChange}
+              projectMenuOpenSignal={projectWork.projectMenuOpenSignal}
+              projectMenuAnchorElement={projectWork.projectMenuAnchorElement}
+              className="min-h-10 min-w-0 flex-1"
+              buttonClassName="text-sm leading-[18px] text-text-secondary hover:bg-background/70 hover:text-text-primary"
+            />
+          )}
+          {projectContext}
+        </div>
       )}
       <form
         data-testid="project-chat-composer-form"
         className={cn(
-          'relative z-10 flex min-h-[76px] w-full flex-col rounded-[26px] border bg-background px-4 pb-1.5 pt-2 transition-colors',
+          'relative z-10 flex min-h-[91px] w-full flex-col rounded-[26px] border bg-background px-4 pb-1.5 pt-2 transition-colors',
           isDraggingFiles ? 'border-focus ring-2 ring-focus/20' : 'border-border/45'
         )}
         onDragEnter={handleDragOver}
@@ -295,6 +309,8 @@ export function ProjectChatComposer({
           </div>
         )}
         <ComposerTextarea
+          inputHistory={inputHistory}
+          inputHistoryScope={inputHistoryScope}
           textOnly={textOnly}
           testId={inputTestId}
           textareaRef={textareaRef}
@@ -314,7 +330,7 @@ export function ProjectChatComposer({
           cloudProjectCandidates={cloudProjectCandidates}
           cloudSpaceEnabled={cloudSpaceEnabled}
           onSelectCloudProject={onSelectCloudProject}
-          className="max-h-[112px] min-h-[48px] w-full resize-none overflow-y-auto bg-transparent px-0 pb-0 pt-1 text-chat text-text-primary outline-none placeholder:text-text-muted/55"
+          className="max-h-[134px] min-h-[58px] w-full resize-none overflow-y-auto bg-transparent px-0 pb-0 pt-1 text-chat text-text-primary outline-none placeholder:text-text-muted/55"
           skillMenuClassName="left-[-1rem] right-[-0.5rem]"
           onListLocalSkills={onListLocalSkills}
           onListLocalApps={onListLocalApps}

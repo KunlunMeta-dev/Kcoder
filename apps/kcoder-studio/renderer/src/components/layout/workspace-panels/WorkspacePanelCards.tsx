@@ -1,6 +1,7 @@
 import { File, FileDiff, Globe2, Loader2, SquareTerminal } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { cloudDesktopExtension } from '@extensions/cloud-desktop'
+import { PAGE_CONTENT_COLUMN_MAX_WIDTH_CLASS } from '@/components/ui/page-content'
 import { getRuntimeConfig } from '@/config/runtime'
 import type { CloudDesktopLaunchAction } from '@/extensions/cloud-desktop-contract'
 import type { WorkspaceSessionApi } from '@/features/workbench/workbenchServices'
@@ -84,17 +85,16 @@ interface PersistedRemoteTerminalState {
   sessions: Array<Omit<WorkspaceTerminalSession, 'terminal_kind' | 'remoteClientFactory'>>
 }
 
-const REMOTE_TERMINAL_STORAGE_PREFIX = 'wework.workspace.remote-terminals.v1:'
-
-function remoteTerminalStorageKey(projectKey: string): string {
-  return `${REMOTE_TERMINAL_STORAGE_PREFIX}${projectKey}`
-}
+const REMOTE_TERMINAL_STORAGE_PREFIX = 'kcoder.workspace.remote-terminals.v1:'
+const LEGACY_REMOTE_TERMINAL_STORAGE_PREFIX = 'wework.workspace.remote-terminals.v1:'
 
 function readPersistedRemoteTerminals(projectKey: string): PersistedRemoteTerminalState {
   if (!projectKey) return { activeSessionId: null, sessions: [] }
   try {
     const value = JSON.parse(
-      window.localStorage.getItem(remoteTerminalStorageKey(projectKey)) ?? ''
+      window.localStorage.getItem(REMOTE_TERMINAL_STORAGE_PREFIX + projectKey) ??
+        window.localStorage.getItem(LEGACY_REMOTE_TERMINAL_STORAGE_PREFIX + projectKey) ??
+        ''
     )
     if (!value || !Array.isArray(value.sessions)) return { activeSessionId: null, sessions: [] }
     const sessions = value.sessions.filter((session: unknown) =>
@@ -134,8 +134,9 @@ function writePersistedRemoteTerminals(
       cwd: session.cwd,
       title: session.title,
     }))
-  const key = remoteTerminalStorageKey(projectKey)
+  const key = REMOTE_TERMINAL_STORAGE_PREFIX + projectKey
   if (remoteSessions.length === 0) {
+    window.localStorage.removeItem(LEGACY_REMOTE_TERMINAL_STORAGE_PREFIX + projectKey)
     window.localStorage.removeItem(key)
     return
   }
@@ -220,7 +221,7 @@ export function WorkspacePanelCards({
   )
   const localTerminalRuntimeAvailable = isLocalTerminalAvailable()
   const localTerminalCheckKey = [
-    localTerminalRuntimeAvailable ? 'tauri-macos' : 'unavailable',
+    localTerminalRuntimeAvailable ? 'gateway-local' : 'unavailable',
     projectDevice?.device_id ?? '',
     projectDevice?.device_type ?? '',
     projectDevice?.bind_shell ?? '',
@@ -916,7 +917,12 @@ export function WorkspacePanelCards({
         data-testid={activeTerminalSession ? undefined : testId('workspace-tool-launcher')}
         className={cn('h-full min-h-0 w-full flex-col', activeTerminalSession ? 'hidden' : 'flex')}
       >
-        <div className="mx-auto flex w-full max-w-3xl flex-col gap-3 px-8 py-6">
+        <div
+          className={cn(
+            'mx-auto flex w-full flex-col gap-3 px-8 py-6',
+            PAGE_CONTENT_COLUMN_MAX_WIDTH_CLASS
+          )}
+        >
           {!hasWorkspaceContext && (
             <p className="text-center text-sm leading-[18px] text-text-secondary">
               {t('workbench.project_tool_requires_project', '请选择项目后使用')}
@@ -930,7 +936,7 @@ export function WorkspacePanelCards({
           {hasLimitedProjectTools && (
             <div
               data-testid={testId('workspace-local-device-limited-tools')}
-              className="rounded-lg border border-border bg-surface px-4 py-5 text-center"
+              className="studio-card-spacing rounded-lg border border-border bg-surface text-center"
             >
               <p className="text-sm font-semibold text-text-primary">
                 {t('workbench.local_device_limited_tools_title')}

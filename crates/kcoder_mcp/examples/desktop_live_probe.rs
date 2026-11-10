@@ -79,9 +79,8 @@ async fn main() -> anyhow::Result<()> {
         let mut fixture=Fixture {child,directory:output.clone()};
         let deadline=Instant::now()+Duration::from_secs(20);
         let ready: Value=loop {
-            if let Ok(bytes)=std::fs::read(output.join("fixture-ready.json")) {
-                if let Ok(value)=serde_json::from_slice(&bytes) { break value; }
-            }
+            if let Ok(bytes)=std::fs::read(output.join("fixture-ready.json"))
+                && let Ok(value)=serde_json::from_slice(&bytes) { break value; }
             ensure!(fixture.child.try_wait()?.is_none(), "fixture exited");
             ensure!(Instant::now()<deadline, "fixture startup timeout");
             tokio::time::sleep(Duration::from_millis(100)).await;
@@ -164,12 +163,10 @@ async fn main() -> anyhow::Result<()> {
                 }
                 let deadline=Instant::now()+Duration::from_secs(5);
                 loop {
-                    if let Ok(bytes)=std::fs::read(output.join("input-result.json")) {
-                        if let Ok(value)=serde_json::from_slice::<Value>(&bytes) {
-                            if value["clicked"]==true && value["text"].as_str().is_some_and(|text|text.replace("\r\n","\n")==*expected) {
-                                break;
-                            }
-                        }
+                    if let Ok(bytes)=std::fs::read(output.join("input-result.json"))
+                        && let Ok(value)=serde_json::from_slice::<Value>(&bytes)
+                        && value["clicked"]==true && value["text"].as_str().is_some_and(|text|text.replace("\r\n","\n")==*expected) {
+                        break;
                     }
                     ensure!(Instant::now()<deadline,"fixture text did not match after input");
                     tokio::time::sleep(Duration::from_millis(100)).await;

@@ -1,0 +1,38 @@
+import { expect, test } from '@playwright/test'
+
+for (const theme of ['light', 'dark'] as const) {
+  test(`${theme}: recovery unlocks a hung answer without clearing its draft (model-independent)`, async ({ page }, testInfo) => {
+    const errors: string[] = []
+    page.on('pageerror', error => errors.push(error.message))
+    await page.goto(`/e2e/fixtures/async-question-browser.html?answerRace=1&theme=${theme}`)
+    const composer = page.getByTestId('chat-message-input')
+    await composer.fill('普通输入不被旧回答阻塞')
+    await page.getByTestId('async-question-toggle').click()
+    const draft = page.getByTestId('request-user-input-custom-e2e-item-a')
+    await draft.fill('重连后保留此回答')
+    const submit = page.getByTestId('request-user-input-submit-button')
+    await submit.click()
+    await expect(submit).toBeDisabled()
+    const lists = await page.evaluate(() => window.__asyncQuestionBrowserFixture.completedListCalls())
+    await page.evaluate(() => window.__asyncQuestionBrowserFixture.emitRecovery(true))
+    await expect.poll(() => page.evaluate(() => window.__asyncQuestionBrowserFixture.completedListCalls())).toBe(lists + 1)
+    await expect(submit).toBeEnabled()
+    await expect(draft).toHaveValue('重连后保留此回答')
+    expect(await page.evaluate(() => window.__asyncQuestionBrowserFixture.answerRequests.length)).toBe(1)
+    await page.evaluate(() => window.__asyncQuestionBrowserFixture.rejectHeldAnswer())
+    await expect(submit).toBeEnabled()
+    await expect(page.getByTestId('async-question-submit-error')).toHaveCount(0)
+    await expect(composer).toHaveText('普通输入不被旧回答阻塞')
+    await expect(composer).toBeEditable()
+    await page.screenshot({ path: testInfo.outputPath(`recovered-hung-answer-${theme}.png`), animations: 'disabled' })
+    await submit.click()
+    await expect.poll(() => page.evaluate(() => window.__asyncQuestionBrowserFixture.answerRequests.length)).toBe(2)
+    const requests = await page.evaluate(() => window.__asyncQuestionBrowserFixture.answerRequests)
+    expect(requests[1].submissionId).toBe(requests[0].submissionId)
+    expect(requests[1].answers).toEqual(requests[0].answers)
+    await expect(submit).toBeDisabled()
+    await page.getByTestId('send-message-button').click()
+    await expect(page.getByTestId('fixture-ordinary-send-count')).toHaveText('1')
+    expect(errors).toEqual([])
+  })
+}

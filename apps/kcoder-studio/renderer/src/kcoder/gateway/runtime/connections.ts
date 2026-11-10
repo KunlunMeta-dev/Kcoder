@@ -1,8 +1,13 @@
+import { hookTargetScope } from '../../gatewayHookConfiguration'
 import { sameWorkspacePath, workspacePathKey } from '@/lib/workspace-path-identity'
+import { clearWidgetUiStateForTarget } from '../../widgetUiState'
+import { clearWidgetPreviews } from '../../widgetPreviewEvents'
+import { taskConnectionStatus } from '../../taskConnectionStatus'
 import { type GatewayServer, safeGatewayFailureDiagnostic } from '../../gatewayRpc'
 import { clearLegacyKCoderContext, readLegacyKCoderContext } from '../../gatewayRuntimeSettings'
 import type { GatewayClient } from '../../gatewayRuntimeTypes'
 import { emitRuntimeEvent as emit } from '../../gatewayServiceBridge'
+import { hasRuntimeTransport } from '@/lib/runtime-transport'
 import { scanWorkspaces } from '../../workspaceScan'
 import { WorkspaceScanCancelledError } from '../../workspaceScanError'
 import {
@@ -19,6 +24,9 @@ import {
 import type { GatewayRuntimeCore } from './core'
 
 export function invalidateAccountTarget(this: GatewayRuntimeCore, targetId: string): void {
+  taskConnectionStatus.clearTarget(this, targetId)
+  clearWidgetUiStateForTarget(targetId)
+  clearWidgetPreviews(targetId)
   this.accountEpochByTarget.set(targetId, {})
   const taskPrefix = `kcoder:${targetId}:`
   const taskIds = new Set(
@@ -70,13 +78,12 @@ export function invalidateAccountTarget(this: GatewayRuntimeCore, targetId: stri
     if (key.startsWith(taskPrefix)) this.completedTurnKeys.delete(key)
   for (const key of this.pendingTurnStartByTask)
     if (key.startsWith(taskPrefix)) this.pendingTurnStartByTask.delete(key)
+  for (const key of this.pendingTaskInputs?.keys() ?? [])
+    if (key.startsWith(taskPrefix) || taskIds.has(key)) this.pendingTaskInputs.delete(key)
   this.remoteSessions.invalidateTarget(targetId)
   void this.browserRuntime.invalidateTarget(targetId)
-  for (const [client, owner] of this.accountClients) {
-    if (owner === targetId) {
-      client.close()
-      this.accountClients.delete(client)
-    }
+  for (const connection of this.connectionsByClient.values()) {
+    if (connection.serverId === targetId) this.releaseClient(connection.client)
   }
   void emit(EXECUTOR_EVENT, {
     event: 'executor.account_context_invalidated',
@@ -98,6 +105,8 @@ export function servers(this: GatewayRuntimeCore): Promise<GatewayServer[]> {
   const pending = (this.serversPromise ??= this.loadServers())
   return pending.then(servers => {
     if (this.serversPromise !== pending) throw new WorkspaceScanCancelledError()
+    this.serverIdentityById.clear()
+    for (const server of servers) this.serverIdentityById.set(server.id, hookTargetScope(server))
     return servers
   })
 }
@@ -181,8 +190,10 @@ export async function connectClient(
   channel: 'runtime' | 'browser' = 'runtime',
   workspacePath?: string,
   restartProbe = false,
-  onCreated?: (client: GatewayClient) => void
+  onCreated?: (client: GatewayClient) => void,
+  nativeManagementOnly = false
 ): Promise<GatewayClient> {
+  if (this.disposed) throw new Error('KCoder 网关运行时已关闭')
   if (this.isRestartingServer(server.id) && !restartProbe) {
     throw new Error('KCoder app-server restart is in progress')
   }
@@ -190,8 +201,23 @@ export async function connectClient(
   this.accountEpochByTarget.set(server.id, epoch)
   const valid = () => this.accountEpochByTarget.get(server.id) === epoch
   const client = this.createClient(server.id, this.token, channel, workspacePath)
-  this.accountClients.set(client, server.id)
-  client.addEventListener('close', () => this.accountClients.delete(client), { once: true })
+  if (nativeManagementOnly) client.useNativeManagementTransport?.()
+  const ready = Promise.resolve().then(() => {
+    if (this.disposed || !valid() || !this.connectionsByClient.has(client))
+      throw new WorkspaceScanCancelledError()
+    return client.connect()
+  })
+  this.connectionsByClient.set(client, {
+    client,
+    serverId: server.id,
+    server,
+    workspacePath: workspacePath ?? server.workspacePath,
+    channel,
+    nativeManagementOnly,
+    ready,
+  })
+  this.trackAsyncJob(ready)
+  client.addEventListener('close', () => this.unregisterClient(client), { once: true })
   const originalRequest = client.request.bind(client)
   client.request = async <T = unknown>(
     method: string,
@@ -206,7 +232,6 @@ export async function connectClient(
     return result
   }
 
-  onCreated?.(client)
   // app-server JSON-RPC notifications are wire-ordered. Project them serially so
   // rapid item/delta and turn/completed events cannot finish asynchronous emission in reverse and lose final text.
   this.notificationQueueByClient.set(client, Promise.resolve())
@@ -234,7 +259,7 @@ export async function connectClient(
             : undefined
         )
         .catch(error => {
-          if (typeof window === 'undefined' || !('__TAURI_INTERNALS__' in window)) return
+          if (!hasRuntimeTransport()) return
           console.error(
             '[KCoder] Failed to forward app-server notification',
             safeGatewayFailureDiagnostic(error)
@@ -245,6 +270,7 @@ export async function connectClient(
     }
   })
   client.addEventListener('request', event => {
+    const connectionId = client.diagnosticConnection?.connectionId
     const message = (
       event as CustomEvent<{
         id?: number
@@ -253,8 +279,9 @@ export async function connectClient(
       }>
     ).detail
     const forwarding = (this.notificationQueueByClient.get(client) ?? Promise.resolve())
-      .then(() => (valid() ? this.forwardServerRequest(client, message, server.id) : undefined))
+      .then(() => (valid() ? this.forwardServerRequest(client, message, server.id, connectionId) : undefined))
       .catch(error => {
+        if (client.diagnosticConnection?.connectionId !== connectionId) return
         if (typeof message.id === 'number') {
           client.respondError?.(
             message.id,
@@ -266,42 +293,28 @@ export async function connectClient(
     this.trackAsyncJob(forwarding)
   })
   try {
-    const ready = client.connect()
-    if (channel === 'runtime') {
-      this.ownedRuntimeClients.set(client, {
-        client,
-        server,
-        workspacePath: workspacePath ?? server.workspacePath,
-        ready,
-      })
-      client.addEventListener('close', () => this.ownedRuntimeClients.delete(client), {
-        once: true,
-      })
-    }
+    onCreated?.(client)
     await ready
-    if (this.disposed || !valid()) {
-      client.close()
+    if (this.disposed || !valid() || !this.connectionsByClient.has(client)) {
       throw new Error('KCoder 网关运行时已关闭')
     }
     return client
   } catch (error) {
-    this.ownedRuntimeClients.delete(client)
-    client.close()
+    this.releaseClient(client)
     throw error
   }
 }
 
 export async function controlClient(this: GatewayRuntimeCore): Promise<GatewayClient> {
+  if (this.disposed) throw new Error('KCoder 网关运行时已关闭')
   if (!this.controlClientPromise) {
     const attempt = this.server().then(async server => {
       const client = await this.connectClient(server)
-      client.addEventListener(
-        'close',
-        () => {
-          if (this.controlClientPromise === attempt) this.controlClientPromise = null
-        },
-        { once: true }
-      )
+      const connection = this.connectionsByClient.get(client)
+      if (!connection) throw new WorkspaceScanCancelledError()
+      connection.onClose = () => {
+        if (this.controlClientPromise === attempt) this.controlClientPromise = null
+      }
       return client
     })
     this.controlClientPromise = attempt
@@ -312,32 +325,137 @@ export async function controlClient(this: GatewayRuntimeCore): Promise<GatewayCl
   return this.controlClientPromise
 }
 
+/** Metadata refresh suspends new requests; only changed owners retire their exact clients. */
+export function refreshCommandDirectory(
+  this: GatewayRuntimeCore,
+  targetId: string | undefined,
+  previousIdentities: ReadonlyMap<string, string>
+): void {
+  const key = targetId
+  const sequence = ++this.commandDirectorySequence
+  const pending = Promise.resolve().then(async () => {
+    let servers: GatewayServer[] | undefined
+    for (let follow = 0; follow < 8; follow++) {
+      const reading = this.servers()
+      const observed = this.serversPromise
+      try {
+        servers = await reading
+        break
+      } catch (error) {
+        if (
+          !(error instanceof WorkspaceScanCancelledError) ||
+          this.serversPromise === observed ||
+          this.commandDirectorySequence === sequence
+        )
+          throw error
+        // Another explicit refresh owns the replacement read; never retry a real read failure.
+      }
+    }
+    if (!servers) throw new WorkspaceScanCancelledError()
+    if (this.disposed || this.commandDirectoryRefresh.get(key)?.result !== pending) return servers
+    const affected = targetId
+      ? [targetId]
+      : new Set([...previousIdentities.keys(), ...servers.map(server => server.id)])
+    for (const id of affected) {
+      const current = servers.find(server => server.id === id)
+      if (previousIdentities.get(id) !== (current ? hookTargetScope(current) : undefined))
+        this.configurationEpochByTarget.set(id, {})
+    }
+    for (const [clientKey, attempt] of this.commandClientByServer) {
+      const owner = clientKey.split('\0')[0]
+      if (targetId && owner !== targetId) continue
+      const current = servers.find(server => server.id === owner)
+      if (current && this.commandClientScopeByKey.get(clientKey) === hookTargetScope(current))
+        continue
+      if (this.commandClientByServer.get(clientKey) !== attempt) continue
+      this.commandClientByServer.delete(clientKey)
+      this.commandClientScopeByKey.delete(clientKey)
+      this.configurationEpochByTarget.set(owner, {})
+      void attempt.then(
+        client => client.close(),
+        () => undefined
+      )
+    }
+    return servers
+  })
+  this.commandDirectoryRefresh.set(key, { sequence, result: pending })
+  // Retain a failed authority read as a dispatch barrier until an explicit new refresh.
+  void pending.catch(() => undefined)
+}
+
+async function commandDirectoryReady(runtime: GatewayRuntimeCore, targetId: string) {
+  const latest = () => {
+    const all = runtime.commandDirectoryRefresh.get(undefined)
+    const target = runtime.commandDirectoryRefresh.get(targetId)
+    return !all || (target && target.sequence > all.sequence) ? target : all
+  }
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const current = latest()
+    let servers: GatewayServer[] | undefined
+    try {
+      servers = await current?.result
+    } catch {
+      if (current !== latest()) continue
+      throw new Error('Scheduled target authority is unavailable; refresh the current target')
+    }
+    if (current === latest()) return servers
+  }
+  throw new Error('Scheduled target changed during refresh')
+}
+
+export async function assertCommandOwner(runtime: GatewayRuntimeCore, server: GatewayServer) {
+  const refreshed = await commandDirectoryReady(runtime, server.id)
+  if (!refreshed) {
+    if (runtime.disposed) throw new Error('Command runtime is closed')
+    return
+  }
+  const current = refreshed.find(value => value.id === server.id)
+  if (runtime.disposed || !current || hookTargetScope(current) !== hookTargetScope(server))
+    throw new Error('Command target changed; reopen the current target')
+}
+
 export async function commandClient(
   this: GatewayRuntimeCore,
   server: GatewayServer,
-  workspacePath?: string
+  workspacePath?: string,
+  nativeManagementOnly = false
 ): Promise<GatewayClient> {
+  if (this.disposed) throw new Error('KCoder 网关运行时已关闭')
   if (this.isRestartingServer(server.id))
     throw new Error('KCoder app-server restart is in progress')
+  await assertCommandOwner(this, server)
   const effectiveWorkspacePath = this.compatibility.commandWorkspace(
     workspacePath,
     server.workspacePath
   )
-  const clientKey = `${server.id}\0${workspacePathKey(effectiveWorkspacePath)}`
+  const clientKey = `${server.id}\0${workspacePathKey(effectiveWorkspacePath)}${nativeManagementOnly ? '\0native-management' : ''}`
   const existing = this.commandClientByServer.get(clientKey)
   if (existing) return existing
-  const attempt = this.connectClient(server, 'runtime', effectiveWorkspacePath).then(client => {
-    client.addEventListener(
-      'close',
-      () => this.handleCommandClientClose(clientKey, server.id, client, attempt),
-      { once: true }
-    )
+  this.commandClientScopeByKey.set(clientKey, hookTargetScope(server))
+  const attempt = this.connectClient(server, 'runtime', effectiveWorkspacePath, false, undefined, nativeManagementOnly).then(client => {
+    const original = client.request.bind(client)
+    client.request = async <T = unknown>(
+      method: string,
+      params?: Record<string, unknown>,
+      options?: { signal?: AbortSignal }
+    ): Promise<T> => {
+      await assertCommandOwner(this, server)
+      const result = options
+        ? await original<T>(method, params, options)
+        : await original<T>(method, params)
+      await assertCommandOwner(this, server)
+      return result
+    }
+    const connection = this.connectionsByClient.get(client)
+    if (!connection) throw new WorkspaceScanCancelledError()
+    connection.onClose = () => this.handleCommandClientClose(clientKey, server.id, client, attempt)
     return client
   })
   this.commandClientByServer.set(clientKey, attempt)
   void attempt.catch(() => {
     if (this.commandClientByServer.get(clientKey) === attempt) {
       this.commandClientByServer.delete(clientKey)
+      this.commandClientScopeByKey.delete(clientKey)
     }
   })
   return attempt
@@ -365,6 +483,7 @@ export function handleCommandClientClose(
 ) {
   if (this.commandClientByServer.get(clientKey) === attempt) {
     this.commandClientByServer.delete(clientKey)
+    this.commandClientScopeByKey.delete(clientKey)
   }
   this.remoteSessions.handleCommandClientClose(serverId, client)
 }
@@ -373,21 +492,26 @@ export async function withTransientClient<T>(
   this: GatewayRuntimeCore,
   server: GatewayServer,
   operation: (client: GatewayClient) => Promise<T>,
-  workspacePath?: string
+  workspacePath?: string,
+  // Scan reads are retired by workspace scan invalidation. A mutation (archive,
+  // delete) passes `false`: retiring a scan must neither cancel it nor close its
+  // connection while its receipt is pending.
+  scanBound = true
 ): Promise<T> {
   const generation = this.workspaceScanGeneration
   const client = await this.connectClient(server, 'runtime', workspacePath, false, created => {
-    this.transientClients.add(created)
-    created.addEventListener('close', () => this.transientClients.delete(created), { once: true })
+    if (!scanBound) return
+    this.connectionsByClient.get(created)!.scanBound = true
   })
   try {
-    if (this.disposed || generation !== this.workspaceScanGeneration) {
+    if (this.disposed || (scanBound && generation !== this.workspaceScanGeneration)) {
       throw new WorkspaceScanCancelledError()
     }
     return await operation(client)
   } finally {
-    this.transientClients.delete(client)
-    if (![...this.clientByTask.values()].includes(client)) client.close()
+    const connection = this.connectionsByClient.get(client)
+    if (connection) connection.scanBound = false
+    if (![...this.clientByTask.values()].includes(client)) this.releaseClient(client)
   }
 }
 
@@ -433,8 +557,9 @@ export async function workspaceDescriptors(
     ordered,
     async server => {
       const basePath = server.workspacePath ?? `/remote/${server.id}`
+      const baseWorkspaceKey = workspacePathKey(basePath)
       const byPath = new Map<string, GatewayWorkspaceDescriptor>()
-      byPath.set(workspacePathKey(basePath), {
+      byPath.set(baseWorkspaceKey, {
         server,
         workspacePath: basePath,
         workspaceKind: 'workspace',
@@ -449,9 +574,10 @@ export async function workspaceDescriptors(
         available: true,
       })
       const healthStartedAt = Date.now()
+      let rootProjectPinned = true
+      let rootProjectPinMetadataRead = false
       try {
         await this.withTransientClient(server, async client => {
-          let rootProjectPinned = true
           if (client.supportsExperimental?.('workspaceRegistry') !== false) {
             const listed = await client.request<{
               items?: Array<Record<string, unknown>>
@@ -465,6 +591,7 @@ export async function workspaceDescriptors(
                 )
               : []
             rootProjectPinned = listed.rootProjectPinned !== false
+            rootProjectPinMetadataRead = typeof listed.rootProjectPinned === 'boolean'
             for (const descriptor of byPath.values()) {
               descriptor.pinnedTaskIds = pinnedTaskIds
               descriptor.projectPinned = rootProjectPinned
@@ -542,9 +669,42 @@ export async function workspaceDescriptors(
         server.latencyMs = Math.max(0, Date.now() - healthStartedAt)
         server.checkedAt = Date.now()
         server.error = error instanceof Error ? error.message : String(error)
-        for (const previous of this.workspaceDescriptorCache.get(server) ?? []) {
-          byPath.set(workspacePathKey(previous.workspacePath), {
+        const cachedDescriptors = this.workspaceDescriptorCache.get(server) ?? []
+        const cachedByPath = new Map(
+          cachedDescriptors.map(previous => [workspacePathKey(previous.workspacePath), previous])
+        )
+        for (const [key, current] of byPath) {
+          const previous = cachedByPath.get(key)
+          const descriptor = previous ? { ...previous } : { ...current }
+          if (previous) {
+            for (const [field, value] of Object.entries(current)) {
+              if (value !== undefined) Object.assign(descriptor, { [field]: value })
+            }
+            if (
+              key === baseWorkspaceKey &&
+              current.projectSource !== 'local_project' &&
+              !rootProjectPinMetadataRead
+            ) {
+              descriptor.projectPinned = previous.projectPinned
+            }
+          }
+          byPath.set(key, {
+            ...descriptor,
+            server,
+            available: false,
+            error: server.error,
+          })
+        }
+        for (const previous of cachedDescriptors) {
+          const key = workspacePathKey(previous.workspacePath)
+          if (byPath.has(key)) continue
+          byPath.set(key, {
             ...previous,
+            ...(rootProjectPinMetadataRead &&
+            previous.projectSource !== 'local_project' &&
+            previous.projectKey === runtimeProjectKey(server.id)
+              ? { projectPinned: rootProjectPinned }
+              : {}),
             server,
             available: false,
             error: server.error,

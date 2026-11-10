@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 
-export const RELAY_HTTP_DIAGNOSTIC_BASE_SHA256 = "941172ab1e4415d5fdc9d02f2efb787fe144c7032f3853013bbdb13ac2826a5e";
-export const RELAY_HTTP_DIAGNOSTIC_OVERLAY_SHA256 = "5f5f4405d76688eb4d408068f8e9c21fe9c156fa61d28d630dc5803be6b6f9cf";
+export const RELAY_HTTP_DIAGNOSTIC_BASE_SHA256 = "296e795bd0377b7a38da410c7939edd5444d996967c6fa4d59e482f6e38fce26";
+export const RELAY_HTTP_DIAGNOSTIC_OVERLAY_SHA256 = "dee11343c0848fa9907700dbbc27937e14af202fe45d408adf692541ef4b5b81";
 
 const EVENT_NAMES = new Set([
   "public-http-entry", "route-decision", "request-classification", "gateway-online-check",
@@ -387,21 +387,21 @@ export function applyRelayPublicHttpDiagnosticOverlay(sourceText) {
       [
         "    upstreamRequest.on('error', error => {",
         "      releaseSessionReservation();",
-        "      agent.destroy();",
+        "      if (lease) lease.release(false); else agent.destroy();",
         "      if (response.headersSent) response.destroy();",
-        "      else sendHttpError(response, error.code === 'RELAY_TIMEOUT' ? 504 : error.code === 'RELAY_TRAFFIC_LIMIT' ? 429 : 503,",
-        "        error.code === 'RELAY_TIMEOUT' ? 'Gateway Timeout' : error.code === 'RELAY_TRAFFIC_LIMIT' ? 'Too Many Requests' : 'Service Unavailable');",
+        "      else sendHttpError(response, error.code === 'RELAY_UNAUTHORIZED' ? 401 : error.code === 'RELAY_TIMEOUT' ? 504 : error.code === 'RELAY_TRAFFIC_LIMIT' ? 429 : 503,",
+        "        error.code === 'RELAY_UNAUTHORIZED' ? 'Unauthorized' : error.code === 'RELAY_TIMEOUT' ? 'Gateway Timeout' : error.code === 'RELAY_TRAFFIC_LIMIT' ? 'Too Many Requests' : 'Service Unavailable');",
         "    });",
       ].join("\n"),
       [
         "    upstreamRequest.on('error', error => {",
         "      releaseSessionReservation();",
-        "      agent.destroy();",
-        "      const statusCode = error.code === 'RELAY_TIMEOUT' ? 504 : error.code === 'RELAY_TRAFFIC_LIMIT' ? 429 : 503;",
+        "      if (lease) lease.release(false); else agent.destroy();",
+        "      const statusCode = error.code === 'RELAY_UNAUTHORIZED' ? 401 : error.code === 'RELAY_TIMEOUT' ? 504 : error.code === 'RELAY_TRAFFIC_LIMIT' ? 429 : 503;",
         "      diagnostic('relay-upstream-error', { outcome: 'error', ...e2eRelayErrorFields(error) });",
         "      if (response.headersSent) response.destroy();",
         "      else sendHttpError(response, statusCode,",
-        "        error.code === 'RELAY_TIMEOUT' ? 'Gateway Timeout' : error.code === 'RELAY_TRAFFIC_LIMIT' ? 'Too Many Requests' : 'Service Unavailable');",
+        "        error.code === 'RELAY_UNAUTHORIZED' ? 'Unauthorized' : error.code === 'RELAY_TIMEOUT' ? 'Gateway Timeout' : error.code === 'RELAY_TRAFFIC_LIMIT' ? 'Too Many Requests' : 'Service Unavailable');",
         "    });",
       ].join("\n"),
     ],
@@ -417,8 +417,8 @@ export function applyRelayPublicHttpDiagnosticOverlay(sourceText) {
       ].join("\n"),
     ],
     [
-      "    entry = openPending(gateway, session, (stream, close) => tunnel.attach(stream, close), error => tunnel.fail(error));",
-      "    entry = openPending(gateway, session, (stream, close) => tunnel.attach(stream, close), error => tunnel.fail(error), diagnosticRequestId);",
+      ["          tunnel.fail(error);", "        });", "        if (!entry) { releaseSessionReservation(); upstreamRequest.destroy(); agent.destroy(); }"].join("\n"),
+      ["          tunnel.fail(error);", "        }, diagnosticRequestId);", "        if (!entry) { releaseSessionReservation(); upstreamRequest.destroy(); agent.destroy(); }"].join("\n"),
     ],
   ];
   for (const [anchor, replacement] of patches) source = replaceUnique(source, anchor, replacement);

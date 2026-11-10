@@ -3,6 +3,7 @@
 import { Server } from "node:http";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { isContract } from "../../shared/generated/validator.mjs";
 
 export function decodeUiReceiptFrame(bytes) {
   if (
@@ -42,7 +43,16 @@ export function encodeUiReceiptFrame(value) {
   return Buffer.concat([header, body]);
 }
 
-export function uiReceiptMatches(mode, result) {
+export function uiReceiptMatches(mode, result, plan = {}) {
+  if (mode === "task-source-current")
+    return (
+      typeof plan.threadId === "string" &&
+      plan.threadId.length > 0 &&
+      result?.status === "completed" &&
+      result.error === null &&
+      isContract("IntegrationTaskCapabilityScopeSnapshot", result.result) &&
+      result.result.threadId === plan.threadId
+    );
   if (mode === "file-kind") {
     try {
       const directory =
@@ -97,11 +107,12 @@ if (process.env.KCODER_E2E_UI_RECEIPT_FAULT === "1") {
             record();
           }
         }
-        let mode;
+        let mode, plan;
         try {
-          mode = JSON.parse(
+          plan = JSON.parse(
             readFileSync(join(directory, "ui-receipt-plan.json"), "utf8"),
-          ).mode;
+          );
+          mode = plan.mode;
         } catch {
           /* Not armed. */
         }
@@ -109,7 +120,7 @@ if (process.env.KCODER_E2E_UI_RECEIPT_FAULT === "1") {
           !frame?.id ||
           frame.error ||
           seen.has(mode) ||
-          !uiReceiptMatches(mode, frame.result)
+          !uiReceiptMatches(mode, frame.result, plan)
         )
           return write.call(this, bytes, ...rest);
         seen.add(mode);

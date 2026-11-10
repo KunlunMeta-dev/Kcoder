@@ -1,6 +1,6 @@
 //! Test/dependency/workspace command classification shared with goal and PowerShell tools.
 
-use super::*;
+use super::{command_syntax::*, verification_policy::python_interpreter_program};
 
 pub(super) fn baseline_mutation_command(command: &str) -> bool {
     shell_command_invocations(command)
@@ -236,7 +236,7 @@ pub(super) fn node_test_script_argument(argument: &str) -> bool {
     stem == "test" || stem.ends_with(".test") || stem.ends_with("-test") || stem.ends_with(".spec")
 }
 
-pub(crate) fn dependency_mutation_command(command: &str) -> bool {
+pub fn dependency_mutation_command(command: &str) -> bool {
     for invocation in shell_command_invocations(command) {
         let program = invocation
             .program
@@ -319,8 +319,8 @@ pub(crate) fn dependency_mutation_command(command: &str) -> bool {
     false
 }
 
-#[cfg(test)]
-pub(crate) fn workspace_mutation_command(command: &str) -> bool {
+#[cfg(any(test, feature = "test-oracle"))]
+pub fn workspace_mutation_command(command: &str) -> bool {
     if dependency_mutation_command(command) || shell_has_unquoted_output_redirection(command) {
         return true;
     }

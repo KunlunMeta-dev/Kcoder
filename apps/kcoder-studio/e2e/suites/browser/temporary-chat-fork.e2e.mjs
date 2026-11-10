@@ -152,5 +152,5 @@ function containsPrompt(message, prompt) {
 }
 
 async function invoke(page, method, params) {
-  return page.evaluate(({ method, params }) => window.__TAURI_INTERNALS__.invoke("local_executor_request", { method, params }), { method, params });
+  return page.evaluate(({ method, params }) => window.__ELECTRON_INTERNALS__.invoke("local_executor_request", { method, params }), { method, params });
 }

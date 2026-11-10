@@ -1,8 +1,7 @@
 import { t } from "@/i18n";
 import { useLocale } from "@/i18n/use-locale";
-import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
-  Alert,
   Animated,
   Modal,
   PanResponder,
@@ -17,32 +16,62 @@ import {
   ChevronDown,
   ChevronRight,
   ChevronUp,
-  CircleHelp,
-  Clock3,
-  FolderPlus,
-  Home,
+  Folder,
   MoreHorizontal,
-  Plus,
-  Server,
   Settings,
-  X,
+  Plus,
 } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type {
   GatewayProfile,
   KCoderServer,
+  ServerStatus,
   ThreadSummary,
 } from "@/gateway/types";
+import { StatusDot } from "@/components/ui";
+import { connectionStatusLabel } from "./connection-status-presentation";
+import { WorkspaceFolderBadge } from "./workspace-folder-badge";
+import { statusDotColor } from "./status-dot-presentation";
 import { radius, spacing, useTheme, useThemedStyles, type ThemeColors } from "@/theme";
 import { useModalFocusTrap } from "./use-modal-focus-trap";
-import { groupThreadsByWorkspace, hiddenThreadCount, projectVisibleThreads, threadStatusTone, threadActivityLabel } from "./thread-list-presentation";
+import { groupThreadsByProject, hiddenThreadCount, projectVisibleThreads, threadActivityPresentation, workspaceSectionCollapseKey, workspaceTargetPresentations, type ProjectWorkspaceThreadGroup } from "./thread-list-presentation";
 import { ThreadActionsSheet, type ThreadActionTarget } from "./thread-actions-sheet";
 import { clampDrawerTranslation, shouldActivateDrawerDismiss, shouldDismissDrawer } from "./mobile-drawer-gesture";
 import { DrawerDismissal } from "./mobile-drawer-dismissal";
 import type { TaskRuntime, WorkspaceOption } from "@/runtime/task-runtime";
 import { useCollapsedServerSections } from "@/storage/use-collapsed-server-sections";
+import { WorkspaceHistoryActionsSheet } from "./workspace-history-actions-sheet";
+import { HistoryRefreshModal, type HistoryRefreshTarget } from "./history-refresh-modal";
+
+interface WorkspaceActionTarget {
+  profile: GatewayProfile;
+  server: KCoderServer;
+  workspace: string;
+  workspaceIdentity: string;
+  owner: string;
+  workspaceLabel: string;
+  workspaceAccessibleName: string;
+  targetLabel: string;
+  workspaceIndex: number;
+}
+type DrawerHistoryRefreshTarget = Extract<HistoryRefreshTarget, { kind: "workspace" }> & { workspaceIdentity: string };
+
+function drawerServerIdentity(server: KCoderServer): string {
+  return JSON.stringify([
+    server.id, server.label, server.labelKey, server.transport,
+    server.workspacePath, server.host, server.user, server.port,
+    server.observationTargetIdentity,
+  ]);
+}
+
+function drawerProfileIdentity(profile: GatewayProfile): string {
+  return JSON.stringify([
+    profile.id, profile.baseUrl, profile.authMode, profile.authorizationGeneration, profile.deviceId,
+  ]);
+}
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+type ConnectionStatus = ServerStatus["status"] | "unknown";
 
 export function MobileDrawer({
   visible,
@@ -51,11 +80,14 @@ export function MobileDrawer({
   profileId,
   profile,
   servers,
+  serverStatuses = {},
   threads = {},
   workspaceOptions = {},
   workspaceErrors = {},
   threadErrors = {},
-  loading = {}, hasMore = {}, onLoadServer, onLoadProjects,
+  workspaceHistoryOwner,
+  canRefreshWorkspaceHistory,
+  onWorkspaceHistoryReady,
   demo = false,
   onThreadRenamed,
   onThreadRemoved,
@@ -67,7 +99,9 @@ export function MobileDrawer({
   onDismissStart?(): void;
   profileId: string;
   profile: GatewayProfile;
+  gatewayStatus?: ConnectionStatus;
   servers: KCoderServer[];
+  serverStatuses?: Record<string, ConnectionStatus>;
   threads?: Record<string, ThreadSummary[]>;
   workspaceOptions?: Record<string, WorkspaceOption[]>;
   workspaceErrors?: Record<string, string>;
@@ -76,6 +110,12 @@ export function MobileDrawer({
   hasMore?: Record<string, boolean>;
   onLoadServer?(serverId: string, more?: boolean): Promise<void>;
   onLoadProjects?(serverId: string): Promise<void>;
+  /** Parent-owned navigation/read owner; changes invalidate pending workspace actions. */
+  workspaceHistoryOwner?: string;
+  /** Verifies the current profile, screen, target and read-owner before history work. */
+  canRefreshWorkspaceHistory?(server: KCoderServer): boolean;
+  /** Optional read-only UI refresh after the exact workspace index operation completes. */
+  onWorkspaceHistoryReady?(serverId: string): void;
   demo?: boolean;
   onThreadRenamed(serverId: string, thread: ThreadSummary): void;
   onThreadRemoved(
@@ -99,11 +139,25 @@ export function MobileDrawer({
   const [drawerWidth, setDrawerWidth] = useState(390);
   const translateX = useRef(new Animated.Value(0)).current;
   const [expandedServerIds, setExpandedServerIds] = useState<Set<string>>(new Set());
-  const [actionTarget, setActionTarget] = useState<ThreadActionTarget | null>(null);
+  const [actionTarget, setActionTarget] = useState<(ThreadActionTarget & { owner: object; interaction: object }) | null>(null);
+  const [workspaceActionTarget, setWorkspaceActionTarget] = useState<WorkspaceActionTarget | null>(null);
+  const [historyRefreshTarget, setHistoryRefreshTarget] = useState<DrawerHistoryRefreshTarget | null>(null);
   const dismissal = useRef(new DrawerDismissal(visible)).current;
   const [closing, setClosing] = useState(false);
   const { serverIds: collapsedServerIds, hydrated: collapseHydrated, toggle: toggleServerCollapsed } = useCollapsedServerSections(profileId);
-  const drawerVisible = visible && !actionTarget;
+  const historyOwnerRef = useRef(workspaceHistoryOwner);
+  historyOwnerRef.current = workspaceHistoryOwner;
+  const historyGateRef = useRef(canRefreshWorkspaceHistory);
+  historyGateRef.current = canRefreshWorkspaceHistory;
+  const historyReadyRef = useRef(onWorkspaceHistoryReady);
+  historyReadyRef.current = onWorkspaceHistoryReady;
+  const workspaceSourceRef = useRef({ profile, profileId, servers, threads, workspaceOptions, visible, owner: workspaceHistoryOwner });
+  workspaceSourceRef.current = { profile, profileId, servers, threads, workspaceOptions, visible, owner: workspaceHistoryOwner };
+  const taskActionOwner = useMemo(() => ({}), [visible, profileId, drawerProfileIdentity(profile),
+    JSON.stringify(servers.map(drawerServerIdentity)), workspaceHistoryOwner]);
+  const taskActionOwnerRef = useRef(taskActionOwner);
+  taskActionOwnerRef.current = taskActionOwner;
+  const visibleActionTarget = visible && !dismissal.closing && actionTarget?.owner === taskActionOwner ? actionTarget : null;
   const restoreDrawer = useCallback(() => {
     if (dismissal.closing) return;
     Animated.spring(translateX, { toValue: 0, useNativeDriver: true, speed: 24, bounciness: 0 }).start();
@@ -124,6 +178,83 @@ export function MobileDrawer({
       onClose();
     });
   }, [beginDismissal, dismissal, onClose, translateX]);
+  const navigate = (href: Parameters<typeof router.push>[0]) => {
+    const generation = beginDismissal();
+    if (generation === undefined || !dismissal.finish(generation)) return;
+    onClose();
+    router.push(href);
+  };
+  const replaceTask = (href: Parameters<typeof router.replace>[0]) => {
+    const generation = beginDismissal();
+    if (generation === undefined || !dismissal.finish(generation)) return;
+    onClose();
+    router.replace(href);
+  };
+  const toggleServerThreadsExpanded = (serverId: string) => {
+    setExpandedServerIds((current) => {
+      const next = new Set(current);
+      if (next.has(serverId)) next.delete(serverId);
+      else next.add(serverId);
+      return next;
+    });
+  };
+  const isWorkspaceActionCurrent = useCallback((target: WorkspaceActionTarget | DrawerHistoryRefreshTarget) => {
+    const source = workspaceSourceRef.current;
+    if (!source.visible || dismissal.closing || source.profile.id !== source.profileId ||
+      drawerProfileIdentity(target.profile) !== drawerProfileIdentity(source.profile) ||
+      !source.owner || source.owner !== target.owner || historyOwnerRef.current !== target.owner) return false;
+    const currentServer = source.servers.find((candidate) => candidate.id === target.server.id);
+    if (!currentServer || drawerServerIdentity(currentServer) !== drawerServerIdentity(target.server)) return false;
+    if (!historyGateRef.current?.(currentServer)) return false;
+    const currentGroups = groupThreadsByProject(
+      source.profile,
+      currentServer,
+      source.threads[currentServer.id] ?? [],
+      source.workspaceOptions[currentServer.id] ?? [],
+    ).flatMap((project) => project.workspaces);
+    return currentGroups.some((group) => group.path === target.workspace &&
+      group.identity === target.workspaceIdentity);
+  }, [dismissal]);
+  const visibleWorkspaceActionTarget = workspaceActionTarget && isWorkspaceActionCurrent(workspaceActionTarget)
+    ? workspaceActionTarget
+    : null;
+  const visibleHistoryRefreshTarget = historyRefreshTarget && isWorkspaceActionCurrent(historyRefreshTarget)
+    ? historyRefreshTarget
+    : null;
+  const targetPresentations = workspaceTargetPresentations(servers);
+  const visibleWorkspaceActionServer = visibleWorkspaceActionTarget
+    ? servers.find((candidate) => candidate.id === visibleWorkspaceActionTarget.server.id)
+    : undefined;
+  const visibleWorkspaceActionGroup: ProjectWorkspaceThreadGroup | undefined = visibleWorkspaceActionServer && visibleWorkspaceActionTarget
+    ? groupThreadsByProject(visibleWorkspaceActionTarget.profile, visibleWorkspaceActionServer,
+      threads[visibleWorkspaceActionServer.id] ?? [], workspaceOptions[visibleWorkspaceActionServer.id] ?? [])
+      .flatMap((project) => project.workspaces)
+      .find((group) => group.identity === visibleWorkspaceActionTarget.workspaceIdentity)
+    : undefined;
+  const drawerVisible = visible && !visibleActionTarget && !visibleWorkspaceActionTarget && !visibleHistoryRefreshTarget;
+
+  useEffect(() => {
+    if (!visible) {
+      setActionTarget(null);
+      setWorkspaceActionTarget(null);
+      setHistoryRefreshTarget(null);
+    } else {
+      if (workspaceActionTarget && !isWorkspaceActionCurrent(workspaceActionTarget)) setWorkspaceActionTarget(null);
+      if (historyRefreshTarget && !isWorkspaceActionCurrent(historyRefreshTarget)) setHistoryRefreshTarget(null);
+    }
+  }, [
+    visible,
+    workspaceActionTarget,
+    historyRefreshTarget,
+    isWorkspaceActionCurrent,
+    workspaceHistoryOwner,
+    canRefreshWorkspaceHistory,
+    profile,
+    profileId,
+    servers,
+    threads,
+    workspaceOptions,
+  ]);
   const drawerRef = useModalFocusTrap(drawerVisible, dismissDrawer);
   const panResponder = useMemo(() => PanResponder.create({
     onStartShouldSetPanResponder: () => false,
@@ -147,27 +278,6 @@ export function MobileDrawer({
   useLayoutEffect(() => {
     if (drawerVisible) translateX.setValue(0);
   }, [drawerVisible, translateX]);
-
-  const navigate = (href: Parameters<typeof router.push>[0]) => {
-    const generation = beginDismissal();
-    if (generation === undefined || !dismissal.finish(generation)) return;
-    onClose();
-    router.push(href);
-  };
-  const replaceTask = (href: Parameters<typeof router.replace>[0]) => {
-    const generation = beginDismissal();
-    if (generation === undefined || !dismissal.finish(generation)) return;
-    onClose();
-    router.replace(href);
-  };
-  const toggleServerThreadsExpanded = (serverId: string) => {
-    setExpandedServerIds((current) => {
-      const next = new Set(current);
-      if (next.has(serverId)) next.delete(serverId);
-      else next.add(serverId);
-      return next;
-    });
-  };
   return (
     <>
       <Modal
@@ -191,428 +301,254 @@ export function MobileDrawer({
               drawerWidthRef.current = width;
               setDrawerWidth(width);
             }}
-            style={[styles.drawer, { transform: [{ translateX }] }]}
+            style={[styles.drawer, { paddingTop: insets.top, transform: [{ translateX }] }]}
             {...panResponder.panHandlers}
           >
-            <View
-              style={[
-                styles.topActions,
-                { paddingTop: insets.top + spacing.sm },
-              ]}
-            >
-              <DrawerAction
-                styles={styles}
-                icon={<Plus size={18} color={colors.textMuted} />}
-                label={t("task.new_task")}
-                onPress={() =>
-                  navigate({ pathname: "/new", params: { profileId } })
-                }
-              />
-              <DrawerAction
-                styles={styles}
-                icon={<Clock3 size={18} color={colors.textMuted} />}
-                label={t("task.history")}
-                onPress={() =>
-                  navigate({ pathname: "/sessions", params: { profileId } })
-                }
-              />
-              <DrawerAction
-                styles={styles}
-                icon={<Clock3 size={18} color={colors.textDim} />}
-                label={t("task.schedules_coming_soon")}
-                disabled
-                onPress={() => {}}
-              />
-              <Pressable
-                accessibilityLabel={t("task.close_navigation")}
-                onPress={dismissDrawer}
-                style={[styles.close, { top: insets.top + spacing.xs }]}
-              >
-                <X size={20} color={colors.textMuted} />
-              </Pressable>
-            </View>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionLabel}>{t("task.workspace")}</Text>
+              <Text style={styles.sectionLabel}>{t("new.projects")}</Text>
+              <Pressable testID="drawer-settings" accessibilityRole="button" accessibilityLabel={t("common.settings")}
+                onPress={() => navigate("/settings")} style={styles.settingsButton}>
+                <Settings size={19} color={colors.textMuted} />
+              </Pressable>
             </View>
             <ScrollView
               style={styles.scroll}
-              contentContainerStyle={styles.scrollContent}
+              contentContainerStyle={[styles.scrollContent, { paddingBottom: Math.max(insets.bottom, spacing.xl) }]}
             >
               {servers.map((server) => {
                 const serverThreads = threads[server.id] ?? [];
-                const workspaceGroups = groupThreadsByWorkspace(
+                const projects = groupThreadsByProject(
+                  profile,
+                  server,
                   serverThreads,
                   workspaceOptions[server.id] ?? [],
-                  server.workspacePath,
                 );
+                const target = targetPresentations.get(server.id)!;
+                const status = serverStatuses[server.id] ?? "unknown";
+                const workspaceActionEnabled = visible && !closing && profile.id === profileId &&
+                  Boolean(workspaceHistoryOwner && canRefreshWorkspaceHistory?.(server));
+                let workspaceIndex = 0;
+                const renderedProjects = projects.map((project) => ({
+                  project,
+                  rows: project.workspaces.map((group) => ({ group, groupIndex: workspaceIndex++ })),
+                }));
                 return (
                   <View key={server.id} style={styles.serverGroup}>
-                    <View style={styles.serverRow}>
-                      <View style={styles.serverBadge}>
-                        <Text style={styles.serverBadgeText}>
-                          {server.label.slice(0, 1).toUpperCase()}
-                        </Text>
+                    {!renderedProjects.length ? (
+                      <View style={styles.targetStatusFallback} testID={`drawer-target-status-${server.id}`}>
+                        <StatusDot status={status} decorative />
+                        <Text numberOfLines={1} style={styles.workspaceTarget}>{target.display} · {connectionStatusLabel(status)}</Text>
                       </View>
-                      <Text style={styles.serverLabel}>{server.label}</Text>
-                      <Pressable
-                        accessibilityLabel={t("task.new_task_on", {
-                          p0: server.label,
-                        })}
-                        hitSlop={6}
-                        onPress={() =>
-                          navigate({
-                            pathname: "/new",
-                            params: { profileId, serverId: server.id },
-                          })
-                        }
-                        style={styles.serverAdd}
-                      >
-                        <Plus size={17} color={colors.textMuted} />
-                      </Pressable>
-                    </View>
-                    {threadErrors[server.id] ? (
-                      <Text
-                        accessibilityRole="alert"
-                        style={styles.workspaceError}
-                      >
-                        {threadErrors[server.id]}
-                      </Text>
                     ) : null}
-                    {workspaceErrors[server.id] ? (
-                      <Text
-                        accessibilityRole="alert"
-                        style={styles.workspaceError}
-                      >
-                        {t(
-                          "task.project_loading_failed_tasks_are_grouped_by_directory",
-                        )}
-                      </Text>
-                    ) : null}
-                    {onLoadServer ? <Pressable testID={`drawer-load-server-${server.id}`} disabled={closing || loading[server.id]} onPress={() => { if (!dismissal.closing) void onLoadServer(server.id, Boolean(hasMore[server.id])); }} style={styles.moreThreads}><Text style={styles.moreThreadsText}>{loading[server.id] ? t("mobile.drawer.loading_sessions") : hasMore[server.id] ? t("mobile.drawer.load_older_sessions") : t("mobile.drawer.load_recent_sessions")}</Text></Pressable> : null}
-                    {onLoadProjects ? <Pressable testID={`drawer-load-projects-${server.id}`} disabled={closing} onPress={() => { if (!dismissal.closing) void onLoadProjects(server.id); }} style={styles.moreThreads}><Text style={styles.moreThreadsText}>{t("mobile.drawer.browse_projects")}</Text></Pressable> : null}
-                    {workspaceGroups.map((group, groupIndex) => {
-                      const sectionKey = `${server.id}\0${group.path}`;
-                      const expanded = expandedServerIds.has(sectionKey);
-                      const hiddenThreads = hiddenThreadCount(
-                        group.threads,
-                        expanded,
-                      );
-                      const collapsed = collapsedServerIds.has(sectionKey);
-                      return (
-                        <View key={sectionKey}>
-                          <Pressable
-                            testID={
-                              groupIndex === 0
-                                ? `drawer-toggle-server-${server.id}`
-                                : `drawer-toggle-workspace-${server.id}-${groupIndex}`
-                            }
-                            accessibilityRole="button"
-                            accessibilityLabel={t("task.sessions_in", {
-                              p0: collapsed
-                                ? t("task.expand")
-                                : t("task.collapse"),
-                              p1: group.label,
-                            })}
-                            aria-expanded={!collapsed}
-                            accessibilityState={{
-                              expanded: !collapsed,
-                              disabled: !collapseHydrated,
-                            }}
-                            disabled={!collapseHydrated}
-                            onPress={() => toggleServerCollapsed(sectionKey)}
-                            style={styles.workspaceRow}
-                          >
-                            <Text
-                              numberOfLines={1}
-                              style={styles.workspaceLabel}
-                            >
-                              {group.label}
-                            </Text>
-                            <Text
-                              numberOfLines={1}
-                              style={styles.workspaceKind}
-                            >
-                              {group.kind === "worktree"
-                                ? "WORKTREE"
-                                : "PROJECT"}
-                            </Text>
-                            {collapsed ? (
-                              <ChevronRight size={15} color={colors.textDim} />
-                            ) : (
-                              <ChevronDown size={15} color={colors.textDim} />
-                            )}
-                          </Pressable>
-                          {!collapsed &&
-                            projectVisibleThreads(group.threads, expanded).map(
-                              (thread) => {
-                                const tone = threadStatusTone(thread.status);
+                    {renderedProjects.map(({ project, rows }, projectIndex) => (
+                      <View key={project.key} style={styles.listGroup}>
+                        {rows.length > 1 ? (
+                          <View testID={`drawer-project-${server.id}-${projectIndex}`} style={styles.projectTitleRow}>
+                            <Folder size={15} color={colors.textDim} />
+                            <Text accessibilityRole="header" numberOfLines={1} style={styles.projectTitle}>{project.name}</Text>
+                          </View>
+                        ) : null}
+                        {rows.map(({ group, groupIndex }) => {
+                          const displayName = rows.length === 1 ? project.name : group.label;
+                          const sectionKey = workspaceSectionCollapseKey(server.id, group.path);
+                          const collapsed = collapsedServerIds.has(sectionKey);
+                          const expanded = expandedServerIds.has(sectionKey);
+                          const hiddenThreads = hiddenThreadCount(group.threads, expanded);
+                          const accessibleName = `${displayName} · ${group.path ?? t("home.choose_directory_for_new")} · ${target.accessible} · ${connectionStatusLabel(status)}`;
+                          const canCreate = Boolean(group.path && workspaceActionEnabled);
+                          const menuExpanded = Boolean(visibleWorkspaceActionTarget?.server.id === server.id &&
+                            visibleWorkspaceActionTarget.workspaceIdentity === group.identity);
+                          return (
+                            <View key={group.identity} testID={`drawer-workspace-row-${server.id}-${groupIndex}`} style={styles.listGroup}>
+                              <View style={styles.workspaceRow}>
+                                <Pressable
+                                  testID={groupIndex === 0 ? `drawer-toggle-server-${server.id}` : `drawer-toggle-workspace-${server.id}-${groupIndex}`}
+                                  accessibilityRole="button"
+                                  accessibilityLabel={`${t(collapsed ? "task.expand" : "task.collapse")} ${accessibleName}`}
+                                  aria-expanded={!collapsed}
+                                  accessibilityState={{ expanded: !collapsed, disabled: !collapseHydrated }}
+                                  disabled={!collapseHydrated}
+                                  onPress={() => toggleServerCollapsed(sectionKey)}
+                                  style={styles.workspaceToggle}
+                                >
+                                  <WorkspaceFolderBadge profile={profile} server={server} testID={`drawer-target-badge-${server.id}-${groupIndex}`} />
+                                  <View style={styles.workspaceTitle}>
+                                    <Text testID={`drawer-workspace-name-${server.id}-${groupIndex}`} numberOfLines={1} ellipsizeMode="tail" style={styles.workspaceLabel}>{displayName}</Text>
+                                    <View testID={`drawer-workspace-chevron-${server.id}-${groupIndex}`}  accessible={false} style={[styles.rowChevron, { pointerEvents: "none" }]}>
+                                      {collapsed ? <ChevronRight size={13} color={statusDotColor(status, colors)} /> : <ChevronDown size={13} color={statusDotColor(status, colors)} />}
+                                    </View>
+                                  </View>
+                                </Pressable>
+                                <View style={styles.workspaceRowActions}>
+                                  <Pressable
+                                    testID={`drawer-workspace-actions-${server.id}-${groupIndex}`}
+                                    accessibilityRole="button"
+                                    accessibilityLabel={t("home.workspace_actions_for", { p0: accessibleName })}
+                                    disabled={!canCreate || demo}
+                                    accessibilityState={{ expanded: menuExpanded, disabled: !canCreate || demo }}
+                                    aria-expanded={menuExpanded}
+                                    onPress={() => {
+                                      if (!canCreate || !group.path || demo || !workspaceHistoryOwner || !isWorkspaceActionCurrent({
+                                        profile, server, workspace: group.path, workspaceIdentity: group.identity,
+                                        owner: workspaceHistoryOwner, workspaceLabel: displayName,
+                                        workspaceAccessibleName: accessibleName, targetLabel: target.display,
+                                        workspaceIndex: groupIndex,
+                                      })) return;
+                                      setWorkspaceActionTarget({
+                                        profile, server, workspace: group.path, workspaceIdentity: group.identity,
+                                        owner: workspaceHistoryOwner, workspaceLabel: displayName,
+                                        workspaceAccessibleName: accessibleName, targetLabel: target.display,
+                                        workspaceIndex: groupIndex,
+                                      });
+                                    }}
+                                    style={[styles.sectionAction, (!canCreate || demo) && styles.sectionActionDisabled]}
+                                  ><MoreHorizontal size={19} color={colors.textMuted} /></Pressable>
+                                  <Pressable
+                                    testID={`drawer-new-workspace-${server.id}-${groupIndex}`}
+                                    accessibilityRole="button"
+                                    accessibilityLabel={`${t("home.create_workspace_for", { p0: displayName, p1: group.path ?? t("home.choose_directory_for_new"), p2: server.id })} · ${connectionStatusLabel(status)}`}
+                                    disabled={!canCreate}
+                                    accessibilityState={{ disabled: !canCreate }}
+                                    onPress={() => {
+                                      if (!group.path || !canCreate || !workspaceHistoryOwner) return;
+                                      const actionTarget: WorkspaceActionTarget = {
+                                        profile, server, workspace: group.path, workspaceIdentity: group.identity,
+                                        owner: workspaceHistoryOwner, workspaceLabel: displayName,
+                                        workspaceAccessibleName: accessibleName, targetLabel: target.display,
+                                        workspaceIndex: groupIndex,
+                                      };
+                                      if (!isWorkspaceActionCurrent(actionTarget)) return;
+                                      const currentServer = servers.find((candidate) => candidate.id === server.id && drawerServerIdentity(candidate) === drawerServerIdentity(server));
+                                      if (!currentServer || profile.id !== profileId) return;
+                                      navigate({ pathname: "/new", params: { profileId, serverId: currentServer.id, cwd: group.path } });
+                                    }}
+                                    style={[styles.sectionAction, !canCreate && styles.sectionActionDisabled]}
+                                  ><Plus size={17} color={colors.textMuted} /></Pressable>
+                                </View>
+                              </View>
+                              {!collapsed && projectVisibleThreads(group.threads, expanded).map((thread) => {
+                                const activity = threadActivityPresentation(thread);
+                                const tone = activity.tone;
+                                const openTaskActions = () => {
+                                  if (taskActionOwnerRef.current !== taskActionOwner || !visible || dismissal.closing || profile.id !== profileId) return;
+                                  const cwd = thread.cwd?.trim() || group.path;
+                                  setActionTarget({ owner: taskActionOwner, interaction: {}, server: { ...server, workspacePath: cwd }, thread: { ...thread, cwd } });
+                                };
                                 return (
                                   <Pressable
                                     testID={`drawer-thread-${thread.id}`}
                                     key={thread.id}
-                                    accessibilityState={{
-                                      selected:
-                                        routeParams.serverId === server.id &&
-                                        routeParams.threadId === thread.id,
+                                    accessibilityRole="button"
+                                    accessibilityLabel={thread.title || t("task.untitled_task")}
+                                    accessibilityActions={[{ name: "longpress", label: t("task.task_actions") }]}
+                                    accessibilityState={{ selected: routeParams.serverId === server.id && routeParams.threadId === thread.id }}
+                                    delayLongPress={500}
+                                    onLongPress={openTaskActions}
+                                    onAccessibilityAction={(event) => {
+                                      if (event.nativeEvent.actionName === "longpress") openTaskActions();
                                     }}
-                                    onPress={() =>
-                                      replaceTask({
-                                        pathname:
-                                          "/h/[profileId]/task/[serverId]/[threadId]",
-                                        params: {
-                                          profileId,
-                                          serverId: server.id,
-                                          threadId: thread.id,
-                                          cwd: thread.cwd?.trim() || group.path,
-                                          title:
-                                            thread.title ||
-                                            t("task.untitled_task"),
-                                        },
-                                      })
-                                    }
-                                    style={[
-                                      styles.threadRow,
-                                      routeParams.serverId === server.id &&
-                                        routeParams.threadId === thread.id &&
-                                        styles.threadSelected,
-                                    ]}
+                                    onPress={() => replaceTask({
+                                      pathname: "/h/[profileId]/task/[serverId]/[threadId]",
+                                      params: {
+                                        profileId, serverId: server.id, threadId: thread.id,
+                                        ...(thread.cwd?.trim() || group.path ? { cwd: thread.cwd?.trim() || group.path } : {}),
+                                        title: thread.title || t("task.untitled_task"),
+                                      },
+                                    })}
+                                    style={[styles.threadRow, routeParams.serverId === server.id && routeParams.threadId === thread.id && styles.threadSelected]}
                                   >
-                                    <View
-                                      style={[
-                                        styles.threadState,
-                                        tone === "running"
-                                          ? styles.threadRunning
-                                          : tone === "waiting"
-                                            ? styles.threadWaiting
-                                            : tone === "failed"
-                                              ? styles.threadFailed
-                                              : styles.threadIdle,
-                                      ]}
-                                    />
-                                    <Text
-                                      numberOfLines={1}
-                                      style={[
-                                        styles.threadText,
-                                        routeParams.serverId === server.id &&
-                                          routeParams.threadId === thread.id &&
-                                          styles.threadSelectedText,
-                                      ]}
-                                    >
-                                      {thread.title || t("task.untitled_task")}
-                                    </Text>
-                                    {threadActivityLabel(thread) ? (
-                                      <Text
-                                        testID={`drawer-thread-state-${thread.id}`}
-                                        style={{
-                                          color: colors.textMuted,
-                                          fontSize: 11,
-                                        }}
-                                      >
-                                        {threadActivityLabel(thread)}
-                                      </Text>
-                                    ) : null}
-                                    <Pressable
-                                      testID={`drawer-thread-actions-${thread.id}`}
-                                      accessibilityLabel={t(
-                                        "task.task_actions_for",
-                                        {
-                                          p0:
-                                            thread.title ||
-                                            t("task.untitled_task"),
-                                        },
-                                      )}
-                                      onPress={(event) => {
-                                        event.stopPropagation();
-                                        setActionTarget({ server, thread });
-                                      }}
-                                      style={styles.threadAction}
-                                    >
-                                      <MoreHorizontal
-                                        size={18}
-                                        color={colors.textMuted}
-                                      />
-                                    </Pressable>
+                                    <View style={styles.threadCopy}>
+                                      <View style={styles.threadPrimaryRow}>
+                                        <Text numberOfLines={1} ellipsizeMode="tail" style={[styles.threadText, routeParams.serverId === server.id && routeParams.threadId === thread.id && styles.threadSelectedText]}>{thread.title || t("task.untitled_task")}</Text>
+                                        {activity.label ? <Text testID={`drawer-thread-state-${thread.id}`} style={{ color: tone === "running" ? colors.green : tone === "waiting" ? colors.yellow : tone === "failed" ? colors.red : tone === "unknown" ? colors.blue : colors.textMuted, fontSize: 11 }}>{activity.label}</Text> : null}
+                                      </View>
+                                      {activity.recentErrorLabel ? <Text testID={`drawer-thread-recent-error-${thread.id}`} style={styles.threadRecentError}>{activity.recentErrorLabel}</Text> : null}
+                                    </View>
                                   </Pressable>
                                 );
-                              },
-                            )}
-                          {!collapsed && group.threads.length > 8 ? (
-                            <Pressable
-                              testID={`drawer-toggle-more-${server.id}-${groupIndex}`}
-                              accessibilityRole="button"
-                              accessibilityLabel={
-                                expanded
-                                  ? t("task.collapse_sessions")
-                                  : t("task.show_more_sessions", {
-                                      p0: hiddenThreads,
-                                    })
-                              }
-                              aria-expanded={expanded}
-                              accessibilityState={{ expanded }}
-                              onPress={() =>
-                                toggleServerThreadsExpanded(sectionKey)
-                              }
-                              style={styles.moreThreads}
-                            >
-                              {expanded ? (
-                                <ChevronUp size={14} color={colors.textDim} />
-                              ) : (
-                                <ChevronDown size={14} color={colors.textDim} />
-                              )}
-                              <Text style={styles.moreThreadsText}>
-                                {expanded
-                                  ? t("task.collapse")
-                                  : t("task.show_more", { p0: hiddenThreads })}
-                              </Text>
-                            </Pressable>
-                          ) : null}
-                          {!collapsed && group.threads.length === 0 ? (
-                            <Text style={styles.emptyThreads}>
-                              {t("task.no_tasks")}
-                            </Text>
-                          ) : null}
-                          {!collapsed ? (
-                            <Pressable
-                              onPress={() =>
-                                navigate({
-                                  pathname: "/new",
-                                  params: {
-                                    profileId,
-                                    serverId: server.id,
-                                    cwd: group.path,
-                                  },
-                                })
-                              }
-                              style={styles.newThread}
-                            >
-                              <Plus size={15} color={colors.textMuted} />
-                              <Text style={styles.newThreadText}>
-                                {t("task.new_task_in_this_project")}
-                              </Text>
-                            </Pressable>
-                          ) : null}
-                        </View>
-                      );
-                    })}
+                              })}
+                              {!collapsed && group.threads.length > 8 ? (
+                                <Pressable testID={`drawer-toggle-more-${server.id}-${groupIndex}`} accessibilityRole="button" accessibilityLabel={expanded ? t("task.collapse_sessions") : t("task.show_more_sessions", { p0: hiddenThreads })} aria-expanded={expanded} accessibilityState={{ expanded }} onPress={() => toggleServerThreadsExpanded(sectionKey)} style={styles.moreThreads}>
+                                  {expanded ? <ChevronUp size={14} color={colors.textDim} /> : <ChevronDown size={14} color={colors.textDim} />}
+                                  <Text style={styles.moreThreadsText}>{expanded ? t("task.collapse") : t("task.show_more", { p0: hiddenThreads })}</Text>
+                                </Pressable>
+                              ) : null}
+                            </View>
+                          );
+                        })}
+                      </View>
+                    ))}
                   </View>
                 );
               })}
             </ScrollView>
-            <View
-              style={[
-                styles.bottom,
-                { paddingBottom: Math.max(insets.bottom, spacing.md) },
-              ]}
-            >
-              <DrawerAction
-                styles={styles}
-                icon={<FolderPlus size={18} color={colors.textMuted} />}
-                label={t("task.add_project")}
-                onPress={() =>
-                  navigate({ pathname: "/open-project", params: { profileId } })
-                }
-              />
-              <View style={styles.bottomNav}>
-                <Pressable
-                  accessibilityLabel={t("task.servers")}
-                  onPress={() => navigate("/server-editor")}
-                  style={styles.bottomButton}
-                >
-                  <Server size={19} color={colors.textMuted} />
-                </Pressable>
-                <Pressable
-                  accessibilityLabel={t("task.home")}
-                  onPress={() =>
-                    replaceTask({
-                      pathname: "/h/[profileId]",
-                      params: { profileId },
-                    })
-                  }
-                  style={styles.bottomButton}
-                >
-                  <Home size={19} color={colors.textMuted} />
-                </Pressable>
-                <Pressable
-                  accessibilityLabel={t("task.help")}
-                  onPress={() =>
-                    Alert.alert(
-                      "KCoder Studio",
-                      t(
-                        "task.mobile_securely_controls_local_or_ssh_kcoder_appservers",
-                      ),
-                    )
-                  }
-                  style={styles.bottomButton}
-                >
-                  <CircleHelp size={19} color={colors.textMuted} />
-                </Pressable>
-                <Pressable
-                  accessibilityLabel={t("task.settings")}
-                  onPress={() => navigate("/settings")}
-                  style={styles.bottomButton}
-                >
-                  <Settings size={19} color={colors.textMuted} />
-                </Pressable>
-              </View>
-            </View>
           </Animated.View>
         </View>
       </Modal>
+      {visibleWorkspaceActionTarget && visibleWorkspaceActionServer && visibleWorkspaceActionGroup?.path ? (
+        <WorkspaceHistoryActionsSheet
+          server={visibleWorkspaceActionServer}
+          workspace={visibleWorkspaceActionGroup}
+          workspaceLabel={visibleWorkspaceActionTarget.workspaceLabel}
+          workspaceAccessibleName={visibleWorkspaceActionTarget.workspaceAccessibleName}
+          targetLabel={visibleWorkspaceActionTarget.targetLabel}
+          workspaceIndex={visibleWorkspaceActionTarget.workspaceIndex}
+          onClose={() => setWorkspaceActionTarget(null)}
+          onSelect={(workspace) => {
+            if (!isWorkspaceActionCurrent(visibleWorkspaceActionTarget) ||
+              workspace !== visibleWorkspaceActionTarget.workspace ||
+              visibleWorkspaceActionGroup.path !== workspace ||
+              visibleWorkspaceActionGroup.identity !== visibleWorkspaceActionTarget.workspaceIdentity) return;
+            setWorkspaceActionTarget(null);
+            setHistoryRefreshTarget({
+              kind: "workspace",
+              profile: visibleWorkspaceActionTarget.profile,
+              server: visibleWorkspaceActionServer,
+              workspace,
+              workspaceIdentity: visibleWorkspaceActionTarget.workspaceIdentity,
+              owner: visibleWorkspaceActionTarget.owner,
+            });
+          }}
+        />
+      ) : null}
+      {visibleHistoryRefreshTarget ? (
+        <HistoryRefreshModal
+          target={visibleHistoryRefreshTarget}
+          isTargetCurrent={() => Boolean(visibleHistoryRefreshTarget && isWorkspaceActionCurrent(visibleHistoryRefreshTarget))}
+          onClose={() => setHistoryRefreshTarget((current) => current === visibleHistoryRefreshTarget ? null : current)}
+          onReady={() => {
+            if (visibleHistoryRefreshTarget && isWorkspaceActionCurrent(visibleHistoryRefreshTarget))
+              historyReadyRef.current?.(visibleHistoryRefreshTarget.server.id);
+          }}
+        />
+      ) : null}
       <ThreadActionsSheet
-        visible={Boolean(actionTarget)}
+        visible={Boolean(visibleActionTarget)}
         profile={profile}
-        target={actionTarget}
+        target={visibleActionTarget}
         demo={demo}
         liveTask={liveTask}
         liveTaskServerId={liveTaskServerId}
-        onClose={() => setActionTarget(null)}
+        onClose={() => setActionTarget((current) => current?.interaction === visibleActionTarget?.interaction ? null : current)}
         onRenamed={(thread) => {
-          if (!actionTarget) return;
-          onThreadRenamed(actionTarget.server.id, thread);
-          setActionTarget({ ...actionTarget, thread });
+          if (!visibleActionTarget || taskActionOwnerRef.current !== visibleActionTarget.owner) return;
+          onThreadRenamed(visibleActionTarget.server.id, thread);
+          setActionTarget((current) => current?.interaction === visibleActionTarget.interaction ? { ...current, thread } : current);
         }}
         onRemoved={(kind, thread) => {
-          if (!actionTarget) return;
-          onThreadRemoved(actionTarget.server.id, thread.id, kind);
-          setActionTarget(null);
+          if (!visibleActionTarget || taskActionOwnerRef.current !== visibleActionTarget.owner) return;
+          onThreadRemoved(visibleActionTarget.server.id, thread.id, kind);
+          setActionTarget((current) => current?.interaction === visibleActionTarget.interaction ? null : current);
         }}
       />
     </>
   );
 }
 
-function DrawerAction({
-  styles,
-  icon,
-  label,
-  onPress,
-  disabled = false,
-}: {
-  styles: ReturnType<typeof makeStyles>;
-  icon: React.ReactNode;
-  label: string;
-  onPress(): void;
-  disabled?: boolean;
-}) {
-  return (
-    <Pressable
-      disabled={disabled}
-      accessibilityState={{ disabled }}
-      onPress={onPress}
-      style={[styles.action, disabled && styles.actionDisabled]}
-    >
-      {icon}
-      <Text style={[styles.actionText, disabled && styles.actionDisabledText]}>
-        {label}
-      </Text>
-    </Pressable>
-  );
-}
-
 const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   overlay: { flex: 1 },
   scrim: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: colors.overlay,
   },
   drawer: {
@@ -626,86 +562,48 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     borderRightWidth: StyleSheet.hairlineWidth,
     borderRightColor: colors.border,
   },
-  topActions: {
-    paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.md,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
-  },
-  close: {
-    position: "absolute",
-    right: spacing.md,
-    width: 44,
-    height: 44,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  action: {
-    minHeight: 44,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.md,
-    paddingHorizontal: spacing.xs,
-  },
-  actionText: { color: colors.textMuted, fontSize: 14 },
-  actionDisabled: { opacity: 0.6 },
-  actionDisabledText: { color: colors.textDim },
   sectionHeader: {
     height: 44,
-    justifyContent: "center",
-    paddingHorizontal: spacing.lg,
-  },
-  sectionLabel: { color: colors.textMuted, fontSize: 12 },
-  scroll: { flex: 1 },
-  scrollContent: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xl },
-  serverGroup: { marginBottom: spacing.md },
-  serverRow: {
-    height: 40,
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing.sm,
+    justifyContent: "space-between",
+    paddingHorizontal: spacing.lg,
   },
-  serverBadge: {
-    width: 18,
-    height: 18,
-    borderRadius: 4,
-    backgroundColor: colors.accent,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  serverBadgeText: {
-    color: colors.accentText,
-    fontSize: 10,
-    fontWeight: "800",
-  },
-  serverLabel: { flex: 1, color: colors.text, fontSize: 14, fontWeight: "600" },
+  settingsButton: { width: 44, height: 44, alignItems: "center", justifyContent: "center", borderRadius: radius.md },
+  sectionLabel: { color: colors.textMuted, fontSize: 12 },
+  scroll: { flex: 1 },
+  scrollContent: { paddingHorizontal: spacing.lg, gap: spacing.sm },
+  serverGroup: { gap: spacing.sm },
+  listGroup: { gap: spacing.sm },
+  targetStatusFallback: { minHeight: 30, flexDirection: "row", alignItems: "center", gap: spacing.sm, paddingHorizontal: spacing.xs },
+  projectTitleRow: { minHeight: 34, flexDirection: "row", alignItems: "center", gap: spacing.sm, paddingHorizontal: spacing.xs },
+  projectTitle: { flex: 1, color: colors.textMuted, fontSize: 12, fontWeight: "600" },
   workspaceRow: {
-    minHeight: 40,
-    marginLeft: 24,
+    minHeight: 48,
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.sm,
     borderRadius: radius.sm,
   },
+  workspaceToggle: { minHeight: 48, flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: spacing.sm, paddingHorizontal: spacing.xs },
   workspaceLabel: {
-    flex: 1,
-    color: colors.textMuted,
+    flexShrink: 1,
+    minWidth: 0,
+    color: colors.text,
     fontSize: 13,
     fontWeight: "600",
   },
-  workspaceKind: { color: colors.textDim, fontSize: 9, fontWeight: "700" },
+  workspaceTitle: { flexShrink: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: spacing.xs },
+  rowChevron: { flexShrink: 0 },
+  workspaceTarget: { flex: 1, minWidth: 0, color: colors.textDim, fontSize: 10 },
+  workspaceRowActions: { flexDirection: "row", alignItems: "center" },
+  sectionAction: { width: 44, height: 44, alignItems: "center", justifyContent: "center", borderRadius: radius.md },
+  sectionActionDisabled: { opacity: 0.45 },
   workspaceError: {
     color: colors.red,
     fontSize: 11,
-    marginLeft: 24,
+    marginLeft: spacing.xs,
     marginBottom: spacing.xs,
-  },
-  serverAdd: {
-    width: 44,
-    height: 44,
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: -12,
   },
   threadRow: {
     minHeight: 44,
@@ -717,33 +615,11 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     borderRadius: radius.sm,
   },
   threadSelected: { backgroundColor: colors.surfaceHover },
-  threadState: { width: 6, height: 6, borderRadius: 6 },
-  threadIdle: { backgroundColor: colors.textDim },
-  threadRunning: { backgroundColor: colors.green },
-  threadWaiting: { backgroundColor: colors.yellow },
-  threadFailed: { backgroundColor: colors.red },
-  threadText: { flex: 1, color: colors.textMuted, fontSize: 13 },
+  threadCopy: { flex: 1, minWidth: 0, gap: 2 },
+  threadPrimaryRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
+  threadText: { flex: 1, minWidth: 0, color: colors.textMuted, fontSize: 13 },
+  threadRecentError: { color: colors.textDim, fontSize: 10 },
   threadSelectedText: { color: colors.text, fontWeight: "600" },
-  threadAction: {
-    width: 44,
-    height: 44,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  emptyThreads: {
-    color: colors.textDim,
-    fontSize: 11,
-    paddingLeft: 26,
-    paddingVertical: spacing.sm,
-  },
-  newThread: {
-    minHeight: 44,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-    paddingLeft: 24,
-  },
-  newThreadText: { color: colors.textMuted, fontSize: 13 },
   moreThreads: {
     minHeight: 36,
     marginLeft: 18,
@@ -754,20 +630,4 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     borderRadius: radius.sm,
   },
   moreThreadsText: { color: colors.textMuted, fontSize: 12 },
-  bottom: {
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.border,
-    padding: spacing.md,
-  },
-  bottomNav: {
-    flexDirection: "row",
-    justifyContent: "flex-end",
-    marginTop: spacing.sm,
-  },
-  bottomButton: {
-    width: 44,
-    height: 44,
-    alignItems: "center",
-    justifyContent: "center",
-  },
 });

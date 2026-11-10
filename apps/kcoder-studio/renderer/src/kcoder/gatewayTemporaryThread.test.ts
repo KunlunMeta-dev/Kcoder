@@ -101,6 +101,7 @@ test('new sessions carry the chosen settings template into thread/start', async 
     params: { settingsTemplate: 'fast-local' },
   })
   expect(request).toHaveBeenCalledExactlyOnceWith('thread/start', {
+    studioWorkMode: 'kcoder',
     cwd: '/workspace',
     settingsTemplate: 'fast-local',
   })
@@ -111,7 +112,7 @@ test('new sessions carry the chosen settings template into thread/start', async 
     workspacePath: '/workspace',
     params: {},
   })
-  expect(request).toHaveBeenCalledExactlyOnceWith('thread/start', { cwd: '/workspace' })
+  expect(request).toHaveBeenCalledExactlyOnceWith('thread/start', { studioWorkMode: 'kcoder', cwd: '/workspace' })
 })
 
 test('unsupported settings templates fail closed instead of silently ignoring the choice', async () => {
@@ -138,5 +139,17 @@ test('workflow conversation binds its draft only on a capable target', async () 
   request.mockClear()
   client.supportsExperimental = name => name !== 'workflowConversationV1'
   await expect(startTaskThread(client, { serverId: 'target', workspacePath: 'D:\\dist', params: { sessionMode: 'workflow_draft', workflowDefinitionId: 'draft' } })).rejects.toThrow('workflowConversationV1')
+  expect(request).not.toHaveBeenCalled()
+})
+
+test('expert selection enters the ordinary persistent creation and refuses an incapable target', async () => {
+  const reference = { id: 'personal.expert', version: '1', definitionSha256: 'a'.repeat(64) }
+  const request = vi.fn().mockResolvedValue({ thread: { id: 'native-original' } })
+  const client = { request, supportsExperimental: (name: string) => name === 'agentDefinitionsV1' } as unknown as GatewayClient
+  await startTaskThread(client, { serverId: 'original', workspacePath: '/original', params: { agentDefinition: reference } })
+  expect(request).toHaveBeenCalledExactlyOnceWith('thread/start', { cwd: '/original', agentDefinition: reference })
+  request.mockClear()
+  client.supportsExperimental = () => false
+  await expect(startTaskThread(client, { serverId: 'original', workspacePath: '/original', params: { agentDefinition: reference } })).rejects.toThrow('agentDefinitionsV1')
   expect(request).not.toHaveBeenCalled()
 })

@@ -251,8 +251,11 @@ export function AttachmentBadges({
           key={fileId}
           data-testid="uploading-attachment-badge"
           className="relative inline-flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-border bg-surface text-text-secondary shadow-sm"
-          aria-label={`${upload.file.name} 上传中 ${upload.progress}%`}
-          title={`${upload.file.name} 上传中 ${upload.progress}%`}
+          aria-label={t('attachment_uploading', {
+            name: upload.file.name,
+            progress: upload.progress,
+          })}
+          title={t('attachment_uploading', { name: upload.file.name, progress: upload.progress })}
         >
           <FileText className="h-8 w-8 text-text-muted/70" />
           <span className="absolute inset-0 flex flex-col items-center justify-center gap-0.5 bg-black/25 text-white">
@@ -265,9 +268,9 @@ export function AttachmentBadges({
           <button
             type="button"
             data-testid="cancel-upload-button"
-            onClick={() => onCancelUpload?.(fileId)}
+            onClick={() => (onCancelUpload ? onCancelUpload(fileId) : upload.cancel?.())}
             className="absolute -right-0.5 -top-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-text-primary text-white shadow-sm transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
-            aria-label={`取消上传 ${upload.file.name}`}
+            aria-label={t('attachment_cancel_upload', { name: upload.file.name })}
           >
             <X className="h-3 w-3" />
           </button>
@@ -284,6 +287,17 @@ export function AttachmentBadges({
           <FileText className="h-4 w-4 shrink-0" />
           <span className="min-w-0 truncate">{fileId}</span>
           <span className="min-w-0 truncate">{error}</span>
+          {onCancelUpload && (
+            <button
+              type="button"
+              data-testid="dismiss-attachment-error"
+              aria-label={t('attachment_dismiss_error', { name: fileId })}
+              className="flex size-6 shrink-0 items-center justify-center rounded-full hover:bg-destructive/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus max-md:min-h-11 max-md:min-w-11"
+              onClick={() => onCancelUpload(fileId)}
+            >
+              <X className="size-3" />
+            </button>
+          )}
         </span>
       ))}
     </div>

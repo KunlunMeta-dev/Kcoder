@@ -1,0 +1,711 @@
+{
+  "AgentArtifactKind": [
+    {
+      "decoded": "output",
+      "name": "original-native-run-observation",
+      "value": "output"
+    }
+  ],
+  "AgentArtifactReadParams": [
+    {
+      "decoded": {
+        "agentId": "original-child",
+        "expectedBackgroundRun": {
+          "agentId": "original-child",
+          "parentSessionId": "original-parent",
+          "runId": "original-run"
+        },
+        "kind": "output",
+        "limit": 65536,
+        "offset": 0,
+        "threadId": "original-parent"
+      },
+      "name": "original-native-run-observation",
+      "value": {
+        "agentId": "original-child",
+        "expectedBackgroundRun": {
+          "agentId": "original-child",
+          "parentSessionId": "original-parent",
+          "runId": "original-run"
+        },
+        "kind": "output",
+        "limit": 65536,
+        "offset": 0,
+        "threadId": "original-parent"
+      }
+    },
+    {
+      "decoded": {
+        "agentId": "child",
+        "threadId": "parent"
+      },
+      "name": "legacy-default-artifact",
+      "value": {
+        "agentId": "child",
+        "threadId": "parent"
+      }
+    }
+  ],
+  "AgentArtifactReadResult": [
+    {
+      "decoded": {
+        "agentId": "original-child",
+        "backgroundRun": {
+          "agentId": "original-child",
+          "parentSessionId": "original-parent",
+          "runId": "original-run"
+        },
+        "content": "Original completed output",
+        "kind": "output",
+        "modifiedAt": 1792893000000,
+        "name": "output.md",
+        "offset": 0,
+        "path": "/owned/private/original-run/output.md",
+        "revision": "original-file-revision",
+        "size": 25,
+        "threadId": "original-parent",
+        "truncated": false
+      },
+      "name": "original-native-run-observation",
+      "value": {
+        "agentId": "original-child",
+        "backgroundRun": {
+          "agentId": "original-child",
+          "parentSessionId": "original-parent",
+          "runId": "original-run"
+        },
+        "content": "Original completed output",
+        "kind": "output",
+        "modifiedAt": 1792893000000,
+        "name": "output.md",
+        "nextOffset": null,
+        "offset": 0,
+        "path": "/owned/private/original-run/output.md",
+        "revision": "original-file-revision",
+        "size": 25,
+        "threadId": "original-parent",
+        "truncated": false
+      }
+    },
+    {
+      "decoded": {
+        "agentId": "child",
+        "content": "Legacy public output",
+        "kind": "output",
+        "name": "output.md",
+        "offset": 0,
+        "path": "/owned/private/output.md",
+        "revision": "old",
+        "size": 20,
+        "threadId": "parent",
+        "truncated": false
+      },
+      "name": "legacy-output-without-native-run",
+      "value": {
+        "agentId": "child",
+        "content": "Legacy public output",
+        "kind": "output",
+        "name": "output.md",
+        "path": "/owned/private/output.md",
+        "revision": "old",
+        "size": 20,
+        "threadId": "parent",
+        "truncated": false
+      }
+    }
+  ],
+  "AgentDefinitionRef": [
+    {
+      "decoded": {
+        "definitionSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "id": "personal.test",
+        "version": "1"
+      },
+      "name": "fixed-native-agent-definition",
+      "value": {
+        "definitionSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "id": "personal.test",
+        "version": "1"
+      }
+    }
+  ],
+  "AgentLiveReadParams": [
+    {
+      "decoded": {
+        "agentId": "original-child",
+        "expectedBackgroundRun": {
+          "agentId": "original-child",
+          "parentSessionId": "original-parent",
+          "runId": "original-run"
+        },
+        "previousRevision": 3,
+        "threadId": "original-parent"
+      },
+      "name": "original-native-run-observation",
+      "value": {
+        "agentId": "original-child",
+        "expectedBackgroundRun": {
+          "agentId": "original-child",
+          "parentSessionId": "original-parent",
+          "runId": "original-run"
+        },
+        "previousRevision": 3,
+        "threadId": "original-parent"
+      }
+    },
+    {
+      "decoded": {
+        "agentId": "child",
+        "previousRevision": null,
+        "threadId": "parent"
+      },
+      "name": "legacy-unconstrained-read",
+      "value": {
+        "agentId": "child",
+        "threadId": "parent"
+      }
+    }
+  ],
+  "AgentLiveReadResult": [
+    {
+      "decoded": {
+        "active": false,
+        "agentId": "original-child",
+        "backgroundRun": {
+          "agentId": "original-child",
+          "parentSessionId": "original-parent",
+          "runId": "original-run"
+        },
+        "content": "Original public output",
+        "phase": "completed",
+        "revision": 4,
+        "threadId": "original-parent",
+        "truncated": false,
+        "unchanged": false
+      },
+      "name": "original-native-run-observation",
+      "value": {
+        "active": false,
+        "agentId": "original-child",
+        "backgroundRun": {
+          "agentId": "original-child",
+          "parentSessionId": "original-parent",
+          "runId": "original-run"
+        },
+        "content": "Original public output",
+        "phase": "completed",
+        "revision": 4,
+        "threadId": "original-parent",
+        "truncated": false,
+        "unchanged": false
+      }
+    },
+    {
+      "decoded": {
+        "active": false,
+        "agentId": "child",
+        "content": "Legacy public output",
+        "phase": null,
+        "revision": null,
+        "threadId": "parent",
+        "truncated": false,
+        "unchanged": false
+      },
+      "name": "legacy-output-without-native-run",
+      "value": {
+        "active": false,
+        "agentId": "child",
+        "content": "Legacy public output",
+        "phase": null,
+        "revision": null,
+        "threadId": "parent",
+        "truncated": false,
+        "unchanged": false
+      }
+    }
+  ],
+  "AgentMessageReadParams": [
+    {
+      "decoded": {
+        "agentId": "original-member",
+        "clientMessageId": "cmd:0:one",
+        "threadId": "original-parent"
+      },
+      "name": "original-legacy-wire",
+      "value": {
+        "agentId": "original-member",
+        "clientMessageId": "cmd:0:one",
+        "threadId": "original-parent"
+      }
+    },
+    {
+      "decoded": {
+        "agentId": "original-member",
+        "clientMessageId": "cmd:0:one",
+        "expectedBackgroundRun": {
+          "agentId": "original-member",
+          "parentSessionId": "original-parent",
+          "runId": "original-run"
+        },
+        "threadId": "original-parent"
+      },
+      "name": "original-run-scope",
+      "value": {
+        "agentId": "original-member",
+        "clientMessageId": "cmd:0:one",
+        "expectedBackgroundRun": {
+          "agentId": "original-member",
+          "parentSessionId": "original-parent",
+          "runId": "original-run"
+        },
+        "threadId": "original-parent"
+      }
+    }
+  ],
+  "AgentMessageReadResult": [
+    {
+      "decoded": {
+        "agentId": "original-member",
+        "clientMessageId": "cmd:0:one",
+        "receipt": {
+          "acceptedAtMs": 1,
+          "backgroundRun": {
+            "agentId": "original-member",
+            "parentSessionId": "original-parent",
+            "runId": "original-run"
+          },
+          "bodySummary": "bounded original instruction",
+          "clientMessageId": "cmd:0:one",
+          "messageId": "message-1",
+          "status": "queued"
+        },
+        "receiptEpoch": 0,
+        "threadId": "original-parent"
+      },
+      "name": "original-legacy-wire",
+      "value": {
+        "agentId": "original-member",
+        "clientMessageId": "cmd:0:one",
+        "receipt": {
+          "acceptedAtMs": 1,
+          "backgroundRun": {
+            "agentId": "original-member",
+            "parentSessionId": "original-parent",
+            "runId": "original-run"
+          },
+          "bodySummary": "bounded original instruction",
+          "clientMessageId": "cmd:0:one",
+          "messageId": "message-1",
+          "status": "queued"
+        },
+        "receiptEpoch": 0,
+        "threadId": "original-parent"
+      }
+    },
+    {
+      "decoded": {
+        "agentId": "original-member",
+        "clientMessageId": "cmd:0:one",
+        "receipt": {
+          "acceptedAtMs": 1,
+          "backgroundRun": {
+            "agentId": "original-member",
+            "parentSessionId": "original-parent",
+            "runId": "original-run"
+          },
+          "bodySummary": "bounded original instruction",
+          "clientMessageId": "cmd:0:one",
+          "messageId": "message-1",
+          "status": "queued"
+        },
+        "receiptEpoch": 0,
+        "threadId": "original-parent"
+      },
+      "name": "original-run-scope",
+      "value": {
+        "agentId": "original-member",
+        "clientMessageId": "cmd:0:one",
+        "receipt": {
+          "acceptedAtMs": 1,
+          "backgroundRun": {
+            "agentId": "original-member",
+            "parentSessionId": "original-parent",
+            "runId": "original-run"
+          },
+          "bodySummary": "bounded original instruction",
+          "clientMessageId": "cmd:0:one",
+          "messageId": "message-1",
+          "status": "queued"
+        },
+        "receiptEpoch": 0,
+        "threadId": "original-parent"
+      }
+    }
+  ],
+  "AgentSteerParams": [
+    {
+      "decoded": {
+        "agentId": "original-member",
+        "clientMessageId": "cmd:0:one",
+        "message": "follow up",
+        "threadId": "original-parent"
+      },
+      "name": "original-legacy-wire",
+      "value": {
+        "agentId": "original-member",
+        "clientMessageId": "cmd:0:one",
+        "message": "follow up",
+        "threadId": "original-parent"
+      }
+    },
+    {
+      "decoded": {
+        "agentId": "original-member",
+        "clientMessageId": "cmd:0:one",
+        "expectedBackgroundRun": {
+          "agentId": "original-member",
+          "parentSessionId": "original-parent",
+          "runId": "original-run"
+        },
+        "message": "follow up",
+        "threadId": "original-parent"
+      },
+      "name": "original-run-scope",
+      "value": {
+        "agentId": "original-member",
+        "clientMessageId": "cmd:0:one",
+        "expectedBackgroundRun": {
+          "agentId": "original-member",
+          "parentSessionId": "original-parent",
+          "runId": "original-run"
+        },
+        "message": "follow up",
+        "threadId": "original-parent"
+      }
+    }
+  ],
+  "AgentSteerResult": [
+    {
+      "decoded": {
+        "agentId": "original-member",
+        "clientMessageId": "cmd:0:one",
+        "messageId": "message-1",
+        "queued": true,
+        "status": "queued_live"
+      },
+      "name": "original-legacy-wire",
+      "value": {
+        "agentId": "original-member",
+        "clientMessageId": "cmd:0:one",
+        "messageId": "message-1",
+        "queued": true,
+        "status": "queued_live"
+      }
+    },
+    {
+      "decoded": {
+        "agentId": "original-member",
+        "clientMessageId": "cmd:0:one",
+        "expectedBackgroundRun": {
+          "agentId": "original-member",
+          "parentSessionId": "original-parent",
+          "runId": "original-run"
+        },
+        "messageId": "message-1",
+        "queued": true,
+        "status": "queued_live"
+      },
+      "name": "original-run-scope",
+      "value": {
+        "agentId": "original-member",
+        "clientMessageId": "cmd:0:one",
+        "expectedBackgroundRun": {
+          "agentId": "original-member",
+          "parentSessionId": "original-parent",
+          "runId": "original-run"
+        },
+        "messageId": "message-1",
+        "queued": true,
+        "status": "queued_live"
+      }
+    }
+  ],
+  "AgentStreamCloseReason": [
+    {
+      "decoded": "run_changed",
+      "name": "original-native-run-observation",
+      "value": "run_changed"
+    },
+    {
+      "decoded": "owner_unavailable",
+      "name": "original-owner-ended",
+      "value": "owner_unavailable"
+    }
+  ],
+  "AgentStreamClosedParams": [
+    {
+      "decoded": {
+        "agentId": "original-child",
+        "expectedBackgroundRun": {
+          "agentId": "original-child",
+          "parentSessionId": "original-parent",
+          "runId": "original-run"
+        },
+        "reasonCode": "run_changed",
+        "subscriptionId": "original-observer",
+        "threadId": "original-parent"
+      },
+      "name": "original-native-run-observation",
+      "value": {
+        "agentId": "original-child",
+        "expectedBackgroundRun": {
+          "agentId": "original-child",
+          "parentSessionId": "original-parent",
+          "runId": "original-run"
+        },
+        "reasonCode": "run_changed",
+        "subscriptionId": "original-observer",
+        "threadId": "original-parent"
+      }
+    }
+  ],
+  "AgentStreamSubscribeParams": [
+    {
+      "decoded": {
+        "agentId": "original-child",
+        "expectedBackgroundRun": {
+          "agentId": "original-child",
+          "parentSessionId": "original-parent",
+          "runId": "original-run"
+        },
+        "subscriptionId": "original-observer",
+        "threadId": "original-parent"
+      },
+      "name": "original-native-run-observation",
+      "value": {
+        "agentId": "original-child",
+        "expectedBackgroundRun": {
+          "agentId": "original-child",
+          "parentSessionId": "original-parent",
+          "runId": "original-run"
+        },
+        "subscriptionId": "original-observer",
+        "threadId": "original-parent"
+      }
+    },
+    {
+      "decoded": {
+        "agentId": "child",
+        "subscriptionId": "observer",
+        "threadId": "parent"
+      },
+      "name": "legacy-unconstrained-observer",
+      "value": {
+        "agentId": "child",
+        "subscriptionId": "observer",
+        "threadId": "parent"
+      }
+    }
+  ],
+  "AgentTaskBinding": [
+    {
+      "decoded": {
+        "definition": {
+          "definitionSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "id": "personal.test",
+          "version": "1"
+        },
+        "owner": {
+          "accountId": "account",
+          "organizationId": null,
+          "targetId": "target",
+          "workspaceId": null
+        },
+        "source": "expert",
+        "title": "Expert"
+      },
+      "name": "fixed-native-agent-definition",
+      "value": {
+        "definition": {
+          "definitionSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "id": "personal.test",
+          "version": "1"
+        },
+        "owner": {
+          "accountId": "account",
+          "organizationId": null,
+          "targetId": "target",
+          "workspaceId": null
+        },
+        "source": "expert",
+        "title": "Expert"
+      }
+    }
+  ],
+  "AgentTaskSource": [
+    {
+      "decoded": "channel",
+      "name": "fixed-native-agent-definition",
+      "value": "channel"
+    }
+  ],
+  "ChannelTaskSource": [
+    {
+      "decoded": {
+        "channelId": "original-feishu",
+        "owner": {
+          "accountId": "account",
+          "organizationId": null,
+          "targetId": "target",
+          "workspaceId": null
+        }
+      },
+      "name": "native-channel-without-expert",
+      "value": {
+        "channelId": "original-feishu",
+        "owner": {
+          "accountId": "account",
+          "organizationId": null,
+          "targetId": "target",
+          "workspaceId": null
+        }
+      }
+    }
+  ],
+  "ThreadExpertChange": [
+    {
+      "decoded": {
+        "expectedRevision": 0,
+        "expert": null
+      },
+      "name": "explicit-none",
+      "value": {
+        "expectedRevision": 0,
+        "expert": null
+      }
+    },
+    {
+      "decoded": {
+        "expectedRevision": 3,
+        "expert": {
+          "definitionSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "id": "expert",
+          "version": "1"
+        }
+      },
+      "name": "existing-version",
+      "value": {
+        "expectedRevision": 3,
+        "expert": {
+          "definitionSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "id": "expert",
+          "version": "1"
+        }
+      }
+    }
+  ],
+  "ThreadExpertParams": [
+    {
+      "decoded": {
+        "threadId": "task"
+      },
+      "name": "read-original",
+      "value": {
+        "threadId": "task"
+      }
+    },
+    {
+      "decoded": {
+        "change": {
+          "expectedRevision": 0,
+          "expert": {
+            "definitionSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "id": "expert",
+            "version": "1"
+          }
+        },
+        "threadId": "task"
+      },
+      "name": "select-next-turn",
+      "value": {
+        "change": {
+          "expectedRevision": 0,
+          "expert": {
+            "definitionSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "id": "expert",
+            "version": "1"
+          }
+        },
+        "threadId": "task"
+      }
+    }
+  ],
+  "ThreadExpertResult": [
+    {
+      "decoded": {
+        "expert": null,
+        "revision": 1,
+        "threadId": "task",
+        "turns": [
+          {
+            "effectiveDefinitionSha256": null,
+            "expert": null,
+            "identity": {
+              "attemptId": "turn-1",
+              "threadId": "task",
+              "turnId": "turn-1"
+            },
+            "personalizationRevision": null,
+            "selectionRevision": 0
+          }
+        ]
+      },
+      "name": "same-task",
+      "value": {
+        "expert": null,
+        "revision": 1,
+        "threadId": "task",
+        "turns": [
+          {
+            "effectiveDefinitionSha256": null,
+            "expert": null,
+            "identity": {
+              "attemptId": "turn-1",
+              "threadId": "task",
+              "turnId": "turn-1"
+            },
+            "personalizationRevision": null,
+            "selectionRevision": 0
+          }
+        ]
+      }
+    }
+  ],
+  "ThreadExpertTurn": [
+    {
+      "decoded": {
+        "effectiveDefinitionSha256": null,
+        "expert": null,
+        "identity": {
+          "attemptId": "turn-1",
+          "threadId": "task",
+          "turnId": "turn-1"
+        },
+        "personalizationRevision": null,
+        "selectionRevision": 0
+      },
+      "name": "no-expert-attempt",
+      "value": {
+        "effectiveDefinitionSha256": null,
+        "expert": null,
+        "identity": {
+          "attemptId": "turn-1",
+          "threadId": "task",
+          "turnId": "turn-1"
+        },
+        "personalizationRevision": null,
+        "selectionRevision": 0
+      }
+    }
+  ]
+}

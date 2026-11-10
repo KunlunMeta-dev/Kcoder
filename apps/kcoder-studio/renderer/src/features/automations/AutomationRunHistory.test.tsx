@@ -37,7 +37,7 @@ describe('automation run history (model-independent persisted state projection)'
     await waitFor(() =>
       expect(screen.getByTestId('automation-run')).toHaveAttribute('data-status', 'failed')
     )
-    expect(screen.getByRole('alert')).toHaveTextContent('startup refused')
+    expect(screen.queryByText('startup refused')).not.toBeInTheDocument()
     fireEvent.click(screen.getByTestId('automation-run-open-thread'))
     await waitFor(() =>
       expect(open).toHaveBeenCalledWith({
@@ -52,7 +52,8 @@ describe('automation run history (model-independent persisted state projection)'
       executionDiagnostics: { runs: [{ ...receipt, status: 'unknown', error: null }] },
     })
     render(<AutomationRunHistory address={address} />)
-    expect(await screen.findByText('automations.execution.noReplay')).toBeInTheDocument()
+    expect(await screen.findByTestId('automation-run')).toHaveAttribute('data-status', 'unknown')
+    expect(screen.queryByText('automations.execution.noReplay')).not.toBeInTheDocument()
     expect(screen.queryByTestId('automation-run-open-thread')).not.toBeInTheDocument()
   })
   it('ignores stale responses from a different workspace and retains known history on refresh error', async () => {
@@ -232,4 +233,102 @@ describe('automation run history (model-independent persisted state projection)'
     expect(screen.queryByTestId('automation-run-open-thread')).not.toBeInTheDocument()
     expect(open).not.toHaveBeenCalled()
   })
+})
+
+const historyRows = (count: number) => ({
+  executionDiagnostics: {
+    historyDeletionSupported: true,
+    runs: Array.from({ length: count }, (_, index) => ({
+      ...receipt,
+      triggerId: `row-${index}`,
+      title: `History ${index}`,
+      replyPreview: 'Long intermediate output',
+      error: 'Detailed failure',
+    })),
+  },
+})
+
+it('paginates ten title-only rows and clamps the last page after deleting its only record', async () => {
+  vi.mocked(requestAutomation).mockImplementation(async (_address, method) =>
+    method === 'cron/list'
+      ? historyRows(21)
+      : { deleted: true, historyOnly: true, schedulePreserved: true }
+  )
+  render(<AutomationRunHistory address={address} />)
+  await screen.findByText('History 0')
+  expect(screen.getAllByTestId('automation-run')).toHaveLength(10)
+  expect(screen.queryByText('Long intermediate output')).not.toBeInTheDocument()
+  expect(screen.queryByText('Detailed failure')).not.toBeInTheDocument()
+  fireEvent.click(screen.getByTestId('automation-runs-next'))
+  expect(screen.getByText('History 10')).toBeInTheDocument()
+  expect(screen.getAllByTestId('automation-run')).toHaveLength(10)
+  fireEvent.click(screen.getByTestId('automation-runs-next'))
+  expect(screen.getAllByTestId('automation-run')).toHaveLength(1)
+  fireEvent.click(screen.getByTestId('automation-run-delete'))
+  await waitFor(() => expect(screen.queryByText('History 20')).not.toBeInTheDocument())
+  expect(screen.getAllByTestId('automation-run')).toHaveLength(10)
+  expect(screen.getByTestId('automation-runs-next')).toBeDisabled()
+  expect(requestAutomation).toHaveBeenCalledWith(address, 'cron/delete', {
+    jobId: receipt.jobId,
+    triggerId: 'row-20',
+    receiptsOnly: true,
+    confirmed: true,
+  })
+})
+
+it('does not resurrect deleted history from an older in-flight refresh', async () => {
+  let resolveRefresh!: (value: unknown) => void
+  vi.mocked(requestAutomation)
+    .mockResolvedValueOnce(historyRows(1))
+    .mockImplementationOnce(
+      () =>
+        new Promise(resolve => {
+          resolveRefresh = resolve
+        })
+    )
+    .mockResolvedValueOnce({ deleted: true, historyOnly: true, schedulePreserved: true })
+  render(<AutomationRunHistory address={address} />)
+  await screen.findByText('History 0')
+  fireEvent.click(screen.getByTestId('automation-runs-refresh'))
+  fireEvent.click(screen.getByTestId('automation-run-delete'))
+  await waitFor(() => expect(screen.queryByText('History 0')).not.toBeInTheDocument())
+  await act(async () => resolveRefresh(historyRows(1)))
+  expect(screen.queryByText('History 0')).not.toBeInTheDocument()
+})
+
+it('keeps the row when deletion fails and rejects deletion against an old runtime', async () => {
+  vi.mocked(requestAutomation)
+    .mockResolvedValueOnce(historyRows(1))
+    .mockRejectedValueOnce(new Error('offline'))
+  const view = render(<AutomationRunHistory address={address} />)
+  await screen.findByText('History 0')
+  fireEvent.click(screen.getByTestId('automation-run-delete'))
+  expect(await screen.findByRole('alert')).toHaveTextContent('offline')
+  expect(screen.getByText('History 0')).toBeInTheDocument()
+  vi.mocked(requestAutomation).mockResolvedValue({ executionDiagnostics: { runs: [receipt] } })
+  view.rerender(<AutomationRunHistory address={{ ...address, workspacePath: '/old-target' }} />)
+  expect(await screen.findByText(receipt.jobId)).toBeInTheDocument()
+  expect(screen.getByTestId('automation-run-delete')).toBeDisabled()
+})
+
+it('does not apply a completed deletion to a newly selected workspace', async () => {
+  let resolveDelete!: (value: unknown) => void
+  vi.mocked(requestAutomation)
+    .mockResolvedValueOnce(historyRows(1))
+    .mockImplementationOnce(
+      () =>
+        new Promise(resolve => {
+          resolveDelete = resolve
+        })
+    )
+    .mockResolvedValueOnce(historyRows(1))
+  const view = render(<AutomationRunHistory address={address} />)
+  await screen.findByText('History 0')
+  fireEvent.click(screen.getByTestId('automation-run-delete'))
+  view.rerender(<AutomationRunHistory address={{ ...address, workspacePath: '/peer' }} />)
+  await screen.findByText('History 0')
+  await act(async () =>
+    resolveDelete({ deleted: true, historyOnly: true, schedulePreserved: true })
+  )
+  expect(screen.getByText('History 0')).toBeInTheDocument()
 })

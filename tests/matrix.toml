@@ -13,9 +13,9 @@ requires_data_files = ["apps/kcoder-relay/node_modules/ws/package.json"]
 [[suite]]
 id = "rust-workspace"
 tiers = ["pr", "full"]
-command = ["cargo", "test", "--workspace", "--exclude", "kcoder_cli", "--exclude", "kcoder_system_tests", "--exclude", "kcoder_test_harness", "--exclude", "kcoder_test_runner"]
+command = ["cargo", "test", "--workspace", "--exclude", "kcoder_cli", "--exclude", "kcoder_cli_runtime", "--exclude", "kcoder_session_configuration", "--exclude", "kcoder_browser", "--exclude", "kcoder_attachment_retention", "--exclude", "kcoder_migration_rpc", "--exclude", "kcoder_workspace_resources", "--exclude", "kcoder_native_journal", "--exclude", "kcoder_knowledge_rpc", "--exclude", "kcoder_cli_headless", "--exclude", "kcoder_cli_support", "--exclude", "kcoder_connectivity_storage", "--exclude", "kcoder_transcript", "--exclude", "kcoder_system_tests", "--exclude", "kcoder_test_harness", "--exclude", "kcoder_test_runner"]
 # Exact Linux roster: tests/ignored-tests.linux.json; review named changes before updating.
-summary = { parser = "cargo", expected_skips = { linux = 38, macos = "any", windows = "any" } }
+summary = { parser = "cargo", expected_skips = { linux = 47, macos = "any", windows = "any" } }
 timeout_seconds = 1800
 requires_commands = ["cargo"]
 pass_env = ["CARGO_HOME", "RUSTUP_HOME", "RUSTC_WRAPPER", "CC", "CXX", "PKG_CONFIG_PATH"]
@@ -46,6 +46,29 @@ summary = { parser = "cargo", expected_skips = 0 }
 timeout_seconds = 900
 requires_commands = ["cargo"]
 pass_env = ["CARGO_HOME", "RUSTUP_HOME", "RUSTC_WRAPPER", "CC", "CXX", "PKG_CONFIG_PATH"]
+
+[[suite]]
+id = "continuous-work-unit"
+tiers = ["full"]
+# Continuous-work behavior is verified by plain Rust tests.
+command = ["cargo", "test", "-p", "kcoder_cli", "--bin", "kcoder", "--", "continuous_work", "background"]
+summary = { parser = "cargo", expected_skips = 0 }
+timeout_seconds = 1800
+requires_commands = ["cargo"]
+pass_env = ["CARGO_HOME", "RUSTUP_HOME", "RUSTC_WRAPPER", "CC", "CXX", "PKG_CONFIG_PATH"]
+env = { CARGO_NET_OFFLINE = "true" }
+
+[[suite]]
+id = "continuous-work-stdio"
+tiers = ["full"]
+# Real app-server processes against a controlled Provider fixture (M1 loop).
+command = ["cargo", "test", "-p", "kcoder_cli", "--test", "app_server_stdio", "--", "--include-ignored", "a_failed_background_command_wakes_the_original_thread_once", "a_background_result_after_pause_does_not_wake_the_thread", "a_steer_reaches_the_next_provider_request_exactly_once", "a_recovery_does_not_redeliver_a_finished_background_job", "background_subagent_lifecycle", "m1_demo_a_goal_survives_a_failed_background_test_and_a_steer_to_completion"]
+summary = { parser = "cargo", expected_skips = 0 }
+timeout_seconds = 1800
+requires_commands = ["cargo"]
+platforms = ["linux"]
+pass_env = ["CARGO_HOME", "RUSTUP_HOME", "RUSTC_WRAPPER", "CC", "CXX", "PKG_CONFIG_PATH"]
+env = { CARGO_NET_OFFLINE = "true" }
 
 [[suite]]
 id = "tui-lab-unit"
@@ -96,16 +119,6 @@ requires_commands = ["node", "pnpm"]
 env = { pnpm_config_verify_deps_before_run = "warn" }
 
 [[suite]]
-id = "studio-tauri-unit"
-tiers = ["pr", "full"]
-command = ["cargo", "test", "--manifest-path", "apps/kcoder-studio/renderer/src-tauri/Cargo.toml"]
-summary = { parser = "cargo", expected_skips = 0 }
-timeout_seconds = 1800
-requires_commands = ["cargo", "pkg-config"]
-pass_env = ["CARGO_HOME", "RUSTUP_HOME", "RUSTC_WRAPPER", "CC", "CXX", "PKG_CONFIG_PATH"]
-platforms = ["linux", "macos", "windows"]
-
-[[suite]]
 id = "studio-harness"
 tiers = ["pr", "full"]
 depends_on = ["build-debug-cli"]
@@ -127,10 +140,21 @@ pass_env = ["CARGO_HOME", "RUSTUP_HOME"]
 platforms = ["linux"]
 
 [[suite]]
+id = "config-private-fs-compat"
+tiers = ["pr", "full"]
+command = ["cargo", "test", "--locked", "-p", "kcoder_config", "--features", "private-file-test-hooks", "--test", "private_fs_compat"]
+summary = { parser = "cargo", expected_skips = 0 }
+timeout_seconds = 300
+requires_commands = ["cargo"]
+pass_env = ["CARGO_HOME", "RUSTUP_HOME", "RUSTC_WRAPPER", "CC", "CXX", "PKG_CONFIG_PATH"]
+platforms = ["linux"]
+
+[[suite]]
 id = "cli-kcoder-unit"
 tiers = ["pr", "full"]
-command = ["cargo", "test", "-p", "kcoder_cli", "--bin", "kcoder", "--", "--test-threads=1"]
-summary = { parser = "cargo", expected_skips = 2 }
+command = ["cargo", "test", "-p", "kcoder_cli_runtime", "-p", "kcoder_session_configuration", "-p", "kcoder_browser", "-p", "kcoder_attachment_retention", "-p", "kcoder_migration_rpc", "-p", "kcoder_workspace_resources", "-p", "kcoder_native_journal", "-p", "kcoder_knowledge_rpc", "-p", "kcoder_cli_headless", "-p", "kcoder_cli_support", "-p", "kcoder_connectivity_storage", "-p", "kcoder_transcript", "--lib", "--", "--test-threads=1"]
+# Exact per-platform names/prerequisites: tests/ignored-tests.cli.json.
+summary = { parser = "cargo", expected_skips = { linux = 36, macos = 25, windows = 26 } }
 timeout_seconds = 1200
 requires_commands = ["cargo"]
 pass_env = ["CARGO_HOME", "RUSTUP_HOME", "RUSTC_WRAPPER", "CC", "CXX", "PKG_CONFIG_PATH"]
@@ -139,8 +163,18 @@ pass_env = ["CARGO_HOME", "RUSTUP_HOME", "RUSTC_WRAPPER", "CC", "CXX", "PKG_CONF
 id = "cli-app-server-stdio"
 tiers = ["pr", "full"]
 command = ["cargo", "test", "-p", "kcoder_cli", "--test", "app_server_stdio", "--", "--test-threads=1"]
-summary = { parser = "cargo", expected_skips = 0 }
+# Prepared native SearXNG/Office cases have exact names in tests/ignored-tests.cli.json.
+summary = { parser = "cargo", expected_skips = { linux = 11, macos = 0, windows = 1 } }
 timeout_seconds = 1200
+requires_commands = ["cargo"]
+pass_env = ["CARGO_HOME", "RUSTUP_HOME", "RUSTC_WRAPPER", "CC", "CXX", "PKG_CONFIG_PATH", "KCODER_TEST_SYSTEM_USERS"]
+
+[[suite]]
+id = "cli-native-code-diagnostics"
+tiers = ["pr", "full"]
+command = ["cargo", "test", "-p", "kcoder_cli", "--test", "native_code_diagnostics"]
+summary = { parser = "cargo", expected_skips = 0 }
+timeout_seconds = 300
 requires_commands = ["cargo"]
 pass_env = ["CARGO_HOME", "RUSTUP_HOME", "RUSTC_WRAPPER", "CC", "CXX", "PKG_CONFIG_PATH"]
 
@@ -154,6 +188,15 @@ requires_commands = ["cargo"]
 pass_env = ["CARGO_HOME", "RUSTUP_HOME", "RUSTC_WRAPPER", "CC", "CXX", "PKG_CONFIG_PATH"]
 
 [[suite]]
+id = "cli-migration-budget"
+tiers = ["pr", "full"]
+command = ["cargo", "test", "-p", "kcoder_cli", "--test", "migration_budget_cli", "--", "--test-threads=1"]
+summary = { parser = "cargo", expected_skips = 0 }
+timeout_seconds = 300
+requires_commands = ["cargo"]
+pass_env = ["CARGO_HOME", "RUSTUP_HOME", "RUSTC_WRAPPER", "CC", "CXX", "PKG_CONFIG_PATH"]
+
+[[suite]]
 id = "cli-tool-registration"
 tiers = ["pr", "full"]
 command = ["cargo", "test", "-p", "kcoder_cli", "--test", "tool_registration", "--", "--test-threads=1"]
@@ -161,6 +204,31 @@ summary = { parser = "cargo", expected_skips = 0 }
 timeout_seconds = 1200
 requires_commands = ["cargo"]
 pass_env = ["CARGO_HOME", "RUSTUP_HOME", "RUSTC_WRAPPER", "CC", "CXX", "PKG_CONFIG_PATH"]
+
+[[suite]]
+id = "acp-toad-application"
+tiers = ["platform"]
+depends_on = ["acp-toad-build"]
+command = ["python3", "crates/kcoder_cli/tests/acp/toad_acceptance.py", "--python-from-env", "--binary", "target/debug/kcoder", "--evidence", "{artifact_dir}"]
+summary = { parser = "exit-code", allow_zero = true, expected_skips = 0 }
+timeout_seconds = 180
+requires_commands = ["python3"]
+requires_executables = [{ env = "KCODER_ACP_TOAD_PYTHON", allow_external = true }]
+pass_env = ["KCODER_ACP_TOAD_PYTHON", "KCODER_TEST_ACP_TOAD"]
+required_artifacts = ["toad-acceptance.json", "toad-first-turn.svg", "toad-after-cancel.svg"]
+platforms = ["linux"]
+consent = "acp-toad-application"
+consent_env = "KCODER_TEST_ACP_TOAD"
+
+[[suite]]
+id = "acp-toad-build"
+tiers = ["platform"]
+command = ["cargo", "build", "--locked", "-p", "kcoder_cli", "--bin", "kcoder"]
+summary = { parser = "exit-code", allow_zero = true, expected_skips = 0 }
+timeout_seconds = 1800
+requires_commands = ["cargo"]
+pass_env = ["CARGO_HOME", "RUSTUP_HOME", "RUSTC_WRAPPER", "CC", "CXX", "PKG_CONFIG_PATH"]
+setup = true
 
 [[suite]]
 id = "cli-first-start-provider"
@@ -222,6 +290,37 @@ pass_env = ["KCODER_E2E_REQUIRE_CHROMIUM_SANDBOX", "KCODER_E2E_CHROMIUM_NO_SANDB
 depends_on = ["build-debug-cli"]
 
 [[suite]]
+id = "mobile-profile-metadata-gate"
+tiers = ["full"]
+command = ["node", "apps/kcoder-studio/e2e/suites/mobile/mobile-profile-metadata-gate.e2e.mjs"]
+summary = { parser = "exit-code", allow_zero = true, expected_skips = 0 }
+timeout_seconds = 180
+requires_commands = ["node"]
+requires_any_env = [["KCODER_E2E_REQUIRE_CHROMIUM_SANDBOX", "KCODER_E2E_CHROMIUM_NO_SANDBOX"]]
+pass_env = ["KCODER_E2E_REQUIRE_CHROMIUM_SANDBOX", "KCODER_E2E_CHROMIUM_NO_SANDBOX", "KCODER_E2E_CHROMIUM_BIN"]
+
+[[suite]]
+id = "mobile-profile-account-http"
+tiers = ["full"]
+command = ["node", "apps/kcoder-studio/e2e/suites/mobile/mobile-profile-account-http.e2e.mjs"]
+summary = { parser = "exit-code", allow_zero = true, expected_skips = 0 }
+timeout_seconds = 180
+requires_commands = ["node"]
+requires_any_env = [["KCODER_E2E_REQUIRE_CHROMIUM_SANDBOX", "KCODER_E2E_CHROMIUM_NO_SANDBOX"]]
+pass_env = ["KCODER_E2E_REQUIRE_CHROMIUM_SANDBOX", "KCODER_E2E_CHROMIUM_NO_SANDBOX", "KCODER_E2E_CHROMIUM_BIN"]
+
+[[suite]]
+id = "mobile-profile-workbench-http"
+tiers = ["full"]
+command = ["node", "apps/kcoder-studio/e2e/suites/mobile/mobile-profile-workbench-http.e2e.mjs"]
+summary = { parser = "exit-code", allow_zero = true, expected_skips = 0 }
+timeout_seconds = 900
+requires_commands = ["node"]
+requires_env = ["KCODER_E2E_KCODER_BIN", "KCODER_E2E_KCODER_BIN_SHA256"]
+requires_any_env = [["KCODER_E2E_REQUIRE_CHROMIUM_SANDBOX", "KCODER_E2E_CHROMIUM_NO_SANDBOX"]]
+pass_env = ["KCODER_E2E_REQUIRE_CHROMIUM_SANDBOX", "KCODER_E2E_CHROMIUM_NO_SANDBOX", "KCODER_E2E_CHROMIUM_BIN", "KCODER_E2E_KCODER_BIN", "KCODER_E2E_KCODER_BIN_SHA256", "KCODER_E2E_MOBILE_SOURCE_ROOT", "KCODER_E2E_MOBILE_WEB_EXPORT_ARCHIVE", "KCODER_E2E_MOBILE_WEB_EXPORT_ARCHIVE_SHA256"]
+
+[[suite]]
 id = "studio-desktop-package-build"
 tiers = ["full"]
 cwd = "apps/kcoder-studio"
@@ -245,23 +344,6 @@ timeout_seconds = 300
 requires_commands = ["node", "npm"]
 requires_files = ["apps/kcoder-studio/dist/linux-unpacked/kcoder-studio"]
 depends_on = ["studio-desktop-package-build"]
-
-[[suite]]
-id = "studio-tauri-desktop-e2e"
-tiers = ["platform"]
-cwd = "apps/kcoder-studio/renderer"
-command = ["pnpm", "run", "e2e:desktop"]
-summary = { parser = "exit-code", allow_zero = true, expected_skips = 0 }
-timeout_seconds = 3600
-requires_commands = ["node", "pnpm", "cargo"]
-requires_files = ["apps/kcoder-studio/renderer/node_modules/.bin/tauri", "apps/kcoder-studio/renderer/src-tauri/binaries/wegent-executor-x86_64-unknown-linux-gnu"]
-requires_executables = [{ env = "CODEX_BIN", allow_external = true }]
-platforms = ["linux"]
-consent = "tauri-codex-desktop"
-consent_env = "KCODER_TEST_TAURI_CODEX_DESKTOP"
-pass_env = ["KCODER_TEST_TAURI_CODEX_DESKTOP", "CARGO_HOME", "RUSTUP_HOME", "RUSTC_WRAPPER", "CC", "CXX", "PKG_CONFIG_PATH", "DISPLAY", "WAYLAND_DISPLAY", "XDG_RUNTIME_DIR", "CODEX_BIN"]
-[suite.env]
-KCODER_STUDIO_E2E_EXECUTOR_BIN = "src-tauri/binaries/wegent-executor-x86_64-unknown-linux-gnu"
 
 [[suite]]
 id = "studio-browser-e2e"
@@ -348,7 +430,7 @@ requires_files = ["target/debug/kcoder"]
 requires_env = ["KCODER_CONFIG_DIR"]
 consent = "real-model"
 consent_env = "KCODER_E2E_REAL_MODEL"
-pass_env = ["KCODER_E2E_REAL_MODEL", "KCODER_E2E_MODEL_PROFILE", "KCODER_E2E_MODEL_ENDPOINT", "KCODER_E2E_MODEL_NAME", "KCODER_E2E_MODEL_API_FORMAT", "KCODER_E2E_MODEL_CREDENTIAL_ENV", "KCODER_E2E_MODEL_CREDENTIAL_VALUE", "KCODER_E2E_KCODER_BIN", "KCODER_CONFIG_DIR", "KCODER_E2E_MODEL_MAX_TOKENS", "KCODER_E2E_MODEL_TIMEOUT_SECS"]
+pass_env = ["KCODER_E2E_REAL_MODEL", "KCODER_E2E_MODEL_PROFILE", "KCODER_E2E_MODEL_ENDPOINT", "KCODER_E2E_MODEL_NAME", "KCODER_E2E_MODEL_API_FORMAT", "KCODER_E2E_MODEL_CREDENTIAL_ENV", "KCODER_E2E_MODEL_CREDENTIAL_VALUE", "KCODER_E2E_KCODER_BIN", "KCODER_CONFIG_DIR", "KCODER_E2E_MODEL_MAX_TOKENS", "KCODER_E2E_MODEL_TIMEOUT_SECS", "KCODER_E2E_OFFICE_MAX_USD", "KCODER_E2E_OFFICE_INPUT_USD_PER_MILLION", "KCODER_E2E_OFFICE_OUTPUT_USD_PER_MILLION"]
 secret_env = ["KCODER_E2E_MODEL_ENDPOINT", "KCODER_E2E_MODEL_CREDENTIAL_VALUE"]
 secret_env_selectors = ["KCODER_E2E_MODEL_CREDENTIAL_ENV"]
 depends_on = ["build-debug-cli"]
@@ -372,3 +454,534 @@ requires_commands = ["python3"]
 requires_files = ["target/debug/kcoder"]
 depends_on = ["build-debug-cli"]
 platforms = ["linux"]
+
+
+[[suite]]
+id = "studio-widget-physical-ssh"
+tiers = ["platform"]
+command = ["node", "apps/kcoder-studio/e2e/suites/gateway/kworker-widget-physical-ssh.e2e.mjs"]
+summary = { parser = "exit-code", allow_zero = true, expected_skips = 0 }
+timeout_seconds = 300
+requires_commands = ["node", "ssh", "scp"]
+requires_env = ["KCODER_E2E_REMOTE_SSH_TARGET", "KCODER_E2E_REMOTE_SSH_KEY", "KCODER_E2E_REMOTE_KNOWN_HOSTS"]
+requires_files = ["target/debug/kcoder"]
+platforms = ["linux"]
+consent = "widget-physical-ssh"
+consent_env = "KCODER_E2E_REMOTE_WIDGET_CONSENT"
+pass_env = ["KCODER_E2E_REMOTE_WIDGET_CONSENT", "KCODER_E2E_REMOTE_SSH_TARGET", "KCODER_E2E_REMOTE_SSH_KEY", "KCODER_E2E_REMOTE_KNOWN_HOSTS", "KCODER_E2E_KCODER_BIN"]
+
+[[suite]]
+id = "windows-migration-security"
+tiers = ["platform"]
+command = ["node", "apps/kcoder-studio/e2e/suites/gateway/windows-migration-security.e2e.mjs"]
+summary = { parser = "exit-code", allow_zero = true, expected_skips = 0 }
+timeout_seconds = 180
+requires_commands = ["node", "ssh", "scp"]
+requires_env = ["KCODER_E2E_WINDOWS_SSH_TARGET", "KCODER_E2E_WINDOWS_PROBE_PARENT", "KCODER_E2E_WINDOWS_SECURITY_HELPER", "KCODER_E2E_WINDOWS_SECURITY_HELPER_SHA256", "KCODER_E2E_WINDOWS_SECURITY_BASELINE_SOURCE"]
+platforms = ["linux", "macos"]
+consent = "windows-migration-security"
+consent_env = "KCODER_E2E_WINDOWS_MIGRATION_SECURITY"
+pass_env = ["KCODER_E2E_WINDOWS_MIGRATION_SECURITY", "KCODER_E2E_WINDOWS_SSH_TARGET", "KCODER_E2E_WINDOWS_PROBE_PARENT", "KCODER_E2E_WINDOWS_SECURITY_HELPER", "KCODER_E2E_WINDOWS_SECURITY_HELPER_SHA256", "KCODER_E2E_WINDOWS_SECURITY_BASELINE_SOURCE"]
+
+[[suite]]
+id = "windows-historical-undo"
+tiers = ["platform"]
+command = ["node", "apps/kcoder-studio/e2e/suites/gateway/windows-historical-undo.e2e.mjs"]
+summary = { parser = "exit-code", allow_zero = true, expected_skips = 0 }
+timeout_seconds = 180
+requires_commands = ["node", "ssh", "scp"]
+requires_env = ["KCODER_E2E_WINDOWS_SSH_TARGET", "KCODER_E2E_WINDOWS_NODE", "KCODER_E2E_WINDOWS_PROBE_PARENT", "KCODER_E2E_WINDOWS_NATIVE_TEST_BIN", "KCODER_E2E_WINDOWS_NATIVE_TEST_SHA256", "KCODER_E2E_WINDOWS_NATIVE_SOURCE_SHA256", "KCODER_E2E_WINDOWS_NATIVE_SUPERVISOR_BIN", "KCODER_E2E_WINDOWS_NATIVE_SUPERVISOR_SHA256"]
+platforms = ["linux", "macos"]
+consent = "windows-native-libtest"
+consent_env = "KCODER_E2E_WINDOWS_NATIVE_LIBTEST"
+pass_env = ["KCODER_E2E_WINDOWS_NATIVE_LIBTEST", "KCODER_E2E_WINDOWS_SSH_TARGET", "KCODER_E2E_WINDOWS_NODE", "KCODER_E2E_WINDOWS_PROBE_PARENT", "KCODER_E2E_WINDOWS_NATIVE_TEST_BIN", "KCODER_E2E_WINDOWS_NATIVE_TEST_SHA256", "KCODER_E2E_WINDOWS_NATIVE_SOURCE_SHA256", "KCODER_E2E_WINDOWS_NATIVE_SUPERVISOR_BIN", "KCODER_E2E_WINDOWS_NATIVE_SUPERVISOR_SHA256"]
+
+[[suite]]
+id = "windows-terminal-lifecycle"
+tiers = ["platform"]
+command = ["node", "apps/kcoder-studio/e2e/suites/gateway/windows-terminal-lifecycle.e2e.mjs"]
+summary = { parser = "exit-code", allow_zero = true, expected_skips = 0 }
+timeout_seconds = 180
+requires_commands = ["node", "ssh", "scp"]
+requires_env = ["KCODER_E2E_WINDOWS_SSH_TARGET", "KCODER_E2E_WINDOWS_NODE", "KCODER_E2E_WINDOWS_PROBE_PARENT", "KCODER_E2E_WINDOWS_NATIVE_TEST_BIN", "KCODER_E2E_WINDOWS_NATIVE_TEST_SHA256", "KCODER_E2E_WINDOWS_NATIVE_SOURCE_SHA256", "KCODER_E2E_WINDOWS_NATIVE_SUPERVISOR_BIN", "KCODER_E2E_WINDOWS_NATIVE_SUPERVISOR_SHA256", "KCODER_E2E_WINDOWS_NATIVE_EXPECTED_COMMIT", "KCODER_E2E_WINDOWS_NATIVE_EXPECTED_DIRTY"]
+platforms = ["linux", "macos"]
+consent = "windows-native-libtest"
+consent_env = "KCODER_E2E_WINDOWS_NATIVE_LIBTEST"
+pass_env = ["KCODER_E2E_WINDOWS_NATIVE_LIBTEST", "KCODER_E2E_WINDOWS_SSH_TARGET", "KCODER_E2E_WINDOWS_NODE", "KCODER_E2E_WINDOWS_PROBE_PARENT", "KCODER_E2E_WINDOWS_NATIVE_TEST_BIN", "KCODER_E2E_WINDOWS_NATIVE_TEST_SHA256", "KCODER_E2E_WINDOWS_NATIVE_SOURCE_SHA256", "KCODER_E2E_WINDOWS_NATIVE_SUPERVISOR_BIN", "KCODER_E2E_WINDOWS_NATIVE_SUPERVISOR_SHA256", "KCODER_E2E_WINDOWS_NATIVE_EXPECTED_COMMIT", "KCODER_E2E_WINDOWS_NATIVE_EXPECTED_DIRTY", "KCODER_E2E_WINDOWS_NATIVE_RUST_MIN_STACK"]
+
+[[suite]]
+id = "windows-local-attachment"
+tiers = ["platform"]
+command = ["node", "apps/kcoder-studio/e2e/suites/gateway/windows-local-attachment.e2e.mjs"]
+summary = { parser = "exit-code", allow_zero = true, expected_skips = 0 }
+timeout_seconds = 240
+requires_commands = ["node", "ssh", "scp"]
+requires_env = ["KCODER_E2E_WINDOWS_SSH_TARGET", "KCODER_E2E_WINDOWS_NODE", "KCODER_E2E_WINDOWS_PROBE_PARENT", "KCODER_E2E_WINDOWS_NATIVE_TEST_BIN", "KCODER_E2E_WINDOWS_NATIVE_TEST_SHA256", "KCODER_E2E_WINDOWS_NATIVE_SOURCE_SHA256", "KCODER_E2E_WINDOWS_NATIVE_SUPERVISOR_BIN", "KCODER_E2E_WINDOWS_NATIVE_SUPERVISOR_SHA256", "KCODER_E2E_WINDOWS_NATIVE_EXPECTED_COMMIT", "KCODER_E2E_WINDOWS_NATIVE_EXPECTED_DIRTY"]
+platforms = ["linux", "macos"]
+consent = "windows-native-libtest"
+consent_env = "KCODER_E2E_WINDOWS_NATIVE_LIBTEST"
+pass_env = ["KCODER_E2E_WINDOWS_NATIVE_LIBTEST", "KCODER_E2E_WINDOWS_SSH_TARGET", "KCODER_E2E_WINDOWS_NODE", "KCODER_E2E_WINDOWS_PROBE_PARENT", "KCODER_E2E_WINDOWS_NATIVE_TEST_BIN", "KCODER_E2E_WINDOWS_NATIVE_TEST_SHA256", "KCODER_E2E_WINDOWS_NATIVE_SOURCE_SHA256", "KCODER_E2E_WINDOWS_NATIVE_SUPERVISOR_BIN", "KCODER_E2E_WINDOWS_NATIVE_SUPERVISOR_SHA256", "KCODER_E2E_WINDOWS_NATIVE_EXPECTED_COMMIT", "KCODER_E2E_WINDOWS_NATIVE_EXPECTED_DIRTY"]
+
+[[suite]]
+id = "windows-local-attachment-lock"
+tiers = ["platform"]
+command = ["node", "apps/kcoder-studio/e2e/suites/gateway/windows-local-attachment-lock.e2e.mjs"]
+summary = { parser = "exit-code", allow_zero = true, expected_skips = 0 }
+timeout_seconds = 180
+requires_commands = ["node", "ssh", "scp"]
+requires_env = ["KCODER_E2E_WINDOWS_SSH_TARGET", "KCODER_E2E_WINDOWS_NODE", "KCODER_E2E_WINDOWS_PROBE_PARENT", "KCODER_E2E_WINDOWS_NATIVE_TEST_BIN", "KCODER_E2E_WINDOWS_NATIVE_TEST_SHA256", "KCODER_E2E_WINDOWS_NATIVE_SOURCE_SHA256", "KCODER_E2E_WINDOWS_NATIVE_SUPERVISOR_BIN", "KCODER_E2E_WINDOWS_NATIVE_SUPERVISOR_SHA256", "KCODER_E2E_WINDOWS_NATIVE_EXPECTED_COMMIT", "KCODER_E2E_WINDOWS_NATIVE_EXPECTED_DIRTY"]
+platforms = ["linux", "macos"]
+consent = "windows-native-libtest"
+consent_env = "KCODER_E2E_WINDOWS_NATIVE_LIBTEST"
+pass_env = ["KCODER_E2E_WINDOWS_NATIVE_LIBTEST", "KCODER_E2E_WINDOWS_SSH_TARGET", "KCODER_E2E_WINDOWS_NODE", "KCODER_E2E_WINDOWS_PROBE_PARENT", "KCODER_E2E_WINDOWS_NATIVE_TEST_BIN", "KCODER_E2E_WINDOWS_NATIVE_TEST_SHA256", "KCODER_E2E_WINDOWS_NATIVE_SOURCE_SHA256", "KCODER_E2E_WINDOWS_NATIVE_SUPERVISOR_BIN", "KCODER_E2E_WINDOWS_NATIVE_SUPERVISOR_SHA256", "KCODER_E2E_WINDOWS_NATIVE_EXPECTED_COMMIT", "KCODER_E2E_WINDOWS_NATIVE_EXPECTED_DIRTY"]
+
+[[suite]]
+id = "windows-profile-settings-lock"
+tiers = ["platform"]
+command = ["node", "apps/kcoder-studio/e2e/suites/gateway/windows-profile-settings-lock.e2e.mjs"]
+summary = { parser = "exit-code", allow_zero = true, expected_skips = 0 }
+timeout_seconds = 240
+requires_commands = ["node", "ssh", "scp"]
+requires_env = ["KCODER_E2E_WINDOWS_SSH_TARGET", "KCODER_E2E_WINDOWS_NODE", "KCODER_E2E_WINDOWS_PROBE_PARENT", "KCODER_E2E_WINDOWS_NATIVE_TEST_BIN", "KCODER_E2E_WINDOWS_NATIVE_TEST_SHA256", "KCODER_E2E_WINDOWS_NATIVE_SOURCE_SHA256", "KCODER_E2E_WINDOWS_NATIVE_SUPERVISOR_BIN", "KCODER_E2E_WINDOWS_NATIVE_SUPERVISOR_SHA256", "KCODER_E2E_WINDOWS_NATIVE_EXPECTED_COMMIT", "KCODER_E2E_WINDOWS_NATIVE_EXPECTED_DIRTY"]
+platforms = ["linux", "macos"]
+consent = "windows-native-libtest"
+consent_env = "KCODER_E2E_WINDOWS_NATIVE_LIBTEST"
+pass_env = ["KCODER_E2E_WINDOWS_CONFIG_LOCK_SCOPE", "KCODER_E2E_WINDOWS_NATIVE_LIBTEST", "KCODER_E2E_WINDOWS_SSH_TARGET", "KCODER_E2E_WINDOWS_NODE", "KCODER_E2E_WINDOWS_PROBE_PARENT", "KCODER_E2E_WINDOWS_NATIVE_TEST_BIN", "KCODER_E2E_WINDOWS_NATIVE_TEST_SHA256", "KCODER_E2E_WINDOWS_NATIVE_SOURCE_SHA256", "KCODER_E2E_WINDOWS_NATIVE_SUPERVISOR_BIN", "KCODER_E2E_WINDOWS_NATIVE_SUPERVISOR_SHA256", "KCODER_E2E_WINDOWS_NATIVE_EXPECTED_COMMIT", "KCODER_E2E_WINDOWS_NATIVE_EXPECTED_DIRTY"]
+
+[[suite]]
+id = "windows-plugin-migration"
+tiers = ["platform"]
+command = ["node", "apps/kcoder-studio/e2e/suites/gateway/windows-plugin-migration.e2e.mjs"]
+summary = { parser = "exit-code", allow_zero = true, expected_skips = 0 }
+timeout_seconds = 360
+requires_commands = ["node", "ssh", "scp"]
+requires_env = ["KCODER_E2E_WINDOWS_SSH_TARGET", "KCODER_E2E_WINDOWS_NODE", "KCODER_E2E_WINDOWS_PROBE_PARENT", "KCODER_E2E_WINDOWS_NATIVE_TEST_BIN", "KCODER_E2E_WINDOWS_NATIVE_TEST_SHA256", "KCODER_E2E_WINDOWS_NATIVE_SOURCE_SHA256", "KCODER_E2E_WINDOWS_NATIVE_SUPERVISOR_BIN", "KCODER_E2E_WINDOWS_NATIVE_SUPERVISOR_SHA256", "KCODER_E2E_WINDOWS_NATIVE_EXPECTED_COMMIT", "KCODER_E2E_WINDOWS_NATIVE_EXPECTED_DIRTY", "KCODER_E2E_WINDOWS_PLUGIN_LEASE_SCOPE"]
+platforms = ["linux", "macos"]
+consent = "windows-native-libtest"
+consent_env = "KCODER_E2E_WINDOWS_NATIVE_LIBTEST"
+pass_env = ["KCODER_E2E_WINDOWS_PLUGIN_LEASE_SCOPE", "KCODER_E2E_WINDOWS_NATIVE_LIBTEST", "KCODER_E2E_WINDOWS_SSH_TARGET", "KCODER_E2E_WINDOWS_NODE", "KCODER_E2E_WINDOWS_PROBE_PARENT", "KCODER_E2E_WINDOWS_NATIVE_TEST_BIN", "KCODER_E2E_WINDOWS_NATIVE_TEST_SHA256", "KCODER_E2E_WINDOWS_NATIVE_SOURCE_SHA256", "KCODER_E2E_WINDOWS_NATIVE_SUPERVISOR_BIN", "KCODER_E2E_WINDOWS_NATIVE_SUPERVISOR_SHA256", "KCODER_E2E_WINDOWS_NATIVE_EXPECTED_COMMIT", "KCODER_E2E_WINDOWS_NATIVE_EXPECTED_DIRTY"]
+
+[[suite]]
+id = "windows-archive-retention"
+# retention scopes also include received-adoption: 7+3+4 exact-roster Native tests,
+# plus the single history-adoption fresh-target service/plan/run/Undo regression.
+# cache selects 5 derived SQLite lifecycle tests and 1 lost-deletion-receipt test.
+# browser-upload selects 14 Native upload and 14 streaming manifest/container tests.
+# uploaded-product selects 11 independent Native materialization/publication/provenance tests.
+# memory-snapshot selects only 5 State private imported-context sidecar cases.
+# private-credentials selects 24 synthetic Native HPKE, custody, recovery and existing-group cases; no OS-vault assertion.
+# read-tools/read-engine select 2 Tools / 1 Engine exact consumers with explicit baseline/long-case/unc owned path fixtures.
+tiers = ["platform"]
+command = ["node", "apps/kcoder-studio/e2e/run-all.mjs", "--suite", "windows-archive-retention"]
+summary = { parser = "exit-code", allow_zero = true, expected_skips = 0 }
+timeout_seconds = 600
+requires_commands = ["node", "ssh", "scp"]
+requires_env = ["KCODER_E2E_WINDOWS_SSH_TARGET", "KCODER_E2E_WINDOWS_NODE", "KCODER_E2E_WINDOWS_PROBE_PARENT", "KCODER_E2E_WINDOWS_NATIVE_TEST_BIN", "KCODER_E2E_WINDOWS_NATIVE_TEST_SHA256", "KCODER_E2E_WINDOWS_NATIVE_SOURCE_SHA256", "KCODER_E2E_WINDOWS_NATIVE_SUPERVISOR_BIN", "KCODER_E2E_WINDOWS_NATIVE_SUPERVISOR_SHA256", "KCODER_E2E_WINDOWS_NATIVE_EXPECTED_COMMIT", "KCODER_E2E_WINDOWS_NATIVE_EXPECTED_DIRTY", "KCODER_E2E_WINDOWS_RETENTION_SCOPE"]
+platforms = ["linux", "macos"]
+consent = "windows-native-libtest"
+consent_env = "KCODER_E2E_WINDOWS_NATIVE_LIBTEST"
+pass_env = ["KCODER_E2E_WINDOWS_RETENTION_SCOPE", "KCODER_E2E_WINDOWS_READ_PATH_MODE", "KCODER_E2E_WINDOWS_NATIVE_LIBTEST", "KCODER_E2E_WINDOWS_SSH_TARGET", "KCODER_E2E_WINDOWS_NODE", "KCODER_E2E_WINDOWS_PROBE_PARENT", "KCODER_E2E_WINDOWS_NATIVE_TEST_BIN", "KCODER_E2E_WINDOWS_NATIVE_TEST_SHA256", "KCODER_E2E_WINDOWS_NATIVE_SOURCE_SHA256", "KCODER_E2E_WINDOWS_NATIVE_SUPERVISOR_BIN", "KCODER_E2E_WINDOWS_NATIVE_SUPERVISOR_SHA256", "KCODER_E2E_WINDOWS_NATIVE_EXPECTED_COMMIT", "KCODER_E2E_WINDOWS_NATIVE_EXPECTED_DIRTY"]
+
+[[suite]]
+id = "windows-keyring-logon"
+tiers = ["platform"]
+command = ["node", "apps/kcoder-studio/e2e/run-all.mjs", "--suite", "windows-keyring-logon"]
+summary = { parser = "exit-code", allow_zero = true, expected_skips = 0 }
+timeout_seconds = 120
+requires_commands = ["node", "ssh"]
+requires_env = ["KCODER_E2E_WINDOWS_SSH_TARGET", "KCODER_E2E_WINDOWS_PROBE_PARENT", "KCODER_E2E_WINDOWS_KEYRING_LOGON_MODE"]
+platforms = ["linux", "macos"]
+consent = "windows-owned-logon"
+consent_env = "KCODER_E2E_WINDOWS_KEYRING_LOGON"
+pass_env = ["KCODER_E2E_WINDOWS_KEYRING_LOGON", "KCODER_E2E_WINDOWS_KEYRING_LOGON_MODE", "KCODER_E2E_WINDOWS_SSH_TARGET", "KCODER_E2E_WINDOWS_PROBE_PARENT"]
+
+[[suite]]
+id = "windows-keyring-account"
+tiers = ["platform"]
+command = ["node", "apps/kcoder-studio/e2e/run-all.mjs", "--suite", "windows-keyring-account"]
+summary = { parser = "exit-code", allow_zero = true, expected_skips = 0 }
+timeout_seconds = 480
+requires_commands = ["node", "ssh", "scp"]
+requires_env = ["KCODER_E2E_WINDOWS_SSH_TARGET", "KCODER_E2E_WINDOWS_PROBE_PARENT", "KCODER_E2E_WINDOWS_KEYRING_ACCOUNT_MODE"]
+platforms = ["linux", "macos"]
+consent = "windows-owned-logon"
+consent_env = "KCODER_E2E_WINDOWS_KEYRING_LOGON"
+pass_env = ["KCODER_E2E_WINDOWS_KEYRING_LOGON", "KCODER_E2E_WINDOWS_KEYRING_ACCOUNT_MODE", "KCODER_E2E_WINDOWS_KEYRING_ACCOUNT_REVIEW_SHA256", "KCODER_E2E_WINDOWS_KEYRING_ACCOUNT_FAULT", "KCODER_E2E_WINDOWS_SSH_TARGET", "KCODER_E2E_WINDOWS_PROBE_PARENT", "KCODER_E2E_WINDOWS_SECURITY_HELPER", "KCODER_E2E_WINDOWS_SECURITY_HELPER_SHA256"]
+
+[[suite]]
+id = "windows-keyring-core"
+tiers = ["platform"]
+command = ["node", "apps/kcoder-studio/e2e/run-all.mjs", "--suite", "windows-keyring-core"]
+summary = { parser = "exit-code", allow_zero = true, expected_skips = 0 }
+timeout_seconds = 480
+requires_commands = ["node", "ssh", "scp"]
+requires_env = ["KCODER_E2E_WINDOWS_SSH_TARGET", "KCODER_E2E_WINDOWS_PROBE_PARENT", "KCODER_E2E_WINDOWS_KEYRING_ACCOUNT_MODE"]
+platforms = ["linux", "macos"]
+consent = "windows-owned-logon"
+consent_env = "KCODER_E2E_WINDOWS_KEYRING_LOGON"
+pass_env = ["KCODER_E2E_WINDOWS_KEYRING_LOGON", "KCODER_E2E_WINDOWS_KEYRING_ACCOUNT_MODE", "KCODER_E2E_WINDOWS_KEYRING_ACCOUNT_REVIEW_SHA256", "KCODER_E2E_WINDOWS_SSH_TARGET", "KCODER_E2E_WINDOWS_PROBE_PARENT", "KCODER_E2E_WINDOWS_SECURITY_HELPER", "KCODER_E2E_WINDOWS_SECURITY_HELPER_SHA256"]
+
+[[suite]]
+id = "windows-keyring-host"
+tiers = ["platform"]
+command = ["node", "apps/kcoder-studio/e2e/run-all.mjs", "--suite", "windows-keyring-host"]
+summary = { parser = "exit-code", allow_zero = true, expected_skips = 0 }
+timeout_seconds = 480
+requires_commands = ["node", "ssh", "scp"]
+requires_env = ["KCODER_E2E_WINDOWS_SSH_TARGET", "KCODER_E2E_WINDOWS_PROBE_PARENT", "KCODER_E2E_WINDOWS_KEYRING_ACCOUNT_MODE"]
+platforms = ["linux", "macos"]
+consent = "windows-owned-logon"
+consent_env = "KCODER_E2E_WINDOWS_KEYRING_LOGON"
+pass_env = ["KCODER_E2E_WINDOWS_KEYRING_LOGON", "KCODER_E2E_WINDOWS_KEYRING_ACCOUNT_MODE", "KCODER_E2E_WINDOWS_KEYRING_ACCOUNT_REVIEW_SHA256", "KCODER_E2E_WINDOWS_SSH_TARGET", "KCODER_E2E_WINDOWS_PROBE_PARENT", "KCODER_E2E_WINDOWS_SECURITY_HELPER", "KCODER_E2E_WINDOWS_SECURITY_HELPER_SHA256", "KCODER_E2E_WINDOWS_KEYRING_HOST_CLI", "KCODER_E2E_WINDOWS_KEYRING_HOST_CLI_SHA256", "KCODER_E2E_WINDOWS_NODE", "KCODER_E2E_WINDOWS_KEYRING_HOST_NODE_SHA256"]
+
+[[suite]]
+id = "windows-private-keyring"
+tiers = ["platform"]
+command = ["node", "apps/kcoder-studio/e2e/run-all.mjs", "--suite", "windows-private-keyring"]
+summary = { parser = "exit-code", allow_zero = true, expected_skips = 0 }
+timeout_seconds = 480
+requires_commands = ["node", "ssh", "scp"]
+requires_env = ["KCODER_E2E_WINDOWS_SSH_TARGET", "KCODER_E2E_WINDOWS_PROBE_PARENT", "KCODER_E2E_WINDOWS_KEYRING_ACCOUNT_MODE"]
+platforms = ["linux", "macos"]
+consent = "windows-owned-logon"
+consent_env = "KCODER_E2E_WINDOWS_KEYRING_LOGON"
+pass_env = ["KCODER_E2E_WINDOWS_KEYRING_LOGON", "KCODER_E2E_WINDOWS_KEYRING_ACCOUNT_MODE", "KCODER_E2E_WINDOWS_KEYRING_ACCOUNT_REVIEW_SHA256", "KCODER_E2E_WINDOWS_SSH_TARGET", "KCODER_E2E_WINDOWS_PROBE_PARENT", "KCODER_E2E_WINDOWS_SECURITY_HELPER", "KCODER_E2E_WINDOWS_SECURITY_HELPER_SHA256", "KCODER_E2E_WINDOWS_KEYRING_HOST_CLI", "KCODER_E2E_WINDOWS_KEYRING_HOST_CLI_SHA256", "KCODER_E2E_WINDOWS_NODE", "KCODER_E2E_WINDOWS_KEYRING_HOST_NODE_SHA256"]
+
+[[suite]]
+id = "linux-headless-credentials"
+tiers = ["platform"]
+command = ["node", "apps/kcoder-studio/e2e/run-all.mjs", "--suite", "linux-headless-credentials"]
+summary = { parser = "exit-code", allow_zero = true, expected_skips = 0 }
+timeout_seconds = 180
+requires_commands = ["node"]
+requires_env = ["KCODER_E2E_LINUX_HEADLESS_NATIVE", "KCODER_E2E_LINUX_HEADLESS_NATIVE_SHA256"]
+platforms = ["linux"]
+consent = "linux-headless-credentials"
+consent_env = "KCODER_E2E_LINUX_HEADLESS_CREDENTIALS"
+pass_env = ["KCODER_E2E_LINUX_HEADLESS_CREDENTIALS", "KCODER_E2E_LINUX_HEADLESS_NATIVE", "KCODER_E2E_LINUX_HEADLESS_NATIVE_SHA256"]
+
+[[suite]]
+id = "windows-cross-host-source"
+tiers = ["platform"]
+command = ["node", "apps/kcoder-studio/e2e/run-all.mjs", "--suite", "windows-cross-host-source"]
+summary = { parser = "exit-code", allow_zero = true, expected_skips = 0 }
+timeout_seconds = 600
+requires_commands = ["node", "ssh", "scp", "tar", "/usr/sbin/sshd", "ssh-keygen"]
+requires_env = ["KCODER_E2E_WINDOWS_CROSS_HOST_CHECKOUT", "KCODER_E2E_WINDOWS_NATIVE_EXPECTED_DIRTY", "KCODER_E2E_WINDOWS_SSH_TARGET", "KCODER_E2E_WINDOWS_NODE", "KCODER_E2E_WINDOWS_PROBE_PARENT", "KCODER_E2E_WINDOWS_NATIVE_TEST_BIN", "KCODER_E2E_WINDOWS_NATIVE_TEST_SHA256", "KCODER_E2E_WINDOWS_NATIVE_SOURCE_SHA256", "KCODER_E2E_WINDOWS_NATIVE_SUPERVISOR_BIN", "KCODER_E2E_WINDOWS_NATIVE_SUPERVISOR_SHA256", "KCODER_E2E_WINDOWS_NATIVE_EXPECTED_COMMIT", "KCODER_E2E_WINDOWS_LINUX_ADDRESS", "KCODER_E2E_WINDOWS_SSH_WRAPPER_BIN", "KCODER_E2E_WINDOWS_SSH_WRAPPER_SHA256", "KCODER_E2E_KCODER_BIN", "KCODER_E2E_KCODER_BIN_SHA256", "KCODER_E2E_WINDOWS_NATIVE_LIBTEST"]
+platforms = ["linux"]
+consent = "windows-cross-host-source"
+consent_env = "KCODER_E2E_WINDOWS_CROSS_HOST_SOURCE"
+pass_env = ["KCODER_E2E_WINDOWS_CROSS_HOST_CHECKOUT", "KCODER_E2E_WINDOWS_NATIVE_EXPECTED_DIRTY", "KCODER_E2E_WINDOWS_CROSS_HOST_SOURCE", "KCODER_E2E_WINDOWS_NATIVE_LIBTEST", "KCODER_E2E_WINDOWS_SSH_TARGET", "KCODER_E2E_WINDOWS_NODE", "KCODER_E2E_WINDOWS_PROBE_PARENT", "KCODER_E2E_WINDOWS_NATIVE_TEST_BIN", "KCODER_E2E_WINDOWS_NATIVE_TEST_SHA256", "KCODER_E2E_WINDOWS_NATIVE_SOURCE_SHA256", "KCODER_E2E_WINDOWS_NATIVE_SUPERVISOR_BIN", "KCODER_E2E_WINDOWS_NATIVE_SUPERVISOR_SHA256", "KCODER_E2E_WINDOWS_NATIVE_EXPECTED_COMMIT", "KCODER_E2E_WINDOWS_LINUX_ADDRESS", "KCODER_E2E_WINDOWS_SSH_WRAPPER_BIN", "KCODER_E2E_WINDOWS_SSH_WRAPPER_SHA256", "KCODER_E2E_KCODER_BIN", "KCODER_E2E_KCODER_BIN_SHA256"]
+
+[[suite]]
+id = "migration-large-history"
+tiers = ["platform"]
+command = ["node", "apps/kcoder-studio/e2e/run-all.mjs", "--suite", "migration-large-history"]
+summary = { parser = "exit-code", allow_zero = true, expected_skips = 0 }
+timeout_seconds = 720
+requires_commands = ["node"]
+requires_env = ["KCODER_E2E_KCODER_BIN", "KCODER_E2E_KCODER_BIN_SHA256", "KCODER_E2E_CHROMIUM_BIN"]
+requires_executables = [{ env = "KCODER_E2E_KCODER_BIN", allow_external = true }, { env = "KCODER_E2E_CHROMIUM_BIN", allow_external = true }]
+platforms = ["linux"]
+consent = "migration-large-history"
+consent_env = "KCODER_E2E_MIGRATION_LARGE_HISTORY"
+pass_env = ["KCODER_E2E_MIGRATION_LARGE_HISTORY", "KCODER_E2E_MIGRATION_PERF_CASE", "KCODER_E2E_MIGRATION_SMALL_ASSET_COUNT", "KCODER_E2E_MIGRATION_RENDERER_BASELINE", "KCODER_E2E_MIGRATION_RENDERER_BASELINE_SHA256", "KCODER_E2E_KCODER_BIN", "KCODER_E2E_KCODER_BIN_SHA256", "KCODER_E2E_RENDERER_ROOT", "KCODER_E2E_CHROMIUM_BIN", "KCODER_E2E_CHROMIUM_NO_SANDBOX", "KCODER_E2E_REQUIRE_CHROMIUM_SANDBOX", "KCODER_E2E_SUITE_TIMEOUT_MS"]
+
+[[suite]]
+id = "windows-source-transfer"
+tiers = ["platform"]
+command = ["node", "apps/kcoder-studio/e2e/suites/gateway/windows-source-transfer.e2e.mjs"]
+summary = { parser = "exit-code", allow_zero = true, expected_skips = 0 }
+timeout_seconds = 600
+requires_commands = ["node", "ssh", "scp"]
+requires_env = ["KCODER_E2E_WINDOWS_SSH_TARGET", "KCODER_E2E_WINDOWS_NODE", "KCODER_E2E_WINDOWS_PROBE_PARENT", "KCODER_E2E_WINDOWS_NATIVE_TEST_BIN", "KCODER_E2E_WINDOWS_NATIVE_TEST_SHA256", "KCODER_E2E_WINDOWS_NATIVE_SOURCE_SHA256", "KCODER_E2E_WINDOWS_NATIVE_SUPERVISOR_BIN", "KCODER_E2E_WINDOWS_NATIVE_SUPERVISOR_SHA256", "KCODER_E2E_WINDOWS_NATIVE_EXPECTED_COMMIT", "KCODER_E2E_WINDOWS_NATIVE_EXPECTED_DIRTY"]
+platforms = ["linux", "macos"]
+consent = "windows-native-libtest"
+consent_env = "KCODER_E2E_WINDOWS_NATIVE_LIBTEST"
+pass_env = ["KCODER_E2E_WINDOWS_NATIVE_LIBTEST", "KCODER_E2E_WINDOWS_SSH_TARGET", "KCODER_E2E_WINDOWS_NODE", "KCODER_E2E_WINDOWS_PROBE_PARENT", "KCODER_E2E_WINDOWS_NATIVE_TEST_BIN", "KCODER_E2E_WINDOWS_NATIVE_TEST_SHA256", "KCODER_E2E_WINDOWS_NATIVE_SOURCE_SHA256", "KCODER_E2E_WINDOWS_NATIVE_SUPERVISOR_BIN", "KCODER_E2E_WINDOWS_NATIVE_SUPERVISOR_SHA256", "KCODER_E2E_WINDOWS_NATIVE_EXPECTED_COMMIT", "KCODER_E2E_WINDOWS_NATIVE_EXPECTED_DIRTY"]
+
+
+[[suite]]
+id = "migration-source-session"
+tiers = ["full"]
+command = ["node", "apps/kcoder-studio/e2e/suites/gateway/migration-source-session.e2e.mjs"]
+summary = { parser = "exit-code", allow_zero = true, expected_skips = 0 }
+timeout_seconds = 120
+platforms = ["linux"]
+requires_commands = ["node"]
+requires_files = ["target/debug/kcoder"]
+pass_env = ["KCODER_E2E_KCODER_BIN"]
+depends_on = ["build-debug-cli"]
+
+[[suite]]
+id = "migration-terminal-transfer"
+tiers = ["full"]
+command = ["node", "apps/kcoder-studio/e2e/suites/gateway/migration-terminal-transfer.e2e.mjs"]
+summary = { parser = "exit-code", allow_zero = true, expected_skips = 0 }
+timeout_seconds = 180
+platforms = ["linux"]
+requires_commands = ["node"]
+requires_files = ["target/debug/kcoder", "tools/tui-lab/node_modules/node-pty/package.json", "tools/tui-lab/node_modules/@playwright/test/package.json"]
+pass_env = ["KCODER_E2E_KCODER_BIN", "KCODER_E2E_CHROMIUM_BIN"]
+depends_on = ["build-debug-cli"]
+
+
+[[suite]]
+id = "migration-archive-resource-pressure"
+tiers = ["platform"]
+command = ["cargo", "test", "--locked", "-p", "kcoder_state", "--features", "resource-pressure-tests", "--lib", "external_history::lifecycle::resource_budget::disk_pressure_tests::actual_enospc_after_admission_preserves_the_original_reservation_and_recovery", "--", "--exact", "--nocapture"]
+summary = { parser = "cargo", expected_skips = 0 }
+timeout_seconds = 600
+requires_commands = ["cargo", "unshare"]
+platforms = ["linux"]
+consent = "migration-resource-pressure"
+consent_env = "KCODER_TEST_MIGRATION_RESOURCE_PRESSURE"
+pass_env = ["CARGO_HOME", "RUSTUP_HOME", "RUSTC_WRAPPER", "CC", "CXX", "PKG_CONFIG_PATH", "KCODER_TEST_MIGRATION_RESOURCE_PRESSURE"]
+
+
+[[suite]]
+id = "cli-mcp-diagnostics"
+tiers = ["pr", "full"]
+command = ["cargo", "test", "-p", "kcoder_cli", "--test", "mcp_diagnostics", "--", "--test-threads=1"]
+summary = { parser = "cargo", expected_skips = 0 }
+timeout_seconds = 1200
+requires_commands = ["cargo"]
+pass_env = ["CARGO_HOME", "RUSTUP_HOME", "RUSTC_WRAPPER", "CC", "CXX", "PKG_CONFIG_PATH"]
+
+[[suite]]
+id = "migration-native-large-archive"
+tiers = ["platform"]
+command = ["cargo", "test", "--locked", "-p", "kcoder_state", "--test", "external_history", "--", "--ignored", "--exact", "archive_500_mib_with_one_oversized_record_uses_bounded_memory", "--nocapture"]
+summary = { parser = "cargo", expected_skips = 0 }
+timeout_seconds = 300
+requires_commands = ["cargo"]
+platforms = ["linux"]
+consent = "migration-native-memory"
+consent_env = "KCODER_E2E_MIGRATION_NATIVE_MEMORY"
+pass_env = ["KCODER_E2E_MIGRATION_NATIVE_MEMORY", "CARGO_HOME", "RUSTUP_HOME", "RUSTC_WRAPPER", "CC", "CXX", "PKG_CONFIG_PATH"]
+
+[[suite]]
+id = "migration-native-large-normalization"
+tiers = ["platform"]
+command = ["cargo", "test", "--locked", "-p", "kcoder_migration", "--test", "history_normalization", "--", "--ignored", "--exact", "large_history_normalization_keeps_memory_bounded", "--nocapture"]
+summary = { parser = "cargo", expected_skips = 0 }
+timeout_seconds = 300
+requires_commands = ["cargo"]
+platforms = ["linux"]
+consent = "migration-native-memory"
+consent_env = "KCODER_E2E_MIGRATION_NATIVE_MEMORY"
+pass_env = ["KCODER_E2E_MIGRATION_NATIVE_MEMORY", "CARGO_HOME", "RUSTUP_HOME", "RUSTC_WRAPPER", "CC", "CXX", "PKG_CONFIG_PATH"]
+
+
+[[suite]]
+id = "migration-private-credentials-http"
+tiers = ["full"]
+command = ["node", "apps/kcoder-studio/e2e/suites/gateway/migration-private-credentials.e2e.mjs"]
+summary = { parser = "exit-code", allow_zero = true, expected_skips = 0 }
+timeout_seconds = 180
+platforms = ["linux"]
+requires_commands = ["node"]
+requires_files = ["target/debug/kcoder"]
+pass_env = ["KCODER_E2E_KCODER_BIN"]
+depends_on = ["build-debug-cli"]
+
+[[suite]]
+id = "windows-private-credentials"
+tiers = ["platform"]
+command = ["node", "apps/kcoder-studio/e2e/run-all.mjs", "--suite", "windows-private-credentials"]
+summary = { parser = "exit-code", allow_zero = true, expected_skips = 0 }
+timeout_seconds = 360
+requires_commands = ["node", "ssh", "scp"]
+requires_env = ["KCODER_E2E_WINDOWS_SSH_TARGET", "KCODER_E2E_WINDOWS_NODE", "KCODER_E2E_WINDOWS_PROBE_PARENT", "KCODER_E2E_WINDOWS_NATIVE_TEST_BIN", "KCODER_E2E_WINDOWS_NATIVE_TEST_SHA256", "KCODER_E2E_WINDOWS_NATIVE_SOURCE_SHA256", "KCODER_E2E_WINDOWS_NATIVE_SUPERVISOR_BIN", "KCODER_E2E_WINDOWS_NATIVE_SUPERVISOR_SHA256", "KCODER_E2E_WINDOWS_NATIVE_EXPECTED_COMMIT", "KCODER_E2E_WINDOWS_NATIVE_EXPECTED_DIRTY", "KCODER_E2E_WINDOWS_PRIVATE_REVIEW_SHA256", "KCODER_E2E_WINDOWS_PRIVATE_NODE_SHA256"]
+platforms = ["linux", "macos"]
+consent = "windows-native-libtest"
+consent_env = "KCODER_E2E_WINDOWS_NATIVE_LIBTEST"
+pass_env = ["KCODER_E2E_WINDOWS_NATIVE_LIBTEST", "KCODER_E2E_WINDOWS_SSH_TARGET", "KCODER_E2E_WINDOWS_NODE", "KCODER_E2E_WINDOWS_PROBE_PARENT", "KCODER_E2E_WINDOWS_NATIVE_TEST_BIN", "KCODER_E2E_WINDOWS_NATIVE_TEST_SHA256", "KCODER_E2E_WINDOWS_NATIVE_SOURCE_SHA256", "KCODER_E2E_WINDOWS_NATIVE_SUPERVISOR_BIN", "KCODER_E2E_WINDOWS_NATIVE_SUPERVISOR_SHA256", "KCODER_E2E_WINDOWS_NATIVE_EXPECTED_COMMIT", "KCODER_E2E_WINDOWS_NATIVE_EXPECTED_DIRTY", "KCODER_E2E_WINDOWS_PRIVATE_REVIEW_SHA256", "KCODER_E2E_WINDOWS_PRIVATE_NODE_SHA256"]
+
+
+[[suite]]
+id = "organization-oidc-browser"
+tiers = ["platform"]
+command = ["node", "apps/kcoder-studio/e2e/suites/browser/organization-oidc-login.e2e.mjs"]
+summary = { parser = "exit-code", allow_zero = true, expected_skips = 0 }
+timeout_seconds = 180
+requires_commands = ["node", "/usr/bin/python3", "/usr/bin/ssh", "/usr/sbin/sshd", "/usr/bin/ssh-keygen", "/usr/sbin/useradd", "/usr/sbin/userdel"]
+requires_env = ["KCODER_E2E_KCODER_BIN_SHA256"]
+requires_executables = [{ env = "KCODER_E2E_OIDC_PYTHON", allow_external = true }, { env = "KCODER_E2E_KCODER_BIN", allow_external = true }, { env = "KCODER_E2E_CHROMIUM_BIN", allow_external = true }]
+requires_any_env = [["KCODER_E2E_REQUIRE_CHROMIUM_SANDBOX", "KCODER_E2E_CHROMIUM_NO_SANDBOX"]]
+platforms = ["linux"]
+consent = "linux-organization-oidc-users"
+consent_env = "KCODER_TEST_SYSTEM_USERS"
+pass_env = ["KCODER_TEST_SYSTEM_USERS", "KCODER_E2E_OIDC_PYTHON", "KCODER_E2E_KCODER_BIN", "KCODER_E2E_KCODER_BIN_SHA256", "KCODER_E2E_CHROMIUM_BIN", "KCODER_E2E_REQUIRE_CHROMIUM_SANDBOX", "KCODER_E2E_CHROMIUM_NO_SANDBOX"]
+
+[[suite]]
+id = "organization-resource-policy-browser"
+tiers = ["platform"]
+command = ["node", "apps/kcoder-studio/e2e/suites/browser/organization-oidc-login.e2e.mjs"]
+summary = { parser = "exit-code", allow_zero = true, expected_skips = 0 }
+timeout_seconds = 180
+requires_commands = ["node", "/usr/bin/python3", "/usr/bin/ssh", "/usr/sbin/sshd", "/usr/bin/ssh-keygen", "/usr/sbin/useradd", "/usr/sbin/userdel"]
+requires_env = ["KCODER_E2E_KCODER_BIN_SHA256"]
+requires_executables = [{ env = "KCODER_E2E_OIDC_PYTHON", allow_external = true }, { env = "KCODER_E2E_KCODER_BIN", allow_external = true }, { env = "KCODER_E2E_CHROMIUM_BIN", allow_external = true }]
+requires_any_env = [["KCODER_E2E_REQUIRE_CHROMIUM_SANDBOX", "KCODER_E2E_CHROMIUM_NO_SANDBOX"]]
+platforms = ["linux"]
+consent = "linux-organization-oidc-users"
+consent_env = "KCODER_TEST_SYSTEM_USERS"
+pass_env = ["KCODER_TEST_SYSTEM_USERS", "KCODER_E2E_OIDC_PYTHON", "KCODER_E2E_KCODER_BIN", "KCODER_E2E_KCODER_BIN_SHA256", "KCODER_E2E_CHROMIUM_BIN", "KCODER_E2E_REQUIRE_CHROMIUM_SANDBOX", "KCODER_E2E_CHROMIUM_NO_SANDBOX", "KCODER_E2E_ORGANIZATION_RESOURCE_UI"]
+env = { KCODER_E2E_ORGANIZATION_RESOURCE_UI = "1" }
+
+[[suite]]
+id = "automation-personal-period-budget-browser"
+tiers = ["full"]
+command = ["node", "apps/kcoder-studio/e2e/run-all.mjs", "--suite", "automation-period-budget"]
+summary = { parser = "exit-code", allow_zero = true, expected_skips = 0 }
+timeout_seconds = 180
+requires_commands = ["node"]
+requires_executables = [{ env = "KCODER_E2E_KCODER_BIN", allow_external = true }, { env = "KCODER_E2E_CHROMIUM_BIN", allow_external = true }]
+requires_any_env = [["KCODER_E2E_REQUIRE_CHROMIUM_SANDBOX", "KCODER_E2E_CHROMIUM_NO_SANDBOX"]]
+pass_env = ["KCODER_E2E_KCODER_BIN", "KCODER_E2E_CHROMIUM_BIN", "KCODER_E2E_REQUIRE_CHROMIUM_SANDBOX", "KCODER_E2E_CHROMIUM_NO_SANDBOX"]
+
+# Direct public adapter probes; these do not establish zero-configuration native-chain quality.
+
+[[suite]]
+id = "web-search-exa-primary-live"
+tiers = ["external-provider"]
+command = ["cargo", "test", "--locked", "-p", "kcoder_tools", "--lib", "web_search::exa::tests::live_search_returns_relevant_primary_documentation", "--", "--exact", "--ignored", "--nocapture", "--test-threads=1"]
+summary = { parser = "cargo", expected_skips = 0 }
+timeout_seconds = 180
+requires_commands = ["cargo"]
+consent = "external-provider"
+consent_env = "KCODER_TEST_SEARCH_EXTERNAL"
+pass_env = ["KCODER_TEST_SEARCH_EXTERNAL", "CARGO_TARGET_DIR", "CARGO_HOME", "RUSTUP_HOME", "RUSTC_WRAPPER", "CC", "CXX", "PKG_CONFIG_PATH", "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "all_proxy", "no_proxy", "KCODER_WEB_NO_PROXY"]
+secret_env = ["HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"]
+
+[[suite]]
+id = "web-search-exa-topics-live"
+tiers = ["external-provider"]
+command = ["cargo", "test", "--locked", "-p", "kcoder_tools", "--lib", "web_search::exa::tests::live_search_user_reported_topics_have_relevant_results", "--", "--exact", "--ignored", "--nocapture", "--test-threads=1"]
+summary = { parser = "cargo", expected_skips = 0 }
+timeout_seconds = 300
+requires_commands = ["cargo"]
+consent = "external-provider"
+consent_env = "KCODER_TEST_SEARCH_EXTERNAL"
+pass_env = ["KCODER_TEST_SEARCH_EXTERNAL", "CARGO_TARGET_DIR", "CARGO_HOME", "RUSTUP_HOME", "RUSTC_WRAPPER", "CC", "CXX", "PKG_CONFIG_PATH", "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "all_proxy", "no_proxy", "KCODER_WEB_NO_PROXY"]
+secret_env = ["HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"]
+
+[[suite]]
+id = "web-search-bing-live"
+tiers = ["external-provider"]
+command = ["cargo", "test", "--locked", "-p", "kcoder_tools", "--lib", "web_search::tests::live_bing_search_returns_results", "--", "--exact", "--ignored", "--nocapture", "--test-threads=1"]
+summary = { parser = "cargo", expected_skips = 0 }
+timeout_seconds = 180
+requires_commands = ["cargo"]
+consent = "external-provider"
+consent_env = "KCODER_TEST_SEARCH_EXTERNAL"
+pass_env = ["KCODER_TEST_SEARCH_EXTERNAL", "CARGO_TARGET_DIR", "CARGO_HOME", "RUSTUP_HOME", "RUSTC_WRAPPER", "CC", "CXX", "PKG_CONFIG_PATH", "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "all_proxy", "no_proxy", "KCODER_WEB_NO_PROXY"]
+secret_env = ["HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"]
+
+[[suite]]
+id = "windows-web-network"
+tiers = ["platform"]
+command = ["node", "apps/kcoder-studio/e2e/preflight/windows-web-network.mjs"]
+summary = { parser = "exit-code", allow_zero = true, expected_skips = 0 }
+timeout_seconds = 900
+requires_commands = ["node", "ssh", "scp"]
+requires_env = ["KCODER_E2E_WINDOWS_SSH_TARGET", "KCODER_E2E_WINDOWS_NODE", "KCODER_E2E_WINDOWS_PROBE_PARENT", "KCODER_E2E_WINDOWS_NATIVE_TEST_BIN", "KCODER_E2E_WINDOWS_NATIVE_TEST_SHA256", "KCODER_E2E_WINDOWS_NATIVE_SOURCE_SHA256", "KCODER_E2E_WINDOWS_NATIVE_SUPERVISOR_BIN", "KCODER_E2E_WINDOWS_NATIVE_SUPERVISOR_SHA256", "KCODER_E2E_WEB_NATIVE_SCOPE"]
+platforms = ["linux", "macos"]
+consent = "windows-native-libtest"
+consent_env = "KCODER_E2E_WINDOWS_NATIVE_LIBTEST"
+pass_env = ["KCODER_E2E_WINDOWS_NATIVE_LIBTEST", "KCODER_E2E_WINDOWS_SSH_TARGET", "KCODER_E2E_WINDOWS_NODE", "KCODER_E2E_WINDOWS_PROBE_PARENT", "KCODER_E2E_WINDOWS_NATIVE_TEST_BIN", "KCODER_E2E_WINDOWS_NATIVE_TEST_SHA256", "KCODER_E2E_WINDOWS_NATIVE_SOURCE_SHA256", "KCODER_E2E_WINDOWS_NATIVE_SUPERVISOR_BIN", "KCODER_E2E_WINDOWS_NATIVE_SUPERVISOR_SHA256", "KCODER_E2E_WEB_NATIVE_SCOPE", "KCODER_E2E_WEB_RUNTIME_ARCHIVE", "KCODER_E2E_WEB_RUNTIME_SHA256"]
+
+[[suite]]
+id = "windows-web-network-live"
+tiers = ["platform"]
+command = ["node", "apps/kcoder-studio/e2e/preflight/windows-web-network-live.mjs"]
+summary = { parser = "exit-code", allow_zero = true, expected_skips = 0 }
+timeout_seconds = 900
+requires_commands = ["node", "ssh", "scp"]
+requires_env = ["KCODER_E2E_WINDOWS_NATIVE_LIBTEST", "KCODER_E2E_WINDOWS_SSH_TARGET", "KCODER_E2E_WINDOWS_NODE", "KCODER_E2E_WINDOWS_PROBE_PARENT", "KCODER_E2E_WINDOWS_NATIVE_TEST_BIN", "KCODER_E2E_WINDOWS_NATIVE_TEST_SHA256", "KCODER_E2E_WINDOWS_NATIVE_SOURCE_SHA256", "KCODER_E2E_WINDOWS_NATIVE_SUPERVISOR_BIN", "KCODER_E2E_WINDOWS_NATIVE_SUPERVISOR_SHA256", "KCODER_E2E_WEB_NATIVE_SCOPE"]
+platforms = ["linux", "macos"]
+consent = "external-provider"
+consent_env = "KCODER_E2E_WEB_EXTERNAL_NETWORK"
+pass_env = ["KCODER_E2E_WEB_EXTERNAL_NETWORK", "KCODER_E2E_WINDOWS_NATIVE_LIBTEST", "KCODER_E2E_WINDOWS_SSH_TARGET", "KCODER_E2E_WINDOWS_NODE", "KCODER_E2E_WINDOWS_PROBE_PARENT", "KCODER_E2E_WINDOWS_NATIVE_TEST_BIN", "KCODER_E2E_WINDOWS_NATIVE_TEST_SHA256", "KCODER_E2E_WINDOWS_NATIVE_SOURCE_SHA256", "KCODER_E2E_WINDOWS_NATIVE_SUPERVISOR_BIN", "KCODER_E2E_WINDOWS_NATIVE_SUPERVISOR_SHA256", "KCODER_E2E_WEB_NATIVE_SCOPE", "KCODER_E2E_WEB_RUNTIME_ARCHIVE", "KCODER_E2E_WEB_RUNTIME_SHA256"]
+
+[[suite]]
+id = "bundled-web-search-live"
+tiers = ["platform"]
+command = ["node", "apps/kcoder-studio/e2e/preflight/bundled-web-search-live.mjs"]
+summary = { parser = "exit-code", allow_zero = true, expected_skips = 0 }
+timeout_seconds = 120
+requires_commands = ["node"]
+requires_env = ["KCODER_E2E_SEARXNG_PROBE_BIN", "KCODER_E2E_SEARXNG_PROBE_SHA256", "KCODER_E2E_SEARXNG_RUNTIME"]
+platforms = ["linux"]
+consent = "external-provider"
+consent_env = "KCODER_E2E_WEB_EXTERNAL_NETWORK"
+pass_env = ["KCODER_E2E_WEB_EXTERNAL_NETWORK", "KCODER_E2E_SEARXNG_PROBE_BIN", "KCODER_E2E_SEARXNG_PROBE_SHA256", "KCODER_E2E_SEARXNG_RUNTIME", "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "all_proxy", "no_proxy", "SSL_CERT_FILE", "SSL_CERT_DIR", "CURL_CA_BUNDLE"]
+
+[[suite]]
+id = "tui-native-web-sources"
+tiers = ["platform"]
+cwd = "tools/tui-lab"
+command = ["npm", "run", "--silent", "native-web-sources", "--", "--description", "project-test-runner-native-web-sources", "--software-webgl", "--timeout-ms", "60000", "--out", "{artifact_dir}"]
+summary = { parser = "assertions-json", expected_skips = 0 }
+timeout_seconds = 900
+requires_commands = ["node", "npm"]
+requires_env = ["PLAYWRIGHT_BROWSERS_PATH", "KCODER_TUI_LAB_NATIVE_WEB_HISTORY", "KCODER_TUI_LAB_NATIVE_WEB_BINARY"]
+required_artifacts = ["assertions.json"]
+platforms = ["linux"]
+consent = "tui-native-web-sources"
+consent_env = "KCODER_TEST_TUI_NATIVE_WEB_SOURCES"
+pass_env = ["KCODER_TEST_TUI_NATIVE_WEB_SOURCES", "PLAYWRIGHT_BROWSERS_PATH", "KCODER_TUI_LAB_NATIVE_WEB_HISTORY", "KCODER_TUI_LAB_NATIVE_WEB_BINARY"]
+
+[[suite]]
+id = "web-search-constraints-live"
+tiers = ["external-provider"]
+command = ["node", "apps/kcoder-studio/e2e/preflight/web-search-constraints-live.mjs"]
+summary = { parser = "exit-code", allow_zero = true, expected_skips = 0 }
+timeout_seconds = 240
+requires_commands = ["node"]
+requires_executables = [{ env = "KCODER_E2E_SEARCH_CONSTRAINTS_BIN", allow_external = true }]
+requires_env = ["KCODER_E2E_SEARCH_CONSTRAINTS_SHA256"]
+consent = "external-provider"
+consent_env = "KCODER_E2E_WEB_EXTERNAL_NETWORK"
+pass_env = ["KCODER_E2E_WEB_EXTERNAL_NETWORK", "KCODER_E2E_SEARCH_CONSTRAINTS_BIN", "KCODER_E2E_SEARCH_CONSTRAINTS_SHA256", "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "all_proxy", "no_proxy", "SSL_CERT_FILE", "SSL_CERT_DIR", "CURL_CA_BUNDLE"]
+secret_env = ["HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"]
+
+[[suite]]
+id = "physical-web-targets-preflight"
+tiers = ["platform"]
+command = ["node", "apps/kcoder-studio/e2e/suites/gateway/physical-web-targets.e2e.mjs"]
+summary = { parser = "exit-code", allow_zero = true, expected_skips = 0 }
+timeout_seconds = 900
+requires_commands = ["node", "ssh", "scp"]
+requires_env = ["KCODER_E2E_WINDOWS_NATIVE_LIBTEST", "KCODER_E2E_PHYSICAL_WEB_TARGET", "KCODER_E2E_WINDOWS_NODE", "KCODER_E2E_WINDOWS_PROBE_PARENT", "KCODER_E2E_PHYSICAL_WEB_ARCHIVE", "KCODER_E2E_PHYSICAL_WEB_ARCHIVE_SHA256", "KCODER_E2E_PHYSICAL_WEB_ARCHIVE_BYTES", "KCODER_E2E_PHYSICAL_WEB_MEMBERS", "KCODER_E2E_PHYSICAL_WEB_LAUNCHER", "KCODER_E2E_WINDOWS_EXPECTED_CLI_SHA256", "KCODER_E2E_WINDOWS_EXPECTED_COMMIT", "KCODER_E2E_PHYSICAL_WEB_GATEWAY_ROOT", "KCODER_E2E_PHYSICAL_WEB_GATEWAY_SOURCE_COMMIT", "KCODER_E2E_PHYSICAL_WEB_NATIVE_BUILD_RESULT", "KCODER_E2E_PHYSICAL_WEB_CLIENT_BIN"]
+platforms = ["linux"]
+consent = "windows-native-libtest"
+consent_env = "KCODER_E2E_WINDOWS_NATIVE_LIBTEST"
+pass_env = ["KCODER_E2E_WINDOWS_NATIVE_LIBTEST", "KCODER_E2E_PHYSICAL_WEB_TARGET", "KCODER_E2E_WINDOWS_NODE", "KCODER_E2E_WINDOWS_PROBE_PARENT", "KCODER_E2E_PHYSICAL_WEB_ARCHIVE", "KCODER_E2E_PHYSICAL_WEB_ARCHIVE_SHA256", "KCODER_E2E_PHYSICAL_WEB_ARCHIVE_BYTES", "KCODER_E2E_PHYSICAL_WEB_MEMBERS", "KCODER_E2E_PHYSICAL_WEB_PRIVATE_URL_FILE", "KCODER_E2E_PHYSICAL_WEB_LAUNCHER", "KCODER_E2E_WINDOWS_EXPECTED_CLI_SHA256", "KCODER_E2E_WINDOWS_EXPECTED_COMMIT", "KCODER_E2E_PHYSICAL_WEB_GATEWAY_ROOT", "KCODER_E2E_PHYSICAL_WEB_GATEWAY_SOURCE_COMMIT", "KCODER_E2E_PHYSICAL_WEB_NATIVE_BUILD_RESULT", "KCODER_E2E_PHYSICAL_WEB_CLIENT_BIN"]
+
+[[suite]]
+id = "physical-web-targets-live"
+tiers = ["platform"]
+command = ["node", "apps/kcoder-studio/e2e/suites/gateway/physical-web-targets.e2e.mjs", "--execute-web"]
+summary = { parser = "exit-code", allow_zero = true, expected_skips = 0 }
+timeout_seconds = 900
+requires_commands = ["node", "ssh", "scp"]
+requires_env = ["KCODER_E2E_WINDOWS_NATIVE_LIBTEST", "KCODER_E2E_PHYSICAL_WEB_TARGET", "KCODER_E2E_WINDOWS_NODE", "KCODER_E2E_WINDOWS_PROBE_PARENT", "KCODER_E2E_PHYSICAL_WEB_ARCHIVE", "KCODER_E2E_PHYSICAL_WEB_ARCHIVE_SHA256", "KCODER_E2E_PHYSICAL_WEB_ARCHIVE_BYTES", "KCODER_E2E_PHYSICAL_WEB_MEMBERS", "KCODER_E2E_PHYSICAL_WEB_LAUNCHER", "KCODER_E2E_WINDOWS_EXPECTED_CLI_SHA256", "KCODER_E2E_WINDOWS_EXPECTED_COMMIT", "KCODER_E2E_PHYSICAL_WEB_GATEWAY_ROOT", "KCODER_E2E_PHYSICAL_WEB_GATEWAY_SOURCE_COMMIT", "KCODER_E2E_PHYSICAL_WEB_NATIVE_BUILD_RESULT", "KCODER_E2E_PHYSICAL_WEB_CLIENT_BIN"]
+platforms = ["linux"]
+consent = "external-provider"
+consent_env = "KCODER_E2E_WEB_EXTERNAL_NETWORK"
+pass_env = ["KCODER_E2E_WINDOWS_NATIVE_LIBTEST", "KCODER_E2E_PHYSICAL_WEB_TARGET", "KCODER_E2E_WINDOWS_NODE", "KCODER_E2E_WINDOWS_PROBE_PARENT", "KCODER_E2E_PHYSICAL_WEB_ARCHIVE", "KCODER_E2E_PHYSICAL_WEB_ARCHIVE_SHA256", "KCODER_E2E_PHYSICAL_WEB_ARCHIVE_BYTES", "KCODER_E2E_PHYSICAL_WEB_MEMBERS", "KCODER_E2E_PHYSICAL_WEB_PRIVATE_URL_FILE", "KCODER_E2E_PHYSICAL_WEB_LAUNCHER", "KCODER_E2E_WINDOWS_EXPECTED_CLI_SHA256", "KCODER_E2E_WINDOWS_EXPECTED_COMMIT", "KCODER_E2E_PHYSICAL_WEB_GATEWAY_ROOT", "KCODER_E2E_PHYSICAL_WEB_GATEWAY_SOURCE_COMMIT", "KCODER_E2E_PHYSICAL_WEB_NATIVE_BUILD_RESULT", "KCODER_E2E_PHYSICAL_WEB_CLIENT_BIN", "KCODER_E2E_WEB_EXTERNAL_NETWORK", "KCODER_E2E_PHYSICAL_WEB_EXECUTE"]
+
+[[suite]]
+id = "web-search-native-faults-offline"
+tiers = ["platform"]
+command = ["node", "apps/kcoder-studio/e2e/run-all.mjs", "--model-independent", "--full-integration", "--suite", "web-search-native-faults"]
+summary = { parser = "exit-code", allow_zero = true, expected_skips = 0 }
+timeout_seconds = 300
+requires_commands = ["node", "openssl"]
+requires_env = ["KCODER_E2E_SEARCH_NATIVE_BIN", "KCODER_E2E_SEARCH_NATIVE_SHA256", "KCODER_E2E_SEARCH_NATIVE_CHECKPOINT", "KCODER_E2E_RENDERER_ROOT"]
+platforms = ["linux"]
+consent = "web-search-native-faults-offline"
+consent_env = "KCODER_TEST_WEB_SEARCH_NATIVE_FAULTS"
+pass_env = ["KCODER_TEST_WEB_SEARCH_NATIVE_FAULTS", "KCODER_E2E_SEARCH_NATIVE_BIN", "KCODER_E2E_SEARCH_NATIVE_SHA256", "KCODER_E2E_SEARCH_NATIVE_CHECKPOINT", "KCODER_E2E_OPENSSL_BIN", "KCODER_E2E_RENDERER_ROOT", "KCODER_E2E_RENDERER_SOURCE_ROOT"]

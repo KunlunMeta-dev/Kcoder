@@ -5,6 +5,7 @@ import { useTranslation } from '@/hooks/useTranslation'
 import { knowledgeApi, type WikiImageImport } from '@/kcoder/knowledgeApi'
 import { startSnapshotPolling } from '@/lib/snapshotPolling'
 import { WikiError } from './WikiError'
+import { useRetainedPageActive } from '@/components/layout/retainedPageState'
 
 /** Recover target-owned extraction independently of uploaded staging files and browser lifetime. */
 export function WikiImageImports({
@@ -28,9 +29,11 @@ export function WikiImageImports({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [disconnected, setDisconnected] = useState(false)
+  const pageActive = useRetainedPageActive()
   useEffect(
     () =>
       startSnapshotPolling({
+        active: pageActive,
         isCurrent,
         retryDelayMs: 2000,
         poll: async isLive => {
@@ -42,7 +45,7 @@ export function WikiImageImports({
         },
         onError: () => setDisconnected(true),
       }),
-    [serverId, libraryId, isCurrent, refreshSignal, refresh]
+    [pageActive, serverId, libraryId, isCurrent, refreshSignal, refresh]
   )
   const control = async (item: WikiImageImport, cancel: boolean) => {
     if (!cancel) setBusy(true)
@@ -66,15 +69,15 @@ export function WikiImageImports({
   }
   if (!items.length) return null
   return (
-    <div className="space-y-2" aria-live="polite">
+    <div className="studio-card-stack" aria-live="polite">
       {items.map(item => (
         <details
           key={item.id}
           data-testid={`wiki-image-import-${item.id}`}
           data-state={item.status}
-          className="group/import rounded-xl bg-surface/30 text-sm"
+          className="studio-card group/import rounded-xl bg-surface/30 text-sm"
         >
-          <summary className="flex min-h-16 cursor-pointer list-none items-center gap-4 rounded-xl px-4 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus [&::-webkit-details-marker]:hidden">
+          <summary className="studio-card-heading flex min-h-16 cursor-pointer list-none items-center gap-4 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus [&::-webkit-details-marker]:hidden">
             <span
               aria-hidden="true"
               className={`flex size-10 shrink-0 items-center justify-center rounded-xl ${item.status === 'failed' || item.status === 'cancelled' ? 'bg-destructive/5 text-destructive' : 'bg-accent-surface text-focus'}`}
@@ -92,7 +95,7 @@ export function WikiImageImports({
               className="size-4 shrink-0 text-text-muted transition-transform group-open/import:rotate-180"
             />
           </summary>
-          <div className="space-y-2 px-4 pb-4 text-xs text-text-muted">
+          <div className="studio-card-body space-y-2 text-xs text-text-muted">
             <p data-testid="wiki-image-import-usage">
               {t('imageImport.usage', {
                 calls: item.reservedCalls,

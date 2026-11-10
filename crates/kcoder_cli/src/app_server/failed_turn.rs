@@ -1,5 +1,7 @@
 //! Provider-error continuation from committed context, never from a replayed user prompt.
+use crate::turn_artifacts::load_turn_outcomes;
 use anyhow::{Result, ensure};
+use kcoder_cli_storage::private_files::hex_sha256;
 use kcoder_types::{ContentBlock, Message};
 use std::collections::HashSet;
 
@@ -30,7 +32,7 @@ pub(super) fn context_hash(messages: &[Message]) -> Result<String> {
         pending.is_empty(),
         "Tool outcome is unknown; cannot safely continue automatically"
     );
-    Ok(super::hex_sha256(&serde_json::to_vec(messages)?))
+    Ok(hex_sha256(&serde_json::to_vec(messages)?))
 }
 
 pub(super) fn validate(
@@ -42,7 +44,7 @@ pub(super) fn validate(
         turn_id == format!("turn-{latest_turn}"),
         "Only the latest failed turn can be continued"
     );
-    let outcomes = super::load_turn_outcomes(engine, &engine.session_id());
+    let outcomes = load_turn_outcomes(engine, &engine.session_id());
     let outcome = outcomes
         .get(turn_id)
         .ok_or_else(|| anyhow::anyhow!("This turn has no pending failure to continue"))?;

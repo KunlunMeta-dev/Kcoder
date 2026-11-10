@@ -1,7 +1,106 @@
 use super::*;
 use crate::task_state::persistable_delegated_tasks;
 
+/// Output recorded on a managed background task whose owning process exited
+/// while it ran. Its outcome is unknown: neither success nor failed work.
+pub const PROCESS_EXIT_TASK_INTERRUPTION: &str =
+    "task was interrupted because its owning KCoder process exited";
+
 impl AppState {
+    /// Bind Studio intent once. Runtime entrypoints must separately authorize each turn.
+    pub fn set_studio_work_mode_before_first_message(
+        &self,
+        mode: kcoder_types::StudioWorkMode,
+    ) -> anyhow::Result<()> {
+        let _persist = self.lock_session_state_persistence();
+        let mut inner = self.write_inner();
+        check_direct_history_fault(&inner)?;
+        if inner.studio_work_mode == mode {
+            return Ok(());
+        }
+        let durable_history_started = inner.history_path.as_ref().is_some_and(|path| {
+            std::fs::metadata(path).is_ok_and(|metadata| metadata.is_file() && metadata.len() > 0)
+        });
+        anyhow::ensure!(
+            !inner.conversation_started && inner.messages.is_empty() && !durable_history_started,
+            "Studio work mode is immutable after the first message; create a new conversation to switch modes"
+        );
+        if inner.history_path.is_some() {
+            require_history_source(&inner)?;
+        }
+        let previous = inner.studio_work_mode;
+        inner.studio_work_mode = mode;
+        if let Some(path) = inner.session_state_path.clone() {
+            let state = PersistedSessionState::from_inner(&inner);
+            let result = match inner.history_source.as_ref() {
+                Some(source) => source.write_metadata(&path, || {
+                    prepare_legacy_session_state_write(&path, state.clone())
+                }),
+                None => write_session_state(&path, &state),
+            };
+            if let Err(error) = result {
+                if crate::history_store::is_uncertain_mutation(&error) {
+                    inner.history_write_fault = Some(format!("{error:#}"));
+                } else {
+                    inner.studio_work_mode = previous;
+                }
+                return Err(error)
+                    .with_context(|| format!("failed to persist Studio work mode to {path:?}"));
+            }
+        }
+        Ok(())
+    }
+
+    /// Freeze the non-secret Studio tool surface for this session.
+    pub fn bind_studio_tool_selection_once(
+        &self,
+        selection: kcoder_types::StudioToolSelections,
+    ) -> anyhow::Result<()> {
+        let _persist = self.lock_session_state_persistence();
+        let mut inner = self.write_inner();
+        check_direct_history_fault(&inner)?;
+        if inner.studio_tool_selection.as_ref() == Some(&selection) {
+            return Ok(());
+        }
+        anyhow::ensure!(
+            inner.studio_tool_selection.is_none(),
+            "Studio tool selection is immutable for an existing session"
+        );
+        if inner.history_path.is_some() {
+            require_history_source(&inner)?;
+        }
+        let previous = inner.studio_tool_selection.clone();
+        inner.studio_tool_selection = Some(selection);
+        if let Some(path) = inner.session_state_path.clone() {
+            let state = PersistedSessionState::from_inner(&inner);
+            let result = match inner.history_source.as_ref() {
+                Some(source) => source.write_metadata(&path, || {
+                    prepare_legacy_session_state_write(&path, state.clone())
+                }),
+                None => write_session_state(&path, &state),
+            };
+            if let Err(error) = result {
+                if crate::history_store::is_uncertain_mutation(&error) {
+                    inner.history_write_fault = Some(format!("{error:#}"));
+                } else {
+                    inner.studio_tool_selection = previous;
+                }
+                return Err(error).with_context(|| {
+                    format!("failed to persist Studio tool selection to {path:?}")
+                });
+            }
+        }
+        Ok(())
+    }
+
+    pub fn studio_tool_selection(&self) -> Option<kcoder_types::StudioToolSelections> {
+        self.read_inner().studio_tool_selection.clone()
+    }
+
+    pub fn studio_work_mode(&self) -> kcoder_types::StudioWorkMode {
+        self.read_inner().studio_work_mode
+    }
+
     /// Persist selection intent without changing the resolved model snapshot.
     pub fn set_model_selection_mode(
         &self,
@@ -240,7 +339,7 @@ impl AppState {
 
     /// Fallible authority boundary for mutations that report successful commit.
     pub(super) fn try_persist_latest_session_state_locked(&self) -> anyhow::Result<()> {
-        let (path, state, source) = {
+        let (path, mut state, source, imported) = {
             let inner = self.read_inner();
             check_direct_history_fault(&inner)?;
             anyhow::ensure!(
@@ -251,18 +350,57 @@ impl AppState {
                 inner.session_state_path.clone(),
                 PersistedSessionState::from_inner(&inner),
                 inner.history_source.clone(),
+                inner
+                    .imported_context_snapshot
+                    .as_ref()
+                    .filter(|_| inner.imported_context_persisted_at != inner.session_state_path)
+                    .map(Arc::clone),
             )
         };
+        if imported.is_some() {
+            let inner = self.read_inner();
+            state.imported_context_snapshot =
+                inner.imported_context_reference.as_ref().map(|reference| {
+                    reference.for_session(&imported_context_snapshot::session_for(&inner))
+                });
+        }
         maybe_wait_before_session_state_write(
             Arc::as_ptr(&self.session_state_persist_lock) as usize,
             path.as_deref(),
         );
+        let mut native_goal_projection = None;
         if let Some(path) = path {
             match source {
                 Some(source) => source.write_metadata(&path, || {
-                    prepare_legacy_session_state_write(&path, state.clone())
+                    if let Some(snapshot) = &imported {
+                        imported_context_snapshot::publish(
+                            &path,
+                            state
+                                .imported_context_snapshot
+                                .as_ref()
+                                .expect("reference for captured context")
+                                .session_id(),
+                            snapshot,
+                        )?;
+                    }
+                    let (bytes, projection) =
+                        prepare_legacy_session_state_with_native_goal(&path, state.clone())?;
+                    native_goal_projection = projection;
+                    Ok(bytes)
                 })?,
                 None => write_session_state(&path, &state)?,
+            }
+            if imported.is_some() {
+                self.write_inner().imported_context_persisted_at = Some(path);
+            }
+        }
+        if let Some(projection) = native_goal_projection {
+            let mut inner = self.write_inner();
+            if let Some(goal) = inner.goal.as_mut()
+                && goal.goal_id == projection.goal_id
+                && goal.created_at_ms == projection.created_at_ms
+            {
+                *goal = projection;
             }
         }
         Ok(())
@@ -280,6 +418,14 @@ impl AppState {
     }
 
     pub fn start_new_session_with_reserved_id(&self, id: ReservedSessionId) {
+        let _ = self.start_new_session_with_reserved_id_and_lifecycle(id);
+    }
+
+    /// Return the original lifecycle created while holding the replacement lock.
+    pub fn start_new_session_with_reserved_id_and_lifecycle(
+        &self,
+        id: ReservedSessionId,
+    ) -> crate::AppStateLifecycleIdentity {
         let _persist = self.lock_session_state_persistence();
         let mut inner = self.write_inner();
         let session_id = id.0;
@@ -299,9 +445,16 @@ impl AppState {
         }
 
         inner.session_id = session_id;
+        inner.inherited_context_archive = None;
         inner.session_created_at_ms = now_millis();
         inner.session_updated_at_ms = inner.session_created_at_ms;
         inner.session_mode = SessionMode::Default;
+        inner.studio_work_mode = Default::default();
+        inner.studio_tool_selection = None;
+        inner.agent_definition = None;
+        inner.agent_configuration_revision = 0;
+        inner.session_lifetime = Default::default();
+        inner.channel_task_source = None;
         inner.workflow_definition_id = None;
         inner.model_selection_mode = Default::default();
         inner.selected_model = None;
@@ -309,6 +462,7 @@ impl AppState {
         inner.message_revision = crate::MessageRevision::default();
         inner.messages.clear();
         inner.message_history_ids.clear();
+        inner.history_attempts = Default::default();
         inner.last_history_uuid = None;
         inner.last_assistant_message_timestamp_ms = None;
         inner.llm_request_history_override = None;
@@ -318,6 +472,10 @@ impl AppState {
         inner.goal = None;
         inner.goal_history.clear();
         inner.session_memory = None;
+        inner.imported_context_snapshot = None;
+        inner.imported_context_reference = None;
+        inner.imported_context_persisted_at = None;
+        inner.imported_context_legacy_unobserved = false;
         inner.file_reads.clear();
         inner.full_file_reads.clear();
         inner.read_tool_call_keys.clear();
@@ -332,10 +490,12 @@ impl AppState {
             inner.history_path = None;
             inner.session_state_path = None;
         }
+        let owner = crate::history_append_context::lifecycle_identity_locked(self, &inner);
         drop(inner);
         self.persist_latest_session_state_locked();
+        owner
     }
-    fn install_history_path(inner: &mut AppStateInner, path: PathBuf) {
+    pub(super) fn install_history_path(inner: &mut AppStateInner, path: PathBuf) {
         if inner
             .history_path
             .as_deref()
@@ -353,6 +513,10 @@ impl AppState {
         inner.history_write_fault = None;
         // Replacing the sender lets any old flusher drain and exit while future
         // entries go to the newly active session history file.
+        let private_storage = inner
+            .history_source
+            .as_ref()
+            .and_then(HistorySource::private_storage);
         inner.history_flusher = None;
         inner.history_source = None;
         inner.history_path = Some(path.clone());
@@ -365,6 +529,11 @@ impl AppState {
         inner.last_history_uuid = last_transcript_uuid(&path).unwrap_or(None);
         match HistorySource::bind(&path) {
             Ok(source) => {
+                if let Some(storage) =
+                    private_storage.filter(|storage| path.starts_with(storage.path()))
+                {
+                    source.retain_private_storage(storage);
+                }
                 inner.history_source = Some(source.clone());
                 if let Ok(handle) = tokio::runtime::Handle::try_current() {
                     inner.history_flusher = Some(start_history_flusher(handle, path, source));
@@ -383,6 +552,14 @@ impl AppState {
         last_history_uuid: Option<String>,
         source: HistorySource,
     ) {
+        if let Some(storage) = inner
+            .history_source
+            .as_ref()
+            .and_then(HistorySource::private_storage)
+            .filter(|storage| path.starts_with(storage.path()))
+        {
+            source.retain_private_storage(storage);
+        }
         inner.history_write_fault = None;
         inner.history_flusher = None;
         inner.history_source = Some(source.clone());
@@ -502,6 +679,15 @@ impl AppState {
         &self,
         prepared: PreparedSessionResume,
     ) -> anyhow::Result<usize> {
+        self.apply_prepared_session_resume_with_lifecycle(prepared)
+            .map(|(count, _)| count)
+    }
+
+    /// Return the lifecycle from the exact lock that installed this resume.
+    pub fn apply_prepared_session_resume_with_lifecycle(
+        &self,
+        prepared: PreparedSessionResume,
+    ) -> anyhow::Result<(usize, crate::AppStateLifecycleIdentity)> {
         let _persist = self.lock_session_state_persistence();
         let PreparedSessionResume {
             session_id: resumed_session_id,
@@ -509,11 +695,13 @@ impl AppState {
             source_stamp,
             messages: history_messages,
             message_history_ids: history_ids,
+            history_attempts,
             last_assistant_message_timestamp_ms,
             transcript_history: _,
             last_transcript_uuid,
             mut persisted_state,
         } = prepared;
+        crate::migrations::sessions::upgrade_for_resume(&mut persisted_state, &path)?;
         let count = history_messages.len();
         let mut interrupted_outputs = Vec::new();
         // Do not restore former compacted_messages; rebuild compaction state from append-only JSONL boundary records.
@@ -544,6 +732,10 @@ impl AppState {
                 }
             }
         }
+        let native_subagent_recovery = persisted_state
+            .native_subagent_outbox
+            .as_ref()
+            .map(|outbox| outbox.recovery_scope());
         for task in persisted_state.tasks.values_mut() {
             for record in &mut task.background_runs {
                 if record.delivered_message_id.is_none() {
@@ -572,12 +764,19 @@ impl AppState {
                 );
             }
             task.recover_interrupted_deliveries(task.delivery_max_attempts);
-            if task.managed
+            let native_run_unresolved = task.kind == TaskKind::Subagent
+                && matches!(task.status, TaskStatus::Pending | TaskStatus::Running)
+                && task.background_run.as_ref().is_some_and(|run| {
+                    native_subagent_recovery.as_ref().is_some_and(|scope| {
+                        scope.as_ref().map_or(true, |scope| scope.may_own_run(run))
+                    })
+                });
+            if !native_run_unresolved
+                && task.managed
                 && matches!(task.kind, TaskKind::Generic | TaskKind::Subagent)
                 && matches!(task.status, TaskStatus::Pending | TaskStatus::Running)
             {
-                let interrupted =
-                    "task was interrupted because its owning KCoder process exited".to_string();
+                let interrupted = PROCESS_EXIT_TASK_INTERRUPTION.to_string();
                 task.status = TaskStatus::Failed;
                 task.output = Some(interrupted.clone());
                 task.updated_at_ms = now_millis();
@@ -600,14 +799,24 @@ impl AppState {
             }
             crate::background_delivery::migrate_legacy_background_run(task, &resumed_session_id);
         }
-        persisted_state.schema_version = SESSION_STATE_SCHEMA_VERSION;
-        persisted_state.delivery_format = Some(RELIABLE_DELIVERY_FORMAT.to_string());
         let state_path = path
             .parent()
             .map(|project_dir| session_state_path(project_dir, &resumed_session_id));
         if let Some(registry) = self.short_id_registry() {
             crate::short_id::retain_existing_short_id(&registry, &resumed_session_id)?;
         }
+        let restored_imported_context = match (
+            &persisted_state.imported_context_snapshot,
+            state_path.as_deref(),
+        ) {
+            (Some(reference), Some(path)) => Some(imported_context_snapshot::load(
+                path,
+                &resumed_session_id,
+                reference,
+            )?),
+            (None, _) => None,
+            _ => anyhow::bail!("imported_context_snapshot_unavailable"),
+        };
         // Keep preparation validation, sidecar commit, and replacement under the same
         // state lock so a newly accepted message cannot disappear between these steps.
         let mut inner = self.write_inner();
@@ -662,6 +871,9 @@ impl AppState {
 
         {
             inner.session_id = resumed_session_id;
+            if inner.history_path.as_ref() != Some(&path) {
+                inner.inherited_context_archive = None;
+            }
             inner.session_created_at_ms = persisted_state.created_at_ms.unwrap_or_default();
             inner.session_updated_at_ms = persisted_state.updated_at_ms.unwrap_or_default();
             inner.conversation_started =
@@ -672,15 +884,27 @@ impl AppState {
             inner.file_reads.clear();
             inner.full_file_reads.clear();
             inner.read_tool_call_keys.clear();
-            inner.message_history_ids = history_ids;
+            inner.message_history_ids = history_ids.into();
+            inner.history_attempts = history_attempts;
             inner.last_assistant_message_timestamp_ms = last_assistant_message_timestamp_ms;
             inner.session_mode = persisted_state.session_mode;
+            inner.studio_work_mode = persisted_state.studio_work_mode;
+            inner.studio_tool_selection = persisted_state.studio_tool_selection.clone();
+            inner.agent_definition = persisted_state.agent_definition.clone();
+            inner.agent_configuration_revision = persisted_state.agent_configuration_revision;
+            inner.session_lifetime = persisted_state.session_lifetime;
+            inner.channel_task_source = persisted_state.channel_task_source.clone();
             inner.workflow_definition_id = persisted_state.workflow_definition_id;
             inner.model_selection_mode = persisted_state.model_selection_mode;
             inner.selected_model = persisted_state.selected_model;
             inner.goal = persisted_state.goal;
             inner.goal_history = persisted_state.goal_history;
             inner.session_memory = persisted_state.session_memory;
+            inner.imported_context_legacy_unobserved = restored_imported_context.as_ref().map_or(inner.conversation_started, |value| value.source == kcoder_types::imported_context_snapshot::ImportedContextSnapshotSource::LegacyUnobserved);
+            inner.imported_context_persisted_at =
+                restored_imported_context.as_ref().and(state_path.clone());
+            inner.imported_context_reference = persisted_state.imported_context_snapshot.clone();
+            inner.imported_context_snapshot = restored_imported_context.map(Arc::new);
             inner.tasks = persisted_state.tasks;
             if let Some(base_cwd) = persisted_state.base_cwd {
                 inner.base_cwd = base_cwd;
@@ -690,7 +914,10 @@ impl AppState {
             }
             Self::install_prepared_history_path(&mut inner, path, last_transcript_uuid, source);
         }
-        Ok(count)
+        Ok((
+            count,
+            crate::history_append_context::lifecycle_identity_locked(self, &inner),
+        ))
     }
 
     /// Build a serializable snapshot of the current session.
@@ -700,6 +927,12 @@ impl AppState {
             session_id: inner.session_id.clone(),
             cwd: inner.cwd.clone(),
             session_mode: inner.session_mode,
+            studio_work_mode: inner.studio_work_mode,
+            studio_tool_selection: inner.studio_tool_selection.clone(),
+            agent_definition: inner.agent_definition.clone(),
+            agent_configuration_revision: inner.agent_configuration_revision,
+            session_lifetime: inner.session_lifetime,
+            channel_task_source: inner.channel_task_source.clone(),
             workflow_definition_id: inner.workflow_definition_id.clone(),
             model_selection_mode: inner.model_selection_mode,
             selected_model: inner.selected_model.clone(),
@@ -711,6 +944,7 @@ impl AppState {
             goal: inner.goal.clone(),
             goal_history: inner.goal_history.clone(),
             session_memory: inner.session_memory.clone(),
+            imported_context_snapshot: inner.imported_context_snapshot.as_deref().cloned(),
             last_assistant_message_timestamp_ms: inner.last_assistant_message_timestamp_ms,
         }
     }
@@ -735,6 +969,9 @@ impl AppState {
             .with_context(|| format!("failed to read snapshot from {:?}", path))?;
         let snapshot: SessionSnapshot = serde_json::from_str(&content)
             .with_context(|| format!("failed to parse snapshot from {:?}", path))?;
+        if let Some(context) = &snapshot.imported_context_snapshot {
+            imported_context_snapshot::validate(context)?;
+        }
         let count = snapshot.messages.len();
         if let Some(task) = snapshot
             .tasks
@@ -753,6 +990,22 @@ impl AppState {
                 && matches!(task.status, TaskStatus::Pending | TaskStatus::Running)),
             "cannot import a snapshot while managed tasks are running"
         );
+        anyhow::ensure!(
+            inner
+                .imported_context_snapshot
+                .as_ref()
+                .is_none_or(|old| Some(old.as_ref()) == snapshot.imported_context_snapshot.as_ref()),
+            "imported_context_snapshot_binding_changed"
+        );
+        anyhow::ensure!(
+            inner
+                .studio_tool_selection
+                .as_ref()
+                .is_none_or(|selection| {
+                    snapshot.studio_tool_selection.as_ref() == Some(selection)
+                }),
+            "Studio tool selection is immutable for an existing session"
+        );
         let mut imported_tasks: HashMap<String, Task> = snapshot
             .tasks
             .into_iter()
@@ -768,6 +1021,12 @@ impl AppState {
             .collect();
         let mut imported_state = PersistedSessionState::from_inner(&inner);
         imported_state.session_mode = snapshot.session_mode;
+        imported_state.studio_work_mode = snapshot.studio_work_mode;
+        imported_state.studio_tool_selection = snapshot.studio_tool_selection.clone();
+        imported_state.agent_definition = snapshot.agent_definition.clone();
+        imported_state.agent_configuration_revision = snapshot.agent_configuration_revision;
+        imported_state.session_lifetime = snapshot.session_lifetime;
+        imported_state.channel_task_source = snapshot.channel_task_source.clone();
         imported_state.workflow_definition_id = snapshot.workflow_definition_id.clone();
         imported_state.model_selection_mode = snapshot.model_selection_mode;
         imported_state.selected_model = snapshot.selected_model.clone();
@@ -777,18 +1036,50 @@ impl AppState {
         imported_state.goal = snapshot.goal.clone();
         imported_state.goal_history = snapshot.goal_history.clone();
         imported_state.session_memory = snapshot.session_memory.clone();
+        imported_state.imported_context_snapshot =
+            snapshot.imported_context_snapshot.as_ref().map(|value| {
+                imported_context_snapshot::SnapshotReference::new(
+                    value,
+                    &imported_context_snapshot::session_for(&inner),
+                )
+            });
         if let Some(path) = inner.session_state_path.as_ref() {
             let source = inner
                 .history_source
                 .as_ref()
                 .context("snapshot import has no bound history source")?;
             source.write_metadata(path, || {
+                if let Some(context) = &snapshot.imported_context_snapshot {
+                    imported_context_snapshot::publish(
+                        path,
+                        &imported_context_snapshot::session_for(&inner),
+                        context,
+                    )?;
+                }
                 let authority = load_session_state(path)?;
+                anyhow::ensure!(
+                    authority
+                        .studio_tool_selection
+                        .as_ref()
+                        .is_none_or(|selection| {
+                            imported_state.studio_tool_selection.as_ref() == Some(selection)
+                        }),
+                    "Studio tool selection is immutable for an existing session"
+                );
+                anyhow::ensure!(
+                    authority
+                        .imported_context_snapshot
+                        .as_ref()
+                        .is_none_or(|original| imported_state.imported_context_snapshot.as_ref()
+                            == Some(original)),
+                    "imported_context_snapshot_binding_changed"
+                );
                 anyhow::ensure!(
                     !authority.tasks.values().any(|task| task.managed
                         && matches!(task.status, TaskStatus::Pending | TaskStatus::Running)),
                     "cannot import a snapshot while managed tasks are running"
                 );
+                imported_state.native_subagent_outbox = authority.native_subagent_outbox.clone();
                 imported_state.background_tombstones = authority.background_tombstones;
                 for (id, mut previous) in authority.tasks {
                     if let Some(imported) = imported_state.tasks.get_mut(&id) {
@@ -829,11 +1120,18 @@ impl AppState {
         inner.full_file_reads.clear();
         inner.read_tool_call_keys.clear();
         // Imported provider messages have no identity in this runtime's committed log.
-        inner.message_history_ids = vec![None; inner.messages.len()];
+        inner.message_history_ids = vec![None; inner.messages.len()].into();
+        inner.history_attempts = Default::default();
         if inner.history_path.is_none() {
             inner.last_history_uuid = None;
         }
         inner.session_mode = snapshot.session_mode;
+        inner.studio_work_mode = snapshot.studio_work_mode;
+        inner.studio_tool_selection = snapshot.studio_tool_selection.clone();
+        inner.agent_definition = snapshot.agent_definition.clone();
+        inner.agent_configuration_revision = snapshot.agent_configuration_revision;
+        inner.session_lifetime = snapshot.session_lifetime;
+        inner.channel_task_source = snapshot.channel_task_source.clone();
         inner.workflow_definition_id = snapshot.workflow_definition_id;
         inner.model_selection_mode = snapshot.model_selection_mode;
         inner.selected_model = snapshot.selected_model;
@@ -843,6 +1141,13 @@ impl AppState {
         inner.goal = snapshot.goal;
         inner.goal_history = snapshot.goal_history;
         inner.session_memory = snapshot.session_memory;
+        inner.imported_context_legacy_unobserved = snapshot.imported_context_snapshot.as_ref().map_or(inner.conversation_started, |value| value.source == kcoder_types::imported_context_snapshot::ImportedContextSnapshotSource::LegacyUnobserved);
+        inner.imported_context_persisted_at = snapshot
+            .imported_context_snapshot
+            .as_ref()
+            .and(inner.session_state_path.clone());
+        inner.imported_context_reference = imported_state.imported_context_snapshot;
+        inner.imported_context_snapshot = snapshot.imported_context_snapshot.map(Arc::new);
         inner.last_assistant_message_timestamp_ms = snapshot.last_assistant_message_timestamp_ms;
 
         Ok(count)
@@ -871,16 +1176,16 @@ fn suppress_imported_background_task(task: &mut Task) {
 
 pub(super) fn ensure_message_history_ids(inner: &mut AppStateInner) {
     if inner.message_history_ids.len() != inner.messages.len() {
-        inner.message_history_ids = vec![None; inner.messages.len()];
+        inner.message_history_ids = vec![None; inner.messages.len()].into();
     }
-    let mut last = None;
-    for id in &mut inner.message_history_ids {
-        if id.is_none() {
-            *id = Some(generate_transcript_uuid());
+    if inner.message_history_ids.iter().any(Option::is_none) {
+        for id in inner.message_history_ids.iter_mut() {
+            if id.is_none() {
+                *id = Some(generate_transcript_uuid());
+            }
         }
-        last = id.clone();
     }
-    inner.last_history_uuid = last;
+    inner.last_history_uuid = inner.message_history_ids.last().cloned().flatten();
 }
 
 pub(super) fn write_history_snapshot<'a>(
@@ -888,6 +1193,8 @@ pub(super) fn write_history_snapshot<'a>(
     session_id: &str,
     messages: impl IntoIterator<Item = &'a Message>,
     message_ids: &[Option<String>],
+    history_attempts: &crate::history_append_context::HistoryAppendMetadata,
+    inherited: Option<&crate::context_archive::InheritedArchive>,
 ) -> anyhow::Result<()> {
     let mut encoded = Vec::new();
     let mut parent_uuid: Option<String> = None;
@@ -896,22 +1203,38 @@ pub(super) fn write_history_snapshot<'a>(
             .get(index)
             .and_then(Clone::clone)
             .unwrap_or_else(generate_transcript_uuid);
+        if index == 0
+            && let Some(inherited) = inherited
+        {
+            inherited.write_header(&mut encoded, msg, &uuid)?;
+        }
         let entry = HistoryEntry {
+            web_sources: history_attempts.sources(&uuid),
+            history_attempt: history_attempts
+                .get(&uuid)
+                .filter(|identity| identity.thread_id == session_id),
             session_id: session_id.to_string(),
             timestamp_ms: now_millis(),
             uuid: Some(uuid.clone()),
             parent_uuid: parent_uuid.clone(),
             message: msg.clone(),
         };
-        serde_json::to_writer(&mut encoded, &entry)?;
+        if msg.origin() == kcoder_types::MessageOrigin::Compaction {
+            let mut value = serde_json::to_value(&entry)?;
+            value["isCompactSummary"] = serde_json::Value::Bool(true);
+            serde_json::to_writer(&mut encoded, &value)?;
+        } else {
+            serde_json::to_writer(&mut encoded, &entry)?;
+        }
         encoded.push(b'\n');
         parent_uuid = Some(uuid);
     }
     source.replace(&encoded)
 }
 
-pub(super) const SESSION_STATE_SCHEMA_VERSION: u32 = 2;
-pub(super) const RELIABLE_DELIVERY_FORMAT: &str = "lease_ack_v1";
+pub(super) use crate::migrations::sessions::{
+    RELIABLE_DELIVERY_FORMAT, SESSION_STATE_SCHEMA_VERSION,
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(super) struct PersistedSessionState {
@@ -929,6 +1252,18 @@ pub(super) struct PersistedSessionState {
     pub(super) base_cwd: Option<PathBuf>,
     #[serde(default, skip_serializing_if = "SessionMode::is_default")]
     pub(super) session_mode: SessionMode,
+    #[serde(default)]
+    pub(super) studio_work_mode: kcoder_types::StudioWorkMode,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) studio_tool_selection: Option<kcoder_types::StudioToolSelections>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) agent_definition: Option<kcoder_types::agent_definition::AgentTaskBinding>,
+    #[serde(default)]
+    pub(super) agent_configuration_revision: u64,
+    #[serde(default)]
+    pub(super) session_lifetime: kcoder_types::session_lifetime::SessionLifetimeSetting,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) channel_task_source: Option<kcoder_types::agent_definition::ChannelTaskSource>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(super) workflow_definition_id: Option<String>,
     #[serde(default)]
@@ -945,14 +1280,19 @@ pub(super) struct PersistedSessionState {
     pub(super) compacted_messages: Option<Vec<Message>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(super) session_memory: Option<SessionMemorySnapshot>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) imported_context_snapshot: Option<imported_context_snapshot::SnapshotReference>,
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub(super) tasks: HashMap<String, Task>,
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub(super) background_tombstones: HashMap<String, Vec<crate::BackgroundRunRecord>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) native_subagent_outbox:
+        Option<crate::background_delivery::native_results::PrivateNativeOutbox>,
 }
 
 impl PersistedSessionState {
-    fn from_inner(inner: &AppStateInner) -> Self {
+    pub(super) fn from_inner(inner: &AppStateInner) -> Self {
         Self {
             created_at_ms: Some(inner.session_created_at_ms),
             updated_at_ms: Some(inner.session_updated_at_ms),
@@ -961,6 +1301,12 @@ impl PersistedSessionState {
             cwd: Some(inner.cwd.clone()),
             base_cwd: Some(inner.base_cwd.clone()),
             session_mode: inner.session_mode,
+            studio_work_mode: inner.studio_work_mode,
+            studio_tool_selection: inner.studio_tool_selection.clone(),
+            agent_definition: inner.agent_definition.clone(),
+            agent_configuration_revision: inner.agent_configuration_revision,
+            session_lifetime: inner.session_lifetime,
+            channel_task_source: inner.channel_task_source.clone(),
             workflow_definition_id: inner.workflow_definition_id.clone(),
             model_selection_mode: inner.model_selection_mode,
             selected_model: inner.selected_model.clone(),
@@ -970,8 +1316,18 @@ impl PersistedSessionState {
             // Recover model messages only from compact/rewind boundaries in append-only JSONL.
             compacted_messages: None,
             session_memory: inner.session_memory.clone(),
+            imported_context_snapshot: if inner.session_state_path.is_some()
+                && inner.imported_context_persisted_at == inner.session_state_path
+            {
+                inner.imported_context_reference.as_ref().map(|reference| {
+                    reference.for_session(&imported_context_snapshot::session_for(inner))
+                })
+            } else {
+                None
+            },
             tasks: persistable_delegated_tasks(&inner.tasks),
             background_tombstones: HashMap::new(),
+            native_subagent_outbox: None,
         }
     }
 }
@@ -986,6 +1342,12 @@ impl Default for PersistedSessionState {
             cwd: None,
             base_cwd: None,
             session_mode: SessionMode::Default,
+            studio_work_mode: Default::default(),
+            studio_tool_selection: None,
+            agent_definition: None,
+            agent_configuration_revision: 0,
+            session_lifetime: Default::default(),
+            channel_task_source: None,
             workflow_definition_id: None,
             model_selection_mode: Default::default(),
             selected_model: None,
@@ -994,8 +1356,10 @@ impl Default for PersistedSessionState {
             goal_history: Vec::new(),
             compacted_messages: None,
             session_memory: None,
+            imported_context_snapshot: None,
             tasks: HashMap::new(),
             background_tombstones: HashMap::new(),
+            native_subagent_outbox: None,
         }
     }
 }
@@ -1245,7 +1609,10 @@ pub(super) fn maybe_fail_before_atomic_replace(destination: &Path) -> std::io::R
     }
 }
 
-fn write_session_state(path: &Path, state: &PersistedSessionState) -> anyhow::Result<()> {
+pub(super) fn write_session_state(
+    path: &Path,
+    state: &PersistedSessionState,
+) -> anyhow::Result<()> {
     write_session_state_with_migration_backup(path, state)
 }
 
@@ -1254,9 +1621,24 @@ pub(super) fn persist_snapshot_session_state(inner: &AppStateInner) -> anyhow::R
     let Some(path) = inner.session_state_path.as_ref() else {
         return Ok(());
     };
-    let state = PersistedSessionState::from_inner(inner);
+    let mut state = PersistedSessionState::from_inner(inner);
     let source = require_history_source(inner)?;
-    source.write_metadata(path, || prepare_legacy_session_state_write(path, state))
+    source.write_metadata(path, || {
+        if let Some(snapshot) = &inner.imported_context_snapshot
+            && inner.imported_context_persisted_at.as_ref() != Some(path)
+        {
+            state.imported_context_snapshot =
+                inner.imported_context_reference.as_ref().map(|reference| {
+                    reference.for_session(&imported_context_snapshot::session_for(inner))
+                });
+            imported_context_snapshot::publish(
+                path,
+                &imported_context_snapshot::session_for(inner),
+                snapshot,
+            )?;
+        }
+        prepare_legacy_session_state_write(path, state)
+    })
 }
 
 fn write_session_state_with_migration_backup(
@@ -1272,6 +1654,7 @@ fn preserve_background_authority(
     authority: &PersistedSessionState,
 ) {
     state.background_tombstones = authority.background_tombstones.clone();
+    state.native_subagent_outbox = authority.native_subagent_outbox.clone();
     for (id, stored) in &authority.tasks {
         if !stored.status.is_known() {
             state.tasks.insert(id.clone(), stored.clone());
@@ -1295,18 +1678,78 @@ fn preserve_background_authority(
         .retain(|id, _| !state.background_tombstones.contains_key(id));
 }
 
-fn prepare_legacy_session_state_write(
+pub(super) fn prepare_legacy_session_state_write(
+    path: &Path,
+    state: PersistedSessionState,
+) -> anyhow::Result<Vec<u8>> {
+    prepare_legacy_session_state_with_native_goal(path, state).map(|(bytes, _)| bytes)
+}
+
+fn prepare_legacy_session_state_with_native_goal(
     path: &Path,
     mut state: PersistedSessionState,
-) -> anyhow::Result<Vec<u8>> {
-    preserve_background_authority(&mut state, &load_session_state(path)?);
-    prepare_session_state_write(path, &state)
+) -> anyhow::Result<(Vec<u8>, Option<Goal>)> {
+    let authority = load_session_state(path)?;
+    // Stale metadata writers may not erase or replace a frozen session surface.
+    if let Some(selection) = &authority.studio_tool_selection {
+        anyhow::ensure!(
+            state
+                .studio_tool_selection
+                .as_ref()
+                .is_none_or(|value| value == selection),
+            "Studio tool selection is immutable for an existing session"
+        );
+        state.studio_tool_selection = Some(selection.clone());
+    }
+    if let Some(reference) = &authority.imported_context_snapshot {
+        anyhow::ensure!(
+            state
+                .imported_context_snapshot
+                .as_ref()
+                .is_none_or(|value| value == reference),
+            "imported_context_snapshot_binding_changed"
+        );
+        state.imported_context_snapshot = Some(reference.clone());
+    }
+    preserve_background_authority(&mut state, &authority);
+    crate::goal_remote_budget::preserve_native_goal_holds(&mut state.goal, &authority.goal)?;
+    for stored in authority.goal_history.iter().chain(authority.goal.iter()) {
+        if stored.native_task_budget_holds.is_empty()
+            || state
+                .goal
+                .as_ref()
+                .is_some_and(|goal| goal.goal_id == stored.goal_id)
+        {
+            continue;
+        }
+        if let Some(existing) = state
+            .goal_history
+            .iter_mut()
+            .find(|goal| goal.goal_id == stored.goal_id)
+        {
+            let mut projection = Some(existing.clone());
+            crate::goal_remote_budget::preserve_native_goal_holds(
+                &mut projection,
+                &Some(stored.clone()),
+            )?;
+            *existing = projection.expect("existing Goal projection");
+        } else {
+            state.goal_history.push(stored.clone());
+        }
+    }
+    let projection = state
+        .goal
+        .as_ref()
+        .filter(|goal| !goal.native_task_budget_holds.is_empty())
+        .cloned();
+    Ok((prepare_session_state_write(path, &state)?, projection))
 }
 
 pub(super) fn prepare_session_state_write(
     path: &Path,
     state: &PersistedSessionState,
 ) -> anyhow::Result<Vec<u8>> {
+    crate::migrations::sessions::validate(state, path)?;
     let previous = match fs::symlink_metadata(path) {
         Ok(metadata) if metadata.file_type().is_symlink() => {
             anyhow::bail!("session state path must not be a symlink: {path:?}")
@@ -1315,14 +1758,13 @@ pub(super) fn prepare_session_state_write(
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
         Err(error) => return Err(error.into()),
     };
-    if let Some(previous) = previous
-        && state.schema_version >= SESSION_STATE_SCHEMA_VERSION
-    {
-        let previous_version = serde_json::from_slice::<serde_json::Value>(&previous)
-            .ok()
-            .and_then(|value| value.get("schema_version").and_then(|value| value.as_u64()))
-            .unwrap_or(1);
-        if previous_version < SESSION_STATE_SCHEMA_VERSION as u64 {
+    if let Some(previous) = previous {
+        let previous_state = parse_session_state(path, std::str::from_utf8(&previous)?)?;
+        anyhow::ensure!(
+            state.schema_version >= previous_state.schema_version,
+            "refusing to downgrade session state at {path:?}"
+        );
+        if previous_state.schema_version < SESSION_STATE_SCHEMA_VERSION {
             let backup = path.with_extension("pre-reliable-delivery.bak");
             match fs::symlink_metadata(&backup) {
                 Ok(metadata) if metadata.file_type().is_symlink() => {
@@ -1514,11 +1956,16 @@ pub(super) fn persist_session_tasks_result(
 
 pub(super) fn load_session_state(path: &Path) -> anyhow::Result<PersistedSessionState> {
     let _span = tracing::debug_span!("history.session_state_read").entered();
-    if !path.exists() {
-        return Ok(PersistedSessionState::default());
-    }
-    let content = fs::read_to_string(path)
-        .with_context(|| format!("failed to read session state from {:?}", path))?;
+    let content = match fs::read_to_string(path) {
+        Ok(content) => content,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Ok(PersistedSessionState::default());
+        }
+        Err(error) => {
+            return Err(error)
+                .with_context(|| format!("failed to read session state from {path:?}"));
+        }
+    };
     parse_session_state(path, &content)
 }
 
@@ -1527,30 +1974,187 @@ pub(super) fn parse_session_state(
     content: &str,
 ) -> anyhow::Result<PersistedSessionState> {
     let state: PersistedSessionState = serde_json::from_str(content).map_err(|error| {
-        // Callers fall back to defaults on error; without a warning the loss
-        // of tasks/goal state/session memory would be completely silent.
+        // Preserve the original sidecar and surface corruption to the owner.
         warn!(
-            "session state at {:?} is corrupted and will be reset to defaults: {}",
+            "session state at {:?} could not be parsed; original data is preserved: {}",
             path, error
         );
         anyhow::anyhow!("failed to parse session state from {:?}: {}", path, error)
     })?;
-    if state.schema_version > SESSION_STATE_SCHEMA_VERSION {
-        anyhow::bail!(
-            "session state at {:?} uses unsupported future schema version {} (maximum {})",
-            path,
-            state.schema_version,
-            SESSION_STATE_SCHEMA_VERSION
-        );
-    }
-    if state.schema_version >= SESSION_STATE_SCHEMA_VERSION
-        && state.delivery_format.as_deref() != Some(RELIABLE_DELIVERY_FORMAT)
-    {
-        anyhow::bail!(
-            "session state at {:?} has unknown reliable delivery format {:?}",
-            path,
-            state.delivery_format
-        );
+    crate::migrations::sessions::validate(&state, path)?;
+    if let Some(reference) = &state.imported_context_snapshot {
+        reference.validate()?;
     }
     Ok(state)
+}
+
+#[cfg(test)]
+mod studio_work_mode_tests {
+    use super::*;
+    use kcoder_types::StudioWorkMode;
+
+    #[test]
+    fn studio_mode_survives_snapshot_and_legacy_defaults_without_unlocking_started_session() {
+        let root = tempfile::tempdir().unwrap();
+        let state = AppState::new(root.path());
+        state
+            .set_studio_work_mode_before_first_message(StudioWorkMode::Kworker)
+            .unwrap();
+        state.add_message(Message::user_text("organize documents"));
+        assert!(
+            state
+                .set_studio_work_mode_before_first_message(StudioWorkMode::Kcoder)
+                .is_err()
+        );
+        let path = root.path().join("snapshot.json");
+        state.export_snapshot(&path).unwrap();
+        let restored = AppState::new(root.path());
+        restored.import_snapshot(&path).unwrap();
+        assert_eq!(restored.studio_work_mode(), StudioWorkMode::Kworker);
+        assert!(
+            restored
+                .set_studio_work_mode_before_first_message(StudioWorkMode::Kcoder)
+                .is_err()
+        );
+        let mut legacy = serde_json::to_value(state.snapshot()).unwrap();
+        legacy.as_object_mut().unwrap().remove("studio_work_mode");
+        let snapshot: SessionSnapshot = serde_json::from_value(legacy).unwrap();
+        assert_eq!(snapshot.studio_work_mode, StudioWorkMode::Kcoder);
+        restored.start_new_session().unwrap();
+        assert_eq!(restored.studio_work_mode(), StudioWorkMode::Kcoder);
+    }
+}
+
+#[cfg(test)]
+mod studio_tool_selection_tests {
+    use super::*;
+    use kcoder_types::StudioToolSelections;
+
+    fn selection() -> StudioToolSelections {
+        StudioToolSelections {
+            kcoder: Some(vec!["Read".into(), "Shell".into()]),
+            kworker: Some(vec![]),
+        }
+    }
+
+    #[test]
+    fn studio_tool_selection_persists_and_cold_restores() {
+        let root = tempfile::tempdir().unwrap();
+        let history = root.path().join("session.jsonl");
+        let state = AppState::new(root.path());
+        state.with_history_path(&history);
+        state.bind_studio_tool_selection_once(selection()).unwrap();
+        state.add_message(Message::user_text("session tools"));
+        state.save_history().unwrap();
+        let restored = AppState::new(root.path());
+        restored.resume_from_history(&history).unwrap();
+        assert_eq!(restored.studio_tool_selection(), Some(selection()));
+        assert_eq!(restored.snapshot().studio_tool_selection, Some(selection()));
+        restored.start_new_session().unwrap();
+        assert_eq!(restored.studio_tool_selection(), None);
+    }
+
+    #[test]
+    fn studio_tool_selection_binding_is_idempotent_and_rejects_replacement() {
+        let root = tempfile::tempdir().unwrap();
+        let state = AppState::new(root.path());
+        state.with_history_path(root.path().join("session.jsonl"));
+        state.bind_studio_tool_selection_once(selection()).unwrap();
+        let sidecar = state.session_state_path().unwrap();
+        let before = fs::read(&sidecar).unwrap();
+        state.bind_studio_tool_selection_once(selection()).unwrap();
+        assert_eq!(fs::read(&sidecar).unwrap(), before);
+        assert!(
+            state
+                .bind_studio_tool_selection_once(StudioToolSelections::default())
+                .is_err()
+        );
+        assert_eq!(state.studio_tool_selection(), Some(selection()));
+        assert_eq!(fs::read(&sidecar).unwrap(), before);
+    }
+
+    #[test]
+    fn studio_tool_selection_legacy_none_is_not_backfilled() {
+        let root = tempfile::tempdir().unwrap();
+        let state = AppState::new(root.path());
+        let mut snapshot = serde_json::to_value(state.snapshot()).unwrap();
+        snapshot
+            .as_object_mut()
+            .unwrap()
+            .remove("studio_tool_selection");
+        let legacy: SessionSnapshot = serde_json::from_value(snapshot).unwrap();
+        assert_eq!(legacy.studio_tool_selection, None);
+        let legacy_sidecar: PersistedSessionState = serde_json::from_str("{}").unwrap();
+        assert_eq!(legacy_sidecar.studio_tool_selection, None);
+        let history = root.path().join("legacy.jsonl");
+        state.with_history_path(&history);
+        state.add_message(Message::user_text("legacy session"));
+        state.save_history().unwrap();
+        let restored = AppState::new(root.path());
+        restored.resume_from_history(&history).unwrap();
+        assert_eq!(restored.studio_tool_selection(), None);
+        let sidecar: serde_json::Value =
+            serde_json::from_slice(&fs::read(restored.session_state_path().unwrap()).unwrap())
+                .unwrap();
+        assert!(sidecar.get("studio_tool_selection").is_none());
+    }
+
+    #[test]
+    fn studio_tool_selection_snapshot_roundtrip_preserves_empty_and_rejects_overwrite() {
+        let root = tempfile::tempdir().unwrap();
+        let state = AppState::new(root.path());
+        state.bind_studio_tool_selection_once(selection()).unwrap();
+        let export = root.path().join("snapshot.json");
+        state.export_snapshot(&export).unwrap();
+        let imported = AppState::new(root.path());
+        imported.with_history_path(root.path().join("import.jsonl"));
+        imported.import_snapshot(&export).unwrap();
+        assert_eq!(imported.studio_tool_selection(), Some(selection()));
+        let sidecar = imported.session_state_path().unwrap();
+        assert_eq!(
+            load_session_state(&sidecar).unwrap().studio_tool_selection,
+            Some(selection())
+        );
+        let other = AppState::new(root.path());
+        other.export_snapshot(&export).unwrap();
+        assert!(imported.import_snapshot(&export).is_err());
+        assert_eq!(imported.studio_tool_selection(), Some(selection()));
+        assert_eq!(
+            load_session_state(&sidecar).unwrap().studio_tool_selection,
+            Some(selection())
+        );
+    }
+
+    #[tokio::test]
+    async fn studio_tool_selection_survives_rewind_and_cold_restore() {
+        let root = tempfile::tempdir().unwrap();
+        let history = root.path().join("rewind.jsonl");
+        let state = AppState::new(root.path());
+        state.with_history_path(&history);
+        state.bind_studio_tool_selection_once(selection()).unwrap();
+        state.add_message(Message::user_text("first turn"));
+        state.add_message(Message::user_text("second turn"));
+        state.save_history().unwrap();
+        state.truncate_messages_for_rewind(1, 1).await.unwrap();
+        assert_eq!(state.studio_tool_selection(), Some(selection()));
+        let restored = AppState::new(root.path());
+        restored.resume_from_history(&history).unwrap();
+        assert_eq!(restored.studio_tool_selection(), Some(selection()));
+        assert_eq!(restored.messages().len(), 1);
+    }
+
+    #[test]
+    fn studio_tool_selection_stale_metadata_cannot_erase_or_replace_binding() {
+        let root = tempfile::tempdir().unwrap();
+        let state = AppState::new(root.path());
+        state.with_history_path(root.path().join("session.jsonl"));
+        let mut stale = PersistedSessionState::from_inner(&state.read_inner());
+        state.bind_studio_tool_selection_once(selection()).unwrap();
+        let sidecar = state.session_state_path().unwrap();
+        let bytes = prepare_legacy_session_state_write(&sidecar, stale.clone()).unwrap();
+        let merged: PersistedSessionState = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(merged.studio_tool_selection, Some(selection()));
+        stale.studio_tool_selection = Some(StudioToolSelections::default());
+        assert!(prepare_legacy_session_state_write(&sidecar, stale).is_err());
+    }
 }

@@ -16,10 +16,52 @@ impl ReplApp {
     }
 
     pub(crate) fn clear_conversation_ui(&mut self, engine: &QueryEngine) -> bool {
-        if let Err(error) = engine.start_new_session() {
-            self.push_message(MessageRole::System, format!("无法新建会话：{error}"));
+        if self.input_admission.as_ref().is_some_and(|admission| {
+            self.input_session_owner
+                .as_ref()
+                .is_some_and(|owner| !admission.owner.same_lifecycle(owner))
+        }) && !self.retire_stale_input_admission()
+        {
+            self.push_message(
+                MessageRole::System,
+                "Previous inputs are still being reconciled. Wait before starting another session.",
+            );
             return false;
         }
+        if !self.can_replace_input_owner() {
+            self.push_message(
+                MessageRole::System,
+                "Previous inputs are still being reconciled. Wait before starting another session.",
+            );
+            return false;
+        }
+        if self.has_current_input_uncertainty() {
+            self.show_cancelled_input_notice();
+            return false;
+        }
+        if self
+            .input_admission
+            .as_ref()
+            .is_some_and(|admission| admission.observer.is_some() || admission.witness.is_none())
+        {
+            self.push_message(
+                MessageRole::System,
+                "An input is still being saved. Wait before starting a new session.",
+            );
+            return false;
+        }
+        self.cancel_preparing_inputs();
+        if let Some(owner) = self.input_session_owner.clone() {
+            self.cancel_side_questions_for(&owner);
+        }
+        let owner = match engine.start_new_session_with_lifecycle() {
+            Ok(owner) => owner,
+            Err(error) => {
+                self.push_message(MessageRole::System, format!("无法新建会话：{error}"));
+                return false;
+            }
+        };
+        self.install_input_owner(owner);
         self.reset_transcript_state_after_clear();
         engine.active_skills.write().unwrap().clear();
         self.refresh_engine_metadata(engine);

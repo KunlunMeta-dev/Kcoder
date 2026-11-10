@@ -3,7 +3,7 @@
     {
       "id": "cyx",
       "secret": "",
-      "pairingToken": "",
+      "gatewaySecret": "",
       "maxConnections": 128,
       "maxBytesPerWindow": 67108864,
       "trafficWindowMs": 60000

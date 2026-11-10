@@ -1,7 +1,7 @@
 use super::*;
 
 pub(super) fn lifecycle_test_engine(cwd: &Path) -> QueryEngine {
-    TestEngineBuilder::new(cwd).build()
+    TestEngineBuilder::new(cwd).build_with_profile_directory()
 }
 
 pub(super) struct PrefireStreamDrop(pub(super) Arc<AtomicUsize>);
@@ -20,7 +20,7 @@ pub(super) fn test_engine_with_settings(
     TestEngineBuilder::new(cwd)
         .provider(provider)
         .settings(settings)
-        .build()
+        .build_with_profile_directory()
 }
 
 pub(super) fn test_engine_with_memory_manager(
@@ -33,7 +33,7 @@ pub(super) fn test_engine_with_memory_manager(
         .provider(provider)
         .settings(settings)
         .memory_manager(memory_manager)
-        .build()
+        .build_with_profile_directory()
 }
 
 pub(super) fn assistant_tool_use(id: &str, name: &str) -> Message {

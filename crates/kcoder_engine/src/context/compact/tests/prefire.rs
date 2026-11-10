@@ -1,5 +1,25 @@
 use super::*;
 
+#[tokio::test]
+async fn incremental_prefire_reuses_only_the_delta_and_preserves_the_prior_prefix() {
+    let provider = Arc::new(RecordingProvider::default());
+    let compactor = test_compactor(provider.clone());
+    let mut messages = vec![Message::compaction_text(format_compact_summary_message(
+        "PRIOR_FACTS",
+    ))];
+    messages.extend(messages_with_summarizable_history());
+    let split = split_for_compaction(&messages);
+    let note = PrefireNote::new(&split.old, "prepared new facts".into())
+        .with_retained_summary(Some("PRIOR_FACTS".into()));
+    let mut request = test_compaction_request(messages);
+    request.prefire = Some(note);
+    let result = compactor.compact(request, 50_000).await.unwrap();
+    assert!(result.used_prefire);
+    assert!(result.summary.starts_with("PRIOR_FACTS"));
+    assert!(result.summary.contains("prepared new facts"));
+    assert!(provider.requests.lock().unwrap().is_empty());
+}
+
 fn recorded_summary_prompt(provider: &RecordingProvider) -> String {
     let requests = provider.requests.lock().unwrap();
     let request = requests.first().expect("one summary request recorded");

@@ -6,10 +6,10 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('./runtime-environment', () => ({
-  isTauriRuntime: () => true,
+  isGatewayRuntime: () => true,
 }))
 
-vi.mock('@tauri-apps/api/core', () => ({
+vi.mock('@/lib/runtime-commands', () => ({
   invoke: mocks.invoke,
 }))
 

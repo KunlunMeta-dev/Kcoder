@@ -96,7 +96,7 @@ describe.each([
     expect(new TextEncoder().encode(chunks.join(''))).toHaveLength(262_143)
   })
 
-  test('rejects late output after close fails and permits a newly assigned wire id', async () => {
+  test('keeps an unconfirmed close owned and routes a distinct new native wire id independently', async () => {
     const client = new FakeGatewayClient('terminal')
     const runtime = create(() => client)
     const session = await runtime.startTerminal('local', '/workspace')
@@ -106,19 +106,22 @@ describe.each([
     const request = client.request.bind(client)
     vi.spyOn(client, 'request').mockImplementation((method, params) => {
       if (method === 'terminal/close') return Promise.reject(new Error('close rejected'))
+      if (method === 'terminal/start') return request(method, params).then(value => ({
+        ...(value as Record<string, unknown>), session_id: 'terminal-next',
+      }))
       return request(method, params)
     })
     await expect(terminal.close()).rejects.toThrow('close rejected')
-    expect(() => runtime.createTerminalClient(session.session_id)).toThrow('不存在')
-    client.emitNotification('terminal/output', { session_id: 'terminal-terminal', data: 'stale' })
-    await new Promise(resolve => setTimeout(resolve, 0))
+    expect(() => runtime.createTerminalClient(session.session_id)).not.toThrow()
+    client.emitNotification('terminal/output', { session_id: 'terminal-terminal', data: 'still-owned' })
+    await vi.waitFor(() => expect(oldOutput).toHaveBeenCalledWith({session_id:session.session_id,data:'still-owned'}))
     const next = await runtime.startTerminal('local', '/workspace')
     const output = vi.fn()
     runtime.createTerminalClient(next.session_id).onOutput(output)
-    client.emitNotification('terminal/output', { session_id: 'terminal-terminal', data: 'fresh' })
+    client.emitNotification('terminal/output', { session_id: 'terminal-next', data: 'fresh' })
     await vi.waitFor(() =>
       expect(output).toHaveBeenCalledWith({ session_id: next.session_id, data: 'fresh' })
     )
-    expect(oldOutput).not.toHaveBeenCalled()
+    expect(oldOutput).toHaveBeenCalledTimes(1)
   })
 })

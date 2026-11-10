@@ -120,6 +120,26 @@ fn publication_scope_keeps_runtime_guidance_and_excludes_internal_audit_history(
     ));
     assert!(!published_document("crates/example/AGENTS.md", &allowed));
     assert!(!published_document("skills/AGENTS.md", &allowed));
+    assert!(historical_product_evidence("docs/phone/diff/old-run.md"));
+    assert!(historical_product_evidence(
+        "apps/kcoder-studio/e2e/private/candidates/old-run/receipt.json"
+    ));
+    assert!(!historical_product_evidence("README.md"));
+    assert!(!historical_product_evidence(
+        "apps/kcoder-studio/desktop/main.mjs"
+    ));
+    assert!(!historical_product_evidence(
+        "apps/kcoder-studio/e2e/fixtures/mobile-cached-session/history.ts"
+    ));
+}
+
+fn historical_product_evidence(relative: &str) -> bool {
+    // These retained runs contain original paths, hashes and failure receipts.
+    // Rebranding their bytes would fabricate evidence rather than fix the product.
+    relative.starts_with("docs/phone/")
+        || relative.starts_with("apps/kcoder-studio/e2e/private/")
+        || relative
+            == "apps/kcoder-studio/e2e/suites/mobile/mobile-public-rust-relay-baseline.e2e.mjs"
 }
 
 #[test]
@@ -130,7 +150,11 @@ fn public_documentation_uses_kcoder_as_its_product_identity() {
     // attribution must retain truthful upstream and protocol references.
     let readme = std::fs::read_to_string(workspace.join("README.md"))
         .expect("canonical public README must exist");
-    let title = readme.lines().find(|line| !line.trim().is_empty()).unwrap();
+    // A company banner may precede the title; the first heading names the product.
+    let title = readme
+        .lines()
+        .find(|line| line.starts_with("# "))
+        .expect("README must have a title");
     assert_eq!(
         title.trim(),
         "# KCoder",
@@ -151,7 +175,7 @@ fn public_documentation_uses_kcoder_as_its_product_identity() {
 }
 
 #[test]
-fn tracked_text_never_restores_retired_product_identifiers() {
+fn active_tracked_text_never_restores_retired_product_identifiers() {
     let workspace = workspace_root();
     let output = Command::new("git")
         .args(["ls-files", "-z"])
@@ -177,6 +201,9 @@ fn tracked_text_never_restores_retired_product_identifiers() {
         let Ok(relative) = std::str::from_utf8(relative) else {
             continue;
         };
+        if historical_product_evidence(relative) {
+            continue;
+        }
         let path = workspace.join(relative);
         let Ok(source) = std::fs::read_to_string(&path) else {
             continue;
@@ -195,7 +222,6 @@ fn tracked_text_never_restores_retired_product_identifiers() {
 fn tests_resolve_workspace_paths_at_runtime() {
     let workspace = workspace_root();
     let compile_time_lookup = ["env!(\"CARGO_", "MANIFEST_DIR\")"].concat();
-    let allowed = "apps/kcoder-studio/renderer/src-tauri/src/app_constants.rs";
     let output = Command::new("git")
         .args(["ls-files", "-z", "--", "*.rs"])
         .current_dir(&workspace)
@@ -214,17 +240,10 @@ fn tests_resolve_workspace_paths_at_runtime() {
             continue;
         }
         let source = std::fs::read_to_string(path).unwrap();
-        if relative == allowed {
-            assert!(
-                source.contains(&compile_time_lookup),
-                "Tauri include_bytes 仍应在编译期嵌入图标"
-            );
-        } else {
-            assert!(
-                !source.contains(&compile_time_lookup),
-                "测试路径不得把 checkout 绝对路径缓存进编译产物: {relative}"
-            );
-        }
+        assert!(
+            !source.contains(&compile_time_lookup),
+            "测试路径不得把 checkout 绝对路径缓存进编译产物: {relative}"
+        );
     }
 }
 

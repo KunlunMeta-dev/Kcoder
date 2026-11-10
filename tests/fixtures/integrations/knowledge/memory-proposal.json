@@ -1,0 +1,15 @@
+{
+  "title": "报告偏好",
+  "content": "先列结论，再附来源表。",
+  "category": "preference",
+  "origin": "manual",
+  "provenance": [
+    {
+      "kind": "native_user_request",
+      "sourceId": "fixture-memory-operation",
+      "sourceRevision": "1",
+      "description": "Synthetic authenticated control request"
+    }
+  ],
+  "validUntilMs": null
+}

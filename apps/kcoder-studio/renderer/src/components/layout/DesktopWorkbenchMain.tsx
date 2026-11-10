@@ -7,7 +7,7 @@ import {
 import { useWorkbench, useWorkbenchPaneContext } from '@/features/workbench/useWorkbench'
 import { useWorkflowComposerIntent } from '@/features/workflows/useWorkflowComposerIntent'
 import { listenAccountContextChanges } from '@/kcoder/accountContextEvents'
-import { isTauriRuntime } from '@/lib/runtime-environment'
+import { isGatewayRuntime } from '@/lib/runtime-environment'
 import { cn } from '@/lib/utils'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { DesktopWorkbenchPane } from './workbench/PaneLayout'
@@ -15,7 +15,7 @@ import { MAX_CACHED_DESKTOP_WORKBENCH_PANES } from './workbench/paneLayoutStyles
 import type { DesktopWorkbenchMainProps } from './workbench/types'
 import { type TaskSummaryVisibility, type WorkbenchPaneWorkspaceState } from './workbench/types'
 import {
-  PANE_WORKSPACE_STORAGE_PREFIX,
+  clearPersistedPaneWorkspacesForTarget,
   readPersistedPaneWorkspaceState,
   writePersistedPaneWorkspaceState,
 } from './workbench/workspacePanelPersistence'
@@ -31,7 +31,7 @@ export function DesktopWorkbenchMain(props: DesktopWorkbenchMainProps) {
   const appearanceContext = useOptionalAppearance()
   const appearance = appearanceContext?.appearance ?? defaultAppearance
   const background = getWorkbenchBackground(appearance, appearanceContext?.resolvedMode ?? 'light')
-  const isTauri = isTauriRuntime()
+  const isGateway = isGatewayRuntime()
   const [summaryVisibilityByPane, setSummaryVisibilityByPane] = useState<
     Record<string, TaskSummaryVisibility>
   >({})
@@ -61,11 +61,7 @@ export function DesktopWorkbenchMain(props: DesktopWorkbenchMainProps) {
           }
         }
         try {
-          for (let i = localStorage.length - 1; i >= 0; i--) {
-            const key = localStorage.key(i)
-            if (key?.startsWith(`${PANE_WORKSPACE_STORAGE_PREFIX}${prefix}`))
-              localStorage.removeItem(key)
-          }
+          clearPersistedPaneWorkspacesForTarget(targetId)
         } catch {
           /* Storage may be disabled. */
         }
@@ -157,7 +153,7 @@ export function DesktopWorkbenchMain(props: DesktopWorkbenchMainProps) {
     />
   )
 
-  if (!isTauri) return paneStack
+  if (!isGateway) return paneStack
 
   return (
     <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden">

@@ -3,6 +3,8 @@ import type { DeviceInfo, RuntimeDeviceWorkspace, RuntimeWorkListResponse } from
 import { mergeRuntimeWorkLists } from './workbenchCloudStatus'
 
 const scope = (id: number) => ({ targetId: `target-${id}`, principalId: `principal-${id}` })
+const cacheKey = 'kcoder.workbench.remoteRuntimeWork.v2.target-7.principal-7'
+const legacyCacheKey = 'wework.workbench.remoteRuntimeWork.v2.target-7.principal-7'
 import {
   createRemoteRuntimeWorkCacheSnapshot,
   readCachedRemoteRuntimeWork,
@@ -133,16 +135,22 @@ describe('remote runtime work cache', () => {
     expect(restoredTask).not.toHaveProperty('modelSelection')
     expect(restoredTask).not.toHaveProperty('parent')
     expect(restoredTask).not.toHaveProperty('children')
-    expect(localStorage.getItem('wework.workbench.remoteRuntimeWork.v2.target-7.principal-7')).not.toContain(
-      'must-not-persist'
-    )
-    expect(localStorage.getItem('wework.workbench.remoteRuntimeWork.v2.target-7.principal-7')).not.toContain(
-      'full conversation'
-    )
+    const stored = localStorage.getItem(cacheKey)
+    expect(stored).toContain('task-a')
+    expect(stored).not.toContain('must-not-persist')
+    expect(stored).not.toContain('full conversation')
   })
 
-  test('isolates cache entries by account scope and never reads legacy keys', () => {
-    writeCachedRemoteRuntimeWork(scope(7), runtimeWork(workspace('remote-a', 'task-a')))
+  test('restores only the matching legacy v2 account and prioritizes the new cache', () => {
+    localStorage.setItem(legacyCacheKey, JSON.stringify({
+      version: 1,
+      updatedAt: 1,
+      runtimeWork: runtimeWork(workspace('remote-a', 'task-a')),
+    }))
+    expect(readCachedRemoteRuntimeWork(scope(7)).projects[0].deviceWorkspaces[0].tasks[0]).toMatchObject({
+      taskId: 'task-a',
+      running: false,
+    })
 
     expect(readCachedRemoteRuntimeWork(scope(8))).toEqual({
       projects: [],
@@ -157,6 +165,10 @@ describe('remote runtime work cache', () => {
       totalTasks: 0,
     })
 
+    writeCachedRemoteRuntimeWork(scope(7), { projects: [], chats: [], totalTasks: 0 })
+    expect(localStorage.getItem(cacheKey)).not.toBeNull()
+    expect(readCachedRemoteRuntimeWork(scope(7)).totalTasks).toBe(0)
+
     // A valid legacy v1 entry keyed by the placeholder user id is never read,
     // and malformed v2 data is ignored.
     localStorage.setItem(
@@ -167,7 +179,8 @@ describe('remote runtime work cache', () => {
         runtimeWork: runtimeWork(workspace('legacy-a', 'task-legacy')),
       })
     )
-    localStorage.setItem('wework.workbench.remoteRuntimeWork.v2.target-7.principal-7', '{')
+    localStorage.removeItem(cacheKey)
+    localStorage.setItem(legacyCacheKey, '{')
     expect(readCachedRemoteRuntimeWork(scope(7))).toEqual({
       projects: [],
       chats: [],
@@ -183,7 +196,8 @@ describe('remote runtime work cache', () => {
   test('a missing scope disables the persistent cache', () => {
     const snapshot = writeCachedRemoteRuntimeWork(null, runtimeWork(workspace('remote-a', 'task-a')))
     expect(snapshot.projects).toHaveLength(1)
-    expect(localStorage.getItem('wework.workbench.remoteRuntimeWork.v2.target-7.principal-7')).toBe(null)
+    expect(localStorage.getItem(cacheKey)).toBeNull()
+    expect(localStorage.getItem(legacyCacheKey)).toBeNull()
     expect(readCachedRemoteRuntimeWork(null)).toEqual({
       projects: [],
       chats: [],

@@ -168,9 +168,14 @@ impl ReplApp {
             .deferred_resumed_transcript
             .take()
             .expect("deferred transcript was checked above");
+        let extra_sources = self.messages.native_web_sources.clone();
         let extra_messages =
             self.messages[deferred.loaded_display_len.min(self.messages.len())..].to_vec();
-        let full_history = match deferred.history.load_all() {
+        let full_history = match deferred
+            .history
+            .load_entries_range(0..deferred.history.len())
+            .map(web_sources::messages_for_entries)
+        {
             Ok(messages) => messages,
             Err(error) => {
                 self.push_message(
@@ -181,7 +186,8 @@ impl ReplApp {
             }
         };
 
-        self.replace_transcript_from_history(&full_history);
+        self.replace_web_history(&full_history);
+        self.messages.native_web_sources.extend(&extra_sources);
         for message in extra_messages {
             self.messages.push(message);
         }
@@ -240,6 +246,7 @@ impl ReplApp {
     pub(super) fn clear_transcript_selection(&mut self) {
         self.transcript_selection = None;
         self.transcript_selection_rows = None;
+        self.transcript_selection_buffer = None;
         self.transcript_selection_drag_active = false;
     }
 
@@ -304,6 +311,7 @@ impl ReplApp {
         };
         self.transcript_selection = Some(TranscriptSelection::new(point));
         self.transcript_selection_rows = Some(self.last_transcript_visible_rows.clone());
+        self.transcript_selection_buffer = self.last_transcript_buffer.clone();
         self.transcript_selection_drag_active = true;
         true
     }
@@ -342,6 +350,8 @@ impl ReplApp {
                 .is_some()
         {
             self.set_transient_status("Text selected; press Ctrl+C to copy");
+        } else {
+            self.clear_transcript_selection();
         }
         true
     }

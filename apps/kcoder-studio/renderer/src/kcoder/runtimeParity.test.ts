@@ -46,7 +46,7 @@ describe('shared runtime contract across both compatibility facades', () => {
   test('separate runtime instances never share connection owners or replay state', () => {
     const standalone = create(Runtime)
     const installed = create(InstalledRuntime)
-    expect(installed.ownedRuntimeClients).not.toBe(standalone.ownedRuntimeClients)
+    expect(installed.connectionsByClient).not.toBe(standalone.connectionsByClient)
     expect(installed.clientByTask).not.toBe(standalone.clientByTask)
     expect(installed.notificationReplayGuard).not.toBe(standalone.notificationReplayGuard)
   })

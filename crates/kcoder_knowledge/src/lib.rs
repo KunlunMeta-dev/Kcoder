@@ -1,6 +1,12 @@
 //! Personal Wiki domain services, independent of UI, Engine and Provider.
 //! The host must construct a scope from its authenticated connection identity.
 mod catalog;
+mod directory_writer;
+mod migrations;
+#[cfg(test)]
+mod test_support;
+pub use directory_writer::DirectoryKnowledgeWriter;
+pub mod integrations;
 pub use catalog::{KnowledgeCatalog, KnowledgeScope, Library};
 
 mod search;
@@ -78,4 +84,6 @@ mod automatic_merge;
 pub use automatic_merge::WikiAutomaticMergeLease;
 
 mod image_import;
-pub use image_import::{ImageImportInput, ImageImportLease, ImageImportOriginal};
+pub use image_import::{
+    ImageImportClaimFacts, ImageImportInput, ImageImportLease, ImageImportOriginal,
+};

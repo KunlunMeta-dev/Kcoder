@@ -32,3 +32,16 @@ test('uses USERPROFILE for the Windows login-link path', () => {
   assert.equal(studioDataDirectory({ platform: 'win32', serversStore: 'C:\\StudioData\\servers.json' }), 'C:\\StudioData');
   assert.equal(studioLoginUrlPath({ platform: 'linux', serversStore: '/var/lib/kcoder/servers.json' }), '/var/lib/kcoder/studio-login-url.txt');
 });
+
+test('explicit Gateway data directory is independent of the target registry and target profile', () => {
+  for (const platform of ['linux', 'darwin']) {
+    assert.equal(studioDataDirectory({ platform, dataDirectory: '/private/gateway', serversStore: '/registry/servers.json' }), '/private/gateway');
+    assert.equal(studioLoginUrlPath({ platform, dataDirectory: '/private/gateway', serversStore: '/another/servers.json' }), '/private/gateway/studio-login-url.txt');
+  }
+  assert.equal(studioDataDirectory({ platform: 'win32', dataDirectory: 'D:\\Gateway', serversStore: 'C:\\Registry\\servers.json' }), 'D:\\Gateway');
+  for (const dataDirectory of ['relative/path', ' ', 3]) {
+    assert.throws(() => studioDataDirectory({ platform: 'linux', dataDirectory }), /must be an absolute path/);
+  }
+  assert.throws(() => studioDataDirectory({ platform: 'win32', dataDirectory: 'C:relative' }), /must be an absolute path/);
+  assert.equal(studioDataDirectory({ platform: 'linux', dataDirectory: '', serversStore: '/existing/servers.json' }), '/existing');
+});

@@ -1,3 +1,4 @@
+import { SettingsSelect } from '@/components/settings/SettingsSelect'
 import { useEffect, useState } from 'react'
 import { Check, GitBranch, LockKeyhole, Pencil, Search, Tag, Trash2, X } from 'lucide-react'
 import type {
@@ -255,7 +256,7 @@ export function CloudProjectManageView({
           成员只能访问被授权的云项目、任务、共享文件和交付。
         </p>
 
-        <div className="mt-6 overflow-hidden rounded-xl border border-border bg-background shadow-sm">
+        <div className="studio-card mt-6 overflow-hidden rounded-xl border border-border bg-background shadow-sm">
           {members.map((member, index) => (
             <div
               key={member.user_id}
@@ -278,7 +279,7 @@ export function CloudProjectManageView({
                 <span className="w-24 text-xs text-text-secondary">Owner</span>
               ) : (
                 <>
-                  <select
+                  <SettingsSelect
                     data-testid={`cloud-project-member-role-${member.user_id}`}
                     value={member.role}
                     onChange={event =>
@@ -292,7 +293,7 @@ export function CloudProjectManageView({
                     <option value="Maintainer">Maintainer</option>
                     <option value="Developer">Developer</option>
                     <option value="Reporter">Reporter</option>
-                  </select>
+                  </SettingsSelect>
                   <button
                     type="button"
                     data-testid={`cloud-project-member-remove-${member.user_id}`}
@@ -321,7 +322,7 @@ export function CloudProjectManageView({
                 placeholder="搜索用户名或邮箱"
               />
             </label>
-            <select
+            <SettingsSelect
               data-testid="cloud-member-role"
               value={role}
               onChange={event => setRole(event.target.value as CloudProjectMember['role'])}
@@ -330,10 +331,10 @@ export function CloudProjectManageView({
               <option value="Maintainer">Maintainer</option>
               <option value="Developer">Developer</option>
               <option value="Reporter">Reporter</option>
-            </select>
+            </SettingsSelect>
           </div>
           {visibleResults.length > 0 && (
-            <div className="mt-2 overflow-hidden rounded-xl border border-border bg-background shadow-sm">
+            <div className="studio-card mt-2 overflow-hidden rounded-xl border border-border bg-background shadow-sm">
               {visibleResults.map(user => (
                 <button
                   key={user.id}
@@ -389,7 +390,7 @@ export function CloudProjectManageView({
             </button>
           </div>
 
-          <div className="mt-4 overflow-hidden rounded-xl border border-border bg-background shadow-sm">
+          <div className="studio-card mt-4 overflow-hidden rounded-xl border border-border bg-background shadow-sm">
             {allTags.length === 0 && (
               <p className="px-4 py-6 text-center text-xs text-text-muted">
                 还没有标签，先新建一个吧
@@ -479,7 +480,7 @@ export function CloudProjectManageView({
               云端保存项目和访问令牌，本地 Executor 直接读取和更新{' '}
               {externalProvider === 'github' ? 'GitHub' : 'GitLab'} Issues。
             </p>
-            <div className="mt-4 rounded-xl border border-border bg-background p-4 shadow-sm">
+            <div className="studio-card-spacing mt-4 rounded-xl border border-border bg-background shadow-sm">
               <div className="flex items-center gap-2 text-sm font-medium">
                 <GitBranch className="h-4 w-4 text-text-secondary" />
                 {externalProvider === 'github' ? 'GitHub' : 'GitLab'}

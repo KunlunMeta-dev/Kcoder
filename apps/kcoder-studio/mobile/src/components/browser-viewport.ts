@@ -1,3 +1,6 @@
+import type { GatewayProfile, KCoderServer } from "@/gateway/types";
+import { normalizeTargetBrowserUrl } from "@/storage/browser-target-url";
+
 export interface BrowserViewport {
   width: number;
   height: number;
@@ -5,15 +8,58 @@ export interface BrowserViewport {
 
 export type BrowserGestureMode = "pending" | "scroll" | "drag";
 
+export class BrowserUrlNormalizationError extends Error {
+  constructor(readonly reason: string) {
+    super("Browser URL must be a valid HTTP(S) address without credentials");
+    this.name = "BrowserUrlNormalizationError";
+  }
+}
+
 export function normalizeBrowserUrl(value: string | null | undefined): string {
   const trimmed = typeof value === "string" ? value.trim() : "";
   if (!trimmed) return "https://example.com";
-  if (/^(localhost|\d{1,3}(?:\.\d{1,3}){3}|\[[\da-fA-F:.]+])(?::\d+)?(?:[/?#]|$)/.test(trimmed)) {
-    return `http://${trimmed}`;
-  }
-  if (/^[a-zA-Z][a-zA-Z\d+.-]*:/.test(trimmed)) return trimmed;
-  if (trimmed.startsWith("//")) return `https:${trimmed}`;
-  return `https://${trimmed}`;
+  const localHost = /^(localhost|\d{1,3}(?:\.\d{1,3}){3}|\[[\da-fA-F:.]+])(?::\d+)?(?:[/?#]|$)/.test(trimmed);
+  const candidate = localHost
+    ? `http://${trimmed}`
+    : trimmed.startsWith("//")
+      ? `https:${trimmed}`
+      : /^[a-zA-Z][a-zA-Z\d+.-]*:/.test(trimmed)
+        ? trimmed
+        : `https://${trimmed}`;
+  const normalized = normalizeTargetBrowserUrl(candidate);
+  if (!normalized.ok) throw new BrowserUrlNormalizationError(normalized.reason);
+  return normalized.url;
+}
+
+/** Stable non-secret key matching the exact Gateway browser connection scope. */
+export function workspaceBrowserOwnerKey(
+  profile: GatewayProfile,
+  server: KCoderServer,
+  cwd: string,
+): string {
+  return JSON.stringify([
+    profile.id,
+    profile.baseUrl,
+    profile.authorizationGeneration ?? `legacy:${profile.id}`,
+    profile.deviceId,
+    server.id,
+    server.runtime,
+    server.transport,
+    [server.workspacePath === undefined ? "absent" : "value", server.workspacePath ?? ""],
+    server.host,
+    server.user,
+    server.port,
+    server.command,
+    server.profile,
+    server.settingsFile,
+    server.accountIdentity?.principalId,
+    server.accountIdentity?.username,
+    server.accountIdentity?.role,
+    server.chromiumBin,
+    server.chromiumNoSandbox,
+    server.acceptNewHostKey,
+    ["value", cwd],
+  ]);
 }
 
 export function classifyBrowserGesture(

@@ -11,13 +11,16 @@ import { cn } from '@/lib/utils'
 import {
   Archive,
   BookOpen,
+  ListChecks,
   Clock3,
   FolderOpen,
   FolderPlus,
   GitCompareArrows,
   Globe2,
   Grid3X3,
+  GraduationCap,
   MessageSquarePlus,
+  Network,
   Sparkles,
   X,
 } from 'lucide-react'
@@ -107,8 +110,29 @@ export function SidebarWorklists({ model }: { model: SidebarModel }) {
       >
         <nav className="mb-4 space-y-0.5">
           <SidebarButton
+            icon={GraduationCap}
+            label={t('experts:title', '专家')}
+            testId="experts-button"
+            selected={activeItem === 'experts'}
+            onClick={() => navigateTo('/experts')}
+          />
+          <SidebarButton
+            icon={Network}
+            label={t('connectivity:channelsPage.title', '通道')}
+            testId="channels-button"
+            selected={activeItem === 'channels'}
+            onClick={() => navigateTo('/channels')}
+          />
+          <SidebarButton
+            icon={ListChecks}
+            label={t('taskWorkspace:title')}
+            testId="task-workspace-button"
+            selected={activeItem === 'task-space'}
+            onClick={() => navigateTo('/tasks')}
+          />
+          <SidebarButton
             icon={Clock3}
-            label={t('workbench.automations', '自动化')}
+            label={t('workbench.automations', '定时任务')}
             testId="automations-button"
             selected={activeItem === 'automation'}
             onClick={() => navigateTo('/automations')}

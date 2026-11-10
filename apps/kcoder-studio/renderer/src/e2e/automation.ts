@@ -7,16 +7,16 @@ import {
   type TestLocalModelConnectionInput,
   type TestLocalModelConnectionResult,
 } from '@/features/model-settings/localModelConnectionTest'
-import { isNativeTauriHost, isTauriRuntime } from '@/lib/runtime-environment'
+import { isGatewayRuntime } from '@/lib/runtime-environment'
 import { desktopHost } from '@/kcoder/desktopHost'
 import { createRandomUuid } from '@/lib/random-id'
-import { closeMainWindowToTray } from '@/tauri/runtimeTaskCloseGuard'
+import { closeMainWindowToTray } from '@/host/runtimeTaskCloseGuard'
 import {
   normalizeCloudBackendUrl,
   saveStoredCloudConnection,
 } from '@/features/cloud-connection/cloudConnectionStorage'
-import { invoke } from '@tauri-apps/api/core'
-import { getCurrentWindow } from '@tauri-apps/api/window'
+import { invoke } from '@/lib/runtime-commands'
+import { refreshProcessDiagnostics } from '@/lib/performanceDiagnostics'
 import {
   LOCAL_MODEL_SETTINGS_CHANGED_EVENT,
   saveLocalModelConfig,
@@ -42,10 +42,11 @@ interface DesktopControlResult {
   error?: string
 }
 
-export interface WeworkAutomationBridge {
+export interface StudioAutomationBridge {
   version: 1
   isEnabled: true
-  isTauri: () => boolean
+  isGateway: () => boolean
+  invokeRuntimeCommand: typeof invoke
   getRuntimeConfig: () => ReturnType<typeof getRuntimeConfig>
   getRoute: () => string
   navigate: (path: string) => string
@@ -64,11 +65,11 @@ export interface WeworkAutomationBridge {
 
 declare global {
   interface Window {
-    __KCODER_STUDIO_E2E__?: WeworkAutomationBridge
+    __KCODER_STUDIO_E2E__?: StudioAutomationBridge
   }
 }
 
-export function isWeworkAutomationEnabled(): boolean {
+export function isStudioAutomationEnabled(): boolean {
   return (
     Boolean(gatewayVerificationConfig()) ||
     import.meta.env.MODE === 'e2e' ||
@@ -78,8 +79,8 @@ export function isWeworkAutomationEnabled(): boolean {
 
 export function shouldUseNativeProjectDirectoryPicker(): boolean {
   return (
-    (isNativeTauriHost() || typeof desktopHost()?.pickWorkspacePaths === 'function') &&
-    (!isWeworkAutomationEnabled() ||
+    typeof desktopHost()?.pickWorkspacePaths === 'function' &&
+    (!isStudioAutomationEnabled() ||
       import.meta.env.VITE_KCODER_STUDIO_E2E_NATIVE_DIRECTORY_PICKER === 'true')
   )
 }
@@ -104,7 +105,7 @@ function normalizeAppPath(path: string): string {
 
 function dispatchNavigationEvents() {
   window.dispatchEvent(new PopStateEvent('popstate'))
-  window.dispatchEvent(new CustomEvent('wework:e2e:navigation'))
+  window.dispatchEvent(new CustomEvent('kcoder:e2e:navigation'))
 }
 
 function hasTestId(testId: string): boolean {
@@ -158,11 +159,12 @@ function createLocalModelCircuitBreakerFetcher(): typeof fetch {
   }) as typeof fetch
 }
 
-function createBridge(): WeworkAutomationBridge {
+function createBridge(): StudioAutomationBridge {
   return {
     version: 1,
     isEnabled: true,
-    isTauri: isTauriRuntime,
+    isGateway: isGatewayRuntime,
+    invokeRuntimeCommand: invoke,
     getRuntimeConfig,
     getRoute: () => stripAppBasePath(window.location.pathname),
     navigate: path => {
@@ -269,7 +271,7 @@ function seedDesktopE2ECloudConnection() {
 }
 
 export function installStudioAutomationBridge() {
-  if (!isWeworkAutomationEnabled() || typeof window === 'undefined') {
+  if (!isStudioAutomationEnabled() || typeof window === 'undefined') {
     return
   }
 
@@ -336,10 +338,7 @@ function desktopControlSnapshot(selector = 'body'): string {
 
 async function captureDesktopControlScreenshot(selector: string): Promise<string> {
   const restoreMainWindow = async () => {
-    const mainWindow = getCurrentWindow()
-    await mainWindow.show()
-    await mainWindow.unminimize()
-    await mainWindow.setFocus()
+    await desktopHost()?.windowAction('show')
     await new Promise<void>(resolve => window.setTimeout(resolve, 50))
   }
   const captureMainWebview = async () => {
@@ -716,9 +715,7 @@ async function executeDesktopControlCommand(command: DesktopControlCommand): Pro
       window.dispatchEvent(new CustomEvent(LOCAL_MODEL_SETTINGS_CHANGED_EVENT))
       return ''
     case 'performanceSnapshot': {
-      const processMemory = navigator.platform.toLowerCase().includes('mac')
-        ? await invoke('get_wework_process_snapshot')
-        : null
+      const processMemory = await refreshProcessDiagnostics()
       return JSON.stringify({
         timestamp: Date.now(),
         domNodeCount: document.getElementsByTagName('*').length,
@@ -727,9 +724,7 @@ async function executeDesktopControlCommand(command: DesktopControlCommand): Pro
       })
     }
     case 'focusMainWindow':
-      await getCurrentWindow().show()
-      await getCurrentWindow().unminimize()
-      await getCurrentWindow().setFocus()
+      await desktopHost()?.windowAction('show')
       return ''
     case 'drag':
       return dragDesktopControlElement(command)
@@ -938,9 +933,7 @@ async function runDesktopControlClient(url: string): Promise<void> {
       headers: desktopControlHeaders(),
     })
   if (!gatewayVerificationConfig()) {
-    await getCurrentWindow().show()
-    await getCurrentWindow().unminimize()
-    await getCurrentWindow().setFocus()
+    await desktopHost()?.windowAction('show')
   }
   let commandRequest = pollForCommand()
   await waitForDesktopControlTick()
@@ -999,6 +992,6 @@ async function runDesktopControlClient(url: string): Promise<void> {
 
 function installDesktopControlClient() {
   const url = desktopControlUrl()
-  if (!url || window.location.pathname.startsWith('/system-drag')) return
+  if (!url) return
   void runDesktopControlClient(url)
 }

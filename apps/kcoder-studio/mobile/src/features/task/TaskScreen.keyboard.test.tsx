@@ -157,9 +157,9 @@ async function simulateAndroidResizeHideRestore(behavior: "height" | undefined) 
   });
   await flushKeyboardUpdates();
 
-  // This synthetic order follows RN Android source: hide reports a zero-height
-  // keyboard at visibleViewArea.height while adjustResize has the root at 500 px.
-  // It characterizes RN's JS calculation, not the native event order on a device.
+  // This synthetic order invokes RN's Android hide path after adjustResize has
+  // reduced the root to 500 px. The installed KAV clears its stored keyboard
+  // event on hide; this characterizes JS event handling, not device event order.
   const didHide = keyboardListeners.get("keyboardDidHide");
   expect(didHide).toBeDefined();
   didHide?.({
@@ -170,14 +170,13 @@ async function simulateAndroidResizeHideRestore(behavior: "height" | undefined) 
   await flushKeyboardUpdates();
   expect(view.state.bottom).toBe(0);
 
-  // The OS restores the full root after the hide event. KAV retains that event,
-  // so its height calculation now treats the hidden keyboard's old Y as an inset.
+  // The root restores after hide, with no retained keyboard event to reapply an inset.
   await view._onLayout(layout(800));
   return { bottom: view.state.bottom, style: flattenStyle(view.render().props.style) };
 }
 
-function taskScreenBehaviorAttribute() {
-  const sourcePath = join(testDirectory, "TaskScreen.tsx");
+function keyboardSafeViewBehaviorAttribute() {
+  const sourcePath = join(testDirectory, "../../components/keyboard-safe-view.tsx");
   const source = readFileSync(sourcePath, "utf8");
   const sourceFile = ts.createSourceFile(
     sourcePath,
@@ -198,26 +197,26 @@ function taskScreenBehaviorAttribute() {
 }
 
 describe("TaskScreen keyboard layout", () => {
-  it("characterizes the installed RN Android KAV hide/frame-restore residual", async () => {
+  it("clears the installed RN Android KAV bottom after hide and frame restore", async () => {
     const result = await simulateAndroidResizeHideRestore("height");
 
     expect(result).toEqual({
-      bottom: 300,
-      style: { flex: 0, height: 500 },
+      bottom: 0,
+      style: { flex: 1 },
     });
   });
 
-  it("does not shrink the root when Android KAV behavior is disabled", async () => {
+  it("keeps the root flex after Android hide when KAV behavior is disabled", async () => {
     const result = await simulateAndroidResizeHideRestore(undefined);
 
     expect(result).toEqual({
-      bottom: 300,
+      bottom: 0,
       style: { flex: 1 },
     });
   });
 
   it("keeps iOS padding and leaves Android/Web without KAV behavior", () => {
-    const { behaviorAttribute, sourceFile } = taskScreenBehaviorAttribute();
+    const { behaviorAttribute, sourceFile } = keyboardSafeViewBehaviorAttribute();
     expect(behaviorAttribute).toBeDefined();
     const initializer = behaviorAttribute?.initializer;
     expect(initializer && ts.isJsxExpression(initializer)).toBe(true);
@@ -235,4 +234,23 @@ describe("TaskScreen keyboard layout", () => {
     expect(expression.whenTrue.getText(sourceFile)).toBe('"padding"');
     expect(expression.whenFalse.getText(sourceFile)).toBe("undefined");
   });
+});
+
+
+it("uses the keyboard-safe root with its actual safe-area top inset", () => {
+  const sourcePath = join(testDirectory, "TaskScreen.tsx");
+  const sourceFile = ts.createSourceFile(
+    sourcePath, readFileSync(sourcePath, "utf8"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX,
+  );
+  const roots: ts.JsxOpeningElement[] = [];
+  const visit = (node: ts.Node) => {
+    if (ts.isJsxOpeningElement(node) && node.tagName.getText(sourceFile) === "KeyboardSafeView") roots.push(node);
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+  expect(roots).toHaveLength(1);
+  const style = roots[0].attributes.properties.find(
+    (attribute) => ts.isJsxAttribute(attribute) && attribute.name.getText(sourceFile) === "style",
+  ) as ts.JsxAttribute;
+  expect(style.initializer?.getText(sourceFile)).toBe("{[styles.root, { paddingTop: insets.top }]}");
 });

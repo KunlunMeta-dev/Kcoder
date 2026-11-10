@@ -1,0 +1,513 @@
+{
+  "schemaVersion": 1,
+  "scope": "synthetic structured generator/oracle fixtures, not model task success",
+  "cases": [
+    {
+      "id": "SC-01",
+      "materials": [
+        {
+          "title": "会议记录.txt",
+          "text": "会议讨论季度安排，决定试点A，预算1234.56元；张华负责，截止日未提供。"
+        }
+      ],
+      "specification": {
+        "schemaVersion": 1,
+        "kind": "docx",
+        "title": "会议纪要",
+        "template": "report",
+        "sourceRefs": [
+          "SC-01-source-1@1"
+        ],
+        "paragraphs": [
+          {
+            "text": "会议决议",
+            "heading": 1
+          },
+          {
+            "text": "启动试点A，预算1234.56元。"
+          },
+          {
+            "text": "行动事项：张华负责；截止日期：待确认。"
+          },
+          {
+            "text": "来源：SC-01-source-1@1"
+          }
+        ]
+      },
+      "criteria": {
+        "requiredText": [
+          "会议决议",
+          "试点A",
+          "1234.56元",
+          "张华",
+          "截止日期：待确认"
+        ],
+        "forbiddenText": [
+          "已报送审批"
+        ],
+        "requiredSourceRefs": [
+          "SC-01-source-1@1"
+        ]
+      }
+    },
+    {
+      "id": "SC-02",
+      "materials": [
+        {
+          "title": "预算A.txt",
+          "text": "预算口径A为1234.56元。"
+        },
+        {
+          "title": "预算B.txt",
+          "text": "预算口径B为1300元。"
+        }
+      ],
+      "specification": {
+        "schemaVersion": 1,
+        "kind": "docx",
+        "title": "材料汇总",
+        "template": "report",
+        "sourceRefs": [
+          "SC-02-source-1@1",
+          "SC-02-source-2@1"
+        ],
+        "paragraphs": [
+          {
+            "text": "材料覆盖与冲突",
+            "heading": 1
+          },
+          {
+            "text": "两份材料均已列入。A为1234.56元，B为1300元。"
+          },
+          {
+            "text": "冲突1处：预算口径不一致，待确认。"
+          },
+          {
+            "text": "来源：SC-02-source-1@1；SC-02-source-2@1"
+          }
+        ]
+      },
+      "criteria": {
+        "requiredText": [
+          "1234.56元",
+          "1300元",
+          "冲突1处",
+          "待确认"
+        ],
+        "forbiddenText": [],
+        "requiredSourceRefs": [
+          "SC-02-source-1@1",
+          "SC-02-source-2@1"
+        ]
+      }
+    },
+    {
+      "id": "SC-03",
+      "materials": [
+        {
+          "title": "账目A.csv",
+          "text": "主键,金额\nA,1234.56\nB,200\nB,210"
+        },
+        {
+          "title": "账目B.csv",
+          "text": "主键,金额\nA,1234.56\nB,220"
+        }
+      ],
+      "specification": {
+        "schemaVersion": 1,
+        "kind": "xlsx",
+        "title": "主键核对",
+        "sourceRefs": [
+          "SC-03-source-1@1",
+          "SC-03-source-2@1"
+        ],
+        "sheets": [
+          {
+            "name": "核对明细",
+            "columns": [
+              {
+                "key": "id",
+                "title": "主键",
+                "type": "string"
+              },
+              {
+                "key": "a",
+                "title": "A金额",
+                "type": "number",
+                "unit": "元"
+              },
+              {
+                "key": "b",
+                "title": "B金额",
+                "type": "number",
+                "unit": "元"
+              },
+              {
+                "key": "note",
+                "title": "差异说明",
+                "type": "string"
+              }
+            ],
+            "rows": [
+              [
+                "A",
+                1234.56,
+                1234.56,
+                "一致"
+              ],
+              [
+                "B",
+                200,
+                null,
+                "重复主键；缺少可唯一匹配的值"
+              ],
+              [
+                "B",
+                210,
+                220,
+                "差异10元；待确认"
+              ]
+            ]
+          }
+        ]
+      },
+      "criteria": {
+        "requiredText": [
+          "1234.56",
+          "重复主键",
+          "差异10元"
+        ],
+        "expectedCells": [
+          {
+            "sheet": "核对明细",
+            "cell": "B2",
+            "value": 1234.56
+          },
+          {
+            "sheet": "核对明细",
+            "cell": "C3",
+            "value": null
+          },
+          {
+            "sheet": "核对明细",
+            "cell": "A4",
+            "value": "B"
+          }
+        ]
+      }
+    },
+    {
+      "id": "SC-04",
+      "materials": [
+        {
+          "title": "来源A.txt",
+          "text": "公开来源A于2026-10-23说明试点覆盖3个部门。"
+        },
+        {
+          "title": "失败记录.txt",
+          "text": "来源B抓取失败；不可引用为事实。"
+        }
+      ],
+      "specification": {
+        "schemaVersion": 1,
+        "kind": "docx",
+        "title": "资料调研",
+        "template": "report",
+        "sourceRefs": [
+          "SC-04-source-1@1",
+          "SC-04-source-2@1"
+        ],
+        "paragraphs": [
+          {
+            "text": "调研事实与覆盖",
+            "heading": 1
+          },
+          {
+            "text": "来源A（2026-10-23）：试点覆盖3个部门。"
+          },
+          {
+            "text": "来源B读取失败，未纳入事实结论。"
+          },
+          {
+            "text": "来源：SC-04-source-1@1；SC-04-source-2@1"
+          }
+        ]
+      },
+      "criteria": {
+        "requiredText": [
+          "2026-10-23",
+          "3个部门",
+          "来源B读取失败",
+          "未纳入事实结论"
+        ],
+        "forbiddenText": [],
+        "requiredSourceRefs": [
+          "SC-04-source-1@1",
+          "SC-04-source-2@1"
+        ]
+      }
+    },
+    {
+      "id": "SC-05",
+      "materials": [
+        {
+          "title": "背景.txt",
+          "text": "拟开展专项核对，预算1234.56元；机关名称、文号、审批结果均未提供。"
+        }
+      ],
+      "specification": {
+        "schemaVersion": 1,
+        "kind": "docx",
+        "title": "专项工作请示（草稿）",
+        "template": "report",
+        "sourceRefs": [
+          "SC-05-source-1@1"
+        ],
+        "paragraphs": [
+          {
+            "text": "专项工作请示（草稿）",
+            "heading": 1
+          },
+          {
+            "text": "预算依据：1234.56元。"
+          },
+          {
+            "text": "报送对象：[待确认]；文号：[待确认]；审批结果：[待确认]。"
+          },
+          {
+            "text": "保留原始材料，不代办报送或审批。"
+          },
+          {
+            "text": "来源：SC-05-source-1@1"
+          }
+        ]
+      },
+      "criteria": {
+        "requiredText": [
+          "1234.56元",
+          "文号：[待确认]",
+          "审批结果：[待确认]",
+          "不代办报送或审批"
+        ],
+        "forbiddenText": [
+          "沪政发",
+          "已经批准"
+        ],
+        "requiredSourceRefs": [
+          "SC-05-source-1@1"
+        ]
+      }
+    },
+    {
+      "id": "SC-06",
+      "materials": [
+        {
+          "title": "周报.txt",
+          "text": "2026-10-19至2026-10-23，资料收集已完成，预算复核进行中，审批意见未知。"
+        }
+      ],
+      "specification": {
+        "schemaVersion": 1,
+        "kind": "docx",
+        "title": "阶段工作报告",
+        "template": "report",
+        "sourceRefs": [
+          "SC-06-source-1@1"
+        ],
+        "paragraphs": [
+          {
+            "text": "报告周期：2026-10-19至2026-10-23",
+            "heading": 1
+          },
+          {
+            "text": "已完成：资料收集。"
+          },
+          {
+            "text": "进行中：预算复核。"
+          },
+          {
+            "text": "未知事项：审批意见。"
+          },
+          {
+            "text": "来源：SC-06-source-1@1"
+          }
+        ]
+      },
+      "criteria": {
+        "requiredText": [
+          "2026-10-19至2026-10-23",
+          "已完成：资料收集",
+          "进行中：预算复核",
+          "未知事项：审批意见"
+        ],
+        "forbiddenText": [],
+        "requiredSourceRefs": [
+          "SC-06-source-1@1"
+        ]
+      }
+    },
+    {
+      "id": "SC-07",
+      "materials": [
+        {
+          "title": "制度v2.txt",
+          "text": "制度v2自2026-10-01生效，仅适用试点部门；v1已失效。"
+        }
+      ],
+      "specification": {
+        "schemaVersion": 1,
+        "kind": "docx",
+        "title": "制度答复",
+        "template": "report",
+        "sourceRefs": [
+          "SC-07-source-1@1"
+        ],
+        "paragraphs": [
+          {
+            "text": "适用依据",
+            "heading": 1
+          },
+          {
+            "text": "采用制度v2，自2026-10-01生效，仅适用试点部门。"
+          },
+          {
+            "text": "制度v1已失效，不作为当前依据。"
+          },
+          {
+            "text": "来源：SC-07-source-1@1"
+          }
+        ]
+      },
+      "criteria": {
+        "requiredText": [
+          "制度v2",
+          "2026-10-01",
+          "仅适用试点部门",
+          "v1已失效"
+        ],
+        "forbiddenText": [],
+        "requiredSourceRefs": [
+          "SC-07-source-1@1"
+        ]
+      }
+    },
+    {
+      "id": "SC-08",
+      "materials": [
+        {
+          "title": "汇报材料.txt",
+          "text": "需10页，项目A金额1234.56元，B金额200元，日期未提供。"
+        }
+      ],
+      "specification": {
+        "schemaVersion": 1,
+        "kind": "pptx",
+        "title": "专项工作汇报",
+        "template": "briefing",
+        "sourceRefs": [
+          "SC-08-source-1@1"
+        ],
+        "slides": [
+          {
+            "title": "专项汇报 1",
+            "paragraphs": [
+              "核对金额1234.56元；未提供的日期保留待确认。"
+            ],
+            "notes": "来源：SC-08-source-1@1"
+          },
+          {
+            "title": "专项汇报 2",
+            "paragraphs": [
+              "核对金额1234.56元；未提供的日期保留待确认。"
+            ],
+            "notes": "来源：SC-08-source-1@1"
+          },
+          {
+            "title": "专项汇报 3",
+            "paragraphs": [
+              "核对金额1234.56元；未提供的日期保留待确认。"
+            ],
+            "notes": "来源：SC-08-source-1@1"
+          },
+          {
+            "title": "专项汇报 4",
+            "paragraphs": [
+              "核对金额1234.56元；未提供的日期保留待确认。"
+            ],
+            "notes": "来源：SC-08-source-1@1",
+            "chart": {
+              "type": "bar",
+              "labels": [
+                "项目A",
+                "项目B"
+              ],
+              "series": [
+                {
+                  "name": "金额",
+                  "values": [
+                    1234.56,
+                    200
+                  ]
+                }
+              ],
+              "unit": "元"
+            }
+          },
+          {
+            "title": "专项汇报 5",
+            "paragraphs": [
+              "核对金额1234.56元；未提供的日期保留待确认。"
+            ],
+            "notes": "来源：SC-08-source-1@1"
+          },
+          {
+            "title": "专项汇报 6",
+            "paragraphs": [
+              "核对金额1234.56元；未提供的日期保留待确认。"
+            ],
+            "notes": "来源：SC-08-source-1@1"
+          },
+          {
+            "title": "专项汇报 7",
+            "paragraphs": [
+              "核对金额1234.56元；未提供的日期保留待确认。"
+            ],
+            "notes": "来源：SC-08-source-1@1"
+          },
+          {
+            "title": "专项汇报 8",
+            "paragraphs": [
+              "核对金额1234.56元；未提供的日期保留待确认。"
+            ],
+            "notes": "来源：SC-08-source-1@1"
+          },
+          {
+            "title": "专项汇报 9",
+            "paragraphs": [
+              "核对金额1234.56元；未提供的日期保留待确认。"
+            ],
+            "notes": "来源：SC-08-source-1@1"
+          },
+          {
+            "title": "专项汇报 10",
+            "paragraphs": [
+              "核对金额1234.56元；未提供的日期保留待确认。"
+            ],
+            "notes": "来源：SC-08-source-1@1"
+          }
+        ]
+      },
+      "criteria": {
+        "requiredText": [
+          "1234.56",
+          "待确认"
+        ],
+        "requiredSourceRefs": [
+          "SC-08-source-1@1"
+        ],
+        "expectedSlides": 10,
+        "minimumCharts": 1
+      }
+    }
+  ]
+}

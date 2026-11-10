@@ -365,8 +365,8 @@ impl SlashCommand for ImportCommand {
         let path = engine.cwd.join(path);
         match engine.state.import_snapshot(&path) {
             Ok(count) => {
-                let messages = engine.state.messages();
-                app.replace_transcript_from_history(&messages);
+                let messages = crate::web_sources::messages_for_state(&engine.state);
+                app.replace_web_history(&messages);
                 app.plan_mode = engine.state.plan_mode();
                 app.push_message(
                     MessageRole::System,
@@ -647,6 +647,9 @@ impl SlashCommand for ResumeCommand {
             return SlashResult::Handled;
         }
 
+        if let Some(task) = app.migration_task.take() {
+            task.stop().await;
+        }
         crate::resume_session_from_history_path(&path, engine, app);
         SlashResult::Handled
     }

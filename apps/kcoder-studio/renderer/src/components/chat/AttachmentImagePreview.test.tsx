@@ -3,13 +3,19 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import type { Attachment } from '@/types/api'
 import { AttachmentImagePreview } from './AttachmentImagePreview'
 
-const tauriCoreMock = vi.hoisted(() => ({
-  convertFileSrc: vi.fn((path: string) => `asset://localhost/${path.replace(/^\/+/, '')}`),
+const runtimeCommandMock = vi.hoisted(() => ({
+  clientResourceUrl: vi.fn((path: string) => `asset://localhost/${path.replace(/^\/+/, '')}`),
   invoke: vi.fn(),
-  isTauri: vi.fn(() => false),
+  isGateway: vi.fn(() => false),
 }))
 
-vi.mock('@tauri-apps/api/core', () => tauriCoreMock)
+vi.mock('@/lib/client-resource-url', () => runtimeCommandMock)
+vi.mock('@/lib/runtime-environment', async original => ({
+  ...(await original<typeof import('@/lib/runtime-environment')>()),
+  isGatewayRuntime: runtimeCommandMock.isGateway,
+}))
+vi.mock('@/lib/runtime-commands', () => ({ invoke: runtimeCommandMock.invoke }))
+
 
 const previewProps = {
   buttonTestId: 'attachment-preview-button',
@@ -36,47 +42,47 @@ function createAttachment(id: number, localPreviewUrl: string): Attachment {
 
 describe('AttachmentImagePreview', () => {
   beforeEach(() => {
-    tauriCoreMock.convertFileSrc.mockImplementation(
+    runtimeCommandMock.clientResourceUrl.mockImplementation(
       (path: string) => `asset://localhost/${path.replace(/^\/+/, '')}`
     )
-    tauriCoreMock.invoke.mockResolvedValue(true)
-    tauriCoreMock.isTauri.mockReturnValue(false)
+    runtimeCommandMock.invoke.mockResolvedValue(true)
+    runtimeCommandMock.isGateway.mockReturnValue(false)
   })
 
   afterEach(() => {
     vi.restoreAllMocks()
-    tauriCoreMock.convertFileSrc.mockReset()
-    tauriCoreMock.invoke.mockReset()
-    tauriCoreMock.isTauri.mockReset()
+    runtimeCommandMock.clientResourceUrl.mockReset()
+    runtimeCommandMock.invoke.mockReset()
+    runtimeCommandMock.isGateway.mockReset()
   })
 
   test('does not retry an invoke failure when the attachment object is rebuilt with the same preview identity', async () => {
-    tauriCoreMock.isTauri.mockReturnValue(true)
-    tauriCoreMock.invoke.mockResolvedValue(false)
+    runtimeCommandMock.isGateway.mockReturnValue(true)
+    runtimeCommandMock.invoke.mockResolvedValue(false)
     const attachment = createAttachment(901, '/tmp/attachment-preview-invoke-failure.png')
     const { rerender } = render(
       <AttachmentImagePreview attachment={attachment} {...previewProps} />
     )
 
     expect(await screen.findByTestId('attachment-preview-error')).toBeInTheDocument()
-    expect(tauriCoreMock.invoke).toHaveBeenCalledTimes(1)
-    expect(tauriCoreMock.invoke).toHaveBeenCalledWith('local_path_exists', {
+    expect(runtimeCommandMock.invoke).toHaveBeenCalledTimes(1)
+    expect(runtimeCommandMock.invoke).toHaveBeenCalledWith('local_path_exists', {
       path: attachment.local_preview_url,
     })
 
     rerender(<AttachmentImagePreview attachment={{ ...attachment }} {...previewProps} />)
 
-    expect(tauriCoreMock.invoke).toHaveBeenCalledTimes(1)
+    expect(runtimeCommandMock.invoke).toHaveBeenCalledTimes(1)
     expect(screen.getByTestId('attachment-preview-error')).toBeInTheDocument()
-    expect(tauriCoreMock.convertFileSrc).not.toHaveBeenCalled()
+    expect(runtimeCommandMock.clientResourceUrl).not.toHaveBeenCalled()
   })
 
   test('retries after a conversion failure when the preview identity changes', async () => {
     const firstAttachment = createAttachment(902, '/tmp/attachment-preview-conversion-failure.png')
     const secondAttachment = createAttachment(902, '/tmp/attachment-preview-conversion-retry.png')
-    tauriCoreMock.convertFileSrc
+    runtimeCommandMock.clientResourceUrl
       .mockImplementationOnce(() => {
-        throw new Error('convertFileSrc unavailable')
+        throw new Error('clientResourceUrl unavailable')
       })
       .mockImplementation((path: string) => `asset://localhost/${path.replace(/^\/+/, '')}`)
     const { rerender } = render(
@@ -91,11 +97,11 @@ describe('AttachmentImagePreview', () => {
       'src',
       'asset://localhost/tmp/attachment-preview-conversion-retry.png'
     )
-    expect(tauriCoreMock.convertFileSrc).toHaveBeenNthCalledWith(
+    expect(runtimeCommandMock.clientResourceUrl).toHaveBeenNthCalledWith(
       1,
       firstAttachment.local_preview_url
     )
-    expect(tauriCoreMock.convertFileSrc).toHaveBeenNthCalledWith(
+    expect(runtimeCommandMock.clientResourceUrl).toHaveBeenNthCalledWith(
       2,
       secondAttachment.local_preview_url
     )

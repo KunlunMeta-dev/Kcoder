@@ -1,5 +1,6 @@
 import type { GatewayProfile, KCoderServer } from "@/gateway/types";
 import { TaskRuntime, type StagedAttachment } from "@/runtime/task-runtime";
+import type { SourceAgentQuestionRouteFocus } from "@/features/interaction-inbox/locator";
 import { type WorkspaceViewState } from "@/storage/workspace-preferences";
 
 export interface AttachmentAsset {
@@ -25,6 +26,7 @@ export type AgentPanelProps = {
   initialDraft?: string;
   initialQueuedMessages?: WorkspaceViewState["queuedMessages"];
   initialFailedSubmissions?: WorkspaceViewState["failedSubmissions"];
+  interactionRouteSourceAgentFocus?: SourceAgentQuestionRouteFocus | null;
   onDraftChange?(value: string | undefined): void | Promise<void>;
   onQueuedMessagesChange?(
     value: WorkspaceViewState["queuedMessages"],

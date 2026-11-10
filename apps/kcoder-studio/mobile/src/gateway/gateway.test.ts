@@ -4,6 +4,7 @@ import { allowHttpGatewayForEnvironment } from "../../app.config";
 import { pairingRouteFromSystemPath, parsePairingLink } from "./pairing";
 import { buildGatewayRpcUrl } from "./rpc";
 import type { GatewayProfile, KCoderServer } from "./types";
+import { t } from "@/i18n";
 
 const profile: GatewayProfile = {
   id: "vm",
@@ -32,7 +33,16 @@ describe("Gateway 地址和配对", () => {
     expect(allowHttpGatewayForEnvironment({ NODE_ENV: "production", KCODER_STUDIO_ALLOW_HTTP: "1" })).toBe(true);
     expect(allowHttpGatewayForEnvironment({ NODE_ENV: "development" })).toBe(false);
     expect(normalizedBaseUrl("gateway.example.com", false)).toBe("https://gateway.example.com");
-    expect(() => normalizedBaseUrl("http://gateway.example.com", false)).toThrow("只允许 HTTPS");
+    expect(() => normalizedBaseUrl("http://gateway.example.com", false)).toThrow(t("connect.gateway_https_required"));
+  });
+
+  it("正式连接错误不向用户展示开发开关，也不把本机地址当成手机目标", () => {
+    expect(() => normalizedBaseUrl("http://127.0.0.1:49542", false)).toThrow(t("connect.gateway_loopback"));
+    expect(() => normalizedBaseUrl("https://localhost:49542", false)).toThrow(t("connect.gateway_loopback"));
+    expect(() => normalizedBaseUrl("http://gateway.example.com", false)).toThrow(t("connect.gateway_https_required"));
+    try { normalizedBaseUrl("http://127.0.0.1:49542", false); } catch (error) {
+      expect(String(error)).not.toContain("ALLOW_HTTP");
+    }
   });
 
   it("解析 KCoder 配对链接并提供中文错误", () => {

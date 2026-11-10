@@ -10,15 +10,17 @@ import { usePluginTargetScope } from '@/kcoder/usePluginTargetScope'
 import { WorkflowCanvas } from './WorkflowCanvas'
 import { workflowApi, type WorkflowDefinition, type WorkflowRun } from './workflowApi'
 import { workflowReferenceKey, type WorkflowReference } from './workflowReferences'
+import { useRetainedPageActive } from '@/components/layout/retainedPageState'
 export function WorkflowExecutionCanvas(props: {
   serverId: string
+  workspacePath?: string
   threadId: string
   reference: WorkflowReference
   onClose: () => void
   active: boolean
   onOpenAgent?: (agentId: string, context?: { runId: string; nodeId: string }) => void
 }) {
-  const scope = usePluginTargetScope(props.serverId)
+  const scope = usePluginTargetScope(props.serverId, props.workspacePath)
   return (
     <ExecutionCanvas
       key={`${scope.key}:${workflowReferenceKey(props.reference)}`}
@@ -29,6 +31,7 @@ export function WorkflowExecutionCanvas(props: {
 }
 function ExecutionCanvas({
   serverId,
+  workspacePath,
   threadId,
   reference,
   onClose,
@@ -37,6 +40,7 @@ function ExecutionCanvas({
   onOpenAgent,
 }: {
   serverId: string
+  workspacePath?: string
   threadId: string
   reference: WorkflowReference
   onClose: () => void
@@ -67,11 +71,12 @@ function ExecutionCanvas({
     cancelOutput()
     setOutputBusy(false)
   }, [cancelOutput])
+  const pageActive = useRetainedPageActive()
   useEffect(() => {
     let cached: WorkflowDefinition | null = null
     let identityMismatch = false
     const stop = startWorkflowPolling({
-      active,
+      active: active && pageActive,
       isCurrent,
       changes: { serverId, definitionId: reference.id, runId: reference.runId },
       poll: async (isLive, signal) => {
@@ -80,12 +85,12 @@ function ExecutionCanvas({
           cached ??
           (reference.version
             ? await workflowApi.exportDefinition(serverId, reference.id, reference.version, {
-                signal,
+                signal, workspacePath,
               })
-            : await workflowApi.read(serverId, reference.id, undefined, { signal }))
+            : await workflowApi.read(serverId, reference.id, undefined, { signal, workspacePath }))
         if (!isLive()) return false
         const next = reference.runId
-          ? await workflowApi.run(serverId, reference.runId, latest.current, { signal })
+          ? await workflowApi.run(serverId, reference.runId, latest.current, { signal, workspacePath })
           : null
         if (!isLive()) return false
         if (
@@ -100,6 +105,7 @@ function ExecutionCanvas({
           (next.runId !== reference.runId ||
             next.definitionId !== reference.id ||
             next.version !== reference.version ||
+            (workspacePath !== undefined && next.workspace !== workspacePath) ||
             (threadId.startsWith(`kcoder:${serverId}:`)
               ? threadId.slice(`kcoder:${serverId}:`.length)
               : threadId) !== next.threadId)
@@ -133,7 +139,9 @@ function ExecutionCanvas({
       invalidateOutputs()
     }
   }, [
+      pageActive,
     serverId,
+    workspacePath,
     threadId,
     reference.id,
     reference.version,
@@ -185,7 +193,7 @@ function ExecutionCanvas({
     setOutputError('')
     try {
       const value = await workflowApi.output(serverId, reference.runId, selected, offset, {
-        signal,
+        signal, workspacePath,
       })
       if (!signal.aborted && isCurrent() && revision === outputRevision.current)
         setOutput({ nodeId: selected, text: value.text, next: value.nextOffset ?? null })
@@ -311,8 +319,9 @@ function ExecutionCanvas({
       )}
       {active && run && ['running', 'interrupted'].includes(run.status) && (
         <WorkflowPendingPanel
-          key={`${serverId}:${run.runId}`}
+          key={`${serverId}:${workspacePath ?? ''}:${run.runId}`}
           serverId={serverId}
+          workspacePath={workspacePath}
           runId={run.runId}
           isCurrent={isCurrent}
           active={active}

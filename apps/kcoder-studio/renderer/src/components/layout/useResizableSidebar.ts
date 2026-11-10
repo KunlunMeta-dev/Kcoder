@@ -4,7 +4,8 @@ const DEFAULT_SIDEBAR_WIDTH = 240
 const MIN_SIDEBAR_WIDTH = 240
 const MAX_SIDEBAR_WIDTH = 480
 const COLLAPSE_SIDEBAR_WIDTH = 168
-const SIDEBAR_WIDTH_STORAGE_KEY = 'wework.desktop.sidebar.width'
+const SIDEBAR_WIDTH_STORAGE_KEY = 'kcoder.desktop.sidebar.width'
+const LEGACY_SIDEBAR_WIDTH_STORAGE_KEY = 'wework.desktop.sidebar.width'
 
 function clampSidebarWidth(width: number): number {
   return Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, width))
@@ -13,7 +14,9 @@ function clampSidebarWidth(width: number): number {
 function readStoredSidebarWidth(): number {
   if (typeof window === 'undefined') return DEFAULT_SIDEBAR_WIDTH
 
-  const storedWidth = window.localStorage.getItem(SIDEBAR_WIDTH_STORAGE_KEY)
+  const storedWidth =
+    window.localStorage.getItem(SIDEBAR_WIDTH_STORAGE_KEY) ??
+    window.localStorage.getItem(LEGACY_SIDEBAR_WIDTH_STORAGE_KEY)
   const parsedWidth = storedWidth ? Number(storedWidth) : DEFAULT_SIDEBAR_WIDTH
 
   if (!Number.isFinite(parsedWidth)) {

@@ -2,7 +2,7 @@
 
 use super::*;
 
-pub(super) fn table_column_count(table_state: &TableState) -> usize {
+pub fn table_column_count(table_state: &TableState) -> usize {
     let header_cols = table_state.header.as_ref().map_or(0, Vec::len);
     let row_cols = table_state
         .rows
@@ -13,12 +13,12 @@ pub(super) fn table_column_count(table_state: &TableState) -> usize {
     table_state.alignments.len().max(header_cols).max(row_cols)
 }
 
-pub(super) fn normalize_table_row(row: &mut Vec<TableCell>, column_count: usize) {
+pub fn normalize_table_row(row: &mut Vec<TableCell>, column_count: usize) {
     row.resize_with(column_count, TableCell::default);
     row.truncate(column_count);
 }
 
-pub(super) fn table_column_widths(
+pub fn table_column_widths(
     header: &[TableCell],
     rows: &[Vec<TableCell>],
     column_count: usize,
@@ -37,7 +37,7 @@ pub(super) fn table_column_widths(
         .collect()
 }
 
-pub(super) fn table_rendered_width(widths: &[usize]) -> usize {
+pub fn table_rendered_width(widths: &[usize]) -> usize {
     if widths.is_empty() {
         return 0;
     }
@@ -46,7 +46,7 @@ pub(super) fn table_rendered_width(widths: &[usize]) -> usize {
         + (widths.len() * TABLE_CELL_PADDING * 2)
 }
 
-pub(super) fn constrained_table_column_widths(
+pub fn constrained_table_column_widths(
     natural_widths: &[usize],
     metrics: &[TableColumnMetrics],
     width: Option<usize>,
@@ -99,7 +99,7 @@ pub(super) fn constrained_table_column_widths(
     }
 }
 
-pub(super) fn collect_table_column_metrics(
+pub fn collect_table_column_metrics(
     header: &[TableCell],
     rows: &[Vec<TableCell>],
     column_count: usize,
@@ -165,10 +165,7 @@ pub(super) fn collect_table_column_metrics(
     metrics
 }
 
-pub(super) fn preferred_column_floor(
-    metrics: &TableColumnMetrics,
-    min_column_width: usize,
-) -> usize {
+pub fn preferred_column_floor(metrics: &TableColumnMetrics, min_column_width: usize) -> usize {
     let token_target = match metrics.kind {
         TableColumnKind::Narrative | TableColumnKind::TokenHeavy => 16,
         TableColumnKind::Compact => metrics
@@ -180,7 +177,7 @@ pub(super) fn preferred_column_floor(
         .min(metrics.max_width.max(min_column_width))
 }
 
-pub(super) fn next_column_to_shrink(
+pub fn next_column_to_shrink(
     widths: &[usize],
     floors: &[usize],
     metrics: &[TableColumnMetrics],
@@ -199,7 +196,7 @@ pub(super) fn next_column_to_shrink(
         .map(|(idx, _)| idx)
 }
 
-pub(super) fn column_shrink_priority(kind: TableColumnKind) -> usize {
+pub fn column_shrink_priority(kind: TableColumnKind) -> usize {
     match kind {
         TableColumnKind::TokenHeavy => 0,
         TableColumnKind::Narrative => 1,
@@ -207,14 +204,14 @@ pub(super) fn column_shrink_priority(kind: TableColumnKind) -> usize {
     }
 }
 
-pub(super) fn longest_token_width(text: &str) -> usize {
+pub fn longest_token_width(text: &str) -> usize {
     text.split_whitespace()
         .map(unicode_width::UnicodeWidthStr::width)
         .max()
         .unwrap_or(0)
 }
 
-pub(super) fn table_should_render_records(
+pub fn table_should_render_records(
     rows: &[Vec<TableCell>],
     column_widths: &[usize],
     metrics: &[TableColumnMetrics],
@@ -256,7 +253,7 @@ pub(super) fn table_should_render_records(
     affected_rows >= threshold
 }
 
-pub(super) fn expansive_cells_are_starved(
+pub fn expansive_cells_are_starved(
     row: &[TableCell],
     column_widths: &[usize],
     metrics: &[TableColumnMetrics],
@@ -288,7 +285,7 @@ pub(super) fn expansive_cells_are_starved(
         })
 }
 
-pub(super) fn is_table_spillover_row(row: &TableBodyRow, next_row: Option<&TableBodyRow>) -> bool {
+pub fn is_table_spillover_row(row: &TableBodyRow, next_row: Option<&TableBodyRow>) -> bool {
     let Some(first_text) = first_non_empty_only_cell_text(&row.cells) else {
         return false;
     };
@@ -317,7 +314,7 @@ pub(super) fn is_table_spillover_row(row: &TableBodyRow, next_row: Option<&Table
     false
 }
 
-pub(super) fn first_non_empty_only_cell_text(row: &[TableCell]) -> Option<String> {
+pub fn first_non_empty_only_cell_text(row: &[TableCell]) -> Option<String> {
     let first = row.first()?.text();
     if first.trim().is_empty() {
         return None;
@@ -328,7 +325,7 @@ pub(super) fn first_non_empty_only_cell_text(row: &[TableCell]) -> Option<String
         .then_some(first)
 }
 
-pub(super) fn looks_like_html_content(text: &str) -> bool {
+pub fn looks_like_html_content(text: &str) -> bool {
     let bytes = text.as_bytes();
     for (idx, &byte) in bytes.iter().enumerate() {
         if byte != b'<' {
@@ -354,7 +351,7 @@ pub(super) fn looks_like_html_content(text: &str) -> bool {
     false
 }
 
-pub(super) fn looks_like_html_label_line(text: &str) -> bool {
+pub fn looks_like_html_label_line(text: &str) -> bool {
     let trimmed = text.trim();
     if !trimmed.ends_with(':') {
         return false;
@@ -365,7 +362,7 @@ pub(super) fn looks_like_html_label_line(text: &str) -> bool {
         .any(|word| word.eq_ignore_ascii_case("html"))
 }
 
-pub(super) fn table_cell_to_hyperlink_line(cell: TableCell) -> HyperlinkLine {
+pub fn table_cell_to_hyperlink_line(cell: TableCell) -> HyperlinkLine {
     HyperlinkLine {
         line: Line::from(cell.spans),
         hyperlinks: cell.hyperlinks,
@@ -373,11 +370,11 @@ pub(super) fn table_cell_to_hyperlink_line(cell: TableCell) -> HyperlinkLine {
     }
 }
 
-pub(super) fn table_cell_width(cell: &TableCell) -> usize {
+pub fn table_cell_width(cell: &TableCell) -> usize {
     unicode_width::UnicodeWidthStr::width(cell.text().as_str())
 }
 
-pub(super) fn render_table_row(
+pub fn render_table_row(
     row: &[TableCell],
     alignments: &[Alignment],
     widths: &[usize],
@@ -466,17 +463,13 @@ pub(super) fn render_table_row(
     rows
 }
 
-pub(super) fn push_table_padding(spans: &mut Vec<Span<'static>>, width: usize) {
+pub fn push_table_padding(spans: &mut Vec<Span<'static>>, width: usize) {
     if width > 0 {
         spans.push(Span::raw(" ".repeat(width)));
     }
 }
 
-pub(super) fn wrap_table_cell(
-    cell: &TableCell,
-    width: usize,
-    base_style: Style,
-) -> Vec<HyperlinkLine> {
+pub fn wrap_table_cell(cell: &TableCell, width: usize, base_style: Style) -> Vec<HyperlinkLine> {
     let mut line = HyperlinkLine {
         line: Line::from(
             cell.spans
@@ -502,7 +495,7 @@ pub(super) fn wrap_table_cell(
     }
 }
 
-pub(super) fn render_table_records(
+pub fn render_table_records(
     header: &[TableCell],
     rows: &[Vec<TableCell>],
     metrics: &[TableColumnMetrics],
@@ -595,11 +588,11 @@ pub(super) fn render_table_records(
     output
 }
 
-pub(super) fn widest_hyperlink_line_width(lines: &[HyperlinkLine]) -> usize {
+pub fn widest_hyperlink_line_width(lines: &[HyperlinkLine]) -> usize {
     lines.iter().map(HyperlinkLine::width).max().unwrap_or(0)
 }
 
-pub(super) fn render_table_pipe_fallback(
+pub fn render_table_pipe_fallback(
     header: &[TableCell],
     rows: &[Vec<TableCell>],
     alignments: &[Alignment],
@@ -617,7 +610,7 @@ pub(super) fn render_table_pipe_fallback(
     output
 }
 
-pub(super) fn row_to_pipe_line(row: &[TableCell], body_style: Style) -> HyperlinkLine {
+pub fn row_to_pipe_line(row: &[TableCell], body_style: Style) -> HyperlinkLine {
     let mut spans = Vec::new();
     let mut hyperlinks = Vec::new();
     let mut column = 0usize;
@@ -635,7 +628,7 @@ pub(super) fn row_to_pipe_line(row: &[TableCell], body_style: Style) -> Hyperlin
     }
 }
 
-pub(super) fn append_table_cell_to_pipe_line(
+pub fn append_table_cell_to_pipe_line(
     cell: &TableCell,
     spans: &mut Vec<Span<'static>>,
     hyperlinks: &mut Vec<TerminalHyperlink>,
@@ -692,17 +685,13 @@ pub(super) fn append_table_cell_to_pipe_line(
     }
 }
 
-pub(super) fn push_pipe_line_segment(
-    spans: &mut Vec<Span<'static>>,
-    segment: &mut String,
-    style: Style,
-) {
+pub fn push_pipe_line_segment(spans: &mut Vec<Span<'static>>, segment: &mut String, style: Style) {
     if !segment.is_empty() {
         spans.push(Span::styled(std::mem::take(segment), style));
     }
 }
 
-pub(super) fn push_pipe_line_text(
+pub fn push_pipe_line_text(
     spans: &mut Vec<Span<'static>>,
     column: &mut usize,
     text: &str,
@@ -712,7 +701,7 @@ pub(super) fn push_pipe_line_text(
     *column = column.saturating_add(unicode_width::UnicodeWidthStr::width(text));
 }
 
-pub(super) fn alignments_to_pipe_delimiter(alignments: &[Alignment]) -> String {
+pub fn alignments_to_pipe_delimiter(alignments: &[Alignment]) -> String {
     let mut output = String::new();
     output.push('|');
     for alignment in alignments {
@@ -728,7 +717,7 @@ pub(super) fn alignments_to_pipe_delimiter(alignments: &[Alignment]) -> String {
     output
 }
 
-pub(super) fn prefix_hyperlink_line(
+pub fn prefix_hyperlink_line(
     prefix: &mut Vec<Span<'static>>,
     mut line: HyperlinkLine,
 ) -> HyperlinkLine {
@@ -752,7 +741,7 @@ pub(super) fn prefix_hyperlink_line(
 }
 
 #[allow(dead_code)]
-pub(super) fn aligned_table_cell_spans(
+pub fn aligned_table_cell_spans(
     cell: &TableCell,
     alignment: Alignment,
     width: usize,
@@ -794,7 +783,7 @@ pub(super) fn aligned_table_cell_spans(
     (spans, hyperlinks)
 }
 
-pub(super) fn render_table_separator(
+pub fn render_table_separator(
     widths: &[usize],
     separator_char: char,
     style: Style,

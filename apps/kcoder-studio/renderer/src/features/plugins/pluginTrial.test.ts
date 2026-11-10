@@ -125,6 +125,19 @@ describe('plugin trial state', () => {
     expect(consumePluginTrialInput()).toBeNull()
   })
 
+  test('consumes an old draft once and discards it when a newer draft is queued', () => {
+    const legacyKey = 'wework:pending-plugin-trial'
+    const legacyDraft = JSON.stringify({ input: 'Old draft' })
+    sessionStorage.setItem(legacyKey, legacyDraft)
+    expect(consumePluginTrialInput()).toBe('Old draft')
+    expect(consumePluginTrialInput()).toBeNull()
+
+    sessionStorage.setItem(legacyKey, legacyDraft)
+    queuePluginInstallationConversation('New draft', 'demo')
+    expect(consumePluginTrialInput()).toBe('New draft')
+    expect(consumePluginTrialInput()).toBeNull()
+  })
+
   test('queues a canonical plugin reference without an installed plugin record', () => {
     expect(
       queuePluginReferenceTrial({

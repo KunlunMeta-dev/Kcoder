@@ -2336,6 +2336,40 @@ fn completed_tool_status_does_not_retain_full_raw_output() {
 }
 
 #[test]
+fn literal_truncation_phrase_does_not_stop_streaming_deltas() {
+    let mut app = ReplApp::default();
+    app.enqueue_streaming_text_delta("literal TUI display truncated");
+    app.enqueue_streaming_text_delta(" followed by more text");
+    assert_eq!(
+        app.streaming_text_pending,
+        "literal TUI display truncated followed by more text"
+    );
+    app.drain_pending_streaming_text_all();
+    app.append_streaming_text(" TUI display truncated");
+    app.append_streaming_text(" and another delta");
+    let text = app
+        .active_turn
+        .as_ref()
+        .unwrap()
+        .display_messages(false)
+        .into_iter()
+        .map(|message| message.text)
+        .collect::<String>();
+    assert!(text.ends_with("TUI display truncated and another delta"));
+
+    app.append_streaming_thinking("literal TUI display truncated");
+    app.append_streaming_thinking(" and continued thinking");
+    assert!(
+        app.streaming_thinking_buffer
+            .ends_with("and continued thinking")
+    );
+    assert!(
+        app.streaming_thinking_status
+            .ends_with("and continued thinking")
+    );
+}
+
+#[test]
 fn active_streaming_text_is_capped_for_tui_memory() {
     let mut app = ReplApp::default();
     let raw = format!(

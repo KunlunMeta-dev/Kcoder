@@ -1,4 +1,5 @@
 import type { StagedAttachment } from "./task-runtime";
+import type { PermissionMode } from "@/protocol/task-permission-mode";
 import { MAX_QUEUED_TASK_MESSAGES, MAX_TASK_MESSAGE_CHARACTERS } from "@/protocol/task-message-limits";
 
 export interface QueuedTaskMessage {
@@ -7,6 +8,8 @@ export interface QueuedTaskMessage {
   attachments: StagedAttachment[];
   createdAt: number;
   staging?: boolean;
+  /** Fixed before the first dispatch attempt and reused with this stable id. */
+  permissionMode?: PermissionMode;
 }
 
 type Listener = () => void;
@@ -50,10 +53,36 @@ export class TaskMessageQueue {
     });
   }
 
-  persistProjection(operation: () => Promise<void>): Promise<void> {
+  persistProjection<T>(operation: () => Promise<T>): Promise<T> {
     const next = this.preparationTail.catch(() => {}).then(operation);
-    this.preparationTail = next;
+    this.preparationTail = next.then(() => undefined, () => undefined);
     return next;
+  }
+
+  freezePermissionMode(
+    id: string,
+    requestedMode: PermissionMode,
+    persist: (messages: QueuedTaskMessage[]) => Promise<void>,
+  ): Promise<PermissionMode> {
+    return this.persistProjection(async () => {
+      const current = this.items.find((item) => item.id === id);
+      if (!current || current.staging) throw new Error("排队消息已移除");
+      const permissionMode = current.permissionMode ?? requestedMode;
+      if (current.permissionMode !== permissionMode) {
+        this.items = this.items.map((item) =>
+          item.id === id ? { ...item, permissionMode } : item,
+        );
+        this.emit();
+      }
+      const messages = this.items
+        .filter((item) => !item.staging)
+        .map(({ staging: _staging, ...item }) => item);
+      // Keep the in-memory choice even if persistence fails. The caller must
+      // not dispatch until this commit succeeds; a later attempt retries this
+      // exact value instead of recapturing the UI selection.
+      await persist(messages);
+      return permissionMode;
+    });
   }
 
   first(): QueuedTaskMessage | undefined {

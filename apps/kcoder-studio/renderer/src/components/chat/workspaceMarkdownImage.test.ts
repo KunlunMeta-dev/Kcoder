@@ -1,8 +1,17 @@
 import { describe, expect, test, vi } from 'vitest'
+import { encodeWorkspaceMarkdownImageSrc, localPathFromMarkdownImageSrc } from './assistantMarkdownLinks'
 import {
   MAX_WORKSPACE_MARKDOWN_IMAGE_BYTES,
   readWorkspaceMarkdownImage,
 } from './workspaceMarkdownImage'
+
+test('encodes new image links with the KCoder host and reads existing links', () => {
+  const path = 'images/example.png'
+  const encoded = encodeWorkspaceMarkdownImageSrc(path)
+  expect(encoded).toBe('https://kcoder.invalid/markdown-workspace-image?path=images%2Fexample.png')
+  expect(localPathFromMarkdownImageSrc(encoded)).toBe(path)
+  expect(localPathFromMarkdownImageSrc(encoded.replace('kcoder.invalid', 'wework.local'))).toBe(path)
+})
 
 describe('readWorkspaceMarkdownImage', () => {
   test.each(['opaque-first', 'opaque-replaced', undefined])(

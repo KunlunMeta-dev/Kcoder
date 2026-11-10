@@ -21,13 +21,13 @@ vi.mock('@/hooks/useQuickPhrases', () => ({
   ],
 }))
 
-vi.mock('@tauri-apps/api/core', () => ({
-  convertFileSrc: (path: string) => `asset://localhost/${path}`,
+vi.mock('@/lib/client-resource-url', () => ({
+  clientResourceUrl: (path: string) => `asset://localhost/${path}`,
 }))
 
 vi.mock('@/lib/navigation', () => ({ navigateTo: vi.fn() }))
 
-vi.mock('@/tauri/appPreferences', () => ({
+vi.mock('@/host/appPreferences', () => ({
   getAppPreferences: appPreferenceMocks.get,
   updateAppPreferences: appPreferenceMocks.update,
 }))

@@ -10,6 +10,9 @@ use std::{
 
 pub(crate) struct ObjectStore {
     root: PathBuf,
+    existing_root: Option<kcoder_config::PrivateDirectory>,
+    existing_parent: Option<(kcoder_config::PrivateDirectory, std::ffi::OsString)>,
+    held_writer: Option<kcoder_config::PrivateDirectory>,
 }
 impl ObjectStore {
     pub fn open(root: PathBuf) -> Result<Self> {
@@ -21,9 +24,159 @@ impl ObjectStore {
             root.parent()
                 .context("knowledge object root has no parent")?,
         )?;
-        Ok(Self { root })
+        Ok(Self {
+            root,
+            existing_root: None,
+            existing_parent: None,
+            held_writer: None,
+        })
+    }
+    /// Observe a private existing root without creating, syncing or repairing it.
+    pub(crate) fn open_existing(root: PathBuf) -> Result<Self> {
+        let directory = kcoder_config::PrivateDirectory::open_existing(&root)?;
+        directory.verify_private_directory()?;
+        let store = Self {
+            root: fs::canonicalize(root)?,
+            existing_root: Some(directory),
+            existing_parent: None,
+            held_writer: None,
+        };
+        store.verify_existing_root()?;
+        Ok(store)
+    }
+    pub(crate) fn open_existing_child(
+        parent: kcoder_config::PrivateDirectory,
+        name: &std::ffi::OsStr,
+    ) -> Result<Self> {
+        let directory = parent.open_child(name, false)?;
+        directory.verify_private_directory()?;
+        // All read I/O and continuity checks use these held parent/child FDs.
+        // The writer path is intentionally absent and cannot be used in this mode.
+        let store = Self {
+            root: PathBuf::new(),
+            existing_root: Some(directory),
+            existing_parent: Some((parent, name.to_os_string())),
+            held_writer: None,
+        };
+        store.verify_existing_root()?;
+        Ok(store)
+    }
+    fn verify_existing_root(&self) -> Result<()> {
+        if let Some(original) = self.existing_root.as_ref().or(self.held_writer.as_ref()) {
+            original.verify_private_directory()?;
+            let current = if let Some((parent, name)) = &self.existing_parent {
+                parent.verify_private_directory()?;
+                parent.open_child(name, false)?
+            } else {
+                kcoder_config::PrivateDirectory::open_existing(&self.root)?
+            };
+            current.verify_private_directory()?;
+            ensure!(
+                current.directory_identity()? == original.directory_identity()?,
+                "knowledge object root changed"
+            );
+        }
+        Ok(())
+    }
+    pub(crate) fn open_writer_child(
+        parent: kcoder_config::PrivateDirectory,
+        name: &std::ffi::OsStr,
+    ) -> Result<Self> {
+        let directory = parent.open_child(name, true)?;
+        directory.verify_private_directory()?;
+        parent.sync()?;
+        let store = Self {
+            root: PathBuf::new(),
+            existing_root: None,
+            existing_parent: Some((parent, name.to_os_string())),
+            held_writer: Some(directory),
+        };
+        store.verify_existing_root()?;
+        Ok(store)
+    }
+    pub(crate) fn verify_held_writer(&self) -> Result<()> {
+        self.verify_existing_root()
+    }
+
+    fn held_library(&self, library: &str) -> Result<kcoder_config::PrivateDirectory> {
+        self.verify_existing_root()?;
+        let id = uuid::Uuid::parse_str(library).context("invalid library id")?;
+        let root = self
+            .held_writer
+            .as_ref()
+            .context("held object writer unavailable")?;
+        let directory = root.open_child(std::ffi::OsStr::new(&id.to_string()), true)?;
+        directory.verify_private_directory()?;
+        root.sync()?;
+        Ok(directory)
+    }
+    fn put_held_reader(
+        &self,
+        library: &str,
+        reader: &mut impl Read,
+        length: u64,
+        expected: &str,
+    ) -> Result<()> {
+        ensure!(length <= 32 * 1024 * 1024, "revision object too large");
+        validate_hash(expected)?;
+        let directory = self.held_library(library)?;
+        let name = format!("{expected}.md");
+        let state = std::cell::RefCell::new((Sha256::new(), 0u64));
+        struct Hashed<'a, R> {
+            reader: R,
+            state: &'a std::cell::RefCell<(Sha256, u64)>,
+        }
+        impl<R: Read> Read for Hashed<'_, R> {
+            fn read(&mut self, bytes: &mut [u8]) -> std::io::Result<usize> {
+                let count = self.reader.read(bytes)?;
+                let mut state = self.state.borrow_mut();
+                state.0.update(&bytes[..count]);
+                state.1 += count as u64;
+                Ok(count)
+            }
+        }
+        let mut stream = Hashed {
+            reader: reader.take(length),
+            state: &state,
+        };
+        let published = directory.atomic_publish_from_reader(
+            std::ffi::OsStr::new(&name),
+            &mut stream,
+            false,
+            || {
+                let state = state.borrow();
+                ensure!(
+                    state.1 == length && format!("{:x}", state.0.clone().finalize()) == expected,
+                    "revision object integrity failure"
+                );
+                self.verify_existing_root()?;
+                Ok(None)
+            },
+        );
+        match published {
+            Ok(_) => {}
+            Err(error)
+                if error.chain().any(|e| {
+                    e.downcast_ref::<std::io::Error>()
+                        .is_some_and(|e| e.kind() == std::io::ErrorKind::AlreadyExists)
+                }) =>
+            {
+                ensure!(
+                    self.object_len(library, expected)? == length,
+                    "revision object integrity failure"
+                );
+                self.copy_object_to(library, expected, &mut std::io::sink())?;
+                directory.sync()?;
+            }
+            Err(error) => return Err(error),
+        }
+        self.verify_existing_root()
     }
     fn directory(&self, library: &str) -> Result<PathBuf> {
+        ensure!(
+            self.existing_root.is_none() && self.held_writer.is_none(),
+            "knowledge object store is read-only"
+        );
         let id = uuid::Uuid::parse_str(library).context("invalid library id")?;
         let path = self.root.join(id.to_string());
         private_dir(&path)?;
@@ -34,6 +187,10 @@ impl ObjectStore {
     }
     /// Only for a newly allocated unpublished import library owned by the caller.
     pub(crate) fn remove_library_unpublished(&self, library: &str) -> Result<()> {
+        ensure!(
+            self.existing_root.is_none() && self.held_writer.is_none(),
+            "knowledge object store is read-only"
+        );
         let id = uuid::Uuid::parse_str(library).context("invalid library id")?;
         let path = self.root.join(id.to_string());
         let metadata = match fs::symlink_metadata(&path) {
@@ -52,6 +209,15 @@ impl ObjectStore {
     }
     pub fn put_bytes(&self, library: &str, content: &[u8]) -> Result<String> {
         let hash = digest(content);
+        if self.held_writer.is_some() {
+            self.put_held_reader(
+                library,
+                &mut std::io::Cursor::new(content),
+                content.len() as u64,
+                &hash,
+            )?;
+            return Ok(hash);
+        }
         let dir = self.directory(library)?;
         let path = dir.join(format!("{hash}.md"));
         if path.try_exists()? {
@@ -117,6 +283,7 @@ impl ObjectStore {
             format!("{:x}", hasher.finalize()) == hash,
             "revision object integrity failure"
         );
+        self.verify_existing_root()?;
         Ok(total)
     }
 
@@ -130,6 +297,9 @@ impl ObjectStore {
     ) -> Result<()> {
         ensure!(length <= 32 * 1024 * 1024, "revision object too large");
         validate_hash(expected_hash)?;
+        if self.held_writer.is_some() {
+            return self.put_held_reader(library, reader, length, expected_hash);
+        }
         let dir = self.directory(library)?;
         let mut temporary = tempfile::NamedTempFile::new_in(&dir)?;
         let mut hasher = Sha256::new();
@@ -168,6 +338,20 @@ impl ObjectStore {
     fn open_object(&self, library: &str, hash: &str) -> Result<fs::File> {
         validate_hash(hash)?;
         let id = uuid::Uuid::parse_str(library).context("invalid library id")?;
+        if let Some(original) = self.existing_root.as_ref().or(self.held_writer.as_ref()) {
+            self.verify_existing_root()?;
+            let directory = original
+                .open_entry_handle(std::ffi::OsStr::new(&id.to_string()))?
+                .open_child_directory()?;
+            directory.verify_private_directory()?;
+            let file = directory
+                .open_single_link_regular_file(std::ffi::OsStr::new(&format!("{hash}.md")))?;
+            ensure!(
+                file.metadata()?.len() <= 32 * 1024 * 1024,
+                "revision object too large"
+            );
+            return Ok(file);
+        }
         let dir = self.root.join(id.to_string());
         let meta = fs::symlink_metadata(&dir)?;
         ensure!(
@@ -202,6 +386,9 @@ fn sync_object_directory(_directory: &Path) -> Result<()> {
     Ok(())
 }
 
+#[cfg(test)]
+#[path = "objects_observation_tests.rs"]
+mod observation_tests;
 #[cfg(all(test, unix))]
 #[path = "objects_tests.rs"]
 mod tests;

@@ -79,8 +79,9 @@ await runE2E(import.meta.url, {
   await page.getByTestId("create-workspace").click();
   await page.getByTestId("stop-turn").waitFor({ state: "visible", timeout: 30_000 });
   await page.locator('[aria-label="更多"]:visible').click();
-  const taskMenu = page.getByLabel("任务操作");
+  const taskMenu = page.getByTestId("task-menu-sheet");
   await taskMenu.waitFor({ state: "visible", timeout: 10_000 });
+  await taskMenu.getByTestId("task-menu-management").click();
   const compactWhileRunning = taskMenu.getByTestId("compact-task");
   assert.equal(await compactWhileRunning.getAttribute("aria-disabled"), "true", "任务运行中必须向用户暴露禁用状态");
   assert.equal(rpcRequests.some(request => request.method === "thread/compact"), false);
@@ -106,6 +107,7 @@ await runE2E(import.meta.url, {
 
   await page.locator('[aria-label="更多"]:visible').click();
   await taskMenu.waitFor({ state: "visible", timeout: 10_000 });
+  await taskMenu.getByTestId("task-menu-management").click();
   const compactIdle = taskMenu.getByTestId("compact-task");
   assert.notEqual(await compactIdle.getAttribute("aria-disabled"), "true", "空闲任务必须允许压缩上下文");
   await compactIdle.click();
@@ -124,6 +126,7 @@ await runE2E(import.meta.url, {
   }
   await page.locator('[aria-label="更多"]:visible').click();
   await taskMenu.waitFor({ state: "visible", timeout: 10_000 });
+  await taskMenu.getByTestId("task-menu-management").click();
   await taskMenu.getByTestId("compact-task").click();
   const compactNotice = taskMenu.getByText(/上下文已压缩（\d+ → \d+ tokens）/);
   await compactNotice.waitFor({ state: "visible", timeout: 60_000 }).catch(async error => {

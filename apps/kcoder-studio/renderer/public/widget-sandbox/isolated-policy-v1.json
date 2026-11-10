@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "csp": "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; font-src 'none'; frame-src 'none'; object-src 'none'; form-action 'none'; base-uri 'none'",
+  "documentSha256": "23604e7a1d4558dd464d4c49b526ee63c0a30f2c5830c4aca0a0db2df8aae7c9",
+  "runtimeSha256": "836d63f56b8416427ad8886dfee39a9204c2b200a3580c8388ee649607b20b22",
+  "requiresNativeProcessAuthorization": true
+}

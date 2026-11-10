@@ -3,6 +3,18 @@ import { normalizeAbsoluteWorkspacePath } from '@/lib/workspace-file-path'
 import type { RuntimeSubagentListResponse, RuntimeSubagentSummary } from '@/types/subagents'
 import { record, text } from './contracts'
 import type { GatewayRuntimeCore } from './core'
+import {
+  isAgentArtifactReadResult,
+  isAgentLiveReadResult,
+  isAgentMessageReadResult,
+} from '../../../../../shared/generated/contractGuards.mjs'
+import {
+  exactAgentConnection,
+  exactAgentUnavailable,
+  requestedAgentRun,
+  sameAgentRun,
+  verifyAgentReply,
+} from './agentRunConstraint'
 
 /** Bind every observation/mutation to the task's actual target and account generation. */
 export async function agentConnection(
@@ -40,7 +52,10 @@ export async function listSubagents(
   this: GatewayRuntimeCore,
   params: Record<string, unknown>
 ): Promise<RuntimeSubagentListResponse> {
-  const { task, server, client, assertCurrent } = await agentConnection(this, params)
+  const expected = requestedAgentRun(params)
+  const { task, server, client, assertCurrent } = expected
+    ? await exactAgentConnection(this, params, expected)
+    : await agentConnection(this, params)
   if (
     client.supportsExperimental?.('agentSteering') !== true &&
     client.supportsExperimental?.('agentArtifactsV1') !== true
@@ -51,6 +66,14 @@ export async function listSubagents(
     { threadId: task.threadId }
   )
   assertCurrent()
+  if (
+    expected &&
+    (result.threadId !== expected.parentSessionId ||
+      !result.agents.some(
+        agent => agent.agentId === expected.agentId && sameAgentRun(agent.backgroundRun, expected)
+      ))
+  )
+    throw exactAgentUnavailable()
   const principal = server.accountIdentity?.principalId
   if (server.security?.identity.mode === 'kcoder-account' && !principal)
     throw new Error('KCoder account identity is unavailable')
@@ -71,6 +94,9 @@ export async function listSubagents(
       receipts: client.supportsExperimental?.('agentCommandReceiptsV1') === true,
       steering: client.supportsExperimental?.('agentSteering') === true,
       stop: client.supportsExperimental?.('agentStopV1') === true,
+      exactRun: client.supportsExperimental?.('agentExactRunV1') === true,
+      exactControl: client.supportsExperimental?.('agentExactControlV1') === true,
+      exactContinuation: client.supportsExperimental?.('agentExactContinuationV1') === true,
     },
   }
 }
@@ -80,10 +106,15 @@ export async function agentRequest(
   method: string,
   capability: string
 ) {
-  const { task, client, assertCurrent } = await agentConnection(this, params)
+  const expected = requestedAgentRun(params)
+  if (expected && !['agent/live/read', 'agent/stop', 'agent/message/read'].includes(method)) throw exactAgentUnavailable()
+  const { task, client, assertCurrent } = expected
+    ? await exactAgentConnection(this, params, expected, method === 'agent/stop' ? 'agentStopV1' : method === 'agent/message/read' ? 'agentExactControlV1' : 'agentExactRunV1')
+    : await agentConnection(this, params)
   requireCapability(client, capability)
   const id = agentId(params)
   const fields: Record<string, unknown> = { threadId: task.threadId, agentId: id }
+  if (expected) fields.expectedBackgroundRun = expected
   if (method === 'agent/live/read' && params.previousRevision !== undefined)
     fields.previousRevision = params.previousRevision
   if (method === 'agent/message/read') fields.clientMessageId = params.clientMessageId
@@ -105,10 +136,27 @@ export async function agentRequest(
   assertCurrent()
   const result = await client.request(method, fields)
   assertCurrent()
+  if (expected) {
+    if (method === 'agent/live/read') {
+      if (!isAgentLiveReadResult(result)) throw exactAgentUnavailable()
+      verifyAgentReply(result, expected)
+    } else if (method === 'agent/message/read') {
+      if (!isAgentMessageReadResult(result) || result.threadId !== expected.parentSessionId
+        || result.agentId !== expected.agentId || result.clientMessageId !== params.clientMessageId
+        || (result.receipt && !sameAgentRun(result.receipt.backgroundRun, expected))) throw exactAgentUnavailable()
+    } else {
+      const value = record(result)
+      if (value.threadId !== expected.parentSessionId || value.agentId !== expected.agentId
+        || !sameAgentRun(value.expectedBackgroundRun, expected)) throw exactAgentUnavailable()
+    }
+  }
   return result
 }
 export async function readAgentArtifact(this: GatewayRuntimeCore, params: Record<string, unknown>) {
-  const { task, client, assertCurrent } = await agentConnection(this, params)
+  const expected = requestedAgentRun(params)
+  const { task, client, assertCurrent } = expected
+    ? await exactAgentConnection(this, params, expected)
+    : await agentConnection(this, params)
   if (client.supportsExperimental?.('agentArtifactsV1') !== true)
     throw new Error('KCoder app-server 不支持 subagent 报告读取')
   const kind = text(params.kind) === 'transcript' ? 'transcript' : 'output'
@@ -140,6 +188,7 @@ export async function readAgentArtifact(this: GatewayRuntimeCore, params: Record
     threadId: task.threadId,
     agentId: id,
     kind,
+    ...(expected ? { expectedBackgroundRun: expected } : {}),
     ...(pages
       ? {
           ...(params.offset !== undefined ? { offset: params.offset } : {}),
@@ -150,6 +199,10 @@ export async function readAgentArtifact(this: GatewayRuntimeCore, params: Record
       : {}),
   })
   assertCurrent()
+  if (expected) {
+    if (!isAgentArtifactReadResult(result)) throw exactAgentUnavailable()
+    verifyAgentReply(result, expected)
+  }
   return result
 }
 
@@ -157,7 +210,10 @@ export async function subscribeAgentConversation(
   this: GatewayRuntimeCore,
   params: Record<string, unknown>
 ) {
-  const { task, server, client, assertCurrent } = await agentConnection(this, params)
+  const expected = requestedAgentRun(params)
+  const { task, server, client, assertCurrent } = expected
+    ? await exactAgentConnection(this, params, expected)
+    : await agentConnection(this, params)
   requireCapability(client, 'agentConversationStreamV1')
   const id = agentId(params)
   const subscriptionId = text(params.subscriptionId)
@@ -194,6 +250,7 @@ export async function subscribeAgentConversation(
     threadId: task.threadId,
     agentId: id,
     assertCurrent,
+    expectedBackgroundRun: expected,
     removeCloseListener: () => client.removeEventListener('close', onClose),
   })
   try {
@@ -201,8 +258,18 @@ export async function subscribeAgentConversation(
       threadId: task.threadId,
       agentId: id,
       subscriptionId,
+      ...(expected ? { expectedBackgroundRun: expected } : {}),
     })
     assertCurrent()
+    if (expected) {
+      const value = record(result)
+      if (
+        value.threadId !== expected.parentSessionId ||
+        value.agentId !== expected.agentId ||
+        value.runId !== expected.runId
+      )
+        throw exactAgentUnavailable()
+    }
     return result
   } catch (error) {
     client.removeEventListener('close', onClose)

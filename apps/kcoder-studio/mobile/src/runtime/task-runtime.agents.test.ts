@@ -1,5 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest";
 import type { JsonRecord } from "@/gateway/rpc";
+import { selectorForInteraction } from "./task-runtime/interactions";
 import { TaskRuntime, taskRuntimeTestHelpers } from "./task-runtime";
 import {
   FakeClient,
@@ -44,6 +45,8 @@ async function connect(client: AgentClient) {
     profile,
     server,
     threadId: "thread-1",
+    profileActivationEpoch: 1,
+    isCurrentInteractionOwner: () => true,
   });
   client.calls = [];
   return task;
@@ -102,6 +105,10 @@ it("ignoring one source question responds only to its ledger entry and never sto
     id: 11,
     method: "question/request",
     params: {
+      serverId: "server-engine-test",
+      threadId: "thread-1",
+      turnId: "turn-agent",
+      appServerEpoch: "epoch-agent",
       questionId: "child",
       sourceAgent: { parentSessionId: "thread-1", agentId: "worker" },
       questions: [],
@@ -111,7 +118,14 @@ it("ignoring one source question responds only to its ledger entry and never sto
     jsonrpc: "2.0",
     id: 12,
     method: "question/request",
-    params: { questionId: "parent", questions: [] },
+    params: {
+      serverId: "server-engine-test",
+      threadId: "thread-1",
+      turnId: "turn-agent",
+      appServerEpoch: "epoch-agent",
+      questionId: "parent",
+      questions: [],
+    },
   });
   task.patch({ running: true });
   task.respondAgentQuestions("worker", 11, {}, true);
@@ -127,6 +141,37 @@ it("ignoring one source question responds only to its ledger entry and never sto
   );
   task.close();
 });
+it("source-agent reply selector distinguishes a reused request ID across app-server epochs", async () => {
+  const client = new AgentClient([]), task = await connect(client);
+  const notify = (appServerEpoch: string, turnId: string) => task.handleRpc({
+    jsonrpc: "2.0",
+    id: 21,
+    method: "question/request",
+    params: {
+      serverId: "server-engine-test",
+      threadId: "thread-1",
+      turnId,
+      appServerEpoch,
+      questionId: "reused-question",
+      sourceAgent: { parentSessionId: "thread-1", agentId: "worker" },
+      questions: [],
+    },
+  });
+  notify("epoch-old", "turn-old");
+  const old = task.pendingInteractions[0]!;
+  task.markInteractionsDisconnected();
+  task.clientGeneration += 1;
+  notify("epoch-new", "turn-new");
+  const current = task.pendingInteractions.find((item) => item.owner.appServerEpoch === "epoch-new")!;
+  expect(() => task.respondAgentQuestions(
+    "worker", current.requestId, {}, true, selectorForInteraction(current),
+  )).toThrow(/失效|只支持核对/);
+  expect(client.responses).toEqual([]);
+  expect(task.pendingInteractions.find((item) => item.owner.appServerEpoch === "epoch-old")?.responding).not.toBe(true);
+  expect(task.pendingInteractions.find((item) => item.owner.appServerEpoch === "epoch-new")?.responding).not.toBe(true);
+  expect(old.owner.originClientGeneration).not.toBe(current.owner.originClientGeneration);
+  task.close();
+});
 it("source attribution requires the actual parent session rather than an agent-looking title", async () => {
   const task = await connect(new AgentClient([]));
   task.handleRpc({
@@ -134,15 +179,18 @@ it("source attribution requires the actual parent session rather than an agent-l
     id: 13,
     method: "question/request",
     params: {
+      serverId: "server-engine-test",
+      threadId: "thread-1",
+      turnId: "turn-agent",
+      appServerEpoch: "epoch-agent",
       questionId: "foreign",
       sourceAgent: { parentSessionId: "foreign-parent", agentId: "worker" },
       questions: [],
     },
   });
-  expect(
-    task.snapshot.interaction?.kind === "question" &&
-      task.snapshot.interaction.sourceAgent,
-  ).toBeUndefined();
+  expect(task.snapshot.interaction?.kind === "question"
+    ? task.snapshot.interaction.sourceAgent
+    : undefined).toBeUndefined();
   task.close();
 });
 

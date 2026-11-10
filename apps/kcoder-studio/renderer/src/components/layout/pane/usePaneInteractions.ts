@@ -1,6 +1,5 @@
 import type { RequestUserInputPayload } from '@/components/chat/RequestUserInputCard'
 import {
-  requestUserInputPayloadKey,
   requestUserInputRelatedKeysForPayloads,
 } from '@/components/chat/requestUserInputMessages'
 import { localRuntimeAttachments, remoteAttachmentIds } from '@/lib/runtime-attachments'
@@ -10,7 +9,7 @@ import {
 } from '@/lib/runtime-terminal-context'
 import type { RequestUserInputResponse, RuntimeRollbackRequest } from '@/types/api'
 import type { WorkbenchMessage } from '@/types/workbench'
-import { useCallback } from 'react'
+import { useCallback, useLayoutEffect, useMemo, useRef } from 'react'
 import { runtimeAddressDebug } from './paneDiagnostics'
 import {
   createLocalUserMessage,
@@ -36,19 +35,24 @@ export function usePaneInteractions(context: ReturnType<typeof usePaneSend>) {
     getRuntimeModelFields,
     applyLocalRequestUserInputResponse,
   } = context
+  const questionOwnerKey = JSON.stringify(currentRuntimeTask)
+  const questionVisit = useMemo(() => ({ key: questionOwnerKey }), [questionOwnerKey])
+  const questionOwner = useRef<object | null>(null)
+  const pendingQuestionIgnore = useRef<object | null>(null)
+  useLayoutEffect(() => {
+    questionOwner.current = questionVisit
+    return () => { questionOwner.current = null }
+  }, [questionVisit])
   const sendRequestUserInputResponse = useCallback(
     async (
-      response: RequestUserInputResponse,
+      responseValue: RequestUserInputResponse,
       options: SendRequestUserInputResponseOptions = {}
     ): Promise<boolean> => {
-      if (!currentRuntimeTask) return false
+      if (!currentRuntimeTask || questionOwner.current !== questionVisit) return false
 
+      // Keep the dispatched identity and answer fixed through the receipt wait.
+      const response: RequestUserInputResponse = JSON.parse(JSON.stringify(responseValue))
       const message = requestUserInputResponseText(response)
-      const requestUserInputKeys = requestUserInputRelatedKeysForPayloads(
-        requestUserInputAliasTrackerRef.current.previousPayloads,
-        response,
-        requestUserInputAliasTrackerRef.current.aliasesByKey
-      )
       const runtimeModelOverride = options.forceDefaultCollaborationMode
         ? { collaborationMode: 'default' }
         : undefined
@@ -59,15 +63,6 @@ export function usePaneInteractions(context: ReturnType<typeof usePaneSend>) {
       if (appendedUserMessage) {
         dispatchMessages({ type: 'user_added', message: appendedUserMessage })
       }
-      if (requestUserInputKeys.length > 0) {
-        updateAnsweredRequestUserInputIds(current => {
-          if (requestUserInputKeys.every(key => current.has(key))) return current
-          const next = new Set(current)
-          for (const key of requestUserInputKeys) next.add(key)
-          return next
-        })
-      }
-      applyLocalRequestUserInputResponse(response)
       const runtimeModelFields = options.appendUserMessage
         ? getRuntimeModelFields(runtimeModelOverride)
         : {}
@@ -82,15 +77,26 @@ export function usePaneInteractions(context: ReturnType<typeof usePaneSend>) {
       })
       if (sent) {
         markRuntimeTerminalAdditionalContextDelivered(additionalContext)
-      } else {
+      }
+      // Only confirmed sends settle the local card. A receipt also belongs to
+      // this exact task visit, including when the user leaves and returns.
+      if (sent && questionOwner.current === questionVisit) {
+        // Recovery can discover another projection of this question while the
+        // send is pending. Reconcile it against the original accepted identity.
+        const requestUserInputKeys = requestUserInputRelatedKeysForPayloads(
+          requestUserInputAliasTrackerRef.current.previousPayloads,
+          response,
+          requestUserInputAliasTrackerRef.current.aliasesByKey
+        )
         if (requestUserInputKeys.length > 0) {
           updateAnsweredRequestUserInputIds(current => {
-            if (requestUserInputKeys.every(key => !current.has(key))) return current
+            if (requestUserInputKeys.every(key => current.has(key))) return current
             const next = new Set(current)
-            for (const key of requestUserInputKeys) next.delete(key)
+            for (const key of requestUserInputKeys) next.add(key)
             return next
           })
         }
+        applyLocalRequestUserInputResponse(response)
       }
       return sent
     },
@@ -101,6 +107,7 @@ export function usePaneInteractions(context: ReturnType<typeof usePaneSend>) {
       getRuntimeModelFields,
       projectChat,
       requestUserInputAliasTrackerRef,
+      questionVisit,
       sendRuntimePaneMessage,
       updateAnsweredRequestUserInputIds,
     ]
@@ -175,6 +182,7 @@ export function usePaneInteractions(context: ReturnType<typeof usePaneSend>) {
 
   const ignoreRequestUserInput = useCallback(
     async (payload: RequestUserInputPayload) => {
+      if (!currentRuntimeTask || questionOwner.current !== questionVisit) return
       if (payload.sourceAgent) {
         return sendRequestUserInputResponse({
           requestId: payload.requestId ?? payload.request_id,
@@ -185,47 +193,63 @@ export function usePaneInteractions(context: ReturnType<typeof usePaneSend>) {
         })
       }
       const cancellationTargets = messagesRef.current.filter(
-        message => message.role === 'assistant' && message.status === 'streaming'
+        message => message.role === 'assistant' && message.status === 'streaming' &&
+          (payload.turnId == null || (message.turnId ?? message.subtaskId) === payload.turnId)
       )
-      const requestUserInputKey = requestUserInputPayloadKey(payload)
-      if (requestUserInputKey) {
-        updateAnsweredRequestUserInputIds(current => {
-          if (current.has(requestUserInputKey)) return current
-          const next = new Set(current)
-          next.add(requestUserInputKey)
-          return next
+      if (pendingQuestionIgnore.current === questionVisit) return
+      pendingQuestionIgnore.current = questionVisit
+      try {
+        const originalQuestion: RequestUserInputResponse = {
+          threadId: payload.threadId,
+          turnId: payload.turnId,
+          appServerEpoch: payload.appServerEpoch,
+          requestId: payload.requestId ?? payload.request_id,
+          itemId: payload.itemId ?? payload.item_id,
+          answers: {},
+        }
+        // Keep the question's turn through asynchronous transport preparation.
+        // A retained card must never fall through to the task's newer turn.
+        const cancelled = await cancelRuntimePaneTask({
+          ...currentRuntimeTask,
+          ...(payload.threadId == null ? {} : { threadId: payload.threadId }),
+          ...(payload.turnId == null ? {} : { expectedTurnId: payload.turnId }),
         })
-      }
-
-      if (!currentRuntimeTask) {
-        return
-      }
-
-      const cancelled = await cancelRuntimePaneTask(currentRuntimeTask)
-      if (!cancelled) {
-        if (requestUserInputKey) {
+        // Only this task visit may apply the cancellation receipt. Keep the card
+        // available until confirmation, including after rejection or lost receipts.
+        if (!cancelled || questionOwner.current !== questionVisit) return
+        // A refresh can restore another projection while cancellation waits.
+        // Settle its current aliases against the captured original identity.
+        const requestUserInputKeys = requestUserInputRelatedKeysForPayloads(
+          requestUserInputAliasTrackerRef.current.previousPayloads,
+          originalQuestion,
+          requestUserInputAliasTrackerRef.current.aliasesByKey
+        )
+        if (requestUserInputKeys.length > 0) {
           updateAnsweredRequestUserInputIds(current => {
-            if (!current.has(requestUserInputKey)) return current
+            if (requestUserInputKeys.every(key => current.has(key))) return current
             const next = new Set(current)
-            next.delete(requestUserInputKey)
+            for (const key of requestUserInputKeys) next.add(key)
             return next
           })
         }
-        return
-      }
 
-      for (const message of cancellationTargets)
-        dispatchMessages({
-          type: 'assistant_cancelled',
-          messageId: message.id,
-          subtaskId: message.attemptId ?? message.subtaskId ?? message.turnId,
-        })
+        for (const message of cancellationTargets)
+          dispatchMessages({
+            type: 'assistant_cancelled',
+            messageId: message.id,
+            subtaskId: message.attemptId ?? message.subtaskId ?? message.turnId,
+          })
+      } finally {
+        if (pendingQuestionIgnore.current === questionVisit) pendingQuestionIgnore.current = null
+      }
     },
     [
       cancelRuntimePaneTask,
       currentRuntimeTask,
       dispatchMessages,
       messagesRef,
+      questionVisit,
+      requestUserInputAliasTrackerRef,
       sendRequestUserInputResponse,
       updateAnsweredRequestUserInputIds,
     ]

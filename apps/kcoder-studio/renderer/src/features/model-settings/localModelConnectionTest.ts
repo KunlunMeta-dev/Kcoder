@@ -1,5 +1,3 @@
-import { fetch as tauriFetch } from '@tauri-apps/plugin-http'
-import { shouldUseTauriFetch } from '@/api/http'
 import {
   buildLocalModelRequestUrl,
   defaultLocalModelToolProfile,
@@ -141,7 +139,7 @@ function hasProbeToolCall(apiFormat: LocalModelApiFormat, body: unknown): boolea
 }
 
 function defaultFetcher(): typeof fetch {
-  return shouldUseTauriFetch() ? (tauriFetch as typeof fetch) : globalThis.fetch.bind(globalThis)
+  return globalThis.fetch.bind(globalThis)
 }
 
 export type LocalModelConnectionErrorKind =

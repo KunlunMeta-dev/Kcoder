@@ -1,11 +1,14 @@
-import { listen } from '@tauri-apps/api/event'
-import { clearMocks, mockIPC } from '@tauri-apps/api/mocks'
+import { listen } from '@/lib/runtime-events'
+import { clearTestTransports, installTestTransport } from '@/test/runtime-transport'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { FakeGatewayClient } from './gateway/runtime/contractFixture.test-support'
 import { GatewayRpcError } from './gatewayRpc'
+import { subscribeRuntimeWorkChanged } from './runtimeWorkEvents'
 import { KCoderGatewayRuntime as CoreRuntime } from './gatewayRuntime'
 import { KCoderGatewayRuntime } from './installGatewayRuntime'
 import { KCODER_RUNTIME_METHODS } from './legacyRuntimeAbi'
+
+const KCODER_PRESENTATION = { version: 1, studioWorkMode: 'kcoder', inlineWidgets: false }
 
 describe.each([
   ['installed', KCoderGatewayRuntime],
@@ -22,9 +25,142 @@ describe.each([
   afterEach(async () => {
     await Promise.all([...runtimes].map(runtime => runtime.disposeAsync?.() ?? runtime.dispose()))
     runtimes.clear()
-    clearMocks()
+    clearTestTransports()
     vi.restoreAllMocks()
   })
+  test('hydrates a live task with the observed Goal without replacing its turn state', async () => {
+    const client = new FakeGatewayClient('thread-live-goal')
+    client.threadResumeSupported = true
+    const supports = client.supportsExperimental.bind(client)
+    client.supportsExperimental = capability => capability === 'threadGoalStatusBatchV1' || supports(capability)
+    const request = client.request.bind(client)
+    client.request = async <T>(method: string, params: Record<string, unknown> = {}) => {
+      if (method === 'thread/goal/status/readMany')
+        return { observations: [{ threadId: 'thread-live-goal', availability: 'available', status: 'active' }] } as T
+      return request<T>(method, params)
+    }
+    const runtime = new KCoderGatewayRuntime('token', {
+      loadServers: async () => [{ id: 'local', label: 'Local', transport: 'local', workspacePath: '/workspace' }],
+      createClient: () => client,
+    })
+    const created = (await runtime.request('runtime.tasks.create', {
+      taskId: 'live-goal', executionRequest: { prompt: 'Finish the work' },
+    })) as { taskId: string }
+    client.emitNotification('turn/completed', {
+      threadId: 'thread-live-goal', turn: { id: 'thread-live-goal-turn', status: 'completed' },
+    })
+    await vi.waitFor(() => expect(runtime.tasks.get(created.taskId)?.turnStatus).toBe('completed'))
+    client.persistedThreads = [{
+      id: 'thread-live-goal', cwd: '/workspace', status: 'idle',
+      goalStatusObservation: { availability: 'available', status: 'active' },
+    }]
+    await runtime.request('runtime.tasks.list', {})
+    expect(runtime.tasks.get(created.taskId)).toMatchObject({
+      turnStatus: 'completed', goalStatusObservation: { availability: 'available', status: 'active' },
+    })
+  })
+
+  test.each([false, true])('does not overwrite a newer Goal event with an older list observation (persisted=%s)', async persisted => {
+    const client = new FakeGatewayClient('thread-goal-race')
+    client.threadResumeSupported = true
+    const supports = client.supportsExperimental.bind(client)
+    client.supportsExperimental = capability => capability === 'threadGoalStatusBatchV1' || supports(capability)
+    const runtime = new KCoderGatewayRuntime('token', {
+      loadServers: async () => [{ id: 'local', label: 'Local', transport: 'local', workspacePath: '/workspace' }],
+      createClient: () => client,
+    })
+    const created = (await runtime.request('runtime.tasks.create', {
+      taskId: 'goal-race', executionRequest: { prompt: 'Finish the work' },
+    })) as { taskId: string }
+    const existing = runtime.tasks.get(created.taskId)!
+    runtime.tasks.set(created.taskId, { ...existing, persisted })
+    let releaseList!: () => void
+    let listStarted!: () => void
+    const gate = new Promise<void>(resolve => { releaseList = resolve })
+    const started = new Promise<void>(resolve => { listStarted = resolve })
+    const request = client.request.bind(client)
+    client.request = async <T>(method: string, params: Record<string, unknown> = {}) => {
+      if (method === 'thread/list') {
+        listStarted()
+        await gate
+        return { threads: [{ id: 'thread-goal-race', cwd: '/workspace', status: 'idle',
+          goalStatusObservation: { availability: 'available', status: 'complete' } }], nextCursor: null } as T
+      }
+      if (method === 'thread/goal/status/readMany')
+        return { observations: [{ threadId: 'thread-goal-race', availability: 'available', status: 'complete' }] } as T
+      return request<T>(method, params)
+    }
+    const listing = runtime.request('runtime.tasks.list', {})
+    await started
+    client.emitNotification('thread/goal/updated', {
+      threadId: 'thread-goal-race', goal: { threadId: 'thread-goal-race', status: 'active' },
+    })
+    await vi.waitFor(() => expect(runtime.tasks.get(created.taskId)?.goalStatusObservation)
+      .toEqual({ availability: 'available', status: 'active' }))
+    const foreignClient = new FakeGatewayClient('thread-goal-race')
+    await runtime.forwardNotification('thread/goal/updated', {
+      serverId: 'local', threadId: 'thread-goal-race', sequence: 42,
+      goal: { threadId: 'thread-goal-race', status: 'complete' },
+    }, 'local', foreignClient)
+    expect(runtime.tasks.get(created.taskId)?.goalStatusObservation)
+      .toEqual({ availability: 'available', status: 'active' })
+    releaseList()
+    await listing
+    expect(runtime.tasks.get(created.taskId)?.goalStatusObservation)
+      .toEqual({ availability: 'available', status: 'active' })
+    client.emitNotification('thread/goal/updated', {
+      serverId: 'local', threadId: 'thread-goal-race', sequence: 42,
+      goal: { threadId: 'thread-goal-race', status: 'paused' },
+    })
+    await vi.waitFor(() => expect(runtime.tasks.get(created.taskId)?.goalStatusObservation)
+      .toEqual({ availability: 'available', status: 'paused' }))
+    await runtime.forwardNotification('thread/goal/updated', {
+      threadId: 'thread-goal-race', goal: { threadId: 'foreign-thread', status: 'complete' },
+    }, 'local', client)
+    expect(runtime.tasks.get(created.taskId)?.goalStatusObservation)
+      .toEqual({ availability: 'unavailable' })
+  })
+
+  test('rechecks Goal completion and clearance before treating them as durable', async () => {
+    installTestTransport(() => undefined)
+    const client = new FakeGatewayClient('thread-uncommitted-goal')
+    client.threadResumeSupported = true
+    const supports = client.supportsExperimental.bind(client)
+    client.supportsExperimental = capability => capability === 'threadGoalStatusBatchV1' || supports(capability)
+    const request = client.request.bind(client)
+    client.request = async <T>(method: string, params: Record<string, unknown> = {}) => {
+      if (method === 'thread/goal/status/readMany')
+        return { observations: [{ threadId: 'thread-uncommitted-goal', availability: 'available', status: 'complete' }] } as T
+      return request<T>(method, params)
+    }
+    const runtime = new KCoderGatewayRuntime('token', {
+      loadServers: async () => [{ id: 'local', label: 'Local', transport: 'local', workspacePath: '/workspace' }],
+      createClient: () => client,
+    })
+    const created = (await runtime.request('runtime.tasks.create', {
+      taskId: 'uncommitted-goal', executionRequest: { prompt: 'Finish the work' },
+    })) as { taskId: string }
+    client.persistedThreads = [{ id: 'thread-uncommitted-goal', cwd: '/workspace', status: 'idle' }]
+    const changed = vi.fn()
+    const unsubscribe = subscribeRuntimeWorkChanged(changed)
+    try {
+      await runtime.forwardNotification('thread/goal/updated', {
+        threadId: 'thread-uncommitted-goal', goal: { threadId: 'thread-uncommitted-goal', status: 'complete' },
+      }, 'local', client)
+      expect(runtime.tasks.get(created.taskId)?.goalStatusObservation).toEqual({ availability: 'unavailable' })
+      await runtime.forwardNotification('thread/goal/updated', {
+        threadId: 'thread-uncommitted-goal', goal: null,
+      }, 'local', client)
+      expect(runtime.tasks.get(created.taskId)?.goalStatusObservation).toEqual({ availability: 'unavailable' })
+      expect(changed).toHaveBeenCalledTimes(2)
+      await runtime.request('runtime.tasks.list', {})
+      expect(runtime.tasks.get(created.taskId)?.goalStatusObservation)
+        .toEqual({ availability: 'available', status: 'complete' })
+    } finally {
+      unsubscribe()
+    }
+  })
+
   test('does not resurrect a fast completed first turn when turn start acknowledges late', async () => {
     const client = new FakeGatewayClient('thread-fast-complete')
     let releaseTurnStart = () => undefined
@@ -60,6 +196,7 @@ describe.each([
     releaseTurnStart()
 
     const created = (await creating) as { taskId: string }
+    expect(runtime.tasks.get(created.taskId)?.turnStatus).toBe('completed')
     await expect(
       runtime.request('runtime.tasks.cancel', {
         address: { deviceId: 'local', taskId: created.taskId },
@@ -117,12 +254,13 @@ describe.each([
 
     expect(client.requests).toContainEqual({
       method: 'thread/start',
-      params: { cwd: '/workspace', model: 'model-special', clientRequestId: 'model-task' },
+      params: { studioWorkMode: 'kcoder', cwd: '/workspace', model: 'model-special', clientRequestId: 'model-task' },
     })
     expect(client.requests.filter(request => request.method === 'turn/start')).toEqual([
       {
         method: 'turn/start',
         params: {
+          clientPresentation: KCODER_PRESENTATION,
           threadId: 'thread-model',
           input: [{ type: 'text', text: 'use selected model' }],
           clientMessageId: 'client-create-1',
@@ -135,6 +273,7 @@ describe.each([
       {
         method: 'turn/start',
         params: {
+          clientPresentation: KCODER_PRESENTATION,
           threadId: 'thread-model',
           input: [{ type: 'text', text: 'continue' }],
           clientMessageId: 'client-send-2',
@@ -145,7 +284,7 @@ describe.each([
   })
 
   test('keeps a newly persisted task and reports a visible failure when its first turn is rejected', async () => {
-    mockIPC(() => undefined, { shouldMockEvents: true })
+    installTestTransport(() => undefined)
     const received: Array<{ event: string; payload: Record<string, unknown> }> = []
     const unlisten = await listen<{ event: string; payload: Record<string, unknown> }>(
       'local-executor:event',
@@ -401,6 +540,7 @@ describe.each([
     expect(clients[0].requests.at(-1)).toEqual({
       method: 'turn/start',
       params: {
+        clientPresentation: KCODER_PRESENTATION,
         threadId: 'thread-1',
         input: [{ type: 'text', text: 'continue first task' }],
       },
@@ -434,7 +574,7 @@ describe.each([
   })
 
   test('implements compact, rollback, and goal operations through the owning app-server', async () => {
-    mockIPC(() => undefined, { shouldMockEvents: true })
+    installTestTransport(() => undefined)
     const client = new FakeGatewayClient('thread-operations')
     const runtime = new KCoderGatewayRuntime('token', {
       loadServers: async () => [
@@ -618,6 +758,7 @@ describe.each([
     expect(client.requests.at(-1)).toEqual({
       method: 'turn/start',
       params: {
+        clientPresentation: KCODER_PRESENTATION,
         threadId: 'thread-operations',
         input: [{ type: 'text', text: 'edited message' }],
       },
@@ -712,20 +853,30 @@ describe.each([
       method: 'thread/read',
       params: { threadId: 'persisted-thread', limit: 50 },
     })
-    expect(
-      clients[3].requests.filter(request => request.method !== 'runtime.context.get').slice(0, 3)
-    ).toEqual([
+    const resumedRequests = clients[3].requests.filter(
+      request => request.method !== 'runtime.context.get'
+    )
+    expect(resumedRequests.slice(0, 2)).toEqual([
       { method: 'thread/resume', params: { threadId: 'persisted-thread' } },
-      { method: 'agent/list', params: { threadId: 'persisted-thread' } },
       {
         method: 'turn/start',
         params: {
+          clientPresentation: KCODER_PRESENTATION,
           threadId: 'persisted-thread',
           input: [{ type: 'text', text: '继续这个任务' }],
           model: 'persisted-model',
         },
       },
     ])
+    await expect
+      .poll(() =>
+        clients[3].requests.some(
+          request =>
+            request.method === 'agent/list' && request.params.threadId === 'persisted-thread'
+        )
+      )
+      .toBe(true)
+    await expect.poll(() => runtime.pendingAsyncJobs.size).toBe(0)
   })
 
   test('reads a persisted goal without acquiring the previous page session lease', async () => {
@@ -785,7 +936,7 @@ describe.each([
   })
 
   test('forks a completed turn into an independently resumed task', async () => {
-    mockIPC(() => undefined, { shouldMockEvents: true })
+    installTestTransport(() => undefined)
     const clients: FakeGatewayClient[] = []
     const runtime = new KCoderGatewayRuntime('token', {
       loadServers: async () => [
@@ -862,7 +1013,7 @@ describe.each([
   })
 
   test('deletes a fork through its creator when the new owner cannot resume it', async () => {
-    mockIPC(() => undefined, { shouldMockEvents: true })
+    installTestTransport(() => undefined)
     const source = new FakeGatewayClient('thread-source-resume-failure')
     const rejectedOwner = new FakeGatewayClient('thread-rejected-owner')
     rejectedOwner.resumeFailure = new Error('resume failed')

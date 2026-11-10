@@ -14,10 +14,13 @@ await runE2E(import.meta.url,{testId:'usage-calendar-trend-keyboard-and-corrupt-
   const {path:workspace}=await materializeWorkspace(context,'minimal',{instanceId:'usage-charts'});
   await context.writeStateJson('config/settings.json',{providers:{}});
   const ledger=await context.writeStateJson('config/usage/usage.json',fixture.history);
-  const gateway=await startGateway(context,{workspace,kcoderBin:process.env.KCODER_E2E_KCODER_BIN||resolve(repoRoot,'target/debug/kcoder'),env:{KCODER_CONFIG_DIR:context.pathInState('config')}});
+  const binary=process.env.KCODER_E2E_KCODER_BIN||resolve(repoRoot,'target/debug/kcoder');
+  const serversFile=await context.writeStateJson('servers.json',[{id:'usage-fixture',label:'Usage fixture',transport:'local',command:binary,workspace}]);
+  const gateway=await startGateway(context,{workspace,serversFile,kcoderBin:binary,env:{KCODER_CONFIG_DIR:context.pathInState('config')}});
   const browser=await startChromium(context);const page=await browser.newPage({viewport:{width:1000,height:850}});
   try{
     await page.goto(gateway.baseUrl+'/settings/usage',{waitUntil:'domcontentloaded'});
+    await page.getByTestId('usage-target').selectOption('usage-fixture');
     await expect(page.getByTestId('usage-totalTokens')).toHaveText('150',{timeout:30000});
     const heat=page.getByTestId('usage-heatmap');const detail=page.getByTestId('usage-day-detail');
     const initial=await page.getByTestId('usage-heatmap-viewport').evaluate(e=>{const last=e.querySelector('button:last-child').getBoundingClientRect();const view=e.getBoundingClientRect();return{right:last.right,limit:view.right};});

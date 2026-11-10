@@ -97,6 +97,20 @@ describe('ModelSelector desktop layout', () => {
   const originalInnerWidth = window.innerWidth
   const originalInnerHeight = window.innerHeight
 
+  test('closes the existing menu when model selection becomes unavailable', async () => {
+    isMobileMock.mockReturnValue(false)
+    const props = { models: [SAMPLE_MODEL], selectedModel: SAMPLE_MODEL,
+      selectedModelOptions: {}, onSelectModel: vi.fn(), onSelectModelOption: vi.fn() }
+    const view = render(<ModelSelector {...props} disabled={false} />)
+    fireEvent.click(screen.getByTestId('model-selector-button'))
+    expect(screen.getByTestId('model-selector-menu')).toBeInTheDocument()
+    view.rerender(<ModelSelector {...props} disabled />)
+    await waitFor(() => expect(screen.queryByTestId('model-selector-menu')).not.toBeInTheDocument())
+    expect(screen.getByTestId('model-selector-button')).toBeVisible()
+    expect(screen.getByTestId('model-selector-button')).toBeDisabled()
+    expect(props.onSelectModel).not.toHaveBeenCalled()
+  })
+
   test('resets to the runtime default model without reasoning or speed options', () => {
     isMobileMock.mockReturnValue(false)
     const current: UnifiedModel = {

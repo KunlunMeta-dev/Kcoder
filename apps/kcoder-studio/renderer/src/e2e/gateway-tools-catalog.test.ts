@@ -3,7 +3,7 @@ import { beforeEach, expect, test, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({ config: vi.fn(), snapshot: vi.fn(), request: vi.fn() }))
 vi.mock('./gateway-verification', () => ({ gatewayVerificationConfig: mocks.config }))
 vi.mock('@/lib/debugPanel', () => ({ getWorkbenchDebugSnapshot: mocks.snapshot }))
-vi.mock('@/tauri/localExecutor', () => ({ requestLocalExecutor: mocks.request }))
+vi.mock('@/host/localExecutor', () => ({ requestLocalExecutor: mocks.request }))
 
 import { getActiveToolsCatalog } from './gateway-tools-catalog'
 

@@ -1,5 +1,5 @@
 import { getWorkbenchDebugSnapshot } from '@/lib/debugPanel'
-import { requestLocalExecutor } from '@/tauri/localExecutor'
+import { requestLocalExecutor } from '@/host/localExecutor'
 import { gatewayVerificationConfig } from './gateway-verification'
 
 function activeTask() {

@@ -109,7 +109,7 @@ export function CloudConnectionDialog({
             <p className="mt-1 text-sm leading-5 text-text-secondary">
               {t(
                 'workbench.cloud_connection_description',
-                '旧版云登录与凭据同步在 KCoder Studio 中不可用。请连接 Gateway，使用目标端已配置的运行时。'
+                'KCoder Studio 的云端凭据同步不可用。请连接 Gateway，使用目标端已配置的运行时。'
               )}
             </p>
           </div>
@@ -127,7 +127,7 @@ export function CloudConnectionDialog({
 
         {isConnected ? (
           <div className="mt-5 space-y-4">
-            <div className="rounded-lg border border-border bg-background p-4">
+            <div className="studio-card-spacing rounded-lg border border-border bg-background p-4">
               <div className="flex items-center gap-2 text-sm font-semibold text-text-primary">
                 <Server className="h-4 w-4 text-primary" />
                 <span>{host}</span>
@@ -210,7 +210,7 @@ export function CloudConnectionDialog({
               </p>
             </div>
 
-            <details className="group rounded-lg border border-border bg-background">
+            <details className="studio-card-spacing group rounded-lg border border-border bg-background">
               <summary
                 data-testid="cloud-connection-advanced-toggle"
                 className="flex h-10 cursor-pointer list-none items-center gap-2 px-3 text-sm font-medium text-text-secondary hover:text-text-primary"
@@ -244,7 +244,7 @@ export function CloudConnectionDialog({
             </details>
 
             {cloud.status === 'connecting' && (
-              <div className="flex items-center gap-2 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text-secondary">
+              <div className="studio-card-spacing flex items-center gap-2 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text-secondary">
                 <Loader2 className="h-4 w-4 animate-spin" />
                 {t('workbench.cloud_connection_connecting', '正在连接云端')}
               </div>
@@ -253,7 +253,7 @@ export function CloudConnectionDialog({
             {(error || cloudError) && (
               <div
                 data-testid="cloud-connection-error"
-                className="flex items-start gap-2 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-red-500"
+                className="studio-card-spacing flex items-start gap-2 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-red-500"
               >
                 <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
                 <span>{error || cloudError}</span>

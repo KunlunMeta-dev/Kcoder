@@ -90,10 +90,38 @@ impl SlashCommand for OrchestrateWorkCommand {
     }
 
     fn usage(&self) -> &'static str {
-        "/work [status|list|diagnostics|select <work_id>|evidence manual <statement>|evidence not-applicable <requirement> -- <rationale>]"
+        "/work [observation|pause|resume|stop|input <requirement>|status|list|diagnostics|select <work_id>|evidence manual <statement>|evidence not-applicable <requirement> -- <rationale>]"
     }
 
     async fn run(&self, args: &str, app: &mut ReplApp, engine: &QueryEngine) -> SlashResult {
+        let args = args.trim();
+        // `observation` reports the target-side continuous work bound to this
+        // workspace and session. It is a read-only observation available in every
+        // session mode; the remaining branches belong to Orchestrate.
+        if args == "observation" {
+            app.work_observation.observe_now(engine);
+            // The store has now been re-read, so a control or input whose durable
+            // outcome was unconfirmed may be attempted again.
+            app.work_control.note_observation();
+            app.work_input.note_observation();
+            let detail = app.work_observation.status().detail();
+            app.push_message(MessageRole::System, detail);
+            return SlashResult::Handled;
+        }
+        // `pause`/`resume`/`stop` record one durable control request for the same
+        // binding, through the store the host already reads. They submit intent
+        // only: nothing is applied until the host consumes and settles it.
+        if let Some(action) = crate::work_control::action(args) {
+            crate::work_control::run(action, app, engine);
+            return SlashResult::Handled;
+        }
+        // `input <requirement>` appends one requirement to the same binding
+        // through the store's own accept/queue path. A busy target keeps it
+        // durable and unconsumed; nothing here starts a turn.
+        if let Some(text) = crate::work_input::requirement_text(args) {
+            crate::work_input::run(text, app, engine);
+            return SlashResult::Handled;
+        }
         if !engine.state.session_mode().is_orchestrate() {
             app.push_message(
                 MessageRole::System,
@@ -102,7 +130,6 @@ impl SlashCommand for OrchestrateWorkCommand {
             return SlashResult::Handled;
         }
         let store = kcoder_state::orchestrate_store::PlanStore::for_workspace(&engine.state.cwd());
-        let args = args.trim();
         if args == "diagnostics" {
             match engine.state.write_orchestrate_runtime_diagnostics() {
                 Ok(path) => app.push_message(
@@ -1719,6 +1746,108 @@ mod tests {
         assert_eq!(result, SlashResult::Handled);
         assert_eq!(engine.state.session_mode(), SessionMode::Default);
         assert!(app.messages.last().unwrap().text.contains("new session"));
+    }
+
+    #[tokio::test]
+    async fn work_observation_reports_a_read_only_observation_without_orchestrate() {
+        let tmp = tempfile::tempdir().unwrap();
+        let engine = test_engine(tmp.path());
+        let mut app = ReplApp::default();
+
+        assert_eq!(
+            OrchestrateWorkCommand
+                .run("observation", &mut app, &engine)
+                .await,
+            SlashResult::Handled
+        );
+        let output = &app.messages.last().unwrap().text;
+        // An observation never claims completion, and an absent store is stated
+        // instead of a fabricated phase.
+        assert!(output.contains("Continuous work observation"), "{output}");
+        assert!(output.contains("not proof of completion"), "{output}");
+        assert!(output.contains("No continuous work storage"), "{output}");
+        assert_eq!(engine.state.session_mode(), SessionMode::Default);
+
+        // Every other branch keeps requiring an Orchestrate session.
+        assert_eq!(
+            OrchestrateWorkCommand
+                .run("status", &mut app, &engine)
+                .await,
+            SlashResult::Handled
+        );
+        assert!(
+            app.messages
+                .last()
+                .unwrap()
+                .text
+                .contains("requires an Orchestrate session")
+        );
+    }
+
+    #[tokio::test]
+    async fn work_control_subcommands_submit_without_orchestrate() {
+        let tmp = tempfile::tempdir().unwrap();
+        let engine = test_engine(tmp.path());
+        let mut app = ReplApp::default();
+
+        // Control belongs to the target store rather than to the Orchestrate plan,
+        // so `/work pause` is reachable in a default session and states that no
+        // bound work was found instead of demanding Orchestrate mode.
+        for verb in ["pause", "resume", "stop"] {
+            assert_eq!(
+                OrchestrateWorkCommand.run(verb, &mut app, &engine).await,
+                SlashResult::Handled
+            );
+            let output = &app.messages.last().unwrap().text;
+            assert!(output.contains("not submitted"), "{verb}: {output}");
+            assert!(
+                output.contains("No continuous work is bound"),
+                "{verb}: {output}"
+            );
+            assert!(
+                !output.contains("requires an Orchestrate session"),
+                "{verb}: {output}"
+            );
+            assert_eq!(engine.state.session_mode(), SessionMode::Default);
+        }
+    }
+
+    #[tokio::test]
+    async fn work_input_submits_a_requirement_without_orchestrate() {
+        let tmp = tempfile::tempdir().unwrap();
+        let engine = test_engine(tmp.path());
+        let mut app = ReplApp::default();
+
+        // A requirement belongs to the target store rather than to the
+        // Orchestrate plan, so `/work input` is reachable in a default session
+        // and reports the missing binding instead of demanding Orchestrate mode.
+        assert_eq!(
+            OrchestrateWorkCommand
+                .run("input add the regression", &mut app, &engine)
+                .await,
+            SlashResult::Handled
+        );
+        let output = &app.messages.last().unwrap().text;
+        assert!(output.contains("not submitted"), "{output}");
+        assert!(output.contains("No continuous work is bound"), "{output}");
+        assert!(!output.contains("recorded"), "{output}");
+        assert!(
+            !output.contains("requires an Orchestrate session"),
+            "{output}"
+        );
+        assert_eq!(engine.state.session_mode(), SessionMode::Default);
+
+        // An empty requirement states its usage and never reaches the store.
+        assert_eq!(
+            OrchestrateWorkCommand.run("input", &mut app, &engine).await,
+            SlashResult::Handled
+        );
+        let usage = &app.messages.last().unwrap().text;
+        assert!(usage.contains("No requirement text was given"), "{usage}");
+        assert!(
+            !usage.contains("requires an Orchestrate session"),
+            "{usage}"
+        );
     }
 
     #[tokio::test]

@@ -6,6 +6,18 @@ const invoke = (channel, ...args) => ipcRenderer.invoke(scope ? `${channel}:${sc
 if (process.isMainFrame) {
   contextBridge.exposeInMainWorld('kcoderDesktopHost', Object.freeze({
     capabilities: Object.freeze({ completionBadge: process.platform === 'win32' }),
+    widgets: Object.freeze({
+      getCapabilities: () => ipcRenderer.invoke('kcoder:widgets:capabilities'),
+      authorize: request => ipcRenderer.invoke('kcoder:widgets:authorize', request),
+      heartbeat: request => ipcRenderer.invoke('kcoder:widgets:heartbeat', request),
+      revoke: request => ipcRenderer.invoke('kcoder:widgets:revoke', request),
+      onRevoked: callback => {
+        if (typeof callback !== 'function') throw new TypeError('Expected a widget listener');
+        const listener = (_event, value) => callback(value);
+        ipcRenderer.on('kcoder:widgets:revoked', listener);
+        return () => ipcRenderer.removeListener('kcoder:widgets:revoked', listener);
+      },
+    }),
     ...(process.argv.includes('--kcoder-local-directory-picker') ? {
       pickWorkspacePaths: options => invoke('kcoder:directories:pick', options),
     } : {}),
@@ -59,7 +71,7 @@ if (process.isMainFrame && process.argv.includes('--kcoder-custom-menu')) {
   contextBridge.exposeInMainWorld('kcoderDesktopMenu', Object.freeze({
     list: locale => invoke('kcoder:menu:list', locale),
     invoke: (index, position) => invoke('kcoder:menu:invoke', { index, position }),
-    setTheme: dark => invoke('kcoder:menu:theme', dark),
+    setTheme: (dark, backgroundColor) => invoke('kcoder:menu:theme', dark, backgroundColor),
     setVisible: visible => invoke('kcoder:menu:visible', visible),
     open: (index, x, y) => invoke('kcoder:menu:open', { index, x, y }),
   }));

@@ -242,6 +242,7 @@ fn parse(root: &Path, source: &Path, kind: &str) -> Result<PromptEntry> {
             .and_then(|v| v.as_str())
             .is_some_and(|m| m != "inherit"),
         profile: PluginPromptProfile {
+            imported_agent: None,
             instructions: body.into(),
             argument_names,
             plugin_root: root.to_string_lossy().into_owned(),

@@ -1110,6 +1110,7 @@ async fn slash_mcp_supports_summary_verbose_and_usage() {
         url: String::new(),
         env: Default::default(),
         headers: Default::default(),
+        policy: Default::default(),
     }];
     let mut app = ReplApp::default();
 
@@ -1344,6 +1345,83 @@ async fn slash_model_without_args_opens_current_model_picker() {
 }
 
 #[tokio::test]
+async fn model_selected_during_stream_switches_after_a_tool_result_boundary() {
+    let tmp = tempfile::tempdir().unwrap();
+    let mut settings = Settings {
+        kunlunmeta_api_key: Some("test-kunlunmeta-key".to_string()),
+        training_mode: true,
+        ..crate::test_support::fixture_settings()
+    };
+    settings.model_discovery.enabled = false;
+    let mut second_profile = settings.providers["kunlunmeta"].clone();
+    second_profile.default_model = "second-model".to_string();
+    settings
+        .providers
+        .insert("second".to_string(), second_profile);
+    settings.stored_provider_credentials.insert(
+        "second".to_string(),
+        "test-second-provider-key".to_string(),
+    );
+    let engine = test_engine_with_settings(tmp.path(), settings);
+    let mut app = ReplApp::default();
+    let (raw_tx, _rx) = mpsc::channel(APP_EVENT_CHANNEL_CAPACITY);
+    let tx = AppEventSender::new(raw_tx);
+    let prompt = TuiPermissionPrompt::new(tx.clone());
+    let cancel = CancellationToken::new();
+    let handle = tokio::spawn(async {
+        std::future::pending::<()>().await;
+    });
+    app.begin_turn(handle, cancel.clone());
+
+    handle_user_action(
+        UserAction::SlashCommand("/model".to_string()),
+        &engine,
+        &mut app,
+        &tx,
+        &prompt,
+    )
+    .await
+    .unwrap();
+    assert!(app.picker_overlay.is_some());
+    assert_eq!(engine.settings.read().unwrap().active_provider.as_deref(), Some("kunlunmeta"));
+
+    assert!(app.handle_picker_key(KeyEvent::from(KeyCode::Down)).is_none());
+    let selection = app
+        .handle_picker_key(KeyEvent::from(KeyCode::Enter))
+        .expect("selected model command");
+    handle_user_action(selection, &engine, &mut app, &tx, &prompt)
+        .await
+        .unwrap();
+
+    assert_eq!(app.pending_model_switch.as_deref(), Some("second"));
+    assert_eq!(engine.settings.read().unwrap().active_provider.as_deref(), Some("kunlunmeta"));
+    let (resume_tx, resume_rx) = tokio::sync::oneshot::channel();
+    handle_app_event(
+        AppEvent::TurnToolResultBoundary { resume_tx },
+        &mut app,
+        &engine,
+        &tx,
+        &prompt,
+    )
+    .await;
+    resume_rx.await.expect("resume after model switch");
+
+    {
+        let settings = engine.settings.read().unwrap();
+        assert_eq!(settings.active_provider.as_deref(), Some("second"));
+        assert_eq!(settings.model, "second-model");
+    }
+    assert_eq!(
+        engine.state.selected_model().as_deref(),
+        Some("second::second-model")
+    );
+    assert!(app.pending_model_switch.is_none());
+
+    let handle = app.abort_turn_for_shutdown().unwrap();
+    let _ = handle.await;
+}
+
+#[tokio::test]
 async fn slash_model_picker_includes_custom_current_model() {
     let tmp = tempfile::tempdir().unwrap();
     let engine = test_engine(tmp.path());
@@ -1414,7 +1492,7 @@ async fn slash_model_switches_provider_profile_and_endpoint() {
     let mut settings = Settings {
         openai_api_key: Some("test-kimi-key".to_string()),
         kunlunmeta_api_key: Some("test-kunlunmeta-key".to_string()),
-        ..Settings::default()
+        ..crate::test_support::fixture_settings()
     };
     let mut kimi = settings.providers["kunlunmeta"].clone();
     kimi.api_format = kcoder_config::ApiFormat::OpenaiChatCompletions;
@@ -1496,7 +1574,7 @@ async fn slash_model_switches_qualified_unknown_model_with_provider_notice() {
 #[tokio::test]
 async fn slash_model_rejects_ambiguous_unqualified_model_name() {
     let tmp = tempfile::tempdir().unwrap();
-    let mut settings = Settings::default();
+    let mut settings = crate::test_support::fixture_settings();
     settings.model_discovery.enabled = false;
     let duplicate = settings.providers["kunlunmeta"].clone();
     settings
@@ -1953,4 +2031,66 @@ fn escape_still_interrupts_when_only_regular_tools_run() {
     let action = app.handle_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
 
     assert!(matches!(action, Some(UserAction::Interrupt)));
+}
+
+#[tokio::test]
+async fn interrupt_keeps_pending_tool_identity_until_terminal_receipt() {
+    let mut app = ReplApp::default();
+    let cancel = CancellationToken::new();
+    let worker_cancel = cancel.clone();
+    app.begin_turn(
+        tokio::spawn(async move { worker_cancel.cancelled().await }),
+        cancel.clone(),
+    );
+    app.push_tool_running(
+        "owned-bash".into(),
+        "bash".into(),
+        "{\"command\":\"sleep 10\"}".into(),
+    );
+    app.interrupt_current_turn();
+    assert!(cancel.is_cancelled());
+    assert!(!app.is_loading);
+    assert!(app.active_turn.as_ref().unwrap().has_running_tool_entries());
+    assert!(
+        !app.messages
+            .iter()
+            .any(|message| message.text.contains("Running tool:"))
+    );
+    app.push_tool_done(
+        "owned-bash".into(),
+        "bash".into(),
+        "Tool call was interrupted by the user.".into(),
+        true,
+    );
+    let handle = app.finish_turn_state().unwrap();
+    handle.await.unwrap();
+    app.flush_active_turn();
+    app.set_loading(false);
+    let text = lines_to_text(&app.render_transcript_range(0, app.messages.len(), 100));
+    assert!(!text.to_lowercase().contains("bash running"), "{text}");
+    assert!(!text.contains("Running tool:"));
+    assert!(text.contains("interrupted"));
+    assert_eq!(
+        app.messages
+            .iter()
+            .filter(|message| message.text.starts_with("[Tool use: bash]"))
+            .count(),
+        1
+    );
+}
+
+#[tokio::test]
+async fn terminal_turn_without_tool_receipt_reports_unknown_instead_of_running_or_success() {
+    let tmp = tempfile::tempdir().unwrap();
+    let engine = test_engine(tmp.path());
+    let (raw_tx, _rx) = tokio::sync::mpsc::channel(APP_EVENT_CHANNEL_CAPACITY);
+    let tx = AppEventSender::new(raw_tx);
+    let mut app = ReplApp::default();
+    app.push_tool_running("owned-tool".into(), "WebFetch".into(), "{}".into());
+    complete_finished_turn(&mut app, &engine, &tx, None);
+    let text = lines_to_text(&app.render_transcript_range(0, app.messages.len(), 100));
+    assert!(text.contains("Tool result unknown: WebFetch"), "{text}");
+    assert!(!text.contains("Running tool:"));
+    assert!(!text.contains("Tool succeeded:"));
+    assert!(!text.contains("Tool failed:"));
 }

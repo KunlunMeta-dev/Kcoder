@@ -1,6 +1,6 @@
 import { createServer as createHttpServer } from 'node:http'
 import { cp, mkdir } from 'node:fs/promises'
-import { isAbsolute } from 'node:path'
+import { isAbsolute, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createServer as createViteServer } from 'vite'
 
@@ -10,15 +10,19 @@ if (!publicDir || !isAbsolute(publicDir)) {
 }
 await mkdir(publicDir, { recursive: true, mode: 0o700 })
 await cp(new URL('../../public', import.meta.url), publicDir, { recursive: true })
+const server = createHttpServer()
 const vite = await createViteServer({
   configFile: fileURLToPath(new URL('../../vite.config.ts', import.meta.url)),
   mode: 'e2e',
   appType: 'spa',
   publicDir,
-  server: { middlewareMode: true },
+  cacheDir: resolve(publicDir, '../vite-cache'),
+  // Some plugins copy build assets from closeBundle even in middleware mode.
+  build: { outDir: resolve(publicDir, '../vite-dist') },
+  server: { middlewareMode: true, hmr: { server } },
 })
 
-const server = createHttpServer(vite.middlewares)
+server.on('request', vite.middlewares)
 await new Promise((resolveListen, reject) => {
   server.once('error', reject)
   server.listen(0, '127.0.0.1', resolveListen)

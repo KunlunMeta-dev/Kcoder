@@ -9,19 +9,16 @@ fn wire(value: kcoder_config::ToolProfile) -> ToolProfile {
     }
 }
 impl SessionConfiguration {
-    pub(in crate::app_server) fn read_tool_profile(&self) -> Result<ToolsSettingsResult> {
+    pub fn read_tool_profile(&self) -> Result<ToolsSettingsResult> {
         let configured = self.loader.load()?.settings.tools.profile;
         Ok(ToolsSettingsResult {
             profile: wire(configured),
             effective_profile: wire(self.cli.tool_profile.effective(configured)),
-            cli_override: (self.cli.tool_profile != crate::cli_args::ToolProfile::Auto)
+            cli_override: (self.cli.tool_profile != cli_args::ToolProfile::Auto)
                 .then(|| wire(self.cli.tool_profile.effective(configured))),
         })
     }
-    pub(in crate::app_server) fn save_tool_profile(
-        &self,
-        profile: ToolProfile,
-    ) -> Result<ToolsSettingsResult> {
+    pub fn save_tool_profile(&self, profile: ToolProfile) -> Result<ToolsSettingsResult> {
         let loaded = self.loader.load()?;
         let covered = |field: &str| field == "tools.profile";
         if loaded.overlay_fields.iter().any(|field| covered(field))
@@ -66,7 +63,7 @@ mod tests {
             SettingsLoader::new(temp.path())
                 .with_config_dir(temp.path())
                 .with_executable_dir(temp.path()),
-            crate::Cli::parse_from(["kcoder", "--tool-profile", "nano"]),
+            Cli::parse_from(["kcoder", "--tool-profile", "nano"]),
         );
         let result = config.save_tool_profile(ToolProfile::Core).unwrap();
         assert_eq!(result.profile, ToolProfile::Core);
@@ -103,7 +100,7 @@ mod tests {
             SettingsLoader::new(&project)
                 .with_config_dir(&home)
                 .with_executable_dir(&exe),
-            crate::Cli::parse_from(["kcoder"]),
+            Cli::parse_from(["kcoder"]),
         );
         assert_eq!(
             config.save_tool_profile(ToolProfile::Nano).unwrap().profile,

@@ -1,3 +1,4 @@
+import { currentHostServer } from '@/features/runtime-target/currentHostTarget'
 import { gatewayServerLabel } from '@/kcoder/gatewayServerLabel'
 import { ChevronLeft, ChevronRight, Rows3, Server } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -40,7 +41,7 @@ export function UsageSettingsPage() {
       .then(items => {
         if (active) {
           setServers(items)
-          setServerId(items[0]?.id ?? '')
+          setServerId(current => items.some(item => item.id === current) ? current : currentHostServer(items)?.id ?? '')
         }
       })
       .catch(() => {
@@ -58,10 +59,17 @@ export function UsageSettingsPage() {
     try {
       const next = await readUsageStats(serverId)
       if (current === generation.current) setStats(next)
-    } catch {
+    } catch (failure) {
       if (current === generation.current) {
         setStats(null)
-        setError(t('usageHistory.loadFailed'))
+        const reason = failure instanceof Error ? failure.message.trim() : ''
+        setError(
+          /explicit user profile/i.test(reason)
+            ? label('profileRequired')
+            : reason
+              ? `${label('loadFailed')}: ${reason}`
+              : label('loadFailed')
+        )
       }
     } finally {
       if (current === generation.current) setBusy(false)
@@ -79,6 +87,7 @@ export function UsageSettingsPage() {
   // Time-range slicing + aggregation: the 7/30 day views share a single 30-day window.
   const view2 = useMemo(() => {
     if (!stats) return null
+    if (!stats.history) return null
     const full = summarizeUsage(stats)
     if (range === 30) return full
     const daily = full.daily.slice(-range)
@@ -194,10 +203,12 @@ export function UsageSettingsPage() {
                 generation.current++
                 setStats(null)
                 setError(null)
+                setBusy(false)
                 setPages({ daily: 1, models: 1 })
                 setServerId(event.target.value)
               }}
             >
+              {servers.length > 0 && <option value="">{label('chooseTarget')}</option>}
               {servers.length === 0 && <option value="">{label('noTargets')}</option>}
               {servers.map(server => (
                 <option key={server.id} value={server.id}>
@@ -231,6 +242,11 @@ export function UsageSettingsPage() {
           {error}
         </p>
       )}
+      {!serverId && !error && (
+        <p className="mb-4 text-sm text-text-secondary" data-testid="usage-choose-target">
+          {servers.length > 0 ? label('chooseTarget') : label('noTargets')}
+        </p>
+      )}
       {busy && !stats && (
         <div
           aria-label={label('loading')}
@@ -242,17 +258,22 @@ export function UsageSettingsPage() {
             {[0, 1, 2].map(item => (
               <div
                 key={item}
-                className="h-24 animate-pulse rounded-xl bg-surface motion-reduce:animate-none"
+                className="h-24 animate-pulse rounded-xl bg-surface"
               />
             ))}
           </div>
           <div
             aria-hidden="true"
-            className="h-64 animate-pulse rounded-2xl bg-surface/60 motion-reduce:animate-none"
+            className="h-64 animate-pulse rounded-2xl bg-surface/60"
           />
         </div>
       )}
-      {stats && summary && (
+      {stats && !stats.history && (
+        <p className="mb-4 text-sm text-text-secondary" data-testid="usage-empty">
+          {label('empty')}
+        </p>
+      )}
+      {stats?.history && summary && (
         <>
           <p className="mb-6 text-sm text-text-secondary" data-testid="usage-coverage">
             {stats.history
@@ -326,7 +347,7 @@ export function UsageSettingsPage() {
               </Button>
             ))}
           </div>
-          <div className="overflow-x-auto rounded-xl border border-border">
+          <div className="studio-card overflow-x-auto rounded-xl border border-border">
             <table className="w-full text-left text-sm" data-testid="usage-table">
               <thead className="bg-surface text-text-secondary">
                 <tr>
@@ -430,6 +451,9 @@ export function UsageSettingsPage() {
             </div>
           </nav>
           <p className="mt-4 text-sm text-text-secondary">{label('accounting')}</p>
+          <p className="mt-2 text-sm text-text-secondary" data-testid="usage-cost-unavailable">
+            {label('costUnavailable')}
+          </p>
         </>
       )}
     </SettingsPage>

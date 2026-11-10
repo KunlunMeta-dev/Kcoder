@@ -1,6 +1,8 @@
+import { isDiagnosticEnabled } from '@/lib/diagnosticPreferences'
+
 export function debugComposerEvent(event: string, details: Record<string, unknown>) {
   try {
-    if (globalThis.localStorage?.getItem('wework:debug-composer') !== '1') return
+    if (!isDiagnosticEnabled('debug-composer')) return
   } catch {
     return
   }

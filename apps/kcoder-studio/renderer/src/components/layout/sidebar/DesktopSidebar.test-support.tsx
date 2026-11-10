@@ -1,3 +1,4 @@
+import { installTestTransport, clearTestTransports } from '@/test/runtime-transport'
 import {
   AppUpdateContext,
   type AppUpdateContextValue,
@@ -129,9 +130,6 @@ export function renderSidebar(
   return render(tree)
 }
 
-export function enableTauri() {
-  Object.defineProperty(window, '__TAURI_INTERNALS__', {
-    configurable: true,
-    value: {},
-  })
+export function enableGateway() {
+  installTestTransport(() => null)
 }

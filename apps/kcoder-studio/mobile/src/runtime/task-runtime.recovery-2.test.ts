@@ -2,11 +2,13 @@ import { gatewaySessionExpired } from "@/gateway/http";
 import { MobileRpcError, type JsonRecord, type RpcMessage } from "@/gateway/rpc";
 import type { ThreadMessage } from "@/gateway/types";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { resetTaskRuntimeAsyncStorage } from "@/test/task-runtime-async-storage-fixture";
 import {
   mergeReconciledMessages,
   TaskRuntime,
   taskRuntimeTestHelpers,
 } from "./task-runtime";
+import { selectorForInteraction } from "./task-runtime/interactions";
 import {
   FakeClient,
   profile,
@@ -16,7 +18,12 @@ vi.mock("@/gateway/http", () => ({
   ensureGatewayAuthorization: vi.fn(async () => {}),
   gatewaySessionExpired: vi.fn(async () => false),
 }));
+vi.mock("@react-native-async-storage/async-storage", async () => {
+  const { taskRuntimeAsyncStorage } = await import("@/test/task-runtime-async-storage-fixture");
+  return { default: taskRuntimeAsyncStorage };
+});
 beforeEach(() => {
+  resetTaskRuntimeAsyncStorage();
   vi.spyOn(Math, "random").mockReturnValue(0.5);
   vi.mocked(gatewaySessionExpired).mockResolvedValue(false);
 });
@@ -62,6 +69,8 @@ describe("TaskRuntime 断线恢复", () => {
       profile,
       server,
       threadId: "thread-1",
+      profileActivationEpoch: 1,
+      isCurrentInteractionOwner: () => true,
     });
 
     initial.emit({
@@ -446,7 +455,7 @@ describe("TaskRuntime 断线恢复", () => {
     vi.useFakeTimers();
     let resolveOldPage: ((value: unknown) => void) | undefined;
     let firstRead = true;
-    const initial = {
+    const initial = Object.assign(new FakeClient([]), {
       listeners: new Set<(message: RpcMessage) => void>(),
       subscribe(listener: (message: RpcMessage) => void) {
         this.listeners.add(listener);
@@ -483,7 +492,7 @@ describe("TaskRuntime 断线恢复", () => {
           });
         return {};
       }),
-    };
+    });
     const recovered = new FakeClient(
       [{ id: "shared", role: "assistant", content: "恢复后", timestampMs: 10 }],
       [],
@@ -526,6 +535,48 @@ describe("TaskRuntime 断线恢复", () => {
     runtime.close();
   });
 
+  it("缺少或空的 interaction ID 不会用 JSON-RPC requestId 合成交互身份", async () => {
+    const client = new FakeClient([]);
+    taskRuntimeTestHelpers.setConnector(
+      vi.fn(async () => client as never) as never,
+    );
+    const runtime = await TaskRuntime.resume({
+      profile,
+      server,
+      threadId: "thread-1",
+      profileActivationEpoch: 1,
+      isCurrentInteractionOwner: () => true,
+    });
+    const identity = {
+      serverId: "server-engine-test",
+      threadId: "thread-1",
+      turnId: "turn-required",
+      appServerEpoch: "epoch-required",
+    };
+
+    client.emit({ id: 81, method: "approval/request", params: identity });
+    client.emit({ id: 82, method: "approval/request", params: { ...identity, approvalId: "" } });
+    client.emit({ id: 83, method: "question/request", params: identity });
+    client.emit({ id: 84, method: "question/request", params: { ...identity, questionId: "" } });
+    client.emit({ id: 85, method: "question/request", params: { ...identity, questionId: "   " } });
+    expect(runtime.pendingInteractions).toHaveLength(0);
+    expect(runtime.getSnapshot().interaction).toBeNull();
+
+    client.emit({
+      id: 86,
+      method: "approval/request",
+      params: { ...identity, approvalId: "approval-exact" },
+    });
+    client.emit({
+      id: 87,
+      method: "question/request",
+      params: { ...identity, questionId: "question-exact", questions: [] },
+    });
+    expect(runtime.pendingInteractions.map((item) => [item.requestId, item.kind === "approval" ? item.approvalId : item.questionId]))
+      .toEqual([[86, "approval-exact"], [87, "question-exact"]]);
+    runtime.close();
+  });
+
   it("并发交互按 requestId 排队，解决一个不会清除另一个", async () => {
     const client = new FakeClient([]);
     taskRuntimeTestHelpers.setConnector(
@@ -535,12 +586,18 @@ describe("TaskRuntime 断线恢复", () => {
       profile,
       server,
       threadId: "thread-1",
+      profileActivationEpoch: 1,
+      isCurrentInteractionOwner: () => true,
     });
 
     client.emit({
       id: 11,
       method: "approval/request",
       params: {
+        serverId: "server-engine-test",
+        threadId: "thread-1",
+        turnId: "turn-1",
+        appServerEpoch: "epoch-1",
         approvalId: "approval-11",
         reason: "运行测试",
         action: { type: "command", command: "cargo test" },
@@ -550,6 +607,10 @@ describe("TaskRuntime 断线恢复", () => {
       id: 12,
       method: "question/request",
       params: {
+        serverId: "server-engine-test",
+        threadId: "thread-1",
+        turnId: "turn-1",
+        appServerEpoch: "epoch-1",
         questionId: "question-12",
         questions: [{ id: "db", prompt: "数据库？", options: [] }],
       },
@@ -561,7 +622,15 @@ describe("TaskRuntime 断线恢复", () => {
 
     client.emit({
       method: "approval/resolved",
-      params: { requestId: 11, approvalId: "approval-11" },
+      params: {
+        requestId: 11,
+        approvalId: "approval-11",
+        threadId: "thread-1",
+        turnId: "turn-1",
+        appServerEpoch: "epoch-1",
+        decision: "accept",
+        reason: "client_response",
+      },
     });
     expect(runtime.getSnapshot().interaction).toMatchObject({
       kind: "question",
@@ -570,12 +639,98 @@ describe("TaskRuntime 断线恢复", () => {
 
     client.emit({
       method: "approval/resolved",
-      params: { requestId: 999, approvalId: "other" },
+      params: {
+        requestId: 999,
+        approvalId: "other",
+        threadId: "thread-1",
+        turnId: "turn-1",
+        appServerEpoch: "epoch-1",
+        decision: "decline",
+        reason: "timeout",
+      },
     });
     expect(runtime.getSnapshot().interaction).toMatchObject({
       kind: "question",
       requestId: 12,
     });
+    runtime.close();
+  });
+
+  it("交互请求缺少或错误 thread/turn 时不继承当前运行身份", async () => {
+    const client = new FakeClient([]);
+    taskRuntimeTestHelpers.setConnector(vi.fn(async () => client as never) as never);
+    const runtime = await TaskRuntime.resume({
+      profile,
+      server,
+      threadId: "thread-1",
+      profileActivationEpoch: 1,
+      isCurrentInteractionOwner: () => true,
+    });
+    runtime.patch({ activeTurnId: "active-turn-must-not-be-inherited" });
+    const emit = (id: number, params: JsonRecord) => client.emit({
+      id,
+      method: "approval/request",
+      params: {
+        serverId: "server-engine-test",
+        appServerEpoch: `epoch-${id}`,
+        approvalId: `approval-${id}`,
+        reason: "approve",
+        action: { type: "command", command: "echo" },
+        ...params,
+      },
+    });
+
+    emit(80, { turnId: "turn-80" });
+    emit(81, { threadId: "thread-1" });
+    emit(82, { threadId: "other-thread", turnId: "turn-82" });
+    emit(83, { threadId: "thread-1", turnId: "" });
+
+    expect(runtime.pendingInteractions).toHaveLength(0);
+    expect(runtime.getSnapshot().interaction).toBeNull();
+    runtime.close();
+  });
+
+  it("sourceAgent parent 不匹配时 fail closed，同 tuple 重放也不能转成普通问题", async () => {
+    const client = new FakeClient([]);
+    client.respond = vi.fn();
+    taskRuntimeTestHelpers.setConnector(vi.fn(async () => client as never) as never);
+    const runtime = await TaskRuntime.resume({
+      profile,
+      server,
+      threadId: "thread-1",
+      profileActivationEpoch: 1,
+      isCurrentInteractionOwner: () => true,
+    });
+    const request = {
+      id: 91,
+      method: "question/request",
+      params: {
+        serverId: "server-engine-test",
+        threadId: "thread-1",
+        turnId: "turn-91",
+        appServerEpoch: "epoch-91",
+        questionId: "question-91",
+        sourceAgent: { agentId: "agent-1", parentSessionId: "different-parent" },
+        questions: [{ id: "choice", prompt: "Choose", options: [] }],
+      },
+    };
+    client.emit(request);
+    const unsupported = runtime.pendingInteractions[0]!;
+    expect(unsupported).toMatchObject({ kind: "question", owner: { status: "unsupported" } });
+    expect(unsupported.kind === "question" ? unsupported.sourceAgent : undefined).toBeUndefined();
+    expect(runtime.isInteractionActionable(unsupported)).toBe(false);
+
+    client.emit({
+      ...request,
+      params: { ...request.params, sourceAgent: { agentId: "agent-1", parentSessionId: "thread-1" } },
+    });
+    expect(runtime.pendingInteractions).toHaveLength(1);
+    expect(runtime.pendingInteractions[0]).toMatchObject({ owner: { status: "unsupported" } });
+    expect(runtime.pendingInteractions[0]?.kind === "question" &&
+      runtime.pendingInteractions[0]?.sourceAgent).toBeUndefined();
+    expect(() => runtime.respondQuestions({ choice: ["yes"] }, selectorForInteraction(runtime.pendingInteractions[0]!)))
+      .toThrow(/失效|只支持核对/);
+    expect(client.respond).not.toHaveBeenCalled();
     runtime.close();
   });
 
@@ -589,12 +744,18 @@ describe("TaskRuntime 断线恢复", () => {
       profile,
       server,
       threadId: "thread-1",
+      profileActivationEpoch: 1,
+      isCurrentInteractionOwner: () => true,
     });
 
     client.emit({
       id: 12,
       method: "question/request",
       params: {
+        serverId: "server-engine-test",
+        threadId: "thread-1",
+        turnId: "turn-1",
+        appServerEpoch: "epoch-1",
         questionId: "question-12",
         questions: [{ id: "db", prompt: "数据库？", options: [] }],
       },
@@ -617,10 +778,148 @@ describe("TaskRuntime 断线恢复", () => {
       params: {
         requestId: 12,
         questionId: "question-12",
+        threadId: "thread-1",
+        turnId: "turn-1",
+        appServerEpoch: "epoch-1",
         reason: "response_error",
       },
     });
     expect(runtime.getSnapshot().interaction).toBeNull();
+    runtime.close();
+  });
+
+  it("断连后同一 request tuple 在新 socket 重放仍保留首个 owner 且只读", async () => {
+    vi.useFakeTimers();
+    const initial = new FakeClient([]);
+    const recovered = new FakeClient([]);
+    recovered.supportsExperimental = (capability) => capability === "interactionStatusReadV1";
+    const recoveredRequest = recovered.request.bind(recovered);
+    recovered.request = vi.fn(async <T>(method: string, params: JsonRecord = {}) => {
+      if (method === "interaction/status/read") return {
+        ...params,
+        status: "pending",
+      } as T;
+      return recoveredRequest<T>(method, params);
+    }) as never;
+    recovered.respond = vi.fn();
+    const clients = [initial, recovered];
+    taskRuntimeTestHelpers.setConnector(
+      vi.fn(async () => clients.shift() as never) as never,
+    );
+    const runtime = await TaskRuntime.resume({
+      profile,
+      server,
+      threadId: "thread-1",
+      profileActivationEpoch: 7,
+      isCurrentInteractionOwner: () => true,
+    });
+    const request = {
+      id: 71,
+      method: "approval/request",
+      params: {
+        serverId: "server-engine-test",
+        threadId: "thread-1",
+        turnId: "turn-71",
+        appServerEpoch: "epoch-71",
+        approvalId: "approval-71",
+        reason: "执行测试",
+        action: { type: "command", command: "cargo test" },
+      },
+    };
+    initial.emit(request);
+    const firstOwner = runtime.pendingInteractions[0]!.owner;
+    expect(firstOwner).toMatchObject({ serverId: "local", appServerId: "server-engine-test" });
+    expect(runtime.isInteractionActionable(runtime.pendingInteractions[0]!)).toBe(true);
+
+    initial.emit({ method: "connection/closed", params: { reason: "network lost" } });
+    expect(runtime.pendingInteractions[0]!.owner).toMatchObject({ status: "unknown", originClientGeneration: 1 });
+    await vi.advanceTimersByTimeAsync(500);
+    await Promise.resolve();
+    await Promise.resolve();
+    await runtime.reconcilePendingInteractions(false);
+    expect(recovered.request).toHaveBeenCalledWith("interaction/status/read", expect.objectContaining({
+      serverId: "server-engine-test",
+      threadId: "thread-1",
+      turnId: "turn-71",
+      appServerEpoch: "epoch-71",
+      requestId: 71,
+      kind: "approval",
+      approvalId: "approval-71",
+    }));
+
+    recovered.emit(request);
+    expect(runtime.pendingInteractions).toHaveLength(1);
+    expect(runtime.pendingInteractions[0]!.owner).toEqual({ ...firstOwner, status: "pending" });
+    expect(runtime.pendingInteractions[0]!.owner.originClientGeneration).toBeLessThan(runtime.clientGeneration);
+    expect(runtime.isInteractionActionable(runtime.pendingInteractions[0]!)).toBe(false);
+    expect(() => runtime.respondApproval("accept", selectorForInteraction(runtime.pendingInteractions[0]!)))
+      .toThrow(/失效|只支持核对/);
+    expect(recovered.respond).not.toHaveBeenCalled();
+    runtime.close();
+  });
+
+  it("epochless 请求标记 unsupported，跨 generation 的重放与 resolved 都不能接管", async () => {
+    vi.useFakeTimers();
+    const initial = new FakeClient([]);
+    const recovered = new FakeClient([]);
+    recovered.respond = vi.fn();
+    const clients = [initial, recovered];
+    taskRuntimeTestHelpers.setConnector(
+      vi.fn(async () => clients.shift() as never) as never,
+    );
+    const runtime = await TaskRuntime.resume({
+      profile,
+      server,
+      threadId: "thread-1",
+      profileActivationEpoch: 8,
+      isCurrentInteractionOwner: () => true,
+    });
+    const request = {
+      id: 72,
+      method: "approval/request",
+      params: {
+        serverId: "server-engine-test",
+        threadId: "thread-1",
+        turnId: "turn-72",
+        approvalId: "approval-72",
+        reason: "旧协议请求",
+        action: { type: "command", command: "echo test" },
+      },
+    };
+    initial.emit(request);
+    const firstOwner = runtime.pendingInteractions[0]!.owner;
+    expect(firstOwner).toMatchObject({ status: "unsupported", appServerEpoch: null });
+    expect(runtime.isInteractionActionable(runtime.pendingInteractions[0]!)).toBe(false);
+
+    initial.emit({ method: "connection/closed", params: { reason: "network lost" } });
+    await vi.advanceTimersByTimeAsync(500);
+    await runtime.reconnectPromise;
+    expect(runtime.client).toBe(recovered);
+
+    recovered.emit(request);
+    recovered.emit({
+      method: "approval/resolved",
+      params: {
+        requestId: 72,
+        approvalId: "approval-72",
+        threadId: "thread-1",
+        turnId: "turn-72",
+        decision: "cancel",
+        reason: "client_response",
+      },
+    });
+    expect(runtime.pendingInteractions).toHaveLength(1);
+    expect(runtime.pendingInteractions[0]!.owner).toMatchObject({
+      appServerEpoch: null,
+      originClientGeneration: firstOwner.originClientGeneration,
+      status: "unsupported",
+    });
+    expect(runtime.isInteractionActionable(runtime.pendingInteractions[0]!)).toBe(false);
+    expect(() => runtime.respondApproval(
+      "accept",
+      selectorForInteraction(runtime.pendingInteractions[0]!),
+    )).toThrow(/失效|核对/);
+    expect(recovered.respond).not.toHaveBeenCalled();
     runtime.close();
   });
 
@@ -1029,7 +1328,8 @@ describe("TaskRuntime 断线恢复", () => {
 
       clients.forEach((client, index) => {
         client.supportsExperimental = (capability: string) =>
-          capability === "threadIndexedPagesV1" || capability === "turnReceiptsV1";
+          capability === "threadIndexedPagesV1" || capability === "turnReceiptsV1" ||
+          capability === "threadTranscriptObservationV1";
         const defaultRequest = client.request.bind(client);
         client.request = vi.fn(async (method: string, params: JsonRecord = {}) => {
           requests[index].push({ method, params });
@@ -1057,6 +1357,11 @@ describe("TaskRuntime 断线恢复", () => {
               beforeCursor: null,
               rangeStart: 0,
               rangeEnd: messages.length,
+              // The final read proves newly persisted rows, independently of the receipt.
+              transcriptObservationV1: {
+                observationId: (index < 2 ? "a" : "c").repeat(64),
+                viewKey: "b".repeat(64),
+              },
             } as never;
           }
           if (method === "turn/start") {

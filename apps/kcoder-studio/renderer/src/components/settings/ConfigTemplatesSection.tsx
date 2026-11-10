@@ -270,7 +270,7 @@ function ConfigTemplatesEditor({ serverId }: { serverId: string }) {
       {(loadState === 'ready' || templates.length > 0) && (
         <div
           data-testid={defaultId ? 'config-templates-default' : undefined}
-          className="flex items-start gap-3 rounded-xl border border-focus/10 bg-accent-surface p-4 text-sm text-text-secondary break-words"
+          className="studio-card-spacing flex items-start gap-3 rounded-xl border border-focus/10 bg-accent-surface text-sm text-text-secondary break-words"
         >
           <Info className="mt-0.5 size-4 shrink-0 text-focus" aria-hidden="true" />
           <p>

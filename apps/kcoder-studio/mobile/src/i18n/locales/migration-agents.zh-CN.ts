@@ -1,0 +1,17 @@
+export const migrationAgentsZhCN = {
+  "migration_agents.adapt": "将此静态定义适配为原生 Agent",
+  "migration_agents.boundary": "保留已审查的提示词和工具限制，发布后默认停用。来源审批、向用户提问权限和未适配依赖不会迁入。",
+  "migration_agents.inspect": "检查适配兼容性",
+  "migration_agents.failed": "暂未确认兼容性，请重新读取原预览。",
+  "migration_agents.update_required": "请更新目标端后再适配 Agent 定义。",
+  "migration_agents.unsupported": "该定义包含尚未适配的行为或依赖，请保留原始待处理定义供审查。",
+  "migration_agents.model_policy": "原生模型映射",
+  "migration_agents.model": "模型标识",
+  "migration_agents.provider": "Provider 标识",
+  "migration_agents.choose": "请明确选择",
+  "migration_agents.inherit": "启动时继承当前模型",
+  "migration_agents.target": "指定已有 Provider 和模型",
+  "migration_agents.model_boundary": "来源模型别名不会自动选择原生模型。启动时校验目标配置，后续接续保持原映射；目标部署变化后需重新启动 Agent。",
+  "migration_agents.tools": "已审查的原生工具",
+  "migration_agents.confirm": "我已审查来源提示词、目标模型映射和受限工具，确认以停用状态发布。"
+} as const;

@@ -57,7 +57,7 @@ export function PluginSettingsPage() {
         description={t('workbench.plugin_settings_subtitle', '管理本地插件、技能和在线连接器')}
       />
 
-      <section className="rounded-lg border border-border bg-background p-5">
+      <section className="studio-card-spacing rounded-lg border border-border bg-background">
         <div className="flex min-w-0 items-start gap-3">
           <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
             <Package className="h-4 w-4" />
@@ -72,7 +72,7 @@ export function PluginSettingsPage() {
           </div>
         </div>
 
-        <div className="mt-5 rounded-lg border border-border bg-background p-3">
+        <div className="studio-card-spacing mt-5 rounded-lg border border-border bg-background">
           <label className="flex cursor-pointer items-start justify-between gap-4">
             <span className="min-w-0">
               <span className="block text-sm font-medium text-text-primary">
@@ -104,7 +104,7 @@ export function PluginSettingsPage() {
           {codexConfigError && (
             <div
               data-testid="codex-plugin-config-error"
-              className="mt-3 flex items-start gap-2 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-red-500"
+              className="studio-card-spacing mt-3 flex items-start gap-2 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-red-500"
             >
               <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
               <span>{codexConfigError}</span>

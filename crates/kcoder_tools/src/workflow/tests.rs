@@ -1,3 +1,7 @@
+#[path = "native_definition_tests.rs"]
+mod native_definition_tests;
+#[path = "native_launch_tests.rs"]
+mod native_launch_tests;
 #[path = "recovery_tests.rs"]
 mod recovery_tests;
 
@@ -36,9 +40,13 @@ use super::*;
 use crate::background::BackgroundJobEvent;
 use crate::{AgentError, BackgroundJobSpawner, SpawnError};
 use kcoder_state::{AppState, Task, TaskKind, TaskStatus};
+#[cfg(any(target_os = "linux", windows))]
+use kcoder_workflow_observations::run_files::try_acquire_resume_lease;
 use std::collections::HashMap;
 use std::future::Future;
 use std::pin::Pin;
+use std::sync::atomic::AtomicU64;
+use std::time::Duration;
 use tokio::sync::broadcast;
 
 #[test]
@@ -118,6 +126,8 @@ fn cache_requires_atomic_completion_marker() {
     let agent_dir = temp.path().join("agent");
     secure_create_dir(&agent_dir).unwrap();
     let request = AgentRequest {
+        model_selection: None,
+        artifact_requirements: vec![],
         output_repair_only: false,
         prompt: "review".to_string(),
         agent_type: "review".to_string(),
@@ -701,6 +711,9 @@ async fn graph_nodes_do_not_inherit_the_parent_launch_request() {
         require_legacy_agent_request: false,
         verification_store: None,
         isolate_context: true,
+        pinned_model: None,
+        native_parent_state: None,
+        collaboration_artifacts: None,
         runner: runner.clone(),
         arrangement_mode: false,
         resume_run_dir: None,
@@ -730,6 +743,9 @@ async fn graph_output_repair_forces_empty_agent_tool_allowlist() {
         require_legacy_agent_request: false,
         verification_store: None,
         isolate_context: false,
+        pinned_model: None,
+        native_parent_state: None,
+        collaboration_artifacts: None,
         runner: runner.clone(),
         arrangement_mode: false,
         resume_run_dir: None,

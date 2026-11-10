@@ -294,7 +294,7 @@ export function useWorkbenchPaneEnvironment({
             devicesRef.current,
             latestActiveWorkspaceTarget?.deviceId ?? info.deviceId
           )
-          setEnvironmentInfo({
+          const next: EnvironmentInfo = {
             ...info,
             workspaceRoots,
             executionTarget: actualDevice
@@ -303,7 +303,10 @@ export function useWorkbenchPaneEnvironment({
                 : 'local'
               : info.executionTarget,
             loading: false,
-          })
+          }
+          // Background polls usually return the same values; keep the previous
+          // object so the pane does not re-render every poll.
+          setEnvironmentInfo(previous => (sameEnvironmentInfo(previous, next) ? previous : next))
         }
       } catch (error) {
         if (environmentInfoRequestSequence.current === requestId) {
@@ -354,7 +357,7 @@ export function useWorkbenchPaneEnvironment({
     }
 
     const intervalId = window.setInterval(() => {
-      void loadCurrentEnvironmentInfo({ force: true, showLoading: false })
+      void loadCurrentEnvironmentInfo({ force: false, showLoading: false })
     }, 5000)
     return () => window.clearInterval(intervalId)
   }, [environmentRefreshActive, loadCurrentEnvironmentInfo])
@@ -461,4 +464,19 @@ export function useWorkbenchPaneEnvironment({
     checkoutEnvironmentBranch: checkoutPaneEnvironmentBranch,
     createEnvironmentBranch: createPaneEnvironmentBranch,
   }
+}
+
+/** Value equality for polled environment snapshots. */
+export function sameEnvironmentInfo(left: EnvironmentInfo, right: EnvironmentInfo): boolean {
+  const keys = new Set([...Object.keys(left), ...Object.keys(right)] as Array<
+    keyof EnvironmentInfo
+  >)
+  for (const key of keys) {
+    const a = left[key]
+    const b = right[key]
+    if (Array.isArray(a) && Array.isArray(b)) {
+      if (a.length !== b.length || a.some((value, index) => value !== b[index])) return false
+    } else if (a !== b) return false
+  }
+  return true
 }

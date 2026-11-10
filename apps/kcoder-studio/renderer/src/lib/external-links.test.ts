@@ -6,37 +6,10 @@ import {
   isLocalHttpUrl,
   openExternalUrl,
 } from './external-links'
-import { openUrl } from '@tauri-apps/plugin-opener'
-
-const requestEmbeddedBrowserOpenMock = vi.hoisted(() => vi.fn())
-const getAppPreferencesMock = vi.hoisted(() => vi.fn())
-
-vi.mock('@tauri-apps/plugin-opener', () => ({
-  openUrl: vi.fn(),
-}))
-
-vi.mock('./embedded-browser', () => ({
-  requestEmbeddedBrowserOpen: requestEmbeddedBrowserOpenMock,
-}))
-
-vi.mock('@/tauri/appPreferences', () => ({
-  getAppPreferences: getAppPreferencesMock,
-}))
-
 const openWindowMock = vi.fn()
 
 afterEach(() => {
   document.body.innerHTML = ''
-  delete (window as Window & { __TAURI_INTERNALS__?: object }).__TAURI_INTERNALS__
-  delete (window as Window & { __KCODER_GATEWAY_WEB_SHIM__?: boolean }).__KCODER_GATEWAY_WEB_SHIM__
-  vi.mocked(openUrl).mockReset()
-  requestEmbeddedBrowserOpenMock.mockReset()
-  requestEmbeddedBrowserOpenMock.mockReturnValue(true)
-  getAppPreferencesMock.mockReset()
-  getAppPreferencesMock.mockResolvedValue({
-    browserExternalLinkTarget: 'system',
-    browserLocalLinkTarget: 'studio',
-  })
   openWindowMock.mockReset()
   vi.unstubAllGlobals()
 })
@@ -59,7 +32,7 @@ describe('external link helpers', () => {
     expect(isLocalHttpUrl('https://example.com')).toBe(false)
   })
 
-  test('opens http URLs with browser fallback outside Tauri', async () => {
+  test('opens http URLs through the browser/Electron navigation policy', async () => {
     vi.stubGlobal('open', openWindowMock)
 
     await expect(openExternalUrl('https://example.com/docs')).resolves.toBe(true)
@@ -69,76 +42,6 @@ describe('external link helpers', () => {
       '_blank',
       'noopener,noreferrer'
     )
-    expect(openUrl).not.toHaveBeenCalled()
-  })
-
-  test('opens http URLs with the Tauri opener plugin in desktop runtime', async () => {
-    Object.defineProperty(window, '__TAURI_INTERNALS__', {
-      configurable: true,
-      value: {},
-    })
-    vi.stubGlobal('open', openWindowMock)
-
-    await expect(openExternalUrl('https://example.com/docs')).resolves.toBe(true)
-
-    expect(openUrl).toHaveBeenCalledWith('https://example.com/docs')
-    expect(openWindowMock).not.toHaveBeenCalled()
-  })
-
-  test('opens links in the browser when Tauri globals belong to the Gateway shim', async () => {
-    Object.defineProperty(window, '__TAURI_INTERNALS__', { configurable: true, value: {} })
-    Object.defineProperty(window, '__KCODER_GATEWAY_WEB_SHIM__', {
-      configurable: true,
-      value: true,
-    })
-    vi.stubGlobal('open', openWindowMock)
-
-    await expect(openExternalUrl('https://example.com/docs')).resolves.toBe(true)
-
-    expect(openWindowMock).toHaveBeenCalledWith(
-      'https://example.com/docs',
-      '_blank',
-      'noopener,noreferrer'
-    )
-    expect(openUrl).not.toHaveBeenCalled()
-    expect(getAppPreferencesMock).not.toHaveBeenCalled()
-  })
-
-  test('routes configured localhost links into the Wework built-in browser', async () => {
-    Object.defineProperty(window, '__TAURI_INTERNALS__', {
-      configurable: true,
-      value: {},
-    })
-
-    await expect(openExternalUrl('http://localhost:3000')).resolves.toBe(true)
-
-    expect(requestEmbeddedBrowserOpenMock).toHaveBeenCalledWith('http://localhost:3000')
-    expect(openUrl).not.toHaveBeenCalled()
-  })
-
-  test('falls back to the system browser when no Wework browser panel is listening', async () => {
-    Object.defineProperty(window, '__TAURI_INTERNALS__', {
-      configurable: true,
-      value: {},
-    })
-    requestEmbeddedBrowserOpenMock.mockReturnValue(false)
-
-    await expect(openExternalUrl('http://localhost:3000')).resolves.toBe(true)
-
-    expect(requestEmbeddedBrowserOpenMock).toHaveBeenCalledWith('http://localhost:3000')
-    expect(openUrl).toHaveBeenCalledWith('http://localhost:3000')
-  })
-
-  test('supports forcing the system browser from the browser toolbar', async () => {
-    Object.defineProperty(window, '__TAURI_INTERNALS__', {
-      configurable: true,
-      value: {},
-    })
-
-    await expect(openExternalUrl('http://localhost:3000', { target: 'system' })).resolves.toBe(true)
-
-    expect(openUrl).toHaveBeenCalledWith('http://localhost:3000')
-    expect(requestEmbeddedBrowserOpenMock).not.toHaveBeenCalled()
   })
 
   test('intercepts clicked http anchors through the shared opener', async () => {

@@ -17,17 +17,17 @@ const localExecutorMocks = vi.hoisted(() => ({
 }))
 
 const runtimeMocks = vi.hoisted(() => ({
-  isTauriRuntime: vi.fn(),
+  isGatewayRuntime: vi.fn(),
 }))
 
-vi.mock('@/tauri/localExecutor', () => localExecutorMocks)
+vi.mock('@/host/localExecutor', () => localExecutorMocks)
 
 vi.mock('./runtime-environment', () => runtimeMocks)
 
 describe('CDP browser session', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    runtimeMocks.isTauriRuntime.mockReturnValue(true)
+    runtimeMocks.isGatewayRuntime.mockReturnValue(true)
     localExecutorMocks.ensureLocalExecutorStarted.mockResolvedValue({
       running: true,
       ready: true,
@@ -45,12 +45,12 @@ describe('CDP browser session', () => {
     })
   })
 
-  test('is available only in the Tauri runtime', () => {
-    runtimeMocks.isTauriRuntime.mockReturnValue(false)
+  test('is available only in the Gateway runtime', () => {
+    runtimeMocks.isGatewayRuntime.mockReturnValue(false)
 
     expect(canUseCdpBrowserSession()).toBe(false)
 
-    runtimeMocks.isTauriRuntime.mockReturnValue(true)
+    runtimeMocks.isGatewayRuntime.mockReturnValue(true)
     expect(canUseCdpBrowserSession()).toBe(true)
   })
 

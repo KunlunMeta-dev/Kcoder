@@ -1,5 +1,10 @@
+
+
+
+import { createMobileUxInstrumentation } from "../../harness/mobile-ux-instrumentation.mjs";
 import assert from "node:assert/strict";
 import { createHash, randomBytes } from "node:crypto";
+import { execFileSync } from "node:child_process";
 import {
   access,
   chmod,
@@ -16,22 +21,45 @@ import {
   stat,
   writeFile,
 } from "node:fs/promises";
-import { basename, relative, resolve, sep } from "node:path";
+import { basename, isAbsolute, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { performance } from "node:perf_hooks";
 import { exportMobileWeb } from "../../harness/mobile-web-export.mjs";
+import { copyOfficialMobileStaticDist, inspectOfficialMobileStaticDist } from "../../harness/mobile-static-dist-input.mjs";
+import { buildGatewayMobileWebManifest } from "../../../mobile/scripts/gateway-mobile-web-manifest.mjs";
+import { addOfficialMobileExportPostflight, officialMobileExportReceiptFromEnv, readOfficialMobileExportReceipt, verifyOfficialMobileSourceSnapshot } from "../../harness/official-mobile-export-receipt.mjs";
 import { chromium as playwrightChromium } from "../../../renderer/node_modules/@playwright/test/index.mjs";
 import { startChromium } from "../../harness/chromium.mjs";
 import { startOwnedDisplay } from "../../harness/ai-verify-gateway.mjs";
 import { appRoot, repoRoot, runE2E, waitFor } from "../../harness/run-context.mjs";
-import { resolveExistingPrivateGatewaySnapshot, resolveExistingPrivatePath } from "./helpers/gateway-runtime-snapshot-guard.mjs";
-import { createAcceptedTurnReceiptFixture, createResponseJitter, mobileApiPath, sanitizeGatewayPath, sumResponseDelayMs } from "./helpers/mobile-high-latency-fault-fixture.mjs";
+import { resolveExistingPrivateGatewaySnapshot, resolveExistingPrivatePath } from "../../harness/gateway-runtime-snapshot-guard.mjs";
+import { createAcceptedTurnReceiptFixture, createResponseJitter, mobileApiPath, sanitizeGatewayPath, sumResponseDelayMs } from "../../harness/mobile-high-latency-fault-fixture.mjs";
+import { assertFormalHomeThreadPresentationStable, captureThreadListFixtureFields, safeAuthCleanupErrorField } from "./helpers/formal-home-thread-observation.mjs";
 import { findHttpResponseForRouteRequest } from "./helpers/refresh-http-response-correlation.mjs";
 import { drainAndArmBackgroundHttpResponseHold } from "./helpers/refresh-background-window-visibility.mjs";
 import { closeOwnedMobilePage, createRefreshProgressWriter, createTurnStartErrorFixtureFrame, observeOwnedMobilePage } from "./helpers/refresh-send-background-fixture.mjs";
+import { summarizePageSideTimingSamples } from "./helpers/page-side-timing-summary.mjs";
+import { createHomeServersRevisionDiagnosticControl } from "./helpers/home-servers-revision-diagnostic.mjs";
+import {
+  MATCHED_DEPLOY_MOUNTED_PINS,
+  hashComplement,
+  materializeMatchedMobileStaticDist,
+  prepareMobileSourceSnapshot,
+  reuseMobileWebExport,
+  selectMatchedDeployMountedModes,
+  validateMatchedDeployMountedInputs,
+} from "./helpers/matched-deploy-mounted-inputs.mjs";
+import { createMobileRefreshSourceInputs } from "../../harness/mobile-refresh-source-inputs.mjs";
+import { createMobileRefreshFaultScenarios } from "../../harness/mobile-refresh-fault-scenarios.mjs";
+import { observeSeparatedSuiteSourceInputs } from "../../harness/separated-suite-source-inputs.mjs";
 
 const SERVER_ID = "backend4a";
 const THREAD_ID = "mock-active-session";
+const HOME_REVISION_NEW_THREAD_ID = "mock-home-revision-refresh-session";
+const HOME_REVISION_NEW_THREAD_TITLE = "Home revision refresh diagnostic row";
+// Keep the mock Home row far from a relative-time boundary without changing
+// Date.now() in the app or browser. This value is fixed for the whole run.
+const REFRESH_FORMAL_HOME_THREAD_UPDATED_AT_EPOCH_MS = Date.now() - ((30 * 24 + 12) * 60 * 60 * 1000);
 const DEFAULT_SAMPLES = 30;
 const DEFAULT_DELAYS = [0, 300, 600, 1000];
 // Application-path timer/clock rounding tolerance; this is not network RTT.
@@ -44,6 +72,10 @@ const beforeComplementDirectory = optionValue("--before-complement-dir", null);
 const beforeComplementSha256 = optionValue("--before-complement-sha256", null);
 const reuseExportDirectory = optionValue("--reuse-export-dir", null);
 const reuseExportManifest = optionValue("--reuse-export-manifest", null);
+const reuseExportManifestSha256 = optionValue("--reuse-export-manifest-sha256", null);
+const { reuseDeployMountedMode, reuseMatchedDeployMountedFormalMode, matchedDeployMountedInputMode } = selectMatchedDeployMountedModes(process.argv);
+const currentOfficialDistMode = process.argv.includes("--current-official-dist");
+const deviceOnlyMountedAuthMode = currentOfficialDistMode || matchedDeployMountedInputMode;
 const gatewaySnapshotDirectory = optionValue("--gateway-snapshot-dir", null);
 const gatewayKcoderBinaryOverride = optionValue("--gateway-kcoder-bin", null);
 const gatewayKcoderBinarySha256 = optionValue("--gateway-kcoder-sha256", null);
@@ -54,19 +86,41 @@ const selectedFaultScenario = optionValue("--fault-scenario", null);
 const refreshSmokeMode = process.argv.includes("--refresh-smoke");
 const refreshAuthCleanupUiGateCycles = optionValue("--auth-cleanup-ui-gate", null);
 const refreshAuthCleanupUiGateMode = refreshAuthCleanupUiGateCycles !== null;
+const refreshHomeN30OnlyMode = process.argv.includes("--home-n30-only");
 const refreshSendDiagnostic = optionValue("--refresh-send-diagnostic", null);
 const refreshSendDiagnosticMode = refreshSendDiagnostic === "accepted-600";
 const refreshBackgroundDiagnostic = optionValue("--refresh-background-diagnostic", null);
 const refreshBackgroundDiagnosticMode = refreshBackgroundDiagnostic === "home-600";
-const refreshDiagnosticMode = refreshSendDiagnosticMode || refreshBackgroundDiagnosticMode;
+const refreshHomeServersRevisionDiagnosticMode = process.argv.includes("--home-servers-revision-diagnostic");
+const refreshHomeBackgroundDiagnosticMode = refreshBackgroundDiagnosticMode || refreshHomeServersRevisionDiagnosticMode;
+const refreshDiagnosticMode = refreshSendDiagnosticMode || refreshHomeBackgroundDiagnosticMode;
+const refreshDiagnosticId = refreshSendDiagnosticMode ? refreshSendDiagnostic
+  : refreshBackgroundDiagnosticMode ? refreshBackgroundDiagnostic
+    : refreshHomeServersRevisionDiagnosticMode ? "home-servers-revision-pending" : null;
+const refreshDiagnosticDelayValues = refreshHomeServersRevisionDiagnosticMode ? [0] : [600];
 const refreshBackgroundWindowMode = !refreshSendDiagnosticMode && !refreshAuthCleanupUiGateMode;
 const refreshSingleSampleMode = refreshSmokeMode || refreshDiagnosticMode || refreshAuthCleanupUiGateMode;
 const formalOwnedAuthLifecycle = !refreshSingleSampleMode;
 const refreshCoverageMode = refreshDiagnosticMode
   ? "DIAGNOSTIC_ONLY"
-  : refreshSmokeMode ? "SMOKE_ONLY" : refreshAuthCleanupUiGateMode ? "AUTH_CLEANUP_UI_GATE_ONLY" : "FORMAL_N30";
+  : refreshSmokeMode ? "SMOKE_ONLY" : refreshAuthCleanupUiGateMode ? "AUTH_CLEANUP_UI_GATE_ONLY"
+    : refreshHomeN30OnlyMode ? "HOME_N30_ONLY"
+      : reuseMatchedDeployMountedFormalMode ? "MATCHED_DEPLOY_MOUNTED_FORMAL_N30" : "FORMAL_N30";
+const refreshFormalN30Mode = !refreshSingleSampleMode && !refreshHomeN30OnlyMode
+  && (refreshCoverageMode === "FORMAL_N30" || refreshCoverageMode === "MATCHED_DEPLOY_MOUNTED_FORMAL_N30");
+const currentOfficialFormalN30Mode = currentOfficialDistMode && refreshFormalN30Mode;
+const currentOfficialHomeN30Mode = currentOfficialDistMode && refreshHomeN30OnlyMode && refreshCoverageMode === "HOME_N30_ONLY";
 const REFRESH_AUTH_CLEANUP_UI_GATE_CYCLES = 35;
-const REFRESH_R7_INPUT_ROOT = resolve(repoRoot, "target/private-phone-ux-implementation/owned-openbox-input-20261008T085548Z");
+const CURRENT_OFFICIAL_DIST_BUILDER_COMMIT = "079ea127";
+const CURRENT_OFFICIAL_DIST_MANIFEST_SHA256 = "5053ac22d3476f7f17513a3c76a71b8993f3752e47bd060b8bead5c07c830752";
+const CURRENT_OFFICIAL_DIST_RESOURCE_TABLE_SHA256 = "5c476e1a11242c37365d16fb1552edf77b956113b643b502cb74857b36e65186";
+const CURRENT_OFFICIAL_DIST_BUILDER_LOG_SHA256 = "3f0676876bb7dde893f971bb610e853f57ea9254b640fda18f397ad168a8df67";
+const CURRENT_OFFICIAL_DIST_DEPENDENCY_LOCK_SHA256 = "7c47b7ad5427ac56682f19c6fb7e46cff6e442ad8f52edee283665a38cd2e68b";
+const CURRENT_OFFICIAL_DIST_RESOURCE_COUNT = 37;
+const REFRESH_R7_INPUT_ROOT = resolve(
+  currentOfficialDistMode ? resolve(repoRoot, "..", "..") : repoRoot,
+  "target/private-phone-ux-implementation/owned-openbox-input-20261008T085548Z",
+);
 const REFRESH_R7_OPENBOX_PATH = resolve(REFRESH_R7_INPUT_ROOT, "prefix/usr/bin/openbox");
 const REFRESH_R7_OPENBOX_SHA256 = "941e69bf5479d77805bdeae7a6dee17142ff429b8db9e7d0c1b579e9c70a0b52";
 const REFRESH_R7_OPENBOX_LIB_DIR = resolve(REFRESH_R7_INPUT_ROOT, "prefix/usr/lib/x86_64-linux-gnu");
@@ -116,12 +170,69 @@ if (beforeComplementSha256 !== null) assert.match(beforeComplementSha256, /^[a-f
 assert.ok(Number.isInteger(sampleCount) && sampleCount >= 1 && sampleCount <= 100, "--samples must be between 1 and 100");
 assert.ok(delayValues.length > 0 && delayValues.every(value => Number.isInteger(value) && value >= 0 && value <= 10_000), "--delay must be a comma-separated list of non-negative milliseconds");
 assert.equal(Boolean(gatewayKcoderBinaryOverride), Boolean(gatewayKcoderBinarySha256), "--gateway-kcoder-bin and --gateway-kcoder-sha256 must be supplied together");
+assert.equal(Boolean(reuseExportDirectory), Boolean(reuseExportManifest), "--reuse-export-dir and --reuse-export-manifest must be supplied together");
+assert.ok(reuseExportManifestSha256 === null || /^[a-f0-9]{64}$/.test(reuseExportManifestSha256), "--reuse-export-manifest-sha256 must be a lowercase SHA-256 digest");
+validateMatchedDeployMountedInputs({
+  argv: process.argv,
+  repoRoot,
+  snapshotMode,
+  snapshotDirectory,
+  snapshotSourceSha256,
+  beforeComplementDirectory,
+  beforeComplementSha256,
+  reuseExportDirectory,
+  reuseExportManifest,
+  reuseExportManifestSha256,
+  currentOfficialDistMode,
+  refreshSmokeMode,
+  refreshSingleSampleMode,
+  refreshHomeN30OnlyMode,
+  refreshSendDiagnosticMode,
+  refreshBackgroundDiagnosticMode,
+  refreshAuthCleanupUiGateMode,
+  refreshSendDiagnostic,
+  refreshBackgroundDiagnostic,
+  navigationOnly,
+  drawerCloseDiagnosticsEnabled,
+  sampleCount,
+  delayValues,
+  defaultSamples: DEFAULT_SAMPLES,
+  defaultDelays: DEFAULT_DELAYS,
+});
 assert.ok(selectedFaultScenario === null || (faultScenariosOnly && faultScenarioIds.includes(selectedFaultScenario)), "--fault-scenario must select a known scenario with --fault-scenarios");
 assert.equal(faultScenariosOnly, true, "the refresh/send/background entry requires --fault-scenarios");
 assert.equal(selectedFaultScenario, refreshScenarioId, "the refresh/send/background entry requires its named scenario before resource startup");
 assert.ok(refreshSendDiagnostic === null || refreshSendDiagnostic === "accepted-600", "--refresh-send-diagnostic only accepts accepted-600");
 assert.ok(refreshBackgroundDiagnostic === null || refreshBackgroundDiagnostic === "home-600", "--refresh-background-diagnostic only accepts home-600");
 assert.ok(!(refreshSendDiagnostic && refreshBackgroundDiagnostic), "accepted-send and background diagnostics cannot be combined");
+if (refreshHomeServersRevisionDiagnosticMode) {
+  assert.equal(refreshSmokeMode, false, "Home server-revision diagnostic cannot be combined with --refresh-smoke");
+  assert.equal(refreshHomeN30OnlyMode, false, "Home server-revision diagnostic cannot be combined with Home-only n30");
+  assert.equal(refreshSendDiagnosticMode, false, "Home server-revision diagnostic cannot be combined with accepted-send diagnostics");
+  assert.equal(refreshBackgroundDiagnosticMode, false, "Home server-revision diagnostic cannot be combined with home-600 diagnostics");
+  assert.equal(refreshAuthCleanupUiGateMode, false, "Home server-revision diagnostic cannot be combined with auth cleanup diagnostics");
+  assert.equal(currentOfficialDistMode, true, "Home server-revision diagnostic requires the current official Mobile dist");
+  assert.equal(snapshotMode, "after", "Home server-revision diagnostic requires the pinned after source snapshot");
+  assert.ok(snapshotDirectory && snapshotSourceSha256, "Home server-revision diagnostic requires pinned after-source inputs");
+  assert.equal(Boolean(reuseExportDirectory || reuseExportManifest || matchedDeployMountedInputMode), false, "Home server-revision diagnostic cannot reuse matched or Expo inputs");
+  assert.equal(sampleCount, 1, "Home server-revision diagnostic requires exactly one sample");
+  assert.deepEqual(delayValues, [0], "Home server-revision diagnostic uses a manually released status hold, not a delay bin");
+  assert.equal(navigationOnly, false, "Home server-revision diagnostic cannot skip the Home action");
+  assert.equal(drawerCloseDiagnosticsEnabled, false, "Home server-revision diagnostic cannot enable drawer-close diagnostics");
+}
+if (refreshHomeN30OnlyMode) {
+  assert.equal(refreshSingleSampleMode, false, "Home-only n30 cannot be combined with a diagnostic, smoke, or auth-only gate");
+  assert.equal(faultScenariosOnly, true, "Home-only n30 requires --fault-scenarios");
+  assert.equal(selectedFaultScenario, refreshScenarioId, "Home-only n30 requires the named refresh/send/background scenario");
+  assert.equal(currentOfficialDistMode, true, "Home-only n30 requires the current official Mobile dist");
+  assert.equal(snapshotMode, "after", "Home-only n30 requires the latest explicitly frozen after snapshot");
+  assert.ok(snapshotDirectory && snapshotSourceSha256, "Home-only n30 requires pinned after-source inputs");
+  assert.equal(Boolean(reuseExportDirectory || reuseExportManifest), false, "Home-only n30 does not accept Expo export/reuse inputs");
+  assert.equal(sampleCount, DEFAULT_SAMPLES, "Home-only n30 requires exactly 30 samples per delay bin");
+  assert.deepEqual(delayValues, DEFAULT_DELAYS, "Home-only n30 requires the 0/300/600/1000ms delay bins");
+  assert.equal(navigationOnly, false, "Home-only n30 cannot skip the Home action");
+  assert.equal(drawerCloseDiagnosticsEnabled, false, "Home-only n30 cannot enable drawer-close diagnostics");
+}
 assert.ok(refreshAuthCleanupUiGateCycles === null || refreshAuthCleanupUiGateCycles === String(REFRESH_AUTH_CLEANUP_UI_GATE_CYCLES), `--auth-cleanup-ui-gate only accepts ${REFRESH_AUTH_CLEANUP_UI_GATE_CYCLES}`);
 if (refreshAuthCleanupUiGateMode) {
   assert.equal(faultScenariosOnly, true, "auth cleanup UI gate requires --fault-scenarios");
@@ -133,7 +244,8 @@ if (refreshAuthCleanupUiGateMode) {
   assert.equal(sampleCount, 1, "auth cleanup UI gate uses a fixed 35-cycle lifecycle and requires --samples=1");
   assert.deepEqual(delayValues, [0], "auth cleanup UI gate requires --delay=0; it does not measure latency");
   assert.equal(snapshotMode, "after", "auth cleanup UI gate requires the latest explicitly frozen after snapshot");
-  assert.ok(snapshotDirectory && snapshotSourceSha256 && reuseExportDirectory && reuseExportManifest, "auth cleanup UI gate requires pinned after-source and reused-web-export inputs");
+  assert.ok(snapshotDirectory && snapshotSourceSha256, "auth cleanup UI gate requires pinned after-source inputs");
+  assert.ok(currentOfficialDistMode || (reuseExportDirectory && reuseExportManifest), "auth cleanup UI gate requires either current official dist or reused web-export inputs");
 } else if (refreshSendDiagnosticMode) {
   assert.equal(faultScenariosOnly, true, "accepted-600 diagnostic requires --fault-scenarios");
   assert.equal(selectedFaultScenario, refreshScenarioId, "accepted-600 diagnostic requires the refresh/send/background scenario");
@@ -153,31 +265,150 @@ if (refreshAuthCleanupUiGateMode) {
   assert.equal(sampleCount, 1, "home-600 diagnostic requires one sample");
   assert.deepEqual(delayValues, [600], "home-600 diagnostic requires only the 600ms HTTP response hold");
   assert.equal(snapshotMode, "after", "home-600 diagnostic requires the latest explicitly frozen after snapshot");
-  assert.ok(snapshotDirectory && snapshotSourceSha256 && reuseExportDirectory && reuseExportManifest, "home-600 diagnostic requires pinned after-source and reused-web-export inputs");
+  assert.ok(snapshotDirectory && snapshotSourceSha256, "home-600 diagnostic requires pinned after-source inputs");
+  assert.ok(currentOfficialDistMode || (reuseExportDirectory && reuseExportManifest), "home-600 diagnostic requires either current official dist or reused web-export inputs");
+} else if (refreshHomeServersRevisionDiagnosticMode) {
+  assert.equal(faultScenariosOnly, true, "Home server-revision diagnostic requires --fault-scenarios");
+  assert.equal(selectedFaultScenario, refreshScenarioId, "Home server-revision diagnostic requires the named refresh/send/background scenario");
+} else if (refreshHomeN30OnlyMode) {
+  assert.equal(sampleCount, DEFAULT_SAMPLES, "Home-only n30 requires exactly 30 samples per action and delay bin");
+  assert.deepEqual(delayValues, DEFAULT_DELAYS, "Home-only n30 requires the 0/300/600/1000ms delay bins");
 } else if (faultScenariosOnly && (selectedFaultScenario === null || selectedFaultScenario === refreshScenarioId)) {
   assert.equal(sampleCount, DEFAULT_SAMPLES, "the refresh/send/background scenario requires n=30 unless --refresh-smoke is explicit");
   assert.deepEqual(delayValues, DEFAULT_DELAYS, "the formal refresh/send/background scenario requires the 0/300/600/1000ms delay bins");
 }
+if (currentOfficialDistMode) {
+  assert.equal(snapshotMode, "after", "current official Mobile dist mode requires an after source snapshot and official dist validation");
+  assert.ok(snapshotDirectory && snapshotSourceSha256, "current official Mobile dist mode requires a pinned after-source snapshot");
+  assert.equal(Boolean(reuseExportDirectory || reuseExportManifest), false, "current official Mobile dist mode does not accept Expo export/reuse inputs");
+  assert.ok(refreshSmokeMode || refreshAuthCleanupUiGateMode || refreshBackgroundDiagnosticMode || refreshHomeServersRevisionDiagnosticMode || refreshSendDiagnosticMode || currentOfficialFormalN30Mode || currentOfficialHomeN30Mode, "current official Mobile dist mode requires zero-delay refresh smoke, the 35-cycle auth gate, a diagnostic, Home-only n30, or the formal N30 matrix");
+  if (currentOfficialFormalN30Mode) {
+    assert.equal(faultScenariosOnly, true, "current official formal N30 mode requires the named fault scenario");
+    assert.equal(selectedFaultScenario, refreshScenarioId, "current official formal N30 mode requires refresh-send-background-return-n30");
+    assert.equal(sampleCount, DEFAULT_SAMPLES, "current official formal N30 mode requires 30 samples per action and delay bin");
+    assert.deepEqual(delayValues, DEFAULT_DELAYS, "current official formal N30 mode requires the 0/300/600/1000ms delay bins");
+    assert.equal(navigationOnly, false, "current official formal N30 mode cannot skip send actions");
+    assert.equal(drawerCloseDiagnosticsEnabled, false, "current official formal N30 mode cannot enable drawer-close diagnostics");
+  }
+  if (currentOfficialHomeN30Mode) {
+    assert.equal(faultScenariosOnly, true, "current official Home-only n30 mode requires the named fault scenario");
+    assert.equal(selectedFaultScenario, refreshScenarioId, "current official Home-only n30 mode requires refresh-send-background-return-n30");
+    assert.equal(sampleCount, DEFAULT_SAMPLES, "current official Home-only n30 mode requires 30 samples per delay bin");
+    assert.deepEqual(delayValues, DEFAULT_DELAYS, "current official Home-only n30 mode requires the 0/300/600/1000ms delay bins");
+    assert.equal(navigationOnly, false, "current official Home-only n30 mode cannot skip the Home action");
+    assert.equal(drawerCloseDiagnosticsEnabled, false, "current official Home-only n30 mode cannot enable drawer-close diagnostics");
+  }
+}
+
+const { installPageInstrumentation, installNetworkInstrumentation } = createMobileUxInstrumentation({
+  THREAD_ID,
+  captureThreadListFixtureFields,
+  createTurnStartErrorFixtureFrame,
+  epochNow,
+  mobileApiPath,
+  parseFrame,
+  recordRoutedWebSocketCloseInvocation,
+  round,
+  rpcIdFingerprint,
+  safePath,
+  safeWebSocketRouteInfo,
+  sha256,
+  sumResponseDelayMs,
+  waitUntilPerformanceDeadline,
+});
+
+const {
+  resolvePrivateBeforeComplementRoot, prepareSnapshot,
+  readMatchedBundleFile, hashMobileExportSourceRoots, appendExportSourceFiles, exportSourceExcluded,
+  hashBundleTree, prepareGatewayRuntimeSnapshot, inspectGatewayRuntimeSnapshot, hashGatewayRuntimeInputs,
+  appendGatewaySnapshotFiles, sourceSnapshotFilter, dependencySnapshotFilter, dependencySnapshotExcluded,
+  sourceSnapshotExcluded, assertNoEscapingLinks, readGatewayExecutableInputs, regularFileIdentity,
+  gatewayRuntimeStable, loadCurrentOfficialMobileDist, verifyCurrentOfficialMobileBuilderSourceParity, mobileEntryUrl,
+  navigateToMobileEntry, startFrozenGateway, copySanitizedTree, createDependencySnapshot,
+  removeDependencyCacheAndSecretFiles, dependencyExcludedCategory, copyArtifactTree, excludedCategory,
+  appendFileHashes, listFiles, pruneEmptyDirectories,
+} = createMobileRefreshSourceInputs({
+  deviceOnlyMountedAuthMode,
+  access, addOfficialMobileExportPostflight, appRoot, assert,
+  basename, buildGatewayMobileWebManifest, chmod, copyFile,
+  copyOfficialMobileStaticDist, cp, CURRENT_OFFICIAL_DIST_BUILDER_COMMIT, CURRENT_OFFICIAL_DIST_BUILDER_LOG_SHA256,
+  CURRENT_OFFICIAL_DIST_DEPENDENCY_LOCK_SHA256, CURRENT_OFFICIAL_DIST_MANIFEST_SHA256, CURRENT_OFFICIAL_DIST_RESOURCE_COUNT, CURRENT_OFFICIAL_DIST_RESOURCE_TABLE_SHA256,
+  currentOfficialDistMode, execFileSync, inspectOfficialMobileStaticDist, isAbsolute,
+  lstat, MATCHED_AFTER_PACKAGE_LOCK_SHA256, MATCHED_AFTER_SOURCE_ADAPTER, MATCHED_BEFORE_SOURCE_ADAPTER,
+  MATCHED_BEFORE_SOURCE_TREE_SHA256, MATCHED_EXPORT_RUN_ROOT, mkdir, officialMobileExportReceiptFromEnv,
+  randomBytes, readdir, readFile, readlink,
+  readOfficialMobileExportReceipt, realpath, relative, repoRoot,
+  resolve, resolveExistingPrivateGatewaySnapshot, resolveExistingPrivatePath, reuseDeployMountedMode,
+  reuseExportDirectory, reuseExportManifest, reuseExportManifestSha256, rm,
+  rmdir, sep, sha256, snapshotMode,
+  stat, waitFor, writeFile,
+});
+
+const {
+  runPhoneUxFaultScenarios, connectMobile, runFreshAuthCleanupUiGate, observeOwnedMobileAuth,
+  ownedMobileDeviceStorePath, captureFormalHomeThreadPresentation, readOwnedMobileDeviceSummary, releaseOwnedMobileAuthSample,
+} = createMobileRefreshFaultScenarios({
+  HOME_REVISION_NEW_THREAD_ID, HOME_REVISION_NEW_THREAD_TITLE, refreshDiagnosticId, epochNow,
+  deviceOnlyMountedAuthMode, refreshDiagnosticDelayValues, refreshHomeServersRevisionDiagnosticMode,
+  refreshHomeBackgroundDiagnosticMode, summarizePageSideTimingSamples, createHomeServersRevisionDiagnosticControl,
+  APPLICATION_DELAY_TIMER_TOLERANCE_MS, applyRefreshBackgroundMobileEmulation, assert, assertApplicationDelay,
+  assertFormalHomeThreadPresentationStable, assertRunningControlsStayHiddenAfterTwoFrames, capturePrivateFailureScreenshot, closeOwnedMobilePage,
+  closeRefreshDiagnosticMobilePage, createAcceptedTurnReceiptFixture, createRefreshProgressWriter, createResponseJitter,
+  currentOfficialDistMode, DEFAULT_DELAYS, DEFAULT_SAMPLES, delayValues,
+  describeVisiblePage, distribution, drainAndArmBackgroundHttpResponseHold, ensureFixtureSessionVisible,
+  faultScenarioIds, findHttpResponseForRouteRequest, formalOwnedAuthLifecycle, navigateToMobileEntry,
+  newMobilePage, observeLoginResponses, openFixtureSession, percentile,
+  performance, readFile, readRefreshBackgroundMobileFacts, REFRESH_BACKGROUND_MOBILE_SESSIONS,
+  REFRESH_FORMAL_HOME_THREAD_UPDATED_AT_EPOCH_MS, refreshBackgroundDiagnostic, refreshBackgroundDiagnosticMode, refreshBackgroundMobileFactsMatch,
+  refreshBackgroundWindowMode, refreshCoverageMode, refreshDiagnosticMode, refreshFormalN30Mode,
+  refreshHomeN30OnlyMode, refreshScenarioId, refreshSendDiagnostic, refreshSendDiagnosticMode,
+  refreshSingleSampleMode, refreshSmokeMode, resolve, reuseDeployMountedMode,
+  round, safeAuthCleanupErrorField, safePath, sampleCount,
+  sanitizeGatewayPath, selectedFaultScenario, SERVER_ID, sha256,
+  startRefreshBackgroundChromium, summarizeHttpDelaySample, summarizeNetwork, summarizeWebSocketDelaySample,
+  THREAD_ID, waitFor, waitForGatewayRpcQuiescence,
+});
 
 await runE2E(import.meta.url, {
   testId: "mobile-ux-refresh-send-background-candidate",
   tier: "manual-live",
-  modelPolicy: "real Mobile Web UI through isolated KCODER_STUDIO_MOCK; background samples use a fresh owned Chromium default context with trusted real-window visibility, send samples use fresh BrowserContexts; explicit accepted-600 diagnostic, zero-delay all-action smoke, 35-cycle fresh-context auth-cleanup gate, and formal n30 modes are separately gated; no real Provider or native claim",
+  modelPolicy: "real Mobile Web UI through isolated KCODER_STUDIO_MOCK; background samples use a fresh owned Chromium default context with trusted real-window visibility, send samples use fresh BrowserContexts; paired matched deploy-mounted formal n30, paired zero-delay smoke, current official diagnostics, 35-cycle fresh-context auth-cleanup gate, Home-only n30 subset, and the ordinary formal n30 matrix are separately gated; no real Provider or native claim",
   retainSuccessLogs: true,
 }, async context => {
   const currentMobileRoot = resolve(appRoot, "mobile");
   const currentSharedRoot = resolve(appRoot, "shared");
   const launcherSourceDigestBefore = sha256(await readFile(new URL(import.meta.url)));
+  await observeSeparatedSuiteSourceInputs(context, [
+    new URL("../../harness/mobile-refresh-source-inputs.mjs", import.meta.url),
+    new URL("../../harness/mobile-refresh-fault-scenarios.mjs", import.meta.url),
+    new URL("./helpers/matched-deploy-mounted-inputs.mjs", import.meta.url),
+    new URL("./helpers/home-servers-revision-diagnostic.mjs", import.meta.url),
+    new URL("./helpers/page-side-timing-summary.mjs", import.meta.url),
+  ]);
   const gatewayRuntime = await prepareGatewayRuntimeSnapshot(context, gatewaySnapshotDirectory, gatewayKcoderBinaryOverride, gatewayKcoderBinarySha256);
   const gatewayRuntimeBefore = await inspectGatewayRuntimeSnapshot(gatewayRuntime.root, gatewayKcoderBinaryOverride);
   const beforeComplementHash = snapshotMode === "before" && !beforeComplementDirectory ? await hashComplement(currentMobileRoot, currentSharedRoot) : null;
-  const sourceSnapshot = await prepareSnapshot(context, snapshotMode, currentMobileRoot, currentSharedRoot, snapshotDirectory, snapshotSourceSha256, beforeComplementDirectory, beforeComplementSha256);
+  const officialMobileDist = currentOfficialDistMode ? await loadCurrentOfficialMobileDist(context) : null;
+  const sourceSnapshot = await prepareMobileSourceSnapshot(context, snapshotMode, currentMobileRoot, currentSharedRoot, snapshotDirectory, snapshotSourceSha256, beforeComplementDirectory, beforeComplementSha256, officialMobileDist?.sourcePackageLockSha256, {
+    matchedDeployMountedInputMode,
+    currentOfficialDistMode,
+    reuseExportDirectory,
+    reuseExportManifest,
+    currentOfficialDistDependencyLockSha256: CURRENT_OFFICIAL_DIST_DEPENDENCY_LOCK_SHA256,
+  });
   const afterComplementHash = snapshotMode === "before" && !beforeComplementDirectory ? await hashComplement(currentMobileRoot, currentSharedRoot) : null;
   if (snapshotMode === "before" && !beforeComplementDirectory) assert.equal(afterComplementHash, beforeComplementHash, "Mobile/shared complement changed while the frozen source copy was being prepared");
-  const dependencySnapshot = reuseExportDirectory ? null : await createDependencySnapshot(context, currentMobileRoot);
+  if (officialMobileDist?.exportReceipt || officialMobileDist?.standardBuild) {
+    sourceSnapshot.completeness.officialSourceParity = await verifyOfficialMobileSourceSnapshot(sourceSnapshot.snapshotRoot, officialMobileDist.builderCommit);
+  }
+  const dependencySnapshot = currentOfficialDistMode || reuseExportDirectory ? null : await createDependencySnapshot(context, currentMobileRoot);
 
-  const mobileWeb = reuseExportDirectory
-    ? await reuseMobileWebExport(context, sourceSnapshot, reuseExportDirectory, reuseExportManifest)
+  const mobileWeb = currentOfficialDistMode ? null : reuseExportDirectory
+    ? await reuseMobileWebExport(context, sourceSnapshot, reuseExportDirectory, reuseExportManifest, reuseExportManifestSha256, {
+      snapshotMode,
+      matchedDeployMountedInputMode,
+      resourceCount: CURRENT_OFFICIAL_DIST_RESOURCE_COUNT,
+    })
     : await exportMobileWeb(context, {
       mobileRoot: sourceSnapshot.mobileRoot,
       sourceRoots: [
@@ -188,11 +419,68 @@ await runE2E(import.meta.url, {
       label: `mobile-high-latency-${snapshotMode}`,
       outputName: `mobile-high-latency-${snapshotMode}-web-export`,
     });
-  const exportedWebArtifact = context.pathInArtifacts("mobile-web-export");
-  await copyArtifactTree(mobileWeb.path, exportedWebArtifact);
+  const exportedWebArtifact = mobileWeb ? context.pathInArtifacts("mobile-web-export") : null;
+  if (mobileWeb) await copyArtifactTree(mobileWeb.path, exportedWebArtifact);
+  const mountedReuseDist = matchedDeployMountedInputMode
+    ? await materializeMatchedMobileStaticDist(context, mobileWeb)
+    : null;
+  const mobileInputProvenance = officialMobileDist
+    ? {
+      inputKind: officialMobileDist.inputKind,
+      builderCommit: officialMobileDist.builderCommit,
+      builderLogSha256: officialMobileDist.builderLogSha256,
+      exportReceipt: officialMobileDist.exportReceipt ?? null,
+      standardBuild: officialMobileDist.standardBuild ?? null,
+      builderSourceParity: officialMobileDist.builderSourceParity,
+      manifestPath: relative(repoRoot, officialMobileDist.manifestPath),
+      manifestSha256: officialMobileDist.manifestSha256,
+      resourceCount: officialMobileDist.resourceCount,
+      resourceTableSha256: officialMobileDist.resourceTableSha256,
+      ownedCopy: {
+        root: relative(context.runRoot, officialMobileDist.ownedRoot),
+        verified: officialMobileDist.ownedCopyVerified,
+        stableDuringCopy: officialMobileDist.sourceStableDuringCopy,
+      },
+    }
+    : {
+      inputKind: matchedDeployMountedInputMode ? "matched-deploy-mounted-paired-export" : "expo-web-export",
+      sourceTreeSha256: mobileWeb.sourceTreeSha256,
+      bundleSha256: mobileWeb.bundleSha256,
+      manifestPath: relative(context.runRoot, mobileWeb.bundleManifestPath),
+      dependencySourceTreeSha256: mobileWeb.dependencySourceTreeSha256,
+      dependencyOwnedTreeSha256: mobileWeb.dependencyOwnedTreeSha256,
+      reuseValidation: mobileWeb.reuseValidation ?? null,
+      ...(matchedDeployMountedInputMode ? {
+        pairedComparison: {
+          comparisonId: "matched-deploy-mounted-191920",
+          snapshotMode,
+          pairRunRoot: MATCHED_DEPLOY_MOUNTED_PINS.exportRunRoot,
+          expectedBeforeManifestSha256: MATCHED_DEPLOY_MOUNTED_PINS.exportManifestSha256.before,
+          expectedAfterManifestSha256: MATCHED_DEPLOY_MOUNTED_PINS.exportManifestSha256.after,
+          commonDependencyInputSha256: MATCHED_DEPLOY_MOUNTED_PINS.commonDependencySourceSha256,
+          commonDependencyOwnedCopySha256: MATCHED_DEPLOY_MOUNTED_PINS.commonDependencyCopySha256,
+        },
+      } : {}),
+      mountedReuse: mountedReuseDist ? {
+        inputKind: mountedReuseDist.inputKind,
+        derivedManifestSha256: mountedReuseDist.manifestSha256,
+        derivedManifestArtifact: relative(context.runRoot, mountedReuseDist.manifestArtifactPath),
+        sourceBundleSha256: mobileWeb.bundleSha256,
+        sourceExportManifestPath: relative(repoRoot, mobileWeb.bundleManifestPath),
+        resourceCount: mountedReuseDist.resourceCount,
+        resourceTableSha256: mountedReuseDist.resourceTableSha256,
+        ownedCopy: {
+          root: relative(context.runRoot, mountedReuseDist.ownedRoot),
+          verified: mountedReuseDist.ownedCopyVerified,
+          stableDuringCopy: mountedReuseDist.sourceStableDuringCopy,
+        },
+      } : null,
+    };
 
   const workspace = context.pathInState("isolated-workspace");
   await mkdir(workspace, { recursive: true });
+  const emptyLegacyWebRoot = matchedDeployMountedInputMode ? context.pathInState("empty-legacy-web-root") : null;
+  if (emptyLegacyWebRoot) await mkdir(emptyLegacyWebRoot, { recursive: false, mode: 0o700 });
   const serversFile = await context.writeStateJson("mock-servers.json", [{
     id: SERVER_ID,
     label: "Backend 4A fixture",
@@ -207,22 +495,24 @@ await runE2E(import.meta.url, {
     workspace,
     serversFile,
     serversStore,
-    webRoot: mobileWeb.path,
+    webRoot: emptyLegacyWebRoot ?? mobileWeb?.path ?? "",
+    mobileWebRoot: mountedReuseDist?.ownedRoot ?? officialMobileDist?.ownedRoot,
     mock: true,
   });
   const refreshBackgroundHost = refreshBackgroundWindowMode
     ? await startRefreshBackgroundChromium(context, { hostOnly: true })
     : null;
-  const chromium = refreshBackgroundDiagnosticMode
-    ? await startRefreshBackgroundChromium(context, { host: refreshBackgroundHost, instanceKey: "home-600-diagnostic" })
+  const chromium = refreshHomeBackgroundDiagnosticMode
+    ? await startRefreshBackgroundChromium(context, { host: refreshBackgroundHost, instanceKey: refreshHomeServersRevisionDiagnosticMode ? "home-servers-revision-diagnostic" : "home-600-diagnostic" })
     : await startChromium(context, {
       label: "phone-ux-mobile-chromium",
       noSandbox: true,
+      startTimeoutMs: 60_000,
     });
-  const refreshDiagnosticBrowserContext = refreshBackgroundDiagnosticMode
+  const refreshDiagnosticBrowserContext = refreshHomeBackgroundDiagnosticMode
     ? await requireOwnedDefaultBrowserContext(chromium.browser)
     : null;
-  if (refreshBackgroundDiagnosticMode) assert.equal(refreshDiagnosticBrowserContext, chromium.defaultContext, "first noDefaults context identity changed before the Mobile fixture");
+  if (refreshHomeBackgroundDiagnosticMode) assert.equal(refreshDiagnosticBrowserContext, chromium.defaultContext, "first noDefaults context identity changed before the Mobile fixture");
 
   const observations = [];
   const network = createNetworkLedger();
@@ -263,7 +553,9 @@ await runE2E(import.meta.url, {
         coverageMode: "AUTH_CLEANUP_UI_GATE_ONLY",
         formalN30Coverage: false,
         evidenceClass: "real Mobile Web UI pairing through isolated KCODER_STUDIO_MOCK Gateway; no real Provider, public Gateway, or native claim",
-        sampleClassification: "35 sequential fresh BrowserContexts; exact self-device revoke, web logout, stale-cookie 401 and active-grant zero gates; not a latency sample",
+        sampleClassification: deviceOnlyMountedAuthMode
+          ? "35 sequential fresh BrowserContexts; exact self-device revoke 204, no web-session cookie, post-revoke device Bearer 401, and active-grant zero gates; not a latency sample"
+          : "35 sequential fresh BrowserContexts; exact self-device revoke, web logout, stale-cookie 401 and active-grant zero gates; not a latency sample",
         cycles: authCleanupGate,
         noRealProviderRequests: true,
         gatewayCalls,
@@ -283,14 +575,7 @@ await runE2E(import.meta.url, {
           entryCount: sourceSnapshot.entryCount,
           completeness: sourceSnapshot.completeness,
         },
-        mobileWeb: {
-          sourceTreeSha256: mobileWeb.sourceTreeSha256,
-          bundleSha256: mobileWeb.bundleSha256,
-          bundleManifestPath: relative(context.runRoot, mobileWeb.bundleManifestPath),
-          dependencySourceTreeSha256: mobileWeb.dependencySourceTreeSha256,
-          dependencyOwnedTreeSha256: mobileWeb.dependencyOwnedTreeSha256,
-          reuseValidation: mobileWeb.reuseValidation ?? null,
-        },
+        mobileInput: mobileInputProvenance,
         gatewayRuntime: {
           root: relative(repoRoot, gatewayRuntime.root),
           manifest: relative(repoRoot, gatewayRuntime.manifestPath),
@@ -310,7 +595,9 @@ await runE2E(import.meta.url, {
         },
         gateway: { port: gateway.port, pid: gateway.child.pid, mock: true, isolatedWorkspace: true },
       });
-      assert.equal(gatePassed, true, "35-cycle fresh UI auth cleanup gate must pass every pair/revoke/logout/stale-cookie/zero-active hard gate");
+      assert.equal(gatePassed, true, deviceOnlyMountedAuthMode
+        ? "35-cycle fresh UI device-auth gate must pass every pair, exact revoke, no-cookie, post-revoke Bearer 401, and zero-active hard gate"
+        : "35-cycle fresh UI auth cleanup gate must pass every pair/revoke/logout/stale-cookie/zero-active hard gate");
       return;
     }
 
@@ -331,21 +618,32 @@ await runE2E(import.meta.url, {
         ? "FAIL"
         : refreshDiagnosticMode && refreshSendCoverageStatus === "DIAGNOSTIC_ONLY" ? "DIAGNOSTIC_ONLY"
           : refreshSmokeMode && refreshSendCoverageStatus === "SMOKE" ? "SMOKE_ONLY"
+          : refreshHomeN30OnlyMode && refreshSendCoverageStatus === "HOME_N30_ONLY" ? "HOME_N30_ONLY"
           : refreshSendCoverageStatus && refreshSendCoverageStatus !== "PASS" ? "PARTIAL" : "PASS",
       selectedScenario: selectedFaultScenario ?? "all-required-fault-scenarios",
-      scenarioScope: selectedFaultScenario ? "single named fault scenario only; not full matrix completion" : "all required fault scenarios",
+      scenarioScope: refreshHomeN30OnlyMode
+        ? "Home action only at four delay bins with 30 samples per bin; the other three matrix actions are NOT_RUN"
+        : selectedFaultScenario ? "single named fault scenario only; not full matrix completion" : "all required fault scenarios",
       fullPlanStatus: "PARTIAL",
       mode: "isolated Mobile Web / KCODER_STUDIO_MOCK Gateway; browser-level HTTP/WSS response fixtures; no model provider",
       sampleClassification: refreshSendDiagnosticMode
         ? "single accepted-send functional diagnostic with a 600ms mock ACK hold; no percentile or formal n=30 claim"
+        : refreshHomeServersRevisionDiagnosticMode
+          ? "single Home serversRevision diagnostic with unchanged server inventory and a manually held status response; DIAGNOSTIC_ONLY, no percentile claim"
         : refreshBackgroundDiagnosticMode
           ? "single home background/foreground diagnostic with a 600ms mock /api/servers response hold; no percentile or formal n=30 claim"
+        : refreshHomeN30OnlyMode
+          ? "Home-only 30-sample-per-bin subset across four delay bins; not the complete four-action matrix"
         : "functional scenario evidence only; no P50/P95 claim unless a scenario explicitly records 30 complete samples",
       refreshCoverageMode: refreshSendDiagnosticMode
         ? "DIAGNOSTIC_ONLY; one accepted-send sample at a 600ms mock ACK hold; excluded from formal n=30 coverage"
+        : refreshHomeServersRevisionDiagnosticMode
+          ? "DIAGNOSTIC_ONLY; one Home sample with an in-test manual /api/servers/status response hold and a target-scope mock thread/list row; excluded from formal n=30 coverage"
         : refreshBackgroundDiagnosticMode
           ? "DIAGNOSTIC_ONLY; one home resume refresh sample at a 600ms mock /api/servers hold using actual owned-window minimize/restore and trusted visibility; excluded from formal n=30 coverage"
-        : refreshSmokeMode ? "SMOKE_ONLY; one sample per action at zero delay; not formal n=30 coverage" : "FORMAL_N30",
+        : refreshSmokeMode ? "SMOKE_ONLY; one sample per action at zero delay; not formal n=30 coverage"
+          : refreshHomeN30OnlyMode ? "HOME_N30_ONLY; Home has 30 samples in each of four delay bins; the other three actions are NOT_RUN"
+            : refreshCoverageMode,
       faults: faultScenarios.rows,
       requiredScenarioFailures: faultScenarios.requiredScenarioFailures,
       fixtureReceiptLedger: faultScenarios.fixtureReceiptLedger,
@@ -410,14 +708,7 @@ await runE2E(import.meta.url, {
         sha256After: launcherSourceDigestAfter,
         unchangedDuringRun: true,
       },
-      mobileWeb: {
-        sourceTreeSha256: mobileWeb.sourceTreeSha256,
-        bundleSha256: mobileWeb.bundleSha256,
-        bundleManifestPath: relative(context.runRoot, mobileWeb.bundleManifestPath),
-        dependencySourceTreeSha256: mobileWeb.dependencySourceTreeSha256,
-        dependencyOwnedTreeSha256: mobileWeb.dependencyOwnedTreeSha256,
-        reuseValidation: mobileWeb.reuseValidation ?? null,
-      },
+      mobileInput: mobileInputProvenance,
       gatewayRuntime: {
         root: relative(repoRoot, gatewayRuntime.root),
         manifest: relative(repoRoot, gatewayRuntime.manifestPath),
@@ -433,12 +724,12 @@ await runE2E(import.meta.url, {
       browser: {
         version: await chromium.browser.version(),
         executablePath: basename(chromium.executablePath),
-        viewport: refreshBackgroundDiagnosticMode
+        viewport: refreshHomeBackgroundDiagnosticMode
           ? { width: 390, height: 844, deviceScaleFactor: 1, isMobile: true, hasTouch: true }
           : { width: 390, height: 844, deviceScaleFactor: 3, isMobile: true, hasTouch: true },
         noDefaults: chromium.noDefaults === true,
-        defaultBrowserContextCount: refreshBackgroundDiagnosticMode ? chromium.browser.contexts().length : null,
-        evidenceBoundary: refreshBackgroundDiagnosticMode
+        defaultBrowserContextCount: refreshHomeBackgroundDiagnosticMode ? chromium.browser.contexts().length : null,
+        evidenceBoundary: refreshHomeBackgroundDiagnosticMode
           ? "real Mobile Web UI in owned headful Xvfb/Openbox Chromium; first and only CDP attach noDefaults; isolated KCODER_STUDIO_MOCK Gateway; not native Android/iOS"
           : "Chromium mobile viewport emulation; not native Android/iOS profiling",
       },
@@ -481,7 +772,7 @@ await runE2E(import.meta.url, {
         methodResponseHoldMs: { "turn/start": SEND_ACK_HOLD_MS },
       }, gatewayCalls, browserErrors, context, warmProfileStorageState);
       const coldLoadStarted = performance.now();
-      const loadResponse = await page.goto(gateway.baseUrl, { waitUntil: "domcontentloaded", timeout: 60_000 });
+      const loadResponse = await navigateToMobileEntry(page, gateway, { waitUntil: "domcontentloaded", timeout: 60_000 });
       assert.equal(loadResponse?.status(), 200, "warm-profile fresh runtime should load the isolated Gateway");
       await page.getByTestId("new-workspace").waitFor({ state: "visible", timeout: 60_000 });
       await ensureFixtureSessionVisible(page);
@@ -656,14 +947,10 @@ await runE2E(import.meta.url, {
       storageRoot: relative(repoRoot, context.stateDir),
       runtimeStableDuringRun: gatewayRuntimeStable(gatewayRuntimeBefore, gatewayRuntimeAfter),
     },
-    sourceTreeSha256: mobileWeb.sourceTreeSha256,
-    bundleSha256: mobileWeb.bundleSha256,
-    bundleManifest: relative(context.runRoot, mobileWeb.bundleManifestPath),
-    dependencySourceTreeSha256: mobileWeb.dependencySourceTreeSha256,
-    dependencyOwnedTreeSha256: mobileWeb.dependencyOwnedTreeSha256,
+    mobileInput: mobileInputProvenance,
     sourceCompleteness: sourceSnapshot.completeness,
     excludedContentCounts: sourceSnapshot.excludedContentCounts,
-    dependencySnapshot: dependencySnapshot ? {
+    ...(!currentOfficialDistMode ? { dependencySnapshot: dependencySnapshot ? {
       sourceRoot: dependencySnapshot.sourceRoot,
       privateRoot: dependencySnapshot.path,
       copyPid: dependencySnapshot.copyPid,
@@ -684,7 +971,7 @@ await runE2E(import.meta.url, {
       semantics: "reused artifact only after complete export manifest, source snapshot digest, bundle file list, per-file SHA-256 and aggregate bundle SHA-256 matched",
       exporterInputSha256: mobileWeb.dependencySourceTreeSha256,
       exporterOwnedCopySha256: mobileWeb.dependencyOwnedTreeSha256,
-    },
+    } } : {}),
     browser: browserInfo,
     gateway: { port: gateway.port, pid: gateway.child.pid, mock: true, isolatedWorkspace: true },
     noRealProviderRequests: true,
@@ -694,7 +981,7 @@ await runE2E(import.meta.url, {
     complementChangeConfirmation: sourceSnapshot.complementSource
       ? "the before complement was copied from the explicit private snapshot; source-before, source-after, and copied complement SHA-256 values matched the supplied digest"
       : "writer confirmed Mobile package/app config/scripts, shared complement, and Gateway source were unchanged across the before freeze; their current copied SHA-256 digest is recorded",
-    exportedWebArtifact: relative(context.runRoot, exportedWebArtifact),
+    ...(exportedWebArtifact ? { exportedWebArtifact: relative(context.runRoot, exportedWebArtifact) } : {}),
   };
   await context.writeArtifactJson("phone-ux-browser-metrics.json", {
     schemaVersion: 1,
@@ -746,2672 +1033,94 @@ await runE2E(import.meta.url, {
   };
 });
 
-async function resolvePrivateBeforeComplementRoot(requestedDirectory) {
-  const canonicalRepoRoot = await realpath(repoRoot);
-  const privateInputRoot = resolve(canonicalRepoRoot, "target/private-phone-ux-implementation");
-  const requestedRoot = resolve(canonicalRepoRoot, requestedDirectory);
-  assert.ok(requestedRoot.startsWith(privateInputRoot + sep), "--before-complement-dir must be below target/private-phone-ux-implementation");
-  const canonicalPrivateInputRoot = await realpath(privateInputRoot);
-  const canonicalRequestedRoot = await realpath(requestedRoot);
-  assert.ok(canonicalRequestedRoot.startsWith(canonicalPrivateInputRoot + sep), "--before-complement-dir canonical path escapes target/private-phone-ux-implementation");
-  assert.equal(canonicalRequestedRoot, requestedRoot, "--before-complement-dir must not traverse symlinked paths");
-  const requestedInfo = await lstat(requestedRoot);
-  assert.ok(requestedInfo.isDirectory() && !requestedInfo.isSymbolicLink(), "--before-complement-dir must be an existing regular directory");
-  return canonicalRequestedRoot;
-}
-
-async function prepareSnapshot(context, mode, currentMobileRoot, currentSharedRoot, snapshotDirectory, expectedSourceDigest, beforeComplementDirectory, beforeComplementSha256) {
-  const snapshotRoot = resolve(repoRoot, snapshotDirectory || `target/private-phone-latency-implementation/${mode}`);
-  assert.ok(snapshotRoot.startsWith(`${repoRoot}${sep}`), "frozen source directory must remain inside the repository target tree");
-  const manifestPath = resolve(snapshotRoot, "sha256.json");
-  await access(manifestPath);
-  const manifestBytes = await readFile(manifestPath);
-  const hashes = JSON.parse(manifestBytes.toString("utf8"));
-  assert.ok(hashes && typeof hashes === "object" && !Array.isArray(hashes), "frozen source manifest must map repository-relative paths to SHA-256 values");
-  const entries = Object.entries(hashes);
-  assert.ok(entries.length > 0, "frozen source manifest is empty");
-  for (const [path, hash] of entries) {
-    const validBeforePath = path.startsWith("apps/kcoder-studio/mobile/") || path.startsWith("apps/kcoder-studio/shared/");
-    const validAfterPath = path.startsWith("apps/kcoder-studio/") || path.startsWith("apps/kcoder-relay/");
-    assert.ok(mode === "before" ? validBeforePath : validAfterPath, `unexpected frozen-source path: ${path}`);
-    const pathSegments = path.split("/");
-    assert.equal(pathSegments.includes("node_modules"), false, `frozen source must not include dependencies: ${path}`);
-    assert.equal(pathSegments.some(segment => segment.startsWith(".env")), false, `frozen source must not include dotenv credentials: ${path}`);
-    const isDependencyLockfile = /(?:^|\/)(?:package-lock\.json|pnpm-lock\.yaml|yarn\.lock)$/.test(path);
-    const isPinnedStaticMobilePackageLock = mode === "after"
-      && Boolean(reuseExportDirectory)
-      && Boolean(reuseExportManifest)
-      && path === "apps/kcoder-studio/mobile/package-lock.json"
-      && hash === "848076f520f165128b601b27d96d4d32cf25e8929ee54b672f198b9a4c224e26";
-    assert.ok(!isDependencyLockfile || isPinnedStaticMobilePackageLock, `frozen source may only retain the exact pinned Mobile package-lock as static metadata for after-mode reuse-export: ${path}`);
-    assert.match(hash, /^[a-f0-9]{64}$/, `invalid frozen-source digest for ${path}`);
-  }
-  let freezeMetadataSha256 = null;
-  let frozenSourceDigest = null;
-  if (mode === "after") {
-    const freezePath = resolve(snapshotRoot, "freeze.json");
-    const metadataPath = resolve(snapshotRoot, "metadata.json");
-    const freezeBytes = await readFile(freezePath).catch(async error => {
-      if (error?.code !== "ENOENT") throw error;
-      return readFile(metadataPath);
-    });
-    const freezeMetadata = JSON.parse(freezeBytes.toString("utf8"));
-    freezeMetadataSha256 = sha256(freezeBytes);
-    frozenSourceDigest = freezeMetadata.sourceDigest ?? freezeMetadata.manifestDigest ?? null;
-    assert.match(String(frozenSourceDigest), /^[a-f0-9]{64}$/, "after freeze metadata must contain a source digest");
-    if (freezeMetadata.manifestDigest) {
-      assert.equal(freezeMetadata.manifestDigest, sha256(manifestBytes), "after freeze metadata does not match sha256.json");
-    }
-    if (expectedSourceDigest) assert.equal(frozenSourceDigest, expectedSourceDigest, "after freeze source digest does not match the explicitly pinned candidate");
-    const expectedFileCount = freezeMetadata.sourceFiles ?? freezeMetadata.count ?? freezeMetadata.files;
-    assert.equal(entries.length, Number(expectedFileCount), "after source file count does not match freeze metadata");
-  }
-
-  const sourceRoot = context.pathInState(`mobile-source-${mode}`);
-  const mobileRoot = resolve(sourceRoot, "apps/kcoder-studio/mobile");
-  const sharedRoot = resolve(sourceRoot, "apps/kcoder-studio/shared");
-  await mkdir(mobileRoot, { recursive: true, mode: 0o700 });
-  await mkdir(sharedRoot, { recursive: true, mode: 0o700 });
-  context.registerTemporaryDirectory(`sanitized Mobile/shared source for ${mode}`, sourceRoot);
-  const excludedContent = Object.create(null);
-  let complementSource = null;
-  let complementShaBeforeOverlay = null;
-  if (mode === "before") {
-    if (beforeComplementDirectory) {
-      const pinnedComplementRoot = await resolvePrivateBeforeComplementRoot(beforeComplementDirectory);
-      const pinnedMobileRoot = resolve(pinnedComplementRoot, "apps/kcoder-studio/mobile");
-      const pinnedSharedRoot = resolve(pinnedComplementRoot, "apps/kcoder-studio/shared");
-      for (const pinnedRoot of [pinnedMobileRoot, pinnedSharedRoot]) {
-        const pinnedInfo = await lstat(pinnedRoot);
-        assert.ok(pinnedInfo.isDirectory() && !pinnedInfo.isSymbolicLink(), "private before-complement Mobile/shared roots must be regular directories");
-      }
-      const sourceSha256BeforeCopy = await hashComplement(pinnedMobileRoot, pinnedSharedRoot);
-      assert.equal(sourceSha256BeforeCopy, beforeComplementSha256, "private before-complement source does not match --before-complement-sha256");
-      await copySanitizedTree(pinnedMobileRoot, mobileRoot, excludedContent);
-      await copySanitizedTree(pinnedSharedRoot, sharedRoot, excludedContent);
-      const sourceSha256AfterCopy = await hashComplement(pinnedMobileRoot, pinnedSharedRoot);
-      assert.equal(sourceSha256AfterCopy, sourceSha256BeforeCopy, "private before-complement source changed while it was being copied");
-      complementShaBeforeOverlay = await hashComplement(mobileRoot, sharedRoot);
-      assert.equal(complementShaBeforeOverlay, beforeComplementSha256, "copied private before-complement does not match the supplied SHA-256");
-      complementSource = {
-        directory: relative(repoRoot, pinnedComplementRoot),
-        expectedSha256: beforeComplementSha256,
-        sourceSha256BeforeCopy,
-        sourceSha256AfterCopy,
-        copiedSha256: complementShaBeforeOverlay,
-        sourceStableDuringCopy: sourceSha256BeforeCopy === sourceSha256AfterCopy,
-      };
-    } else {
-      await copySanitizedTree(currentMobileRoot, mobileRoot, excludedContent);
-      await copySanitizedTree(currentSharedRoot, sharedRoot, excludedContent);
-      complementShaBeforeOverlay = await hashComplement(mobileRoot, sharedRoot);
-    }
-  }
-
-  const expectedMobileSrc = new Set(entries
-    .map(([path]) => path.startsWith("apps/kcoder-studio/mobile/src/") ? path.slice("apps/kcoder-studio/mobile/src/".length) : null)
-    .filter(Boolean));
-  const currentMobileSrc = resolve(mobileRoot, "src");
-  const currentSrcFiles = mode === "before" ? await listFiles(currentMobileSrc) : [];
-  if (mode === "before") {
-    // The before SHA list freezes the complete Mobile/src tree. Remove any
-    // source added after that freeze before restoring the frozen file bytes.
-    for (const path of currentSrcFiles) {
-      if (!expectedMobileSrc.has(path)) await rm(resolve(currentMobileSrc, path), { force: true });
-    }
-    await pruneEmptyDirectories(currentMobileSrc);
-  }
-  let overlay = [];
-  for (const [path, expectedHash] of entries) {
-    const source = resolve(snapshotRoot, path);
-    const destination = resolve(sourceRoot, path);
-    assert.ok(destination.startsWith(`${sourceRoot}${sep}`), "frozen source path escaped the private E2E state directory");
-    const sourceBytes = await readFile(source);
-    const actualHash = sha256(sourceBytes);
-    assert.equal(actualHash, expectedHash, `frozen before/after source hash mismatch for ${path}`);
-    await mkdir(resolve(destination, ".."), { recursive: true, mode: 0o700 });
-    await copyFile(source, destination);
-    overlay.push({ path, sha256: actualHash });
-  }
-  const complementShaAfterOverlay = mode === "before" ? await hashComplement(mobileRoot, sharedRoot) : null;
-  if (mode === "before") assert.equal(complementShaAfterOverlay, complementShaBeforeOverlay, "the frozen overlay unexpectedly changed a complement file");
-  if (beforeComplementSha256) assert.equal(complementShaAfterOverlay, beforeComplementSha256, "before complement SHA-256 changed during the frozen 224-file overlay");
-  const completeness = {
-    mobileSrcExpected: expectedMobileSrc.size,
-    mobileSrcRestored: overlay.filter(item => item.path.startsWith("apps/kcoder-studio/mobile/src/")).length,
-    mobileSrcFilesRemovedSinceFreezeCount: currentSrcFiles.filter(path => !expectedMobileSrc.has(path)).length,
-    manifestFileCount: entries.length,
-    workspaceComplementCopied: mode === "before" && !beforeComplementDirectory,
-    privateBeforeComplementCopied: Boolean(complementSource),
-    complementSource: mode === "before"
-      ? complementSource
-        ? `copied from verified private source ${complementSource.directory}; source-before, source-after, and copied hashes matched ${complementSource.expectedSha256}`
-        : "copied from the current workspace and identified by SHA-256; writer confirmed build-affecting complement files were unchanged"
-      : `no active-workspace complement copied; the exact ${entries.length}-file after freeze is copied and hash-verified. The one pinned Mobile package-lock remains static source metadata and is never executed or used to install dependencies on this reuse-only path; the Mobile/shared roots and 37-file bundle are checked against the reused export, with dependency trees separately pinned by its provenance.`,
-  };
-  assert.equal(completeness.mobileSrcExpected, completeness.mobileSrcRestored, "the frozen manifest does not cover every Mobile/src file");
-  if (mode === "after") assert.equal(overlay.length, entries.length, "after source snapshot must contain exactly every frozen file");
-  return {
-    mobileRoot,
-    sharedRoot,
-    snapshotRoot,
-    manifestSha256: sha256(manifestBytes),
-    freezeMetadataSha256,
-    frozenSourceDigest,
-    entryCount: entries.length,
-    overlaySha256: sha256(Buffer.from(JSON.stringify(overlay))),
-    complementSha256: complementShaAfterOverlay,
-    complementSource,
-    completeness,
-    excludedContentCounts: excludedContent,
-  };
-}
-
-async function reuseMobileWebExport(context, sourceSnapshot, bundleDirectory, manifestArgument) {
-  let bundleRoot = resolve(repoRoot, bundleDirectory);
-  const runArtifactsRoot = resolve(repoRoot, "target/test");
-  const privateInputRoot = resolve(repoRoot, "target/private-phone-ux-implementation");
-  let manifestPath = resolve(repoRoot, manifestArgument || resolve(bundleRoot, "..", `mobile-web-export-mobile-high-latency-${snapshotMode}-manifest.json`));
-  const bundleIsRunArtifact = bundleRoot.startsWith(`${runArtifactsRoot}${sep}`);
-  const manifestIsRunArtifact = manifestPath.startsWith(`${runArtifactsRoot}${sep}`);
-  const bundleIsPrivateInput = bundleRoot.startsWith(`${privateInputRoot}${sep}`);
-  const manifestIsPrivateInput = manifestPath.startsWith(`${privateInputRoot}${sep}`);
-  if (bundleIsRunArtifact && manifestIsRunArtifact) {
-    // Existing target/test artifacts remain supported for one-off inspection.
-  } else {
-    assert.ok(bundleIsPrivateInput && manifestIsPrivateInput, "reused Mobile Web bundle and manifest must both come from target/test or explicitly selected target/private-phone-ux-implementation inputs");
-    bundleRoot = await resolveExistingPrivatePath(repoRoot, bundleRoot);
-    manifestPath = await resolveExistingPrivatePath(repoRoot, manifestPath);
-    const bundleInfo = await lstat(bundleRoot);
-    const manifestInfo = await lstat(manifestPath);
-    assert.ok(bundleInfo.isDirectory() && !bundleInfo.isSymbolicLink(), "private Mobile Web bundle must be an existing regular directory");
-    assert.ok(manifestInfo.isFile() && !manifestInfo.isSymbolicLink(), "private Mobile Web export manifest must be an existing regular file");
-  }
-  const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
-  assert.equal(manifest.status, "complete", "reused Mobile Web export manifest must be complete");
-  assert.equal(manifest.failurePhase, null, "reused Mobile Web export must not have a failure phase");
-  assert.equal(manifest.sourceUnchanged, true, "reused Mobile Web source must have stayed stable during its original export");
-  assert.equal(manifest.snapshotUnchangedDuringExport, true, "reused Mobile Web build snapshot must have stayed stable during its original export");
-  assert.equal(manifest.dependencyProvenance?.sourceUnchanged, true, "reused Mobile Web dependencies must have stayed stable during its original export");
-
-  const expectedSourceRoots = [
-    { name: "mobile", path: sourceSnapshot.mobileRoot, destination: "apps/kcoder-studio/mobile" },
-    { name: "studio-shared", path: sourceSnapshot.sharedRoot, destination: "apps/kcoder-studio/shared" },
-  ];
-  const sourceTree = await hashMobileExportSourceRoots(expectedSourceRoots);
-  assert.equal(manifest.sourceTreeSha256, sourceTree.sha256, "reused Mobile Web bundle source digest does not match the selected frozen source snapshot");
-  assert.deepEqual(
-    manifest.inputRootsAfter?.map(({ name, destination, sha256, fileCount }) => ({ name, destination, sha256, fileCount })),
-    sourceTree.roots.map(({ name, destination, sha256, fileCount }) => ({ name, destination, sha256, fileCount })),
-    "reused Mobile Web bundle source roots do not match the selected snapshot",
-  );
-
-  const actualBundleFiles = await hashBundleTree(bundleRoot);
-  assert.deepEqual(actualBundleFiles, manifest.bundleFiles, "reused Mobile Web bundle file list or per-file SHA-256 differs from the complete export manifest");
-  assert.equal(sha256(Buffer.from(JSON.stringify(actualBundleFiles))), manifest.bundleSha256, "reused Mobile Web bundle aggregate SHA-256 differs from its manifest");
-  assert.ok(actualBundleFiles.some(file => file.path === "index.html" && file.sha256 === manifest.indexHtmlSha256), "reused Mobile Web bundle index.html digest does not match its manifest");
-
-  return {
-    path: bundleRoot,
-    sourceTreeSha256: manifest.sourceTreeSha256,
-    bundleSha256: manifest.bundleSha256,
-    bundleManifestPath: manifestPath,
-    reusedManifestPath: manifestPath,
-    dependencySourceTreeSha256: manifest.dependencyProvenance?.sourceTreeSha256Before ?? null,
-    dependencyOwnedTreeSha256: manifest.dependencyProvenance?.copiedTreeSha256 ?? null,
-    reuseValidation: {
-      manifestStatus: manifest.status,
-      sourceTreeMatchesSelectedSnapshot: true,
-      sourceRootCount: sourceTree.roots.length,
-      bundleFilesMatchManifest: true,
-      bundleFileCount: actualBundleFiles.length,
-      bundleSha256: manifest.bundleSha256,
-    },
-  };
-}
-
-async function hashMobileExportSourceRoots(roots) {
-  const hashedRoots = [];
-  for (const root of roots) {
-    const files = [];
-    await appendExportSourceFiles(root.path, "", files);
-    files.sort((left, right) => left.path.localeCompare(right.path));
-    hashedRoots.push({ name: root.name, destination: root.destination, sha256: sha256(Buffer.from(JSON.stringify(files))), fileCount: files.length });
-  }
-  return {
-    roots: hashedRoots,
-    sha256: sha256(Buffer.from(JSON.stringify(hashedRoots.map(({ name, destination, sha256: digest }) => ({ name, destination, sha256: digest }))))),
-  };
-}
-
-async function appendExportSourceFiles(root, relativeRoot, output) {
-  for (const entry of await readdir(root, { withFileTypes: true })) {
-    if (exportSourceExcluded(entry.name, entry.isDirectory())) continue;
-    const absolute = resolve(root, entry.name);
-    const relativePath = relativeRoot ? `${relativeRoot}/${entry.name}` : entry.name;
-    const info = await lstat(absolute);
-    assert.ok(!info.isSymbolicLink(), `reused export source contains a symlink: ${relativePath}`);
-    if (info.isDirectory()) await appendExportSourceFiles(absolute, relativePath, output);
-    else if (info.isFile()) {
-      const contents = await readFile(absolute);
-      output.push({ path: relativePath, size: contents.length, sha256: sha256(contents) });
-    }
-  }
-}
-
-function exportSourceExcluded(name, isDirectory) {
-  if (isDirectory && [".expo", ".git", "dist", "node_modules"].includes(name)) return true;
-  if (/^\.env(?:\..+)?$/i.test(name) && name.toLowerCase() !== ".env.example") return true;
-  return /(?:^|[._-])(?:secret|secrets|credential|credentials)(?:[._-]|$)/i.test(name);
-}
-
-async function hashBundleTree(root) {
-  const files = [];
-  async function visit(directory) {
-    for (const entry of await readdir(directory, { withFileTypes: true })) {
-      const absolute = resolve(directory, entry.name);
-      const path = relative(root, absolute).split(sep).join("/");
-      const info = await lstat(absolute);
-      assert.ok(!info.isSymbolicLink(), `reused Mobile Web bundle contains a symlink: ${path}`);
-      if (info.isDirectory()) await visit(absolute);
-      else if (info.isFile()) {
-        const contents = await readFile(absolute);
-        files.push({ path, size: contents.length, sha256: sha256(contents) });
-      } else {
-        assert.fail(`reused Mobile Web bundle contains a non-regular file: ${path}`);
-      }
-    }
-  }
-  await visit(root);
-  return files.sort((left, right) => left.path.localeCompare(right.path));
-}
-
-async function prepareGatewayRuntimeSnapshot(context, snapshotDirectoryArgument, binaryOverride, expectedBinarySha256) {
-  let snapshotRoot = snapshotDirectoryArgument
-    ? resolve(repoRoot, snapshotDirectoryArgument)
-    : context.pathInArtifacts("gateway-runtime-frozen");
-  const targetTestRoot = resolve(repoRoot, "target/test");
-  const privateSnapshotRoot = resolve(repoRoot, "target/private-phone-ux-implementation");
-  const isTestArtifactSnapshot = snapshotRoot.startsWith(`${targetTestRoot}${sep}`);
-  const isExplicitPrivateSnapshot = Boolean(snapshotDirectoryArgument)
-    && snapshotRoot.startsWith(`${privateSnapshotRoot}${sep}`);
-  assert.ok(
-    isTestArtifactSnapshot || isExplicitPrivateSnapshot,
-    "frozen Gateway runtime must be inside target/test or an explicitly selected target/private-phone-ux-implementation snapshot",
-  );
-  if (isExplicitPrivateSnapshot) {
-    const validated = await resolveExistingPrivateGatewaySnapshot(repoRoot, snapshotDirectoryArgument);
-    snapshotRoot = validated.snapshotRoot;
-  }
-  const manifestPath = resolve(snapshotRoot, "gateway-runtime-freeze.json");
-  try {
-    await access(manifestPath);
-    const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
-    assert.equal(manifest.status, "complete", "reused Gateway runtime freeze must be complete");
-      const inspected = await inspectGatewayRuntimeSnapshot(snapshotRoot, binaryOverride);
-      assert.equal(inspected.sourceDigest, manifest.sourceTreeSha256, "frozen Gateway source tree no longer matches its manifest");
-      assert.equal(inspected.dependencyDigest, manifest.dependencyTreeSha256, "frozen Gateway dependency tree no longer matches its manifest");
-      assert.equal(inspected.nodeExecutable, manifest.nodeExecutable, "frozen Gateway Node executable path differs from its manifest");
-      assert.equal(inspected.nodeVersion, manifest.nodeVersion, "frozen Gateway Node version differs from its manifest");
-      if (binaryOverride) {
-        assert.deepEqual(
-          { nodeExecutable: inspected.runtimeInputs.nodeExecutable, nodeVersion: inspected.runtimeInputs.nodeVersion, nodeStat: inspected.runtimeInputs.nodeStat },
-          { nodeExecutable: manifest.runtimeInputs.nodeExecutable, nodeVersion: manifest.runtimeInputs.nodeVersion, nodeStat: manifest.runtimeInputs.nodeStat },
-          "frozen Gateway Node executable inputs differ from the freeze manifest",
-        );
-        assert.equal(inspected.kcoderBinarySha256, expectedBinarySha256, "explicit Gateway KCoder binary does not match its declared SHA-256");
-      } else {
-        assert.deepEqual(inspected.runtimeInputs, manifest.runtimeInputs, "frozen Gateway runtime executable inputs differ from the freeze manifest");
-      }
-    return {
-      root: snapshotRoot,
-      manifestPath,
-      manifestSha256: sha256(await readFile(manifestPath)),
-      manifest,
-      binaryPath: inspected.kcoderBinaryPath,
-      binaryOverride: binaryOverride ? { path: inspected.kcoderBinaryPath, sha256: inspected.kcoderBinarySha256 } : null,
-    };
-  } catch (error) {
-    if (error?.code !== "ENOENT") throw error;
-    assert.ok(!isExplicitPrivateSnapshot, "an explicitly selected private Gateway runtime must already contain its complete freeze manifest");
-  }
-
-  await mkdir(snapshotRoot, { recursive: false, mode: 0o700 });
-  const appNodeModules = resolve(appRoot, "node_modules");
-  const appNodeModulesReal = await realpath(appNodeModules);
-  await assertNoEscapingLinks(appNodeModules, appNodeModulesReal);
-  const originBefore = await hashGatewayRuntimeInputs(appRoot);
-  const sourceEntries = [];
-  for (const name of ["dev-server.mjs", "package.json", "pnpm-lock.yaml"]) {
-    const source = resolve(appRoot, name);
-    try {
-      const info = await lstat(source);
-      if (info.isFile()) {
-        sourceEntries.push({ source, destination: resolve(snapshotRoot, name) });
-      }
-    } catch (error) {
-      if (error?.code !== "ENOENT") throw error;
-    }
-  }
-  for (const name of ["src", "shared"]) {
-    sourceEntries.push({ source: resolve(appRoot, name), destination: resolve(snapshotRoot, name), directory: true });
-  }
-  for (const entry of sourceEntries) {
-    if (entry.directory) {
-      await cp(entry.source, entry.destination, { recursive: true, dereference: true, filter: sourceSnapshotFilter });
-    } else {
-      await cp(entry.source, entry.destination, { dereference: true, filter: sourceSnapshotFilter });
-    }
-  }
-  await cp(appNodeModules, resolve(snapshotRoot, "node_modules"), {
-    recursive: true,
-    dereference: false,
-    verbatimSymlinks: true,
-    filter: dependencySnapshotFilter,
-  });
-  const copiedNodeModules = resolve(snapshotRoot, "node_modules");
-  await assertNoEscapingLinks(copiedNodeModules, await realpath(copiedNodeModules));
-
-  const inputs = await inspectGatewayRuntimeSnapshot(snapshotRoot);
-  const originAfter = await hashGatewayRuntimeInputs(appRoot);
-  assert.deepEqual(originAfter, originBefore, "Gateway source or dependencies changed while creating the immutable runtime snapshot");
-  assert.equal(inputs.sourceDigest, originBefore.sourceDigest, "copied Gateway source files differ from the stable workspace source");
-  assert.equal(inputs.dependencyDigest, originBefore.dependencyDigest, "copied Gateway dependencies differ from the stable workspace dependencies");
-  const runtimeInputs = await readGatewayExecutableInputs(binaryOverride);
-  if (binaryOverride) assert.equal(runtimeInputs.kcoderBinarySha256, expectedBinarySha256, "explicit Gateway KCoder binary does not match its declared SHA-256");
-  const manifest = {
-    schemaVersion: 1,
-    status: "complete",
-    createdAtUtc: new Date().toISOString(),
-    sourceRoot: relative(repoRoot, appRoot),
-    sourceFiles: inputs.sourceFiles,
-    sourceTreeSha256: inputs.sourceDigest,
-    workspaceSourceTreeSha256: originBefore.sourceDigest,
-    dependencyFiles: inputs.dependencyFiles,
-    dependencyTreeSha256: inputs.dependencyDigest,
-    workspaceDependencyTreeSha256: originBefore.dependencyDigest,
-    dependencySourceRoot: relative(repoRoot, appNodeModulesReal),
-    dependencyCopySemantics: "one-time private copy preserving package-manager symlinks with verbatim targets; every dependency symlink is checked to resolve inside the owned node_modules tree; .env/key/credential/cache files are excluded while dependency packages such as dotenv remain",
-    runtimeInputs,
-    nodeExecutable: inputs.nodeExecutable,
-    nodeVersion: inputs.nodeVersion,
-    kcoderBinaryPath: inputs.kcoderBinaryPath,
-    kcoderBinaryStat: inputs.kcoderBinaryStat,
-  };
-  const bytes = Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`);
-  await writeFile(manifestPath, bytes, { flag: "wx", mode: 0o600 });
-  return {
-    root: snapshotRoot,
-    manifestPath,
-    manifestSha256: sha256(bytes),
-    manifest,
-    binaryPath: runtimeInputs.kcoderBinaryPath,
-    binaryOverride: binaryOverride ? { path: runtimeInputs.kcoderBinaryPath, sha256: runtimeInputs.kcoderBinarySha256 } : null,
-  };
-}
-
-async function inspectGatewayRuntimeSnapshot(snapshotRoot, binaryOverride = null) {
-  const sourceFiles = [];
-  const dependencyFiles = [];
-  await appendGatewaySnapshotFiles(snapshotRoot, "", sourceFiles, false);
-  await appendGatewaySnapshotFiles(resolve(snapshotRoot, "node_modules"), "", dependencyFiles, true);
-  sourceFiles.sort((left, right) => left.path.localeCompare(right.path));
-  dependencyFiles.sort((left, right) => left.path.localeCompare(right.path));
-  const nodeExecutable = await realpath(process.execPath);
-  const nodeVersion = process.version;
-  const kcoderBinaryPath = binaryOverride || process.env.KCODER_E2E_KCODER_BIN || resolve(repoRoot, "target/debug/kcoder");
-  const kcoderBinaryStat = await regularFileIdentity(kcoderBinaryPath);
-  const runtimeInputs = await readGatewayExecutableInputs(binaryOverride);
-  return {
-    sourceFiles,
-    sourceDigest: sha256(Buffer.from(JSON.stringify(sourceFiles))),
-    dependencyFiles,
-    dependencyDigest: sha256(Buffer.from(JSON.stringify(dependencyFiles))),
-    nodeExecutable,
-    nodeVersion,
-    kcoderBinaryPath: kcoderBinaryStat ? await realpath(kcoderBinaryPath) : resolve(kcoderBinaryPath),
-    kcoderBinaryStat,
-    kcoderBinarySha256: runtimeInputs.kcoderBinarySha256,
-    runtimeInputs,
-  };
-}
-
-async function hashGatewayRuntimeInputs(root) {
-  const sourceFiles = [];
-  for (const name of ["dev-server.mjs", "package.json", "pnpm-lock.yaml"]) {
-    const path = resolve(root, name);
-    try {
-      const info = await lstat(path);
-      if (!info.isFile()) continue;
-      sourceFiles.push({ path: name, size: info.size, sha256: sha256(await readFile(path)) });
-    } catch (error) {
-      if (error?.code !== "ENOENT") throw error;
-    }
-  }
-  for (const name of ["src", "shared"]) await appendGatewaySnapshotFiles(resolve(root, name), name, sourceFiles, false);
-  const dependencyFiles = [];
-  await appendGatewaySnapshotFiles(resolve(root, "node_modules"), "", dependencyFiles, true);
-  sourceFiles.sort((left, right) => left.path.localeCompare(right.path));
-  dependencyFiles.sort((left, right) => left.path.localeCompare(right.path));
-  return {
-    sourceFiles,
-    sourceDigest: sha256(Buffer.from(JSON.stringify(sourceFiles))),
-    dependencyFiles,
-    dependencyDigest: sha256(Buffer.from(JSON.stringify(dependencyFiles))),
-  };
-}
-
-async function appendGatewaySnapshotFiles(root, relativeRoot, output, dependencies) {
-  for (const entry of await readdir(root, { withFileTypes: true })) {
-    if (entry.name === "gateway-runtime-freeze.json") continue;
-    if (!dependencies && entry.name === "node_modules") continue;
-    if (dependencies && dependencySnapshotExcluded(entry.name, entry.isDirectory())) continue;
-    if (!dependencies && sourceSnapshotExcluded(entry.name, entry.isDirectory())) continue;
-    const absolute = resolve(root, entry.name);
-    const path = relativeRoot ? `${relativeRoot}/${entry.name}` : entry.name;
-    let info = await lstat(absolute);
-    if (info.isSymbolicLink()) {
-      assert.ok(dependencies, `frozen Gateway source snapshot contains a symlink: ${path}`);
-      output.push({ path, symlinkTarget: await readlink(absolute) });
-      info = await stat(absolute);
-    }
-    if (info.isDirectory()) await appendGatewaySnapshotFiles(absolute, path, output, dependencies);
-    else if (info.isFile()) {
-      const contents = await readFile(absolute);
-      output.push({ path, size: contents.length, sha256: sha256(contents) });
-    }
-  }
-}
-
-function sourceSnapshotFilter(sourcePath) {
-  const name = basename(sourcePath);
-  if (/^\.env(?:\..+)?$/i.test(name) && name.toLowerCase() !== ".env.example") return false;
-  return !/\.(?:pem|key|p12|pfx|keystore)$/i.test(name);
-}
-
-function dependencySnapshotFilter(sourcePath) {
-  const name = basename(sourcePath);
-  return !dependencySnapshotExcluded(name, false) && !dependencySnapshotExcluded(name, true);
-}
-
-function dependencySnapshotExcluded(name, isDirectory) {
-  if (isDirectory && [".vite", ".cache", "coverage", ".git"].includes(name)) return true;
-  if (/^\.env(?:\..+)?$/i.test(name) && name.toLowerCase() !== ".env.example") return true;
-  if ([".npmrc", "credentials.json", "account_credentials.json"].includes(name)) return true;
-  if (/(?:^|[._-])(?:secret|secrets|credential|credentials)(?:[._-]|$)/i.test(name)) return true;
-  return /\.(?:pem|key|p12|pfx|keystore)$/i.test(name);
-}
-
-function sourceSnapshotExcluded(name, isDirectory) {
-  if (isDirectory && [".git", ".expo", "dist", "target"].includes(name)) return true;
-  if (/^\.env(?:\..+)?$/i.test(name) && name.toLowerCase() !== ".env.example") return true;
-  return /\.(?:pem|key|p12|pfx|keystore)$/i.test(name);
-}
-
-async function assertNoEscapingLinks(root, allowedRoot) {
-  for (const entry of await readdir(root, { withFileTypes: true })) {
-    const path = resolve(root, entry.name);
-    const info = await lstat(path);
-    if (info.isSymbolicLink()) {
-      const target = await realpath(path);
-      assert.ok(target === allowedRoot || target.startsWith(`${allowedRoot}${sep}`), `Gateway dependency symlink escapes its package root: ${relative(root, path)}`);
-    } else if (info.isDirectory()) {
-      await assertNoEscapingLinks(path, allowedRoot);
-    }
-  }
-}
-
-async function readGatewayExecutableInputs(binaryOverride = null) {
-  const nodeExecutable = await realpath(process.execPath);
-  const nodeStat = await regularFileIdentity(nodeExecutable);
-  const kcoderBinaryPath = binaryOverride || process.env.KCODER_E2E_KCODER_BIN || resolve(repoRoot, "target/debug/kcoder");
-  const kcoderBinaryStat = await regularFileIdentity(kcoderBinaryPath);
-  return {
-    nodeExecutable,
-    nodeVersion: process.version,
-    nodeStat,
-    kcoderBinaryPath: kcoderBinaryStat ? await realpath(kcoderBinaryPath) : resolve(kcoderBinaryPath),
-    kcoderBinaryStat,
-    kcoderBinarySha256: kcoderBinaryStat ? sha256(await readFile(kcoderBinaryPath)) : null,
-  };
-}
-
-async function regularFileIdentity(path) {
-  try {
-    const info = await stat(path);
-    if (!info.isFile()) return null;
-    return { size: info.size, mtimeMs: info.mtimeMs, dev: info.dev, ino: info.ino };
-  } catch (error) {
-    if (error?.code === "ENOENT") return null;
-    throw error;
-  }
-}
-
-function gatewayRuntimeStable(before, after) {
-  return before.sourceDigest === after.sourceDigest
-    && before.dependencyDigest === after.dependencyDigest
-    && before.nodeExecutable === after.nodeExecutable
-    && before.nodeVersion === after.nodeVersion
-    && before.kcoderBinaryPath === after.kcoderBinaryPath
-    && JSON.stringify(before.kcoderBinaryStat) === JSON.stringify(after.kcoderBinaryStat)
-    && JSON.stringify(before.runtimeInputs) === JSON.stringify(after.runtimeInputs);
-}
-
-async function startFrozenGateway(context, gatewayRuntime, { label, workspace, serversFile, serversStore, webRoot, mock }) {
-  const host = "127.0.0.1";
-  const port = 0;
-  const authToken = randomBytes(24).toString("base64url");
-  context.registerSecret(authToken);
-  const overrides = {
-    KCODER_STUDIO_HOST: host,
-    KCODER_STUDIO_PORT: String(port),
-    KCODER_STUDIO_KCODER_BIN: gatewayRuntime.binaryPath || gatewayRuntime.manifest.runtimeInputs.kcoderBinaryPath,
-    KCODER_STUDIO_WORKSPACE: workspace,
-    KCODER_STUDIO_WEB_ROOT: webRoot,
-    KCODER_STUDIO_SERVERS_FILE: serversFile,
-    KCODER_STUDIO_SERVERS_STORE: serversStore,
-    KCODER_STUDIO_AUTH_TOKEN: authToken,
-    KCODER_STUDIO_ALLOWED_HOSTS: "127.0.0.1,localhost,::1",
-    KCODER_STUDIO_MOCK: mock ? "1" : "0",
-  };
-  const env = context.isolatedEnvironment(overrides);
-  const scriptPath = resolve(gatewayRuntime.root, "dev-server.mjs");
-  const child = context.spawnOwned(label, process.execPath, [scriptPath], {
-    cwd: gatewayRuntime.root,
-    env,
-  });
-  const logPath = resolve(context.logsDir, `${label}.log`);
-  const gatewayPort = await waitFor(async () => {
-    const log = await readFile(logPath, "utf8").catch(() => "");
-    const match = log.match(/KCoder Studio: http:\/\/[^:]+:(\d+)/);
-    if (child.exitCode !== null) throw new Error(`frozen Gateway exited with code ${child.exitCode}; inspect ${logPath}`);
-    return match ? Number(match[1]) : null;
-  }, 15_000, "frozen isolated Gateway startup", 50, context.abortSignal);
-  context.registerPort(label, gatewayPort);
-  return {
-    child,
-    port: gatewayPort,
-    host,
-    serversStore,
-    baseUrl: `http://${host}:${gatewayPort}`,
-    wsUrl: `ws://${host}:${gatewayPort}`,
-    authToken,
-    logPath,
-    scriptPath,
-    cwd: gatewayRuntime.root,
-  };
-}
-
-async function copySanitizedTree(sourceRoot, destinationRoot, excludedContent) {
-  const entries = await readdir(sourceRoot, { withFileTypes: true });
-  entries.sort((left, right) => left.name.localeCompare(right.name));
-  for (const entry of entries) {
-    const source = resolve(sourceRoot, entry.name);
-    const destination = resolve(destinationRoot, entry.name);
-    const category = excludedCategory(entry.name, entry.isDirectory());
-    if (category) {
-      excludedContent[category] = (excludedContent[category] ?? 0) + 1;
-      continue;
-    }
-    const info = await lstat(source);
-    assert.ok(!info.isSymbolicLink(), `source tree contains a symlink: ${relative(sourceRoot, source)}`);
-    if (info.isDirectory()) {
-      await mkdir(destination, { recursive: true, mode: 0o700 });
-      await copySanitizedTree(source, destination, excludedContent);
-    } else if (info.isFile()) {
-      await copyFile(source, destination);
-    }
-  }
-}
-
-async function createDependencySnapshot(context, currentMobileRoot) {
-  const sourceRoot = resolve(currentMobileRoot, "node_modules");
-  const snapshotRoot = context.pathInState("mobile-dependency-input-frozen");
-  await mkdir(snapshotRoot, { recursive: false, mode: 0o700 });
-  context.registerTemporaryDirectory("isolated Mobile dependency input snapshot", snapshotRoot);
-  const label = "phone-ux-dependency-snapshot-copy";
-  const copyStartedAtUtc = new Date().toISOString();
-  const child = context.spawnOwned(label, "cp", ["-aL", "--reflink=auto", `${sourceRoot}/.`, `${snapshotRoot}/`], {
-    cwd: repoRoot,
-    env: context.isolatedEnvironment(),
-  });
-  let spawnError = null;
-  child.once("error", error => { spawnError = error; });
-  try {
-    await waitFor(
-      () => spawnError || child.exitCode !== null || child.signalCode !== null,
-      10 * 60_000,
-      "isolated Mobile dependency input snapshot copy",
-      100,
-      context.abortSignal,
-    );
-    if (spawnError) throw new Error(`dependency snapshot copy could not start: ${spawnError.message}`);
-    assert.equal(child.exitCode, 0, `dependency snapshot copy exited with ${child.signalCode || `code ${child.exitCode}`}`);
-  } finally {
-    await context.stopOwned(label);
-  }
-  const excludedContentCounts = Object.create(null);
-  await removeDependencyCacheAndSecretFiles(snapshotRoot, excludedContentCounts);
-  return {
-    path: snapshotRoot,
-    sourceRoot,
-    copyPid: child.pid,
-    copyStartedAtUtc,
-    copyCompletedAtUtc: new Date().toISOString(),
-    excludedContentCounts,
-    semantics: "private dependency copy; generated .vite cache, dotenv files, credentials, and key material removed before the exporter hashes or builds it",
-  };
-}
-
-async function removeDependencyCacheAndSecretFiles(root, counts) {
-  for (const entry of await readdir(root, { withFileTypes: true })) {
-    const path = resolve(root, entry.name);
-    const category = dependencyExcludedCategory(entry.name, entry.isDirectory());
-    if (category) {
-      counts[category] = (counts[category] ?? 0) + 1;
-      await rm(path, { recursive: true, force: true });
-      continue;
-    }
-    const info = await lstat(path);
-    assert.ok(!info.isSymbolicLink(), "isolated Mobile dependency snapshot must not contain symlinks");
-    if (info.isDirectory()) await removeDependencyCacheAndSecretFiles(path, counts);
-  }
-}
-
-function dependencyExcludedCategory(name, isDirectory) {
-  if (isDirectory && name === ".vite") return "generated-vite-cache-directory";
-  if (name === ".env" || /^\.env\.(?!example(?:\.|$))/i.test(name)) return "environment-file";
-  if ([".npmrc", "credentials.json", "account_credentials.json"].includes(name)) return "credential-file";
-  if (/(?:^|[._-])(?:secret|secrets|credential|credentials)(?:[._-]|$)/i.test(name)) return "credential-named-file";
-  if (/\.(?:pem|key|p12|pfx|keystore)$/i.test(name)) return "cryptographic-key-material";
-  return null;
-}
-
-async function copyArtifactTree(sourceRoot, destinationRoot) {
-  await mkdir(destinationRoot, { recursive: true, mode: 0o700 });
-  for (const entry of await readdir(sourceRoot, { withFileTypes: true })) {
-    const source = resolve(sourceRoot, entry.name);
-    const destination = resolve(destinationRoot, entry.name);
-    const info = await lstat(source);
-    assert.ok(!info.isSymbolicLink(), "exported Mobile Web bundle must not contain symlinks");
-    if (info.isDirectory()) await copyArtifactTree(source, destination);
-    else if (info.isFile()) await copyFile(source, destination);
-  }
-}
-
-function excludedCategory(name, isDirectory) {
-  if (isDirectory && ["node_modules", ".expo", ".git", "dist", "target"].includes(name)) return "generated-or-dependency-directory";
-  if (name === ".env" || /^\.env\.(?!example(?:\.|$))/i.test(name)) return "environment-file";
-  if ([".npmrc", "credentials.json", "account_credentials.json"].includes(name)) return "credential-file";
-  if (/\.(?:pem|key|p12|pfx|keystore)$/i.test(name)) return "cryptographic-key-material";
-  return null;
-}
-
-async function hashComplement(mobileRoot, sharedRoot) {
-  const files = [];
-  await appendFileHashes(mobileRoot, "apps/kcoder-studio/mobile", files, new Set(["src"]));
-  await appendFileHashes(sharedRoot, "apps/kcoder-studio/shared", files, new Set(["gatewayConnectionBudget.ts"]));
-  files.sort((left, right) => left.path.localeCompare(right.path));
-  return sha256(Buffer.from(JSON.stringify(files)));
-}
-
-async function appendFileHashes(root, repoRelativeRoot, output, excludedNames) {
-  for (const entry of await readdir(root, { withFileTypes: true })) {
-    if (excludedCategory(entry.name, entry.isDirectory()) || excludedNames.has(entry.name)) continue;
-    const absolute = resolve(root, entry.name);
-    const repoRelative = `${repoRelativeRoot}/${entry.name}`;
-    const info = await lstat(absolute);
-    assert.ok(!info.isSymbolicLink(), `complement source contains a symlink: ${repoRelative}`);
-    if (info.isDirectory()) await appendFileHashes(absolute, repoRelative, output, new Set());
-    else if (info.isFile()) output.push({ path: repoRelative, sha256: sha256(await readFile(absolute)) });
-  }
-}
-
-async function listFiles(root) {
-  const output = [];
-  async function visit(directory) {
-    for (const entry of await readdir(directory, { withFileTypes: true })) {
-      const absolute = resolve(directory, entry.name);
-      if (entry.isDirectory()) await visit(absolute);
-      else if (entry.isFile()) output.push(relative(root, absolute).split(sep).join("/"));
-    }
-  }
-  await visit(root);
-  return output.sort();
-}
-
-async function pruneEmptyDirectories(root) {
-  for (const entry of await readdir(root, { withFileTypes: true })) {
-    if (!entry.isDirectory()) continue;
-    const child = resolve(root, entry.name);
-    await pruneEmptyDirectories(child);
-    if ((await readdir(child)).length === 0) await rmdir(child);
-  }
-}
-
-async function runPhoneUxFaultScenarios(chromium, gateway, network, gatewayCalls, browserErrors, context, refreshBackgroundHost) {
-  const rows = [];
-  const requiredScenarioFailures = [];
-  let receiptSummary = null;
-  const persistProgress = () => {
-    const completedScenarioCount = rows.filter(row => ["PASS", "SMOKE", "DIAGNOSTIC_ONLY", "PARTIAL", "FAIL"].includes(row.status)).length;
-    const expectedScenarioCount = selectedFaultScenario ? 1 : faultScenarioIds.length;
-    const partialCoverage = rows.some(row => row.checks.coverageStatus && !["PASS", "FAIL", "SMOKE", "DIAGNOSTIC_ONLY"].includes(row.checks.coverageStatus));
-    const progressArtifactName = `phone-ux-fault-progress-${String(completedScenarioCount).padStart(2, "0")}.json`;
-    return context.writeArtifactJson(progressArtifactName, {
-      schemaVersion: 1,
-      status: rows.some(row => row.status === "FAIL")
-        ? "PARTIAL_FAIL"
-        : rows.some(row => row.status === "DIAGNOSTIC_ONLY") ? "DIAGNOSTIC_ONLY"
-          : rows.some(row => row.status === "SMOKE") ? "SMOKE_ONLY"
-          : partialCoverage ? "PARTIAL_COVERAGE"
-          : completedScenarioCount >= expectedScenarioCount ? "PASS_SCOPED" : "RUNNING",
-      selectedScenario: selectedFaultScenario ?? "all-required-fault-scenarios",
-      completedScenarioCount,
-      expectedScenarioCount,
-      faults: rows,
-      requiredScenarioFailures,
-      fixtureReceiptLedger: receiptSummary,
-      network: summarizeNetwork(network),
-      browserErrors,
-      gatewayCalls,
-    });
-  };
-  const runCase = async (scenarioId, delayControl, exercise, { skipPageSetup = false, beforeFixtureSessionVisible } = {}) => {
-    if (selectedFaultScenario && selectedFaultScenario !== scenarioId) return null;
-    const row = {
-      scenario: scenarioId,
-      status: "RUNNING",
-      evidenceClass: "real Mobile Web page in isolated Chromium context plus KCODER_STUDIO_MOCK Gateway fixture",
-      checks: {},
-    };
-    const scenarioControl = { ...delayControl, delayMs: delayControl.delayMs ?? 0, scenarioId };
-    network.currentStage = `fault:${scenarioId}:home`;
-    let page;
-    const startedAt = performance.now();
-    try {
-      if (!skipPageSetup) {
-        page = await newMobilePage(chromium, network, scenarioControl, gatewayCalls, browserErrors, context);
-        await connectMobile(page, gateway, {
-          beforeFixtureSessionVisible: beforeFixtureSessionVisible ? () => beforeFixtureSessionVisible(page, row) : undefined,
-        });
-      }
-      await exercise(page, row, scenarioControl);
-      row.drain = await waitForGatewayRpcQuiescence(network, 35_000, 200);
-      row.status = refreshDiagnosticMode && scenarioId === refreshScenarioId
-        ? row.checks.coverageStatus === "DIAGNOSTIC_ONLY" ? "DIAGNOSTIC_ONLY" : "PARTIAL"
-        : refreshSmokeMode && scenarioId === refreshScenarioId && row.checks.coverageStatus === "SMOKE"
-          ? "SMOKE"
-          : refreshSmokeMode && scenarioId === refreshScenarioId ? "PARTIAL" : "PASS";
-    } catch (error) {
-      row.status = "FAIL";
-      row.error = context.redactText(error instanceof Error ? error.message : String(error)).slice(0, 700);
-      if (page && !page.isClosed()) row.pageAtFailure = await describeVisiblePage(page);
-      requiredScenarioFailures.push({ scenario: scenarioId, reason: row.error });
-    } finally {
-      row.durationMs = round(performance.now() - startedAt);
-      if (page) await closeOwnedMobilePage(page).catch(() => {});
-      if (!(["PASS", "SMOKE", "DIAGNOSTIC_ONLY"].includes(row.status))) {
-        try { await waitForGatewayRpcQuiescence(network, 2_000, 100); } catch {}
-      }
-      rows.push(row);
-      await persistProgress();
-    }
-    return row;
-  };
-
-  await runCase("slow-status-12s", { statusProbeDelayMs: 12_000 }, async (page, row) => {
-    const statusRequest = await waitFor(() => network.httpRouteRequests.find(item => item.scenario === row.scenario && item.apiPath === "/api/servers/status"), 10_000, "slow status probe request");
-    await page.getByTestId("server-status-refreshing").waitFor({ state: "visible", timeout: 8_000 });
-    row.checks.statusRefreshingVisible = true;
-    row.checks.statusRequestStartedAtEpochMs = statusRequest.startedAtEpochMs;
-    network.currentStage = `fault:${row.scenario}:history-before-status-response`;
-    const historyStartedAt = performance.now();
-    await openFixtureSession(page);
-    await page.getByTestId("message-user").first().waitFor({ state: "visible", timeout: 8_000 });
-    const historyVisibleMs = round(performance.now() - historyStartedAt);
-    const statusResponseAlreadyReturned = network.httpResponsePathDelays.some(item => item.scenario === row.scenario && item.apiPath === "/api/servers/status");
-    assert.equal(statusResponseAlreadyReturned, false, "history should become visible while the 12-second status response is still held");
-    row.checks.historyVisibleBeforeSlowStatusResponse = true;
-    row.checks.clickToHistoryVisibleMs = historyVisibleMs;
-    assert.ok(historyVisibleMs < 10_000, `history appeared after ${historyVisibleMs}ms, while status is configured for 12000ms`);
-    await waitForGatewayRpcQuiescence(network, 20_000, 200);
-    const delayedStatus = network.httpResponsePathDelays.find(item => item.scenario === row.scenario && item.apiPath === "/api/servers/status");
-    assertApplicationDelay(delayedStatus, 12_000, "slow /api/servers/status application response hold");
-    row.checks.slowStatusResponseCompleted = true;
-    row.checks.statusConfiguredDelayMs = delayedStatus.configuredDelayMs;
-    row.checks.statusAppliedDelayMs = delayedStatus.appliedDelayMs;
-    row.checks.statusDelayTimerToleranceMs = APPLICATION_DELAY_TIMER_TOLERANCE_MS;
-  }, {
-    beforeFixtureSessionVisible: async (page, row) => {
-      const statusRequest = await waitFor(() => network.httpRouteRequests.find(item => item.scenario === row.scenario && item.apiPath === "/api/servers/status"), 10_000, "slow status probe request before session-list setup");
-      await page.getByTestId("server-status-refreshing").waitFor({ state: "visible", timeout: 8_000 });
-      const completed = network.httpResponsePathDelays.some(item => item.scenario === row.scenario && item.apiPath === "/api/servers/status");
-      assert.equal(completed, false, "slow status response must still be held while the home route is becoming interactive");
-      row.checks.statusRequestObservedBeforeSessionListSetup = true;
-      row.checks.statusRefreshingVisibleBeforeSessionList = true;
-      row.checks.statusResponseStillHeldBeforeSessionListSetup = true;
-      row.checks.statusRequestStartedAtEpochMs = statusRequest.startedAtEpochMs;
-    },
-  });
-
-  await runCase("status-http-401", { httpStatusOverrides: {} }, async (page, row, scenarioControl) => {
-    await page.getByTestId(`thread-${THREAD_ID}`).waitFor({ state: "visible", timeout: 10_000 });
-    row.checks.sessionRowVisibleBeforeStatus401 = true;
-    scenarioControl.httpStatusOverrides["/api/servers/status"] = 401;
-    // This is an endpoint-specific forced 401, not a token or session revoke.
-    // Let server-list setup settle so the post-challenge UI can attempt the same
-    // cold task route through its normal session-row interaction.
-    scenarioControl.statusProbeDelayMs = 500;
-    network.currentStage = `fault:${row.scenario}:status-401-reload`;
-    await page.reload({ waitUntil: "domcontentloaded", timeout: 30_000 });
-    await page.getByTestId("new-workspace").waitFor({ state: "visible", timeout: 30_000 });
-    await page.getByTestId("reauthorize-active-profile").waitFor({ state: "visible", timeout: 15_000 });
-    row.checks.reauthorizationChallengeAfterEndpointSpecific401 = true;
-    row.checks.serverStatusErrorHiddenWhileReauthorizationRequired = !(await page.getByTestId("server-status-error").isVisible().catch(() => false));
-    assert.equal(row.checks.serverStatusErrorHiddenWhileReauthorizationRequired, true, "a 401 must be presented as a reauthorization challenge, not a transient health-probe error");
-    const reloadStage = `fault:${row.scenario}:status-401-reload`;
-    const statusProbeResponses = network.httpResponsePathDelays.filter(item => item.scenario === row.scenario && item.stage === reloadStage && item.apiPath === "/api/servers/status");
-    assert.ok(statusProbeResponses.length > 0 && statusProbeResponses.every(item => item.status === 401), "the isolated status probe must return the injected 401");
-    row.checks.statusProbe401ResponseCount = statusProbeResponses.length;
-    row.checks.injectedStatus401 = network.injectedHttpStatuses.some(item => item.scenario === row.scenario && item.apiPath === "/api/servers/status" && item.status === 401);
-    assert.equal(row.checks.injectedStatus401, true, "the endpoint-specific 401 must be visible in the isolated HTTP route ledger");
-
-    const coldTaskRouteStage = `fault:${row.scenario}:cold-task-route-after-endpoint-401`;
-    network.currentStage = coldTaskRouteStage;
-    await page.getByTestId(`thread-${THREAD_ID}`).waitFor({ state: "visible", timeout: 8_000 });
-    await page.getByTestId(`thread-${THREAD_ID}`).click();
-    await page.getByText("无法打开任务", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
-    const coldResumeRequests = network.rpcEvents.filter(item => item.direction === "request" && item.method === "thread/resume" && item.stage === coldTaskRouteStage);
-    row.checks.coldTaskRouteBlockedByReauthorization = true;
-    row.checks.coldResumeRequestCountAfterChallenge = coldResumeRequests.length;
-    assert.equal(coldResumeRequests.length, 0, "a task route opened after the reauthorization challenge must not issue a cold thread/resume request");
-    row.evidenceBoundary = "TaskScreen routeError intercepts the cold task route; this scenario makes no claim that a previously hot cached transcript remains readable after auth revocation";
-  });
-
-  await runCase("runtime-model-catalog-slow-12s", {
-    threadModelFixture: true,
-    methodDelayMs: {},
-  }, async (page, row, scenarioControl) => {
-    network.currentStage = `fault:${row.scenario}:preference-setup`;
-    await page.getByTestId(`thread-${THREAD_ID}`).click();
-    await page.getByTestId("task-header-title").waitFor({ state: "visible", timeout: 10_000 });
-    await page.getByTestId("message-user").first().waitFor({ state: "visible", timeout: 10_000 });
-
-    await page.getByTestId("conversation-model-selector").click();
-    await page.getByTestId("conversation-model-mock-minimax").waitFor({ state: "visible", timeout: 10_000 });
-    const preferenceCatalogRequest = await waitFor(() => network.rpcEvents.find(item => item.direction === "request" && item.method === "runtime.models.list" && item.stage === `fault:${row.scenario}:preference-setup`), 10_000, "real model-picker runtime.models.list request");
-    await page.getByTestId("conversation-model-mock-minimax").click();
-    const highEffort = page.getByRole("radio", { name: "高", exact: true });
-    await highEffort.waitFor({ state: "visible", timeout: 10_000 });
-    await waitFor(() => highEffort.isEnabled(), 10_000, "model preference write to settle");
-    await highEffort.click();
-    await waitFor(async () => (await page.getByTestId("conversation-model-selector").innerText()).includes("高"), 10_000, "persisted high reasoning effort visible in the actual task selector");
-    const modelPickerDialogs = page.getByRole("dialog").filter({ hasText: "模型与推理强度" });
-    const dialogCount = await modelPickerDialogs.count();
-    const modelPickerDialog = modelPickerDialogs.last();
-    const closeModelPicker = modelPickerDialog.getByLabel("关闭", { exact: true });
-    const closeLocatorProof = {
-      dialogCount,
-      ariaLabelCloseCount: await closeModelPicker.count(),
-    };
-    if (closeLocatorProof.ariaLabelCloseCount === 1) {
-      Object.assign(closeLocatorProof, await closeModelPicker.evaluate(element => ({
-        tagName: element.tagName.toLowerCase(),
-        role: element.getAttribute("role"),
-        disabled: element.hasAttribute("disabled") || element.getAttribute("aria-disabled") === "true",
-        ariaDisabled: element.getAttribute("aria-disabled"),
-      })));
-    }
-    row.checks.modelPickerCloseLocatorProof = closeLocatorProof;
-    assert.ok(closeLocatorProof.dialogCount >= 1, "at least one active model-preference dialog must be present");
-    assert.equal(closeLocatorProof.ariaLabelCloseCount, 1, "the active model-preference dialog must expose exactly one aria-label=关闭 control");
-    await closeModelPicker.waitFor({ state: "visible", timeout: 10_000 });
-    await waitFor(() => closeModelPicker.isEnabled(), 10_000, "model preference write to finish before closing the picker");
-    await closeModelPicker.click();
-    await waitFor(async () => (await modelPickerDialogs.count()) === 0, 10_000, "all model-preference dialog layers to close");
-    row.checks.preferenceSetThroughMobileUi = true;
-    row.checks.preferenceCatalogRpcObserved = true;
-    row.checks.preferencePickerClosedUsingVisibleCloseControl = true;
-    row.checks.preferenceSetupRequestIdFingerprint = preferenceCatalogRequest.rpcIdFingerprint;
-
-    await page.getByRole("button", { name: "返回" }).click();
-    await page.getByTestId("new-workspace").waitFor({ state: "visible", timeout: 10_000 });
-    await ensureFixtureSessionVisible(page);
-    await page.reload({ waitUntil: "domcontentloaded", timeout: 30_000 });
-    await page.getByTestId("new-workspace").waitFor({ state: "visible", timeout: 30_000 });
-    await ensureFixtureSessionVisible(page);
-
-    scenarioControl.methodDelayMs["runtime.models.list"] = 12_000;
-    const routeSocketCountBeforeResume = network.routedWebSocketConnections.length;
-    network.currentStage = `fault:${row.scenario}:task-reentry-with-persisted-effort`;
-    const clickStartedAt = performance.now();
-    await page.getByTestId(`thread-${THREAD_ID}`).click();
-    const request = await waitFor(() => network.rpcEvents.find(item => item.direction === "request" && item.method === "runtime.models.list" && item.stage === network.currentStage), 10_000, "runtime.models.list from task resume with persisted effort");
-    const responseAlreadyForwarded = network.rpcEvents.some(item => item.direction === "response-forwarded" && item.method === "runtime.models.list" && item.rpcIdFingerprint === request.rpcIdFingerprint && item.stage === request.stage);
-    assert.equal(responseAlreadyForwarded, false, "runtime.models.list response must remain held during task re-entry");
-    await page.getByTestId("task-header-title").waitFor({ state: "visible", timeout: 10_000 });
-    await page.getByTestId("message-user").first().waitFor({ state: "visible", timeout: 10_000 });
-    await page.getByTestId("message-input").waitFor({ state: "visible", timeout: 10_000 });
-    await page.getByTestId("send-message").waitFor({ state: "visible", timeout: 10_000 });
-    await page.getByTestId("message-input").fill(`PHONE_UX_MODEL_GATE_${Date.now()}`);
-    assert.equal(await page.getByTestId("message-input").isEnabled(), true, "composer should remain editable during configuration restore");
-    assert.equal(await page.getByTestId("send-message").isDisabled(), true, "sending must remain gated while runtime.models.list is pending");
-    const clickToHistoryVisibleMs = round(performance.now() - clickStartedAt);
-    assert.ok(clickToHistoryVisibleMs < 10_000, `history became visible after ${clickToHistoryVisibleMs}ms with model catalog held for 12000ms`);
-    const restoredPreferenceLabel = await page.getByTestId("conversation-model-selector").innerText();
-    assert.ok(restoredPreferenceLabel.includes("高"), "the model effort selected before reload must be restored into the active task UI");
-    row.checks.resumeModelsListRequestObserved = true;
-    row.checks.requestToHistoryVisibleMs = round(performance.now() - request.atMs);
-    row.checks.clickToHistoryVisibleMs = clickToHistoryVisibleMs;
-    row.checks.historyVisibleBeforeModelCatalogResponse = true;
-    row.checks.persistedModelEffortHydratedOnResume = true;
-    row.checks.composerEditableWhileModelCatalogPending = true;
-    row.checks.sendDisabledWhileModelCatalogPending = true;
-    row.checks.persistedModelEffort = "high";
-    row.checks.threadResumeModelFixtureApplied = network.faultFixtureEvents.some(item => item.scenario === row.scenario && item.kind === "typed-thread-model-fixture" && item.method === "thread/resume");
-    assert.equal(row.checks.threadResumeModelFixtureApplied, true, "thread/resume must provide the typed model identity used with the persisted reasoning preference");
-    row.checks.routeSocketCountBeforeResume = routeSocketCountBeforeResume;
-
-    const responseForwarded = await waitFor(() => network.rpcEvents.find(item => item.direction === "response-forwarded" && item.method === "runtime.models.list" && item.rpcIdFingerprint === request.rpcIdFingerprint && item.stage === request.stage), 20_000, "delayed runtime.models.list response");
-    const delayedResponse = network.websocketResponsePathDelays.find(item => item.scenario === row.scenario && item.stage === request.stage && item.method === "runtime.models.list" && item.rpcIdFingerprint === request.rpcIdFingerprint);
-    assertApplicationDelay(delayedResponse, 12_000, "task-resume runtime.models.list application response hold");
-    const sendButton = page.getByTestId("send-message");
-    await sendButton.waitFor({ state: "visible", timeout: 5_000 });
-    const sendEnabledObservedAtMs = await waitFor(
-      async () => (await sendButton.isEnabled()) ? performance.now() : null,
-      5_000,
-      "send to become enabled after model catalog restoration",
-    );
-    row.checks.modelCatalogApplicationDelayTimerToleranceMs = APPLICATION_DELAY_TIMER_TOLERANCE_MS;
-    row.checks.modelCatalogResponseForwardedAtMs = responseForwarded.atMs;
-    row.checks.sendEnabledObservedAtMs = round(sendEnabledObservedAtMs);
-    row.checks.responseForwardedToSendEnabledObservedMs = round(sendEnabledObservedAtMs - responseForwarded.atMs);
-    row.checks.sendEnabledAfterCatalogResponse = true;
-    row.checks.modelCatalogResponseCompleted = true;
-    row.checks.modelCatalogConfiguredDelayMs = delayedResponse.configuredDelayMs;
-    row.checks.modelCatalogAppliedDelayMs = delayedResponse.appliedDelayMs;
-  });
-
-  await runCase("aux-agent-list-12s", {
-    methodDelayMs: { "agent/list": 12_000 },
-    testCapabilities: { agentSteering: true },
-  }, async (page, row) => {
-    network.currentStage = `fault:${row.scenario}:task-entry`;
-    const clickStartedAt = performance.now();
-    await page.getByTestId(`thread-${THREAD_ID}`).click();
-    const request = await waitFor(() => network.rpcEvents.find(item => item.direction === "request" && item.method === "agent/list" && item.stage === `fault:${row.scenario}:task-entry`), 10_000, "capability-gated agent/list request");
-    await page.getByTestId("task-header-title").waitFor({ state: "visible", timeout: 8_000 });
-    await page.getByTestId("message-user").first().waitFor({ state: "visible", timeout: 8_000 });
-    const historyVisibleAt = performance.now();
-    const historyVisibleAfterRequestMs = round(historyVisibleAt - request.atMs);
-    const clickToHistoryVisibleMs = round(historyVisibleAt - clickStartedAt);
-    const responseAlreadyReturned = network.rpcEvents.some(item => item.direction === "response-forwarded" && item.method === "agent/list" && item.rpcIdFingerprint === request.rpcIdFingerprint && item.stage === `fault:${row.scenario}:task-entry`);
-    assert.equal(responseAlreadyReturned, false, "history must render before the slow agent/list response");
-    assert.ok(historyVisibleAfterRequestMs < 10_000, `history appeared after ${historyVisibleAfterRequestMs}ms with agent/list held for 12000ms`);
-    await page.getByTestId("message-input").waitFor({ state: "visible", timeout: 8_000 });
-    assert.equal(await page.getByTestId("message-input").isEnabled(), true, "an optional agent/list response must not gate the editable composer");
-    const forwarded = await waitFor(() => network.rpcEvents.find(item => item.direction === "response-forwarded" && item.method === "agent/list" && item.rpcIdFingerprint === request.rpcIdFingerprint && item.stage === request.stage), 20_000, "delayed agent/list response");
-    const delayedResponse = network.websocketResponsePathDelays.find(item => item.scenario === row.scenario && item.stage === request.stage && item.method === "agent/list" && item.rpcIdFingerprint === request.rpcIdFingerprint);
-    assertApplicationDelay(delayedResponse, 12_000, "agent/list application response hold");
-    row.checks.auxiliaryDelayTimerToleranceMs = APPLICATION_DELAY_TIMER_TOLERANCE_MS;
-    row.checks.testCapabilityInjected = true;
-    row.checks.agentListRequestObserved = true;
-    row.checks.historyVisibleBeforeAuxiliaryResponse = true;
-    row.checks.composerEditableWhileAuxiliaryResponsePending = true;
-    row.checks.agentListResponseCompleted = Boolean(forwarded);
-    row.checks.auxiliaryResponseAppliedDelayMs = delayedResponse.appliedDelayMs;
-    row.checks.requestToHistoryVisibleMs = historyVisibleAfterRequestMs;
-    row.checks.clickToHistoryVisibleMs = clickToHistoryVisibleMs;
-    row.checks.auxiliaryResponseConfiguredDelayMs = delayedResponse.configuredDelayMs;
-  });
-
-  await runCase("send-pending-2500ms", { methodResponseHoldMs: { "turn/start": 2_500 } }, async (page, row) => {
-    network.currentStage = `fault:${row.scenario}:send-pending`;
-    await openFixtureSession(page);
-    const message = `PHONE_UX_PENDING_FIXTURE_${Date.now()}`;
-    await page.getByTestId("message-input").fill(message);
-    const priorStarts = network.rpcMethodCounts["turn/start"] ?? 0;
-    const clickStartedAt = performance.now();
-    await page.getByTestId("send-message").click();
-    const pendingCard = page.getByTestId("failed-submission").filter({ hasText: message });
-    await pendingCard.getByTestId("failed-submission-content").waitFor({ state: "visible", timeout: 2_000 });
-    await pendingCard.getByText("正在发送，恢复记录已保存", { exact: true }).waitFor({ state: "visible", timeout: 2_000 });
-    const pendingVisibleMs = round(performance.now() - clickStartedAt);
-    const request = await waitFor(() => network.rpcEvents.find(item => item.direction === "request" && item.method === "turn/start" && item.stage === `fault:${row.scenario}:send-pending`), 5_000, "mock turn/start pending request");
-    const responseAlreadyForwarded = network.rpcEvents.some(item => item.direction === "response-forwarded" && item.method === "turn/start" && item.rpcIdFingerprint === request.rpcIdFingerprint && item.stage === `fault:${row.scenario}:send-pending`);
-    assert.equal(responseAlreadyForwarded, false, "the local pending UI should appear before the delayed turn/start response");
-    assert.ok((network.rpcMethodCounts["turn/start"] ?? 0) - priorStarts === 1, "one send gesture must emit exactly one mock turn/start request");
-    assert.ok(network.pendingRpcMethodCounts["turn/start"] > 0, "turn/start must remain in flight while the pending UI is observed");
-    row.checks.pendingDraftVisibleBeforeAck = true;
-    row.checks.localRecoveryRecordPersistedBeforeAck = true;
-    row.checks.pendingCardVisibleMs = pendingVisibleMs;
-    row.checks.turnStartRequestCountForGesture = 1;
-    await page.getByTestId("stop-turn").waitFor({ state: "visible", timeout: 15_000 });
-    const ack = await waitFor(() => network.rpcEvents.find(item => item.direction === "response-forwarded" && item.method === "turn/start" && item.rpcIdFingerprint === request.rpcIdFingerprint && item.stage === request.stage), 10_000, "delayed mock turn/start response");
-    const startObserved = await waitFor(() => network.faultFixtureEvents.find(item => item.scenario === row.scenario && item.kind === "turn-start-request" && item.rpcIdFingerprint === request.rpcIdFingerprint), 5_000, "turn/start thread identity at the isolated route");
-    assert.equal(startObserved.routeSocketId, request.routeSocketId, "turn/start identity must come from the same routed WebSocket request");
-    assert.ok(startObserved.threadIdFingerprint, "the isolated turn/start request must include a thread identity fingerprint");
-    const turnStarted = await waitFor(() => network.faultFixtureEvents.find(item => item.scenario === row.scenario && item.kind === "turn-lifecycle-frame" && item.method === "turn/started" && item.routeSocketId === startObserved.routeSocketId && item.threadIdFingerprint === startObserved.threadIdFingerprint && item.atMs >= startObserved.atMs), 5_000, "same-route turn/started identity");
-    assert.ok(turnStarted.turnIdFingerprint, "the actual turn/started notification must include a turn identity fingerprint");
-    const turnCompleted = await waitFor(() => network.faultFixtureEvents.find(item => item.scenario === row.scenario && item.kind === "turn-lifecycle-frame" && item.method === "turn/completed" && item.routeSocketId === turnStarted.routeSocketId && item.threadIdFingerprint === turnStarted.threadIdFingerprint && item.turnIdFingerprint === turnStarted.turnIdFingerprint), 10_000, "same-route terminal notification before delayed ACK");
-    assert.equal(ack.routeSocketId, startObserved.routeSocketId, "the delayed turn/start ACK must belong to the same route socket");
-    assert.ok(turnStarted.atMs >= startObserved.atMs, "turn/started must follow its exact turn/start request");
-    assert.ok(turnCompleted.atMs < ack.atMs, "the exact same-route turn must actually complete before its delayed ACK is forwarded");
-    const ackHold = await waitFor(() => network.methodResponseHolds.find(item => item.method === "turn/start" && item.configuredHoldMs === 2_500), 5_000, "measured turn/start response hold");
-    assertApplicationDelay({ configuredDelayMs: ackHold.configuredHoldMs, appliedDelayMs: ackHold.measuredHoldMs }, 2_500, "mock turn/start response hold");
-    row.checks.mockAckForwardedAfterPending = Boolean(ack);
-    row.checks.turnLifecycleExactThreadTurnRoute = {
-      threadIdFingerprint: startObserved.threadIdFingerprint,
-      turnIdFingerprint: turnStarted.turnIdFingerprint,
-      routeSocketId: turnStarted.routeSocketId,
-    };
-    row.checks.turnCompletedBeforeAckMs = round(ack.atMs - turnCompleted.atMs);
-    row.checks.responseHoldConfiguredMs = ackHold.configuredHoldMs;
-    row.checks.responseHoldAppliedMs = ackHold.measuredHoldMs;
-    row.checks.responseHoldTimerToleranceMs = APPLICATION_DELAY_TIMER_TOLERANCE_MS;
-    await assertRunningControlsStayHiddenAfterTwoFrames(page, "turn completed before ACK; a late ACK must not revive running UI");
-    await waitForGatewayRpcQuiescence(network, 10_000, 200);
-    await assertRunningControlsStayHiddenAfterTwoFrames(page, "after network quiescence, a late ACK must not revive running UI");
-    row.checks.runningControlsStayedHiddenAfterAckTwoFramesAndNetworkQuiescence = true;
-  });
-
-  await runCase("approval-live-turn-interrupt-same-route", {}, async (page, row) => {
-    network.currentStage = `fault:${row.scenario}:live-approval-turn`;
-    await openFixtureSession(page);
-    const message = `MOBILE_APPROVAL_PHONE_UX_${Date.now()}`;
-    const priorStarts = network.rpcMethodCounts["turn/start"] ?? 0;
-    await page.getByTestId("message-input").fill(message);
-    await page.getByTestId("send-message").click();
-    await page.getByTestId("approval-card").waitFor({ state: "visible", timeout: 15_000 });
-    const stopButton = page.getByTestId("stop-turn");
-    await stopButton.waitFor({ state: "visible", timeout: 10_000 });
-    const startRequest = await waitFor(() => network.rpcEvents.find(item => item.direction === "request" && item.method === "turn/start" && item.stage === `fault:${row.scenario}:live-approval-turn`), 5_000, "MOBILE_APPROVAL turn/start request");
-    assert.equal((network.rpcMethodCounts["turn/start"] ?? 0) - priorStarts, 1, "the approval fixture must start one isolated turn");
-    const startObserved = await waitFor(() => network.faultFixtureEvents.find(item => item.scenario === row.scenario && item.kind === "turn-start-request" && item.rpcIdFingerprint === startRequest.rpcIdFingerprint), 5_000, "approval turn thread identity");
-    const turnStarted = await waitFor(() => network.faultFixtureEvents.find(item => item.scenario === row.scenario && item.kind === "turn-lifecycle-frame" && item.method === "turn/started" && item.routeSocketId === startObserved.routeSocketId && item.threadIdFingerprint === startObserved.threadIdFingerprint), 5_000, "approval turn started on its route");
-    assert.equal(startObserved.routeSocketId, startRequest.routeSocketId, "the turn identity must match the actual request route");
-    assert.ok(turnStarted.turnIdFingerprint, "the approval turn must expose its actual turn identity fingerprint");
-    row.checks.approvalUiVisibleForHeldMockTurn = true;
-    row.checks.activeTurnRouteSocketId = turnStarted.routeSocketId;
-
-    await stopButton.click();
-    const interruptRequest = await waitFor(() => network.faultFixtureEvents.find(item => item.scenario === row.scenario && item.kind === "turn-interrupt-request" && item.threadIdFingerprint === turnStarted.threadIdFingerprint && item.turnIdFingerprint === turnStarted.turnIdFingerprint), 10_000, "same-route turn/interrupt request");
-    assert.equal(interruptRequest.routeSocketId, turnStarted.routeSocketId, "the stop gesture must interrupt the exact active turn on its owning route");
-    const interruptResponse = await waitFor(() => network.faultFixtureEvents.find(item => item.scenario === row.scenario && item.kind === "turn-interrupt-upstream-response" && item.rpcIdFingerprint === interruptRequest.rpcIdFingerprint && item.routeSocketId === turnStarted.routeSocketId && item.stage === interruptRequest.stage), 10_000, "upstream turn/interrupt response on the same route and scenario stage");
-    assert.equal(interruptResponse.interrupted, true, "the isolated Gateway must acknowledge interruption of the active turn");
-    assert.equal(interruptResponse.routeSocketId, turnStarted.routeSocketId, "the interrupt response must use the turn's owning route");
-    assert.equal(interruptResponse.threadIdFingerprint, turnStarted.threadIdFingerprint, "the interrupt response must match the active thread");
-    assert.equal(interruptResponse.turnIdFingerprint, turnStarted.turnIdFingerprint, "the interrupt response must match the active turn");
-    const interruptForwarded = await waitFor(() => network.rpcEvents.find(item => item.direction === "response-forwarded" && item.method === "turn/interrupt" && item.rpcIdFingerprint === interruptRequest.rpcIdFingerprint && item.routeSocketId === turnStarted.routeSocketId && item.stage === interruptRequest.stage), 10_000, "turn/interrupt response forwarded on the same route and scenario stage");
-    assert.equal(interruptForwarded.routeSocketId, turnStarted.routeSocketId, "the interrupt response delivered to the client must stay on the active turn route");
-    const terminal = await waitFor(() => network.faultFixtureEvents.find(item => item.scenario === row.scenario && item.kind === "turn-lifecycle-frame" && item.method === "turn/completed" && item.turnStatus === "interrupted" && item.routeSocketId === turnStarted.routeSocketId && item.threadIdFingerprint === turnStarted.threadIdFingerprint && item.turnIdFingerprint === turnStarted.turnIdFingerprint), 10_000, "same-route interrupted terminal notification");
-    assert.ok(terminal.atMs >= interruptRequest.atMs, "the exact terminal notification must follow the stop request");
-    assert.ok(terminal.atMs >= interruptForwarded.atMs, "the exact terminal notification must follow the interrupt response delivered to the client");
-    await assertRunningControlsStayHiddenAfterTwoFrames(page, "same-route active-turn interrupt");
-    row.checks = {
-      ...row.checks,
-      sameRouteInterruptRequestAndTerminal: true,
-      interruptResponseAccepted: true,
-      interruptResponseForwardedToClient: true,
-      terminalStatus: terminal.turnStatus,
-      terminalAfterInterruptMs: round(terminal.atMs - interruptRequest.atMs),
-      exactThreadTurnRoute: {
-        threadIdFingerprint: turnStarted.threadIdFingerprint,
-        turnIdFingerprint: turnStarted.turnIdFingerprint,
-        routeSocketId: turnStarted.routeSocketId,
-      },
-      runningControlsHiddenAfterTerminalAndTwoFrames: true,
-    };
-  });
-
-  const receiptFixture = createAcceptedTurnReceiptFixture();
-  const receiptScope = Object.freeze({});
-  const startCountBeforeReceiptScenario = gatewayCalls.turnStart;
-  const ackRow = await runCase("ack-loss-reconnect-exact-receipt", {
-    testCapabilities: { turnReceiptsV1: true },
-    receiptFixture,
-    receiptScope,
-    dropFirstResponseForMethod: "turn/start",
-    closeAfterDroppedResponse: true,
-  }, async (page, row) => {
-    network.currentStage = `fault:${row.scenario}:send-and-drop-ack`;
-    await openFixtureSession(page);
-    const message = `PHONE_UX_ACK_FIXTURE_${Date.now()}`;
-    await page.getByTestId("message-input").fill(message);
-    await page.getByTestId("send-message").click();
-    await waitFor(() => network.injectedWebSocketResponseDrops.find(item => item.scenario === row.scenario && item.method === "turn/start"), 15_000, "dropped isolated turn/start response");
-    const dropped = network.injectedWebSocketResponseDrops.find(item => item.scenario === row.scenario && item.method === "turn/start");
-    assert.equal(dropped.acceptedObservedFromMockGateway, true, "the dropped response must follow an actual successful isolated mock response");
-    const readbackEvent = await waitFor(() => network.faultFixtureEvents.find(item => item.scenario === row.scenario && item.kind === "turn-receipt-readback"), 25_000, "exact receipt readback after socket reconnect");
-    assert.equal(readbackEvent.exactObservedAcceptanceMatched, true, "receipt readback must match the accepted thread/clientMessageId pair in this page scope");
-    assert.notEqual(readbackEvent.routeSocketId, dropped.routeSocketId, "receipt readback must use the replacement WebSocket after the dropped-response close");
-    await page.getByTestId("stop-turn").waitFor({ state: "visible", timeout: 20_000 });
-    const summary = receiptFixture.summary();
-    assert.equal(summary.turnStartRequestCount, 1, "ACK recovery must not retry turn/start or create a new clientMessageId");
-    assert.equal(summary.duplicatePairRequestCount, 0, "ACK recovery must not resubmit the same clientMessageId");
-    assert.equal(summary.acceptedResponseCount, 1, "only the one successful mock response may populate the fixture receipt");
-    assert.equal(summary.receiptReadCount, 1, "the client should read one receipt for the ambiguous start");
-    assert.equal(summary.receiptMismatchCount, 0, "the receipt lookup must remain scoped to the exact accepted pair");
-    assert.equal(summary.acceptedIdentityFingerprints.length, 1, "there must be exactly one accepted identity, without a replacement ID");
-    assert.equal(summary.acceptedIdentityFingerprints[0].receiptReadOnDifferentRouteSocket, true, "readback should be correlated across the expected reconnect but within one scenario scope");
-    row.checks = {
-      ...row.checks,
-      droppedResponseAfterObservedMockAcceptance: true,
-      routeSocketClosedAfterDrop: true,
-      reconnectReceiptReadbackExactPair: true,
-      turnStartRequestsAcrossRecovery: summary.turnStartRequestCount,
-      duplicatePairRequests: summary.duplicatePairRequestCount,
-      acceptedResponseCount: summary.acceptedResponseCount,
-      receiptReadCount: summary.receiptReadCount,
-      receiptMismatchCount: summary.receiptMismatchCount,
-      acceptedIdentityFingerprints: summary.acceptedIdentityFingerprints,
-      crossRouteStopCoverage: "UNVERIFIED: isolated mock keeps activeTurn on the original socket; this receipt scenario does not claim replacement-route interruption",
-      mockActiveTurnOwnerRouteSocketId: dropped.routeSocketId,
-      receiptReadbackRouteSocketId: readbackEvent.routeSocketId,
-    };
-  });
-  receiptSummary = receiptFixture.summary();
-  if (ackRow) {
-    ackRow.checks.turnStartRequestCountForScenario = gatewayCalls.turnStart - startCountBeforeReceiptScenario;
-    assert.equal(ackRow.checks.turnStartRequestCountForScenario, 1, "exact receipt recovery must not send a second turn/start");
-  }
-
-  await runCase("websocket-disconnect-and-reconnect", {
-    disconnectAfterMethodResponse: "thread/read",
-  }, async (page, row) => {
-    network.currentStage = `fault:${row.scenario}:task-entry`;
-    const priorSocketIds = new Set(network.routedWebSocketConnections.map(item => item.id));
-    await page.getByTestId(`thread-${THREAD_ID}`).click();
-    const readResponse = await waitFor(() => network.rpcEvents.find(item => item.direction === "response-forwarded" && item.method === "thread/read" && item.stage === `fault:${row.scenario}:task-entry`), 15_000, "thread/read response before forced disconnect");
-    const reconnectInitialize = await waitFor(() => network.rpcEvents.find(item => item.direction === "request" && item.method === "initialize" && item.routeSocketId !== readResponse.routeSocketId && !priorSocketIds.has(item.routeSocketId) && item.stage === `fault:${row.scenario}:task-entry`), 25_000, "initialize request on replacement WebSocket");
-    await page.getByTestId("task-header-title").waitFor({ state: "visible", timeout: 10_000 });
-    await page.getByTestId("message-user").first().waitFor({ state: "visible", timeout: 10_000 });
-    const disconnectObserved = network.faultFixtureEvents.some(item => item.scenario === row.scenario && item.kind === "socket-closed-after-response" && item.method === "thread/read");
-    assert.equal(disconnectObserved, true, "fixture must record the intentional WebSocket close after thread/read");
-    row.checks = {
-      ...row.checks,
-      socketClosedAfterThreadRead: true,
-      replacementInitializeObserved: Boolean(reconnectInitialize),
-      historyStillVisible: true,
-    };
-  });
-
-  const jitterSequence = [0, 100, 900, 300, 600];
-  const jitter = createResponseJitter({
-    http: { "/api/servers/status": jitterSequence },
-    rpc: { "thread/read": jitterSequence },
-  });
-  await runCase("response-jitter-30", { responseJitter: jitter }, async (_unused, row) => {
-    const pageSamples = [];
-    const pairingSetupStage = `fault:${row.scenario}:pairing-setup`;
-    let pairedProfileStorageState;
-    let pairingPage;
-    const pairingLoginResponses = [];
-    let removePairingLoginObserver = () => {};
-    network.currentStage = pairingSetupStage;
-    try {
-      pairingPage = await newMobilePage(chromium, network, { delayMs: 0, scenarioId: row.scenario }, gatewayCalls, browserErrors, context);
-      removePairingLoginObserver = observeLoginResponses(pairingPage, pairingLoginResponses, pairingSetupStage, "setup");
-      await connectMobile(pairingPage, gateway);
-      await waitForGatewayRpcQuiescence(network, 15_000, 100);
-      const pairingSessionRows = network.httpResponsePathDelays.filter(item => item.scenario === row.scenario && item.stage === pairingSetupStage && item.apiPath === "/api/mobile/session");
-      assert.equal(pairingSessionRows.length, 1, "jitter setup must perform exactly one Mobile Gateway pairing");
-      assert.equal(pairingSessionRows[0].status, 200, "jitter setup pairing must be accepted before repeated samples");
-      pairedProfileStorageState = await pairingPage.context().storageState();
-      await context.writeArtifactJson("phone-ux-jitter-pairing-setup.json", {
-        schemaVersion: 1,
-        scenario: row.scenario,
-        status: "PASS",
-        sampleClass: "single pairing setup; excluded from the 30 jitter page samples",
-        pairingCount: pairingSessionRows.length,
-        pairingResponseStatus: pairingSessionRows[0].status,
-        profileStateLocation: "private in-memory Playwright storageState; never serialized to artifacts",
-        loginResponses: pairingLoginResponses,
-      });
-    } catch (error) {
-      const pageAtFailure = pairingPage && !pairingPage.isClosed() ? await describeVisiblePage(pairingPage).catch(() => null) : null;
-      const screenshot = pairingPage && !pairingPage.isClosed()
-        ? await capturePrivateFailureScreenshot(context, pairingPage, "phone-ux-jitter-pairing-setup-failure.png")
-        : { artifact: null, status: "page-unavailable" };
-      await context.writeArtifactJson("phone-ux-jitter-pairing-setup.json", {
-        schemaVersion: 1,
-        scenario: row.scenario,
-        status: "FAIL",
-        sampleClass: "single pairing setup; excluded from the 30 jitter page samples",
-        profileStateLocation: "private in-memory Playwright storageState; never serialized to artifacts",
-        pageAtFailure,
-        loginResponses: pairingLoginResponses,
-        apiResponses: network.httpResponsePathDelays
-          .filter(item => item.scenario === row.scenario && item.stage === pairingSetupStage)
-          .map(summarizeHttpDelaySample),
-        screenshot,
-        error: context.redactText(error instanceof Error ? error.message : String(error)).slice(0, 700),
-      });
-      throw error;
-    } finally {
-      removePairingLoginObserver();
-      if (pairingPage) await closeOwnedMobilePage(pairingPage).catch(() => {});
-    }
-    row.checks.pairingSetup = {
-      pairingCount: 1,
-      pairingSetupSampleExcludedFromJitterN30: true,
-      profileStateReusedInMemory: true,
-      repeatedSamplesUseFreshBrowserContexts: true,
-    };
-
-    for (let index = 0; index < 30; index += 1) {
-      const sampleId = String(index + 1).padStart(2, "0");
-      const stage = `fault:${row.scenario}:sample-${sampleId}`;
-      network.currentStage = stage;
-      let page;
-      const loginResponses = [];
-      const failedRequestPaths = [];
-      let removeLoginObserver = () => {};
-      const failedRequestObserver = request => failedRequestPaths.push(safePath(request.url()));
-      const sampleStartedAt = performance.now();
-      let sampleResult = {
-        schemaVersion: 1,
-        scenario: row.scenario,
-        sampleId,
-        status: "RUNNING",
-        sampleClass: "cold runtime in fresh BrowserContext with the single paired profile restored",
-        pairingCountForThisSample: 0,
-        profileStateLocation: "private in-memory Playwright storageState; never serialized to artifacts",
-        stage,
-        homeNavigation: null,
-        homeReadyMs: null,
-        clickToHistoryVisibleMs: null,
-      };
-      let sampleError = null;
-      try {
-        page = await newMobilePage(chromium, network, { delayMs: 0, scenarioId: row.scenario, responseJitter: jitter }, gatewayCalls, browserErrors, context, pairedProfileStorageState);
-        removeLoginObserver = observeLoginResponses(page, loginResponses, stage, sampleId);
-        page.on("requestfailed", failedRequestObserver);
-        const homeNavigationStartedAt = performance.now();
-        const homeResponse = await page.goto(gateway.baseUrl, { waitUntil: "domcontentloaded", timeout: 60_000 });
-        page.__phoneUxLastNavigationStatus = homeResponse?.status() ?? null;
-        const homeNavigation = { path: safePath(homeResponse?.url() ?? page.url()), status: homeResponse?.status() ?? null };
-        sampleResult.homeNavigation = homeNavigation;
-        assert.equal(homeResponse?.status(), 200, "paired profile should restore the isolated Gateway home");
-        await page.getByTestId("new-workspace").waitFor({ state: "visible", timeout: 60_000 });
-        await ensureFixtureSessionVisible(page);
-        const homeReadyMs = round(performance.now() - homeNavigationStartedAt);
-        sampleResult.homeReadyMs = homeReadyMs;
-        await waitForGatewayRpcQuiescence(network, 15_000, 100);
-        const repeatedPairingRows = network.httpResponsePathDelays.filter(item => item.scenario === row.scenario && item.stage === stage && item.apiPath === "/api/mobile/session");
-        assert.equal(repeatedPairingRows.length, 0, `jitter sample ${sampleId} must reuse the one paired profile without another pairing request`);
-        const clickStartedAt = performance.now();
-        await page.getByTestId(`thread-${THREAD_ID}`).click();
-        await page.getByTestId("task-header-title").waitFor({ state: "visible", timeout: 10_000 });
-        await page.getByTestId("message-user").first().waitFor({ state: "visible", timeout: 10_000 });
-        const clickToHistoryVisibleMs = round(performance.now() - clickStartedAt);
-        sampleResult.clickToHistoryVisibleMs = clickToHistoryVisibleMs;
-        await waitForGatewayRpcQuiescence(network, 15_000, 100);
-        const statusRows = network.httpResponsePathDelays.filter(item => item.scenario === row.scenario && item.stage === stage && item.apiPath === "/api/servers/status");
-        const readRows = network.websocketResponsePathDelays.filter(item => item.scenario === row.scenario && item.stage === stage && item.method === "thread/read");
-        assert.ok(statusRows.length > 0, `jitter sample ${sampleId} must include a completed HTTP status response`);
-        assert.ok(readRows.length > 0, `jitter sample ${sampleId} must include a completed thread/read response`);
-        for (const sample of statusRows) {
-          assert.ok(Number.isFinite(sample.jitterDelayMs) && jitterSequence.includes(sample.jitterDelayMs), `jitter sample ${sampleId} HTTP delay must be one of the configured fixture values`);
-          assert.equal(sample.configuredDelayMs, sample.jitterDelayMs, `jitter sample ${sampleId} HTTP configured delay must preserve its fixture value`);
-          assertApplicationDelay(sample, sample.jitterDelayMs, `jitter sample ${sampleId} HTTP application response hold`);
-        }
-        for (const sample of readRows) {
-          assert.ok(Number.isFinite(sample.jitterDelayMs) && jitterSequence.includes(sample.jitterDelayMs), `jitter sample ${sampleId} WSS delay must be one of the configured fixture values`);
-          assert.equal(sample.configuredDelayMs, sample.jitterDelayMs, `jitter sample ${sampleId} WSS configured delay must preserve its fixture value`);
-          assertApplicationDelay(sample, sample.jitterDelayMs, `jitter sample ${sampleId} WSS application response hold`);
-        }
-        sampleResult = {
-          ...sampleResult,
-          status: "PASS",
-          homeNavigation,
-          homeReadyMs,
-          taskShellVisible: true,
-          historyFirstMessageVisible: true,
-          clickToHistoryVisibleMs,
-          httpRequests: network.httpRouteRequests
-            .filter(item => item.scenario === row.scenario && item.stage === stage)
-            .map(item => ({ path: sanitizeGatewayPath(item.apiPath ?? item.path), method: item.method })),
-          httpStatusResponses: statusRows.map(summarizeHttpDelaySample),
-          webSocketRequests: network.rpcEvents
-            .filter(item => item.scenario === row.scenario && item.stage === stage && item.direction === "request")
-            .map(item => ({ path: sanitizeGatewayPath(item.path), method: item.method, routeSocketId: item.routeSocketId })),
-          threadReadResponses: readRows.map(summarizeWebSocketDelaySample),
-          loginResponses,
-          failedRequestPaths,
-          elapsedMs: round(performance.now() - sampleStartedAt),
-        };
-        await context.writeArtifactJson(`phone-ux-jitter-sample-${sampleId}.json`, sampleResult);
-        pageSamples.push({ sampleIndex: index, sampleId, stage, homeReadyMs, clickToHistoryVisibleMs, httpStatusResponses: statusRows.length, threadReadResponses: readRows.length });
-      } catch (error) {
-        sampleError = error;
-        const pageAtFailure = page && !page.isClosed() ? await describeVisiblePage(page).catch(() => null) : null;
-        const screenshot = page && !page.isClosed()
-          ? await capturePrivateFailureScreenshot(context, page, `phone-ux-jitter-sample-${sampleId}-failure.png`)
-          : { artifact: null, status: "page-unavailable" };
-        sampleResult = {
-          ...sampleResult,
-          status: "FAIL",
-          completedDomSamplesBeforeThisSample: pageSamples.length,
-          pageAtFailure,
-          loginResponses,
-          failedRequestPaths,
-          httpRequests: network.httpRouteRequests
-            .filter(item => item.scenario === row.scenario && item.stage === stage)
-            .map(item => ({ path: sanitizeGatewayPath(item.apiPath ?? item.path), method: item.method })),
-          httpResponses: network.httpResponsePathDelays
-            .filter(item => item.scenario === row.scenario && item.stage === stage)
-            .map(summarizeHttpDelaySample),
-          webSocketRequests: network.rpcEvents
-            .filter(item => item.scenario === row.scenario && item.stage === stage && item.direction === "request")
-            .map(item => ({ path: sanitizeGatewayPath(item.path), method: item.method, routeSocketId: item.routeSocketId })),
-          webSocketResponses: network.websocketResponsePathDelays
-            .filter(item => item.scenario === row.scenario && item.stage === stage)
-            .map(summarizeWebSocketDelaySample),
-          screenshot,
-          error: context.redactText(error instanceof Error ? error.message : String(error)).slice(0, 700),
-          elapsedMs: round(performance.now() - sampleStartedAt),
-        };
-        await context.writeArtifactJson(`phone-ux-jitter-sample-${sampleId}.json`, sampleResult);
-      } finally {
-        removeLoginObserver();
-        if (page) {
-          page.off("requestfailed", failedRequestObserver);
-          await closeOwnedMobilePage(page).catch(() => {});
-        }
-      }
-      if (sampleError) throw sampleError;
-    }
-    const jitterSampleStage = item => item.scenario === row.scenario && /^fault:response-jitter-30:sample-\d+$/.test(item.stage);
-    const httpRows = network.httpResponsePathDelays.filter(item => jitterSampleStage(item) && item.apiPath === "/api/servers/status");
-    const rpcRows = network.websocketResponsePathDelays.filter(item => jitterSampleStage(item) && item.method === "thread/read");
-    assert.equal(pageSamples.length, 30, "the jitter scenario must retain exactly thirty completed browser samples");
-    assert.ok(httpRows.length >= 30, `only ${httpRows.length} completed status responses received jitter`);
-    assert.ok(rpcRows.length >= 30, `only ${rpcRows.length} completed thread/read responses received jitter`);
-    const applied = rows => rows.map(item => item.appliedDelayMs).filter(Number.isFinite).sort((a, b) => a - b);
-    const historySamples = pageSamples.map(item => item.clickToHistoryVisibleMs).sort((a, b) => a - b);
-    row.checks = {
-      ...row.checks,
-      requiredPageSamples: 30,
-      completedPageSamples: pageSamples.length,
-      pageSampleErrorCount: 0,
-      clickToHistoryVisibleP50P95Ms: { p50: percentile(historySamples, 0.5), p95: percentile(historySamples, 0.95) },
-      httpStatusResponseSamples: httpRows.length,
-      websocketThreadReadResponseSamples: rpcRows.length,
-      applicationDelayTimerToleranceMs: APPLICATION_DELAY_TIMER_TOLERANCE_MS,
-      httpConfiguredJitterMs: distribution(httpRows.map(item => item.jitterDelayMs)),
-      websocketConfiguredJitterMs: distribution(rpcRows.map(item => item.jitterDelayMs)),
-      httpAppliedDelayP50P95Ms: { p50: percentile(applied(httpRows), 0.5), p95: percentile(applied(httpRows), 0.95) },
-      websocketAppliedDelayP50P95Ms: { p50: percentile(applied(rpcRows), 0.5), p95: percentile(applied(rpcRows), 0.95) },
-      pageSamples,
-      delayDefinition: "configured HTTP/WSS response-path extra delay, not RTT, packet loss, or native radio network latency",
-    };
-  }, { skipPageSetup: true });
-
-  await runCase("refresh-send-background-return-n30", {}, async (_unused, row) => {
-    assert.equal(sampleCount, refreshSingleSampleMode ? 1 : DEFAULT_SAMPLES, refreshSingleSampleMode
-      ? "single-sample refresh diagnostic requires exactly one sample per selected action and delay bin"
-      : "refresh/send/background formal coverage requires thirty samples per action and delay bin");
-    assert.deepEqual(
-      delayValues,
-      refreshDiagnosticMode ? [600] : refreshSmokeMode ? [0] : DEFAULT_DELAYS,
-      refreshSendDiagnosticMode
-        ? "accepted-600 diagnostic requires only the 600ms mock ACK hold"
-        : refreshBackgroundDiagnosticMode
-          ? "home-600 diagnostic requires only the 600ms /api/servers response hold"
-        : refreshSmokeMode
-          ? "refresh smoke requires only the zero-delay functional check"
-          : "refresh/send/background formal coverage requires the 0/300/600/1000ms delay bins",
-    );
-
-    let pairedProfileStorageState;
-    let pairingPage;
-    let bootstrapAuth = null;
-    let bootstrapAuthCleanup = null;
-    const sharedDiagnosticContext = refreshBackgroundDiagnosticMode ? chromium.defaultContext : null;
-    const backgroundVisibilityHelper = refreshBackgroundHost?.visibilityHelper ?? null;
-    const mobilePageOptions = refreshBackgroundDiagnosticMode
-      ? { browserContext: sharedDiagnosticContext, applyMobileEmulation: true, prepareViewportDocument: true }
-      : undefined;
-    const pairingStage = `fault:${row.scenario}:pairing-setup`;
-    network.currentStage = pairingStage;
-    try {
-      pairingPage = await newMobilePage(
-        chromium,
-        network,
-        { delayMs: 0, scenarioId: row.scenario, httpPathDelayMs: {}, methodResponseHoldMs: {} },
-        gatewayCalls,
-        browserErrors,
-        context,
-        undefined,
-        mobilePageOptions,
-      );
-      if (formalOwnedAuthLifecycle) {
-        const beforePair = await readOwnedMobileDeviceSummary(ownedMobileDeviceStorePath(gateway));
-        assert.equal(beforePair.active, 0, "formal owned-auth samples must start with no active device grants");
-        bootstrapAuth = observeOwnedMobileAuth(pairingPage, context);
-      }
-      if (refreshBackgroundDiagnosticMode) assert.equal(pairingPage.context(), sharedDiagnosticContext, "pairing page must use the one noDefaults BrowserContext");
-      await connectMobile(pairingPage, gateway);
-      if (bootstrapAuth) {
-        await bootstrapAuth.waitForPair();
-        const afterPair = await readOwnedMobileDeviceSummary(ownedMobileDeviceStorePath(gateway));
-        assert.equal(afterPair.active, 1, "the formal bootstrap pair must create exactly one owned active device grant");
-      }
-      await waitForGatewayRpcQuiescence(network, 15_000, 100);
-      if (!refreshBackgroundDiagnosticMode && !formalOwnedAuthLifecycle) pairedProfileStorageState = await pairingPage.context().storageState();
-    } finally {
-      if (bootstrapAuth && pairingPage) {
-        try {
-          bootstrapAuthCleanup = await releaseOwnedMobileAuthSample(pairingPage, gateway, bootstrapAuth, context);
-        } catch (error) {
-          bootstrapAuthCleanup = {
-            status: "FAIL",
-            failures: ["cleanup-helper-error"],
-            error: context.redactText(error instanceof Error ? error.message : String(error)).slice(0, 400),
-          };
-        }
-      }
-      if (pairingPage) {
-        if (refreshBackgroundDiagnosticMode) await closeRefreshDiagnosticMobilePage(pairingPage);
-        else await closeOwnedMobilePage(pairingPage).catch(() => {});
-      }
-    }
-    if (bootstrapAuthCleanup) assert.equal(bootstrapAuthCleanup.status, "PASS", "formal bootstrap auth must be revoked/logged out before its BrowserContext closes");
-    row.checks.pairing = {
-      status: "PASS",
-      bootstrapPairingCount: 1,
-      setupExcludedFromSamples: true,
-      profileStorageState: refreshBackgroundDiagnosticMode
-        ? "same owned noDefaults default BrowserContext localStorage; no storageState export"
-        : formalOwnedAuthLifecycle
-          ? "formal samples use fresh per-sample UI login/pair; no bootstrap profile is reused"
-          : "in-memory Playwright state only; not written to artifacts",
-      sampleContexts: refreshBackgroundDiagnosticMode
-        ? "single diagnostic page and pairing share the one noDefaults default BrowserContext"
-        : formalOwnedAuthLifecycle
-          ? "background: one freshly paired owned Chromium/default context per sample; send: one fresh BrowserContext paired independently per sample"
-          : "background: one freshly paired owned Chromium/default context per sample; send: one fresh BrowserContext per sample restored from in-memory paired profile",
-      backgroundPairingPolicy: refreshBackgroundDiagnosticMode
-        ? "one selected home-600 diagnostic sample reuses its paired default context"
-        : formalOwnedAuthLifecycle
-          ? "every formal Home/Task/accepted/rejected sample uses a fresh owned pair and exact grant+web-session cleanup before the next sample"
-          : "each Home/Task background sample is paired independently in its fresh noDefaults default context; bootstrap storageState is used only for send samples",
-      formalOwnedAuthLifecycle: formalOwnedAuthLifecycle ? {
-        status: "PER_SAMPLE_REQUIRED",
-        bootstrapAuthCleanup,
-        cleanupContract: "exact observed mobile access token DELETE 204; exact BrowserContext web cookie POST /logout 303; stale cookie protected request 401; owned device store active count 0 before context close",
-      } : null,
-    };
-
-    const allGroups = [
-      { id: "home-resume-list-retention", kind: "background", apiPath: "/api/servers", view: "home" },
-      { id: "task-resume-history-retention", kind: "background", apiPath: "/api/servers/status", view: "task" },
-      { id: "send-pending-accepted", kind: "accepted-send" },
-      { id: "send-rejected-draft-retained", kind: "rejected-send" },
-    ];
-    const groups = refreshSendDiagnosticMode
-      ? allGroups.filter(item => item.id === "send-pending-accepted")
-      : refreshBackgroundDiagnosticMode
-        ? allGroups.filter(item => item.id === "home-resume-list-retention")
-      : allGroups;
-    if (refreshSmokeMode) {
-      assert.deepEqual(groups.map(item => item.id), [
-        "home-resume-list-retention",
-        "task-resume-history-retention",
-        "send-pending-accepted",
-        "send-rejected-draft-retained",
-      ], "zero-delay smoke must exercise all four actions");
-    }
-    assert.equal(groups.length, refreshDiagnosticMode ? 1 : allGroups.length, "a single-action diagnostic must run only its selected action group");
-    const groupResults = [];
-    let totalFailedSamples = 0;
-    let backgroundSamplePairingCount = 0;
-    let formalAuthSampleCount = 0;
-    let formalAuthCleanupCount = 0;
-    let formalMaxActiveDeviceGrants = 0;
-    const progressWriter = createRefreshProgressWriter((name, value) => context.writeArtifactJson(name, value));
-
-    await progressWriter.write({
-      schemaVersion: 1,
-      scenario: row.scenario,
-      status: "RUNNING",
-      backgroundWindowSetup: refreshBackgroundWindowMode ? {
-        hostStartupMs: refreshBackgroundHost?.setupElapsedMs ?? null,
-        xvfbPid: refreshBackgroundHost?.display?.child?.pid ?? null,
-        openboxPid: refreshBackgroundHost?.openbox?.pid ?? null,
-        display: refreshBackgroundHost?.display?.display ?? null,
-        policy: "one RunContext-owned Xvfb/Openbox host; a fresh owned noDefaults Chromium/default context per Home/Task sample",
-      } : null,
-      currentAction: null,
-      currentDelayMs: null,
-      attemptedSamplesInCurrentBin: 0,
-      requiredSamplesPerBin: sampleCount,
-      failedSamples: 0,
-      completedGroups: [],
-      currentBin: [],
-      delayBins: delayValues,
-      actionIds: groups.map(item => item.id),
-      coverageMode: refreshCoverageMode,
-      formalN30Coverage: !refreshSingleSampleMode,
-      noProviderConfigured: true,
-      gatewayEvidenceClass: "KCODER_STUDIO_MOCK; JS runMock except the explicit test-generated error fixture",
-    });
-
-    for (const group of groups) {
-      const delayResults = [];
-      for (const delayMs of delayValues) {
-        const sampleResults = [];
-        for (let index = 0; index < sampleCount; index += 1) {
-          const sampleId = String(index + 1).padStart(2, "0");
-          const stage = `fault:${row.scenario}:${group.id}:delay-${delayMs}:sample-${sampleId}`;
-          const actionId = `${group.id}:delay-${delayMs}:sample-${sampleId}`;
-          network.currentStage = stage;
-          network.currentActionId = actionId;
-          const sampleControl = {
-            delayMs: 0,
-            scenarioId: row.scenario,
-            httpPathDelayMs: {},
-            methodResponseHoldMs: {},
-            ...(group.kind === "rejected-send" ? { turnStartErrorFixture: true } : {}),
-          };
-          const receiptFixture = group.kind === "accepted-send" ? createAcceptedTurnReceiptFixture() : null;
-          if (receiptFixture) {
-            sampleControl.receiptFixture = receiptFixture;
-            sampleControl.receiptScope = {};
-          }
-          const sampleLifecycleStartedAt = performance.now();
-          const sampleResult = {
-            schemaVersion: 1,
-            scenario: row.scenario,
-            action: group.id,
-            delayMs,
-            sampleId,
-            stage,
-            actionId,
-            status: "RUNNING",
-            coverageMode: refreshCoverageMode,
-            formalN30Coverage: !refreshSingleSampleMode,
-            diagnosticId: refreshSendDiagnosticMode ? refreshSendDiagnostic : refreshBackgroundDiagnosticMode ? refreshBackgroundDiagnostic : null,
-            evidenceClass: group.kind === "background"
-              ? "real Mobile Web UI through isolated KCODER_STUDIO_MOCK Gateway; one fresh owned Chromium default context per background sample, actual window minimize/restore with trusted visibility, no Provider/model"
-              : group.kind === "rejected-send"
-              ? "real Mobile Web TaskRuntime plus test-generated request-id-correlated JSON-RPC error in Playwright WebSocket route; bypasses KCODER_STUDIO_MOCK runMock and is not Rust app-server rejection"
-              : refreshBackgroundDiagnosticMode
-                ? "real Mobile Home UI and app foreground refresh in owned headful Chromium; actual window minimize/restore with trusted visibility; isolated KCODER_STUDIO_MOCK Gateway, no Provider/model"
-              : "real Mobile Web UI/TaskRuntime plus isolated KCODER_STUDIO_MOCK Gateway; no Provider configured or invoked",
-            configuredHold: null,
-            visibility: null,
-            setupTimingsMs: {
-              sharedWindowHostStartup: group.kind === "background" ? refreshBackgroundHost?.setupElapsedMs ?? null : null,
-              sharedHostStartedBeforeSample: group.kind === "background" && refreshBackgroundHost !== null,
-            },
-            timingsMs: {},
-          };
-          let page;
-          let sampleAuth = null;
-          let sampleChromium = chromium;
-          let ownsSampleChromium = false;
-          let measurementStartedAt = null;
-          if (group.kind === "background" && refreshBackgroundDiagnosticMode) {
-            sampleResult.backgroundBrowser = {
-              instanceKey: "home-600-diagnostic",
-              pid: chromium.child.pid,
-              cdpPort: chromium.cdpPort,
-              display: chromium.display,
-              noDefaults: true,
-              freshDefaultContext: true,
-              pairingAndStartupExcludedFromMeasuredIntervals: true,
-            };
-            sampleResult.setupTimingsMs.ownedChromiumStartup = chromium.startupElapsedMs;
-            sampleResult.setupTimingsMs.pairingAndHomeReadyMs = null;
-            sampleResult.sharedDiagnosticPairingCompletedBeforeSample = true;
-          }
-          let sampleError = null;
-          try {
-            if (group.kind === "background" && !refreshBackgroundDiagnosticMode) {
-              const instanceKey = `${group.id}-d${delayMs}-s${sampleId}`;
-              sampleChromium = await startRefreshBackgroundChromium(context, { host: refreshBackgroundHost, instanceKey });
-              ownsSampleChromium = true;
-              sampleResult.setupTimingsMs.ownedChromiumStartup = sampleChromium.startupElapsedMs;
-              assert.equal(sampleChromium.browser.contexts().length, 1, "each background sample must use a fresh Chromium with one default BrowserContext");
-              assert.equal(sampleChromium.defaultContext, sampleChromium.browser.contexts()[0], "each background sample must use the first and only noDefaults BrowserContext");
-
-              const pairingStage = `${stage}:pairing-setup`;
-              network.currentStage = pairingStage;
-              network.currentActionId = `${actionId}:pairing-setup`;
-              const pageSetupStartedAt = performance.now();
-              page = await newMobilePage(
-                sampleChromium,
-                network,
-                sampleControl,
-                gatewayCalls,
-                browserErrors,
-                context,
-                null,
-                { browserContext: sampleChromium.defaultContext, applyMobileEmulation: true, prepareViewportDocument: true },
-              );
-              assert.equal(page.context(), sampleChromium.defaultContext, "background sample page must belong to its fresh default BrowserContext");
-              sampleResult.setupTimingsMs.mobilePageSetup = round(performance.now() - pageSetupStartedAt);
-              const pairingStartedAt = performance.now();
-              if (formalOwnedAuthLifecycle) {
-                const beforePair = await readOwnedMobileDeviceSummary(ownedMobileDeviceStorePath(gateway));
-                assert.equal(beforePair.active, 0, "the previous formal sample must release its device grant before the next pair");
-                sampleAuth = observeOwnedMobileAuth(page, context);
-                formalAuthSampleCount += 1;
-              }
-              await connectMobile(page, gateway);
-              if (sampleAuth) {
-                await sampleAuth.waitForPair();
-                const afterPair = await readOwnedMobileDeviceSummary(ownedMobileDeviceStorePath(gateway));
-                assert.equal(afterPair.active, 1, "each formal background pair must be the only active device grant");
-                formalMaxActiveDeviceGrants = Math.max(formalMaxActiveDeviceGrants, afterPair.active);
-              }
-              await waitForGatewayRpcQuiescence(network, 15_000, 100);
-              backgroundSamplePairingCount += 1;
-              sampleResult.setupTimingsMs.pairingAndHomeReady = round(performance.now() - pairingStartedAt);
-              sampleResult.backgroundBrowser = {
-                instanceKey,
-                pid: sampleChromium.child.pid,
-                cdpPort: sampleChromium.cdpPort,
-                display: sampleChromium.display,
-                noDefaults: true,
-                freshDefaultContext: true,
-                pairingAndStartupExcludedFromMeasuredIntervals: true,
-              };
-              network.currentStage = stage;
-              network.currentActionId = actionId;
-            } else {
-              page = await newMobilePage(
-                chromium,
-                network,
-                sampleControl,
-                gatewayCalls,
-                browserErrors,
-                context,
-                formalOwnedAuthLifecycle ? undefined : pairedProfileStorageState,
-                mobilePageOptions,
-              );
-              if (refreshBackgroundDiagnosticMode && group.kind === "background") assert.equal(page.context(), sharedDiagnosticContext, "diagnostic sample page must use the same noDefaults BrowserContext as pairing");
-              if (formalOwnedAuthLifecycle) {
-                const beforePair = await readOwnedMobileDeviceSummary(ownedMobileDeviceStorePath(gateway));
-                assert.equal(beforePair.active, 0, "the previous formal sample must release its device grant before the next pair");
-                sampleAuth = observeOwnedMobileAuth(page, context);
-                formalAuthSampleCount += 1;
-                const pairingStage = `${stage}:pairing-setup`;
-                network.currentStage = pairingStage;
-                network.currentActionId = `${actionId}:pairing-setup`;
-                const pairingStartedAt = performance.now();
-                await connectMobile(page, gateway);
-                await sampleAuth.waitForPair();
-                const afterPair = await readOwnedMobileDeviceSummary(ownedMobileDeviceStorePath(gateway));
-                assert.equal(afterPair.active, 1, "each formal send pair must be the only active device grant");
-                formalMaxActiveDeviceGrants = Math.max(formalMaxActiveDeviceGrants, afterPair.active);
-                await waitForGatewayRpcQuiescence(network, 15_000, 100);
-                sampleResult.setupTimingsMs.pairingAndHomeReady = round(performance.now() - pairingStartedAt);
-                network.currentStage = stage;
-                network.currentActionId = actionId;
-              } else {
-                const homeResponse = await page.goto(gateway.baseUrl, { waitUntil: "domcontentloaded", timeout: 60_000 });
-                page.__phoneUxLastNavigationStatus = homeResponse?.status() ?? null;
-                assert.equal(homeResponse?.status(), 200, "paired profile must restore the isolated Gateway Home");
-                await page.getByTestId("new-workspace").waitFor({ state: "visible", timeout: 30_000 });
-                await ensureFixtureSessionVisible(page);
-                await waitForGatewayRpcQuiescence(network, 15_000, 100);
-              }
-            }
-
-            if (group.kind === "background") {
-              let initialMessageText = null;
-              if (group.view === "task") {
-                await openFixtureSession(page);
-                await page.getByTestId("task-header-title").waitFor({ state: "visible", timeout: 10_000 });
-                const firstMessage = page.getByTestId("message-user").first();
-                await firstMessage.waitFor({ state: "visible", timeout: 10_000 });
-                initialMessageText = await firstMessage.innerText();
-                sampleResult.initialHistoryTextFingerprint = sha256(initialMessageText).slice(0, 16);
-              } else {
-                const homeThreadRow = page.getByTestId(`thread-${THREAD_ID}`);
-                await page.getByTestId(`toggle-server-${SERVER_ID}`).waitFor({ state: "visible", timeout: 10_000 });
-                await homeThreadRow.waitFor({ state: "visible", timeout: 10_000 });
-                const initialHomeThreadText = await homeThreadRow.innerText();
-                sampleResult.initialHomeThreadTextFingerprint = sha256(initialHomeThreadText).slice(0, 16);
-              }
-              await waitForGatewayRpcQuiescence(network, 15_000, 100);
-              const visibility = await backgroundVisibilityHelper.captureWindowMinimizeVisibilityCycle(page, {
-                timeoutMs: 5_000,
-                pollIntervalMs: 20,
-                beforeMinimize: async () => {
-                  const armed = await drainAndArmBackgroundHttpResponseHold({
-                    waitForQuiescence: () => waitForGatewayRpcQuiescence(network, 15_000, 100),
-                    sampleControl,
-                    apiPath: group.apiPath,
-                    delayMs,
-                  });
-                  sampleResult.preMinimizeQuiescence = armed.quiescence;
-                  assert.equal(armed.status, "ARMED", "HTTP hold must only arm after Gateway HTTP and RPC activity is drained");
-                  sampleResult.configuredHold = {
-                    layer: "HTTP response path",
-                    path: group.apiPath,
-                    delayMs,
-                    armedAfterQuiescence: true,
-                    definition: "one-way application response hold after Gateway route fetch; not RTT or packet loss",
-                  };
-                  sampleResult.measurementOrigin = "after pre-minimize quiescence and hold arming; action intervals use actual trusted window/HTTP request timestamps, excluding browser startup and pairing";
-                  sampleResult.measurementStartMonotonicMs = round(performance.now());
-                  sampleResult.measurementClock = "Node monotonic; not compared directly with Chromium event epoch timestamps";
-                  sampleResult.setupTimingsMs.preMeasurementReady = round(performance.now() - sampleLifecycleStartedAt);
-                  measurementStartedAt = performance.now();
-                },
-                prepareCompanionPage: async companionPage => {
-                  const companionEmulation = await applyRefreshBackgroundMobileEmulation(companionPage);
-                  sampleResult.companionMobileFacts = { facts: companionEmulation.facts, gate: companionEmulation.gate, detachStatus: "pending" };
-                  return async () => {
-                    await companionEmulation.session.detach();
-                    companionEmulation.detached = true;
-                    sampleResult.companionMobileFacts.detachStatus = "acknowledged";
-                  };
-                },
-              });
-              sampleResult.visibility = visibility;
-              const mainMobileRecord = REFRESH_BACKGROUND_MOBILE_SESSIONS.get(page);
-              sampleResult.mainMobileFactsBeforeTransition = mainMobileRecord?.facts ?? null;
-              sampleResult.mainMobileFactsAfterTransition = await readRefreshBackgroundMobileFacts(page);
-              assert.equal(refreshBackgroundMobileFactsMatch(sampleResult.mainMobileFactsAfterTransition), true, "main Mobile page must retain its real CDP mobile metrics through the visibility cycle");
-              const activeSampleChromium = sampleChromium;
-              sampleResult.sameDefaultBrowserContext = activeSampleChromium.browser.contexts().length === 1
-                && activeSampleChromium.browser.contexts()[0] === activeSampleChromium.defaultContext
-                && page.context() === activeSampleChromium.defaultContext;
-              sampleResult.visibilityChecks = {
-                helperPass: visibility.status === "PASS",
-                actualWindowMinimized: visibility.minimizedWindow?.bounds?.windowState === "minimized",
-                actualWindowRestored: visibility.restoredWindow?.bounds?.windowState === "normal",
-                trustedHiddenAfterMinimize: visibility.hiddenEvent?.isTrusted === true && visibility.hiddenEvent.atEpochMs > visibility.minimizeBoundaryEpochMs && visibility.hiddenState === "hidden",
-                trustedVisibleAfterRestore: visibility.activeEvent?.isTrusted === true && visibility.activeEvent.atEpochMs > visibility.restoreBoundaryEpochMs && visibility.activeState === "visible",
-                sameBrowserContext: visibility.targetOwnership?.sameBrowserContext === true,
-                sameBrowserWindow: visibility.targetOwnership?.sameBrowserWindow === true,
-                companionClosed: visibility.companionClosed === true,
-                traceDetached: visibility.traceDetached === true,
-                oneFreshNoDefaultsDefaultContext: sampleResult.sameDefaultBrowserContext,
-                mainMetricsBefore: refreshBackgroundMobileFactsMatch(sampleResult.mainMobileFactsBeforeTransition),
-                mainMetricsAfter: refreshBackgroundMobileFactsMatch(sampleResult.mainMobileFactsAfterTransition),
-                companionMetrics: sampleResult.companionMobileFacts?.gate === true,
-                companionMetricsDetached: sampleResult.companionMobileFacts?.detachStatus === "acknowledged",
-                preMinimizeQuiescence: sampleResult.preMinimizeQuiescence?.status === "DRAINED",
-                beforeMinimizeHookCompletedBeforeBoundary: visibility.beforeMinimizeHookStatus === "COMPLETED"
-                  && visibility.completedStages.indexOf("check-main-page-visible") < visibility.completedStages.indexOf("before-minimize-hook")
-                  && visibility.completedStages.indexOf("before-minimize-hook") < visibility.completedStages.indexOf("capture-minimize-boundary"),
-                holdArmedBeforeMinimize: sampleResult.configuredHold?.armedAfterQuiescence === true
-                  && visibility.beforeMinimizeHookStatus === "COMPLETED"
-                  && visibility.completedStages.indexOf("before-minimize-hook") < visibility.completedStages.indexOf("capture-minimize-boundary"),
-                noCleanupErrors: !visibility.cleanupError && !visibility.cleanupErrorStage && !visibility.restoreError && !visibility.restoreErrorStage && !visibility.traceError && !visibility.traceErrorStage && !visibility.cdpDetachError && !visibility.cdpDetachErrorStage && !visibility.companionPreparationCleanupError && !visibility.companionPreparationCleanupErrorStage,
-              };
-              if (visibility.status === "PASS") {
-                for (const [name, passed] of Object.entries(sampleResult.visibilityChecks)) {
-                  assert.equal(passed, true, `owned-window Mobile visibility gate failed: ${name}`);
-                }
-              }
-              if (visibility.status !== "PASS") {
-                sampleResult.status = "NOT_RUN";
-                sampleResult.notRunReason = visibility.reason ?? "trusted visible-hidden-visible transition not observed";
-              } else {
-                const activeAtEpochMs = visibility.activeEvent.atEpochMs;
-                const request = await waitFor(
-                  () => network.httpRouteRequests.find(item => item.scenario === row.scenario
-                    && item.stage === stage
-                    && item.apiPath === group.apiPath
-                    && item.startedAtEpochMs >= activeAtEpochMs),
-                  5_000,
-                  `${group.apiPath} request after trusted AppState active transition`,
-                );
-                sampleResult.activeEventAtEpochMs = activeAtEpochMs;
-                sampleResult.refreshRequest = {
-                  routeRequestOrdinal: request.routeRequestOrdinal,
-                  path: request.apiPath,
-                  method: request.method,
-                  startedAtEpochMs: request.startedAtEpochMs,
-                  activeToRequestMs: round(request.startedAtEpochMs - activeAtEpochMs),
-                  afterActiveTransition: request.startedAtEpochMs >= activeAtEpochMs,
-                };
-                assert.equal(sampleResult.refreshRequest.afterActiveTransition, true, "the refresh request must follow the real active transition");
-
-                const matchingResponse = () => findHttpResponseForRouteRequest(network.httpResponsePathDelays, request);
-                const rowVisibleDuringHold = group.view === "home"
-                  ? await page.getByTestId(`thread-${THREAD_ID}`).isVisible()
-                  : await page.getByTestId("message-user").first().isVisible();
-                assert.equal(rowVisibleDuringHold, true, "existing Home thread row or Task history must stay visible while refresh is pending");
-                sampleResult.retainedVisibleBeforeResponse = true;
-                if (group.view === "home") {
-                  const currentHomeThreadText = await page.getByTestId(`thread-${THREAD_ID}`).innerText();
-                  sampleResult.homeThreadTextFingerprintDuringHold = sha256(currentHomeThreadText).slice(0, 16);
-                  assert.equal(sampleResult.homeThreadTextFingerprintDuringHold, sampleResult.initialHomeThreadTextFingerprint, "existing Home row content must remain unchanged while the foreground refresh is held");
-                } else {
-                  const currentMessageText = await page.getByTestId("message-user").first().innerText();
-                  sampleResult.historyTextFingerprintDuringHold = sha256(currentMessageText).slice(0, 16);
-                  assert.equal(sampleResult.historyTextFingerprintDuringHold, sampleResult.initialHistoryTextFingerprint, "existing Task history content must remain unchanged while the foreground refresh is held");
-                }
-                if (delayMs > 0) {
-                  assert.equal(Boolean(matchingResponse()), false, "the configured positive response hold must still be pending when retention is checked");
-                }
-                const response = await waitFor(matchingResponse, Math.max(5_000, delayMs + 3_000), `${group.apiPath} refresh response`);
-                assert.equal(response.routeRequestOrdinal, request.routeRequestOrdinal, "foreground response evidence must correlate to the exact post-active request ordinal");
-                assertApplicationDelay(response, delayMs, `${group.id} HTTP refresh hold`);
-                sampleResult.refreshResponseCorrelation = {
-                  routeRequestOrdinal: response.routeRequestOrdinal,
-                  matchesSelectedPostActiveRequest: response.routeRequestOrdinal === sampleResult.refreshRequest.routeRequestOrdinal,
-                  configuredDelayMs: response.configuredDelayMs,
-                  appliedDelayMs: response.appliedDelayMs,
-                };
-                if (group.view === "home") {
-                  await page.getByTestId("new-workspace").waitFor({ state: "visible", timeout: 5_000 });
-                  const homeThreadRow = page.getByTestId(`thread-${THREAD_ID}`);
-                  await homeThreadRow.waitFor({ state: "visible", timeout: 5_000 });
-                  if (group.view === "home") {
-                    const finalHomeThreadText = await homeThreadRow.innerText();
-                    sampleResult.homeThreadTextFingerprintAfterResponse = sha256(finalHomeThreadText).slice(0, 16);
-                    assert.equal(sampleResult.homeThreadTextFingerprintAfterResponse, sampleResult.initialHomeThreadTextFingerprint, "existing Home row content must remain unchanged after the foreground refresh response");
-                    sampleResult.postActiveMatchingRequestCount = network.httpRouteRequests.filter(item => item.scenario === row.scenario && item.stage === stage && item.apiPath === group.apiPath && item.startedAtEpochMs >= activeAtEpochMs).length;
-                  }
-                } else {
-                  await page.getByTestId("task-header-title").waitFor({ state: "visible", timeout: 5_000 });
-                  const afterMessage = page.getByTestId("message-user").first();
-                  await afterMessage.waitFor({ state: "visible", timeout: 5_000 });
-                  const finalMessageText = await afterMessage.innerText();
-                  assert.equal(sha256(finalMessageText), sha256(initialMessageText), "the previously visible history item must be unchanged after the refresh response");
-                  sampleResult.finalHistoryTextFingerprint = sha256(finalMessageText).slice(0, 16);
-                }
-                sampleResult.retainedVisibleAfterResponse = true;
-                sampleResult.response = summarizeHttpDelaySample(response);
-                sampleResult.status = refreshBackgroundDiagnosticMode ? "DIAGNOSTIC" : refreshSmokeMode ? "SMOKE" : "PASS";
-              }
-            } else {
-              measurementStartedAt = performance.now();
-              await openFixtureSession(page);
-              await page.getByTestId("task-header-title").waitFor({ state: "visible", timeout: 10_000 });
-              await page.getByTestId("message-input").waitFor({ state: "visible", timeout: 10_000 });
-              await waitForGatewayRpcQuiescence(network, 15_000, 100);
-              sampleControl.methodResponseHoldMs["turn/start"] = delayMs;
-              sampleResult.configuredHold = { layer: "WebSocket JSON-RPC response path", method: "turn/start", delayMs, definition: group.kind === "rejected-send" ? "test-generated request-id-correlated error response hold; bypasses mock Gateway runMock" : "isolated mock Gateway successful ACK hold; not RTT or packet loss" };
-
-              const message = `PHONE_UX_${group.kind === "accepted-send" ? "ACCEPTED" : "REJECTED"}_${delayMs}_${sampleId}`;
-              const priorStartCount = network.rpcMethodCounts["turn/start"] ?? 0;
-              await page.getByTestId("message-input").fill(message);
-              const clickStartedAt = performance.now();
-              await page.getByTestId("send-message").click();
-              const pendingCard = page.getByTestId("failed-submission").filter({ hasText: message });
-              const zeroDelayAccepted = group.kind === "accepted-send" && delayMs === 0;
-              const zeroDelayRejected = group.kind === "rejected-send" && delayMs === 0;
-              if (zeroDelayAccepted) {
-                const acceptedUserMessageForFeedback = page.getByTestId("message-user").filter({ hasText: message }).last();
-                const firstFeedback = await Promise.any([
-                  pendingCard.getByTestId("failed-submission-content").waitFor({ state: "visible", timeout: 5_000 })
-                    .then(() => ({ kind: "pending-content", observedAtMs: performance.now() })),
-                  acceptedUserMessageForFeedback.waitFor({ state: "visible", timeout: 5_000 })
-                    .then(() => ({ kind: "accepted-user-message", observedAtMs: performance.now() })),
-                ]);
-                const clickToFirstFeedbackObservedMs = round(firstFeedback.observedAtMs - clickStartedAt);
-                assert.ok(clickToFirstFeedbackObservedMs >= 0, "the first visible feedback sample must follow the send gesture");
-                sampleResult.timingsMs.clickToFirstFeedbackObserved = clickToFirstFeedbackObservedMs;
-                sampleResult.zeroDelayFeedbackEvidence = {
-                  status: "FIRST_VISIBLE_FEEDBACK_OBSERVED",
-                  kind: firstFeedback.kind,
-                  observedAfterClickMs: clickToFirstFeedbackObservedMs,
-                  observationSemantics: "Playwright locator visibility resolution is an observation upper bound, not a paint timestamp",
-                };
-                sampleResult.pendingUiEvidence = {
-                  status: "NOT_REQUIRED_ZERO_DELAY_ACK_MAY_PRECEDE_DOM_SAMPLE",
-                  reason: "A successful zero-delay ACK can remove the transient retrying-submission card before Playwright samples its pending label; exact request/ACK correlation, accepted transcript visibility, and no-duplicate checks are required below.",
-                };
-              } else if (zeroDelayRejected) {
-                const pendingStatusForFeedback = pendingCard.getByText("正在发送，恢复记录已保存", { exact: true });
-                const failedErrorForFeedback = pendingCard.getByTestId("failed-submission-error");
-                const firstFeedback = await Promise.any([
-                  pendingStatusForFeedback.waitFor({ state: "visible", timeout: 5_000 })
-                    .then(() => ({ kind: "pending-status", observedAtMs: performance.now() })),
-                  failedErrorForFeedback.waitFor({ state: "visible", timeout: 5_000 })
-                    .then(() => ({ kind: "definite-failure-error", observedAtMs: performance.now() })),
-                ]);
-                const clickToFirstFeedbackObservedMs = round(firstFeedback.observedAtMs - clickStartedAt);
-                assert.ok(clickToFirstFeedbackObservedMs >= 0, "the first rejected-send feedback sample must follow the send gesture");
-                sampleResult.timingsMs.clickToFirstFeedbackObserved = clickToFirstFeedbackObservedMs;
-                sampleResult.zeroDelayFeedbackEvidence = {
-                  status: "FIRST_REJECTION_FEEDBACK_OBSERVED",
-                  kind: firstFeedback.kind,
-                  observedAfterClickMs: clickToFirstFeedbackObservedMs,
-                  observationSemantics: "Playwright locator visibility resolution is an observation upper bound, not a paint timestamp",
-                };
-                sampleResult.pendingUiEvidence = {
-                  status: "NOT_REQUIRED_ZERO_DELAY_REJECTION_MAY_PRECEDE_DOM_SAMPLE",
-                  reason: "A zero-delay error response may transition the submission from pending to its definite failure card before Playwright samples the transient pending title; the first pending or error feedback is recorded, while exact request/error/route, retained draft, and no-automatic-retry checks remain required below.",
-                };
-              } else {
-                await pendingCard.getByTestId("failed-submission-content").waitFor({ state: "visible", timeout: 5_000 });
-                await pendingCard.getByText("正在发送，恢复记录已保存", { exact: true }).waitFor({ state: "visible", timeout: 5_000 });
-                sampleResult.timingsMs.clickToLocalPending = round(performance.now() - clickStartedAt);
-                sampleResult.pendingUiEvidence = { status: "OBSERVED_BEFORE_ACK", delayMs };
-              }
-              const request = await waitFor(
-                () => network.rpcEvents.find(item => item.direction === "request" && item.method === "turn/start" && item.stage === stage),
-                5_000,
-                "single real client turn/start request",
-              );
-              assert.equal((network.rpcMethodCounts["turn/start"] ?? 0) - priorStartCount, 1, "one send gesture must create exactly one browser turn/start");
-              const startIdentity = await waitFor(
-                () => network.faultFixtureEvents.find(item => item.scenario === row.scenario && item.kind === "turn-start-request" && item.rpcIdFingerprint === request.rpcIdFingerprint && item.stage === stage),
-                5_000,
-                "turn/start identity fingerprints at the routed WebSocket boundary",
-              );
-              assert.equal(startIdentity.routeSocketId, request.routeSocketId, "clientMessageId identity must belong to the same routed socket as this request");
-              assert.ok(startIdentity.clientMessageIdFingerprint, "the actual turn/start must include a stable clientMessageId fingerprint");
-              sampleResult.messageFingerprint = sha256(message).slice(0, 16);
-              sampleResult.request = {
-                method: request.method,
-                rpcIdFingerprint: request.rpcIdFingerprint,
-                clientMessageIdFingerprint: startIdentity.clientMessageIdFingerprint,
-                threadIdFingerprint: startIdentity.threadIdFingerprint,
-                routeSocketId: request.routeSocketId,
-              };
-
-              if (group.kind === "accepted-send") {
-                const responseAlreadyForwarded = network.rpcEvents.some(item => item.direction === "response-forwarded" && item.method === "turn/start" && item.rpcIdFingerprint === request.rpcIdFingerprint && item.stage === stage);
-                if (delayMs > 0) {
-                  assert.equal(responseAlreadyForwarded, false, "the delayed success ACK must remain pending when the local pending UI is observed");
-                  assert.equal(
-                    await pendingCard.getByText("正在发送，恢复记录已保存", { exact: true }).isVisible(),
-                    true,
-                    "the exact delayed turn/start must retain the pending UI while its ACK is still outstanding",
-                  );
-                  sampleResult.pendingUiEvidence = {
-                    status: "OBSERVED_WITH_EXACT_ACK_OUTSTANDING",
-                    delayMs,
-                    rpcIdFingerprint: request.rpcIdFingerprint,
-                    routeSocketId: request.routeSocketId,
-                  };
-                }
-                const ack = await waitFor(
-                  () => network.rpcEvents.find(item => item.direction === "response-forwarded" && item.method === "turn/start" && item.rpcIdFingerprint === request.rpcIdFingerprint && item.stage === stage),
-                  Math.max(10_000, delayMs + 5_000),
-                  "successful isolated mock turn/start ACK with the exact request id",
-                );
-                const ackDetails = network.rpc.find(item => item.method === "turn/start" && item.rpcIdFingerprint === request.rpcIdFingerprint && item.routeSocketId === request.routeSocketId);
-                assert.equal(ack.rpcIdFingerprint, request.rpcIdFingerprint, "the successful ACK must use the exact turn/start request id");
-                assert.equal(ack.routeSocketId, request.routeSocketId, "the successful ACK must match the request route socket");
-                assert.equal(ackDetails?.ok, true, "the isolated mock must return a successful turn/start ACK");
-                assert.equal(ackDetails?.errorCode, undefined, "the accepted sample must not contain an error response");
-                const responseDelay = network.websocketResponsePathDelays.find(item => item.method === "turn/start" && item.rpcIdFingerprint === request.rpcIdFingerprint && item.stage === stage);
-                if (delayMs > 0) {
-                  const acceptedHold = network.methodResponseHolds.find(item => item.method === "turn/start" && item.configuredHoldMs === delayMs && item.stage === stage);
-                  assertApplicationDelay(
-                    { configuredDelayMs: acceptedHold?.configuredHoldMs, appliedDelayMs: acceptedHold?.measuredHoldMs },
-                    delayMs,
-                    "accepted turn/start response hold",
-                  );
-                } else {
-                  assertApplicationDelay(responseDelay, 0, "zero-delay accepted turn/start response path");
-                }
-                const started = await waitFor(
-                  () => network.faultFixtureEvents.find(item => item.scenario === row.scenario && item.kind === "turn-lifecycle-frame" && item.method === "turn/started" && item.routeSocketId === request.routeSocketId && item.threadIdFingerprint === startIdentity.threadIdFingerprint && item.stage === stage),
-                  10_000,
-                  "same-route turn/started notification after successful ACK",
-                );
-                const completed = await waitFor(
-                  () => network.faultFixtureEvents.find(item => item.scenario === row.scenario && item.kind === "turn-lifecycle-frame" && item.method === "turn/completed" && item.routeSocketId === request.routeSocketId && item.threadIdFingerprint === startIdentity.threadIdFingerprint && item.turnIdFingerprint === started.turnIdFingerprint && item.stage === stage),
-                  20_000,
-                  "same-route turn/completed notification",
-                );
-                assert.ok(completed.atMs > started.atMs, "the mock turn must finish after it starts");
-                await page.getByTestId("stop-turn").waitFor({ state: "hidden", timeout: 5_000 });
-                const acceptedUserMessage = page.getByTestId("message-user").filter({ hasText: message }).last();
-                await acceptedUserMessage.waitFor({ state: "visible", timeout: 5_000 });
-                assert.ok((await acceptedUserMessage.innerText()).includes(message), "the accepted user message must be visible in the transcript");
-                const assistantMessage = page.getByTestId("message-assistant").last();
-                await assistantMessage.waitFor({ state: "visible", timeout: 10_000 });
-                assert.ok((await assistantMessage.innerText()).includes(message), "the TaskRuntime must render the accepted mock reply in the visible transcript");
-                const stageTurnStartRequests = network.rpcEvents.filter(item => item.direction === "request" && item.method === "turn/start" && item.stage === stage);
-                const stageTurnStartAcks = network.rpcEvents.filter(item => item.direction === "response-forwarded" && item.method === "turn/start" && item.rpcIdFingerprint === request.rpcIdFingerprint && item.stage === stage);
-                assert.equal(stageTurnStartRequests.length, 1, "the accepted action must not send a duplicate turn/start");
-                assert.equal(stageTurnStartAcks.length, 1, "the exact accepted turn/start request must have one forwarded ACK");
-                const receiptSummaryForSample = receiptFixture.summary();
-                assert.equal(receiptSummaryForSample.turnStartRequestCount, 1, "the receipt fixture must observe exactly one accepted request");
-                assert.equal(receiptSummaryForSample.acceptedResponseCount, 1, "the receipt fixture must observe exactly one successful mock ACK");
-                assert.equal(receiptSummaryForSample.duplicatePairRequestCount, 0, "the clientMessageId pair must not be resubmitted");
-                assert.equal(receiptSummaryForSample.acceptedIdentityFingerprints[0]?.clientMessageIdFingerprint, startIdentity.clientMessageIdFingerprint, "the accepted fixture must correlate the same stable clientMessageId");
-                sampleResult.timingsMs.clickToAcceptedAck = round(ack.atMs - clickStartedAt);
-                sampleResult.ack = { rpcIdFingerprint: ack.rpcIdFingerprint, routeSocketId: ack.routeSocketId, appliedDelayMs: responseDelay.appliedDelayMs, success: true };
-                sampleResult.lifecycle = { turnIdFingerprint: started.turnIdFingerprint, completed: true, terminalVisibleAssistantReply: true };
-                sampleResult.receiptFixture = receiptSummaryForSample;
-                sampleResult.status = refreshDiagnosticMode ? "DIAGNOSTIC" : refreshSmokeMode ? "SMOKE" : "PASS";
-              } else {
-                if (delayMs > 0) {
-                  const errorAlreadyForwarded = network.rpcEvents.some(item => item.direction === "response-forwarded"
-                    && item.method === "turn/start"
-                    && item.rpcIdFingerprint === request.rpcIdFingerprint
-                    && item.stage === stage
-                    && item.ok === false
-                    && item.responseSource === "test-generated JSON-RPC error fixture");
-                  assert.equal(errorAlreadyForwarded, false, "the delayed rejection response must remain outstanding while the local pending UI is observed");
-                  assert.equal(
-                    await pendingCard.getByText("正在发送，恢复记录已保存", { exact: true }).isVisible(),
-                    true,
-                    "the exact delayed turn/start error response must remain outstanding while the pending UI is visible",
-                  );
-                  sampleResult.pendingUiEvidence = {
-                    status: "OBSERVED_WITH_EXACT_ERROR_RESPONSE_OUTSTANDING",
-                    delayMs,
-                    rpcIdFingerprint: request.rpcIdFingerprint,
-                    routeSocketId: request.routeSocketId,
-                  };
-                }
-                const errorResponse = await waitFor(
-                  () => network.rpcEvents.find(item => item.direction === "response-forwarded" && item.method === "turn/start" && item.rpcIdFingerprint === request.rpcIdFingerprint && item.stage === stage && item.ok === false && item.responseSource === "test-generated JSON-RPC error fixture"),
-                  Math.max(10_000, delayMs + 5_000),
-                  "request-id-correlated test error response delivered to the Mobile WebSocketMock",
-                );
-                sampleResult.timingsMs.clickToErrorResponse = round(errorResponse.atMs - clickStartedAt);
-                const errorFixtureEvents = network.faultFixtureEvents.filter(item => item.scenario === row.scenario
-                  && item.kind === "turn-start-error-fixture"
-                  && item.requestIdFingerprint === request.rpcIdFingerprint
-                  && item.stage === stage);
-                assert.equal(errorFixtureEvents.length, 1, "exactly one typed rejection fixture must match this request id and stage");
-                const [errorFixture] = errorFixtureEvents;
-                assert.equal(errorFixture.requestIdPreserved, true, "the fixture error must preserve the exact JSON-RPC request id");
-                assert.equal(errorFixture.requestIdFingerprint, request.rpcIdFingerprint, "the error fixture must preserve the exact request fingerprint");
-                assert.equal(errorFixture.routeSocketId, request.routeSocketId, "the injected fixture must be bound to the request's originating route socket");
-                assert.equal(errorFixture.clientMessageIdFingerprint, startIdentity.clientMessageIdFingerprint, "the injected rejection must correlate to the exact clientMessageId");
-                const matchingErrorResponses = network.rpcEvents.filter(item => item.direction === "response-forwarded"
-                  && item.method === "turn/start"
-                  && item.rpcIdFingerprint === request.rpcIdFingerprint
-                  && item.stage === stage
-                  && item.ok === false
-                  && item.responseSource === "test-generated JSON-RPC error fixture");
-                assert.equal(matchingErrorResponses.length, 1, "exactly one request-id-correlated error response must be forwarded");
-                const [uniqueErrorResponse] = matchingErrorResponses;
-                assert.equal(uniqueErrorResponse.routeSocketId, request.routeSocketId, "the only matching error response must use the originating route socket");
-                assert.equal(uniqueErrorResponse.rpcIdFingerprint, errorFixture.requestIdFingerprint, "the fixture and forwarded response must share the exact request fingerprint");
-                assert.equal(errorResponse.routeSocketId, request.routeSocketId, "the request-id-correlated fixture response must return on the originating route socket");
-                const responseDelay = network.websocketResponsePathDelays.find(item => item.method === "turn/start" && item.rpcIdFingerprint === request.rpcIdFingerprint && item.stage === stage);
-                assertApplicationDelay(responseDelay, delayMs, "rejected turn/start fixture response hold");
-                const failedCard = page.getByTestId("failed-submission").filter({ hasText: message });
-                await failedCard.getByTestId("failed-submission-error").waitFor({ state: "visible", timeout: 10_000 });
-                sampleResult.timingsMs.clickToFailedCardVisible = round(performance.now() - clickStartedAt);
-                const failedContent = await failedCard.getByTestId("failed-submission-content").innerText();
-                const failedError = await failedCard.getByTestId("failed-submission-error").innerText();
-                assert.equal(sha256(failedContent.trim()), sha256(message), "the rejected client message must stay in its own failed-submission card");
-                assert.ok(failedError.includes("Isolated Mobile E2E rejected this turn/start"), "the client UI must show the injected definite rejection");
-                const startCountForStage = network.rpcEvents.filter(item => item.direction === "request" && item.method === "turn/start" && item.stage === stage).length;
-                assert.equal(startCountForStage, 1, "the rejected sample must never automatically retry turn/start");
-
-                const draft = `PHONE_UX_DRAFT_RETAINED_${delayMs}_${sampleId}`;
-                await page.getByTestId("message-input").fill(draft);
-                await waitFor(async () => page.evaluate(expected => Object.keys(localStorage).some(key => {
-                  try { return JSON.parse(localStorage.getItem(key) || "null")?.composerDraft === expected; }
-                  catch { return false; }
-                }), draft), 5_000, "composer draft persistence before reload");
-                sampleResult.draftFingerprint = sha256(draft).slice(0, 16);
-                await page.reload({ waitUntil: "domcontentloaded", timeout: 60_000 });
-                await page.getByTestId("message-input-root").waitFor({ state: "visible", timeout: 60_000 });
-                const reloadedCard = page.getByTestId("failed-submission").filter({ hasText: message });
-                await reloadedCard.getByTestId("failed-submission-content").waitFor({ state: "visible", timeout: 15_000 });
-                await reloadedCard.getByTestId("failed-submission-error").waitFor({ state: "visible", timeout: 15_000 });
-                const restoredDraft = await page.getByTestId("message-input").inputValue();
-                const restoredFailedContent = await reloadedCard.getByTestId("failed-submission-content").innerText();
-                const restoredFailedError = await reloadedCard.getByTestId("failed-submission-error").innerText();
-                assert.equal(sha256(restoredDraft), sha256(draft), "hard reload must restore the unsent composer draft from persisted workspace state");
-                assert.equal(sha256(restoredFailedContent.trim()), sha256(message), "hard reload must restore the rejected message in the failed-submission card");
-                assert.ok(restoredFailedError.includes("Isolated Mobile E2E rejected this turn/start"), "hard reload must restore the rejection detail in the failed-submission card");
-                assert.equal(network.rpcEvents.filter(item => item.direction === "request" && item.method === "turn/start" && item.stage === stage).length, 1, "reload must not resend the failed clientMessageId");
-                sampleResult.ack = { rpcIdFingerprint: errorResponse.rpcIdFingerprint, routeSocketId: errorResponse.routeSocketId, appliedDelayMs: responseDelay.appliedDelayMs, success: false, errorFixture: true };
-                sampleResult.recoveryReadback = { failedSubmissionRestored: true, separateComposerDraftRestored: true, hardReload: true, automaticRetryCount: 0 };
-                sampleResult.status = refreshDiagnosticMode ? "DIAGNOSTIC" : refreshSmokeMode ? "SMOKE" : "PASS";
-              }
-            }
-          } catch (error) {
-            sampleError = error;
-            sampleResult.status = "FAIL";
-            sampleResult.error = context.redactText(error instanceof Error ? error.message : String(error)).slice(0, 700);
-            if (page && !page.isClosed()) {
-              sampleResult.pageAtFailure = await describeVisiblePage(page).catch(() => null);
-              sampleResult.screenshot = await capturePrivateFailureScreenshot(context, page, `phone-ux-refresh-${group.id}-d${delayMs}-${sampleId}-failure.png`).catch(() => ({ artifact: null, status: "capture-failed" }));
-            }
-          } finally {
-            const sampleFinishedAt = performance.now();
-            sampleResult.setupElapsedMs = round((measurementStartedAt ?? sampleFinishedAt) - sampleLifecycleStartedAt);
-            sampleResult.measurementElapsedMs = measurementStartedAt === null ? null : round(sampleFinishedAt - measurementStartedAt);
-            sampleResult.elapsedMs = round(sampleFinishedAt - sampleLifecycleStartedAt);
-            if (sampleAuth && page) {
-              try {
-                sampleResult.authLifecycle = await releaseOwnedMobileAuthSample(page, gateway, sampleAuth, context);
-                if (sampleResult.authLifecycle.status === "PASS") formalAuthCleanupCount += 1;
-                else {
-                  sampleResult.status = "FAIL";
-                  sampleError ??= new Error("formal per-sample mobile auth cleanup failed");
-                }
-              } catch (error) {
-                sampleResult.authLifecycle = {
-                  status: "FAIL",
-                  failures: ["cleanup-helper-error"],
-                  error: context.redactText(error instanceof Error ? error.message : String(error)).slice(0, 400),
-                };
-                sampleResult.status = "FAIL";
-                sampleError ??= error instanceof Error ? error : new Error(String(error));
-              }
-            }
-            if (page) {
-              try {
-                if (group.kind === "background") await closeRefreshDiagnosticMobilePage(page);
-                else await closeOwnedMobilePage(page).catch(() => {});
-              } catch (error) {
-                sampleResult.status = "FAIL";
-                sampleResult.pageCleanupError = context.redactText(error instanceof Error ? error.message : String(error)).slice(0, 500);
-              }
-            }
-            if (ownsSampleChromium && sampleChromium) {
-              try {
-                await sampleChromium.close();
-                sampleResult.backgroundBrowserCleanup = { status: "CLOSED", pid: sampleChromium.child.pid, cdpPort: sampleChromium.cdpPort };
-              } catch (error) {
-                sampleResult.status = "FAIL";
-                sampleResult.backgroundBrowserCleanup = {
-                  status: "FAILED",
-                  pid: sampleChromium.child.pid,
-                  cdpPort: sampleChromium.cdpPort,
-                  error: context.redactText(error instanceof Error ? error.message : String(error)).slice(0, 500),
-                };
-              }
-            }
-            sampleResults.push(sampleResult);
-            if (sampleResult.status === "FAIL") totalFailedSamples += 1;
-            await context.writeArtifactJson(`phone-ux-refresh-${group.id}-d${delayMs}-${sampleId}.json`, sampleResult);
-            await progressWriter.write({
-              schemaVersion: 1,
-              scenario: row.scenario,
-              status: totalFailedSamples ? "PARTIAL_FAIL" : "RUNNING",
-              currentAction: group.id,
-              currentDelayMs: delayMs,
-              attemptedSamplesInCurrentBin: sampleResults.length,
-              requiredSamplesPerBin: sampleCount,
-              failedSamples: totalFailedSamples,
-              completedGroups: groupResults,
-              currentBin: sampleResults,
-              delayBins: delayValues,
-              actionIds: groups.map(item => item.id),
-              noProviderConfigured: true,
-              gatewayEvidenceClass: "KCODER_STUDIO_MOCK; JS runMock except the explicit test-generated error fixture",
-            });
-          }
-          if (sampleResult.authLifecycle?.status === "FAIL") {
-            throw new Error("formal auth cleanup failed; stop before another sample can inherit capacity state");
-          }
-          if (sampleError) continue;
-        }
-        const passed = sampleResults.filter(item => item.status === "PASS");
-        const smoked = sampleResults.filter(item => item.status === "SMOKE");
-        const diagnosticSamples = sampleResults.filter(item => item.status === "DIAGNOSTIC");
-        const successfulSamples = [...passed, ...smoked, ...diagnosticSamples];
-        const notRun = sampleResults.filter(item => item.status === "NOT_RUN");
-        const failed = sampleResults.filter(item => item.status === "FAIL");
-        const groupBin = {
-          action: group.id,
-          delayMs,
-          requiredSamples: sampleCount,
-          attemptedSamples: sampleResults.length,
-          passedSamples: passed.length,
-          smokeSamples: smoked.length,
-          diagnosticSamples: diagnosticSamples.length,
-          notRunSamples: notRun.length,
-          failedSamples: failed.length,
-          status: failed.length ? "FAIL"
-            : refreshDiagnosticMode && diagnosticSamples.length === sampleCount ? "DIAGNOSTIC_ONLY"
-              : refreshSmokeMode && smoked.length === sampleCount ? "SMOKE"
-                : passed.length === sampleCount ? "PASS"
-                  : passed.length === 0 && smoked.length === 0 && diagnosticSamples.length === 0 && notRun.length === sampleCount ? "NOT_RUN" : "PARTIAL",
-          coverageMode: refreshCoverageMode,
-          formalN30Coverage: !refreshSingleSampleMode,
-          samples: sampleResults,
-        };
-        const percentileFields = refreshSingleSampleMode
-          ? { percentileEligibility: refreshCoverageMode, percentilesReported: false }
-          : {};
-        if (group.kind === "accepted-send") {
-          const pending = successfulSamples.map(item => item.timingsMs.clickToLocalPending).filter(Number.isFinite).sort((a, b) => a - b);
-          const accepted = successfulSamples.map(item => item.timingsMs.clickToAcceptedAck).filter(Number.isFinite).sort((a, b) => a - b);
-          if (refreshSingleSampleMode) Object.assign(groupBin, percentileFields, { clickToLocalPendingMs: pending[0] ?? null, clickToAcceptedAckMs: accepted[0] ?? null });
-          else {
-            groupBin.clickToLocalPendingP50P95Ms = { p50: percentile(pending, 0.5), p95: percentile(pending, 0.95) };
-            groupBin.clickToAcceptedAckP50P95Ms = { p50: percentile(accepted, 0.5), p95: percentile(accepted, 0.95) };
-          }
-        }
-        if (group.kind === "rejected-send") {
-          const rejectionFrames = successfulSamples.map(item => item.timingsMs.clickToErrorResponse).filter(Number.isFinite).sort((a, b) => a - b);
-          const failedCards = successfulSamples.map(item => item.timingsMs.clickToFailedCardVisible).filter(Number.isFinite).sort((a, b) => a - b);
-          if (refreshSingleSampleMode) Object.assign(groupBin, percentileFields, { clickToErrorResponseMs: rejectionFrames[0] ?? null, clickToFailedCardVisibleMs: failedCards[0] ?? null });
-          else {
-            groupBin.clickToErrorResponseP50P95Ms = { p50: percentile(rejectionFrames, 0.5), p95: percentile(rejectionFrames, 0.95) };
-            groupBin.clickToFailedCardVisibleP50P95Ms = { p50: percentile(failedCards, 0.5), p95: percentile(failedCards, 0.95) };
-          }
-        }
-        if (group.kind === "background") {
-          const activeToRequest = successfulSamples.map(item => item.refreshRequest?.activeToRequestMs).filter(Number.isFinite).sort((a, b) => a - b);
-          if (refreshSingleSampleMode) Object.assign(groupBin, percentileFields, { activeToRefreshRequestMs: activeToRequest[0] ?? null });
-          else groupBin.activeToRefreshRequestP50P95Ms = { p50: percentile(activeToRequest, 0.5), p95: percentile(activeToRequest, 0.95) };
-          groupBin.completedResponseAppliedDelayMs = distribution(successfulSamples.map(item => item.response?.appliedDelayMs).filter(Number.isFinite));
-        }
-        delayResults.push(groupBin);
-        await context.writeArtifactJson(`phone-ux-refresh-${group.id}-d${delayMs}-summary.json`, groupBin);
-      }
-      const groupStatus = refreshDiagnosticMode && delayResults.every(item => item.status === "DIAGNOSTIC_ONLY")
-        ? "DIAGNOSTIC_ONLY"
-        : refreshSmokeMode && delayResults.every(item => item.status === "SMOKE")
-          ? "SMOKE"
-        : delayResults.every(item => item.status === "PASS")
-        ? "PASS"
-        : delayResults.some(item => item.status === "FAIL")
-          ? "FAIL"
-          : delayResults.every(item => item.status === "NOT_RUN")
-            ? "NOT_RUN"
-            : "PARTIAL";
-      const groupResult = {
-        action: group.id,
-        kind: group.kind,
-        status: groupStatus,
-        coverageMode: refreshCoverageMode,
-        formalN30Coverage: !refreshSingleSampleMode,
-        delayResults,
-      };
-      groupResults.push(groupResult);
-      row.checks.groupResults = groupResults;
-      await context.writeArtifactJson(`phone-ux-refresh-${group.id}-summary.json`, groupResult);
-    }
-    row.checks.pairing.freshBackgroundSamplePairings = backgroundSamplePairingCount;
-    if (formalOwnedAuthLifecycle) {
-      const finalAuthStore = await readOwnedMobileDeviceSummary(ownedMobileDeviceStorePath(gateway));
-      const expectedFormalSamples = groups.length * delayValues.length * sampleCount;
-      row.checks.pairing.formalOwnedAuthLifecycle = {
-        status: formalAuthSampleCount === expectedFormalSamples && formalAuthCleanupCount === expectedFormalSamples && finalAuthStore.active === 0 && formalMaxActiveDeviceGrants === 1 ? "PASS" : "FAIL",
-        expectedSamples: expectedFormalSamples,
-        observedSamplePairs: formalAuthSampleCount,
-        exactGrantRevocationsAndWebLogouts: formalAuthCleanupCount,
-        activeDeviceCountAtEnd: finalAuthStore.active,
-        revokedDeviceRowsAtEnd: finalAuthStore.revoked,
-        maxConcurrentActiveDeviceGrants: formalMaxActiveDeviceGrants,
-      };
-      assert.equal(row.checks.pairing.formalOwnedAuthLifecycle.status, "PASS", "every formal sample must own and release one fresh auth grant before the next sample");
-    }
-    row.checks.backgroundWindowLifecycle = refreshBackgroundWindowMode ? {
-      hostStartupMs: refreshBackgroundHost?.setupElapsedMs ?? null,
-      oneOwnedWindowHostPerRun: true,
-      freshOwnedChromiumDefaultContextPerBackgroundSample: true,
-      backgroundBrowserStartupRecordedSeparately: true,
-      requestAndContentIntervalsExcludeBrowserStartupAndPairing: true,
-      allBackgroundDelayBinsArmedAfterDrainedPreMinimizeBoundary: true,
-    } : null;
-    const allPass = groupResults.every(item => item.status === "PASS");
-    const allSmoke = refreshSmokeMode && groupResults.every(item => item.status === "SMOKE");
-    const allDiagnostic = refreshDiagnosticMode && groupResults.every(item => item.status === "DIAGNOSTIC_ONLY");
-    const anyNotRun = groupResults.some(item => item.status === "NOT_RUN" || item.status === "PARTIAL");
-    row.checks.coverageStatus = allPass ? "PASS" : allSmoke ? "SMOKE" : allDiagnostic ? "DIAGNOSTIC_ONLY" : totalFailedSamples ? "FAIL" : anyNotRun ? "PARTIAL" : "NOT_RUN";
-    row.checks.coverageMode = refreshCoverageMode;
-    row.checks.formalN30Coverage = !refreshSingleSampleMode;
-    row.checks.diagnosticId = refreshSendDiagnosticMode ? refreshSendDiagnostic : refreshBackgroundDiagnosticMode ? refreshBackgroundDiagnostic : null;
-    row.checks.requiredActions = groups.map(item => item.id);
-    row.checks.requiredDelayBinsMs = delayValues;
-    row.checks.samplesPerActionAndBin = sampleCount;
-    row.checks.completedSequentially = true;
-    row.checks.groupResults = groupResults;
-    row.checks.delayBoundary = "one-way HTTP response or WSS JSON-RPC response hold in isolated loopback Gateway route; not RTT, packet loss, or radio latency";
-    row.checks.draftDurabilityBoundary = "actual UI draft and failed-submission state are read back after hard reload from browser-persisted Mobile workspace state";
-    row.checks.nativePlatform = "UNVERIFIED; Chromium Mobile Web only";
-    await context.writeArtifactJson("phone-ux-refresh-send-progress-terminal.json", {
-      schemaVersion: 1,
-      artifactType: "terminal-aggregate",
-      scenario: row.scenario,
-      status: row.checks.coverageStatus,
-      coverageMode: row.checks.coverageMode,
-      formalN30Coverage: row.checks.formalN30Coverage,
-      diagnosticId: refreshSendDiagnosticMode ? refreshSendDiagnostic : refreshBackgroundDiagnosticMode ? refreshBackgroundDiagnostic : null,
-      lastProgressSequence: progressWriter.sequence,
-      requiredSamplesPerBin: sampleCount,
-      delayBins: delayValues,
-      actionIds: groups.map(item => item.id),
-      failedSamples: totalFailedSamples,
-      completedGroups: groupResults,
-      noProviderConfigured: true,
-      gatewayEvidenceClass: "KCODER_STUDIO_MOCK; JS runMock except the explicit test-generated error fixture",
-      nativePlatform: "UNVERIFIED; Chromium Mobile Web only",
-    });
-    await context.writeArtifactJson("phone-ux-refresh-send-summary.json", {
-      schemaVersion: 1,
-      scenario: row.scenario,
-      status: row.checks.coverageStatus,
-      coverageMode: row.checks.coverageMode,
-      formalN30Coverage: row.checks.formalN30Coverage,
-      evidenceClass: "real Mobile Web UI/TaskRuntime with isolated KCODER_STUDIO_MOCK; rejection is injected at the Playwright WebSocket route",
-      noProviderConfigured: true,
-      requiredActions: row.checks.requiredActions,
-      requiredDelayBinsMs: row.checks.requiredDelayBinsMs,
-      samplesPerActionAndBin: row.checks.samplesPerActionAndBin,
-      smokeOnly: refreshSmokeMode,
-      diagnosticOnly: refreshDiagnosticMode,
-      diagnosticId: refreshSendDiagnosticMode ? refreshSendDiagnostic : refreshBackgroundDiagnosticMode ? refreshBackgroundDiagnostic : null,
-      completedSequentially: true,
-      groups: groupResults,
-      failedSamples: totalFailedSamples,
-      profileStorageState: "in-memory only; not serialized",
-      nativePlatform: "UNVERIFIED",
-    });
-    if (totalFailedSamples) throw new Error(`${totalFailedSamples} refresh/send samples failed; inspect per-sample artifacts and preserve the original evidence`);
-  }, { skipPageSetup: true });
-
-  return { rows, requiredScenarioFailures, fixtureReceiptLedger: receiptSummary };
-}
-
-async function connectMobile(page, gateway, { beforeFixtureSessionVisible } = {}) {
-  const loginResponse = await page.goto(gateway.baseUrl, { waitUntil: "domcontentloaded" });
-  page.__phoneUxLastNavigationStatus = loginResponse?.status() ?? null;
-  assert.equal(loginResponse?.status(), 200, "isolated test Gateway should serve Mobile Web");
-  await page.locator('input[name="token"]').fill(gateway.authToken);
-  await Promise.all([
-    page.getByTestId("welcome-direct-connection").waitFor({ state: "visible", timeout: 30_000 }),
-    page.locator('button[type="submit"]').click(),
-  ]);
-  await page.getByTestId("welcome-direct-connection").click();
-  await page.getByTestId("gateway-endpoint").fill(gateway.baseUrl);
-  await page.getByTestId("gateway-token").fill(gateway.authToken);
-  await page.getByTestId("gateway-connect").click();
-  await page.getByTestId("new-workspace").waitFor({ state: "visible", timeout: 60_000 });
-  if (beforeFixtureSessionVisible) await beforeFixtureSessionVisible();
-  await ensureFixtureSessionVisible(page);
-}
-
-async function runFreshAuthCleanupUiGate(chromium, gateway, network, gatewayCalls, browserErrors, runContext, requiredCycles) {
-  const rows = [];
-  const browserContexts = new Set();
-  const deviceFingerprints = new Set();
-  let maximumActiveDeviceGrantsObserved = 0;
-
-  for (let sampleNumber = 1; sampleNumber <= requiredCycles; sampleNumber += 1) {
-    const sampleId = String(sampleNumber).padStart(2, "0");
-    const stage = `auth-cleanup-ui-${sampleId}`;
-    const row = {
-      sampleNumber,
-      status: "NOT_RUN",
-      browserContextOrdinal: sampleNumber,
-      pairResponseStatus: null,
-      deviceFingerprint: null,
-      activeDeviceCountBeforePair: null,
-      activeDeviceCountAfterPair: null,
-      activeDeviceCountAfterCleanup: null,
-      browserContextClosed: false,
-      browserErrors: 0,
-      authLifecycle: null,
-      error: null,
-    };
-    let page = null;
-    let authCapture = null;
-    const browserErrorStart = browserErrors.length;
-    network.currentStage = stage;
-    network.currentActionId = stage;
-
-    try {
-      const beforePair = await readOwnedMobileDeviceSummary(ownedMobileDeviceStorePath(gateway));
-      row.activeDeviceCountBeforePair = beforePair.active;
-      assert.equal(beforePair.active, 0, `sample ${sampleNumber} must start with no active device grants from the owned Gateway`);
-
-      page = await newMobilePage(
-        chromium,
-        network,
-        { delayMs: 0, scenarioId: refreshScenarioId },
-        gatewayCalls,
-        browserErrors,
-        runContext,
-      );
-      const browserContext = page.context();
-      assert.equal(browserContexts.has(browserContext), false, `sample ${sampleNumber} must use a new BrowserContext`);
-      browserContexts.add(browserContext);
-
-      authCapture = observeOwnedMobileAuth(page, runContext);
-      await connectMobile(page, gateway);
-      const pair = await authCapture.waitForPair();
-      row.pairResponseStatus = pair.status;
-      row.deviceFingerprint = pair.deviceFingerprint;
-      assert.equal(deviceFingerprints.has(pair.deviceFingerprint), false, `sample ${sampleNumber} must receive a distinct device identity`);
-      deviceFingerprints.add(pair.deviceFingerprint);
-
-      const afterPair = await readOwnedMobileDeviceSummary(ownedMobileDeviceStorePath(gateway));
-      row.activeDeviceCountAfterPair = afterPair.active;
-      maximumActiveDeviceGrantsObserved = Math.max(maximumActiveDeviceGrantsObserved, afterPair.active);
-      assert.equal(afterPair.active, 1, `sample ${sampleNumber} must own exactly one active device grant after UI pairing`);
-      await waitForGatewayRpcQuiescence(network, 15_000, 100);
-      row.status = "PASS";
-    } catch (error) {
-      row.status = "FAIL";
-      row.error = runContext.redactText(error instanceof Error ? error.message : String(error)).slice(0, 600);
-    } finally {
-      if (page && authCapture) {
-        try {
-          row.authLifecycle = await releaseOwnedMobileAuthSample(page, gateway, authCapture, runContext);
-          if (row.authLifecycle.status !== "PASS") {
-            row.status = "FAIL";
-            row.error ??= "exact self-device revoke, web logout, stale-cookie rejection, or active-grant cleanup failed";
-          }
-        } catch (error) {
-          row.status = "FAIL";
-          row.error ??= runContext.redactText(error instanceof Error ? error.message : String(error)).slice(0, 600);
-          row.authLifecycle = { status: "FAIL", failures: ["cleanup-helper-error"] };
-          authCapture.dispose();
-        }
-      }
-
-      if (page) {
-        try {
-          await closeOwnedMobilePage(page);
-          row.browserContextClosed = page.isClosed();
-          assert.equal(row.browserContextClosed, true, `sample ${sampleNumber} BrowserContext must be closed before the next sample`);
-        } catch (error) {
-          row.status = "FAIL";
-          row.error ??= runContext.redactText(error instanceof Error ? error.message : String(error)).slice(0, 600);
-        }
-        try {
-          await waitForGatewayRpcQuiescence(network, 15_000, 100);
-        } catch (error) {
-          row.status = "FAIL";
-          row.error ??= runContext.redactText(error instanceof Error ? error.message : String(error)).slice(0, 600);
-        }
-      }
-
-      try {
-        const afterCleanup = await readOwnedMobileDeviceSummary(ownedMobileDeviceStorePath(gateway));
-        row.activeDeviceCountAfterCleanup = afterCleanup.active;
-        if (afterCleanup.active !== 0) {
-          row.status = "FAIL";
-          row.error ??= `owned Gateway retained ${afterCleanup.active} active device grants after sample cleanup`;
-        }
-      } catch (error) {
-        row.status = "FAIL";
-        row.error ??= runContext.redactText(error instanceof Error ? error.message : String(error)).slice(0, 600);
-      }
-
-      row.browserErrors = browserErrors.length - browserErrorStart;
-      if (row.browserErrors > 0) {
-        row.status = "FAIL";
-        row.error ??= "Mobile Web emitted a browser page error during the auth lifecycle gate";
-      }
-      await runContext.writeArtifactJson(`phone-ux-auth-cleanup-ui-gate-sample-${sampleId}.json`, row);
-    }
-
-    rows.push(row);
-    if (row.status !== "PASS") break;
-  }
-
-  let finalDeviceSummary = null;
-  try { finalDeviceSummary = await readOwnedMobileDeviceSummary(ownedMobileDeviceStorePath(gateway)); }
-  catch {}
-  const passedCycles = rows.filter(row => row.status === "PASS").length;
-  const status = rows.length === requiredCycles
-    && passedCycles === requiredCycles
-    && browserContexts.size === requiredCycles
-    && deviceFingerprints.size === requiredCycles
-    && finalDeviceSummary?.active === 0
-    && maximumActiveDeviceGrantsObserved === 1
-    ? "PASS"
-    : "FAIL";
-  return {
-    status,
-    requiredCycles,
-    attemptedCycles: rows.length,
-    passedCycles,
-    notRunCycles: requiredCycles - rows.length,
-    distinctBrowserContexts: browserContexts.size,
-    distinctDeviceFingerprints: deviceFingerprints.size,
-    maximumActiveDeviceGrantsObserved,
-    activeDeviceCountAfterAll: finalDeviceSummary?.active ?? null,
-    rows,
-  };
-}
-
-
-function observeOwnedMobileAuth(page, runContext) {
-  let resolveObservation;
-  const observed = new Promise(resolveObserved => { resolveObservation = resolveObserved; });
-  let pair = null;
-  let settled = false;
-  const onResponse = response => {
-    if (settled || response.request().method() !== "POST" || safePath(response.url()) !== "/api/mobile/session") return;
-    void (async () => {
-      let payload = null;
-      try { payload = await response.json(); } catch {}
-      pair = {
-        status: response.status(),
-        accessToken: typeof payload?.accessToken === "string" ? payload.accessToken : null,
-        deviceId: typeof payload?.deviceId === "string" ? payload.deviceId : null,
-        mobileRefreshV1: payload?.capabilities?.mobileRefreshV1 === true,
-      };
-      if (pair.accessToken) runContext.registerSecret(pair.accessToken);
-      settled = true;
-      resolveObservation(pair);
-    })();
-  };
-  page.on("response", onResponse);
-  return {
-    getPair: () => pair,
-    async waitForObservation(timeoutMs = 1_500) {
-      let timer;
-      try {
-        return await Promise.race([
-          observed,
-          new Promise((_, reject) => { timer = setTimeout(() => reject(new Error("owned mobile pair response was not observed")), timeoutMs); }),
-        ]);
-      } finally {
-        clearTimeout(timer);
-      }
-    },
-    async waitForPair(timeoutMs = 5_000) {
-      const result = await this.waitForObservation(timeoutMs);
-      assert.equal(result.status, 200, "fresh UI pair must return HTTP 200");
-      assert.ok(result.accessToken && result.deviceId, "fresh UI pair must return an access token and device identity");
-      assert.equal(result.mobileRefreshV1, true, "fresh UI pair must create a durable device grant");
-      return { status: result.status, deviceFingerprint: sha256(result.deviceId).slice(0, 16), mobileRefreshV1: result.mobileRefreshV1 };
-    },
-    dispose() { page.off("response", onResponse); },
-  };
-}
-
-function ownedMobileDeviceStorePath(gateway) {
-  return resolve(gateway.serversStore, "..", "mobile-device-auth", "devices.json");
-}
-
-async function readOwnedMobileDeviceSummary(path) {
-  let raw;
-  try { raw = await readFile(path, "utf8"); }
-  catch (error) {
-    if (error?.code === "ENOENT") return { active: 0, revoked: 0, stored: 0 };
-    throw error;
-  }
-  const store = JSON.parse(raw);
-  assert.equal(store?.version, 1, "owned Gateway device store format changed");
-  assert.ok(Array.isArray(store.devices), "owned Gateway device store must contain a devices array");
-  const now = Date.now();
-  return {
-    active: store.devices.filter(device => device && device.revoked !== true
-      && Number.isSafeInteger(device.expiresAt) && device.expiresAt > now
-      && Number.isSafeInteger(device.absoluteExpiresAt) && device.absoluteExpiresAt > now).length,
-    revoked: store.devices.filter(device => device?.revoked === true).length,
-    stored: store.devices.length,
-  };
-}
-
-async function releaseOwnedMobileAuthSample(page, gateway, capture, runContext) {
-  let pair = capture.getPair();
-  if (!pair) pair = await capture.waitForObservation(750).catch(() => null);
-  const failures = [];
-  let revokeStatus = "not-attempted";
-  if (pair?.accessToken) {
-    try {
-      const response = await fetch(`${gateway.baseUrl}/api/mobile/session`, {
-        method: "DELETE",
-        headers: { authorization: `Bearer ${pair.accessToken}`, accept: "application/json" },
-        redirect: "manual",
-        signal: AbortSignal.timeout(2_000),
-      });
-      revokeStatus = response.status;
-    } catch { revokeStatus = "request-failed"; }
-  }
-  if (!pair || pair.status !== 200 || !pair.accessToken || !pair.deviceId || pair.mobileRefreshV1 !== true) failures.push("pair-response-invalid-or-missing");
-  if (revokeStatus !== 204) failures.push("exact-device-revoke-not-204");
-
-  let cookieHeader = null;
-  try {
-    const cookie = (await page.context().cookies(gateway.baseUrl)).find(item => item.name === "kcoder_studio_session");
-    if (cookie?.value) {
-      cookieHeader = `kcoder_studio_session=${cookie.value}`;
-      runContext.registerSecret(cookieHeader);
-    }
-  } catch {}
-  let logoutStatus = "not-attempted";
-  let staleSessionHttpStatus = "not-attempted";
-  if (cookieHeader) {
-    try {
-      const response = await fetch(`${gateway.baseUrl}/logout`, {
-        method: "POST",
-        headers: { cookie: cookieHeader, accept: "text/html" },
-        redirect: "manual",
-        signal: AbortSignal.timeout(2_000),
-      });
-      logoutStatus = response.status;
-    } catch { logoutStatus = "request-failed"; }
-    try {
-      const response = await fetch(`${gateway.baseUrl}/api/servers`, {
-        headers: { cookie: cookieHeader, accept: "application/json" },
-        redirect: "manual",
-        signal: AbortSignal.timeout(2_000),
-      });
-      staleSessionHttpStatus = response.status;
-    } catch { staleSessionHttpStatus = "request-failed"; }
-  } else {
-    failures.push("owned-web-cookie-missing");
-  }
-  if (logoutStatus !== 303) failures.push("web-session-logout-not-303");
-  if (staleSessionHttpStatus !== 401) failures.push("logged-out-cookie-not-rejected");
-
-  let deviceStore = null;
-  try { deviceStore = await readOwnedMobileDeviceSummary(ownedMobileDeviceStorePath(gateway)); }
-  catch { failures.push("owned-device-store-unreadable"); }
-  if (deviceStore && deviceStore.active !== 0) failures.push("active-owned-device-remained");
-  capture.dispose();
-  return {
-    status: failures.length === 0 ? "PASS" : "FAIL",
-    pairResponseStatus: pair?.status ?? "not-observed",
-    deviceFingerprint: pair?.deviceId ? sha256(pair.deviceId).slice(0, 16) : null,
-    durableGrantObserved: pair?.mobileRefreshV1 === true,
-    revokeStatus,
-    logoutStatus,
-    staleSessionHttpStatus,
-    activeDeviceCountAfter: deviceStore?.active ?? null,
-    revokedDeviceRowsAfter: deviceStore?.revoked ?? null,
-    failures,
-  };
-}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 async function newMobilePage(chromium, network, delayControl, gatewayCalls, browserErrors, context, storageState, options = {}) {
   const ownsBrowserContext = !options.browserContext;
@@ -3492,7 +1201,7 @@ async function startRefreshBackgroundChromium(context, { host: suppliedHost = nu
     const visibilityHelper = await import(pathToFileURL(REFRESH_BACKGROUND_HOOK_HELPER_PATH).href);
     assert.equal(typeof visibilityHelper.captureWindowMinimizeVisibilityCycle, "function", "test-only before-minimize hook helper must export the real window visibility driver");
 
-    const display = await startOwnedDisplay(context);
+    const display = await startOwnedDisplay(context, { startupTimeoutMs: 60_000 });
     const openboxHome = context.pathInState("refresh-background-openbox-home");
     const openboxConfigHome = resolve(openboxHome, ".config");
     const openboxConfigDirectory = resolve(openboxConfigHome, "openbox");
@@ -3593,7 +1302,7 @@ async function startRefreshBackgroundChromium(context, { host: suppliedHost = nu
       const [portText, webSocketPath] = raw.trim().split(/\r?\n/);
       const port = Number(portText);
       return Number.isInteger(port) && port > 0 && webSocketPath?.startsWith("/devtools/browser/") ? { port } : null;
-    }, 20_000, "owned Mobile Chromium CDP endpoint", 50, context.abortSignal);
+    }, 60_000, "owned Mobile Chromium CDP endpoint", 50, context.abortSignal);
     const portLabel = `${label}-cdp`;
     context.registerPort(portLabel, activePort.port);
     browser = await playwrightChromium.connectOverCDP(`http://127.0.0.1:${activePort.port}`, { noDefaults: true });
@@ -4502,857 +2211,8 @@ async function writeNavigationSampleCheckpoint(context, network, capture, observ
   await context.writeArtifactJson(`phone-ux-navigation-${capture.delayMs}ms-${cacheKey}-${sampleKey}-s${String(capture.ordinal).padStart(4, "0")}.json`, sample);
 }
 
-async function installPageInstrumentation(page, pageId) {
-  await page.addInitScript(({ pageId }) => {
-    const activeKey = "__phoneUxActiveMeasurementsV1";
-    const completedKey = "__phoneUxCompletedMeasurementsV1";
-    const debugKey = "__phoneUxEventDebugV1";
-    const readStored = key => {
-      try { return JSON.parse(sessionStorage.getItem(key) || "[]"); } catch { return []; }
-    };
-    const active = new Map(readStored(activeKey).map(measurement => [measurement.id, measurement]));
-    const completed = new Map(readStored(completedKey));
-    const longTasks = [];
-    const events = readStored(debugKey);
-    const appSocketKey = "__phoneUxApplicationWebSocketConnectionsV1";
-    const appFrameKey = "__phoneUxApplicationWebSocketFramesV1";
-    const appSockets = readStored(appSocketKey);
-    const appFrames = readStored(appFrameKey);
-    const pendingAppFrameWrites = new Set();
-    const maxAppSockets = 512;
-    const maxAppFrames = 8192;
-    let socketOverflowCount = 0;
-    let frameOverflowCount = 0;
-    let storageWriteFailureCount = 0;
-    let appSocketSequence = Math.max(0, ...appSockets.map(row => Number(row.socketId) || 0));
-    const storeAppEvidence = () => {
-      try {
-        sessionStorage.setItem(appSocketKey, JSON.stringify(appSockets));
-        sessionStorage.setItem(appFrameKey, JSON.stringify(appFrames));
-      } catch { storageWriteFailureCount += 1; }
-    };
-    const digestFingerprint = async value => {
-      const bytes = new TextEncoder().encode(String(value));
-      const digest = await crypto.subtle.digest("SHA-256", bytes);
-      return [...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, "0")).join("");
-    };
-    const applicationRouteInfo = async rawUrl => {
-      try {
-        const parsed = new URL(rawUrl, location.href);
-        const fingerprint = async names => {
-          for (const name of names) {
-            const value = parsed.searchParams.get(name);
-            if (value) return (await digestFingerprint(`${name}:${value}`)).slice(0, 12);
-          }
-          return null;
-        };
-        return {
-          path: parsed.pathname,
-          serverFingerprint: await fingerprint(["serverId", "server"]),
-          channelFingerprint: await fingerprint(["channelId", "channel"]),
-          workspaceFingerprint: await fingerprint(["workspaceId", "workspace"]),
-        };
-      } catch {
-        return { path: "<invalid-url>", serverFingerprint: null, channelFingerprint: null, workspaceFingerprint: null };
-      }
-    };
-    const recordApplicationFrame = (socket, direction, raw, atEpochMs, eventTimestampEpochMs = null) => {
-      const pending = (async () => {
-        if (typeof raw !== "string") return;
-        let frame;
-        try { frame = JSON.parse(raw); } catch { return; }
-        if (!frame || typeof frame !== "object" || Array.isArray(frame)) return;
-        const hasId = Object.hasOwn(frame, "id");
-        const hasResult = Object.hasOwn(frame, "result");
-        const hasError = Object.hasOwn(frame, "error");
-        const method = typeof frame.method === "string" ? frame.method : null;
-        if (!hasId && !hasResult && !hasError && method === null) return;
-        const idFingerprint = hasId ? (await digestFingerprint(frame.id)).slice(0, 16) : null;
-        const routeInfo = await socket.routeInfo;
-        if (appFrames.length >= maxAppFrames) {
-          frameOverflowCount += 1;
-          return;
-        }
-        appFrames.push({
-          pageId,
-          direction,
-          socketId: socket.socketId,
-          ...routeInfo,
-          method,
-          rpcIdFingerprint: idFingerprint,
-          hasId,
-          hasResult,
-          hasError,
-          atEpochMs: Number(atEpochMs.toFixed(3)),
-          eventTimestampEpochMs: Number.isFinite(eventTimestampEpochMs) ? Number(eventTimestampEpochMs.toFixed(3)) : null,
-        });
-        storeAppEvidence();
-      })();
-      pendingAppFrameWrites.add(pending);
-      void pending.finally(() => pendingAppFrameWrites.delete(pending));
-    };
-    const NativeWebSocket = window.WebSocket;
-    const nativeSend = NativeWebSocket.prototype.send;
-    const socketMetadata = new WeakMap();
-    NativeWebSocket.prototype.send = function phoneUxInstrumentedSend(raw) {
-      const socket = socketMetadata.get(this);
-      if (socket) recordApplicationFrame(socket, "sent", raw, performance.timeOrigin + performance.now());
-      return nativeSend.call(this, raw);
-    };
-    const InstrumentedWebSocket = function PhoneUxInstrumentedWebSocket(...args) {
-      if (!new.target) throw new TypeError("WebSocket constructor requires 'new'");
-      const socket = Reflect.construct(NativeWebSocket, args, NativeWebSocket);
-      const metadata = {
-        pageId,
-        socketId: ++appSocketSequence,
-        routeInfo: applicationRouteInfo(args[0]),
-      };
-      socketMetadata.set(socket, metadata);
-      const pendingSocketCapture = metadata.routeInfo.then(routeInfo => {
-        if (appSockets.length >= maxAppSockets) {
-          socketOverflowCount += 1;
-          return;
-        }
-        appSockets.push({
-          pageId,
-          socketId: metadata.socketId,
-          ...routeInfo,
-          atEpochMs: Number((performance.timeOrigin + performance.now()).toFixed(3)),
-        });
-        storeAppEvidence();
-      });
-      pendingAppFrameWrites.add(pendingSocketCapture);
-      void pendingSocketCapture.finally(() => pendingAppFrameWrites.delete(pendingSocketCapture));
-      socket.addEventListener("message", event => {
-        const callbackEpochMs = performance.timeOrigin + performance.now();
-        const eventTimestampEpochMs = performance.timeOrigin + event.timeStamp;
-        recordApplicationFrame(metadata, "received", event.data, callbackEpochMs, eventTimestampEpochMs);
-      });
-      return socket;
-    };
-    Object.setPrototypeOf(InstrumentedWebSocket, NativeWebSocket);
-    InstrumentedWebSocket.prototype = NativeWebSocket.prototype;
-    window.WebSocket = InstrumentedWebSocket;
-    window.__phoneUxDrainApplicationWebSocketEvidence = async () => {
-      while (pendingAppFrameWrites.size > 0) await Promise.all([...pendingAppFrameWrites]);
-      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-      while (pendingAppFrameWrites.size > 0) await Promise.all([...pendingAppFrameWrites]);
-      const evidence = {
-        pageId,
-        sockets: appSockets.slice(),
-        frames: appFrames.slice(),
-        socketOverflowCount,
-        frameOverflowCount,
-        storageWriteFailureCount,
-        maxSocketsPerPage: maxAppSockets,
-        maxFramesPerPage: maxAppFrames,
-      };
-      appSockets.length = 0;
-      appFrames.length = 0;
-      storeAppEvidence();
-      return evidence;
-    };
-    storeAppEvidence();
-    const absoluteNow = () => performance.timeOrigin + performance.now();
-    const persist = () => {
-      try {
-        sessionStorage.setItem(activeKey, JSON.stringify([...active.values()]));
-        sessionStorage.setItem(completedKey, JSON.stringify([...completed.entries()].slice(-64)));
-        sessionStorage.setItem(debugKey, JSON.stringify(events.slice(-64)));
-      } catch {}
-    };
-    const noteEvent = (measurement, eventType, target) => {
-      events.push({ id: measurement.id, eventType, targetTag: target?.tagName ?? null, targetTestId: target?.getAttribute?.("data-testid") ?? null, at: Number(absoluteNow().toFixed(3)) });
-      if (events.length > 64) events.splice(0, events.length - 64);
-    };
-    const visible = element => {
-      if (!element) return false;
-      const style = getComputedStyle(element);
-      const rect = element.getBoundingClientRect();
-      return style.display !== "none" && style.visibility !== "hidden" && Number(style.opacity || 1) > 0 && rect.width > 0 && rect.height > 0;
-    };
-    const matches = (target, selector) => {
-      if (!(target instanceof Element)) return false;
-      try { return Boolean(target.closest(selector)); } catch { return false; }
-    };
-    const stillReady = measurement => {
-      const element = document.querySelector(measurement.targetSelector);
-      const textMatches = measurement.targetText === undefined || (element?.textContent ?? "").includes(measurement.targetText);
-      if (measurement.requireTargetTransition) {
-        const isVisible = visible(element) && textMatches;
-        if (isVisible) measurement.targetWasVisible = true;
-        return measurement.targetWasVisible === true && !isVisible;
-      }
-      let ready = visible(element) === measurement.targetVisible && (measurement.targetVisible ? textMatches : true);
-      if (measurement.targetValue !== undefined) ready = element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement
-        ? element.value === measurement.targetValue
-        : false;
-      return ready;
-    };
-    const finish = measurement => {
-      if (measurement.startedAt === null || measurement.domReadyAt !== null || !stillReady(measurement)) return;
-      measurement.domReadyAt = absoluteNow();
-      measurement.domReadyMs = Number((measurement.domReadyAt - measurement.startedAt).toFixed(3));
-      requestAnimationFrame(() => requestAnimationFrame(() => {
-        if (!stillReady(measurement)) {
-          measurement.domReadyAt = null;
-          measurement.domReadyMs = null;
-          persist();
-          return;
-        }
-        measurement.finishedAt = absoluteNow();
-        measurement.paintFeedbackMs = Number((measurement.finishedAt - measurement.startedAt).toFixed(3));
-        completed.set(measurement.id, {
-          action: measurement.action ?? null,
-          startedAtEpochMs: measurement.startedAt,
-          domReadyAtEpochMs: measurement.domReadyAt,
-          paintFeedbackAtEpochMs: measurement.finishedAt,
-          domReadyMs: measurement.domReadyMs,
-          paintFeedbackMs: measurement.paintFeedbackMs,
-        });
-        active.delete(measurement.id);
-        persist();
-      }));
-    };
-    window.__phoneUxArm = spec => {
-      active.set(spec.id, { ...spec, startedAt: null, domReadyAt: null, finishedAt: null, domReadyMs: null, paintFeedbackMs: null });
-      persist();
-    };
-    window.__phoneUxMeasure = id => completed.get(id) || null;
-    window.__phoneUxDebug = ids => {
-      const values = Array.isArray(ids) ? ids : [ids];
-      return Object.fromEntries(values.map(id => [id, {
-        active: active.get(id) ?? null,
-        completed: completed.get(id) ?? null,
-        events: events.filter(event => event.id === id),
-        url: location.href,
-      }]));
-    };
-    const begin = (event, eventType) => {
-      for (const measurement of active.values()) {
-        if (measurement.targetValue !== undefined && eventType !== "input") continue;
-        if (measurement.targetValue === undefined && eventType !== "pointerdown") continue;
-        if (measurement.startedAt !== null || !matches(event.target, measurement.sourceSelector)) continue;
-        measurement.startedAt = absoluteNow();
-        measurement.eventType = eventType;
-        noteEvent(measurement, eventType, event.target);
-        persist();
-        if (eventType === "input") finish(measurement);
-      }
-    };
-    document.addEventListener("pointerdown", event => begin(event, "pointerdown"), true);
-    document.addEventListener("click", event => begin(event, "click"), true);
-    document.addEventListener("input", event => begin(event, "input"), true);
-    new MutationObserver(() => {
-      for (const measurement of active.values()) finish(measurement);
-    }).observe(document, { childList: true, subtree: true, attributes: true, characterData: true });
-    for (const measurement of active.values()) finish(measurement);
-    if (typeof PerformanceObserver === "function") {
-      try {
-        new PerformanceObserver(list => {
-          for (const entry of list.getEntries()) longTasks.push({ startTimeMs: Number(entry.startTime.toFixed(3)), durationMs: Number(entry.duration.toFixed(3)) });
-        }).observe({ type: "longtask", buffered: true });
-      } catch {}
-    }
-    window.__phoneUxLongTasks = () => longTasks.slice();
-  }, { pageId });
-}
 
-async function installNetworkInstrumentation(page, pageId, ledger, delayControl, gatewayCalls) {
-  page.on("websocket", socket => {
-    const routeInfo = safeWebSocketRouteInfo(socket.url());
-    const path = routeInfo.path;
-    const socketId = ++ledger.browserSocketSequence;
-    const atMs = round(performance.now());
-    ledger.browserWebSocketPaths.push(path);
-    ledger.browserWebSocketConnections.push({ id: socketId, ...routeInfo, atMs, atEpochMs: round(epochNow()), stage: ledger.currentStage, actionId: ledger.currentActionId });
-    const recordFrame = (direction, event) => {
-      const frame = parseFrame(event?.payload);
-      if (!frame || typeof frame !== "object" || Array.isArray(frame)) return;
-      const method = typeof frame.method === "string" ? frame.method : null;
-      const hasId = Object.hasOwn(frame, "id");
-      const hasResult = Object.hasOwn(frame, "result");
-      const hasError = Object.hasOwn(frame, "error");
-      if (method === null && !hasId && !hasResult && !hasError) return;
-      if (direction === "sent" && method !== null) ledger.browserFrameMethodCounts[method] = (ledger.browserFrameMethodCounts[method] ?? 0) + 1;
-      ledger.browserFrames.push({
-        direction,
-        socketId,
-        ...routeInfo,
-        method,
-        rpcIdFingerprint: hasId ? rpcIdFingerprint(frame.id) : null,
-        hasId,
-        hasResult,
-        hasError,
-        atMs: round(performance.now()),
-        atEpochMs: round(epochNow()),
-        stage: ledger.currentStage,
-        actionId: ledger.currentActionId,
-      });
-    };
-    socket.on("framesent", event => recordFrame("sent", event));
-    socket.on("framereceived", event => recordFrame("received", event));
-  });
-  page.on("request", request => {
-    const path = safePath(request.url());
-    if (mobileApiPath(path).startsWith("/api/")) ledger.requestStarts.set(request, { path, method: request.method(), at: performance.now() });
-  });
-  page.on("response", response => {
-    const request = response.request();
-    const start = ledger.requestStarts.get(request);
-    if (!start) return;
-    ledger.http.push({ path: start.path, method: start.method, status: response.status(), durationMs: round(performance.now() - start.at), configuredDelayMs: delayControl.delayMs ?? 0 });
-  });
-  await page.route("**/api/**", async route => {
-    ledger.pendingHttpResponses += 1;
-    try {
-      const path = safePath(route.request().url());
-      const apiPath = mobileApiPath(path);
-      const method = route.request().method();
-      const routeRequestOrdinal = ++ledger.httpRouteRequestSequence;
-      const requestStartedAtMs = round(performance.now());
-      const requestStartedAtEpochMs = round(epochNow());
-      ledger.httpRouteRequests.push({
-        routeRequestOrdinal,
-        path,
-        apiPath,
-        method,
-        stage: ledger.currentStage,
-        scenario: delayControl.scenarioId ?? null,
-        startedAtMs: requestStartedAtMs,
-        startedAtEpochMs: requestStartedAtEpochMs,
-      });
-      const response = await route.fetch();
-      const jitter = delayControl.responseJitter?.next("http", apiPath) ?? { sampleIndex: null, delayMs: 0 };
-      const configuredDelayMs = sumResponseDelayMs(
-        delayControl.delayMs ?? 0,
-        apiPath === "/api/servers/status" ? (delayControl.statusProbeDelayMs ?? 0) : 0,
-        delayControl.httpPathDelayMs?.[apiPath] ?? 0,
-        jitter.delayMs,
-      );
-      const responsePathHoldStartedAt = performance.now();
-      const responsePathHoldDeadline = responsePathHoldStartedAt + configuredDelayMs;
-      if (configuredDelayMs > 0) await waitUntilPerformanceDeadline(responsePathHoldDeadline);
-      const appliedDelayMs = round(performance.now() - responsePathHoldStartedAt);
-      const injectedStatus = delayControl.httpStatusOverrides?.[apiPath];
-      if (Number.isInteger(injectedStatus)) {
-        await route.fulfill({ response, status: injectedStatus });
-        ledger.injectedHttpStatuses.push({ path, apiPath, status: injectedStatus, stage: ledger.currentStage, scenario: delayControl.scenarioId ?? null });
-      } else {
-        await route.fulfill({ response });
-      }
-      ledger.httpResponsePathDelays.push({
-        routeRequestOrdinal,
-        path,
-        apiPath,
-        method,
-        requestStartedAtMs,
-        requestStartedAtEpochMs,
-        forwardedAtEpochMs: round(epochNow()),
-        configuredDelayMs,
-        jitterSampleIndex: jitter.sampleIndex,
-        jitterDelayMs: jitter.delayMs,
-        appliedDelayMs,
-        status: injectedStatus ?? response.status(),
-        stage: ledger.currentStage,
-        scenario: delayControl.scenarioId ?? null,
-      });
-    } finally {
-      ledger.pendingHttpResponses = Math.max(0, ledger.pendingHttpResponses - 1);
-    }
-  });
-  const methodResponseHoldTimers = new Set();
-  page.on("close", () => {
-    const cancelledHoldCount = methodResponseHoldTimers.size;
-    for (const timer of methodResponseHoldTimers) clearTimeout(timer);
-    methodResponseHoldTimers.clear();
-    ledger.pendingWebSocketDeliveries = Math.max(0, ledger.pendingWebSocketDeliveries - cancelledHoldCount);
-  });
-  await page.routeWebSocket(url => url.pathname.endsWith("/rpc"), socket => {
-    const routeSocketId = ++ledger.routedSocketSequence;
-    const socketUrl = typeof socket.url === "function" ? socket.url() : socket.url;
-    const routeInfo = typeof socketUrl === "string" ? safeWebSocketRouteInfo(socketUrl) : { path: null };
-    ledger.routedWebSocketConnections.push({
-      id: routeSocketId,
-      owningPageId: pageId,
-      ...routeInfo,
-      atMs: round(performance.now()),
-      atEpochMs: round(epochNow()),
-      stage: ledger.currentStage,
-      actionId: ledger.currentActionId,
-    });
-    const upstream = socket.connectToServer();
-    const pendingRpc = new Map();
-    let deliverQueue = Promise.resolve();
-    socket.onMessage(raw => {
-      const frame = parseFrame(raw);
-      if (typeof frame?.method === "string") {
-        const idFingerprint = frame.id !== undefined ? rpcIdFingerprint(frame.id) : null;
-        ledger.rpcMethodCounts[frame.method] = (ledger.rpcMethodCounts[frame.method] ?? 0) + 1;
-        ledger.rpcEvents.push({
-          direction: "request",
-          method: frame.method,
-          rpcIdFingerprint: idFingerprint,
-          hasId: frame.id !== undefined,
-          atMs: round(performance.now()),
-          atEpochMs: round(epochNow()),
-          stage: ledger.currentStage,
-          actionId: ledger.currentActionId,
-          routeSocketId,
-          ...routeInfo,
-        });
-        if (frame.method === "turn/start" && delayControl.scenarioId) {
-          ledger.faultFixtureEvents.push({
-            scenario: delayControl.scenarioId,
-            kind: "turn-start-request",
-            rpcIdFingerprint: idFingerprint,
-            threadIdFingerprint: typeof frame.params?.threadId === "string" ? sha256(frame.params.threadId).slice(0, 16) : null,
-            clientMessageIdFingerprint: typeof frame.params?.clientMessageId === "string" ? sha256(frame.params.clientMessageId).slice(0, 16) : null,
-            routeSocketId,
-            atMs: round(performance.now()),
-            stage: ledger.currentStage,
-          });
-        }
-        if (frame.method === "turn/interrupt" && delayControl.scenarioId) {
-          ledger.faultFixtureEvents.push({
-            scenario: delayControl.scenarioId,
-            kind: "turn-interrupt-request",
-            rpcIdFingerprint: idFingerprint,
-            threadIdFingerprint: typeof frame.params?.threadId === "string" ? sha256(frame.params.threadId).slice(0, 16) : null,
-            turnIdFingerprint: typeof frame.params?.turnId === "string" ? sha256(frame.params.turnId).slice(0, 16) : null,
-            routeSocketId,
-            atMs: round(performance.now()),
-            stage: ledger.currentStage,
-          });
-        }
-        if (frame.method === "turn/start") gatewayCalls.turnStart += 1;
-        if (frame.method === "runtime.models.list") gatewayCalls.modelCatalogRpcRequests += 1;
-        if (frame.id !== undefined) {
-          const receiptRequestIdentity = frame.method === "turn/start"
-            ? delayControl.receiptFixture?.observeTurnStartRequest(frame.params, delayControl.receiptScope, routeSocketId)
-            : null;
-          pendingRpc.set(String(frame.id), {
-            method: frame.method,
-            stage: ledger.currentStage,
-            sentAt: performance.now(),
-            sentAtEpochMs: epochNow(),
-            rpcIdFingerprint: idFingerprint,
-            actionId: ledger.currentActionId,
-            routeSocketId,
-            threadIdFingerprint: typeof frame.params?.threadId === "string" ? sha256(frame.params.threadId).slice(0, 16) : null,
-            turnIdFingerprint: typeof frame.params?.turnId === "string" ? sha256(frame.params.turnId).slice(0, 16) : null,
-            receiptRequestIdentity,
-            ...routeInfo,
-          });
-          ledger.pendingRpcMethodCounts[frame.method] = (ledger.pendingRpcMethodCounts[frame.method] ?? 0) + 1;
-          if (frame.method === "turn/start" && delayControl.turnStartErrorFixture === true) {
-            const request = pendingRpc.get(String(frame.id));
-            const errorFrame = createTurnStartErrorFixtureFrame(frame);
-            const receivedAt = performance.now();
-            const receivedAtEpochMs = epochNow();
-            const configuredDelayMs = sumResponseDelayMs(
-              delayControl.methodResponseHoldMs?.["turn/start"] ?? 0,
-            );
-            const eligibleAt = receivedAt + configuredDelayMs;
-            ledger.pendingWebSocketDeliveries += 1;
-            deliverQueue = deliverQueue
-              .then(async () => {
-                if (configuredDelayMs > 0) await waitUntilPerformanceDeadline(eligibleAt);
-                socket.send(JSON.stringify(errorFrame));
-                const deliveredAt = performance.now();
-                const appliedDelayMs = round(deliveredAt - receivedAt);
-                const fixtureEvent = {
-                  scenario: delayControl.scenarioId ?? "unspecified",
-                  kind: "turn-start-error-fixture",
-                  responseSource: "test-generated request-id-correlated JSON-RPC error at Playwright WebSocket route",
-                  requestIdFingerprint: request.rpcIdFingerprint,
-                  clientMessageIdFingerprint: typeof frame.params?.clientMessageId === "string" ? sha256(frame.params.clientMessageId).slice(0, 16) : null,
-                  threadIdFingerprint: request.threadIdFingerprint,
-                  routeSocketId,
-                  requestIdPreserved: errorFrame.id === frame.id,
-                  errorCode: errorFrame.error.code,
-                  configuredDelayMs,
-                  appliedDelayMs,
-                  stage: request.stage,
-                  atMs: round(deliveredAt),
-                };
-                ledger.websocketFrames += 1;
-                ledger.faultFixtureEvents.push(fixtureEvent);
-                ledger.websocketResponsePathDelays.push({
-                  method: "turn/start",
-                  configuredDelayMs,
-                  appliedDelayMs,
-                  isRpcResponse: true,
-                  rpcIdFingerprint: request.rpcIdFingerprint,
-                  actionId: request.actionId,
-                  routeSocketId,
-                  ...routeInfo,
-                  receivedAtEpochMs: round(receivedAtEpochMs),
-                  forwardedAtEpochMs: round(epochNow()),
-                  stage: request.stage,
-                  scenario: delayControl.scenarioId ?? null,
-                  responseSource: "test-generated request-id-correlated JSON-RPC error; bypasses KCODER_STUDIO_MOCK runMock",
-                });
-                ledger.rpc.push({
-                  method: "turn/start",
-                  rpcIdFingerprint: request.rpcIdFingerprint,
-                  actionId: request.actionId,
-                  routeSocketId,
-                  ...routeInfo,
-                  durationMs: round(deliveredAt - request.sentAt),
-                  configuredDelayMs,
-                  methodResponseHoldMs: configuredDelayMs,
-                  appliedMethodResponseHoldMs: appliedDelayMs,
-                  responsePathAppliedDelayMs: appliedDelayMs,
-                  requestSentAtEpochMs: round(request.sentAtEpochMs),
-                  responseReceivedAtEpochMs: round(receivedAtEpochMs),
-                  responseForwardedAtEpochMs: round(epochNow()),
-                  ok: false,
-                  errorCode: errorFrame.error.code,
-                  responseSource: fixtureEvent.responseSource,
-                });
-                ledger.methodResponseHolds.push({
-                  method: "turn/start",
-                  configuredHoldMs: configuredDelayMs,
-                  measuredHoldMs: appliedDelayMs,
-                  ok: false,
-                  responseSource: "test-generated JSON-RPC error fixture",
-                  scenario: delayControl.scenarioId ?? null,
-                  stage: request.stage,
-                });
-                ledger.rpcEvents.push({
-                  direction: "response-forwarded",
-                  method: "turn/start",
-                  rpcIdFingerprint: request.rpcIdFingerprint,
-                  atMs: round(deliveredAt),
-                  atEpochMs: round(epochNow()),
-                  stage: request.stage,
-                  actionId: request.actionId,
-                  routeSocketId,
-                  ...routeInfo,
-                  ok: false,
-                  errorCode: errorFrame.error.code,
-                  responseSource: "test-generated JSON-RPC error fixture",
-                });
-                pendingRpc.delete(String(frame.id));
-                ledger.pendingRpcMethodCounts["turn/start"] = Math.max(0, (ledger.pendingRpcMethodCounts["turn/start"] ?? 1) - 1);
-              })
-              .catch(() => {
-                ledger.websocketForwardErrors += 1;
-                pendingRpc.delete(String(frame.id));
-                ledger.pendingRpcMethodCounts["turn/start"] = Math.max(0, (ledger.pendingRpcMethodCounts["turn/start"] ?? 1) - 1);
-              })
-              .finally(() => { ledger.pendingWebSocketDeliveries = Math.max(0, ledger.pendingWebSocketDeliveries - 1); });
-            return;
-          }
-          if (frame.method === "turn/receipt/read" && delayControl.receiptFixture) {
-            const request = pendingRpc.get(String(frame.id));
-            const receipt = delayControl.receiptFixture.read(frame.params, delayControl.receiptScope, routeSocketId);
-            const response = { jsonrpc: frame.jsonrpc || "2.0", id: frame.id, result: { receipt } };
-            socket.send(JSON.stringify(response));
-            ledger.rpc.push({
-              method: frame.method,
-              rpcIdFingerprint: idFingerprint,
-              actionId: ledger.currentActionId,
-              routeSocketId,
-              ...routeInfo,
-              durationMs: round(performance.now() - request.sentAt),
-              configuredDelayMs: 0,
-              methodResponseHoldMs: 0,
-              responsePathAppliedDelayMs: 0,
-              responseSource: "in-memory fixture populated from observed isolated mock turn/start response",
-              ok: Boolean(receipt),
-            });
-            ledger.rpcEvents.push({
-              direction: "response-forwarded",
-              method: frame.method,
-              rpcIdFingerprint: idFingerprint,
-              atMs: round(performance.now()),
-              atEpochMs: round(epochNow()),
-              stage: ledger.currentStage,
-              actionId: ledger.currentActionId,
-              routeSocketId,
-              ...routeInfo,
-              responseSource: "in-memory-test-fixture",
-            });
-            ledger.faultFixtureEvents.push({
-              scenario: delayControl.scenarioId ?? "unspecified",
-              kind: "turn-receipt-readback",
-              exactObservedAcceptanceMatched: Boolean(receipt),
-              receiptScopeFingerprint: receipt ? delayControl.receiptFixture.summary().acceptedIdentityFingerprints.find(row => row.threadIdFingerprint === sha256(frame.params?.threadId).slice(0, 16) && row.clientMessageIdFingerprint === sha256(frame.params?.clientMessageId).slice(0, 16))?.scopeFingerprint ?? null : null,
-              threadIdFingerprint: typeof frame.params?.threadId === "string" ? sha256(frame.params.threadId).slice(0, 16) : null,
-              receiptClientMessageIdFingerprint: typeof frame.params?.clientMessageId === "string" ? sha256(frame.params.clientMessageId).slice(0, 16) : null,
-              routeSocketId,
-              receiptFixtureKind: "in-memory isolated mock only; not durable Rust app-server evidence",
-            });
-            pendingRpc.delete(String(frame.id));
-            ledger.pendingRpcMethodCounts[frame.method] = Math.max(0, (ledger.pendingRpcMethodCounts[frame.method] ?? 1) - 1);
-            return;
-          }
-        }
-      }
-      upstream.send(raw);
-    });
-    upstream.onMessage(async raw => {
-      const receivedAt = performance.now();
-      const receivedAtEpochMs = epochNow();
-      let frame = parseFrame(raw);
-      const request = frame?.id !== undefined ? pendingRpc.get(String(frame.id)) : null;
-      const method = request?.method ?? (typeof frame?.method === "string" ? frame.method : "notification");
-      if (delayControl.scenarioId && ["turn/started", "turn/completed"].includes(frame?.method)) {
-        const params = frame.params ?? {};
-        ledger.faultFixtureEvents.push({
-          scenario: delayControl.scenarioId,
-          kind: "turn-lifecycle-upstream-frame",
-          method: frame.method,
-          threadIdFingerprint: typeof params.threadId === "string" ? sha256(params.threadId).slice(0, 16) : null,
-          turnIdFingerprint: typeof params.turnId === "string" ? sha256(params.turnId).slice(0, 16) : null,
-          turnStatus: typeof params.turn?.status === "string" ? params.turn.status : null,
-          routeSocketId,
-          atMs: round(receivedAt),
-          stage: ledger.currentStage,
-          source: "upstream-mock-gateway-frame",
-        });
-      }
-      if (delayControl.scenarioId && request?.method === "turn/interrupt") {
-        ledger.faultFixtureEvents.push({
-          scenario: delayControl.scenarioId,
-          kind: "turn-interrupt-upstream-response",
-          interrupted: frame?.result?.interrupted === true,
-          rpcIdFingerprint: request.rpcIdFingerprint,
-          threadIdFingerprint: request.threadIdFingerprint,
-          turnIdFingerprint: request.turnIdFingerprint,
-          routeSocketId,
-          atMs: round(receivedAt),
-          stage: ledger.currentStage,
-          source: "upstream-mock-gateway-response",
-        });
-      }
-      if (delayControl.threadModelFixture && request && ["thread/read", "thread/resume"].includes(request.method) && frame?.result?.thread) {
-        frame = {
-          ...frame,
-          result: {
-            ...frame.result,
-            thread: { ...frame.result.thread, model: "MiniMax-M3", modelProvider: "kunlunmeta" },
-          },
-        };
-        ledger.faultFixtureEvents.push({
-          scenario: delayControl.scenarioId ?? "unspecified",
-          kind: "typed-thread-model-fixture",
-          method: request.method,
-          modelFixture: "mock-minimax from KCODER_STUDIO_MOCK catalog",
-          routeSocketId,
-        });
-      }
-      if (request?.method === "initialize" && delayControl.testCapabilities && frame?.result?.capabilities) {
-        frame = {
-          ...frame,
-          result: {
-            ...frame.result,
-            capabilities: {
-              ...frame.result.capabilities,
-              experimental: {
-                ...frame.result.capabilities.experimental,
-                ...delayControl.testCapabilities,
-              },
-            },
-          },
-        };
-      }
-      if (request?.method === "turn/start" && delayControl.receiptFixture) {
-        request.receiptAcceptedAtMockResponse = delayControl.receiptFixture.observeTurnStartResponse(request.receiptRequestIdentity, frame, routeSocketId);
-      }
-      const responseJitter = delayControl.responseJitter?.next("rpc", method) ?? { sampleIndex: null, delayMs: 0 };
-      const configuredDelayMs = sumResponseDelayMs(
-        delayControl.delayMs ?? 0,
-        delayControl.methodDelayMs?.[method] ?? 0,
-        responseJitter.delayMs,
-      );
-      const dropResponse = Boolean(request)
-        && delayControl.dropFirstResponseForMethod === method
-        && !ledger.injectedWebSocketResponseDrops.some(row => row.scenario === delayControl.scenarioId && row.method === method);
-      if (dropResponse) {
-        ledger.injectedWebSocketResponseDrops.push({
-          scenario: delayControl.scenarioId ?? "unspecified",
-          method,
-          rpcIdFingerprint: request.rpcIdFingerprint,
-          responseReceivedAtEpochMs: round(receivedAtEpochMs),
-          acceptedObservedFromMockGateway: method === "turn/start" && request.receiptAcceptedAtMockResponse === true,
-          threadIdFingerprint: request.receiptRequestIdentity ? sha256(request.receiptRequestIdentity.threadId).slice(0, 16) : null,
-          clientMessageIdFingerprint: request.receiptRequestIdentity ? sha256(request.receiptRequestIdentity.clientMessageId).slice(0, 16) : null,
-          receiptScopeFingerprint: request.receiptRequestIdentity?.scopeFingerprint ?? null,
-          routeSocketId,
-          responseForwarded: false,
-          transportLayer: "single JSON-RPC response dropped in Playwright WebSocket route; not IP/TCP packet loss",
-        });
-        ledger.rpc.push({
-          method,
-          rpcIdFingerprint: request.rpcIdFingerprint,
-          actionId: request.actionId,
-          routeSocketId,
-          ...routeInfo,
-          durationMs: round(performance.now() - request.sentAt),
-          configuredDelayMs,
-          responsePathAppliedDelayMs: null,
-          responseReceivedAtEpochMs: round(receivedAtEpochMs),
-          responseForwardedAtEpochMs: null,
-          responseDroppedByFixture: true,
-          ok: !frame?.error,
-        });
-        ledger.rpcEvents.push({
-          direction: "response-dropped",
-          method,
-          rpcIdFingerprint: request.rpcIdFingerprint,
-          atMs: round(performance.now()),
-          atEpochMs: round(epochNow()),
-          stage: ledger.currentStage,
-          actionId: request.actionId,
-          routeSocketId,
-          ...routeInfo,
-        });
-        pendingRpc.delete(String(frame.id));
-        ledger.pendingRpcMethodCounts[method] = Math.max(0, (ledger.pendingRpcMethodCounts[method] ?? 1) - 1);
-        if (delayControl.closeAfterDroppedResponse) {
-          ledger.faultFixtureEvents.push({ scenario: delayControl.scenarioId ?? "unspecified", kind: "socket-closed-after-dropped-response", method });
-          recordRoutedWebSocketCloseInvocation(ledger, routeSocketId, { code: 1012, reason: "isolated test reconnect", stage: ledger.currentStage, actionId: ledger.currentActionId });
-          await socket.close({ code: 1012, reason: "isolated test reconnect" });
-        }
-        return;
-      }
-      // The WSS application delay starts when the upstream response frame arrives.
-      const eligibleAt = receivedAt + configuredDelayMs;
-      ledger.pendingWebSocketDeliveries += 1;
-      const deliver = async appliedMethodResponseHoldMs => {
-        ledger.websocketFrames += 1;
-        if (configuredDelayMs > 0) await waitUntilPerformanceDeadline(eligibleAt);
-        socket.send(frame && JSON.stringify(frame) !== String(raw) ? JSON.stringify(frame) : raw);
-        const deliveredAt = performance.now();
-        if (delayControl.scenarioId && ["turn/started", "turn/completed"].includes(frame?.method)) {
-          const params = frame.params ?? {};
-          ledger.faultFixtureEvents.push({
-            scenario: delayControl.scenarioId,
-            kind: "turn-lifecycle-frame",
-            method: frame.method,
-            threadIdFingerprint: typeof params.threadId === "string" ? sha256(params.threadId).slice(0, 16) : null,
-            turnIdFingerprint: typeof params.turnId === "string" ? sha256(params.turnId).slice(0, 16) : null,
-            turnStatus: typeof params.turn?.status === "string" ? params.turn.status : null,
-            routeSocketId,
-            atMs: round(deliveredAt),
-            stage: ledger.currentStage,
-            source: "route-forwarded-to-browser",
-          });
-        }
-        const appliedDelayMs = round(deliveredAt - receivedAt);
-        ledger.websocketResponsePathDelays.push({
-          method,
-          configuredDelayMs,
-          jitterSampleIndex: responseJitter.sampleIndex,
-          jitterDelayMs: responseJitter.delayMs,
-          appliedDelayMs,
-          isRpcResponse: Boolean(request),
-          rpcIdFingerprint: request?.rpcIdFingerprint ?? (frame?.id !== undefined ? rpcIdFingerprint(frame.id) : null),
-          actionId: request?.actionId ?? ledger.currentActionId,
-          routeSocketId,
-          ...routeInfo,
-          receivedAtEpochMs: round(receivedAtEpochMs),
-          forwardedAtEpochMs: round(epochNow()),
-          stage: ledger.currentStage,
-          scenario: delayControl.scenarioId ?? null,
-        });
-        if (request) {
-          ledger.rpc.push({
-            method,
-            rpcIdFingerprint: request.rpcIdFingerprint,
-            actionId: request.actionId,
-            routeSocketId,
-            ...routeInfo,
-            durationMs: round(performance.now() - request.sentAt),
-            configuredDelayMs,
-            methodResponseHoldMs: delayControl.methodResponseHoldMs?.[method] ?? 0,
-            appliedMethodResponseHoldMs,
-            responsePathAppliedDelayMs: appliedDelayMs,
-            requestSentAtEpochMs: round(request.sentAtEpochMs),
-            responseReceivedAtEpochMs: round(receivedAtEpochMs),
-            responseForwardedAtEpochMs: round(epochNow()),
-            ok: !frame?.error,
-            timingBoundary: "browser RPC request to delayed response frame delivery through loopback Gateway; not physical RTT",
-          });
-          if ((delayControl.methodResponseHoldMs?.[method] ?? 0) > 0) ledger.methodResponseHolds.push({
-            method,
-            configuredHoldMs: delayControl.methodResponseHoldMs[method],
-            measuredHoldMs: appliedMethodResponseHoldMs,
-            ok: !frame?.error,
-            scenario: delayControl.scenarioId ?? null,
-            stage: request.stage,
-          });
-          pendingRpc.delete(String(frame.id));
-          ledger.pendingRpcMethodCounts[method] = Math.max(0, (ledger.pendingRpcMethodCounts[method] ?? 1) - 1);
-          ledger.rpcEvents.push({
-            direction: "response-forwarded",
-            method,
-            rpcIdFingerprint: request.rpcIdFingerprint,
-            atMs: round(performance.now()),
-            atEpochMs: round(epochNow()),
-            stage: ledger.currentStage,
-            actionId: request.actionId,
-            routeSocketId,
-            ...routeInfo,
-          });
-        }
-        if (request && delayControl.disconnectAfterMethodResponse === method) {
-          const alreadyClosed = ledger.faultFixtureEvents.some(row => row.scenario === delayControl.scenarioId && row.kind === "socket-closed-after-response");
-          if (!alreadyClosed) {
-            ledger.faultFixtureEvents.push({ scenario: delayControl.scenarioId ?? "unspecified", kind: "socket-closed-after-response", method });
-            recordRoutedWebSocketCloseInvocation(ledger, routeSocketId, { code: 1012, reason: "isolated test reconnect", stage: ledger.currentStage, actionId: ledger.currentActionId });
-            await socket.close({ code: 1012, reason: "isolated test reconnect" });
-          }
-        }
-      };
-      const methodResponseHoldMs = sumResponseDelayMs(delayControl.methodResponseHoldMs?.[method] ?? 0);
-      if (methodResponseHoldMs > 0 && request) {
-        // Keep the original hold duration boundary at upstream-frame receipt.
-        const methodResponseHoldDeadline = receivedAt + methodResponseHoldMs;
-        const timer = setTimeout(() => {
-          methodResponseHoldTimers.delete(timer);
-          void (async () => {
-            await waitUntilPerformanceDeadline(methodResponseHoldDeadline);
-            const measuredHoldMs = round(performance.now() - receivedAt);
-            await deliver(measuredHoldMs);
-          })()
-            .catch(() => { ledger.websocketForwardErrors += 1; })
-            .finally(() => { ledger.pendingWebSocketDeliveries = Math.max(0, ledger.pendingWebSocketDeliveries - 1); });
-        }, Math.max(0, methodResponseHoldDeadline - performance.now()));
-        methodResponseHoldTimers.add(timer);
-        return;
-      }
-      deliverQueue = deliverQueue
-        .then(() => deliver(0))
-        .catch(() => { ledger.websocketForwardErrors += 1; })
-        .finally(() => { ledger.pendingWebSocketDeliveries = Math.max(0, ledger.pendingWebSocketDeliveries - 1); });
-    });
-    socket.onClose(() => {
-      ledger.routedWebSocketCloseEvents.push({
-        routeSocketId,
-        atMs: round(performance.now()),
-        atEpochMs: round(epochNow()),
-        stage: ledger.currentStage,
-        actionId: ledger.currentActionId,
-        pendingRequests: [...pendingRpc.values()].map(request => ({
-          method: request.method,
-          rpcIdFingerprint: request.rpcIdFingerprint,
-          routeSocketId,
-          startedAtEpochMs: round(request.sentAtEpochMs),
-          stage: request.stage,
-          actionId: request.actionId,
-        })),
-      });
-      for (const request of pendingRpc.values()) {
-        ledger.pendingRpcMethodCounts[request.method] = Math.max(0, (ledger.pendingRpcMethodCounts[request.method] ?? 1) - 1);
-      }
-      pendingRpc.clear();
-    });
-  });
-}
+
 
 async function waitForGatewayRpcQuiescence(network, timeoutMs = 30_000, quietMs = 200) {
   const startedAt = performance.now();
@@ -5469,6 +2329,7 @@ function createNetworkLedger() {
     currentAction: null,
     drawerClosedListChecks: [],
     drawerCloseListChecks: [],
+    homeThreadSnapshots: [],
     failedRequests: Object.create(null),
     requestStarts: new WeakMap(),
   };
@@ -5527,6 +2388,7 @@ function summarizeNetwork(network) {
       httpRouteRequests: network.httpRouteRequests,
       httpResponsePathResponses: network.httpResponsePathDelays.map(item => ({
         routeRequestOrdinal: item.routeRequestOrdinal,
+        forwardedAtEpochMs: item.forwardedAtEpochMs,
         apiPath: item.apiPath,
         configuredDelayMs: item.configuredDelayMs,
         jitterDelayMs: item.jitterDelayMs,

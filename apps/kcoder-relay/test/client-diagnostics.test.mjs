@@ -12,7 +12,7 @@ import { startClient, startRegisteredClient } from '../src/client.mjs';
 
 const gatewayId = 'diagnostic-fixture-gateway';
 const secret = 'fixture-control-secret-0123456789-abcdefghijklmnop';
-const pairingToken = 'fixture-pairing-token-0123456789-abcdefghijklmnop';
+const gatewaySecret = 'fixture-pairing-token-0123456789-abcdefghijklmnop';
 const registrationKey = 'fixture-register-key-0123456789-abcdefghijklmnop';
 const channelId = 'a'.repeat(48);
 const correlation = createHash('sha256').update(channelId).digest('hex');
@@ -54,7 +54,7 @@ async function fixture(t, { mode = 'success', registered = false, onDiagnostic }
       registrationRequests += 1;
       request.resume();
       response.writeHead(201, { 'content-type': 'application/json', connection: 'close' });
-      response.end(JSON.stringify({ id: gatewayId, secret, pairingToken, maxConnections: 128, maxBytesPerWindow: 1024 * 1024, trafficWindowMs: 60_000 }));
+      response.end(JSON.stringify({ id: gatewayId, secret, gatewaySecret, maxConnections: 128, maxBytesPerWindow: 1024 * 1024, trafficWindowMs: 60_000 }));
     } else {
       response.writeHead(404, { connection: 'close' });
       response.end();
@@ -118,7 +118,7 @@ async function fixture(t, { mode = 'success', registered = false, onDiagnostic }
     },
   };
   client = registered
-    ? await startRegisteredClient({ ...common, registrationKey, pairingToken, identityFile: join(identityDirectory, 'identity.json') })
+    ? await startRegisteredClient({ ...common, registrationKey, gatewaySecret, identityFile: join(identityDirectory, 'identity.json') })
     : startClient({ ...common, secret, gatewayId });
   let onlineReady = false;
   online.then(() => { onlineReady = true; });
@@ -147,7 +147,7 @@ function checkSafeRecords(events) {
     if (event.correlation !== undefined) assert.equal(event.correlation, correlation);
   }
   const text = JSON.stringify(events);
-  for (const forbidden of [channelId, gatewayId, secret, pairingToken, registrationKey, body, 'http://', 'ws://', '/_relay/']) {
+  for (const forbidden of [channelId, gatewayId, secret, gatewaySecret, registrationKey, body, 'http://', 'ws://', '/_relay/']) {
     assert.ok(!text.includes(forbidden), 'diagnostics must not contain identities, credentials, URL or payload');
   }
 }
@@ -162,7 +162,7 @@ test('invalid diagnostic observer rejects before registration or identity storag
     url: 'http://127.0.0.1:1',
     allowInsecure: true,
     registrationKey,
-    pairingToken,
+    gatewaySecret,
     identityFile,
     onDiagnostic: {},
     fetchImpl: async () => { fetchCalls += 1; throw new Error('registration must not run'); },
@@ -226,3 +226,21 @@ test('throwing observer and absent observer preserve legacy forwarding and clean
     f.close();
   }
 });
+
+
+test('revoked control credentials stop reconnecting', async t => {
+  let attempts = 0
+  const server = createServer()
+  server.on('upgrade', (_request, socket) => {
+    attempts++
+    socket.end('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\nContent-Length: 0\r\n\r\n')
+  })
+  server.listen(0, '127.0.0.1')
+  await once(server, 'listening')
+  const client = startClient({ url: `http://127.0.0.1:${server.address().port}`, allowInsecure: true,
+    secret, gatewayId, retryMs: 10 })
+  t.after(async () => { client.close(); server.close(); await once(server, 'close') })
+  await eventually(() => attempts === 1, 'rejected handshake')
+  await new Promise(resolve => setTimeout(resolve, 100))
+  assert.equal(attempts, 1)
+})

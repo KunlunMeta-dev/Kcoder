@@ -1,11 +1,12 @@
+import { installTestTransport, clearTestTransports } from '@/test/runtime-transport'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 
 const invokeMock = vi.hoisted(() => vi.fn())
-const isTauriMock = vi.hoisted(() => vi.fn(() => false))
+const isGatewayMock = vi.hoisted(() => vi.fn(() => false))
 
-vi.mock('@tauri-apps/api/core', () => ({
+vi.mock('@/lib/runtime-commands', () => ({
   invoke: invokeMock,
-  isTauri: isTauriMock,
+  isGateway: isGatewayMock,
 }))
 
 import { installFrontendRecoveryBridge } from './frontendRecovery'
@@ -13,16 +14,16 @@ import { installFrontendRecoveryBridge } from './frontendRecovery'
 describe('installFrontendRecoveryBridge', () => {
   beforeEach(() => {
     invokeMock.mockReset()
-    isTauriMock.mockReturnValue(false)
+    isGatewayMock.mockReturnValue(false)
     delete window.__KCODER_STUDIO_NATIVE_RESUME_PROBE__
-    delete (window as typeof window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__
+    clearTestTransports()
     vi.spyOn(window, 'requestAnimationFrame').mockImplementation(callback => {
       callback(0)
       return 1
     })
   })
 
-  test('does nothing outside the Tauri app', () => {
+  test('does nothing outside the Gateway app', () => {
     installFrontendRecoveryBridge()
 
     expect(window.__KCODER_STUDIO_NATIVE_RESUME_PROBE__).toBeUndefined()
@@ -30,11 +31,8 @@ describe('installFrontendRecoveryBridge', () => {
   })
 
   test('acknowledges a native resume probe after WebView rendering advances', async () => {
-    Object.defineProperty(window, '__TAURI_INTERNALS__', {
-      configurable: true,
-      value: {},
-    })
-    isTauriMock.mockReturnValue(true)
+    installTestTransport(() => null)
+    isGatewayMock.mockReturnValue(true)
     invokeMock.mockResolvedValue(undefined)
 
     installFrontendRecoveryBridge()

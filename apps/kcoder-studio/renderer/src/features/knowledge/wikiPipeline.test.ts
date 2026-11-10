@@ -15,7 +15,7 @@ import {
   wikiPipelineStageCounts,
 } from './wikiPipeline'
 import { pipelineJob } from './wikiPipeline.test-support'
-import examples from '../../../../shared/generated/examples.json'
+import examples from '../../../../shared/generated/examples.knowledge.json'
 import { isWikiPipelineProgress } from '../../../../shared/generated/contracts'
 
 // QA: public stage-record interpretation, protocol compatibility and diagnostic privacy.

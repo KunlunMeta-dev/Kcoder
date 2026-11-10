@@ -1,3 +1,5 @@
+import { isRuntimeGoalScopeRetired } from '@/kcoder/goalObservationCancellation'
+import { captureAccountContextRevision } from '@/kcoder/accountContextEvents'
 import { updateRuntimeGoalContinuation } from '@/lib/runtime-goal'
 import { useEffect } from 'react'
 import { markRuntimeSubagentsSettled } from '../subagentSteerState'
@@ -38,6 +40,7 @@ export function usePaneSubscription(context: ReturnType<typeof usePaneRestore>) 
     pendingAppliedGuidancesRef,
     interruptedGuidanceIdsRef,
     rebuildingTranscriptRef,
+    showLiveDuringTranscriptLoadRef,
     transcriptGapGenerationRef,
     forceAuthoritativeTranscriptRef,
     rebuildingTranscriptIdentityRef,
@@ -71,12 +74,14 @@ export function usePaneSubscription(context: ReturnType<typeof usePaneRestore>) 
         // Discard the incomplete event suffix and start a new authoritative read.
         // New events arriving during that read use the existing replay/filter gate.
         rebuildingTranscriptRef.current = true
+        showLiveDuringTranscriptLoadRef.current = false
         rebuildingTranscriptIdentityRef.current = target.identityKey
         bufferedTranscriptActionsRef.current = []
         loadedRuntimeTranscriptKeyRef.current = null
         setReceiptTranscriptRevision(revision => revision + 1)
       },
       onMessageAction: action => {
+        if (!active || runtimeTaskLoadTargetRef.current?.identityKey !== target.identityKey) return
         if (action.type === 'assistant_error' && action.subtaskId) {
           const retrySource = lastSubmittedRetryMessageRef.current
           if (retrySource) {
@@ -88,10 +93,12 @@ export function usePaneSubscription(context: ReturnType<typeof usePaneRestore>) 
           if (bufferedTranscriptActionsRef.current.length > 512) {
             transcriptGapGenerationRef.current += 1
             forceAuthoritativeTranscriptRef.current = true
+            showLiveDuringTranscriptLoadRef.current = false
             bufferedTranscriptActionsRef.current = []
             loadedRuntimeTranscriptKeyRef.current = null
             setReceiptTranscriptRevision(revision => revision + 1)
           }
+          if (showLiveDuringTranscriptLoadRef.current) dispatchMessages(action)
           return
         }
         dispatchMessages(action)
@@ -106,12 +113,15 @@ export function usePaneSubscription(context: ReturnType<typeof usePaneRestore>) 
         const goalCreationPending = getRuntimePaneGoalSeed(address)?.creationPending === true
         const requestedGoalRevision = goalRevisionRef.current
         const requestedGoalTargetIdentity = target.identityKey
+        const requestedGoalReader = getRuntimeGoalRef.current
+        const accountCurrent = captureAccountContextRevision()
         const isCurrentGoalRefresh = () =>
           active &&
+          getRuntimeGoalRef.current === requestedGoalReader &&
+          accountCurrent(address.deviceId) &&
           runtimeTaskLoadTargetRef.current?.identityKey === requestedGoalTargetIdentity &&
           requestedGoalRevision === goalRevisionRef.current
-        void getRuntimeGoalRef
-          .current(address)
+        void requestedGoalReader(address)
           .then(response => {
             if (!isCurrentGoalRefresh()) return
             const loadedGoal = response.accepted ? response.goal : null
@@ -139,7 +149,7 @@ export function usePaneSubscription(context: ReturnType<typeof usePaneRestore>) 
             // Archiving, removing, or switching sessions releases the old task's gateway
             // client. The old turn no longer belongs to this pane, so a late goal-request
             // failure is expected cleanup and should not pollute the console.
-            if (!isCurrentGoalRefresh()) return
+            if (!isCurrentGoalRefresh() || isRuntimeGoalScopeRetired(error)) return
             console.error('[KCoder Studio] Runtime goal refresh failed', {
               address: runtimeAddressDebug(address),
               error,
@@ -160,6 +170,7 @@ export function usePaneSubscription(context: ReturnType<typeof usePaneRestore>) 
         const identityKey = target.identityKey
         const replacementGapGeneration = transcriptGapGenerationRef.current
         rebuildingTranscriptRef.current = true
+        showLiveDuringTranscriptLoadRef.current = false
         rebuildingTranscriptIdentityRef.current = identityKey
         bufferedTranscriptActionsRef.current = []
         console.warn('[KCoder Studio] Runtime transport replaced during an active response', {
@@ -332,6 +343,7 @@ export function usePaneSubscription(context: ReturnType<typeof usePaneRestore>) 
     pendingAppliedGuidancesRef,
     rebuildingTranscriptIdentityRef,
     rebuildingTranscriptRef,
+    showLiveDuringTranscriptLoadRef,
     refreshWorkListsRef,
     retrySourceBySubtaskIdRef,
     runtimeTaskLoadTargetRef,

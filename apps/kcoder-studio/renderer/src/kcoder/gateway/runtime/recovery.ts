@@ -1,3 +1,7 @@
+import { isRuntimeDebugEnabled } from '@/lib/diagnosticPreferences'
+import { studioWorkMode } from '@/features/workbench/studioWorkMode'
+import { captureAccountContextRevision } from '../../accountContextEvents'
+import { hookTargetScope } from '../../gatewayHookConfiguration'
 import { computerUseStates } from '../../computerUseState'
 import { safeGatewayFailureDiagnostic } from '../../gatewayRpc'
 import type { GatewayClient } from '../../gatewayRuntimeTypes'
@@ -18,16 +22,60 @@ import {
   text,
 } from './contracts'
 import type { GatewayRuntimeCore } from './core'
-import { createRandomUuid } from '@/lib/random-id'
+import { taskConnectionStatus } from '../../taskConnectionStatus'
+import { redeliverUnsettledSteers } from './turnSteer'
+import { sameWorkspacePath } from '@/lib/workspace-path-identity'
+
+interface SubagentSnapshotOwner {
+  readonly taskId: string
+  readonly serverId: string
+  readonly threadId: string
+  readonly workspacePath: string
+  readonly accountCurrent: (targetId: string) => boolean
+  readonly targetScope: string
+}
 
 export async function resumeTaskOnce(
   this: GatewayRuntimeCore,
   task: GatewayTask
 ): Promise<GatewayClient> {
   if (task.ephemeral) throw new Error('临时会话连接已结束，请重新打开临时聊天')
-  const server = (await this.servers()).find(item => item.id === task.serverId)
-  if (!server) throw new Error(`任务服务器已不存在：${task.serverId}`)
-  const client = await this.connectClient(server, 'runtime', task.workspacePath)
+  const identity = {
+    taskId: task.taskId,
+    serverId: task.serverId,
+    threadId: task.threadId,
+    workspacePath: task.workspacePath,
+  }
+  const retirePreviousTurn = () => {
+    const previous = this.activeTurnByTask.get(identity.taskId)
+    if (!previous) return
+    previous.complete()
+    this.activeTurnByTask.delete(identity.taskId)
+    this.turnText.delete(`${identity.taskId}:${previous.turnId}`)
+    this.turnAttemptIds.delete(`${identity.taskId}:${previous.turnId}`)
+  }
+  const accountCurrent = captureAccountContextRevision()
+  const server = (await this.servers()).find(item => item.id === identity.serverId)
+  if (!server) throw new Error(`任务服务器已不存在：${identity.serverId}`)
+  const targetScope = hookTargetScope(server)
+  const client = await this.connectClient(server, 'runtime', identity.workspacePath)
+  const assertResumeOwner = async () => {
+    const currentTarget = await this.serverForParams({ deviceId: identity.serverId })
+    const currentTask = this.tasks.get(identity.taskId)
+    if (
+      this.disposed ||
+      !accountCurrent(identity.serverId) ||
+      hookTargetScope(currentTarget) !== targetScope ||
+      this.appServerDisconnectedClients.has(client) ||
+      !this.connectionsByClient.has(client) ||
+      this.isRestartingServer(identity.serverId) ||
+      currentTask?.taskId !== identity.taskId ||
+      currentTask.serverId !== identity.serverId ||
+      currentTask.threadId !== identity.threadId ||
+      !sameWorkspacePath(currentTask.workspacePath, identity.workspacePath)
+    )
+      throw new Error('KCoder task ownership changed during resume')
+  }
   const preceding = this.notificationQueueByClient.get(client) ?? Promise.resolve()
   let releaseNotifications!: () => void
   const admission = new Promise<void>(resolve => {
@@ -38,26 +86,38 @@ export async function resumeTaskOnce(
     preceding.then(() => admission)
   )
   try {
+    await assertResumeOwner()
     const result = await client.request<{
       thread?: Record<string, unknown>
       streamContext?: unknown
     }>('thread/resume', {
-      threadId: task.threadId,
+      threadId: identity.threadId,
     })
-    if (text(result.thread?.id) !== task.threadId) {
+    if (text(result.thread?.id) !== identity.threadId) {
       throw new Error('KCoder app-server 恢复了错误的 thread')
     }
     if (this.disposed) throw new Error('KCoder 网关运行时已关闭')
-    if (this.isRestartingServer(task.serverId))
+    if (this.isRestartingServer(identity.serverId))
       throw new Error('KCoder app-server restart is in progress')
+    await preceding
+    await assertResumeOwner()
     const snapshot = record(result.thread)
+    task.studioWorkMode = studioWorkMode(snapshot.studioWorkMode)
+    task.runtimeHandle = { ...task.runtimeHandle, studioWorkMode: task.studioWorkMode }
+    const modeTask = this.tasks.get(identity.taskId)
+    if (modeTask) {
+      modeTask.studioWorkMode = task.studioWorkMode
+      modeTask.runtimeHandle = task.runtimeHandle
+    }
     const summary = parseThreadRunSummary(snapshot.runSummary)
     const activity = threadRunActivity(snapshot.status, summary)
-    if (!this.activeTurnByTask.has(task.taskId)) {
+    const snapshotRunning = transcriptSnapshotRunning(snapshot, undefined)
+    if (summary?.mainTurn === 'idle' || snapshotRunning === false) retirePreviousTurn()
+    if (!this.activeTurnByTask.has(identity.taskId)) {
       task.runSummary = summary
       task.runActivity = activity
-      task.running = transcriptSnapshotRunning(snapshot, task.running) ?? task.running
-      const current = this.tasks.get(task.taskId)
+      task.running = snapshotRunning ?? task.running
+      const current = this.tasks.get(identity.taskId)
       if (current && current !== task) {
         current.runSummary = summary
         current.runActivity = activity
@@ -65,27 +125,28 @@ export async function resumeTaskOnce(
       }
     }
     applyThreadModelSelection(task, record(result.thread))
-    const currentTask = this.tasks.get(task.taskId)
+    const currentTask = this.tasks.get(identity.taskId)
     if (currentTask && currentTask !== task)
       applyThreadModelSelection(currentTask, record(result.thread))
-    await preceding
-    if (
-      this.disposed ||
-      !this.accountClients.has(client) ||
-      this.isRestartingServer(task.serverId) ||
-      this.tasks.get(task.taskId)?.threadId !== task.threadId
-    )
-      throw new Error('KCoder task ownership changed during resume')
-    this.bindTaskClient(task.taskId, client)
-    this.threadByTask.set(task.taskId, task.threadId)
-    this.taskByThread.set(this.threadKey(task.serverId, task.threadId), task.taskId)
+    this.bindTaskClient(identity.taskId, client)
+    const view = [...this.taskViewGenerations].find(([key]) => this.resolveTaskId(key) === identity.taskId)
+    if (view && client.supportsExperimental?.('sessionLifetimeV1') === true) {
+      await client.request('gateway/thread/attach', { threadId: identity.threadId, viewId: view[1].generation })
+      await assertResumeOwner()
+      if (this.taskViewGenerations.get(view[0]) !== view[1]) {
+        await client.request('gateway/thread/detach', { threadId: identity.threadId, viewId: view[1].generation })
+      }
+    }
+
+    this.threadByTask.set(identity.taskId, identity.threadId)
+    this.taskByThread.set(this.threadKey(identity.serverId, identity.threadId), identity.taskId)
     if (
       client.supportsExperimental?.('threadStreamContextV1') === true &&
       this.toolPathPreviews.seedResume(
         result.streamContext,
-        task.serverId,
-        task.taskId,
-        task.threadId,
+        identity.serverId,
+        identity.taskId,
+        identity.threadId,
         client
       )
     ) {
@@ -93,25 +154,24 @@ export async function resumeTaskOnce(
       const turnId = text(active.id)
       if (turnId) {
         const attemptId = String(active.attemptId)
-        this.turnAttemptIds.set(`${task.taskId}:${turnId}`, attemptId)
-        if (this.activeTurnByTask.get(task.taskId)?.turnId !== turnId)
-          this.trackActiveTurn(task.taskId, turnId)
+        if (this.activeTurnByTask.get(identity.taskId)?.turnId !== turnId) {
+          retirePreviousTurn()
+          this.trackActiveTurn(identity.taskId, turnId)
+        }
+        this.turnAttemptIds.set(`${identity.taskId}:${turnId}`, attemptId)
         await emit(EXECUTOR_EVENT, {
           event: 'response.created',
           payload: {
-            taskId: task.taskId,
+            taskId: identity.taskId,
             subtaskId: attemptId,
-            deviceId: task.serverId,
+            turnId,
+            attemptId,
+            deviceId: identity.serverId,
             data: {},
           },
         })
       } else {
-        const previous = this.activeTurnByTask.get(task.taskId)
-        if (previous) {
-          previous.complete()
-          this.activeTurnByTask.delete(task.taskId)
-          this.turnAttemptIds.delete(`${task.taskId}:${previous.turnId}`)
-        }
+        retirePreviousTurn()
       }
     }
   } catch (error) {
@@ -120,47 +180,108 @@ export async function resumeTaskOnce(
   } finally {
     releaseNotifications()
   }
-  await this.emitSubagentSnapshot(task, client)
+  const snapshotTask = {
+    ...task,
+    ...identity,
+    runtimeHandle: { ...task.runtimeHandle },
+  }
+  const snapshotOwner: SubagentSnapshotOwner = {
+    ...identity,
+    accountCurrent,
+    targetScope,
+  }
+  const snapshot = new Promise<void>(resolve => window.setTimeout(resolve, 0))
+    .then(() => this.emitSubagentSnapshot(snapshotTask, client, snapshotOwner))
+    .catch(error => {
+      console.warn('[KCoder] 无法恢复子代理快照', safeGatewayFailureDiagnostic(error))
+    })
+  this.trackAsyncJob(snapshot)
+  if (this.clientByTask.get(identity.taskId) === client) {
+    taskConnectionStatus.clear(this, identity.serverId, identity.taskId, true)
+  }
   return client
 }
 
 export async function emitSubagentSnapshot(
   this: GatewayRuntimeCore,
   task: GatewayTask,
-  client: GatewayClient
+  client: GatewayClient,
+  owner: SubagentSnapshotOwner
 ): Promise<void> {
-  if (client.supportsExperimental?.('agentSteering') !== true) return
-  const result = await client
-    .request<{ agents?: Array<Record<string, unknown>> }>('agent/list', {
-      threadId: task.threadId,
+  if (
+    client.supportsExperimental?.('agentSteering') !== true ||
+    task.taskId !== owner.taskId ||
+    task.serverId !== owner.serverId ||
+    task.threadId !== owner.threadId ||
+    !sameWorkspacePath(task.workspacePath, owner.workspacePath)
+  ) {
+    return
+  }
+  const isLocallyOwned = () => {
+    const currentTask = this.tasks.get(owner.taskId)
+    return (
+      !this.disposed &&
+      owner.accountCurrent(owner.serverId) &&
+      this.clientByTask.get(owner.taskId) === client &&
+      this.connectionsByClient.get(client)?.serverId === owner.serverId &&
+      !this.appServerDisconnectedClients.has(client) &&
+      !this.isRestartingServer(owner.serverId) &&
+      currentTask?.taskId === owner.taskId &&
+      currentTask.serverId === owner.serverId &&
+      currentTask.threadId === owner.threadId &&
+      sameWorkspacePath(currentTask.workspacePath, owner.workspacePath)
+    )
+  }
+  const isCurrentOwner = async () => {
+    if (!isLocallyOwned()) return false
+    const currentTarget = await this.serverForParams({ deviceId: owner.serverId })
+    return isLocallyOwned() && hookTargetScope(currentTarget) === owner.targetScope
+  }
+
+  if (!(await isCurrentOwner())) return
+  let result: { agents?: Array<Record<string, unknown>> }
+  try {
+    result = await client.request<{ agents?: Array<Record<string, unknown>> }>('agent/list', {
+      threadId: owner.threadId,
     })
-    .catch(() => ({ agents: [] }))
+  } catch (error) {
+    console.warn('[KCoder] 无法读取子代理快照', safeGatewayFailureDiagnostic(error))
+    return
+  }
+  if (!(await isCurrentOwner())) return
   for (const rawAgent of Array.isArray(result.agents) ? result.agents : []) {
+    if (!(await isCurrentOwner())) return
     const agent = record(rawAgent)
     const agentId = text(agent.agentId)
     const status = text(agent.status) ?? 'failed'
     const run = record(agent.backgroundRun)
-    if (!this.notificationReplayGuard.canSeedBackgroundRun(run, status, task.serverId)) continue
+    if (!this.notificationReplayGuard.canSeedBackgroundRun(run, status, owner.serverId)) continue
     const queueDepth = finiteNumber(agent.queueDepth)
     if (!agentId) {
       continue
     }
     const agentName = text(agent.agentName) ?? 'spawn_agent'
-    const existingJob = this.backgroundJobById.get(agentId, task.taskId, task.serverId)
+    const existingJob = this.backgroundJobById.get(agentId, owner.taskId, owner.serverId)
     // A reconnect snapshot adds steering state, not a new tool-call identity.
     // Keep the original message target so terminal events update its visible block.
     let job: GatewayBackgroundJob =
-      existingJob?.taskId === task.taskId
+      existingJob?.taskId === owner.taskId
         ? existingJob
         : {
-            taskId: task.taskId,
-            turnId: this.activeTurnByTask.get(task.taskId)?.turnId ?? `${task.threadId}:reconnect`,
+            taskId: owner.taskId,
+            turnId:
+              this.activeTurnByTask.get(owner.taskId)?.turnId ?? `${owner.threadId}:reconnect`,
             toolCallId: text(agent.parentToolCallId) ?? `recovered-${agentId}`,
             toolName: agentName,
-            serverId: task.serverId,
+            serverId: owner.serverId,
           }
     job = { ...job, runId: text(run.runId) ?? existingJob?.runId }
     this.backgroundJobById.set(agentId, job)
+    const restorePreviousJobIfStale = () => {
+      if (this.backgroundJobById.get(agentId, owner.taskId, owner.serverId) !== job) return
+      if (existingJob) this.backgroundJobById.set(agentId, existingJob)
+      else this.backgroundJobById.delete(agentId, job)
+    }
     const terminal = ['completed', 'failed', 'cancelled', 'halted'].includes(status)
     if (terminal && (existingJob || text(agent.parentToolCallId))) {
       await this.emitBackgroundToolLifecycle(
@@ -170,6 +291,10 @@ export async function emitSubagentSnapshot(
       )
     } else if (status === 'paused') {
       await this.emitBackgroundToolLifecycle(agentId, job, 'paused')
+    }
+    if (!(await isCurrentOwner())) {
+      restorePreviousJobIfStale()
+      return
     }
     const turnId = job.turnId
     const headStatus = text(agent.headStatus)
@@ -186,9 +311,9 @@ export async function emitSubagentSnapshot(
     await emit(EXECUTOR_EVENT, {
       event: 'response.subagent.activity',
       payload: {
-        taskId: task.taskId,
+        taskId: owner.taskId,
         subtaskId: turnId,
-        deviceId: task.serverId,
+        deviceId: owner.serverId,
         data: {
           agent_path: agentId,
           agent_id: agentId,
@@ -204,8 +329,12 @@ export async function emitSubagentSnapshot(
         },
       },
     })
+    if (!(await isCurrentOwner())) {
+      restorePreviousJobIfStale()
+      return
+    }
     if (terminal) this.backgroundJobById.delete(agentId, job)
-    this.notificationReplayGuard.seedBackgroundRun(run, status, task.serverId)
+    this.notificationReplayGuard.seedBackgroundRun(run, status, owner.serverId)
   }
 }
 
@@ -215,108 +344,86 @@ export function recoverTaskAfterDisconnect(
   disconnectProjection: Promise<void>
 ): void {
   if (this.disposed || this.isRestartingServer(task.serverId)) return
+  // Recovery belongs to the disconnected address, never a later task rebind.
+  task = { ...task }
+  const questionOwner = {
+    taskId: task.taskId, serverId: task.serverId,
+    threadId: task.threadId, workspacePath: task.workspacePath,
+  }
   const previousRecovery = this.disconnectRecoveryByTask.get(task.taskId)
-  const reconnectBlockId = `runtime-reconnecting-${task.threadId}-${createRandomUuid()}`
-  const reconnectSubtaskId = reconnectBlockId
+  const previousClient = this.clientByTask.get(task.taskId)
+  const mayHaveMissedTurnEvents = this.activeTurnByTask.has(task.taskId)
+  const isCurrent = () => {
+    const current = this.tasks.get(task.taskId)
+    return !this.disposed && !this.isRestartingServer(task.serverId) &&
+      this.disconnectRecoveryByTask.get(task.taskId) === recovery &&
+      current?.taskId === task.taskId && current.serverId === task.serverId &&
+      current.threadId === task.threadId && sameWorkspacePath(current.workspacePath, task.workspacePath)
+  }
   const recovery = Promise.resolve().then(async () => {
     await disconnectProjection
     if (previousRecovery) await previousRecovery.catch(() => undefined)
-    if (
-      this.disposed ||
-      this.isRestartingServer(task.serverId) ||
-      !this.tasks.has(task.taskId) ||
-      this.disconnectRecoveryByTask.get(task.taskId) !== recovery
-    ) {
-      return
-    }
-    await emit(EXECUTOR_EVENT, {
-      event: 'response.block.created',
-      payload: {
-        taskId: task.taskId,
-        subtaskId: reconnectSubtaskId,
-        deviceId: task.serverId,
-        data: {
-          block: {
-            id: reconnectBlockId,
-            type: 'tool',
-            tool_name: 'runtime_reconnecting',
-            toolName: 'runtime_reconnecting',
-            status: 'pending',
-            timestamp: Date.now(),
-          },
-        },
-      },
-    }).catch(error =>
-      console.warn('[KCoder] 无法报告任务重连状态', safeGatewayFailureDiagnostic(error))
-    )
+    if (!isCurrent()) return
     const delays = [0, 250, 750, 1_500]
     let lastError: unknown
     for (const delay of delays) {
-      if (
-        this.disposed ||
-        this.isRestartingServer(task.serverId) ||
-        !this.tasks.has(task.taskId) ||
-        this.disconnectRecoveryByTask.get(task.taskId) !== recovery
-      ) {
-        return
-      }
+      if (!isCurrent()) return
       if (delay > 0) await new Promise(resolve => window.setTimeout(resolve, delay))
-      if (this.isRestartingServer(task.serverId)) return
+      if (!isCurrent()) return
       try {
         const client = await this.resumeTask(task)
-        if (
-          this.clientByTask.get(task.taskId) !== client ||
-          this.disconnectRecoveryByTask.get(task.taskId) !== recovery
-        ) {
+        if (!isCurrent() || this.clientByTask.get(task.taskId) !== client) {
           return
         }
-        await emit(EXECUTOR_EVENT, {
-          event: 'response.block.updated',
-          payload: {
-            taskId: task.taskId,
-            subtaskId: reconnectSubtaskId,
-            deviceId: task.serverId,
-            data: { blockId: reconnectBlockId, updates: { status: 'done' } },
-          },
-        }).catch(error =>
-          console.warn('[KCoder] 无法报告任务重连成功', safeGatewayFailureDiagnostic(error))
-        )
+        if (mayHaveMissedTurnEvents) {
+          await emit(EXECUTOR_EVENT, {
+            event: 'executor.task_stream_gap',
+            payload: { taskId: task.taskId, deviceId: task.serverId },
+          }).catch(error =>
+            console.warn('[KCoder] 无法刷新重连后的会话记录', safeGatewayFailureDiagnostic(error))
+          )
+          if (!isCurrent() || this.clientByTask.get(task.taskId) !== client) return
+        }
+        const currentTask = this.tasks.get(questionOwner.taskId)
+        if (!this.disposed && !this.appServerDisconnectedClients.has(client) &&
+            currentTask?.serverId === questionOwner.serverId &&
+            currentTask.threadId === questionOwner.threadId &&
+            sameWorkspacePath(currentTask.workspacePath, questionOwner.workspacePath)) {
+          // Changes made while disconnected are not replayed by thread/resume.
+          // Recheck capability even if the new connection no longer supports
+          // questions; old cards must retire without replaying an answer.
+          await emit(EXECUTOR_EVENT, { event: 'async-question:refresh', payload: questionOwner })
+            .catch(error => console.warn('[KCoder] 无法刷新恢复任务的提问状态', safeGatewayFailureDiagnostic(error)))
+        }
+        if (!isCurrent() || this.clientByTask.get(task.taskId) !== client) return
+        // Only an exited app-server process can no longer settle a steer; a
+        // dropped transport to a live server still delivers the settlement.
+        if (previousClient && this.appServerDisconnectedClients.has(previousClient)) {
+          await redeliverUnsettledSteers(this, task.taskId, task.serverId).catch(error =>
+            console.warn('[KCoder] 无法重新发送未生效的引导', safeGatewayFailureDiagnostic(error))
+          )
+        }
         return
       } catch (error) {
         lastError = error
       }
     }
+    if (!isCurrent()) return
     console.warn(`[KCoder] 无法自动恢复任务连接 当前任务`, safeGatewayFailureDiagnostic(lastError))
-    await emit(EXECUTOR_EVENT, {
-      event: 'response.block.updated',
-      payload: {
-        taskId: task.taskId,
-        subtaskId: reconnectSubtaskId,
-        deviceId: task.serverId,
-        data: {
-          blockId: reconnectBlockId,
-          updates: {
-            status: 'error',
-            tool_output: '自动重连失败，请手动重新打开任务。',
-            toolOutput: '自动重连失败，请手动重新打开任务。',
-          },
-        },
-      },
-    }).catch(error =>
-      console.warn('[KCoder] 无法报告任务重连失败', safeGatewayFailureDiagnostic(error))
-    )
     throw new Error(
       `自动恢复任务连接失败：${lastError instanceof Error ? lastError.message : String(lastError)}`
     )
   })
   this.disconnectRecoveryByTask.set(task.taskId, recovery)
+  const finishConnectionStatus = taskConnectionStatus.start(this, task.serverId, task.taskId)
   this.trackAsyncJob(recovery)
-  const clearRecovery = () => {
+  const settle = (failed: boolean) => {
+    finishConnectionStatus(failed && isCurrent())
     if (this.disconnectRecoveryByTask.get(task.taskId) === recovery) {
       this.disconnectRecoveryByTask.delete(task.taskId)
     }
   }
-  void recovery.then(clearRecovery, clearRecovery)
+  void recovery.then(() => settle(false), () => settle(true))
 }
 
 export function bindTaskClient(this: GatewayRuntimeCore, taskId: string, client: GatewayClient) {
@@ -366,7 +473,7 @@ export async function projectTaskClientDisconnect(
     computerUseStates.unconfirmed(this, desktopTask.serverId, taskId)
   }
 
-  if (globalThis.localStorage?.getItem('wework:debug-runtime') === '1') {
+  if (isRuntimeDebugEnabled()) {
     console.debug('[KCoder] Background disconnect projection', {
       taskId,
       jobs: [...this.backgroundJobById.entries()]
@@ -457,24 +564,29 @@ export async function projectTaskClientDisconnect(
     }
   }
 
+  const replacement = this.clientByTask.get(taskId)
+  if (replacement && replacement !== client) return
   const active = this.activeTurnByTask.get(taskId)
-  const preserveInternalTurn =
-    active?.internal === true && !this.appServerDisconnectedClients.has(client)
-  if (active && !preserveInternalTurn) {
-    active.complete()
-    this.activeTurnByTask.delete(taskId)
-  }
   const task = this.tasks.get(taskId)
   if (!task) return
-  this.tasks.set(taskId, { ...task, running: preserveInternalTurn, updatedAt: Date.now() })
-  if (active && !preserveInternalTurn) {
-    this.turnText.delete(`${taskId}:${active.turnId}`)
-    this.turnAttemptIds.delete(`${taskId}:${active.turnId}`)
+  // Closing a WebSocket says nothing about whether the app-server stopped its turn.
+  const stopped = task.ephemeral || this.appServerDisconnectedClients.has(client)
+  if (active && !stopped) this.turnText.set(`${taskId}:${active.turnId}`, null)
+  if (stopped) this.tasks.set(taskId, { ...task, running: false, updatedAt: Date.now() })
+  if (active && stopped) {
+    active.complete()
+    this.activeTurnByTask.delete(taskId)
+    const turnKey = `${taskId}:${active.turnId}`
+    const attemptId = this.turnAttemptIds.get(turnKey) ?? active.turnId
+    this.turnText.delete(turnKey)
+    this.turnAttemptIds.delete(turnKey)
     await emit(EXECUTOR_EVENT, {
       event: 'response.failed',
       payload: {
         taskId,
-        subtaskId: active.turnId,
+        subtaskId: attemptId,
+        turnId: active.turnId,
+        attemptId,
         deviceId: task.serverId,
         data: { message: 'KCoder app-server 连接已断开，已停止当前任务' },
       },

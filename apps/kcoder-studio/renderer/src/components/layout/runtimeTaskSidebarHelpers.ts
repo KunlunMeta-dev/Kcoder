@@ -1,4 +1,5 @@
 import type { RuntimeTaskSummary, RuntimeDeviceWorkspace, RuntimeTaskAddress } from '@/types/api'
+import { runtimeTaskOrderTime } from '@/features/workbench/runtimeTaskLifecycle/workListProjection'
 
 export interface RuntimeSidebarTaskItem {
   workspace: RuntimeDeviceWorkspace
@@ -52,13 +53,17 @@ export function getRuntimeChatSidebarTaskItems(
 }
 
 export function sortRuntimeTaskItems(items: RuntimeSidebarTaskItem[]) {
-  return [...items].sort((left, right) => {
-    const leftTime = new Date(getRuntimeTaskSortTime(left.task) || 0).getTime()
-    const rightTime = new Date(getRuntimeTaskSortTime(right.task) || 0).getTime()
-    const normalizedLeftTime = Number.isNaN(leftTime) ? 0 : leftTime
-    const normalizedRightTime = Number.isNaN(rightTime) ? 0 : rightTime
-    return normalizedRightTime - normalizedLeftTime
-  })
+  const times = new Map(
+    items.map(item => [
+      item,
+      runtimeTaskOrderTime(
+        `${item.workspace.deviceId}\u0000${item.task.taskId}`,
+        item.task,
+        getRuntimeTaskSortTime(item.task) ?? 0
+      ),
+    ])
+  )
+  return [...items].sort((left, right) => (times.get(right) ?? 0) - (times.get(left) ?? 0))
 }
 
 export function getVisibleRuntimeSidebarTaskItems(
@@ -127,6 +132,7 @@ export function getRuntimeTaskAddress(
   return {
     deviceId: workspace.deviceId,
     taskId: task.taskId,
+    ...(task.threadId ? { threadId: task.threadId } : {}),
     workspacePath: getRuntimeTaskWorkspacePath(workspace, task),
     ...(task.taskId ? { taskId: task.taskId } : {}),
     ...(task.runtimeHandle ? { runtimeHandle: task.runtimeHandle } : {}),

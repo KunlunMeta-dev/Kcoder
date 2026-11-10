@@ -7,7 +7,7 @@ import { inspectMacApplication, macApplicationPath, verifyMacReleaseManifest, wr
 
 // Model-independent bundle/manifest safety. The ASAR entry reader is injected;
 // its archive decoding and public path checks have their own release tests.
-async function fixture(t) {
+async function fixture(t, arch = 'x64') {
   const root = await mkdtemp(join(tmpdir(), 'kcoder-mac-layout-'));
   t.after(() => rm(root, { recursive: true, force: true }));
   const bundle = join(root, 'KCoder Studio.app');
@@ -17,7 +17,7 @@ async function fixture(t) {
     ['Contents/MacOS/KCoder Studio', 'fixture host'],
     ['Contents/Resources/app.asar', 'fixture asar'],
     ['Contents/Resources/bin/kcoder', 'fixture sidecar'],
-    ['Contents/Resources/bin/chrome/chrome-mac-x64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing', 'fixture browser'],
+    [`Contents/Resources/bin/chrome/chrome-mac-${arch}/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing`, 'fixture browser'],
     ['Contents/Resources/bin/pdf/pdftotext', 'fixture reader'],
     ['Contents/Resources/bin/pdf/xpdfrc', 'fixture character-map configuration'],
     ['Contents/Resources/bin/pdf/.kcoder-pdf.json', '{}'],
@@ -32,10 +32,19 @@ async function fixture(t) {
   await symlink('Versions/Current/Electron Framework', join(framework, 'Electron Framework'));
   await symlink('Versions/Current/Helpers', join(framework, 'Helpers'));
   await symlink('Versions/Current/Resources', join(framework, 'Resources'));
-  const context = { electronPlatformName: 'darwin', appOutDir: root, packager: { appInfo: { productFilename: 'KCoder Studio', id: 'dev.kcoder.studio' }, info: { framework: { version: '42.3.3' } } } };
+  const context = { electronPlatformName: 'darwin', arch: arch === 'arm64' ? 3 : 1, appOutDir: root, packager: { appInfo: { productFilename: 'KCoder Studio', id: 'dev.kcoder.studio' }, info: { framework: { version: '42.3.3' } } } };
   const options = { inspectAsar: async () => ['desktop/main.mjs'], identity: { packagingSource: { commit: 'a'.repeat(40), dirty: false } } };
   return { root, bundle, context, options, put, framework };
 }
+
+test('ARM64 manifest verification retains architecture and rejects a mismatched Chrome tree', async t => {
+  const { bundle, context, options } = await fixture(t, 'arm64');
+  const manifest = await writeMacReleaseManifest(context, options);
+  assert.equal(manifest.hostRuntime.architecture, 'arm64');
+  await verifyMacReleaseManifest(bundle, options);
+  await assert.rejects(verifyMacReleaseManifest(bundle, { ...options, arch: 'x64' }), /architecture/);
+  await assert.rejects(inspectMacApplication(bundle, { ...options, arch: 'x64' }), /missing.*chrome-mac-x64/);
+});
 
 test('macOS manifests cover canonical framework files, explicit links and the full Resources directory', async t => {
   const { bundle, context, options } = await fixture(t);

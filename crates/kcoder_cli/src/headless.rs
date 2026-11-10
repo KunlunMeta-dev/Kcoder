@@ -1,13 +1,18 @@
 use crate::headless_outcome::HeadlessOutcome;
 use anyhow::{Context, Result, bail};
 use futures::StreamExt;
+use kcoder_cli_support::{
+    HeadlessPermissionPrompt, build_identity, engine_event_json, visible_system_notice,
+};
 use kcoder_engine::{BackgroundJobEvent, EngineEvent, QueryEngine};
-use kcoder_permissions::PermissionPrompt;
+use kcoder_state::continuous_work::{ContinuousWorkStore, HostWorkScope};
 use kcoder_state::{GoalStatus, TaskKind, TaskStatus};
+use kcoder_types::continuous_work::{WorkRecord, WorkScope};
 use kcoder_types::{ContentBlock, Message};
 use serde_json::Value;
 use std::collections::BTreeMap;
 use std::io::{self, Write};
+use std::path::Path;
 use std::time::{Duration, Instant};
 use tracing::error;
 
@@ -34,218 +39,6 @@ fn record_orchestrate_turn_outcome(engine: &QueryEngine, events: &[EngineEvent])
     engine.record_orchestrate_continuation_outcome(
         events.iter().any(|event| headless_failure(event).is_some()),
     )
-}
-
-pub(crate) fn engine_event_json(event: EngineEvent) -> Value {
-    match event {
-        EngineEvent::BackgroundScoped { identity, event } => {
-            let mut value = engine_event_json(*event);
-            value["backgroundIdentity"] = serde_json::to_value(identity).unwrap_or(Value::Null);
-            value
-        }
-        EngineEvent::UserMessageAdded => serde_json::json!({"type": "user_message_added"}),
-        EngineEvent::SubagentUserMessageAdded {
-            agent_id,
-            message_id,
-            client_message_id,
-            message_index,
-            text,
-        } => {
-            serde_json::json!({"type":"subagent_user_message_added", "agent_id":agent_id, "message_id":message_id, "client_message_id":client_message_id, "message_index":message_index, "text":text})
-        }
-        EngineEvent::TurnSteerApplied { id } => {
-            serde_json::json!({"type": "turn_steer_applied", "id": id})
-        }
-        EngineEvent::SubagentSteerApplied {
-            agent_id,
-            message_id,
-            queue_depth,
-        } => {
-            serde_json::json!({
-                "type": "subagent_steer_applied",
-                "agent_id": agent_id,
-                "message_id": message_id,
-                "queue_depth": queue_depth,
-            })
-        }
-        EngineEvent::AssistantTextDelta(text) => {
-            serde_json::json!({"type": "assistant_text_delta", "text": text})
-        }
-        EngineEvent::AssistantMessageStarted => {
-            serde_json::json!({"type": "assistant_message_started"})
-        }
-        EngineEvent::AssistantMessageDone => serde_json::json!({"type": "assistant_message_done"}),
-        EngineEvent::AssistantThinkingDelta(text) => {
-            serde_json::json!({"type": "assistant_thinking_delta", "text": text})
-        }
-        EngineEvent::ToolUseStarted { id, name, input } => {
-            serde_json::json!({"type": "tool_use_started", "id": id, "name": name, "input": input})
-        }
-        EngineEvent::ToolExecutionStarted { id, name } => {
-            serde_json::json!({"type": "tool_execution_started", "id": id, "name": name})
-        }
-        EngineEvent::ToolInputReset => serde_json::json!({"type": "tool_input_reset"}),
-        EngineEvent::ToolInputProgress {
-            id,
-            name,
-            chars,
-            lines,
-        } => {
-            let mut event = serde_json::json!({"type": "tool_input_progress", "id": id, "name": name, "chars": chars});
-            if let Some(lines) = lines {
-                event["lines"] = serde_json::to_value(lines).unwrap_or_default();
-            }
-            event
-        }
-        EngineEvent::ToolInputPreview { id, preview } => {
-            serde_json::json!({"type": "tool_input_preview", "id": id, "preview": preview})
-        }
-        EngineEvent::ToolPathPreview {
-            attempt_id,
-            id,
-            path,
-        } => {
-            serde_json::json!({"type": "tool_path_preview", "attempt_id": attempt_id, "id": id, "path": path})
-        }
-        EngineEvent::ToolDenied { id, name, reason } => {
-            serde_json::json!({"type": "tool_denied", "id": id, "name": name, "reason": reason})
-        }
-        EngineEvent::ToolResult { id, name, output } => {
-            let text = output
-                .content
-                .into_iter()
-                .filter_map(|block| match block {
-                    ContentBlock::Text { text } => Some(text),
-                    _ => None,
-                })
-                .collect::<String>();
-            serde_json::json!({"type": "tool_result", "id": id, "name": name, "text": text, "is_error": output.is_error})
-        }
-        EngineEvent::SystemNotice(text) => {
-            serde_json::json!({"type": "system_notice", "text": text})
-        }
-        EngineEvent::ProviderRetry(details) => {
-            let text = details.notice_text();
-            let mut event = serde_json::to_value(details).unwrap_or_else(|_| serde_json::json!({}));
-            if let Some(event) = event.as_object_mut() {
-                event.insert(
-                    "type".to_string(),
-                    Value::String("system_notice".to_string()),
-                );
-                event.insert(
-                    "kind".to_string(),
-                    Value::String("provider_retry".to_string()),
-                );
-                event.insert("text".to_string(), Value::String(text));
-            }
-            crate::build_identity::add_to_json(&mut event);
-            event
-        }
-        EngineEvent::MoaReference {
-            label,
-            text,
-            index,
-            count,
-        } => {
-            serde_json::json!({"type": "moa_reference", "label": label, "text": text, "index": index, "count": count})
-        }
-        EngineEvent::MoaAggregating { aggregator } => {
-            serde_json::json!({"type": "moa_aggregating", "aggregator": aggregator})
-        }
-        EngineEvent::ProviderFailed { message, details } => serde_json::json!({
-            "type": "error",
-            "error": message,
-            "retryable": details.retryable,
-            "resume_safe": details.resume_safe,
-            "retry_after_ms": details.retry_after_ms,
-            "provider_failure": details,
-        }),
-        EngineEvent::Error(error) => {
-            let retryable = crate::headless_outcome::is_retryable_failure(&error);
-            let retry_after_ms = crate::headless_outcome::recommended_retry_after_ms(&error);
-            serde_json::json!({
-                "type": "error",
-                "error": error,
-                "retryable": retryable,
-                "resume_safe": retryable,
-                "retry_after_ms": retry_after_ms,
-            })
-        }
-        EngineEvent::MaxTurnsReached { max_turns, .. } => {
-            serde_json::json!({"type": "max_turns_reached", "max_turns": max_turns})
-        }
-        EngineEvent::StreamAborted { reason } => {
-            serde_json::json!({"type": "stream_aborted", "reason": reason})
-        }
-        EngineEvent::CompactionFailed { error, details } => {
-            let mut event = serde_json::json!({"type": "compaction_failed", "error": error});
-            if let (Some(details), Some(event)) = (details, event.as_object_mut())
-                && let Ok(serde_json::Value::Object(fields)) = serde_json::to_value(details)
-            {
-                event.extend(fields);
-            }
-            crate::build_identity::add_to_json(&mut event);
-            event
-        }
-        EngineEvent::CompactionRecovered { details } => {
-            let mut event = serde_json::json!({"type": "compaction_recovered"});
-            if let (Ok(serde_json::Value::Object(fields)), Some(event)) =
-                (serde_json::to_value(details), event.as_object_mut())
-            {
-                event.extend(fields);
-            }
-            crate::build_identity::add_to_json(&mut event);
-            event
-        }
-        EngineEvent::HookMessage { text, is_error } => {
-            serde_json::json!({"type": "hook_message", "text": text, "is_error": is_error})
-        }
-        EngineEvent::BackgroundJobStarted { id, description } => {
-            serde_json::json!({"type": "background_job_started", "id": id, "description": description})
-        }
-        EngineEvent::BackgroundJobAssociated {
-            id,
-            tool_call_id,
-            run_in_background,
-        } => {
-            serde_json::json!({"type": "background_job_associated", "id": id, "tool_call_id": tool_call_id, "run_in_background": run_in_background})
-        }
-        EngineEvent::BackgroundJobPromoted { id } => {
-            serde_json::json!({"type": "background_job_promoted", "id": id})
-        }
-        EngineEvent::BackgroundJobProgress {
-            id,
-            message,
-            detail,
-            current,
-            total,
-        } => {
-            serde_json::json!({"type": "background_job_progress", "id": id, "message": message, "detail": detail, "current": current, "total": total})
-        }
-        EngineEvent::BackgroundJobCompleted { id, output } => {
-            let text = output
-                .content
-                .into_iter()
-                .filter_map(|block| match block {
-                    ContentBlock::Text { text } => Some(text),
-                    _ => None,
-                })
-                .collect::<String>();
-            serde_json::json!({"type": "background_job_completed", "id": id, "text": text, "is_error": output.is_error})
-        }
-        EngineEvent::BackgroundJobFailed { id, error } => {
-            serde_json::json!({"type": "background_job_failed", "id": id, "error": error})
-        }
-        EngineEvent::BackgroundJobPaused { id, reason } => {
-            serde_json::json!({"type": "background_job_paused", "id": id, "reason": reason})
-        }
-        EngineEvent::BackgroundJobHalted { id, reason } => {
-            serde_json::json!({"type": "background_job_halted", "id": id, "reason": reason})
-        }
-        EngineEvent::BackgroundJobCancelled { id, reason } => {
-            serde_json::json!({"type": "background_job_cancelled", "id": id, "reason": reason})
-        }
-    }
 }
 
 fn write_json_line(writer: &mut impl Write, value: &Value) -> Result<()> {
@@ -289,8 +82,242 @@ fn headless_result_event(
     } else {
         outcome.to_json(session_id)
     };
-    crate::build_identity::add_to_json(&mut event);
+    build_identity::add_to_json(&mut event);
     event
+}
+
+/// Upper bound on how many session-bound records one turn boundary reads. A
+/// session normally binds one work; the cap keeps an unexpected binding count
+/// from multiplying whole-store reads.
+const MAX_OBSERVED_WORKS: usize = 4;
+
+/// Longest wait reference copied into a one-line observation.
+const MAX_WAIT_REFERENCE_CHARS: usize = 96;
+
+/// Longest session identity accepted as a work binding key.
+const MAX_SESSION_ID_BYTES: usize = 256;
+
+/// Plain owned projection of one stored work record for `--json` headless
+/// output.
+///
+/// This mirrors the terminal UI projection in
+/// `crates/kcoder_repl/src/work_observation.rs`; the CLI deliberately does not
+/// depend on REPL rendering code, so keep both mappers in step when the stored
+/// record changes. Every value here is a point-in-time observation: a stored
+/// phase is not proof that business work finished, and `result_ready` is not
+/// proof that its required deliveries happened.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct HeadlessWorkObservation {
+    pub(crate) work_id: String,
+    /// Stored phase label (`running`, `waiting_user`, ...); never inferred.
+    pub(crate) phase: String,
+    pub(crate) revision: u64,
+    pub(crate) requirements_revision: u64,
+    /// Waiting condition rendered as `kind (reference)`, as the status line does.
+    pub(crate) waiting: Option<String>,
+    /// Accepted but not yet applied inputs at the observed revision.
+    pub(crate) unconsumed_inputs: Option<u64>,
+    /// Whether the stored result was produced at the observed revision. A stale
+    /// result is not ready; a current one still proves no delivery.
+    pub(crate) result_ready: Option<bool>,
+}
+
+impl HeadlessWorkObservation {
+    fn from_record(record: &WorkRecord) -> Self {
+        let revision = &record.revision;
+        Self {
+            work_id: record.identity.work_id.clone(),
+            phase: record.phase.as_str().to_string(),
+            revision: revision.revision,
+            requirements_revision: revision.requirements_revision,
+            waiting: record.waiting.as_ref().map(|wait| {
+                format!(
+                    "{} ({})",
+                    wait.kind.as_str(),
+                    capped(
+                        &sanitized_control_chars(&wait.reference),
+                        MAX_WAIT_REFERENCE_CHARS
+                    )
+                )
+            }),
+            unconsumed_inputs: Some(
+                revision
+                    .accepted_input_sequence
+                    .saturating_sub(revision.applied_input_sequence),
+            ),
+            result_ready: Some(record.result.as_ref().is_some_and(|result| {
+                let basis = &result.basis;
+                basis.requirements_revision == revision.requirements_revision
+                    && basis.control_epoch == revision.control_epoch
+                    && basis.owner_epoch == revision.owner_epoch
+                    && basis.applied_input_sequence == revision.applied_input_sequence
+            })),
+        }
+    }
+}
+
+/// One bounded, read-only observation of the target store belonging to this
+/// engine's profile, workspace and session.
+///
+/// `None` means no work is bound to this turn, either because no storage exists
+/// or because the store could not be read. An unreadable store is reported on
+/// the diagnostic channel instead of being projected as a guessed phase, so a
+/// consumer never sees a fabricated `work_observation`.
+fn observe_headless_work(engine: &QueryEngine) -> Option<HeadlessWorkObservation> {
+    match read_headless_work(engine) {
+        Ok(observed) => observed,
+        Err(error) => {
+            // JSON stdout stays protocol-only; diagnostics belong on stderr.
+            tracing::warn!(
+                error = %format!("{error:#}"),
+                "continuous work observation unavailable; no work event emitted"
+            );
+            None
+        }
+    }
+}
+
+/// The store is only ever opened with `open_existing`, so a profile that never
+/// ran durable work is never created, repaired or written while observing.
+fn read_headless_work(engine: &QueryEngine) -> Result<Option<HeadlessWorkObservation>> {
+    let workspace = engine.state.cwd();
+    let settings = engine.settings_persistence_path();
+    let Some(profile) = settings.as_deref().and_then(Path::parent) else {
+        // Persistence is disabled for this engine, so there is no target store.
+        return Ok(None);
+    };
+    if !profile.is_dir() {
+        // Durable work lives inside an existing profile; never create one here.
+        return Ok(None);
+    }
+    let Some(store) = ContinuousWorkStore::open_existing(profile)? else {
+        return Ok(None);
+    };
+    // Records may only be attributed through host-resolved account, target and
+    // workspace identities, never through a stored scope string.
+    let host = HostWorkScope::capture(profile, &workspace, None)?;
+    let observed = read_bound_work(&store, host.scope(), &engine.session_id())?;
+    // Recheck the held objects and their names after filesystem I/O; a scope
+    // that changed mid-read cannot be reported as the current one.
+    host.verify()
+        .context("continuous work scope changed during the headless read")?;
+    if engine.state.cwd() != workspace
+        || engine.settings_persistence_path().as_deref() != settings.as_deref()
+    {
+        bail!("continuous work scope changed during the headless read");
+    }
+    Ok(observed)
+}
+
+fn read_bound_work(
+    store: &ContinuousWorkStore,
+    scope: &WorkScope,
+    session_id: &str,
+) -> Result<Option<HeadlessWorkObservation>> {
+    if session_id.is_empty()
+        || session_id.len() > MAX_SESSION_ID_BYTES
+        || session_id.trim() != session_id
+        || session_id.chars().any(char::is_control)
+    {
+        // Without a usable session identity no record is bound to this turn.
+        return Ok(None);
+    }
+    let identities = store.list_for_thread(scope, session_id)?;
+    let mut best: Option<(u64, HeadlessWorkObservation)> = None;
+    let mut failures = 0usize;
+    for identity in identities.iter().take(MAX_OBSERVED_WORKS) {
+        match store.read_work(scope, &identity.work_id) {
+            Ok(Some(record)) => {
+                // Only an explicit binding is considered; a missing timestamp is
+                // unknown, not the Unix epoch.
+                let updated_at = record
+                    .presentation
+                    .as_ref()
+                    .and_then(|presentation| presentation.updated_at_ms)
+                    .unwrap_or(0);
+                if best
+                    .as_ref()
+                    .is_none_or(|(current, _)| updated_at > *current)
+                {
+                    best = Some((updated_at, HeadlessWorkObservation::from_record(&record)));
+                }
+            }
+            Ok(None) => {}
+            Err(_) => failures += 1,
+        }
+    }
+    match best {
+        Some((_, observation)) => Ok(Some(observation)),
+        // An unreadable record must not be downgraded to "no work exists".
+        None if failures > 0 => bail!("continuous work records are unreadable"),
+        None => Ok(None),
+    }
+}
+
+/// The session's current goal, if any. A terminal or paused goal is still the
+/// goal this turn belongs to; its status is not re-derived here.
+fn headless_goal_id(engine: &QueryEngine) -> Option<String> {
+    engine.state.goal().map(|goal| goal.goal_id)
+}
+
+/// One JSONL line per headless turn that has a bound work.
+fn headless_work_observation_event(
+    observation: &HeadlessWorkObservation,
+    goal_id: Option<&str>,
+    attempt_id: Option<&str>,
+) -> Value {
+    let mut event = serde_json::json!({
+        "type": "work_observation",
+        "goal_id": goal_id,
+        "work_id": &observation.work_id,
+        "phase": &observation.phase,
+        "revision": observation.revision,
+        "requirements_revision": observation.requirements_revision,
+        "waiting": &observation.waiting,
+        "unconsumed_inputs": observation.unconsumed_inputs,
+        "result_ready": observation.result_ready,
+    });
+    if let Some(attempt_id) = attempt_id {
+        event["attempt_id"] = Value::String(attempt_id.to_string());
+    }
+    event
+}
+
+/// Read the bound work once at a turn boundary and project its event. `None`
+/// keeps the existing output unchanged for consumers of work-free sessions.
+fn observe_headless_work_event(engine: &QueryEngine) -> Option<(Value, HeadlessWorkObservation)> {
+    let observation = observe_headless_work(engine)?;
+    let goal_id = headless_goal_id(engine);
+    // A headless turn has no accepted attempt identity unless the host bound one
+    // for the current history append; the field is then simply absent.
+    let attempt_id = engine
+        .state
+        .current_history_attempt_identity()
+        .map(|identity| identity.attempt_id);
+    let event =
+        headless_work_observation_event(&observation, goal_id.as_deref(), attempt_id.as_deref());
+    Some((event, observation))
+}
+
+/// Strip control characters from a stored wait reference. The TUI has a richer
+/// sanitizer; this projection only needs a single printable line, which JSON
+/// would otherwise carry as raw escape sequences in a machine field.
+fn sanitized_control_chars(text: &str) -> String {
+    text.chars()
+        .map(|value| if value.is_control() { ' ' } else { value })
+        .collect()
+}
+
+fn capped(text: &str, max_chars: usize) -> String {
+    if text.chars().count() <= max_chars {
+        return text.to_string();
+    }
+    let mut capped = text
+        .chars()
+        .take(max_chars.saturating_sub(1))
+        .collect::<String>();
+    capped.push('…');
+    capped
 }
 
 const MAX_HEADLESS_BACKGROUND_FOLLOWUPS: usize = 32;
@@ -517,17 +544,17 @@ fn headless_background_event_id(event: &EngineEvent) -> Option<&str> {
 fn headless_background_event_summary(event: &EngineEvent) -> Option<String> {
     match event.background_payload() {
         EngineEvent::BackgroundJobCompleted { id, .. } => {
-            Some(format!("background sub-agent `{id}` completed"))
+            Some(format!("background job `{id}` completed"))
         }
         EngineEvent::BackgroundJobFailed { id, error } => {
-            Some(format!("background sub-agent `{id}` failed: {error}"))
+            Some(format!("background job `{id}` failed: {error}"))
         }
         EngineEvent::BackgroundJobHalted { id, reason } => {
-            Some(format!("background sub-agent `{id}` halted: {reason}"))
+            Some(format!("background job `{id}` halted: {reason}"))
         }
-        EngineEvent::BackgroundJobCancelled { id, reason } => Some(format!(
-            "background sub-agent `{id}` was cancelled: {reason}"
-        )),
+        EngineEvent::BackgroundJobCancelled { id, reason } => {
+            Some(format!("background job `{id}` was cancelled: {reason}"))
+        }
         _ => None,
     }
 }
@@ -664,10 +691,11 @@ fn retain_live_background_followups(
 
 fn headless_background_followup_nudge(pending: &BTreeMap<String, String>) -> String {
     format!(
-        "[system] All tracked background sub-agents have finished. Aggregate their results now \
-         using the available `<subagent_notification .../>` entries and output files. Events: {}. \
-         Continue the original task, do not repeat work already delegated to a sub-agent, and do \
-         not give a final conclusion until the relevant results have been inspected.",
+        "[system] All tracked background work has finished. Aggregate the results now using \
+         the available `<subagent_notification .../>`, `<workflow_notification .../>` and \
+         `<task_notification .../>` entries and output files. Events: {}. Continue the original \
+         task, do not repeat work already delegated to background work, and do not give a final \
+         conclusion until the relevant results have been inspected.",
         pending.values().cloned().collect::<Vec<_>>().join(" ")
     )
 }
@@ -745,10 +773,10 @@ fn cancel_headless_for_user(engine: &QueryEngine) {
     engine.state.update_active_goal_status(GoalStatus::Paused);
 }
 
-pub(super) async fn run<P: PermissionPrompt>(
+pub async fn run(
     engine: &QueryEngine,
     prompt: String,
-    prompt_cb: &P,
+    prompt_cb: &HeadlessPermissionPrompt,
     json: bool,
     events: Vec<EngineEvent>,
 ) -> Result<()> {
@@ -817,6 +845,11 @@ pub(super) async fn run<P: PermissionPrompt>(
         // The driver can finish before the owned-job drain. Project remaining
         // work only after that cleanup, preserving the cancelled/failed verdict.
         outcome.finalize(engine);
+        // An interrupted driver discards its own outcome, so re-observe the
+        // bound work once here to keep work identity in the terminal result.
+        if let Some(observation) = observe_headless_work(engine) {
+            outcome.record_work_observation(observation);
+        }
     }
     if json {
         let mut event = headless_result_event(&outcome, false, engine.session_id());
@@ -844,10 +877,10 @@ pub(super) async fn run<P: PermissionPrompt>(
     Ok(())
 }
 
-async fn run_inner<P: PermissionPrompt>(
+async fn run_inner(
     engine: &QueryEngine,
     prompt: String,
-    prompt_cb: &P,
+    prompt_cb: &HeadlessPermissionPrompt,
     json: bool,
     mut events: Vec<EngineEvent>,
 ) -> Result<HeadlessOutcome> {
@@ -915,6 +948,18 @@ async fn run_inner<P: PermissionPrompt>(
                 }
             }
             drop(stream);
+            // One read-only work observation per turn boundary, never per event.
+            // The observation also feeds the terminal result, so the outcome and
+            // the correlation line always describe the same work.
+            if let Some((event, observation)) = observe_headless_work_event(engine) {
+                outcome.record_work_observation(observation);
+                if output_error.is_none()
+                    && let Err(error) = write_json_line(&mut stdout, &event)
+                {
+                    engine.cancel();
+                    output_error = Some(error);
+                }
+            }
             if !orchestrate_turn_failed
                 && output_error.is_none()
                 && let Some((keys, turn_id)) = active_background_followup.take()
@@ -1272,6 +1317,7 @@ async fn run_inner<P: PermissionPrompt>(
                 print!("{}", text);
                 assistant_started = true;
             }
+            EngineEvent::AssistantStopReason { .. } => {}
             EngineEvent::AssistantMessageDone => {
                 if assistant_started {
                     println!();
@@ -1289,7 +1335,9 @@ async fn run_inner<P: PermissionPrompt>(
             | EngineEvent::ToolExecutionStarted { .. } => {
                 // Progress is rendered by the TUI; keep plain headless output concise.
             }
-            EngineEvent::ToolInputPreview { .. } | EngineEvent::ToolPathPreview { .. } => {
+            EngineEvent::WidgetInputPreview { .. }
+            | EngineEvent::ToolInputPreview { .. }
+            | EngineEvent::ToolPathPreview { .. } => {
                 // The following ToolUseStarted event contains the completed input.
             }
             EngineEvent::ToolDenied { name, reason, .. } => {
@@ -1312,7 +1360,7 @@ async fn run_inner<P: PermissionPrompt>(
                 println!("\n{}: {}]\n{}", prefix, name, text);
             }
             EngineEvent::SystemNotice(text) => {
-                println!("\n[{}]", text);
+                println!("\n[{}]", visible_system_notice(&text));
             }
             EngineEvent::ProviderRetry(details) => {
                 println!("\n[{}]", details.notice_text());
@@ -1403,6 +1451,26 @@ async fn run_inner<P: PermissionPrompt>(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn imported_context_notice_carries_a_locale_key_and_readable_legacy_fallback() {
+        let event = super::engine_event_json(kcoder_engine::EngineEvent::SystemNotice(
+            "kcoder.notice.imported_context_legacy_unobserved".into(),
+        ));
+        assert_eq!(
+            event["code"],
+            "kcoder.notice.imported_context_legacy_unobserved"
+        );
+        assert!(
+            event["text"]
+                .as_str()
+                .unwrap()
+                .contains("Current profile notes were not applied")
+        );
+        assert_eq!(
+            super::visible_system_notice("ordinary notice"),
+            "ordinary notice"
+        );
+    }
     use super::*;
     use std::sync::Arc;
 
@@ -1518,8 +1586,8 @@ mod tests {
     fn goal_policy_test_engine(cwd: &std::path::Path) -> QueryEngine {
         let settings = kcoder_config::Settings::default();
         QueryEngine::new_with_folder_trust(
-            Arc::new(crate::tui_dev_mock::MockScenarioProvider::new(
-                crate::tui_dev_mock::TuiDevScenario::FullTurn,
+            Arc::new(kcoder_cli_support::tui_dev_mock::MockScenarioProvider::new(
+                kcoder_cli_support::tui_dev_mock::TuiDevScenario::FullTurn,
             )),
             kcoder_state::AppState::new(cwd),
             kcoder_tools::ToolRegistry::new(),
@@ -1985,5 +2053,480 @@ mod tests {
             EngineEvent::BackgroundJobProgress { detail, .. }
                 if detail.as_deref() == Some("compiling kcoder_cli")
         ));
+    }
+
+    /// Private per-test profile and workspace so the captured work scope belongs
+    /// to this test only. The user's real profile is never opened.
+    struct WorkFixture {
+        _root: tempfile::TempDir,
+        profile: std::path::PathBuf,
+        workspace: std::path::PathBuf,
+        engine: QueryEngine,
+    }
+
+    fn owned_directory(root: &Path, name: &str) -> std::path::PathBuf {
+        let path = root.join(name);
+        std::fs::create_dir_all(&path).unwrap();
+        kcoder_config::set_user_only_dir_permissions(&path).unwrap();
+        path
+    }
+
+    fn work_input_source() -> kcoder_state::continuous_work::WorkInputSource {
+        kcoder_state::continuous_work::WorkInputSource {
+            kind: "foreground".into(),
+            instance_id: "test-instance".into(),
+            conversation_id: "test-conversation".into(),
+        }
+    }
+
+    fn stored_work_record(scope: &WorkScope, work_id: &str, thread_id: &str) -> WorkRecord {
+        let attempt = kcoder_types::TurnAttemptIdentity {
+            thread_id: thread_id.into(),
+            turn_id: format!("turn-{work_id}"),
+            attempt_id: format!("attempt-{work_id}"),
+        };
+        serde_json::from_value(serde_json::json!({
+            "schemaVersion": 1,
+            "identity": {"scope": scope, "workId": work_id},
+            "origin": {"kind": "foreground", "initialAttempt": attempt},
+            "linkedThreadIds": [thread_id],
+            "phase": "pending",
+            "revision": {
+                "revision": 1,
+                "requirementsRevision": 1,
+                "controlEpoch": 0,
+                "ownerEpoch": 0,
+                "acceptedInputSequence": 1,
+                "requiredInputSequence": 1,
+                "appliedInputSequence": 0,
+            },
+        }))
+        .expect("valid work record")
+    }
+
+    /// A waiting record whose result was produced at its own revision, used to
+    /// exercise the projection without touching storage.
+    fn waiting_work_record(scope: &WorkScope, wait_reference: &str) -> WorkRecord {
+        serde_json::from_value(serde_json::json!({
+            "schemaVersion": 1,
+            "identity": {"scope": scope, "workId": "work-waiting"},
+            "origin": {
+                "kind": "foreground",
+                "initialAttempt": {"threadId": "thread-1", "turnId": "turn-1", "attemptId": "attempt-1"},
+            },
+            "linkedThreadIds": ["thread-1"],
+            "phase": "waiting_user",
+            "revision": {
+                "revision": 3,
+                "requirementsRevision": 2,
+                "controlEpoch": 1,
+                "ownerEpoch": 1,
+                "acceptedInputSequence": 2,
+                "requiredInputSequence": 2,
+                "appliedInputSequence": 2,
+            },
+            "waiting": {"kind": "user", "reference": wait_reference},
+            "result": {
+                "resultId": "result-1",
+                "basis": {
+                    "requirementsRevision": 2,
+                    "controlEpoch": 1,
+                    "ownerEpoch": 1,
+                    "appliedInputSequence": 2,
+                },
+                "artifactRefs": ["artifact-1"],
+                "evidenceRefs": [],
+                "requiredDeliveryIds": [],
+            },
+        }))
+        .expect("valid waiting record")
+    }
+
+    impl WorkFixture {
+        fn new() -> Self {
+            let root = tempfile::Builder::new()
+                .prefix("kcoder-headless-work-")
+                .tempdir()
+                .unwrap();
+            let base = root.path().canonicalize().unwrap();
+            let profile = owned_directory(&base, "config");
+            let workspace = owned_directory(&base, "work");
+            let engine = goal_policy_test_engine(&workspace)
+                .with_settings_persistence_path(profile.join("settings.json"));
+            Self {
+                _root: root,
+                profile,
+                workspace,
+                engine,
+            }
+        }
+
+        fn scope(&self) -> WorkScope {
+            HostWorkScope::capture(&self.profile, &self.workspace, None)
+                .expect("private test scope")
+                .scope()
+                .clone()
+        }
+
+        fn admit(&self, work_id: &str) {
+            let scope = self.scope();
+            let store = ContinuousWorkStore::open_or_create(&self.profile).expect("own test store");
+            store
+                .admit(
+                    &scope,
+                    stored_work_record(&scope, work_id, &self.engine.session_id()),
+                    &work_input_source(),
+                    &format!("request-{work_id}"),
+                    serde_json::json!({"text": work_id}),
+                    Vec::new(),
+                )
+                .expect("own test admission");
+        }
+
+        fn state_path(&self) -> std::path::PathBuf {
+            self.profile.join("continuous-work.v1/state.json")
+        }
+    }
+
+    #[test]
+    fn work_observation_event_is_emitted_for_a_bound_work() {
+        let fixture = WorkFixture::new();
+        fixture.admit("work-1");
+
+        let (event, observation) =
+            observe_headless_work_event(&fixture.engine).expect("bound work is observed");
+        assert_eq!(observation.work_id, "work-1");
+        assert_eq!(event["type"], "work_observation");
+        assert_eq!(event["work_id"], "work-1");
+        assert_eq!(event["phase"], "pending");
+        assert_eq!(event["revision"], 1);
+        assert_eq!(event["requirements_revision"], 1);
+        assert!(event["waiting"].is_null());
+        // `admit` records one accepted input that was never applied.
+        assert_eq!(event["unconsumed_inputs"], 1);
+        assert_eq!(event["result_ready"], false);
+        // No goal and no accepted attempt identity for this turn.
+        assert!(event["goal_id"].is_null());
+        assert!(event.get("attempt_id").is_none());
+    }
+
+    #[test]
+    fn work_observation_projects_the_stored_wait_and_result_state() {
+        let fixture = WorkFixture::new();
+        let scope = fixture.scope();
+
+        let observation =
+            HeadlessWorkObservation::from_record(&waiting_work_record(&scope, "message-1"));
+        assert_eq!(observation.work_id, "work-waiting");
+        assert_eq!(observation.phase, "waiting_user");
+        assert_eq!(observation.revision, 3);
+        assert_eq!(observation.requirements_revision, 2);
+        assert_eq!(observation.waiting.as_deref(), Some("user (message-1)"));
+        assert_eq!(observation.unconsumed_inputs, Some(0));
+        assert_eq!(observation.result_ready, Some(true));
+
+        // A control character never reaches the machine-readable field.
+        let control =
+            HeadlessWorkObservation::from_record(&waiting_work_record(&scope, "message\none"));
+        assert_eq!(control.waiting.as_deref(), Some("user (message one)"));
+
+        // A result produced at an older revision is not ready for this one.
+        let mut stale = waiting_work_record(&scope, "message-1");
+        stale.revision.applied_input_sequence += 1;
+        assert_eq!(
+            HeadlessWorkObservation::from_record(&stale).result_ready,
+            Some(false)
+        );
+        let mut without_result = waiting_work_record(&scope, "message-1");
+        without_result.result = None;
+        assert_eq!(
+            HeadlessWorkObservation::from_record(&without_result).result_ready,
+            Some(false)
+        );
+    }
+
+    #[test]
+    fn work_observation_is_absent_without_a_store() {
+        let fixture = WorkFixture::new();
+
+        assert!(observe_headless_work_event(&fixture.engine).is_none());
+        assert!(
+            matches!(
+                ContinuousWorkStore::open_existing(&fixture.profile),
+                Ok(None)
+            ),
+            "observation must not create work storage"
+        );
+    }
+
+    #[test]
+    fn work_observation_is_silent_for_an_unreadable_store() {
+        let fixture = WorkFixture::new();
+        fixture.admit("work-1");
+        // A store another process left unparsable must stay untouched.
+        std::fs::write(fixture.state_path(), b"{ not json").expect("corrupt own store");
+
+        assert!(
+            observe_headless_work_event(&fixture.engine).is_none(),
+            "an unreadable store must not be projected as a guessed phase"
+        );
+        assert_eq!(
+            std::fs::read(fixture.state_path()).expect("read own store"),
+            b"{ not json"
+        );
+    }
+
+    #[test]
+    fn headless_result_carries_work_identity_and_keeps_previous_fields() {
+        let fixture = WorkFixture::new();
+        fixture.admit("work-1");
+        let (_, observation) =
+            observe_headless_work_event(&fixture.engine).expect("bound work is observed");
+
+        let mut baseline = HeadlessOutcome::default();
+        baseline.finalize(&fixture.engine);
+        let baseline = baseline.to_json("session-work".into());
+
+        let mut outcome = HeadlessOutcome::default();
+        outcome.finalize(&fixture.engine);
+        outcome.record_work_observation(observation);
+        let event = outcome.to_json("session-work".into());
+
+        assert_eq!(event["work_id"], "work-1");
+        assert_eq!(event["work_phase"], "pending");
+        assert!(event["waiting"].is_null());
+        assert!(event["goal_id"].is_null());
+        for field in [
+            "type",
+            "subtype",
+            "run_status",
+            "task_status",
+            "termination_reason",
+            "session_id",
+            "timed_out",
+            "retryable",
+            "resume_safe",
+            "nudge_sent",
+            "deliverable_written",
+            "provider_retry_count",
+            "work_remaining",
+        ] {
+            assert_eq!(
+                event[field], baseline[field],
+                "{field} must keep its meaning"
+            );
+        }
+    }
+
+    /// Emit one record through the production writer and return the raw line
+    /// with its parsed form. The contract under test is the emitted byte stream,
+    /// not a `Value` the test assembled itself.
+    fn emitted_json_line(value: &Value) -> (String, Value) {
+        let mut bytes = Vec::new();
+        write_json_line(&mut bytes, value).expect("write one JSONL record");
+        let text = String::from_utf8(bytes).expect("JSONL output is UTF-8");
+        assert!(text.ends_with('\n'), "a record ends with a newline");
+        assert_eq!(
+            text.matches('\n').count(),
+            1,
+            "a record is exactly one line"
+        );
+        let parsed: Value = serde_json::from_str(&text).expect("the emitted line parses");
+        assert_eq!(
+            text,
+            format!(
+                "{}\n",
+                serde_json::to_string(&parsed).expect("re-serialize the parsed line")
+            ),
+            "the emitted bytes are the compact one-line serialization"
+        );
+        (text, parsed)
+    }
+
+    fn sorted_keys(value: &Value) -> Vec<String> {
+        let mut keys = value
+            .as_object()
+            .expect("a headless event is a JSON object")
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>();
+        keys.sort();
+        keys
+    }
+
+    #[test]
+    fn work_observation_line_bytes_match_the_documented_contract() {
+        let fixture = WorkFixture::new();
+        fixture.admit("work-1");
+        let (event, observation) =
+            observe_headless_work_event(&fixture.engine).expect("bound work is observed");
+
+        let (text, parsed) = emitted_json_line(&event);
+        assert_eq!(
+            sorted_keys(&parsed),
+            [
+                "goal_id",
+                "phase",
+                "requirements_revision",
+                "result_ready",
+                "revision",
+                "type",
+                "unconsumed_inputs",
+                "waiting",
+                "work_id",
+            ]
+            .map(str::to_string),
+            "the line carries exactly the documented keys"
+        );
+        assert_eq!(parsed["type"], "work_observation");
+        assert_eq!(parsed["work_id"], observation.work_id);
+        assert_eq!(parsed["work_id"], "work-1");
+        assert_eq!(parsed["phase"], "pending");
+        assert_eq!(parsed["revision"], 1);
+        assert_eq!(parsed["requirements_revision"], 1);
+        // `admit` recorded one accepted input that was never applied.
+        assert_eq!(parsed["unconsumed_inputs"], 1);
+        assert_eq!(parsed["result_ready"], false);
+        assert!(parsed["waiting"].is_null());
+        assert!(parsed["goal_id"].is_null());
+        // `attempt_id` is optional in the contract: absent, not a null field.
+        assert!(!text.contains("attempt_id"));
+    }
+
+    #[test]
+    fn work_observation_line_adds_only_the_bound_attempt_key() {
+        let fixture = WorkFixture::new();
+        let scope = fixture.scope();
+        let observation =
+            HeadlessWorkObservation::from_record(&waiting_work_record(&scope, "message-1"));
+        let event =
+            headless_work_observation_event(&observation, Some("goal-1"), Some("attempt-1"));
+
+        let (_, parsed) = emitted_json_line(&event);
+        assert_eq!(
+            sorted_keys(&parsed),
+            [
+                "attempt_id",
+                "goal_id",
+                "phase",
+                "requirements_revision",
+                "result_ready",
+                "revision",
+                "type",
+                "unconsumed_inputs",
+                "waiting",
+                "work_id",
+            ]
+            .map(str::to_string),
+            "a bound attempt adds its own key and nothing else"
+        );
+        assert_eq!(parsed["type"], "work_observation");
+        assert_eq!(parsed["attempt_id"], "attempt-1");
+        assert_eq!(parsed["goal_id"], "goal-1");
+        assert_eq!(parsed["work_id"], "work-waiting");
+        assert_eq!(parsed["phase"], "waiting_user");
+        assert_eq!(parsed["revision"], 3);
+        assert_eq!(parsed["requirements_revision"], 2);
+        assert_eq!(parsed["waiting"], "user (message-1)");
+        assert_eq!(parsed["unconsumed_inputs"], 0);
+        assert_eq!(parsed["result_ready"], true);
+    }
+
+    #[test]
+    fn terminal_result_line_keeps_previous_bytes_and_names_the_work() {
+        let fixture = WorkFixture::new();
+        fixture.admit("work-1");
+        let (_, observation) =
+            observe_headless_work_event(&fixture.engine).expect("bound work is observed");
+
+        // The work-free result is the pre-existing contract; emit it through the
+        // same writer so both sides are compared as records, not as literals.
+        let mut baseline_outcome = HeadlessOutcome::default();
+        baseline_outcome.finalize(&fixture.engine);
+        let baseline_event =
+            headless_result_event(&baseline_outcome, false, "session-bytes".to_string());
+        let (_, baseline) = emitted_json_line(&baseline_event);
+
+        let mut outcome = HeadlessOutcome::default();
+        outcome.finalize(&fixture.engine);
+        outcome.record_work_observation(observation);
+        let event = headless_result_event(&outcome, false, "session-bytes".to_string());
+        let (_, parsed) = emitted_json_line(&event);
+
+        // The terminal record names the work the observation line named.
+        assert_eq!(parsed["work_id"], "work-1");
+        assert_eq!(parsed["work_phase"], "pending");
+        assert!(parsed["waiting"].is_null());
+        assert!(baseline["work_id"].is_null());
+        assert!(baseline["work_phase"].is_null());
+
+        // No key is added and none is dropped by carrying the identity.
+        assert_eq!(sorted_keys(&parsed), sorted_keys(&baseline));
+        for (key, value) in baseline.as_object().expect("baseline object") {
+            if matches!(key.as_str(), "work_id" | "work_phase") {
+                assert!(value.is_null(), "{key} is null without a bound work");
+                assert!(!parsed[key].is_null(), "{key} is emitted, not null");
+                continue;
+            }
+            // Includes `waiting`, which stays null in both records.
+            assert_eq!(parsed.get(key), Some(value), "{key} must keep its meaning");
+        }
+
+        // The pre-existing field set, stated independently of the baseline so a
+        // removal from both sides cannot pass.
+        for field in [
+            "type",
+            "subtype",
+            "run_status",
+            "task_status",
+            "termination_reason",
+            "session_id",
+            "timed_out",
+            "retryable",
+            "provider_failure",
+            "resume_safe",
+            "nudge_sent",
+            "deliverable_written",
+            "provider_retry_count",
+            "retry_after_ms",
+            "work_remaining",
+            "goal_id",
+            "work_id",
+            "work_phase",
+            "waiting",
+            "version",
+            "build_commit",
+            "build_dirty",
+            "build_time_unix",
+        ] {
+            assert!(parsed.get(field).is_some(), "{field} must still be emitted");
+        }
+        // Conditional fields stay absent on a clean run.
+        assert!(parsed.get("error").is_none());
+        assert!(parsed.get("last_compaction_failure").is_none());
+    }
+
+    #[test]
+    fn headless_result_names_the_goal_the_turn_belongs_to() {
+        let fixture = WorkFixture::new();
+        let goal = fixture
+            .engine
+            .state
+            .set_goal("Carry the work identity into the terminal result", None);
+
+        let mut outcome = HeadlessOutcome::default();
+        outcome.finalize(&fixture.engine);
+        let event = outcome.to_json("session-goal".into());
+
+        assert_eq!(event["goal_id"], goal.goal_id);
+        assert!(
+            event["work_id"].is_null(),
+            "no bound work keeps the work fields null"
+        );
+        assert!(event["work_phase"].is_null());
+        assert!(event["waiting"].is_null());
+        // The verdict still follows the active goal.
+        assert_eq!(event["task_status"], "partial");
+        assert_eq!(event["termination_reason"], "goal_unfinished");
     }
 }

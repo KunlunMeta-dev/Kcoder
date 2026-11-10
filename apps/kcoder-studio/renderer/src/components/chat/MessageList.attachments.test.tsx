@@ -7,15 +7,22 @@ import { WorkspaceMarkdownImageLoaderContext } from './workspaceMarkdownImageLoa
 import { clearPersistentProcessingExpansions } from './blocks/processingExpansionState'
 import '@/i18n'
 
-const tauriCoreMock = vi.hoisted(() => ({
-  convertFileSrc: vi.fn((path: string) => `asset://localhost/${path.replace(/^\/+/, '')}`),
+const runtimeCommandMock = vi.hoisted(() => ({
+  clientResourceUrl: vi.fn((path: string) => `asset://localhost/${path.replace(/^\/+/, '')}`),
   invoke: vi.fn(),
-  isTauri: vi.fn(() => false),
+  isGateway: vi.fn(() => false),
 }))
 const openExternalUrlMock = vi.hoisted(() => vi.fn().mockResolvedValue(true))
 const requestEmbeddedBrowserOpenMock = vi.hoisted(() => vi.fn(() => true))
 
-vi.mock('@tauri-apps/api/core', () => tauriCoreMock)
+vi.mock('@/lib/client-resource-url', () => runtimeCommandMock)
+vi.mock('@/lib/runtime-environment', async original => ({
+  ...(await original<typeof import('@/lib/runtime-environment')>()),
+  isGatewayRuntime: runtimeCommandMock.isGateway,
+}))
+
+vi.mock('@/lib/runtime-commands', () => ({ invoke: runtimeCommandMock.invoke }))
+
 vi.mock('@/lib/external-links', async importOriginal => ({
   ...(await importOriginal<typeof import('@/lib/external-links')>()),
   openExternalUrl: openExternalUrlMock,
@@ -29,7 +36,7 @@ describe('MessageList', () => {
   const originalRevokeObjectUrl = URL.revokeObjectURL
 
   beforeEach(() => {
-    tauriCoreMock.convertFileSrc.mockImplementation(
+    runtimeCommandMock.clientResourceUrl.mockImplementation(
       (path: string) => `asset://localhost/${path.replace(/^\/+/, '')}`
     )
   })
@@ -39,13 +46,13 @@ describe('MessageList', () => {
     clearPersistentProcessingExpansions()
     vi.unstubAllGlobals()
     vi.restoreAllMocks()
-    tauriCoreMock.convertFileSrc
+    runtimeCommandMock.clientResourceUrl
       .mockReset()
       .mockImplementation(
         (path: string) => `asset://localhost/${path.replace(/^\/+/, '')}`
       )
-    tauriCoreMock.invoke.mockReset()
-    tauriCoreMock.isTauri.mockReset().mockReturnValue(false)
+    runtimeCommandMock.invoke.mockReset()
+    runtimeCommandMock.isGateway.mockReset().mockReturnValue(false)
     openExternalUrlMock.mockClear()
     requestEmbeddedBrowserOpenMock.mockClear()
     localStorage.clear()
@@ -283,7 +290,7 @@ describe('MessageList', () => {
     expect(URL.revokeObjectURL).not.toHaveBeenCalled()
   })
 
-  test('renders local path image attachment previews through Tauri asset URLs', async () => {
+  test('renders local path image attachment previews through Gateway asset URLs', async () => {
     vi.stubGlobal('fetch', vi.fn())
 
     const attachment: Attachment = {
@@ -366,49 +373,6 @@ describe('MessageList', () => {
     expect(fetch).not.toHaveBeenCalled()
   })
 
-  test('downloads local path image attachments through the Tauri native command', async () => {
-    vi.stubGlobal('fetch', vi.fn())
-    tauriCoreMock.isTauri.mockReturnValue(true)
-    tauriCoreMock.invoke.mockResolvedValue('/Users/dev/Downloads/screenshot.png')
-
-    const attachment: Attachment = {
-      id: -1,
-      filename: 'screenshot.png',
-      file_size: 0,
-      mime_type: 'image/png',
-      status: 'ready',
-      file_extension: '.png',
-      created_at: '2026-06-26T15:33:00.000+08:00',
-      local_preview_url: '/var/folders/tmp/codex-clipboard/screenshot.png',
-    }
-
-    render(
-      <MessageList
-        messages={[
-          {
-            id: 'local-codex-image',
-            role: 'user',
-            content: '解释一下这张图片',
-            status: 'done',
-            attachments: [attachment],
-            createdAt: '2026-06-26T15:33:00.000+08:00',
-          },
-        ]}
-      />
-    )
-
-    await userEvent.click(await screen.findByTestId('message-image-preview'))
-    await screen.findByTestId('attachment-image-lightbox-image')
-    await userEvent.click(screen.getByTestId('attachment-image-download'))
-
-    await waitFor(() => {
-      expect(tauriCoreMock.invoke).toHaveBeenCalledWith('download_local_file_to_downloads', {
-        sourcePath: '/var/folders/tmp/codex-clipboard/screenshot.png',
-        filename: 'screenshot.png',
-      })
-    })
-    expect(fetch).not.toHaveBeenCalled()
-  })
 
   test('prefers persisted image attachments over stale Codex local image mentions', async () => {
     vi.stubGlobal('fetch', vi.fn())
@@ -554,9 +518,9 @@ describe('MessageList', () => {
     expect(screen.queryByText(/My request for Codex/)).not.toBeInTheDocument()
   })
 
-  test('does not render raw local image paths when Tauri file conversion is unavailable', () => {
-    tauriCoreMock.convertFileSrc.mockImplementation(() => {
-      throw new Error('convertFileSrc unavailable')
+  test('does not render raw local image paths when Gateway file conversion is unavailable', () => {
+    runtimeCommandMock.clientResourceUrl.mockImplementation(() => {
+      throw new Error('clientResourceUrl unavailable')
     })
 
     render(
@@ -612,7 +576,7 @@ describe('MessageList', () => {
     expect(screen.getByTestId('user-message-content')).toHaveTextContent('分析下这个图片')
   })
 
-  test('does not create Tauri asset previews for transient Codex clipboard images', () => {
+  test('does not create Gateway asset previews for transient Codex clipboard images', () => {
     render(
       <MessageList
         messages={[
@@ -636,7 +600,7 @@ describe('MessageList', () => {
 
     expect(screen.queryByTestId('message-local-image-preview')).not.toBeInTheDocument()
     expect(screen.queryByTestId('message-codex-file-mention')).not.toBeInTheDocument()
-    expect(tauriCoreMock.convertFileSrc).not.toHaveBeenCalledWith(
+    expect(runtimeCommandMock.clientResourceUrl).not.toHaveBeenCalledWith(
       expect.stringContaining('codex-clipboard-c73483f7')
     )
     expect(screen.getByTestId('user-message-content')).toHaveTextContent('分析下这个图片')
@@ -711,7 +675,7 @@ describe('MessageList', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
-  test('renders assistant markdown local image paths through Tauri asset URLs', () => {
+  test('renders assistant markdown local image paths through Gateway asset URLs', () => {
     render(
       <MessageList
         messages={[
@@ -734,9 +698,9 @@ describe('MessageList', () => {
   })
 
   test('downloads assistant local Markdown images in Gateway Web without native invoke', async () => {
-    tauriCoreMock.isTauri.mockReturnValue(true)
-    tauriCoreMock.convertFileSrc.mockImplementation(() => {
-      throw new Error('Gateway Web has no native convertFileSrc')
+    runtimeCommandMock.isGateway.mockReturnValue(true)
+    runtimeCommandMock.clientResourceUrl.mockImplementation(() => {
+      throw new Error('Gateway Web has no native clientResourceUrl')
     })
     ;(window as typeof window & { __KCODER_GATEWAY_WEB_SHIM__?: boolean })
       .__KCODER_GATEWAY_WEB_SHIM__ = true
@@ -774,14 +738,14 @@ describe('MessageList', () => {
 
     await waitFor(() => expect(URL.createObjectURL).toHaveBeenCalled())
     expect(loadWorkspaceImage).toHaveBeenCalledWith('result.png')
-    expect(tauriCoreMock.invoke).not.toHaveBeenCalled()
+    expect(runtimeCommandMock.invoke).not.toHaveBeenCalled()
     expect(fetch).not.toHaveBeenCalled()
   })
 
   test('retries the same workspace image path when the active task loader changes', async () => {
-    tauriCoreMock.isTauri.mockReturnValue(true)
-    tauriCoreMock.convertFileSrc.mockImplementation(() => {
-      throw new Error('Gateway Web has no native convertFileSrc')
+    runtimeCommandMock.isGateway.mockReturnValue(true)
+    runtimeCommandMock.clientResourceUrl.mockImplementation(() => {
+      throw new Error('Gateway Web has no native clientResourceUrl')
     })
     ;(window as typeof window & { __KCODER_GATEWAY_WEB_SHIM__?: boolean })
       .__KCODER_GATEWAY_WEB_SHIM__ = true

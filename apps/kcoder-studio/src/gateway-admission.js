@@ -16,20 +16,20 @@ function loopbackHostname(hostname) {
     (isIP(hostname) === 4 && hostname.startsWith('127.'));
 }
 
-export function createGatewayAdmission({ authRequired, publicOrigins, listeningPort, trustedTunnelAuthorities = new Set() }) {
-  const authorities = new Set([...publicOrigins].map(value => new URL(value).host));
-  const proxyPorts = new Set([...publicOrigins].map(value => new URL(value).port).filter(Boolean));
+export function createGatewayAdmission({ authRequired, publicOrigins, listeningPort, trustedTunnelAuthorities = new Set(), retiredAuthorities = new Set() }) {
+  const publicAuthority = authority => [...publicOrigins].some(value => new URL(value).host === authority);
 
   function isAllowedAuthority(authority) {
     const parsed = parseAuthority(authority);
     if (!parsed) return false;
+    if (retiredAuthorities.has(authority)) return false;
     if (trustedTunnelAuthorities.has(authority)) return true;
-    if (authorities.has(authority)) return true;
+    if (publicAuthority(authority)) return true;
     const directPort = parsed.port ? Number(parsed.port) : 80;
     // An unauthenticated listener must prove the host identity as well as the port.
     // Explicit public origins authorize the exact proxy authority, never unrelated hosts sharing its port.
     if (!authRequired) return loopbackHostname(parsed.hostname) && directPort === listeningPort();
-    return directPort === listeningPort() || proxyPorts.has(parsed.port);
+    return directPort === listeningPort() || Boolean(parsed.port && [...publicOrigins].some(value => new URL(value).port === parsed.port));
   }
 
   function isAllowedOrigin(origin, authority) {
@@ -37,7 +37,8 @@ export function createGatewayAdmission({ authRequired, publicOrigins, listeningP
     try {
       const parsed = new URL(origin);
       if (!/^https?:$/.test(parsed.protocol) || parsed.origin !== origin || parsed.host !== authority) return false;
-      if (authorities.has(authority)) return publicOrigins.has(parsed.origin);
+      if (retiredAuthorities.has(authority)) return false;
+      if (publicAuthority(authority)) return publicOrigins.has(parsed.origin);
       return isAllowedAuthority(authority);
     } catch {
       return false;

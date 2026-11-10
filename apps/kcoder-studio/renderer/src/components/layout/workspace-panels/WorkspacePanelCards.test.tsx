@@ -303,6 +303,8 @@ describe('WorkspacePanelCards', () => {
     await userEvent.click(await screen.findByTestId('workspace-terminal-card'))
 
     await waitFor(() => expect(startProjectTerminalMock).toHaveBeenCalledWith(7))
+    // The terminal module loads on demand.
+    await screen.findByTestId('remote-terminal')
     expect(remoteTerminalMocks.render).toHaveBeenCalledWith(
       expect.objectContaining({
         sessionId: 'terminal-1',
@@ -319,6 +321,8 @@ describe('WorkspacePanelCards', () => {
   })
 
   test('restores persisted remote terminal tabs for the workspace', async () => {
+    const legacyKey = 'wework.workspace.remote-terminals.v1:7:device-1:/workspace/projects/project38:configured'
+    const currentKey = 'kcoder.workspace.remote-terminals.v1:7:device-1:/workspace/projects/project38:configured'
     const restoreDeviceTerminal = vi.fn(async () => ({
       session_id: 'gateway-terminal:device-1:persisted-terminal',
       url: '',
@@ -332,7 +336,7 @@ describe('WorkspacePanelCards', () => {
       restoreDeviceTerminal,
     }
     window.localStorage.setItem(
-      'wework.workspace.remote-terminals.v1:7:device-1:/workspace/projects/project38:configured',
+      legacyKey,
       JSON.stringify({
         activeSessionId: 'gateway-terminal:device-1:persisted-terminal',
         sessions: [
@@ -370,6 +374,7 @@ describe('WorkspacePanelCards', () => {
       'gateway-terminal:device-1:persisted-terminal'
     )
     expect(startProjectTerminalMock).not.toHaveBeenCalled()
+    expect(localStorage.getItem(currentKey)).toContain('persisted-terminal')
 
     await userEvent.click(
       screen.getByTestId('remote-terminal-exit-gateway-terminal:device-1:persisted-terminal')
@@ -378,6 +383,8 @@ describe('WorkspacePanelCards', () => {
     await waitFor(() => expect(screen.queryByTestId('remote-terminal')).not.toBeInTheDocument())
     expect(screen.getByTestId('workspace-tool-launcher')).toBeInTheDocument()
     expect(startProjectTerminalMock).not.toHaveBeenCalled()
+    expect(localStorage.getItem(currentKey)).toBeNull()
+    expect(localStorage.getItem(legacyKey)).toBeNull()
   })
 
   test('keeps persisted remote terminals isolated between bottom panel tabs', async () => {
@@ -676,7 +683,7 @@ describe('WorkspacePanelCards', () => {
       })
     )
     expect(getLocalExecutorDeviceIdMock).toHaveBeenCalledWith('/api')
-    expect(screen.getByTestId('embedded-local-terminal')).toHaveAttribute(
+    expect(await screen.findByTestId('embedded-local-terminal')).toHaveAttribute(
       'data-session-id',
       'local-terminal-1'
     )

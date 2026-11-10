@@ -11,6 +11,10 @@ export function allowHttpGatewayForEnvironment(
 export default ({ config }: ConfigContext): ExpoConfig => {
   // Development may connect directly to private HTTP endpoints; production permits HTTPS by default and requires explicit opt-in for HTTP.
   const allowHttpGateway = allowHttpGatewayForEnvironment(process.env);
+  const devBase = process.env.KCODER_STUDIO_MOBILE_DEV_BASE;
+  if (devBase && !/^(?:\/g\/[A-Za-z0-9_-]{1,64})?\/mobile$/.test(devBase)) {
+    throw new Error("Invalid Mobile Web development base");
+  }
   const plugins = appJson.expo.plugins.filter(
     (plugin) =>
       !(Array.isArray(plugin) && plugin[0] === "expo-build-properties"),
@@ -21,7 +25,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     experiments: {
       ...appJson.expo.experiments,
       ...(process.env.KCODER_STUDIO_MOBILE_WEB_DEPLOY === "1"
-        ? { baseUrl: "/__kcoder_mobile_mount_v1__" } : {}),
+        ? { baseUrl: "/__kcoder_mobile_mount_v1__" } : devBase ? { baseUrl: devBase } : {}),
     },
     ios: {
       ...appJson.expo.ios,
@@ -35,6 +39,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
         "expo-build-properties",
         { android: { usesCleartextTraffic: allowHttpGateway } },
       ],
+      "./scripts/plugins/withWebRtcDataChannelOnlyPermissions",
     ],
   } as ExpoConfig;
 };

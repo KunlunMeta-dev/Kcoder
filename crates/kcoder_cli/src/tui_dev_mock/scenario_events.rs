@@ -215,6 +215,20 @@ impl MockScenarioProvider {
     pub(super) fn goal_pro_events(
         request: &MessagesRequest,
     ) -> Vec<Result<StreamEvent, kcoder_api::ApiErrorKind>> {
+        const CREATE_ID: &str = "continuous-work-fixture-create";
+        if request_text_contains(request, "continuous-work-fixture-request") {
+            return if request_has_tool_result(request, CREATE_ID) {
+                mock_assistant_text_events(vec![MockBlock::Text(
+                    "The requested goal is active.".into(),
+                )])
+            } else {
+                mock_assistant_text_events(vec![MockBlock::ToolUse {
+                    id: CREATE_ID.into(),
+                    name: "create_goal".into(),
+                    input: serde_json::json!({"objective":"Complete the requested fixture task"}),
+                }])
+            };
+        }
         const TOOL_ID: &str = "tui-lab-goal-pro-update";
         if request_text_contains(request, "Independently review this Strict Goal")
             || request_text_contains(request, "first line must strictly be PASS")
@@ -420,8 +434,8 @@ impl MockScenarioProvider {
                 id: WRITE_ID.to_string(),
                 name: "write".to_string(),
                 input: serde_json::json!({
-                    "file_path": FILE_PATH,
-                    "content": content
+                    "content": content,
+                    "file_path": FILE_PATH
                 }),
             },
         ], request.path_first_tools)

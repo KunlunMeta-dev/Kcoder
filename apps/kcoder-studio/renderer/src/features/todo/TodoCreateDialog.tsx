@@ -1,3 +1,4 @@
+import { SettingsSelect } from '@/components/settings/SettingsSelect'
 import { useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import {
@@ -142,7 +143,7 @@ export function TodoCreateDialog({
               <span className="truncate text-xs font-semibold text-[#4A5158] dark:text-text-primary">
                 {selectedProject?.name ?? t('todo.no_project', '未选择项目')}
               </span>
-              <select
+              <SettingsSelect
                 data-testid="todo-create-project"
                 value={projectId}
                 onChange={event => setProjectId(Number(event.target.value))}
@@ -154,7 +155,7 @@ export function TodoCreateDialog({
                     {project.name}
                   </option>
                 ))}
-              </select>
+              </SettingsSelect>
               <ChevronDown className="pointer-events-none absolute right-2 h-3 w-3 text-[#818991]" />
             </label>
           </div>
@@ -475,7 +476,7 @@ function PropertySelect({
         {options.find(option => option.value === value)?.label}
       </span>
       <ChevronDown className="ml-auto h-2.5 w-2.5 shrink-0 text-[#9AA1A8]" />
-      <select
+      <SettingsSelect
         data-testid={testId}
         value={value}
         onChange={event => onChange(event.target.value)}
@@ -487,7 +488,7 @@ function PropertySelect({
             {option.label}
           </option>
         ))}
-      </select>
+      </SettingsSelect>
     </label>
   )
 }

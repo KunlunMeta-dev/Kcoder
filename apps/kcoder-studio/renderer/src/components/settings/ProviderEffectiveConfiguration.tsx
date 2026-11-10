@@ -120,7 +120,7 @@ export function ProviderEffectiveConfiguration({
           aria-labelledby={`${id}-${title}-tab`}
           hidden={active !== title}
           data-testid={`provider-${title}`}
-          className="rounded-xl border border-border/60 bg-background p-4"
+          className="studio-card-spacing rounded-xl border border-border/60 bg-background"
         >
           <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
             <h3 className="flex items-center gap-2 font-medium">
@@ -192,7 +192,7 @@ export function ProviderEffectiveConfiguration({
         </div>
       ))}
       {settings.supportsClearUserOverrides && Boolean(settings.clearableUserOverrides?.length) && (
-        <section className="rounded-xl border border-border/60 bg-background p-4">
+        <section className="studio-card-spacing rounded-xl border border-border/60 bg-background">
           <h3 className="mb-3 flex items-center gap-2 font-medium">
             <Settings2 className="size-4" aria-hidden="true" />
             {label('userOverrides')}

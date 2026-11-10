@@ -37,7 +37,19 @@ export interface DesktopSidebarProps {
   imNotificationSettings?: RuntimeIMNotificationSettingsResponse | null
   unreadRuntimeTaskKeys?: ReadonlySet<string>
   preferredDeviceId?: string | null
-  activeItem?: 'chat' | 'todo' | 'plugins' | 'sites' | 'automation' | 'workflows' | 'knowledge'
+  activeItem?:
+    | 'chat'
+    | 'todo'
+    | 'plugins'
+    | 'sites'
+    | 'automation'
+    | 'workflows'
+    | 'knowledge'
+    | 'memory'
+    | 'task-space'
+    | 'experts'
+    | 'channels'
+    | 'personalization'
   collapsed?: boolean
   containerTestId?: string
   hideResizeHandle?: boolean
@@ -45,7 +57,6 @@ export interface DesktopSidebarProps {
   onResizeStateChange?: (resizing: boolean) => void
   onPointerEnter?: PointerEventHandler<HTMLElement>
   onPointerLeave?: PointerEventHandler<HTMLElement>
-  onToggleSidebar?: () => void
   onOpenWorkbench?: () => void
   onOpenTodo?: () => void
   onOpenApps?: () => void

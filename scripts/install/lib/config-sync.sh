@@ -13,12 +13,12 @@ kcoder_sync_development_config() {
     return 1
   }
   mkdir -p "$user_settings_dir"
-  # Development settings from the checkout are the sole source for this profile; replace only the development user layer.
-  rm -f "$user_settings_dir/settings.json"
-
-  "$KCODER_REAL_BIN" --cwd "$sync_cwd" config migrate >/dev/null
-  "$KCODER_REAL_BIN" --cwd "$sync_cwd" \
-    config import --scope user --file "$settings" >/dev/null
+  # Model configuration is owned by the development user profile.
+  if [[ ! -e "$user_settings_dir/settings.json" ]]; then
+    "$KCODER_REAL_BIN" --cwd "$sync_cwd" config migrate >/dev/null
+    "$KCODER_REAL_BIN" --cwd "$sync_cwd" \
+      config import --scope user --file "$settings" >/dev/null
+  fi
   if [[ -f "$env_file" ]]; then
     "$KCODER_REAL_BIN" --cwd "$sync_cwd" \
       auth login --provider kunlunmeta --env-file "$env_file" >/dev/null

@@ -1,0 +1,490 @@
+{
+  "MigrationSourceUploadPrepareParams": {
+    "valid": [
+      {
+        "name": "bounded upload",
+        "value": {
+          "operationId": "11111111-1111-4111-8111-111111111111",
+          "manifest": {
+            "version": 1,
+            "source": "codex",
+            "files": [
+              {
+                "relativePath": "AGENTS.md",
+                "bytes": 4,
+                "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown authority",
+        "value": {
+          "operationId": "11111111-1111-4111-8111-111111111111",
+          "manifest": {
+            "version": 1,
+            "source": "codex",
+            "files": [
+              {
+                "relativePath": "AGENTS.md",
+                "bytes": 4,
+                "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+              }
+            ]
+          },
+          "owner": "forged"
+        }
+      },
+      {
+        "name": "invalid operation identity",
+        "value": {
+          "operationId": "../../somewhere",
+          "manifest": {
+            "version": 1,
+            "source": "codex",
+            "files": [
+              {
+                "relativePath": "AGENTS.md",
+                "bytes": 4,
+                "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+              }
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "MigrationSourceUploadReadParams": {
+    "valid": [
+      {
+        "name": "bounded upload",
+        "value": {
+          "operationId": "11111111-1111-4111-8111-111111111111"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown authority",
+        "value": {
+          "operationId": "11111111-1111-4111-8111-111111111111",
+          "owner": "forged"
+        }
+      },
+      {
+        "name": "invalid operation identity",
+        "value": {
+          "operationId": "../../somewhere"
+        }
+      }
+    ]
+  },
+  "MigrationSourceUploadFilesParams": {
+    "valid": [
+      {
+        "name": "bounded upload",
+        "value": {
+          "operationId": "11111111-1111-4111-8111-111111111111",
+          "cursor": null
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown authority",
+        "value": {
+          "operationId": "11111111-1111-4111-8111-111111111111",
+          "cursor": null,
+          "owner": "forged"
+        }
+      },
+      {
+        "name": "invalid operation identity",
+        "value": {
+          "operationId": "../../somewhere",
+          "cursor": null
+        }
+      }
+    ]
+  },
+  "MigrationSourceUploadPartParams": {
+    "valid": [
+      {
+        "name": "bounded upload",
+        "value": {
+          "operationId": "11111111-1111-4111-8111-111111111111",
+          "cancelWatermark": 0,
+          "fileIndex": 0,
+          "partIndex": 0,
+          "contentBase64": "Ym9keQ=="
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown authority",
+        "value": {
+          "operationId": "11111111-1111-4111-8111-111111111111",
+          "cancelWatermark": 0,
+          "fileIndex": 0,
+          "partIndex": 0,
+          "contentBase64": "Ym9keQ==",
+          "owner": "forged"
+        }
+      },
+      {
+        "name": "invalid operation identity",
+        "value": {
+          "operationId": "../../somewhere",
+          "cancelWatermark": 0,
+          "fileIndex": 0,
+          "partIndex": 0,
+          "contentBase64": "Ym9keQ=="
+        }
+      },
+      {
+        "name": "invalid encoded content",
+        "value": {
+          "operationId": "11111111-1111-4111-8111-111111111111",
+          "cancelWatermark": 0,
+          "fileIndex": 0,
+          "partIndex": 0,
+          "contentBase64": "bad\nbody"
+        }
+      }
+    ]
+  },
+  "MigrationSourceUploadRunParams": {
+    "valid": [
+      {
+        "name": "bounded upload",
+        "value": {
+          "operationId": "11111111-1111-4111-8111-111111111111",
+          "expectedSequence": 0,
+          "cancelWatermark": 0
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown authority",
+        "value": {
+          "operationId": "11111111-1111-4111-8111-111111111111",
+          "expectedSequence": 0,
+          "cancelWatermark": 0,
+          "owner": "forged"
+        }
+      },
+      {
+        "name": "invalid operation identity",
+        "value": {
+          "operationId": "../../somewhere",
+          "expectedSequence": 0,
+          "cancelWatermark": 0
+        }
+      }
+    ]
+  },
+  "MigrationSourceUploadCancelParams": {
+    "valid": [
+      {
+        "name": "bounded upload",
+        "value": {
+          "operationId": "11111111-1111-4111-8111-111111111111",
+          "commandId": "22222222-2222-4222-8222-222222222222"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown authority",
+        "value": {
+          "operationId": "11111111-1111-4111-8111-111111111111",
+          "commandId": "22222222-2222-4222-8222-222222222222",
+          "owner": "forged"
+        }
+      },
+      {
+        "name": "invalid operation identity",
+        "value": {
+          "operationId": "../../somewhere",
+          "commandId": "22222222-2222-4222-8222-222222222222"
+        }
+      }
+    ]
+  },
+  "MigrationSourceUploadStateResult": {
+    "valid": [
+      {
+        "name": "bounded upload",
+        "value": {
+          "upload": {
+            "operationId": "11111111-1111-4111-8111-111111111111",
+            "manifestSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "source": "codex",
+            "stage": "receiving",
+            "sequence": 0,
+            "cancelWatermark": 0,
+            "cancelRequested": false,
+            "workerState": "stopped",
+            "totalFiles": 1,
+            "completedFiles": 0,
+            "totalBytes": 4,
+            "receivedBytes": 4,
+            "verifiedBytes": 0,
+            "errorCode": null
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown authority",
+        "value": {
+          "upload": {
+            "operationId": "11111111-1111-4111-8111-111111111111",
+            "manifestSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "source": "codex",
+            "stage": "receiving",
+            "sequence": 0,
+            "cancelWatermark": 0,
+            "cancelRequested": false,
+            "workerState": "stopped",
+            "totalFiles": 1,
+            "completedFiles": 0,
+            "totalBytes": 4,
+            "receivedBytes": 4,
+            "verifiedBytes": 0,
+            "errorCode": null
+          },
+          "owner": "forged"
+        }
+      }
+    ]
+  },
+  "MigrationSourceUploadFilesResult": {
+    "valid": [
+      {
+        "name": "bounded upload",
+        "value": {
+          "page": {
+            "operationId": "11111111-1111-4111-8111-111111111111",
+            "manifestSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "files": [
+              {
+                "fileIndex": 0,
+                "acceptedBytes": 4,
+                "nextPart": 1,
+                "complete": true
+              }
+            ],
+            "nextCursor": null
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown authority",
+        "value": {
+          "page": {
+            "operationId": "11111111-1111-4111-8111-111111111111",
+            "manifestSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "files": [
+              {
+                "fileIndex": 0,
+                "acceptedBytes": 4,
+                "nextPart": 1,
+                "complete": true
+              }
+            ],
+            "nextCursor": null
+          },
+          "owner": "forged"
+        }
+      }
+    ]
+  },
+  "MigrationSourceProductParams": {
+    "valid": [
+      {
+        "name": "owned uploaded product",
+        "value": {
+          "operationId": "11111111-1111-4111-8111-111111111111",
+          "manifestSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "no path authority",
+        "value": {
+          "operationId": "11111111-1111-4111-8111-111111111111",
+          "manifestSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "path": "/untrusted"
+        }
+      },
+      {
+        "name": "invalid manifest digest",
+        "value": {
+          "operationId": "11111111-1111-4111-8111-111111111111",
+          "manifestSha256": "invalid"
+        }
+      }
+    ]
+  },
+  "MigrationSourceProductRunParams": {
+    "valid": [
+      {
+        "name": "owned uploaded product",
+        "value": {
+          "operationId": "11111111-1111-4111-8111-111111111111",
+          "manifestSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "expectedSequence": 0,
+          "cancelWatermark": 0
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "no path authority",
+        "value": {
+          "operationId": "11111111-1111-4111-8111-111111111111",
+          "manifestSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "expectedSequence": 0,
+          "cancelWatermark": 0,
+          "path": "/untrusted"
+        }
+      },
+      {
+        "name": "invalid manifest digest",
+        "value": {
+          "operationId": "11111111-1111-4111-8111-111111111111",
+          "manifestSha256": "invalid",
+          "expectedSequence": 0,
+          "cancelWatermark": 0
+        }
+      }
+    ]
+  },
+  "MigrationSourceProductCancelParams": {
+    "valid": [
+      {
+        "name": "owned uploaded product",
+        "value": {
+          "operationId": "11111111-1111-4111-8111-111111111111",
+          "manifestSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "commandId": "22222222-2222-4222-8222-222222222222"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "no path authority",
+        "value": {
+          "operationId": "11111111-1111-4111-8111-111111111111",
+          "manifestSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "commandId": "22222222-2222-4222-8222-222222222222",
+          "path": "/untrusted"
+        }
+      },
+      {
+        "name": "invalid manifest digest",
+        "value": {
+          "operationId": "11111111-1111-4111-8111-111111111111",
+          "manifestSha256": "invalid",
+          "commandId": "22222222-2222-4222-8222-222222222222"
+        }
+      }
+    ]
+  },
+  "MigrationSourceProductStateResult": {
+    "valid": [
+      {
+        "name": "owned uploaded product",
+        "value": {
+          "materialization": {
+            "operationId": "11111111-1111-4111-8111-111111111111",
+            "manifestSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "source": "codex",
+            "stage": "verifying",
+            "sequence": 0,
+            "cancelWatermark": 0,
+            "cancelRequested": false,
+            "workerState": "running",
+            "totalFiles": 1,
+            "completedFiles": 0,
+            "totalBytes": 4,
+            "receivedBytes": 4,
+            "verifiedBytes": 0,
+            "errorCode": null
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "no path authority",
+        "value": {
+          "materialization": {
+            "operationId": "11111111-1111-4111-8111-111111111111",
+            "manifestSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "source": "codex",
+            "stage": "verifying",
+            "sequence": 0,
+            "cancelWatermark": 0,
+            "cancelRequested": false,
+            "workerState": "running",
+            "totalFiles": 1,
+            "completedFiles": 0,
+            "totalBytes": 4,
+            "receivedBytes": 4,
+            "verifiedBytes": 0,
+            "errorCode": null
+          },
+          "path": "/untrusted"
+        }
+      }
+    ]
+  },
+  "MigrationSourceProductSelectResult": {
+    "valid": [
+      {
+        "name": "owned uploaded product",
+        "value": {
+          "operationId": "11111111-1111-4111-8111-111111111111",
+          "manifestSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "source": "codex",
+          "remainingMs": 600000,
+          "origin": "user_supplied"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "no path authority",
+        "value": {
+          "operationId": "11111111-1111-4111-8111-111111111111",
+          "manifestSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "source": "codex",
+          "remainingMs": 600000,
+          "origin": "user_supplied",
+          "path": "/untrusted"
+        }
+      },
+      {
+        "name": "cannot claim original OS authentication",
+        "value": {
+          "operationId": "11111111-1111-4111-8111-111111111111",
+          "manifestSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "source": "codex",
+          "remainingMs": 600000,
+          "origin": "authenticated_original_machine"
+        }
+      }
+    ]
+  }
+}

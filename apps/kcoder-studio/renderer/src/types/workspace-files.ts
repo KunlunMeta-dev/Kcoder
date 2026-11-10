@@ -110,7 +110,21 @@ export interface WorkspaceTarget {
   workspaceSource?: 'local' | 'remote' | string | null
 }
 
+/** In-memory editor ownership; it never stores or serializes file contents. */
+export interface WorkspaceFileEditorGuard {
+  owner: object
+  deviceId?: string
+  dirty: boolean
+  navigate: (action: () => void) => void
+}
+export interface WorkspaceFileEditorNavigation {
+  dirty: boolean
+  register: (guard: WorkspaceFileEditorGuard) => () => void
+  request: (action: () => void) => void
+}
+
 export interface WorkspaceFileOpenOptions {
+  sourceRevision?: string
   lineStart?: number
   lineEnd?: number
   isDirectory?: boolean
@@ -133,5 +147,28 @@ export interface CodeCommentContext {
   endLine: number
   selectedText: string
   comment: string
+  fileRevision?: string
+  sourceRevision?: string
   createdAt: string
+}
+
+/** Client-only feedback that has not yet been added to a conversation draft. */
+export interface WorkspaceFileCommentDraft {
+  sourceRevision?: string
+  filePath: string
+  fileName: string
+  revision: string
+  sourceContent: string
+  targetKey: string
+  selectedText: string
+  startLine: number
+  endLine: number
+  comment: string
+}
+
+export interface WorkspaceFileCommentController {
+  draft: WorkspaceFileCommentDraft | null
+  capacityExceeded: boolean
+  setDraft: (draft: WorkspaceFileCommentDraft | null) => boolean
+  isCurrent: () => boolean
 }

@@ -1,0 +1,2564 @@
+{
+  "MigrationHistoryAttachmentChunkParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "HistoricalAttachmentSelection": {
+        "additionalProperties": false,
+        "properties": {
+          "blockIndex": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "jobId": {
+            "type": "string"
+          },
+          "position": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "toolItemIndex": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "viewId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "blockIndex",
+          "jobId",
+          "position"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "limit": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "offset": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "selection": {
+        "$ref": "#/definitions/HistoricalAttachmentSelection"
+      }
+    },
+    "required": [
+      "offset",
+      "selection"
+    ],
+    "title": "MigrationHistoryAttachmentChunkParams",
+    "type": "object"
+  },
+  "MigrationHistoryAttachmentChunkResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "HistoricalAttachmentReceipt": {
+        "additionalProperties": false,
+        "properties": {
+          "attachmentId": {
+            "type": "string"
+          },
+          "bytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "chunkBytes": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sha256": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "attachmentId",
+          "bytes",
+          "chunkBytes",
+          "sha256"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "dataBase64": {
+        "type": "string"
+      },
+      "dataSha256": {
+        "type": "string"
+      },
+      "nextOffset": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "offset": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "receipt": {
+        "$ref": "#/definitions/HistoricalAttachmentReceipt"
+      }
+    },
+    "required": [
+      "dataBase64",
+      "dataSha256",
+      "offset",
+      "receipt"
+    ],
+    "title": "MigrationHistoryAttachmentChunkResult",
+    "type": "object"
+  },
+  "MigrationHistoryAttachmentParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "HistoricalAttachmentSelection": {
+        "additionalProperties": false,
+        "properties": {
+          "blockIndex": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "jobId": {
+            "type": "string"
+          },
+          "position": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "toolItemIndex": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "viewId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "blockIndex",
+          "jobId",
+          "position"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "selection": {
+        "$ref": "#/definitions/HistoricalAttachmentSelection"
+      }
+    },
+    "required": [
+      "selection"
+    ],
+    "title": "MigrationHistoryAttachmentParams",
+    "type": "object"
+  },
+  "MigrationHistoryAttachmentResumeParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "HistoricalAttachmentSelection": {
+        "additionalProperties": false,
+        "properties": {
+          "blockIndex": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "jobId": {
+            "type": "string"
+          },
+          "position": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "toolItemIndex": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "viewId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "blockIndex",
+          "jobId",
+          "position"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "expectedSequence": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "selection": {
+        "$ref": "#/definitions/HistoricalAttachmentSelection"
+      }
+    },
+    "required": [
+      "expectedSequence",
+      "selection"
+    ],
+    "title": "MigrationHistoryAttachmentResumeParams",
+    "type": "object"
+  },
+  "MigrationHistoryAttachmentStateResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "HistoricalAttachmentInfo": {
+        "additionalProperties": false,
+        "properties": {
+          "displayName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "issue": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "kind": {
+            "$ref": "#/definitions/HistoricalAttachmentKind"
+          },
+          "mediaType": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "receipt": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/HistoricalAttachmentReceipt"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "type": "object"
+      },
+      "HistoricalAttachmentJobStage": {
+        "enum": [
+          "planned",
+          "inspecting",
+          "extracting",
+          "ready",
+          "catalogued",
+          "unavailable",
+          "cancelled",
+          "failed"
+        ],
+        "type": "string"
+      },
+      "HistoricalAttachmentJobView": {
+        "additionalProperties": false,
+        "properties": {
+          "cancelRequested": {
+            "type": "boolean"
+          },
+          "cancelRevision": {
+            "default": 0,
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "catalog": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/HistoricalToolAttachmentSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "failureCode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "info": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/HistoricalAttachmentInfo"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "processedBytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sequence": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "stage": {
+            "$ref": "#/definitions/HistoricalAttachmentJobStage"
+          }
+        },
+        "required": [
+          "cancelRequested",
+          "id",
+          "processedBytes",
+          "sequence",
+          "stage"
+        ],
+        "type": "object"
+      },
+      "HistoricalAttachmentKind": {
+        "enum": [
+          "embedded_base64",
+          "embedded_text",
+          "remote_reference",
+          "local_reference",
+          "unsupported"
+        ],
+        "type": "string"
+      },
+      "HistoricalAttachmentReceipt": {
+        "additionalProperties": false,
+        "properties": {
+          "attachmentId": {
+            "type": "string"
+          },
+          "bytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "chunkBytes": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sha256": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "attachmentId",
+          "bytes",
+          "chunkBytes",
+          "sha256"
+        ],
+        "type": "object"
+      },
+      "HistoricalToolAttachmentSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "attachments": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "opaqueItems": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sourceItems": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "structured": {
+            "type": "boolean"
+          },
+          "unknownItems": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "attachments",
+          "opaqueItems",
+          "sourceItems",
+          "structured",
+          "unknownItems"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "job": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/HistoricalAttachmentJobView"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "workerError": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "workerRunning": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "workerRunning"
+    ],
+    "title": "MigrationHistoryAttachmentStateResult",
+    "type": "object"
+  },
+  "MigrationHistoryToolAttachmentItemsParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "HistoricalAttachmentSelection": {
+        "additionalProperties": false,
+        "properties": {
+          "blockIndex": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "jobId": {
+            "type": "string"
+          },
+          "position": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "toolItemIndex": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "viewId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "blockIndex",
+          "jobId",
+          "position"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "cursor": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "selection": {
+        "$ref": "#/definitions/HistoricalAttachmentSelection"
+      }
+    },
+    "required": [
+      "selection"
+    ],
+    "title": "MigrationHistoryToolAttachmentItemsParams",
+    "type": "object"
+  },
+  "MigrationHistoryToolAttachmentItemsResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "HistoricalToolAttachmentItem": {
+        "additionalProperties": false,
+        "properties": {
+          "index": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sourceArrayIndex": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sourceType": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "index",
+          "sourceArrayIndex",
+          "sourceType"
+        ],
+        "type": "object"
+      },
+      "HistoricalToolAttachmentSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "attachments": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "opaqueItems": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sourceItems": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "structured": {
+            "type": "boolean"
+          },
+          "unknownItems": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "attachments",
+          "opaqueItems",
+          "sourceItems",
+          "structured",
+          "unknownItems"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "items": {
+        "items": {
+          "$ref": "#/definitions/HistoricalToolAttachmentItem"
+        },
+        "type": "array"
+      },
+      "nextCursor": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "summary": {
+        "$ref": "#/definitions/HistoricalToolAttachmentSummary"
+      }
+    },
+    "required": [
+      "items",
+      "summary"
+    ],
+    "title": "HistoricalToolAttachmentPage",
+    "type": "object"
+  },
+  "MigrationLocalAttachmentBeginParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "bytes": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "expectedSequence": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "filename": {
+        "type": "string"
+      },
+      "operationId": {
+        "type": "string"
+      },
+      "sha256": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "bytes",
+      "expectedSequence",
+      "filename",
+      "operationId",
+      "sha256"
+    ],
+    "title": "MigrationLocalAttachmentBeginParams",
+    "type": "object"
+  },
+  "MigrationLocalAttachmentChunkParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "HistoricalAttachmentReceipt": {
+        "additionalProperties": false,
+        "properties": {
+          "attachmentId": {
+            "type": "string"
+          },
+          "bytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "chunkBytes": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sha256": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "attachmentId",
+          "bytes",
+          "chunkBytes",
+          "sha256"
+        ],
+        "type": "object"
+      },
+      "HistoricalAttachmentSelection": {
+        "additionalProperties": false,
+        "properties": {
+          "blockIndex": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "jobId": {
+            "type": "string"
+          },
+          "position": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "toolItemIndex": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "viewId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "blockIndex",
+          "jobId",
+          "position"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "expectedReceipt": {
+        "$ref": "#/definitions/HistoricalAttachmentReceipt"
+      },
+      "limit": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "offset": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "operationId": {
+        "type": "string"
+      },
+      "selection": {
+        "$ref": "#/definitions/HistoricalAttachmentSelection"
+      }
+    },
+    "required": [
+      "expectedReceipt",
+      "limit",
+      "offset",
+      "operationId",
+      "selection"
+    ],
+    "title": "MigrationLocalAttachmentChunkParams",
+    "type": "object"
+  },
+  "MigrationLocalAttachmentListParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "HistoricalAttachmentSelection": {
+        "additionalProperties": false,
+        "properties": {
+          "blockIndex": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "jobId": {
+            "type": "string"
+          },
+          "position": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "toolItemIndex": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "viewId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "blockIndex",
+          "jobId",
+          "position"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "cursor": {
+        "default": null,
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "selection": {
+        "$ref": "#/definitions/HistoricalAttachmentSelection"
+      }
+    },
+    "required": [
+      "selection"
+    ],
+    "title": "MigrationLocalAttachmentListParams",
+    "type": "object"
+  },
+  "MigrationLocalAttachmentListResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "HistoricalAttachmentInfo": {
+        "additionalProperties": false,
+        "properties": {
+          "displayName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "issue": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "kind": {
+            "$ref": "#/definitions/HistoricalAttachmentKind"
+          },
+          "mediaType": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "receipt": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/HistoricalAttachmentReceipt"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "type": "object"
+      },
+      "HistoricalAttachmentKind": {
+        "enum": [
+          "embedded_base64",
+          "embedded_text",
+          "remote_reference",
+          "local_reference",
+          "unsupported"
+        ],
+        "type": "string"
+      },
+      "HistoricalAttachmentReceipt": {
+        "additionalProperties": false,
+        "properties": {
+          "attachmentId": {
+            "type": "string"
+          },
+          "bytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "chunkBytes": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sha256": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "attachmentId",
+          "bytes",
+          "chunkBytes",
+          "sha256"
+        ],
+        "type": "object"
+      },
+      "HistoricalAttachmentSelection": {
+        "additionalProperties": false,
+        "properties": {
+          "blockIndex": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "jobId": {
+            "type": "string"
+          },
+          "position": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "toolItemIndex": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "viewId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "blockIndex",
+          "jobId",
+          "position"
+        ],
+        "type": "object"
+      },
+      "HistoricalLocalAttachmentJob": {
+        "additionalProperties": false,
+        "properties": {
+          "historicalContentVerified": {
+            "description": "The selection proves the supplied bytes, not equivalence to an unavailable historical file.",
+            "type": "boolean"
+          },
+          "info": {
+            "$ref": "#/definitions/HistoricalAttachmentInfo"
+          },
+          "selection": {
+            "$ref": "#/definitions/HistoricalAttachmentSelection"
+          },
+          "state": {
+            "$ref": "#/definitions/HistoricalLocalAttachmentState"
+          }
+        },
+        "required": [
+          "historicalContentVerified",
+          "info",
+          "selection",
+          "state"
+        ],
+        "type": "object"
+      },
+      "HistoricalLocalAttachmentStage": {
+        "enum": [
+          "authorized",
+          "copying",
+          "ready",
+          "cancelled",
+          "selection_required",
+          "source_changed",
+          "failed",
+          "outcome_unknown"
+        ],
+        "type": "string"
+      },
+      "HistoricalLocalAttachmentState": {
+        "additionalProperties": false,
+        "properties": {
+          "cancelRequested": {
+            "type": "boolean"
+          },
+          "cancelRevision": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "failureCode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "operationId": {
+            "type": "string"
+          },
+          "processedBytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "receipt": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/HistoricalAttachmentReceipt"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sequence": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "stage": {
+            "$ref": "#/definitions/HistoricalLocalAttachmentStage"
+          }
+        },
+        "required": [
+          "cancelRequested",
+          "cancelRevision",
+          "operationId",
+          "processedBytes",
+          "sequence",
+          "stage"
+        ],
+        "type": "object"
+      },
+      "HistoricalLocalAttachmentUpload": {
+        "additionalProperties": false,
+        "properties": {
+          "bytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "cancelRequested": {
+            "type": "boolean"
+          },
+          "cancelRevision": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "failureCode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "filename": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "localJob": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/HistoricalLocalAttachmentJob"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "operationId": {
+            "type": "string"
+          },
+          "partBytes": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "receivedBytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "receivedParts": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "selection": {
+            "$ref": "#/definitions/HistoricalAttachmentSelection"
+          },
+          "sequence": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sha256": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "stage": {
+            "$ref": "#/definitions/HistoricalLocalAttachmentUploadStage"
+          }
+        },
+        "required": [
+          "cancelRequested",
+          "cancelRevision",
+          "operationId",
+          "partBytes",
+          "receivedBytes",
+          "receivedParts",
+          "selection",
+          "sequence",
+          "stage"
+        ],
+        "type": "object"
+      },
+      "HistoricalLocalAttachmentUploadStage": {
+        "enum": [
+          "prepared",
+          "receiving",
+          "assembling",
+          "authorized",
+          "cancelled",
+          "failed",
+          "outcome_unknown"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "items": {
+        "items": {
+          "$ref": "#/definitions/HistoricalLocalAttachmentUpload"
+        },
+        "type": "array"
+      },
+      "nextCursor": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "items"
+    ],
+    "title": "MigrationLocalAttachmentListResult",
+    "type": "object"
+  },
+  "MigrationLocalAttachmentPartParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "contentBase64": {
+        "type": "string"
+      },
+      "expectedSequence": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "index": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "operationId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "contentBase64",
+      "expectedSequence",
+      "index",
+      "operationId"
+    ],
+    "title": "MigrationLocalAttachmentPartParams",
+    "type": "object"
+  },
+  "MigrationLocalAttachmentPrepareParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "HistoricalAttachmentSelection": {
+        "additionalProperties": false,
+        "properties": {
+          "blockIndex": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "jobId": {
+            "type": "string"
+          },
+          "position": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "toolItemIndex": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "viewId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "blockIndex",
+          "jobId",
+          "position"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "requestId": {
+        "type": "string"
+      },
+      "selection": {
+        "$ref": "#/definitions/HistoricalAttachmentSelection"
+      }
+    },
+    "required": [
+      "requestId",
+      "selection"
+    ],
+    "title": "MigrationLocalAttachmentPrepareParams",
+    "type": "object"
+  },
+  "MigrationLocalAttachmentReadParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "operationId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "operationId"
+    ],
+    "title": "MigrationLocalAttachmentReadParams",
+    "type": "object"
+  },
+  "MigrationLocalAttachmentRunParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "expectedSequence": {
+        "description": "Upload sequence for finish/resume, local copy sequence for run.",
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "operationId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "expectedSequence",
+      "operationId"
+    ],
+    "title": "MigrationLocalAttachmentRunParams",
+    "type": "object"
+  },
+  "MigrationLocalAttachmentStateResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "HistoricalAttachmentInfo": {
+        "additionalProperties": false,
+        "properties": {
+          "displayName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "issue": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "kind": {
+            "$ref": "#/definitions/HistoricalAttachmentKind"
+          },
+          "mediaType": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "receipt": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/HistoricalAttachmentReceipt"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "type": "object"
+      },
+      "HistoricalAttachmentKind": {
+        "enum": [
+          "embedded_base64",
+          "embedded_text",
+          "remote_reference",
+          "local_reference",
+          "unsupported"
+        ],
+        "type": "string"
+      },
+      "HistoricalAttachmentReceipt": {
+        "additionalProperties": false,
+        "properties": {
+          "attachmentId": {
+            "type": "string"
+          },
+          "bytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "chunkBytes": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sha256": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "attachmentId",
+          "bytes",
+          "chunkBytes",
+          "sha256"
+        ],
+        "type": "object"
+      },
+      "HistoricalAttachmentSelection": {
+        "additionalProperties": false,
+        "properties": {
+          "blockIndex": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "jobId": {
+            "type": "string"
+          },
+          "position": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "toolItemIndex": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "viewId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "blockIndex",
+          "jobId",
+          "position"
+        ],
+        "type": "object"
+      },
+      "HistoricalLocalAttachmentJob": {
+        "additionalProperties": false,
+        "properties": {
+          "historicalContentVerified": {
+            "description": "The selection proves the supplied bytes, not equivalence to an unavailable historical file.",
+            "type": "boolean"
+          },
+          "info": {
+            "$ref": "#/definitions/HistoricalAttachmentInfo"
+          },
+          "selection": {
+            "$ref": "#/definitions/HistoricalAttachmentSelection"
+          },
+          "state": {
+            "$ref": "#/definitions/HistoricalLocalAttachmentState"
+          }
+        },
+        "required": [
+          "historicalContentVerified",
+          "info",
+          "selection",
+          "state"
+        ],
+        "type": "object"
+      },
+      "HistoricalLocalAttachmentStage": {
+        "enum": [
+          "authorized",
+          "copying",
+          "ready",
+          "cancelled",
+          "selection_required",
+          "source_changed",
+          "failed",
+          "outcome_unknown"
+        ],
+        "type": "string"
+      },
+      "HistoricalLocalAttachmentState": {
+        "additionalProperties": false,
+        "properties": {
+          "cancelRequested": {
+            "type": "boolean"
+          },
+          "cancelRevision": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "failureCode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "operationId": {
+            "type": "string"
+          },
+          "processedBytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "receipt": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/HistoricalAttachmentReceipt"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sequence": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "stage": {
+            "$ref": "#/definitions/HistoricalLocalAttachmentStage"
+          }
+        },
+        "required": [
+          "cancelRequested",
+          "cancelRevision",
+          "operationId",
+          "processedBytes",
+          "sequence",
+          "stage"
+        ],
+        "type": "object"
+      },
+      "HistoricalLocalAttachmentUpload": {
+        "additionalProperties": false,
+        "properties": {
+          "bytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "cancelRequested": {
+            "type": "boolean"
+          },
+          "cancelRevision": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "failureCode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "filename": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "localJob": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/HistoricalLocalAttachmentJob"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "operationId": {
+            "type": "string"
+          },
+          "partBytes": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "receivedBytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "receivedParts": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "selection": {
+            "$ref": "#/definitions/HistoricalAttachmentSelection"
+          },
+          "sequence": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sha256": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "stage": {
+            "$ref": "#/definitions/HistoricalLocalAttachmentUploadStage"
+          }
+        },
+        "required": [
+          "cancelRequested",
+          "cancelRevision",
+          "operationId",
+          "partBytes",
+          "receivedBytes",
+          "receivedParts",
+          "selection",
+          "sequence",
+          "stage"
+        ],
+        "type": "object"
+      },
+      "HistoricalLocalAttachmentUploadStage": {
+        "enum": [
+          "prepared",
+          "receiving",
+          "assembling",
+          "authorized",
+          "cancelled",
+          "failed",
+          "outcome_unknown"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "upload": {
+        "$ref": "#/definitions/HistoricalLocalAttachmentUpload"
+      },
+      "workerError": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "workerRunning": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "upload",
+      "workerRunning"
+    ],
+    "title": "MigrationLocalAttachmentStateResult",
+    "type": "object"
+  },
+  "MigrationUploadCollectionAttachmentResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "HistoricalAttachmentInfo": {
+        "additionalProperties": false,
+        "properties": {
+          "displayName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "issue": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "kind": {
+            "$ref": "#/definitions/HistoricalAttachmentKind"
+          },
+          "mediaType": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "receipt": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/HistoricalAttachmentReceipt"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "type": "object"
+      },
+      "HistoricalAttachmentKind": {
+        "enum": [
+          "embedded_base64",
+          "embedded_text",
+          "remote_reference",
+          "local_reference",
+          "unsupported"
+        ],
+        "type": "string"
+      },
+      "HistoricalAttachmentReceipt": {
+        "additionalProperties": false,
+        "properties": {
+          "attachmentId": {
+            "type": "string"
+          },
+          "bytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "chunkBytes": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sha256": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "attachmentId",
+          "bytes",
+          "chunkBytes",
+          "sha256"
+        ],
+        "type": "object"
+      },
+      "HistoricalAttachmentSelection": {
+        "additionalProperties": false,
+        "properties": {
+          "blockIndex": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "jobId": {
+            "type": "string"
+          },
+          "position": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "toolItemIndex": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "viewId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "blockIndex",
+          "jobId",
+          "position"
+        ],
+        "type": "object"
+      },
+      "HistoricalLocalAttachmentJob": {
+        "additionalProperties": false,
+        "properties": {
+          "historicalContentVerified": {
+            "description": "The selection proves the supplied bytes, not equivalence to an unavailable historical file.",
+            "type": "boolean"
+          },
+          "info": {
+            "$ref": "#/definitions/HistoricalAttachmentInfo"
+          },
+          "selection": {
+            "$ref": "#/definitions/HistoricalAttachmentSelection"
+          },
+          "state": {
+            "$ref": "#/definitions/HistoricalLocalAttachmentState"
+          }
+        },
+        "required": [
+          "historicalContentVerified",
+          "info",
+          "selection",
+          "state"
+        ],
+        "type": "object"
+      },
+      "HistoricalLocalAttachmentStage": {
+        "enum": [
+          "authorized",
+          "copying",
+          "ready",
+          "cancelled",
+          "selection_required",
+          "source_changed",
+          "failed",
+          "outcome_unknown"
+        ],
+        "type": "string"
+      },
+      "HistoricalLocalAttachmentState": {
+        "additionalProperties": false,
+        "properties": {
+          "cancelRequested": {
+            "type": "boolean"
+          },
+          "cancelRevision": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "failureCode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "operationId": {
+            "type": "string"
+          },
+          "processedBytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "receipt": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/HistoricalAttachmentReceipt"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sequence": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "stage": {
+            "$ref": "#/definitions/HistoricalLocalAttachmentStage"
+          }
+        },
+        "required": [
+          "cancelRequested",
+          "cancelRevision",
+          "operationId",
+          "processedBytes",
+          "sequence",
+          "stage"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "job": {
+        "$ref": "#/definitions/HistoricalLocalAttachmentJob"
+      }
+    },
+    "required": [
+      "job"
+    ],
+    "title": "MigrationUploadCollectionAttachmentResult",
+    "type": "object"
+  },
+  "MigrationUploadCollectionCancelParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "HistoricalAttachmentSelection": {
+        "additionalProperties": false,
+        "properties": {
+          "blockIndex": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "jobId": {
+            "type": "string"
+          },
+          "position": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "toolItemIndex": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "viewId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "blockIndex",
+          "jobId",
+          "position"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "collectionId": {
+        "type": "string"
+      },
+      "operationId": {
+        "type": "string"
+      },
+      "selection": {
+        "$ref": "#/definitions/HistoricalAttachmentSelection"
+      }
+    },
+    "required": [
+      "collectionId",
+      "operationId",
+      "selection"
+    ],
+    "title": "MigrationUploadCollectionCancelParams",
+    "type": "object"
+  },
+  "MigrationUploadCollectionListParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "HistoricalAttachmentSelection": {
+        "additionalProperties": false,
+        "properties": {
+          "blockIndex": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "jobId": {
+            "type": "string"
+          },
+          "position": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "toolItemIndex": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "viewId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "blockIndex",
+          "jobId",
+          "position"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "cursor": {
+        "default": null,
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "selection": {
+        "$ref": "#/definitions/HistoricalAttachmentSelection"
+      }
+    },
+    "required": [
+      "selection"
+    ],
+    "title": "MigrationUploadCollectionListParams",
+    "type": "object"
+  },
+  "MigrationUploadCollectionListResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "HistoricalAttachmentSelection": {
+        "additionalProperties": false,
+        "properties": {
+          "blockIndex": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "jobId": {
+            "type": "string"
+          },
+          "position": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "toolItemIndex": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "viewId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "blockIndex",
+          "jobId",
+          "position"
+        ],
+        "type": "object"
+      },
+      "MigrationUploadCollection": {
+        "additionalProperties": false,
+        "properties": {
+          "cancelRequested": {
+            "type": "boolean"
+          },
+          "cancelRevision": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "collectionId": {
+            "type": "string"
+          },
+          "deletedBytes": {
+            "description": "Verified logical lengths, not a promise about filesystem free blocks.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "failureCode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "operationId": {
+            "type": "string"
+          },
+          "releasedReservationBytes": {
+            "description": "Freed staging reservation only after the original completed deletion receipt.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "selection": {
+            "$ref": "#/definitions/HistoricalAttachmentSelection"
+          },
+          "sequence": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "stage": {
+            "$ref": "#/definitions/MigrationUploadCollectionStage"
+          },
+          "storageRetired": {
+            "type": "boolean"
+          },
+          "uploadSequence": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "cancelRequested",
+          "cancelRevision",
+          "collectionId",
+          "deletedBytes",
+          "operationId",
+          "releasedReservationBytes",
+          "selection",
+          "sequence",
+          "stage",
+          "storageRetired",
+          "uploadSequence"
+        ],
+        "type": "object"
+      },
+      "MigrationUploadCollectionStage": {
+        "enum": [
+          "prepared",
+          "blocked",
+          "collecting",
+          "collected",
+          "cancelled",
+          "outcome_unknown"
+        ],
+        "type": "string"
+      },
+      "MigrationUploadCollectionStateResult": {
+        "additionalProperties": false,
+        "properties": {
+          "collection": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/MigrationUploadCollection"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "workerError": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "workerRunning": {
+            "description": "Observed from the Native independent collection writer, including peer processes.",
+            "type": "boolean"
+          },
+          "workerScheduled": {
+            "description": "Connection-owned accepted work; this alone does not prove Native execution.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "workerRunning",
+          "workerScheduled"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "items": {
+        "items": {
+          "$ref": "#/definitions/MigrationUploadCollectionStateResult"
+        },
+        "type": "array"
+      },
+      "nextCursor": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "items"
+    ],
+    "title": "MigrationUploadCollectionListResult",
+    "type": "object"
+  },
+  "MigrationUploadCollectionPrepareParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "HistoricalAttachmentSelection": {
+        "additionalProperties": false,
+        "properties": {
+          "blockIndex": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "jobId": {
+            "type": "string"
+          },
+          "position": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "toolItemIndex": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "viewId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "blockIndex",
+          "jobId",
+          "position"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "expectedUploadSequence": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "operationId": {
+        "type": "string"
+      },
+      "selection": {
+        "$ref": "#/definitions/HistoricalAttachmentSelection"
+      }
+    },
+    "required": [
+      "expectedUploadSequence",
+      "operationId",
+      "selection"
+    ],
+    "title": "MigrationUploadCollectionPrepareParams",
+    "type": "object"
+  },
+  "MigrationUploadCollectionReadParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "HistoricalAttachmentSelection": {
+        "additionalProperties": false,
+        "properties": {
+          "blockIndex": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "jobId": {
+            "type": "string"
+          },
+          "position": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "toolItemIndex": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "viewId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "blockIndex",
+          "jobId",
+          "position"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "operationId": {
+        "type": "string"
+      },
+      "selection": {
+        "$ref": "#/definitions/HistoricalAttachmentSelection"
+      }
+    },
+    "required": [
+      "operationId",
+      "selection"
+    ],
+    "title": "MigrationUploadCollectionReadParams",
+    "type": "object"
+  },
+  "MigrationUploadCollectionResumeParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "HistoricalAttachmentSelection": {
+        "additionalProperties": false,
+        "properties": {
+          "blockIndex": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "jobId": {
+            "type": "string"
+          },
+          "position": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "toolItemIndex": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "viewId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "blockIndex",
+          "jobId",
+          "position"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "collectionId": {
+        "type": "string"
+      },
+      "expectedSequence": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "expectedUploadSequence": {
+        "description": "Rebase only through this explicit action and only before Native side effects.",
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "operationId": {
+        "type": "string"
+      },
+      "selection": {
+        "$ref": "#/definitions/HistoricalAttachmentSelection"
+      }
+    },
+    "required": [
+      "collectionId",
+      "expectedSequence",
+      "expectedUploadSequence",
+      "operationId",
+      "selection"
+    ],
+    "title": "MigrationUploadCollectionResumeParams",
+    "type": "object"
+  },
+  "MigrationUploadCollectionRunParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "HistoricalAttachmentSelection": {
+        "additionalProperties": false,
+        "properties": {
+          "blockIndex": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "jobId": {
+            "type": "string"
+          },
+          "position": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "toolItemIndex": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "viewId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "blockIndex",
+          "jobId",
+          "position"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "collectionId": {
+        "type": "string"
+      },
+      "expectedSequence": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "operationId": {
+        "type": "string"
+      },
+      "selection": {
+        "$ref": "#/definitions/HistoricalAttachmentSelection"
+      }
+    },
+    "required": [
+      "collectionId",
+      "expectedSequence",
+      "operationId",
+      "selection"
+    ],
+    "title": "MigrationUploadCollectionRunParams",
+    "type": "object"
+  },
+  "MigrationUploadCollectionStateResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "HistoricalAttachmentSelection": {
+        "additionalProperties": false,
+        "properties": {
+          "blockIndex": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "jobId": {
+            "type": "string"
+          },
+          "position": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "toolItemIndex": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "viewId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "blockIndex",
+          "jobId",
+          "position"
+        ],
+        "type": "object"
+      },
+      "MigrationUploadCollection": {
+        "additionalProperties": false,
+        "properties": {
+          "cancelRequested": {
+            "type": "boolean"
+          },
+          "cancelRevision": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "collectionId": {
+            "type": "string"
+          },
+          "deletedBytes": {
+            "description": "Verified logical lengths, not a promise about filesystem free blocks.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "failureCode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "operationId": {
+            "type": "string"
+          },
+          "releasedReservationBytes": {
+            "description": "Freed staging reservation only after the original completed deletion receipt.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "selection": {
+            "$ref": "#/definitions/HistoricalAttachmentSelection"
+          },
+          "sequence": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "stage": {
+            "$ref": "#/definitions/MigrationUploadCollectionStage"
+          },
+          "storageRetired": {
+            "type": "boolean"
+          },
+          "uploadSequence": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "cancelRequested",
+          "cancelRevision",
+          "collectionId",
+          "deletedBytes",
+          "operationId",
+          "releasedReservationBytes",
+          "selection",
+          "sequence",
+          "stage",
+          "storageRetired",
+          "uploadSequence"
+        ],
+        "type": "object"
+      },
+      "MigrationUploadCollectionStage": {
+        "enum": [
+          "prepared",
+          "blocked",
+          "collecting",
+          "collected",
+          "cancelled",
+          "outcome_unknown"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "collection": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/MigrationUploadCollection"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "workerError": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "workerRunning": {
+        "description": "Observed from the Native independent collection writer, including peer processes.",
+        "type": "boolean"
+      },
+      "workerScheduled": {
+        "description": "Connection-owned accepted work; this alone does not prove Native execution.",
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "workerRunning",
+      "workerScheduled"
+    ],
+    "title": "MigrationUploadCollectionStateResult",
+    "type": "object"
+  }
+}

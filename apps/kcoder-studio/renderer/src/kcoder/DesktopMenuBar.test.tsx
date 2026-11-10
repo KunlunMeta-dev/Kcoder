@@ -8,12 +8,15 @@ const labels = ['文件', '编辑', '视图', '窗口', '自动化']
 const bridge = {
   list: vi.fn(),
   setVisible: vi.fn(),
+  setTheme: vi.fn(),
   open: vi.fn(),
 }
 
 beforeEach(() => {
+  localStorage.clear()
   bridge.list.mockReset().mockResolvedValue(labels.map((label, index) => ({ index, label })))
   bridge.setVisible.mockReset().mockResolvedValue(undefined)
+  bridge.setTheme.mockReset().mockResolvedValue(undefined)
   bridge.open.mockReset().mockResolvedValue(undefined)
   Object.defineProperty(window, 'kcoderDesktopMenu', { configurable: true, value: bridge })
 })
@@ -34,7 +37,45 @@ test('does not invent menu content without the Windows desktop bridge', () => {
   Reflect.deleteProperty(window, 'kcoderDesktopMenu')
   render(<DesktopMenuBar />)
   expect(screen.queryByRole('menubar')).not.toBeInTheDocument()
+  expect(screen.queryByTestId('desktop-titlebar-sidebar-toggle')).not.toBeInTheDocument()
   expect(bridge.list).not.toHaveBeenCalled()
+})
+
+test('syncs the rendered title bar background when the appearance changes', async () => {
+  const root = document.documentElement
+  const previousStyle = root.getAttribute('style')
+  render(<DesktopMenuBar />)
+  await ready()
+  const chrome = screen.getByTestId('desktop-brand-chrome')
+  const dark = root.classList.contains('dark')
+  try {
+    chrome.style.backgroundColor = 'rgb(17, 19, 22)'
+    root.style.setProperty('--color-bg-base', '17 19 22')
+    await waitFor(() => expect(bridge.setTheme).toHaveBeenLastCalledWith(dark, 'rgb(17, 19, 22)'))
+    chrome.style.backgroundColor = 'rgb(28, 31, 36)'
+    root.style.setProperty('--color-bg-base', '28 31 36')
+    await waitFor(() => expect(bridge.setTheme).toHaveBeenLastCalledWith(dark, 'rgb(28, 31, 36)'))
+  } finally {
+    if (previousStyle === null) root.removeAttribute('style')
+    else root.setAttribute('style', previousStyle)
+  }
+})
+
+test('keeps the sidebar toggle available while the host menu loads or fails', async () => {
+  let reject!: (error: Error) => void
+  bridge.list.mockReturnValueOnce(
+    new Promise((_resolve, fail) => {
+      reject = fail
+    })
+  )
+  render(<DesktopMenuBar />)
+  const toggle = screen.getByTestId('desktop-titlebar-sidebar-toggle')
+  fireEvent.click(toggle)
+  expect(localStorage.getItem('kcoder.desktop.sidebar.collapsed')).toBe('true')
+  await act(async () => reject(new Error('IPC unavailable')))
+  expect(screen.queryByRole('menubar')).not.toBeInTheDocument()
+  fireEvent.click(toggle)
+  expect(localStorage.getItem('kcoder.desktop.sidebar.collapsed')).toBe('false')
 })
 
 test('preserves the complete host labels and menu indexes with compact themed styling', async () => {

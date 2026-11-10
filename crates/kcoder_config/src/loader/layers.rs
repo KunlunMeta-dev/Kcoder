@@ -67,6 +67,7 @@ impl SettingsLoader {
                 .and_then(|path| path.parent().map(Path::to_path_buf)),
             overlay_files: Vec::new(),
             frozen_overlays: Default::default(),
+            project_document: None,
         }
     }
 
@@ -160,9 +161,62 @@ impl SettingsLoader {
         Ok(())
     }
 
+    /// Validate an in-memory project delta through normal layer ownership rules.
+    pub(crate) fn with_project_document(mut self, document: &Value) -> Self {
+        self.project_document = Some(FrozenOverlay(document.clone()));
+        self
+    }
+
     pub fn load(&self) -> Result<LoadedSettings> {
+        let (loaded, _transaction_guard) = self.load_with_profile_guard()?;
+        Ok(loaded)
+    }
+
+    /// Read current policy layers under the normal configuration coordinator
+    /// without hydrating unrelated model provider credentials.
+    pub fn load_policy_configuration(&self) -> Result<Settings> {
+        let (loaded, _transaction_guard) = self.load_configuration(true, false)?;
+        Ok(loaded.settings)
+    }
+
+    /// Keep the native user configuration coordinator while publishing a dependent project delta.
+    pub(crate) fn load_with_profile_guard(
+        &self,
+    ) -> Result<(LoadedSettings, Option<std::fs::File>)> {
+        self.load_guarded(true)
+    }
+
+    /// The caller retains the same profile coordinator for this private projection.
+    pub(crate) fn load_under_profile_guard(&self) -> Result<LoadedSettings> {
+        self.load_guarded(false).map(|(loaded, _)| loaded)
+    }
+
+    /// Read the normal configuration layers without credential stores,
+    /// environment application, locks, transaction recovery or first-start writes.
+    /// This returns configuration data only and grants no runtime authority.
+    pub fn load_read_only_configuration(&self) -> Result<LoadedSettings> {
         let paths = self.paths()?;
-        let _transaction_guard = provider_transaction::read_guard(&paths.user_settings)?;
+        provider_transaction::refuse_pending_read_only_transaction(&paths.user_settings)?;
+        let (loaded, _) = self.load_configuration(false, false)?;
+        provider_transaction::refuse_pending_read_only_transaction(&paths.user_settings)?;
+        Ok(loaded)
+    }
+
+    fn load_guarded(&self, acquire: bool) -> Result<(LoadedSettings, Option<std::fs::File>)> {
+        self.load_configuration(acquire, true)
+    }
+
+    fn load_configuration(
+        &self,
+        acquire: bool,
+        runtime_private: bool,
+    ) -> Result<(LoadedSettings, Option<std::fs::File>)> {
+        let paths = self.paths()?;
+        let transaction_guard = if acquire {
+            provider_transaction::read_guard(&paths.user_settings)?
+        } else {
+            None
+        };
         // Product defaults are the lowest-priority configuration layer. Every explicit
         // file remains user-owned and may override bundled providers.
         let mut merged = default_settings_document();
@@ -185,6 +239,8 @@ impl SettingsLoader {
             model_configuration_sources.merge(&value, ConfigScope::User.as_str());
             providers_declared |= value.get("providers").is_some();
             declared_provider_names.extend(provider_names_of(&value));
+            let mut value = value;
+            crate::project_mcp::expand_layer(&merged, &mut value, false)?;
             merge_settings_value(&mut merged, value);
             loaded_sources.push(ConfigSource {
                 scope: ConfigScope::User,
@@ -205,6 +261,8 @@ impl SettingsLoader {
             model_configuration_sources.merge(&value, ConfigScope::Executable.as_str());
             providers_declared |= value.get("providers").is_some();
             declared_provider_names.extend(provider_names_of(&value));
+            let mut value = value;
+            crate::project_mcp::expand_layer(&merged, &mut value, false)?;
             merge_settings_value(&mut merged, value);
             loaded_sources.push(ConfigSource {
                 scope: ConfigScope::Executable,
@@ -216,15 +274,25 @@ impl SettingsLoader {
             (ConfigScope::Project, &paths.project_settings),
             (ConfigScope::Local, &paths.local_settings),
         ] {
-            let Some(value) = read_optional_json_object(path)? else {
-                continue;
+            let value = if scope == ConfigScope::Project {
+                match &self.project_document {
+                    Some(document) => Some(document.0.clone()),
+                    None => read_optional_json_object(path)?,
+                }
+            } else {
+                read_optional_json_object(path)?
             };
+            let Some(value) = value else { continue };
             validate_settings_document(&value)
                 .with_context(|| format!("invalid settings in {}", path.display()))?;
+            crate::settings::validate_project_web_layer(&merged, &value)
+                .with_context(|| format!("invalid web policy in {}", path.display()))?;
             record_leaf_sources(&value, "", scope, &mut field_sources);
             model_configuration_sources.merge(&value, scope.as_str());
             providers_declared |= value.get("providers").is_some();
             declared_provider_names.extend(provider_names_of(&value));
+            let mut value = value;
+            crate::project_mcp::expand_layer(&merged, &mut value, scope == ConfigScope::Project)?;
             merge_settings_value(&mut merged, value);
             loaded_sources.push(ConfigSource {
                 scope,
@@ -247,6 +315,8 @@ impl SettingsLoader {
             model_configuration_sources.merge(&value, "overlay");
             providers_declared |= value.get("providers").is_some();
             declared_provider_names.extend(provider_names_of(&value));
+            let mut value = value;
+            crate::project_mcp::expand_layer(&merged, &mut value, false)?;
             merge_settings_value(&mut merged, value);
             overlay_sources.push(path.clone());
         }
@@ -257,32 +327,8 @@ impl SettingsLoader {
             profiles.retain(|name, _| declared_provider_names.contains(name));
         }
 
-        // If existing configuration has a provider catalog but depends on a formerly
-        // bundled default selection, keep it usable after product defaults change.
-        // An explicitly configured active_provider remains authoritative and is validated below.
-        let active_provider_is_explicit = field_sources.contains_key("active_provider")
-            || overlay_fields.contains("active_provider");
-        if !active_provider_is_explicit && providers_declared && declared_provider_names.is_empty()
-        {
-            merged["active_provider"] = Value::Null;
-        } else if !active_provider_is_explicit && !declared_provider_names.is_empty() {
-            let replacement =
-                merged
-                    .get("providers")
-                    .and_then(Value::as_object)
-                    .and_then(|profiles| {
-                        let active = merged.get("active_provider").and_then(Value::as_str);
-                        if active.is_some_and(|name| profiles.contains_key(name)) {
-                            None
-                        } else {
-                            profiles.keys().next().cloned()
-                        }
-                    });
-            if let Some(replacement) = replacement {
-                merged["active_provider"] = Value::String(replacement);
-            }
-        }
-
+        // Catalog entries are available choices. Only an explicit selection
+        // activates a Provider and its configured model.
         normalize_legacy_profile_references(&mut merged);
         normalize_default_provider_output_tokens(&mut merged, &field_sources, &overlay_fields);
         validate_settings_document(&merged).context("invalid merged settings")?;
@@ -333,6 +379,11 @@ impl SettingsLoader {
         expand_active_provider_below_explicit_settings(&mut merged)?;
         let mut settings: Settings = serde_json::from_value(merged)
             .context("failed to deserialize merged KCoder settings")?;
+        settings.integrations.validate()?;
+        settings
+            .web
+            .validate()
+            .context("invalid merged web policy")?;
         settings
             .reapply_active_model_selection()
             .context("failed to apply active discovered model selection")?;
@@ -342,28 +393,35 @@ impl SettingsLoader {
             .into_iter()
             .map(str::to_string)
             .collect();
-        apply_credentials(
-            &mut settings,
-            &CredentialStore::load_from(&paths.credentials)?,
-        );
+        if runtime_private {
+            apply_credentials(
+                &mut settings,
+                &CredentialStore::load_from(&paths.credentials)?,
+            );
+        }
         settings.session_allowed_tools.clear();
         settings.session_denied_tools.clear();
         settings.session_permission_rules.clear();
-        settings.apply_env_overrides();
+        if runtime_private {
+            settings.apply_env_overrides();
+        }
         settings.normalize_runtime_limits();
         settings.normalize_paths();
 
-        Ok(LoadedSettings {
-            settings,
-            model_runtime_overrides,
-            model_configuration_sources,
-            paths,
-            loaded_sources,
-            overlay_sources,
-            overlay_fields,
-            field_sources,
-            plaintext_secret_setting_names,
-        })
+        Ok((
+            LoadedSettings {
+                settings,
+                model_runtime_overrides,
+                model_configuration_sources,
+                paths,
+                loaded_sources,
+                overlay_sources,
+                overlay_fields,
+                field_sources,
+                plaintext_secret_setting_names,
+            },
+            transaction_guard,
+        ))
     }
 }
 
@@ -389,6 +447,16 @@ pub(super) fn merge_settings_value_at(target: &mut Value, source: Value, path: &
                 path.pop();
             }
         }
+        (Value::Array(target), Value::Array(source))
+            if path.as_slice() == ["mcp_disabled_servers"] =>
+        {
+            // A later project/overlay cannot silently re-enable a server disabled by its owner.
+            for name in source {
+                if !target.contains(&name) {
+                    target.push(name);
+                }
+            }
+        }
         (target @ Value::Array(_), source @ Value::Array(_)) => *target = source,
         (target, source) => *target = source,
     }
@@ -404,25 +472,15 @@ pub fn merge_settings_documents(target: &mut Value, source: Value) {
 /// overrides.
 pub fn validate_and_resolve_settings_document(value: &Value) -> Result<Settings> {
     validate_settings_document(value).context("invalid user settings")?;
+    let mut scoped = value.clone();
+    crate::project_mcp::expand_layer(&Value::Null, &mut scoped, false)?;
     let mut merged = default_settings_document();
-    merge_settings_value(&mut merged, value.clone());
+    merge_settings_value(&mut merged, scoped);
     // A standalone document has the same catalog ownership as an explicit file layer.
     if value.get("providers").is_some() {
         let declared: BTreeSet<_> = provider_names_of(value).collect();
         if let Some(profiles) = merged.get_mut("providers").and_then(Value::as_object_mut) {
             profiles.retain(|name, _| declared.contains(name));
-        }
-        if value.get("active_provider").is_none()
-            && !merged
-                .get("active_provider")
-                .and_then(Value::as_str)
-                .is_some_and(|name| declared.contains(name))
-        {
-            merged["active_provider"] = declared
-                .first()
-                .cloned()
-                .map(Value::String)
-                .unwrap_or(Value::Null);
         }
     }
     normalize_legacy_profile_references(&mut merged);
@@ -434,6 +492,11 @@ pub fn validate_and_resolve_settings_document(value: &Value) -> Result<Settings>
     expand_active_provider_below_explicit_settings(&mut merged)?;
     let settings: Settings =
         serde_json::from_value(merged).context("failed to deserialize resolved KCoder settings")?;
+    settings.integrations.validate()?;
+    settings
+        .web
+        .validate()
+        .context("invalid resolved web policy")?;
     settings.validate_model_reasoning_policy()?;
     Ok(settings)
 }

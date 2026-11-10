@@ -1,7 +1,7 @@
 import { ensureGatewayAuthorization } from "@/gateway/http";
 import type { GatewayRpcClient, JsonRecord } from "@/gateway/rpc";
 import type { GatewayProfile, KCoderServer } from "@/gateway/types";
-import { captureWorkspaceProfileIdentity, startWorkspaceProfileRpc, withWorkspaceProfileWrite } from "@/storage/workspace-profile-fence";
+import { captureWorkspaceProfileIdentity, startWorkspaceProfileRpc, withWorkspaceProfileMetadata } from "@/storage/workspace-profile-fence";
 import { threadListScopeKey } from "../thread-list-projection";
 import { taskClientConnector } from "./connectionFactory";
 
@@ -14,6 +14,12 @@ export function catalogReadScopeKey(profile: GatewayProfile, server: KCoderServe
     server.workspacePath === undefined ? ["undefined"] : ["string", server.workspacePath],
     profile.authorizationGeneration === undefined ? ["undefined"] : ["string", profile.authorizationGeneration],
     server.runtime, server.accountIdentity?.username ?? null, "runtime"]);
+}
+
+/** Workspace model overlays use their exact connection cwd, independently of the target's directory catalog. */
+export function modelCatalogReadScopeKey(profile: GatewayProfile, server: KCoderServer, workspacePath = server.workspacePath): string {
+  const targetScope = catalogReadScopeKey(profile, server);
+  return workspacePath === server.workspacePath ? targetScope : JSON.stringify([profile.id, targetScope, "model-workspace", workspacePath]);
 }
 
 export async function prepareCatalogRead(profile: GatewayProfile, server: KCoderServer, signal?: AbortSignal): Promise<string> {
@@ -48,29 +54,32 @@ function abortable<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
 /** One New loader only. Fixed candidates are registered before either cache can run its loader. */
 export interface NewCatalogReadSource {
   run<T>(branch: Branch, read: () => Promise<T>): Promise<T>;
-  assertOwner(profile: GatewayProfile, server: KCoderServer): void;
+  assertOwner(profile: GatewayProfile, server: KCoderServer, branch?: Branch, workspacePath?: string): void;
   cacheRead<T>(branch: Branch, read: () => Promise<T>): Promise<T>;
   withClient<T>(branch: Branch, signal: AbortSignal, read: (client: CatalogClient) => Promise<T>): Promise<T>;
 }
 export function createNewCatalogReadSource(
   profile: GatewayProfile, server: KCoderServer, isIdentityCurrent: () => boolean,
+  options: { modelsWorkspacePath?: string } = {},
 ): NewCatalogReadSource {
   const owner = catalogReadScopeKey(profile, server);
   const capturedProfile = { ...profile };
   const capturedServer = { ...server, ...(server.accountIdentity ? { accountIdentity: { ...server.accountIdentity } } : {}) };
   const authorization = captureWorkspaceProfileIdentity(capturedProfile);
+  const modelsWorkspacePath = options.modelsWorkspacePath ?? capturedServer.workspacePath;
   const connectionAbort = new AbortController();
   // Reservations persist until both cache calls settle, including warm/foreign-inflight calls.
   const candidate = () => ({ started: false, finished: false, lookup: "pending" as "pending" | "queued" | "complete" });
   const candidates = { workspace: candidate(), models: candidate() };
   const active = new Map<Branch, AbortSignal>(); // At most two fixed branch entries; never shared across operations.
-  let connecting: Promise<GatewayRpcClient> | undefined;
-  let client: GatewayRpcClient | undefined;
+  const connecting = new Map<string, Promise<GatewayRpcClient>>();
+  const clients = new Set<GatewayRpcClient>();
   let closed = false;
   let connectionFinished = false;
-  const assertOwner = (inputProfile = profile, inputServer = server) => {
+  const assertOwner = (inputProfile = profile, inputServer = server, branch?: Branch, workspacePath?: string) => {
     if (closed || !isIdentityCurrent() || catalogReadScopeKey(profile, server) !== owner ||
-      catalogReadScopeKey(capturedProfile, capturedServer) !== owner || catalogReadScopeKey(inputProfile, inputServer) !== owner) throw changed();
+      catalogReadScopeKey(capturedProfile, capturedServer) !== owner || catalogReadScopeKey(inputProfile, inputServer) !== owner ||
+      branch === "models" && workspacePath !== modelsWorkspacePath) throw changed();
   };
   const finishIfIdle = () => {
     if (candidates.workspace.lookup !== "complete" || candidates.models.lookup !== "complete" ||
@@ -80,24 +89,30 @@ export function createNewCatalogReadSource(
     if (!connectionFinished) {
       connectionFinished = true;
       try { connectionAbort.abort(); } catch { /* Late connect is also closed below. */ }
-      if (client) closeClient(client);
+      for (const client of clients) closeClient(client);
     }
     if (candidates.workspace.finished && candidates.models.finished) closed = true;
   };
 
-  const connect = () => {
+  const connect = (branch: Branch) => {
     if (connectionFinished) return Promise.reject(cancelled());
-    if (!connecting) connecting = (async () => {
-      assertOwner();
-      await prepareCatalogRead(capturedProfile, capturedServer, connectionAbort.signal);
-      assertOwner();
-      const result = await taskClientConnector(capturedProfile, capturedServer, capturedServer.workspacePath, "runtime", { signal: connectionAbort.signal });
-      try { assertOwner(); if (connectionAbort.signal.aborted) throw cancelled(); }
-      catch (error) { closeClient(result); throw error; }
-      client = result;
-      return result;
-    })();
-    return connecting;
+    const workspacePath = branch === "models" ? modelsWorkspacePath : capturedServer.workspacePath;
+    const key = JSON.stringify(workspacePath === undefined ? ["undefined"] : ["path", workspacePath]);
+    let pending = connecting.get(key);
+    if (!pending) {
+      pending = (async () => {
+        assertOwner();
+        await prepareCatalogRead(capturedProfile, capturedServer, connectionAbort.signal);
+        assertOwner();
+        const result = await taskClientConnector(capturedProfile, capturedServer, workspacePath, "runtime", { signal: connectionAbort.signal });
+        try { assertOwner(); if (connectionAbort.signal.aborted) throw cancelled(); }
+        catch (error) { closeClient(result); throw error; }
+        clients.add(result);
+        return result;
+      })();
+      connecting.set(key, pending);
+    }
+    return pending;
   };
   return {
     assertOwner,
@@ -131,7 +146,7 @@ export function createNewCatalogReadSource(
       signal.addEventListener("abort", abort, { once: true });
       const assertCurrent = () => { assertOwner(); if (signal.aborted) throw cancelled(); };
       try {
-        const connected = await abortable(connect(), signal);
+        const connected = await abortable(connect(branch), signal);
         assertCurrent();
         const guarded: CatalogClient = {
           async request<T = unknown>(method: string, params: JsonRecord = {}, timeoutMs?: number): Promise<T> {
@@ -141,7 +156,7 @@ export function createNewCatalogReadSource(
               assertCurrent(); return connected.request<T>(method, params, timeoutMs);
             });
             const result = await abortable(started.response, signal);
-            await withWorkspaceProfileWrite(authorization, async () => { assertCurrent(); });
+            await withWorkspaceProfileMetadata(authorization, async () => { assertCurrent(); });
             assertCurrent();
             return result;
           },

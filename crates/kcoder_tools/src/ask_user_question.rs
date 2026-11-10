@@ -10,7 +10,7 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 
-/// Ask the user one or more multiple-choice questions and return the answers.
+/// Ask the user questions with suggested choices and a free-text alternative.
 #[derive(Debug, Default)]
 pub struct AskUserQuestionTool;
 
@@ -85,7 +85,9 @@ impl Tool for AskUserQuestionTool {
     }
 
     fn description(&self) -> String {
-        "Ask the user one or more multiple-choice questions and return their answers. \
+        "Ask the user one or more questions with suggested choices and return their answers. \
+         Users can ignore all suggestions and enter their own answer. The client always supplies \
+         a free-text alternative, including for multiple-choice questions; do not add an Other option yourself. \
          Use this only when progress depends on a user decision that cannot be safely inferred.\n\
          Input must be one JSON object with this shape: \
          {\"questions\":[{\"question\":\"...\",\"header\":\"short_label\",\"options\":[{\"label\":\"Option A\",\"description\":\"What happens if selected\"},{\"label\":\"Option B\",\"description\":\"What happens if selected\"}],\"multi_select\":false}]}.\n\

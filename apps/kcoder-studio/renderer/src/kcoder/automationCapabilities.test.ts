@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { automationExecutionDiagnostics } from './automationCapabilities'
+import {
+  assertAutomationCapabilities,
+  automationExecutionDiagnostics,
+} from './automationCapabilities'
+import type { GatewayClient } from './gatewayRuntimeTypes'
 
 const receipt = {
   triggerId: 'cron:job:2026-10-03T09:00:00Z',
@@ -10,6 +14,26 @@ const receipt = {
 }
 
 describe('automation execution projection', () => {
+  it('requires the history-delete capability before sending a trigger selector', () => {
+    const client = {
+      supportsExperimental: (name: string) => name === 'projectAutomations',
+    } as GatewayClient
+    expect(() =>
+      assertAutomationCapabilities(client, 'cron/delete', {
+        jobId: 'job',
+        triggerId: 'trigger',
+        receiptsOnly: true,
+        confirmed: true,
+      })
+    ).toThrow()
+    expect(() =>
+      assertAutomationCapabilities(client, 'cron/delete', { jobId: 'job' })
+    ).not.toThrow()
+    client.supportsExperimental = () => true
+    expect(() =>
+      assertAutomationCapabilities(client, 'cron/delete', { jobId: 'job', triggerId: 'trigger' })
+    ).not.toThrow()
+  })
   it('does not infer execution from legacy delivery or schedule timestamps', () => {
     expect(
       automationExecutionDiagnostics({ jobs: [{ last_fired_at: receipt.scheduledAt }] })

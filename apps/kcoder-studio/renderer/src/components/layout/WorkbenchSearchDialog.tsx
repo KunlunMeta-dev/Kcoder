@@ -68,10 +68,21 @@ function WorkbenchSearchDialogPanel({
   const [query, setQuery] = useState('')
   const [items, setItems] = useState<RuntimeWorkSearchItem[]>([])
   const [selectedIndex, setSelectedIndex] = useState(0)
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [searchedQuery, setSearchedQuery] = useState('')
   const trimmedQuery = query.trim()
+  const cacheOwnerRef = useRef(onSearchRuntimeWork)
+  const resultOwnerRef = useRef(onSearchRuntimeWork)
+
+  useEffect(() => {
+    if (cacheOwnerRef.current === onSearchRuntimeWork) return
+    cacheOwnerRef.current = onSearchRuntimeWork
+    searchCacheRef.current.clear()
+    cloudResultsRef.current.clear()
+    setItems([])
+    setLoading(true)
+  }, [onSearchRuntimeWork])
 
   useEffect(() => {
     window.setTimeout(() => inputRef.current?.focus(), 0)
@@ -97,11 +108,10 @@ function WorkbenchSearchDialogPanel({
   }, [trimmedQuery])
 
   useEffect(() => {
-    if (!trimmedQuery) return
-
     if (searchCacheRef.current.has(trimmedQuery)) {
       const cachedItems = searchCacheRef.current.get(trimmedQuery) ?? []
       setItems(cachedItems)
+      resultOwnerRef.current = onSearchRuntimeWork
       setSelectedIndex(0)
       setError(null)
       setLoading(false)
@@ -122,6 +132,7 @@ function WorkbenchSearchDialogPanel({
           )
           rememberSearchResults(searchCacheRef.current, trimmedQuery, merged)
           setItems(merged)
+          resultOwnerRef.current = onSearchRuntimeWork
           setSelectedIndex(0)
           setError(null)
           setSearchedQuery(trimmedQuery)
@@ -143,14 +154,15 @@ function WorkbenchSearchDialogPanel({
     }
   }, [onSearchRuntimeWork, t, trimmedQuery])
 
-  const selectedItem = items[selectedIndex] ?? null
+  const visibleItems = resultOwnerRef.current === onSearchRuntimeWork ? items : []
+  const selectedItem = visibleItems[selectedIndex] ?? null
   const selectedOptionId = selectedItem ? `${listboxId}-option-${selectedIndex}` : undefined
   const hasQuery = trimmedQuery.length > 0
   const statusLabel = useMemo(() => {
     if (loading) return t('workbench.search_loading')
     if (error) return error
-    if (hasQuery && searchedQuery === trimmedQuery && items.length === 0) {
-      return t('workbench.search_no_results')
+    if (searchedQuery === trimmedQuery && items.length === 0) {
+      return t(hasQuery ? 'workbench.search_no_results' : 'workbench.history_empty')
     }
     return null
   }, [error, hasQuery, items.length, loading, searchedQuery, t, trimmedQuery])
@@ -163,7 +175,7 @@ function WorkbenchSearchDialogPanel({
   }, [hasQuery, items.length, searchedQuery, statusLabel, t, trimmedQuery])
 
   const openItem = (item: RuntimeWorkSearchItem | null) => {
-    if (!item) return
+    if (!item || resultOwnerRef.current !== onSearchRuntimeWork) return
     void Promise.resolve(onOpenRuntimeTask(item.address)).finally(onClose)
   }
 
@@ -276,11 +288,11 @@ function WorkbenchSearchDialogPanel({
         </div>
 
         <div className="max-h-[420px] min-h-[120px] overflow-y-auto px-2 py-3">
-          {items.length > 0 && (
-            <div className="px-3 pb-2 text-xs text-text-muted">{t('workbench.chats')}</div>
+          {visibleItems.length > 0 && (
+            <div className="px-3 pb-2 text-xs text-text-muted">{t(hasQuery ? 'workbench.chats' : 'workbench.recent_history')}</div>
           )}
           <div id={listboxId} role="listbox" aria-label={t('workbench.search_conversations')}>
-            {items.map((item, index) => (
+            {visibleItems.map((item, index) => (
               <div
                 key={`${item.address.deviceId}:${item.address.taskId}:${item.messageId ?? index}`}
                 id={`${listboxId}-option-${index}`}
@@ -300,14 +312,15 @@ function WorkbenchSearchDialogPanel({
                   <div className="truncate text-sm font-medium leading-5 text-text-primary">
                     {item.title}
                   </div>
-                  <div className="mt-0.5 line-clamp-2 text-xs leading-5 text-text-secondary">
+                  {hasQuery ? <div className="mt-0.5 line-clamp-2 text-xs leading-5 text-text-secondary">
                     {renderHighlightedSnippet(item.snippet, trimmedQuery)}
-                  </div>
+                  </div> : null}
                 </div>
                 <div className="flex max-w-[150px] shrink-0 flex-col items-end gap-1 text-xs text-text-muted">
                   <span className="max-w-full truncate">
-                    {item.project?.name || item.deviceName}
+                    {item.unassignedProject ? t('workbench.unassigned_project') : item.project?.name || item.deviceName}
                   </span>
+                  {item.unassignedProject ? <span className="max-w-full truncate" title={item.workspacePath}>{item.workspacePath}</span> : null}
                 </div>
               </div>
             ))}

@@ -1,6 +1,10 @@
 import { createServer } from "node:http";
+import { networkInterfaces } from "node:os";
 
 export async function startFixtureSite(context, options = {}) {
+  const host = options.host ?? "127.0.0.1";
+  const localAddresses = Object.values(networkInterfaces()).flat().filter(Boolean).filter(entry => entry.family === "IPv4").map(entry => entry.address);
+  if (host !== "127.0.0.1" && !localAddresses.includes(host)) throw new Error("Fixture host must be an exact local IPv4 interface");
   const title = options.title || "KCoder E2E Browser Fixture";
   const marker = options.marker || "KCODER_BROWSER_FIXTURE_OK";
   const interactionState = {
@@ -12,8 +16,18 @@ export async function startFixtureSite(context, options = {}) {
     focus: [],
     scrollY: 0,
   };
+  const assets = new Map();
+  for (const [path, asset] of Object.entries(options.assets || {})) {
+    if (!/^\/[A-Za-z0-9._/-]+$/.test(path) || path.split('/').some(part => part === '..' || part === '.') || assets.size >= 16
+      || !asset || typeof asset.body !== 'string' || Buffer.byteLength(asset.body) > 1024 * 1024
+      || !['text/javascript; charset=utf-8', 'text/plain; charset=utf-8'].includes(asset.contentType)) throw new Error('Invalid fixture exact asset');
+    assets.set(path, { body: asset.body, contentType: asset.contentType });
+  }
   const server = createServer((request, response) => {
     const requestUrl = new URL(request.url || "/", "http://127.0.0.1");
+    const asset = assets.get(String(request.url || '/').split('?')[0]);
+    if (asset && !['GET', 'HEAD'].includes(request.method)) { response.writeHead(405); response.end(); return; }
+    if (asset) { response.writeHead(200, { 'content-type': asset.contentType, 'cache-control': 'no-store' }); response.end(asset.body); return; }
     if (request.url === "/health") {
       response.writeHead(200, { "content-type": "application/json" });
       response.end(JSON.stringify({ ok: true }));
@@ -99,7 +113,7 @@ addEventListener('scroll', () => {
   });
   await new Promise((resolveListen, reject) => {
     server.once("error", reject);
-    server.listen(0, "127.0.0.1", resolveListen);
+    server.listen(0, host, resolveListen);
   });
   context.addCleanup("close fixture site", () => new Promise(resolveClose => server.close(resolveClose)));
   const address = server.address();
@@ -107,9 +121,9 @@ addEventListener('scroll', () => {
   return {
     server,
     port: address.port,
-    url: `http://127.0.0.1:${address.port}/`,
-    interactionUrl: `http://127.0.0.1:${address.port}/interaction`,
-    interactionStateUrl: `http://127.0.0.1:${address.port}/interaction-state`,
+    url: `http://${host}:${address.port}/`,
+    interactionUrl: `http://${host}:${address.port}/interaction`,
+    interactionStateUrl: `http://${host}:${address.port}/interaction-state`,
     title,
     marker,
   };

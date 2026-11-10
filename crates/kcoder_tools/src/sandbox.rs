@@ -14,6 +14,7 @@ pub struct Sandbox {
     cwd: PathBuf,
     config: SandboxConfig,
     readonly_paths: Vec<PathBuf>,
+    resource_readonly_paths: Vec<PathBuf>,
     runtime_write_paths: Vec<PathBuf>,
 }
 
@@ -25,6 +26,7 @@ impl Sandbox {
             cwd: cwd.into(),
             config,
             readonly_paths: Vec::new(),
+            resource_readonly_paths: Vec::new(),
             runtime_write_paths: Vec::new(),
         }
     }
@@ -40,6 +42,12 @@ impl Sandbox {
     #[must_use]
     pub fn with_readonly_paths(mut self, paths: Vec<PathBuf>) -> Self {
         self.readonly_paths = paths;
+        self
+    }
+
+    /// Grant only reads to the current expert snapshot; never expose its parent configuration store.
+    pub fn with_resource_readonly_paths(mut self, paths: Vec<PathBuf>) -> Self {
+        self.resource_readonly_paths = paths;
         self
     }
 
@@ -99,6 +107,17 @@ impl Sandbox {
     /// `write` should be true for create/edit/write operations and false for
     /// reads. Returns `Ok(())` when allowed or when the sandbox is disabled.
     pub fn check_path(&self, path: &Path, write: bool) -> Result<(), String> {
+        let resource = if self.resource_readonly_paths.is_empty() {
+            false
+        } else {
+            let normalized = policy_path(&self.resolve(path))?;
+            self.resource_readonly_paths.iter().any(|root| {
+                policy_path(root).is_ok_and(|root| path_starts_with(&normalized, &root))
+            })
+        };
+        if resource && write {
+            return Err("expert resource snapshots are read-only".into());
+        }
         if !self.config.enabled {
             return Ok(());
         }
@@ -127,6 +146,9 @@ impl Sandbox {
 
         // If an explicit allow-list is provided, the path must be under one of
         // them. Otherwise it must be under the working directory.
+        if resource {
+            return Ok(());
+        }
         if self.config.allowed_paths.is_empty() {
             let cwd_abs = policy_path(&self.cwd)?;
             if path_starts_with(&normalized, &cwd_abs) {
@@ -215,7 +237,12 @@ impl Sandbox {
             Some(crate::os_sandbox::OsSandboxSpec {
                 backend: crate::os_sandbox::OsSandboxBackend::WindowsRestrictedToken,
                 rw_paths,
-                readonly_paths: self.readonly_paths.clone(),
+                readonly_paths: self
+                    .readonly_paths
+                    .iter()
+                    .chain(&self.resource_readonly_paths)
+                    .cloned()
+                    .collect(),
                 deny_read: self
                     .config
                     .denied_paths
@@ -270,7 +297,12 @@ impl Sandbox {
             Some(crate::os_sandbox::OsSandboxSpec {
                 backend: crate::os_sandbox::OsSandboxBackend::Landlock,
                 rw_paths,
-                readonly_paths: self.readonly_paths.clone(),
+                readonly_paths: self
+                    .readonly_paths
+                    .iter()
+                    .chain(&self.resource_readonly_paths)
+                    .cloned()
+                    .collect(),
                 deny_read,
             })
         }
@@ -465,6 +497,44 @@ fn windows_path_component_eq(left: &std::ffi::OsStr, right: &std::ffi::OsStr) ->
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn expert_resources_grant_reads_without_parent_or_write_access() {
+        let temp = tempfile::tempdir().unwrap();
+        let project = temp.path().join("project");
+        let resource = temp.path().join("private/cache/snapshot");
+        std::fs::create_dir_all(&project).unwrap();
+        std::fs::create_dir_all(&resource).unwrap();
+        let sandbox = super::Sandbox::new(
+            &project,
+            kcoder_types::SandboxConfig {
+                enabled: true,
+                ..Default::default()
+            },
+        )
+        .with_resource_readonly_paths(vec![resource.clone()]);
+        assert!(
+            sandbox
+                .check_path(&resource.join("routing.md"), false)
+                .is_ok()
+        );
+        assert!(
+            sandbox
+                .check_path(&resource.join("routing.md"), true)
+                .is_err()
+        );
+        assert!(
+            sandbox
+                .check_path(&temp.path().join("private/credentials.json"), false)
+                .is_err()
+        );
+        let unconfined = super::Sandbox::new(&project, Default::default())
+            .with_resource_readonly_paths(vec![resource.clone()]);
+        assert!(
+            unconfined
+                .check_path(&resource.join("routing.md"), true)
+                .is_err()
+        );
+    }
     use super::*;
 
     #[test]

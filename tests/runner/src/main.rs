@@ -5,6 +5,7 @@ mod report;
 mod retention;
 mod secrets;
 mod selection;
+mod source_snapshot;
 mod suite_manifest;
 mod summary;
 
@@ -105,6 +106,12 @@ fn main() -> Result<()> {
         let mut passed_suites = BTreeSet::new();
         let mut stopped_by = None;
         for suite in suites {
+            let needs_source_observation = suite.summary.as_ref().is_some_and(|policy| {
+                matches!(policy.parser, matrix::SummaryParser::AssertionsJson)
+            });
+            let source_before = needs_source_observation
+                .then(|| source_snapshot::capture(&root))
+                .flatten();
             let outcome = if let Some(failed_suite) = &stopped_by {
                 SuiteOutcome::NotRun {
                     id: suite.id.clone(),
@@ -144,7 +151,17 @@ fn main() -> Result<()> {
                 passed_suites.insert(suite.id.as_str());
             }
             let failed = !matches!(outcome, SuiteOutcome::Passed { .. });
-            let execution_manifest = persist_suite_manifest(&context, &root, suite, &outcome)?;
+            let source_after = needs_source_observation
+                .then(|| source_snapshot::capture(&root))
+                .flatten();
+            let execution_manifest = persist_suite_manifest(
+                &context,
+                &root,
+                suite,
+                &outcome,
+                source_before.as_ref(),
+                source_after.as_ref(),
+            )?;
             report.execution_manifests.push(execution_manifest);
             report.outcomes.push(outcome);
             if failed && !args.keep_going && stopped_by.is_none() {

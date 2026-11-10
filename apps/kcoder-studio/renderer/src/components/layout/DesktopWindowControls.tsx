@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils'
 import { DESKTOP_TOP_BAR_BUTTON_CLASS } from './DesktopTopBar'
 
 interface DesktopWindowControlsProps {
-  sidebarCollapsed: boolean
+  sidebarCollapsed?: boolean
   onToggleSidebar: () => void
   onNewChat?: () => void
   className?: string
@@ -19,9 +19,12 @@ export function DesktopWindowControls({
   toggleTestId,
 }: DesktopWindowControlsProps) {
   const { t } = useTranslation('common')
-  const toggleLabel = sidebarCollapsed
-    ? t('workbench.expand_sidebar', '展开侧边栏')
-    : t('workbench.collapse_sidebar', '收起侧边栏')
+  const toggleLabel =
+    sidebarCollapsed === undefined
+      ? t('workbench.toggle_sidebar', '切换边栏')
+      : sidebarCollapsed
+        ? t('workbench.expand_sidebar', '展开侧边栏')
+        : t('workbench.collapse_sidebar', '收起侧边栏')
 
   return (
     <div data-testid="desktop-window-controls" className={cn('flex items-center gap-3', className)}>
@@ -34,10 +37,14 @@ export function DesktopWindowControls({
           event.currentTarget.focus()
           onToggleSidebar()
         }}
-        className={cn(DESKTOP_TOP_BAR_BUTTON_CLASS, 'max-md:min-h-11 max-md:min-w-11')}
+        className={cn(
+          DESKTOP_TOP_BAR_BUTTON_CLASS,
+          'max-md:min-h-11 max-md:min-w-11 transition-[background-color,color,transform] duration-150 active:scale-90'
+        )}
         aria-label={toggleLabel}
+        aria-pressed={sidebarCollapsed}
       >
-        <PanelLeft />
+        <PanelLeft aria-hidden="true" />
       </button>
       {sidebarCollapsed && onNewChat && (
         <button

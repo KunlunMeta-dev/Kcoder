@@ -1,3 +1,4 @@
+import { SettingsSelect } from '@/components/settings/SettingsSelect'
 import { WorkflowRunArchive } from './WorkflowRunArchive'
 import { startWorkflowPolling, workflowRunPollDelay } from './workflowPolling'
 import { useWorkflowReadCancellation } from './useWorkflowReadCancellation'
@@ -10,6 +11,8 @@ import { useTranslation } from '@/hooks/useTranslation'
 import { usePluginTargetScope } from '@/kcoder/usePluginTargetScope'
 import { buildRuntimeTaskRoute, navigateTo } from '@/lib/navigation'
 import { workflowApi, type WorkflowRun } from './workflowApi'
+import { fixedWorkflowDefinition, matchesFixedWorkflowRun, type FixedWorkflowRun } from './fixedWorkflowRun'
+import { useRetainedPageActive } from '@/components/layout/retainedPageState'
 
 export function WorkflowRunPanel({
   serverId,
@@ -17,23 +20,35 @@ export function WorkflowRunPanel({
   onSnapshot,
   onOpenAgent,
   latestSavedVersion,
+  fixedRun,
+  workspacePath,
+  readOnly = false,
+  onOpenThread,
 }: {
   serverId: string
   definitionId: string
+  fixedRun?: FixedWorkflowRun
+  workspacePath?: string
+  readOnly?: boolean
+  onOpenThread?: () => void
   latestSavedVersion?: number | null
   onSnapshot?: (run: WorkflowRun | null) => void
   onOpenAgent?: (agentId: string, context?: { runId: string; nodeId: string }) => void
 }) {
-  const scope = usePluginTargetScope(serverId)
+  const scope = usePluginTargetScope(serverId, workspacePath)
   return (
     <RunPanel
-      key={`${scope.key}:${definitionId}`}
+      key={`${scope.key}:${definitionId}:${JSON.stringify(fixedRun ?? null)}`}
       serverId={serverId}
       definitionId={definitionId}
       isCurrent={scope.isCurrent}
       onSnapshot={onSnapshot}
       onOpenAgent={onOpenAgent}
       latestSavedVersion={latestSavedVersion}
+      fixedRun={fixedRun}
+      workspacePath={workspacePath}
+      readOnly={readOnly || !!fixedRun}
+      onOpenThread={onOpenThread}
     />
   )
 }
@@ -44,9 +59,17 @@ function RunPanel({
   onSnapshot,
   onOpenAgent,
   latestSavedVersion,
+  fixedRun,
+  workspacePath,
+  readOnly = false,
+  onOpenThread,
 }: {
   serverId: string
   definitionId: string
+  fixedRun?: FixedWorkflowRun
+  workspacePath?: string
+  readOnly?: boolean
+  onOpenThread?: () => void
   latestSavedVersion?: number | null
   isCurrent: () => boolean
   onSnapshot?: (run: WorkflowRun | null) => void
@@ -68,18 +91,24 @@ function RunPanel({
     text: string
     next: number | null
   } | null>(null)
+  const pageActive = useRetainedPageActive()
   useEffect(
     () =>
       startWorkflowPolling({
+        active: pageActive,
         isCurrent,
-        changes: { serverId, definitionId, runId: selected || latest.current?.runId },
+        changes: { serverId, definitionId, runId: fixedRun?.runId || selected || latest.current?.runId },
         poll: async (isLive, signal) => {
-          const page = await workflowApi.runs(serverId, definitionId, offset, { signal })
+          if (fixedRun && fixedWorkflowDefinition(fixedRun) !== definitionId)
+            throw new Error(t('workflowFlow.runMismatch'))
+          const page = fixedRun ? null : await workflowApi.runs(serverId, definitionId, offset, { signal })
           if (!isLive()) return false
-          const id = selected || latest.current?.runId || page.items[0]?.runId
+          const id = fixedRun?.runId || selected || latest.current?.runId || page?.items[0]?.runId
           const detail = id ? await workflowApi.run(serverId, id, latest.current, { signal }) : null
           if (!isLive()) return false
           if (detail && (detail.runId !== id || detail.definitionId !== definitionId))
+            throw new Error(t('workflowFlow.runMismatch'))
+          if (fixedRun && (!detail || !matchesFixedWorkflowRun(detail, fixedRun, workspacePath) || (latest.current && detail.revision < latest.current.revision)))
             throw new Error(t('workflowFlow.runMismatch'))
           if (
             !latest.current ||
@@ -89,15 +118,18 @@ function RunPanel({
           )
             latest.current = detail
           onSnapshot?.(latest.current)
-          setRuns(page.items)
-          setNext(page.nextOffset ?? null)
+          setRuns(page?.items ?? [])
+          setNext(page?.nextOffset ?? null)
           setRun(latest.current)
           setError('')
           return workflowRunPollDelay(latest.current?.status)
         },
-        onError: failure => setError(failure instanceof Error ? failure.message : String(failure)),
+        onError: failure => {
+          if (fixedRun) { latest.current = null; setRun(null); setOutput(null); cancelOutput(); onSnapshot?.(null) }
+          setError(failure instanceof Error ? failure.message : String(failure))
+        },
       }),
-    [serverId, definitionId, selected, offset, retry, isCurrent, onSnapshot, t]
+    [pageActive, serverId, definitionId, fixedRun, workspacePath, selected, offset, retry, isCurrent, onSnapshot, t, cancelOutput]
   )
   const readOutput = async (nodeId: string, from = 0) => {
     if (!run) return
@@ -114,7 +146,7 @@ function RunPanel({
     }
   }
   const prepareRecovery = (targetVersion?: number) => {
-    if (!run || !isCurrent() || error) return
+    if (readOnly || fixedRun || !run || !isCurrent() || error) return
     requestWorkflowComposerIntent({
       active: false,
       recovery: {
@@ -132,7 +164,7 @@ function RunPanel({
   return (
     <section
       data-testid="workflow-run-history"
-      className="space-y-2 rounded-xl border border-border bg-background p-3"
+      className="studio-card-spacing space-y-2 rounded-xl border border-border bg-background"
     >
       <div className="flex items-center gap-2">
         <h3 className="flex-1 text-sm font-medium">{t('workflowCanvas.runHistory')}</h3>
@@ -140,7 +172,7 @@ function RunPanel({
           {t('workflowCanvas.reload')}
         </Button>
       </div>
-      <WorkflowRunArchive
+      {!readOnly && !fixedRun && <WorkflowRunArchive
         serverId={serverId}
         isCurrent={isCurrent}
         onInspect={snapshot => {
@@ -158,17 +190,17 @@ function RunPanel({
           onSnapshot?.(null)
           setRetry(value => value + 1)
         }}
-      />
+      />}
       {error && (
         <p role="alert" className="whitespace-pre-wrap break-words text-xs text-destructive">
           {error}
         </p>
       )}
-      {!error && !runs.length && (
+      {!fixedRun && !error && !runs.length && (
         <p className="text-xs text-text-muted">{t('workflowCanvas.noRuns')}</p>
       )}
       {!!runs.length && (
-        <select
+        <SettingsSelect
           aria-label={t('workflowCanvas.runHistory')}
           className="w-full rounded-lg border border-border bg-background p-2 text-sm"
           value={run?.runId ?? ''}
@@ -187,7 +219,7 @@ function RunPanel({
               {t(`workflowCanvas.status_${item.status}`, item.status)}
             </option>
           ))}
-        </select>
+        </SettingsSelect>
       )}
       {(offset > 0 || next != null) && (
         <div className="flex gap-2">
@@ -232,6 +264,7 @@ function RunPanel({
               runId={run.runId}
               isCurrent={isCurrent}
               disabled={!!error}
+              readOnly={readOnly || !!fixedRun}
             />
           )}
           {run.interactionModified && (
@@ -247,22 +280,25 @@ function RunPanel({
           <p className="break-all text-xs text-text-muted">
             {run.runId} · v{run.version ?? '—'} · {run.workspace}
           </p>
-          <Button
+          {(!readOnly && !fixedRun || onOpenThread) && <Button
             size="sm"
             variant="link"
-            onClick={() =>
+            onClick={() => {
+              if (!isCurrent()) return
+              if (onOpenThread) { onOpenThread(); return }
+              if (readOnly || fixedRun) return
               navigateTo(
                 buildRuntimeTaskRoute({
                   deviceId: serverId,
                   taskId: `kcoder:${serverId}:${run.threadId}`,
                 })
               )
-            }
+            }}
           >
             {t('workflowCanvas.openRunConversation')}
-          </Button>
+          </Button>}
           <div className="flex flex-wrap gap-2">
-            {['failed', 'interrupted', 'cancelled'].includes(run.status) && (
+            {!readOnly && !fixedRun && ['failed', 'interrupted', 'cancelled'].includes(run.status) && (
               <Button
                 size="sm"
                 variant="secondary"
@@ -273,7 +309,7 @@ function RunPanel({
                 {t('workflowCanvas.resumeRun')}
               </Button>
             )}
-            {latestSavedVersion != null &&
+            {!readOnly && !fixedRun && latestSavedVersion != null &&
               run.version != null &&
               latestSavedVersion > run.version &&
               ['completed', 'failed', 'cancelled', 'interrupted'].includes(run.status) && (
@@ -288,14 +324,14 @@ function RunPanel({
                 </Button>
               )}
           </div>
-          <p className="text-xs text-text-muted">{t('workflowCanvas.runControlsHint')}</p>
+          {!readOnly && !fixedRun && <p className="text-xs text-text-muted">{t('workflowCanvas.runControlsHint')}</p>}
           <div className="max-h-64 space-y-1 overflow-auto">
             {run.nodeStates.map(node => (
               <div key={node.nodeId} className="rounded-lg bg-surface/50 p-2 text-xs">
                 <div className="flex items-center gap-2">
                   <span className="font-medium">{node.nodeId}</span>
                   <span>{t(`workflowCanvas.status_${node.status}`, node.status)}</span>
-                  {node.agentId && onOpenAgent && (
+                  {!readOnly && !fixedRun && node.agentId && onOpenAgent && (
                     <Button
                       size="sm"
                       variant="ghost"

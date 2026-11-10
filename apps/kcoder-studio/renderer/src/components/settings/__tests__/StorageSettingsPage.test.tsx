@@ -65,7 +65,7 @@ beforeEach(() => {
     ignoreGlobs: [],
   })
   vi.mocked(saveTurnFileChangesPolicy).mockImplementation(async (_id, policy) => policy)
-  vi.mocked(fetchGatewayServers).mockResolvedValue([{ id: 'server-1' }] as never)
+  vi.mocked(fetchGatewayServers).mockResolvedValue([{ id: 'server-1', transport: 'local' }] as never)
   vi.mocked(readStorageReport).mockResolvedValue(report)
   vi.mocked(cleanStorage).mockResolvedValue({
     removedBytes: 2048,

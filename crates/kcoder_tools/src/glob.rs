@@ -1,14 +1,17 @@
 use crate::{Tool, ToolContext, ToolError, ToolOutput, parse_input};
 use async_trait::async_trait;
 use globset::Glob;
+use kcoder_file_search::glob::{
+    GlobMatch, GlobScanError, GlobScanLimits, GlobScanRequest, GlobScanResult, ScanStop, scan_glob,
+    to_relative_path,
+};
+use kcoder_file_search::{GENERATED_DIRECTORIES_TO_EXCLUDE, VCS_DIRECTORIES_TO_EXCLUDE};
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::Value;
-use std::cmp::Ordering;
-use std::collections::BinaryHeap;
 use std::path::{Component, Path, PathBuf};
 use std::process::Stdio;
-use std::time::{Duration, Instant, SystemTime};
+use std::time::{Duration, SystemTime};
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, BufReader};
 use tokio::process::Command;
 use tokio::task::spawn_blocking;
@@ -18,9 +21,7 @@ use tracing::debug;
 
 use crate::process::configure_isolated_process_environment;
 
-// Shared with model-facing schema guidance so enrichment does not append a second policy.
-pub(crate) const GLOB_PATH_GUIDANCE: &str = "Existing directory to search; patterns are relative to it. Omit path only when cwd is the intended project. The default budget rejects filesystem/drive roots, the current user's home, and on Unix direct children of / (e.g. /home, /tmp, /data). Choose a concrete project/subdirectory such as C:/Users/Alice/project/src. For expanded/large, path must be explicit and, after normalization, neither cwd itself nor an ancestor of cwd; a separate directory outside cwd is allowed if it is not an ancestor. Changing only pattern or limit cannot bypass a root refusal.";
-pub(crate) const GLOB_BUDGET_GUIDANCE: &str = "Scan tiers: default (50,000 entries/2s/100 paths), expanded (500,000 entries/10s/500 paths), large (5,000,000 entries/30s/2,000 paths). Expanded/large additionally require an explicit path that is neither cwd itself nor its ancestor; they are not a way to rescan the same home/root cwd. Prefer narrowing path. limit controls returned paths, not traversal scope, and must be positive when supplied. Count mode has the same root/scope restrictions and entry/time budgets, but no path-result cap on its count.";
+use kcoder_tool_input::{GLOB_BUDGET_GUIDANCE, GLOB_PATH_GUIDANCE};
 
 /// Find files matching a glob pattern.
 #[derive(Debug, Default)]
@@ -66,13 +67,6 @@ pub struct GlobInput {
     pub scan_budget: GlobScanBudget,
 }
 
-#[derive(Debug, Clone, Copy)]
-struct GlobScanLimits {
-    max_entries: usize,
-    max_duration: Duration,
-    max_results: usize,
-}
-
 impl GlobScanBudget {
     fn limits(self) -> GlobScanLimits {
         match self {
@@ -105,21 +99,6 @@ impl GlobScanBudget {
 
 const DEFAULT_GLOB_LIMIT: usize = 100;
 const RIPGREP_GLOB_TIMEOUT: Duration = Duration::from_secs(20);
-const PREFLIGHT_MAX_ENTRIES: usize = 20_000;
-const PREFLIGHT_MAX_DURATION: Duration = Duration::from_millis(300);
-const VCS_DIRECTORIES_TO_EXCLUDE: &[&str] = &[".git", ".svn", ".hg", ".bzr", ".jj", ".sl"];
-const GENERATED_DIRECTORIES_TO_EXCLUDE: &[&str] = &[
-    "target",
-    "node_modules",
-    ".venv",
-    "venv",
-    "__pycache__",
-    ".pytest_cache",
-    "dist",
-    "build",
-    "out",
-];
-
 fn glob_limit_error(limit: usize, budget: GlobScanBudget, max_results: usize) -> String {
     if budget == GlobScanBudget::Large {
         return format!(
@@ -294,7 +273,7 @@ impl Tool for GlobTool {
                 cwd,
                 pattern,
                 result_limit,
-                budget: scan_budget,
+                default_budget: scan_budget == GlobScanBudget::Default,
                 limits,
                 skip_generated,
                 abort_token,
@@ -312,7 +291,7 @@ impl Tool for GlobTool {
 
         let scan = match scan {
             Ok(scan) => scan,
-            Err(ToolError::Aborted) => return Err(ToolError::Aborted),
+            Err(GlobScanError::Aborted) => return Err(ToolError::Aborted),
             Err(error) => return Ok(ToolOutput::error(error.to_string())),
         };
 
@@ -565,63 +544,6 @@ impl Drop for GlobProcessTreeTerminator {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ScanStop {
-    EntryLimit,
-    TimeLimit,
-}
-
-#[derive(Debug)]
-struct GlobMatch {
-    path: String,
-    modified: SystemTime,
-}
-
-impl PartialEq for GlobMatch {
-    fn eq(&self, other: &Self) -> bool {
-        self.path == other.path && self.modified == other.modified
-    }
-}
-
-impl Eq for GlobMatch {}
-
-// BinaryHeap keeps the least desirable retained match at the top, bounding memory while preserving reverse modification-time order.
-impl Ord for GlobMatch {
-    fn cmp(&self, other: &Self) -> Ordering {
-        other
-            .modified
-            .cmp(&self.modified)
-            .then_with(|| self.path.cmp(&other.path))
-    }
-}
-
-impl PartialOrd for GlobMatch {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-#[derive(Debug)]
-struct GlobScanResult {
-    matches: Vec<GlobMatch>,
-    total_matches: usize,
-    scanned_entries: usize,
-    elapsed: Duration,
-    stopped: Option<ScanStop>,
-}
-
-struct GlobScanRequest {
-    base: PathBuf,
-    cwd: PathBuf,
-    pattern: String,
-    result_limit: usize,
-    budget: GlobScanBudget,
-    limits: GlobScanLimits,
-    skip_generated: bool,
-    abort_token: Option<CancellationToken>,
-    worker_cancel: CancellationToken,
-}
-
 /// Ask a still-running worker to exit promptly when an outer timeout drops the calling future.
 struct CancelOnDrop(CancellationToken);
 
@@ -629,158 +551,6 @@ impl Drop for CancelOnDrop {
     fn drop(&mut self) {
         self.0.cancel();
     }
-}
-
-fn scan_glob(request: GlobScanRequest) -> Result<GlobScanResult, ToolError> {
-    let GlobScanRequest {
-        base,
-        cwd,
-        pattern,
-        result_limit,
-        budget,
-        limits,
-        skip_generated,
-        abort_token,
-        worker_cancel,
-    } = request;
-    let matcher = Glob::new(&pattern)
-        .map_err(|e| ToolError::InvalidInput(format!("invalid glob pattern: {}", e)))?
-        .compile_matcher();
-
-    if budget == GlobScanBudget::Default
-        && preflight_exceeds_default_budget(
-            &base,
-            &matcher,
-            skip_generated,
-            &abort_token,
-            &worker_cancel,
-        )?
-    {
-        return Err(ToolError::Execution(format!(
-            "Refusing to run a default glob over `{}` because the search root is too broad. Preflight exceeded {} entries or {} ms before the scan began. Narrow `path`, or explicitly retry with `scan_budget: \"expanded\"`/`\"large\"` and a positive `limit`.",
-            base.display(),
-            PREFLIGHT_MAX_ENTRIES,
-            PREFLIGHT_MAX_DURATION.as_millis(),
-        )));
-    }
-
-    let started_at = Instant::now();
-    let mut matches = BinaryHeap::with_capacity(result_limit.min(1024));
-    let mut total_matches = 0usize;
-    let mut scanned_entries = 0usize;
-    let mut stopped = None;
-    let walker = walk_entries(&base, skip_generated);
-    let mut entries = walker.into_iter().filter_map(Result::ok);
-
-    loop {
-        if is_cancelled(&abort_token, &worker_cancel) {
-            return Err(ToolError::Aborted);
-        }
-        if scanned_entries >= limits.max_entries {
-            stopped = Some(ScanStop::EntryLimit);
-            break;
-        }
-        if started_at.elapsed() >= limits.max_duration {
-            stopped = Some(ScanStop::TimeLimit);
-            break;
-        }
-
-        let Some(entry) = entries.next() else {
-            break;
-        };
-        scanned_entries = scanned_entries.saturating_add(1);
-
-        if entry.file_type().is_symlink() || !entry.file_type().is_file() {
-            continue;
-        }
-        let path = entry.path();
-        let rel = path.strip_prefix(&base).unwrap_or(path);
-        if !matcher.is_match(rel) {
-            continue;
-        }
-
-        total_matches = total_matches.saturating_add(1);
-        let candidate = GlobMatch {
-            path: to_relative_path(path, &cwd, &base),
-            modified: entry
-                .metadata()
-                .ok()
-                .and_then(|metadata| metadata.modified().ok())
-                .unwrap_or(SystemTime::UNIX_EPOCH),
-        };
-        retain_best_match(&mut matches, candidate, result_limit);
-    }
-
-    let mut matches = matches.into_vec();
-    matches.sort_by(|a, b| {
-        b.modified
-            .cmp(&a.modified)
-            .then_with(|| a.path.cmp(&b.path))
-    });
-    let elapsed = started_at.elapsed();
-
-    Ok(GlobScanResult {
-        matches,
-        total_matches,
-        scanned_entries,
-        elapsed,
-        stopped,
-    })
-}
-
-fn preflight_exceeds_default_budget(
-    base: &Path,
-    matcher: &globset::GlobMatcher,
-    skip_generated: bool,
-    abort_token: &Option<CancellationToken>,
-    worker_cancel: &CancellationToken,
-) -> Result<bool, ToolError> {
-    let started_at = Instant::now();
-    let mut scanned_entries = 0usize;
-    let walker = walk_entries(base, skip_generated);
-    let mut entries = walker.into_iter().filter_map(Result::ok);
-
-    loop {
-        if is_cancelled(abort_token, worker_cancel) {
-            return Err(ToolError::Aborted);
-        }
-        if scanned_entries >= PREFLIGHT_MAX_ENTRIES
-            || started_at.elapsed() >= PREFLIGHT_MAX_DURATION
-        {
-            return Ok(true);
-        }
-        let Some(entry) = entries.next() else {
-            return Ok(false);
-        };
-        scanned_entries = scanned_entries.saturating_add(1);
-
-        if entry.file_type().is_symlink() || !entry.file_type().is_file() {
-            continue;
-        }
-        let path = entry.path();
-        let rel = path.strip_prefix(base).unwrap_or(path);
-        let _ = matcher.is_match(rel);
-    }
-}
-
-fn retain_best_match(matches: &mut BinaryHeap<GlobMatch>, candidate: GlobMatch, limit: usize) {
-    if matches.len() < limit {
-        matches.push(candidate);
-        return;
-    }
-
-    if matches
-        .peek()
-        .is_some_and(|worst| is_better_match(&candidate, worst))
-    {
-        let _ = matches.pop();
-        matches.push(candidate);
-    }
-}
-
-fn is_better_match(candidate: &GlobMatch, current: &GlobMatch) -> bool {
-    candidate.modified > current.modified
-        || (candidate.modified == current.modified && candidate.path < current.path)
 }
 
 fn format_scan_output(
@@ -879,42 +649,6 @@ struct FormattedGlobOutput {
     truncated: bool,
 }
 
-fn walk_entries(
-    base: &Path,
-    skip_generated: bool,
-) -> impl Iterator<Item = Result<walkdir::DirEntry, walkdir::Error>> {
-    walkdir::WalkDir::new(base)
-        .follow_links(false)
-        .into_iter()
-        .filter_entry(move |entry| should_descend(entry, skip_generated))
-}
-
-fn should_descend(entry: &walkdir::DirEntry, skip_generated: bool) -> bool {
-    if entry.depth() == 0 || !entry.file_type().is_dir() {
-        return true;
-    }
-    let Some(name) = entry.file_name().to_str() else {
-        return true;
-    };
-    if VCS_DIRECTORIES_TO_EXCLUDE.contains(&name) {
-        return false;
-    }
-    if skip_generated && GENERATED_DIRECTORIES_TO_EXCLUDE.contains(&name) {
-        return false;
-    }
-    true
-}
-
-fn is_cancelled(
-    abort_token: &Option<CancellationToken>,
-    worker_cancel: &CancellationToken,
-) -> bool {
-    abort_token
-        .as_ref()
-        .is_some_and(CancellationToken::is_cancelled)
-        || worker_cancel.is_cancelled()
-}
-
 fn path_provides_narrow_scope(input: &GlobInput, base: &Path, cwd: &Path) -> bool {
     input
         .path
@@ -967,14 +701,6 @@ fn normalize_path_lexically(path: &Path) -> PathBuf {
     }
 }
 
-fn to_relative_path(path: &Path, cwd: &Path, base: &Path) -> String {
-    path.strip_prefix(cwd)
-        .or_else(|_| path.strip_prefix(base))
-        .unwrap_or(path)
-        .display()
-        .to_string()
-}
-
 fn resolve_path(path: &str, cwd: &Path) -> PathBuf {
     let p = PathBuf::from(path);
     if p.is_absolute() { p } else { cwd.join(p) }
@@ -990,50 +716,6 @@ mod tests {
         for index in 0..count {
             std::fs::write(root.join(format!("file-{index:05}.rs")), "").unwrap();
         }
-    }
-
-    #[test]
-    fn default_budget_rejects_a_broad_preflight() {
-        let tmp = tempfile::tempdir().unwrap();
-        make_file_tree(tmp.path(), PREFLIGHT_MAX_ENTRIES + 1);
-        let matcher = Glob::new("**/*").unwrap().compile_matcher();
-
-        assert!(
-            preflight_exceeds_default_budget(
-                tmp.path(),
-                &matcher,
-                true,
-                &None,
-                &CancellationToken::new(),
-            )
-            .unwrap()
-        );
-    }
-
-    #[test]
-    fn scan_budget_stops_and_bounds_results() {
-        let tmp = tempfile::tempdir().unwrap();
-        make_file_tree(tmp.path(), 20);
-        let result = scan_glob(GlobScanRequest {
-            base: tmp.path().to_path_buf(),
-            cwd: tmp.path().to_path_buf(),
-            pattern: "**/*".to_string(),
-            result_limit: 2,
-            budget: GlobScanBudget::Expanded,
-            limits: GlobScanLimits {
-                max_entries: 5,
-                max_duration: Duration::from_secs(10),
-                max_results: 2,
-            },
-            skip_generated: true,
-            abort_token: None,
-            worker_cancel: CancellationToken::new(),
-        })
-        .unwrap();
-
-        assert_eq!(result.scanned_entries, 5);
-        assert_eq!(result.matches.len(), 2);
-        assert_eq!(result.stopped, Some(ScanStop::EntryLimit));
     }
 
     #[test]

@@ -14,6 +14,13 @@ const MAX_TEXT_BYTES: usize = 256 * 1024;
 const MAX_CONTENT_BLOCKS: usize = 128;
 
 pub(crate) fn convert_result(result: CallToolResult) -> ToolOutput {
+    convert_result_with_image_budget(result, MAX_IMAGE_BASE64_BYTES)
+}
+
+pub(crate) fn convert_result_with_image_budget(
+    result: CallToolResult,
+    image_budget: usize,
+) -> ToolOutput {
     let mut output = ToolOutput::text("");
     output.content.clear();
     output.is_error = result.is_error;
@@ -30,7 +37,7 @@ pub(crate) fn convert_result(result: CallToolResult) -> ToolOutput {
                 .ok_or("text block is missing text")
                 .and_then(|text| bounded_text(text, &mut text_bytes))
                 .map_err(str::to_owned),
-            "image" => image_block(block, &mut image_bytes, &mut warnings),
+            "image" => image_block(block, &mut image_bytes, image_budget, &mut warnings),
             _ => Err(
                 "unsupported MCP content type; this observation was not passed to the model"
                     .to_owned(),
@@ -88,6 +95,7 @@ fn bounded_text(text: String, total: &mut usize) -> Result<ContentBlock, &'stati
 fn image_block(
     block: McpContent,
     total: &mut usize,
+    budget: usize,
     warnings: &mut Vec<String>,
 ) -> Result<ContentBlock, String> {
     let mime = block.mime_type.ok_or("image block is missing mimeType")?;
@@ -99,12 +107,12 @@ fn image_block(
         _ => return Err("unsupported image MIME type; request PNG, JPEG, WebP or GIF".into()),
     };
     let data = block.data.ok_or("image block is missing base64 data")?;
-    if data.len() > MAX_IMAGE_BASE64_BYTES.saturating_sub(*total) {
+    if data.len() > budget.saturating_sub(*total) {
         return Err(format!(
             "Image data is too large: {} base64 bytes; remaining tool-result budget: {} bytes (maximum {} bytes). Request a proportionally resized screenshot; do not crop automatically or substitute OCR.",
             data.len(),
-            MAX_IMAGE_BASE64_BYTES.saturating_sub(*total),
-            MAX_IMAGE_BASE64_BYTES
+            budget.saturating_sub(*total),
+            budget
         ));
     }
     let decoded = STANDARD.decode(&data).map_err(|_| "invalid image base64")?;
@@ -125,6 +133,33 @@ fn image_block(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn desktop_budget_admits_valid_larger_images_without_raising_generic_mcp_limit() {
+        let mut seed = 42_u32;
+        let image = image::RgbImage::from_fn(600, 520, |_, _| {
+            image::Rgb(std::array::from_fn(|_| {
+                seed ^= seed << 13;
+                seed ^= seed >> 17;
+                seed ^= seed << 5;
+                seed as u8
+            }))
+        });
+        let mut bytes = Cursor::new(Vec::new());
+        image.write_to(&mut bytes, image::ImageFormat::Png).unwrap();
+        let data = STANDARD.encode(bytes.into_inner());
+        let budget = kcoder_types::computer_use::DESKTOP_SCREENSHOT_BASE64_BYTES;
+        assert!((MAX_IMAGE_BASE64_BYTES + 1..=budget).contains(&data.len()));
+        let payload =
+            serde_json::json!({"content":[{"type":"image","mimeType":"image/png","data":data}]});
+        assert!(convert(payload.clone()).is_error);
+        let output =
+            convert_result_with_image_budget(serde_json::from_value(payload).unwrap(), budget);
+        assert!(!output.is_error);
+        assert!(
+            matches!(&output.content[..], [ContentBlock::Image { source }] if source.data == data)
+        );
+    }
     use serde_json::json;
 
     fn png() -> String {

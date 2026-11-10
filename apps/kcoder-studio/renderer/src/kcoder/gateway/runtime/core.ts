@@ -1,10 +1,10 @@
 import { listenAccountContextChanges } from '../../accountContextEvents'
 import { BackgroundJobRegistry } from '../../backgroundJobRegistry'
-import { type OwnedRuntimeClient } from '../../gatewayAppServerRestart'
 import { GatewayBrowserRuntime } from '../../gatewayBrowserRuntime'
+import { browserProfiles } from '../../gatewayBrowserProfiles'
 import { GatewayRemoteSessions } from '../../gatewayRemoteSessions'
 import { fetchGatewayServers, GatewayRpcClient, type GatewayServer } from '../../gatewayRpc'
-import type { GatewayClient } from '../../gatewayRuntimeTypes'
+import type { GatewayClient, OwnedGatewayConnection } from '../../gatewayRuntimeTypes'
 import { NotificationReplayGuard } from '../../notificationReplayGuard'
 import { ToolPathPreviewConsumer } from '../../toolPathPreview'
 import { WorkspaceListScan } from '../../workspaceListScan'
@@ -46,7 +46,7 @@ export class GatewayRuntimeCore {
   disposed = false
   restartingAppServers = false
   restartingServerId: string | null = null
-  readonly ownedRuntimeClients = new Map<GatewayClient, OwnedRuntimeClient>()
+  readonly connectionsByClient = new Map<GatewayClient, OwnedGatewayConnection>()
   controlClientPromise: Promise<GatewayClient> | null = null
   selectedServer: GatewayServer | null = null
   readonly agentConversationSubscriptions = new Map<
@@ -57,10 +57,12 @@ export class GatewayRuntimeCore {
       taskId: string
       threadId: string
       agentId: string
+      expectedBackgroundRun?: import('../../../../../shared/generated/contracts').BackgroundRunKey
       assertCurrent: () => void
       removeCloseListener?: () => void
     }
   >()
+  readonly taskViewGenerations = new Map<string, { views: Set<string>; generation: string }>()
   readonly clientByTask = new Map<string, GatewayClient>()
   readonly resumeClientByTask = new Map<string, Promise<GatewayClient>>()
   readonly disconnectRecoveryByTask = new Map<string, Promise<void>>()
@@ -69,17 +71,25 @@ export class GatewayRuntimeCore {
   readonly toolPathPreviews = new ToolPathPreviewConsumer()
   readonly appServerDisconnectedClients = new WeakSet<GatewayClient>()
   readonly pendingAsyncJobs = new Set<Promise<void>>()
+  readonly commandClientScopeByKey = new Map<string, string>()
+  readonly serverIdentityById = new Map<string, string>()
+  readonly configurationEpochByTarget = new Map<string, object>()
+  commandDirectorySequence = 0
+  readonly commandDirectoryRefresh = new Map<
+    string | undefined,
+    { sequence: number; result: Promise<GatewayServer[]> }
+  >()
   readonly commandClientByServer = new Map<string, Promise<GatewayClient>>()
   readonly workspaceOperationByKey = new Map<string, Promise<void>>()
   readonly taskListScans = new WorkspaceListScan<GatewayServer, GatewayWorkspaceDescriptor>()
-  readonly transientClients = new Set<GatewayClient>()
   workspaceScanGeneration = 0
   readonly workspaceDescriptorCache = new Map<GatewayServer, GatewayWorkspaceDescriptor[]>()
   readonly threadByTask = new Map<string, string>()
   readonly taskByThread = new Map<string, string>()
   readonly persistedThreadMisses = new Map<string, number>()
   readonly canonicalTaskByRequested = new Map<string, string>()
-  readonly turnText = new Map<string, string>()
+  /** Null means a disconnect left a gap in the turn's streamed text. */
+  readonly turnText = new Map<string, string | null>()
   readonly turnAttemptIds = new Map<string, string>()
   readonly toolNameByCall = new Map<string, string>()
   readonly backgroundJobById = new BackgroundJobRegistry<GatewayBackgroundJob>()
@@ -88,27 +98,22 @@ export class GatewayRuntimeCore {
   readonly archivedTasks = new Map<string, GatewayTask>()
   readonly taskMetadata = readTaskMetadata()
   readonly activeTurnByTask = new Map<string, ActiveGatewayTurn>()
+  readonly turnReceiptObservers = new Map<string, AbortController>()
   readonly completedTurnKeys = new Set<string>()
   readonly pendingTurnStartByTask = new Set<string>()
+  pendingTaskInputs = new Map<string, Set<symbol>>()
   readonly pendingQuestionByKey = new Map<string, PendingGatewayQuestion>()
   readonly browserRuntime: GatewayBrowserRuntime
   readonly remoteSessions: GatewayRemoteSessions
   readonly accountEpochByTarget = new Map<string, object>()
-  readonly accountClients = new Map<GatewayClient, string>()
   readonly handleServersChanged = (event?: Event) => {
     const targetId = (event as CustomEvent<{ targetId?: string }> | undefined)?.detail?.targetId
+    const previousIdentities = new Map(this.serverIdentityById)
     this.serversPromise = null
     this.selectedServer = null
     this.invalidateWorkspaceScans()
     this.workspaceDescriptorCache.clear()
-    for (const [key, client] of this.commandClientByServer) {
-      if (targetId && !key.startsWith(`${targetId}\0`)) continue
-      void client.then(
-        value => value.close(),
-        () => undefined
-      )
-      this.commandClientByServer.delete(key)
-    }
+    connections.refreshCommandDirectory.call(this, targetId, previousIdentities)
   }
   stopAccountContextListener: () => void = () => {}
   invalidateAccountTarget = connections.invalidateAccountTarget
@@ -119,6 +124,7 @@ export class GatewayRuntimeCore {
   serverForParams = connections.serverForParams
   connectClient = connections.connectClient
   controlClient = connections.controlClient
+  assertCommandTarget = (server: GatewayServer) => connections.assertCommandOwner(this, server)
   commandClient = connections.commandClient
   closeCachedCommandClient = connections.closeCachedCommandClient
   handleCommandClientClose = connections.handleCommandClientClose
@@ -127,12 +133,15 @@ export class GatewayRuntimeCore {
   workspaceDescriptors = connections.workspaceDescriptors
   serverForBrowserLabel = resources.serverForBrowserLabel
   openBrowser = resources.openBrowser
+  browserProfiles = browserProfiles
+  browserHandoff = resources.browserHandoff
   setBrowserBounds = resources.setBrowserBounds
   controlBrowser = resources.controlBrowser
   evaluateBrowser = resources.evaluateBrowser
   readBrowserPageState = resources.readBrowserPageState
   relabelBrowser = resources.relabelBrowser
   closeBrowser = resources.closeBrowser
+  closeBrowserForAccountSwitch = resources.closeBrowserForAccountSwitch
   clearBrowserData = resources.clearBrowserData
   status = resources.status
   saveAttachment = resources.saveAttachment
@@ -179,7 +188,8 @@ export class GatewayRuntimeCore {
   isRestartingServer = lifecycle.isRestartingServer
   assertRequestTargetAvailable = lifecycle.assertRequestTargetAvailable
   restartAppServers = lifecycle.restartAppServers
-  releaseRestartClient = lifecycle.releaseRestartClient
+  unregisterClient = lifecycle.unregisterClient
+  releaseClient = lifecycle.releaseClient
   sendTask = turns.sendTask
   resumeTask = turns.resumeTask
   readyTaskClient = turns.readyTaskClient

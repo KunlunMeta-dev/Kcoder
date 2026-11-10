@@ -1,0 +1,1134 @@
+{
+  "TaskInteractionReferenceV1": {
+    "valid": [
+      {
+        "name": "valid-exact-native-selector-0",
+        "value": {
+          "attemptId": "actual-attempt",
+          "selector": {
+            "serverId": "native-server",
+            "threadId": "thread",
+            "turnId": "turn",
+            "requestId": 2000001,
+            "appServerEpoch": "native-epoch",
+            "kind": "question",
+            "questionId": "question-2000001"
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "invalid-exact-native-selector-0",
+        "value": {
+          "attemptId": "actual-attempt",
+          "selector": {
+            "serverId": "native-server",
+            "threadId": "thread",
+            "turnId": "turn",
+            "requestId": 2000001,
+            "appServerEpoch": "native-epoch",
+            "kind": "question",
+            "questionId": "question-2000001"
+          },
+          "authorized": true
+        }
+      }
+    ]
+  },
+  "TaskInteractionOptionV1": {
+    "valid": [
+      {
+        "name": "valid-exact-native-selector-0",
+        "value": {
+          "label": "Continue",
+          "description": "Use the original task"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "invalid-exact-native-selector-0",
+        "value": {
+          "label": "Continue",
+          "description": "Use the original task",
+          "authorized": true
+        }
+      }
+    ]
+  },
+  "TaskInteractionQuestionV1": {
+    "valid": [
+      {
+        "name": "valid-exact-native-selector-0",
+        "value": {
+          "id": "question",
+          "header": "Original question",
+          "question": "Choose an option",
+          "isOther": false,
+          "options": [
+            {
+              "label": "Continue",
+              "description": "Use the original task"
+            }
+          ]
+        }
+      },
+      {
+        "name": "valid-multiselect-compatible-0",
+        "value": {
+          "id": "q",
+          "header": "Choice",
+          "question": "Select materials",
+          "isOther": false,
+          "multiSelect": true,
+          "options": [
+            {
+              "label": "A",
+              "description": "First"
+            },
+            {
+              "label": "B",
+              "description": "Second"
+            }
+          ]
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "invalid-exact-native-selector-0",
+        "value": {
+          "id": "question",
+          "header": "Original question",
+          "question": "Choose an option",
+          "isOther": false,
+          "options": [
+            {
+              "label": "Continue",
+              "description": "Use the original task"
+            }
+          ],
+          "authorized": true
+        }
+      },
+      {
+        "name": "invalid-multiselect-compatible-0",
+        "value": {
+          "id": "q",
+          "header": "Choice",
+          "question": "Pick",
+          "isOther": false,
+          "multiSelect": "true",
+          "options": []
+        }
+      }
+    ]
+  },
+  "TaskInteractionApprovalKindV1": {
+    "valid": [
+      {
+        "name": "valid-exact-native-selector-0",
+        "value": "tool"
+      }
+    ],
+    "invalid": [
+      {
+        "name": "invalid-exact-native-selector-0",
+        "value": "invented"
+      }
+    ]
+  },
+  "TaskInteractionApprovalV1": {
+    "valid": [
+      {
+        "name": "valid-exact-native-selector-0",
+        "value": {
+          "kind": "tool",
+          "subject": "FileWrite",
+          "input": "{}",
+          "reason": "Write the owned file"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "invalid-exact-native-selector-0",
+        "value": {
+          "kind": "tool",
+          "subject": "FileWrite",
+          "input": "{}",
+          "reason": "Write the owned file",
+          "authorized": true
+        }
+      }
+    ]
+  },
+  "TaskInteractionPresentationV1": {
+    "valid": [
+      {
+        "name": "valid-exact-native-selector-0",
+        "value": {
+          "questions": [
+            {
+              "id": "question",
+              "header": "Original question",
+              "question": "Choose an option",
+              "isOther": false,
+              "options": [
+                {
+                  "label": "Continue",
+                  "description": "Use the original task"
+                }
+              ]
+            }
+          ],
+          "approval": null
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "invalid-exact-native-selector-0",
+        "value": {
+          "questions": [
+            {
+              "id": "question",
+              "header": "Original question",
+              "question": "Choose an option",
+              "isOther": false,
+              "options": [
+                {
+                  "label": "Continue",
+                  "description": "Use the original task"
+                }
+              ]
+            }
+          ],
+          "approval": null,
+          "authorized": true
+        }
+      }
+    ]
+  },
+  "TaskInteractionStateV1": {
+    "valid": [
+      {
+        "name": "valid-exact-native-selector-0",
+        "value": "response_pending"
+      }
+    ],
+    "invalid": [
+      {
+        "name": "invalid-exact-native-selector-0",
+        "value": "invented"
+      }
+    ]
+  },
+  "TaskInteractionObservationStateV1": {
+    "valid": [
+      {
+        "name": "valid-exact-native-selector-0",
+        "value": "unknown"
+      }
+    ],
+    "invalid": [
+      {
+        "name": "invalid-exact-native-selector-0",
+        "value": "invented"
+      }
+    ]
+  },
+  "TaskInteractionItemV1": {
+    "valid": [
+      {
+        "name": "valid-exact-native-selector-0",
+        "value": {
+          "reference": {
+            "attemptId": "actual-attempt",
+            "selector": {
+              "serverId": "native-server",
+              "threadId": "thread",
+              "turnId": "turn",
+              "requestId": 2000001,
+              "appServerEpoch": "native-epoch",
+              "kind": "question",
+              "questionId": "question-2000001"
+            }
+          },
+          "state": "pending",
+          "presentation": {
+            "questions": [
+              {
+                "id": "question",
+                "header": "Original question",
+                "question": "Choose an option",
+                "isOther": false,
+                "options": [
+                  {
+                    "label": "Continue",
+                    "description": "Use the original task"
+                  }
+                ]
+              }
+            ],
+            "approval": null
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "invalid-exact-native-selector-0",
+        "value": {
+          "reference": {
+            "attemptId": "actual-attempt",
+            "selector": {
+              "serverId": "native-server",
+              "threadId": "thread",
+              "turnId": "turn",
+              "requestId": 2000001,
+              "appServerEpoch": "native-epoch",
+              "kind": "question",
+              "questionId": "question-2000001"
+            }
+          },
+          "state": "pending",
+          "presentation": {
+            "questions": [
+              {
+                "id": "question",
+                "header": "Original question",
+                "question": "Choose an option",
+                "isOther": false,
+                "options": [
+                  {
+                    "label": "Continue",
+                    "description": "Use the original task"
+                  }
+                ]
+              }
+            ],
+            "approval": null
+          },
+          "authorized": true
+        }
+      }
+    ]
+  },
+  "TaskInteractionSnapshotV1": {
+    "valid": [
+      {
+        "name": "valid-exact-native-selector-0",
+        "value": {
+          "schemaVersion": 1,
+          "threadId": "thread",
+          "observationState": "observed",
+          "items": [
+            {
+              "reference": {
+                "attemptId": "actual-attempt",
+                "selector": {
+                  "serverId": "native-server",
+                  "threadId": "thread",
+                  "turnId": "turn",
+                  "requestId": 2000001,
+                  "appServerEpoch": "native-epoch",
+                  "kind": "question",
+                  "questionId": "question-2000001"
+                }
+              },
+              "state": "pending",
+              "presentation": {
+                "questions": [
+                  {
+                    "id": "question",
+                    "header": "Original question",
+                    "question": "Choose an option",
+                    "isOther": false,
+                    "options": [
+                      {
+                        "label": "Continue",
+                        "description": "Use the original task"
+                      }
+                    ]
+                  }
+                ],
+                "approval": null
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "valid-multiselect-compatible-0",
+        "value": {
+          "schemaVersion": 1,
+          "threadId": "thread",
+          "observationState": "unknown",
+          "items": [],
+          "originalViewRequired": true
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "invalid-exact-native-selector-0",
+        "value": {
+          "schemaVersion": 1,
+          "threadId": "thread",
+          "observationState": "observed",
+          "items": [
+            {
+              "reference": {
+                "attemptId": "actual-attempt",
+                "selector": {
+                  "serverId": "native-server",
+                  "threadId": "thread",
+                  "turnId": "turn",
+                  "requestId": 2000001,
+                  "appServerEpoch": "native-epoch",
+                  "kind": "question",
+                  "questionId": "question-2000001"
+                }
+              },
+              "state": "pending",
+              "presentation": {
+                "questions": [
+                  {
+                    "id": "question",
+                    "header": "Original question",
+                    "question": "Choose an option",
+                    "isOther": false,
+                    "options": [
+                      {
+                        "label": "Continue",
+                        "description": "Use the original task"
+                      }
+                    ]
+                  }
+                ],
+                "approval": null
+              }
+            }
+          ],
+          "authorized": true
+        }
+      },
+      {
+        "name": "invalid-multiselect-compatible-0",
+        "value": {
+          "schemaVersion": 1,
+          "threadId": "thread",
+          "observationState": "unknown",
+          "items": [],
+          "originalViewRequired": "true"
+        }
+      }
+    ]
+  },
+  "TaskInteractionAnswerV1": {
+    "valid": [
+      {
+        "name": "valid-exact-native-selector-0",
+        "value": {
+          "answers": [
+            "Continue"
+          ]
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "invalid-exact-native-selector-0",
+        "value": {
+          "answers": [
+            "Continue"
+          ],
+          "authorized": true
+        }
+      }
+    ]
+  },
+  "TaskInteractionRespondParamsV1": {
+    "valid": [
+      {
+        "name": "valid-exact-native-selector-0",
+        "value": {
+          "reference": {
+            "attemptId": "actual-attempt",
+            "selector": {
+              "serverId": "native-server",
+              "threadId": "thread",
+              "turnId": "turn",
+              "requestId": 2000001,
+              "appServerEpoch": "native-epoch",
+              "kind": "question",
+              "questionId": "question-2000001"
+            }
+          },
+          "answers": {
+            "question": {
+              "answers": [
+                "Continue"
+              ]
+            }
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "invalid-exact-native-selector-0",
+        "value": {
+          "reference": {
+            "attemptId": "actual-attempt",
+            "selector": {
+              "serverId": "native-server",
+              "threadId": "thread",
+              "turnId": "turn",
+              "requestId": 2000001,
+              "appServerEpoch": "native-epoch",
+              "kind": "question",
+              "questionId": "question-2000001"
+            }
+          },
+          "answers": {
+            "question": {
+              "answers": [
+                "Continue"
+              ]
+            }
+          },
+          "authorized": true
+        }
+      }
+    ]
+  },
+  "TaskInteractionRespondResultV1": {
+    "valid": [
+      {
+        "name": "valid-exact-native-selector-0",
+        "value": {
+          "reference": {
+            "attemptId": "actual-attempt",
+            "selector": {
+              "serverId": "native-server",
+              "threadId": "thread",
+              "turnId": "turn",
+              "requestId": 2000001,
+              "appServerEpoch": "native-epoch",
+              "kind": "question",
+              "questionId": "question-2000001"
+            }
+          },
+          "state": "response_pending"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "invalid-exact-native-selector-0",
+        "value": {
+          "reference": {
+            "attemptId": "actual-attempt",
+            "selector": {
+              "serverId": "native-server",
+              "threadId": "thread",
+              "turnId": "turn",
+              "requestId": 2000001,
+              "appServerEpoch": "native-epoch",
+              "kind": "question",
+              "questionId": "question-2000001"
+            }
+          },
+          "state": "response_pending",
+          "authorized": true
+        }
+      }
+    ]
+  },
+  "AsyncQuestionOptionDraft": {
+    "valid": [
+      {
+        "name": "original-task-question",
+        "value": {
+          "label": "Engineers",
+          "description": "Technical audience"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing-contract",
+        "value": null
+      }
+    ]
+  },
+  "AsyncQuestionItemDraft": {
+    "valid": [
+      {
+        "name": "original-task-question",
+        "value": {
+          "header": "Audience",
+          "question": "Who is the report for?",
+          "options": [
+            {
+              "label": "Engineers",
+              "description": "Technical audience"
+            }
+          ],
+          "multiSelect": false
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing-contract",
+        "value": null
+      }
+    ]
+  },
+  "AsyncQuestionRequest": {
+    "valid": [
+      {
+        "name": "original-task-question",
+        "value": {
+          "sourceTurnId": "turn-1",
+          "toolCallId": "call-1",
+          "questions": [
+            {
+              "header": "Audience",
+              "question": "Who is the report for?",
+              "options": [
+                {
+                  "label": "Engineers",
+                  "description": "Technical audience"
+                }
+              ],
+              "multiSelect": false
+            }
+          ]
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing-contract",
+        "value": null
+      }
+    ]
+  },
+  "AsyncQuestionOption": {
+    "valid": [
+      {
+        "name": "original-task-question",
+        "value": {
+          "id": "option-1",
+          "label": "Engineers",
+          "description": "Technical audience"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing-contract",
+        "value": null
+      }
+    ]
+  },
+  "AsyncQuestionItem": {
+    "valid": [
+      {
+        "name": "original-task-question",
+        "value": {
+          "id": "item-1",
+          "header": "Audience",
+          "question": "Who is the report for?",
+          "options": [
+            {
+              "id": "option-1",
+              "label": "Engineers",
+              "description": "Technical audience"
+            }
+          ],
+          "multiSelect": false
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing-contract",
+        "value": null
+      }
+    ]
+  },
+  "AsyncQuestionStatus": {
+    "valid": [
+      {
+        "name": "original-task-question",
+        "value": "pending"
+      },
+      {
+        "name": "answer_saved",
+        "value": "answer_saved"
+      },
+      {
+        "name": "queued",
+        "value": "queued"
+      },
+      {
+        "name": "context_applied",
+        "value": "context_applied"
+      },
+      {
+        "name": "delivery_failed",
+        "value": "delivery_failed"
+      },
+      {
+        "name": "delivery_unknown",
+        "value": "delivery_unknown"
+      },
+      {
+        "name": "cancelled",
+        "value": "cancelled"
+      },
+      {
+        "name": "stale",
+        "value": "stale"
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing-contract",
+        "value": null
+      },
+      {
+        "name": "unknown-status",
+        "value": "model_handled"
+      }
+    ]
+  },
+  "AsyncQuestionAnswerValue": {
+    "valid": [
+      {
+        "name": "original-task-question",
+        "value": {
+          "selectedOptionIds": [
+            "option-1"
+          ],
+          "text": "Engineers"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing-contract",
+        "value": null
+      }
+    ]
+  },
+  "AsyncQuestionAnswerRecord": {
+    "valid": [
+      {
+        "name": "original-task-question",
+        "value": {
+          "submissionId": "submission-1",
+          "answers": {
+            "item-1": {
+              "selectedOptionIds": [
+                "option-1"
+              ],
+              "text": "Engineers"
+            }
+          },
+          "acceptedAtMs": 2
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing-contract",
+        "value": null
+      }
+    ]
+  },
+  "AsyncQuestionRecord": {
+    "valid": [
+      {
+        "name": "original-task-question",
+        "value": {
+          "questionId": "question-1",
+          "requestId": "request-1",
+          "threadId": "thread-1",
+          "sourceTurnId": "turn-1",
+          "toolCallId": "call-1",
+          "revision": 1,
+          "createdAtMs": 1,
+          "status": "pending",
+          "questions": [
+            {
+              "id": "item-1",
+              "header": "Audience",
+              "question": "Who is the report for?",
+              "options": [
+                {
+                  "id": "option-1",
+                  "label": "Engineers",
+                  "description": "Technical audience"
+                }
+              ],
+              "multiSelect": false
+            }
+          ]
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing-contract",
+        "value": null
+      },
+      {
+        "name": "numeric-request-id",
+        "value": {
+          "questionId": "question-1",
+          "requestId": 1,
+          "threadId": "thread-1",
+          "sourceTurnId": "turn-1",
+          "toolCallId": "call-1",
+          "revision": 1,
+          "createdAtMs": 1,
+          "status": "pending",
+          "questions": [
+            {
+              "id": "item-1",
+              "header": "Audience",
+              "question": "Who is the report for?",
+              "options": [
+                {
+                  "id": "option-1",
+                  "label": "Engineers",
+                  "description": "Technical audience"
+                }
+              ],
+              "multiSelect": false
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "AsyncQuestionAccepted": {
+    "valid": [
+      {
+        "name": "original-task-question",
+        "value": {
+          "accepted": true,
+          "question": {
+            "questionId": "question-1",
+            "requestId": "request-1",
+            "threadId": "thread-1",
+            "sourceTurnId": "turn-1",
+            "toolCallId": "call-1",
+            "revision": 1,
+            "createdAtMs": 1,
+            "status": "pending",
+            "questions": [
+              {
+                "id": "item-1",
+                "header": "Audience",
+                "question": "Who is the report for?",
+                "options": [
+                  {
+                    "id": "option-1",
+                    "label": "Engineers",
+                    "description": "Technical audience"
+                  }
+                ],
+                "multiSelect": false
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing-contract",
+        "value": null
+      }
+    ]
+  },
+  "AsyncQuestionAnswerReceipt": {
+    "valid": [
+      {
+        "name": "original-task-question",
+        "value": {
+          "accepted": true,
+          "duplicate": false,
+          "question": {
+            "questionId": "question-1",
+            "requestId": "request-1",
+            "threadId": "thread-1",
+            "sourceTurnId": "turn-1",
+            "toolCallId": "call-1",
+            "revision": 1,
+            "createdAtMs": 1,
+            "status": "pending",
+            "questions": [
+              {
+                "id": "item-1",
+                "header": "Audience",
+                "question": "Who is the report for?",
+                "options": [
+                  {
+                    "id": "option-1",
+                    "label": "Engineers",
+                    "description": "Technical audience"
+                  }
+                ],
+                "multiSelect": false
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing-contract",
+        "value": null
+      }
+    ]
+  },
+  "AsyncQuestionListParams": {
+    "valid": [
+      {
+        "name": "original-task-question",
+        "value": {
+          "threadId": "thread-1"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing-contract",
+        "value": null
+      }
+    ]
+  },
+  "AsyncQuestionAnswerParams": {
+    "valid": [
+      {
+        "name": "original-task-question",
+        "value": {
+          "threadId": "thread-1",
+          "questionId": "question-1",
+          "submissionId": "submission-1",
+          "expectedRevision": 1,
+          "answers": {
+            "item-1": {
+              "selectedOptionIds": [
+                "option-1"
+              ],
+              "text": "Engineers"
+            }
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing-contract",
+        "value": null
+      }
+    ]
+  },
+  "AsyncQuestionCancelParams": {
+    "valid": [
+      {
+        "name": "original-task-question",
+        "value": {
+          "threadId": "thread-1",
+          "questionId": "question-1",
+          "expectedRevision": 1
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing-contract",
+        "value": null
+      }
+    ]
+  },
+  "AsyncQuestionListResult": {
+    "valid": [
+      {
+        "name": "original-task-question",
+        "value": {
+          "threadId": "thread-1",
+          "questions": [
+            {
+              "questionId": "question-1",
+              "requestId": "request-1",
+              "threadId": "thread-1",
+              "sourceTurnId": "turn-1",
+              "toolCallId": "call-1",
+              "revision": 1,
+              "createdAtMs": 1,
+              "status": "pending",
+              "questions": [
+                {
+                  "id": "item-1",
+                  "header": "Audience",
+                  "question": "Who is the report for?",
+                  "options": [
+                    {
+                      "id": "option-1",
+                      "label": "Engineers",
+                      "description": "Technical audience"
+                    }
+                  ],
+                  "multiSelect": false
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing-contract",
+        "value": null
+      }
+    ]
+  },
+  "AsyncQuestionAnswerResult": {
+    "valid": [
+      {
+        "name": "original-task-question",
+        "value": {
+          "threadId": "thread-1",
+          "question": {
+            "questionId": "question-1",
+            "requestId": "request-1",
+            "threadId": "thread-1",
+            "sourceTurnId": "turn-1",
+            "toolCallId": "call-1",
+            "revision": 1,
+            "createdAtMs": 1,
+            "status": "pending",
+            "questions": [
+              {
+                "id": "item-1",
+                "header": "Audience",
+                "question": "Who is the report for?",
+                "options": [
+                  {
+                    "id": "option-1",
+                    "label": "Engineers",
+                    "description": "Technical audience"
+                  }
+                ],
+                "multiSelect": false
+              }
+            ]
+          },
+          "accepted": true,
+          "duplicate": false
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing-contract",
+        "value": null
+      }
+    ]
+  },
+  "AsyncQuestionCancelResult": {
+    "valid": [
+      {
+        "name": "original-task-question",
+        "value": {
+          "threadId": "thread-1",
+          "question": {
+            "questionId": "question-1",
+            "requestId": "request-1",
+            "threadId": "thread-1",
+            "sourceTurnId": "turn-1",
+            "toolCallId": "call-1",
+            "revision": 2,
+            "createdAtMs": 1,
+            "status": "cancelled",
+            "questions": [
+              {
+                "id": "item-1",
+                "header": "Audience",
+                "question": "Who is the report for?",
+                "options": [
+                  {
+                    "id": "option-1",
+                    "label": "Engineers",
+                    "description": "Technical audience"
+                  }
+                ],
+                "multiSelect": false
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing-contract",
+        "value": null
+      }
+    ]
+  },
+  "AsyncQuestionChangedNotification": {
+    "valid": [
+      {
+        "name": "original-task-question",
+        "value": {
+          "threadId": "thread-1",
+          "question": {
+            "questionId": "question-1",
+            "requestId": "request-1",
+            "threadId": "thread-1",
+            "sourceTurnId": "turn-1",
+            "toolCallId": "call-1",
+            "revision": 1,
+            "createdAtMs": 1,
+            "status": "pending",
+            "questions": [
+              {
+                "id": "item-1",
+                "header": "Audience",
+                "question": "Who is the report for?",
+                "options": [
+                  {
+                    "id": "option-1",
+                    "label": "Engineers",
+                    "description": "Technical audience"
+                  }
+                ],
+                "multiSelect": false
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing-contract",
+        "value": null
+      }
+    ]
+  }
+}

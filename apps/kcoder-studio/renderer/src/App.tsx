@@ -1,4 +1,9 @@
+import { ToolSelectionsStartupSync } from '@/components/settings/ToolSelectionsStartupSync'
+import { PageTransitionController } from '@/components/layout/pageTransitions'
+import { PageLoadingState } from '@/components/layout/PageLoadingState'
 import {
+  Suspense,
+  lazy,
   useCallback,
   useEffect,
   useRef,
@@ -10,14 +15,7 @@ import { Check, Copy, Info, Minimize2, PanelLeft } from 'lucide-react'
 import { AuthProvider } from '@/features/auth/AuthProvider'
 import { useAuth } from '@/features/auth/useAuth'
 import { WorkbenchProvider } from '@/features/workbench/WorkbenchProvider'
-import { OidcCallbackPage } from '@/pages/OidcCallbackPage'
-import { LoginPage } from '@/pages/LoginPage'
 import { WorkbenchPage } from '@/pages/WorkbenchPage'
-import { PluginsPage } from '@/pages/PluginsPage'
-import { PluginCreatePage } from '@/pages/PluginCreatePage'
-import { PluginManagementPage } from '@/pages/PluginManagementPage'
-import { AppsPage } from '@/pages/AppsPage'
-import { SitesPage } from '@/pages/SitesPage'
 import { stripAppBasePath } from '@/config/runtime'
 import { AppearanceProvider } from '@/features/appearance'
 import { ChromeTitlebar } from '@/components/topnav/ChromeTitlebar'
@@ -26,7 +24,7 @@ import { DesktopMenuBar } from '@/kcoder/DesktopMenuBar'
 import { AppIframe } from '@/components/topnav/AppIframe'
 import { useChromeTabs } from '@/components/topnav/useChromeTabs'
 import type { AppTab } from '@/config/apps'
-import { isTauriRuntime } from '@/lib/runtime-environment'
+import { isGatewayRuntime } from '@/lib/runtime-environment'
 import { AppUpdateProvider } from '@/features/app-update/AppUpdateProvider'
 import { AppUpdateTitlebarButton } from '@/components/topnav/AppUpdateTitlebarButton'
 import { TitlebarTooltip } from '@/components/topnav/TitlebarTooltip'
@@ -43,7 +41,7 @@ import { useTranslation } from '@/hooks/useTranslation'
 import { cn } from '@/lib/utils'
 import { navigateTo } from '@/lib/navigation'
 import { createLocalAppServices } from '@/api/local/localServices'
-import { defaultAppPreferences, getAppPreferences } from '@/tauri/appPreferences'
+import { defaultAppPreferences, getAppPreferences } from '@/host/appPreferences'
 import { applyLanguagePreference } from '@/i18n/languagePreference'
 import {
   KEYBINDINGS_CHANGED_EVENT,
@@ -72,29 +70,31 @@ import {
   setActiveKeybindings,
 } from '@/lib/keybindings'
 import {
-  getWeworkDevInstanceInfo,
-  getWeworkDevInstanceRows,
-  getWeworkDocumentTitle,
+  getKCoderDevInstanceInfo,
+  getKCoderDevInstanceRows,
+  getKCoderDocumentTitle,
 } from '@/lib/kcoder-dev-instance'
 import { AppshotBridge } from '@/features/appshots/AppshotBridge'
-import { SystemDragPanel } from '@/features/system-drag/SystemDragPanel'
-import { SystemDragBridge } from '@/features/system-drag/SystemDragBridge'
 import { DesktopFileMenuBridge } from '@/kcoder/DesktopFileMenuBridge'
 import { desktopHost } from '@/kcoder/desktopHost'
-import { installMacOSInputArrowKeyGuard } from '@/lib/macosInputArrowKeyGuard'
+
+const PluginsPage = lazy(() =>
+  import('@/pages/PluginsPage').then(module => ({ default: module.PluginsPage }))
+)
+const PluginCreatePage = lazy(() =>
+  import('@/pages/PluginCreatePage').then(module => ({ default: module.PluginCreatePage }))
+)
+const PluginManagementPage = lazy(() =>
+  import('@/pages/PluginManagementPage').then(module => ({ default: module.PluginManagementPage }))
+)
+const AppsPage = lazy(() =>
+  import('@/pages/AppsPage').then(module => ({ default: module.AppsPage }))
+)
+const SitesPage = lazy(() =>
+  import('@/pages/SitesPage').then(module => ({ default: module.SitesPage }))
+)
 
 const WORKBENCH_STARTUP_REVEAL_TIMEOUT_MS = 6000
-
-function hasTauriIpc() {
-  const internals = (
-    window as typeof window & {
-      __TAURI_INTERNALS__?: { invoke?: unknown; transformCallback?: unknown }
-    }
-  ).__TAURI_INTERNALS__
-  return (
-    typeof internals?.invoke === 'function' && typeof internals.transformCallback === 'function'
-  )
-}
 
 function useCurrentPath() {
   const [path, setPath] = useState(stripAppBasePath(window.location.pathname))
@@ -108,12 +108,14 @@ function useCurrentPath() {
   return path
 }
 
+
+
 interface AppRoutesProps {
   onWorkbenchStartupReadyChange?: (ready: boolean) => void
-  onOpenWeworkForAppshot?: () => void
+  onOpenKCoderForAppshot?: () => void
 }
 
-function AppRoutes({ onWorkbenchStartupReadyChange, onOpenWeworkForAppshot }: AppRoutesProps = {}) {
+function AppRoutes({ onWorkbenchStartupReadyChange, onOpenKCoderForAppshot }: AppRoutesProps = {}) {
   const path = useCurrentPath()
   const { user, isLoading } = useAuth()
   const cloudConnection = useCloudConnection()
@@ -158,14 +160,6 @@ function AppRoutes({ onWorkbenchStartupReadyChange, onOpenWeworkForAppshot }: Ap
     onWorkbenchStartupReadyChange?.(true)
   }, [isLoading, isNativeApp, onWorkbenchStartupReadyChange, resolvedActiveTab?.url, user])
 
-  if (path === '/login') {
-    return <LoginPage />
-  }
-
-  if (path === '/login/oidc') {
-    return <OidcCallbackPage />
-  }
-
   if (isLoading || !user) {
     return null
   }
@@ -187,8 +181,8 @@ function AppRoutes({ onWorkbenchStartupReadyChange, onOpenWeworkForAppshot }: Ap
   // reconstructing them after every route change is both lossy and expensive.
   return (
     <WorkbenchProvider user={user} onStartupReadyChange={onWorkbenchStartupReadyChange}>
-      {onOpenWeworkForAppshot ? <AppshotBridge onOpenWework={onOpenWeworkForAppshot} /> : null}
-      {hasTauriIpc() && <SystemDragBridge />}
+      <ToolSelectionsStartupSync />
+      {onOpenKCoderForAppshot ? <AppshotBridge onOpenStudio={onOpenKCoderForAppshot} /> : null}
       {desktopHost()?.onMenuCommand && <DesktopFileMenuBridge />}
       {(!isAuxiliaryRoute || hasMountedWorkbench) && (
         <div className={cn('h-full', isAuxiliaryRoute && 'hidden')} aria-hidden={isAuxiliaryRoute}>
@@ -198,29 +192,34 @@ function AppRoutes({ onWorkbenchStartupReadyChange, onOpenWeworkForAppshot }: Ap
       {mountedIframeTabs.map(tab => (
         <div
           key={tab.key}
+          data-studio-page-content="true"
           className={cn('h-full', activeIframeTab?.key !== tab.key && 'hidden')}
           aria-hidden={activeIframeTab?.key !== tab.key}
         >
           <AppIframe src={tab.url ?? ''} title={tab.label} />
         </div>
       ))}
-      {auxiliaryPage}
+      <Suspense fallback={<PageLoadingState />}>
+        {auxiliaryPage}
+      </Suspense>
     </WorkbenchProvider>
   )
 }
 
 export default function App() {
-  const path = useCurrentPath()
-  if (isTauriRuntime() && path === '/system-drag') {
-    return <SystemDragPanel />
-  }
 
-  return <MainApp />
+
+  return (
+    <>
+      <PageTransitionController />
+      <MainApp />
+    </>
+  )
 }
 
 function MainApp() {
   useEffect(() => {
-    document.title = getWeworkDocumentTitle()
+    document.title = getKCoderDocumentTitle()
   }, [])
 
   useEffect(() => {
@@ -261,6 +260,7 @@ function MainApp() {
 }
 
 function AppShell() {
+  const { t } = useTranslation('common')
   const path = useCurrentPath()
   const { user, isLoading } = useAuth()
   const cloudConnection = useCloudConnection()
@@ -270,17 +270,17 @@ function AppShell() {
     token: cloudConnection.token,
   }
   const { activeAppKey, tabs, navigateToApp } = useChromeTabs(path)
-  const isTauri = isTauriRuntime()
-  const titlebarOverlaysContent = isTauri && activeAppKey === 'studio'
-  const showChromeTitlebar = isTauri && activeAppKey !== 'studio'
+  const isGateway = isGatewayRuntime()
+  const titlebarOverlaysContent = isGateway && activeAppKey === 'studio'
+  const showChromeTitlebar = isGateway && activeAppKey !== 'studio'
   const [workbenchStartupReady, setWorkbenchStartupReady] = useState(false)
   const [workbenchStartupRevealTimedOut, setWorkbenchStartupRevealTimedOut] = useState(false)
-  const openWeworkForAppshot = useCallback(() => {
+  const openKCoderForAppshot = useCallback(() => {
     navigateToApp('studio')
   }, [navigateToApp])
 
   useEffect(() => {
-    if (!isTauri) return undefined
+    if (!isGateway) return undefined
 
     let activeBindings = mergeKeybindings([])
     let disposed = false
@@ -404,16 +404,10 @@ function AppShell() {
       window.removeEventListener('mouseup', handleMouseUp)
       window.removeEventListener(KEYBINDINGS_CHANGED_EVENT, loadKeybindings)
     }
-  }, [isTauri])
-
-  useEffect(() => {
-    return installMacOSInputArrowKeyGuard()
-  }, [])
+  }, [isGateway])
 
   useEffect(() => {
     if (
-      path === '/login' ||
-      path === '/login/oidc' ||
       isLoading ||
       !user ||
       workbenchStartupReady
@@ -431,21 +425,25 @@ function AppShell() {
     return () => window.clearTimeout(timer)
   }, [activeAppKey, isLoading, path, user, workbenchStartupReady])
 
-  // No chrome on login/setup pages
-  if (path === '/login' || path === '/login/oidc') {
-    return <AppRoutes />
-  }
-
   if (isLoading) {
-    return (
-      <LocalRuntimeInitializer initialCloudConnection={initialCloudConnection} startupReady={false}>
-        <div />
+    const loading = (
+      <LocalRuntimeInitializer
+        initialCloudConnection={initialCloudConnection}
+        startupReady={false}
+        waitForInitialPage={isGateway}
+      >
+        <PageLoadingState fullScreen />
       </LocalRuntimeInitializer>
     )
+    return isGateway ? <CodexHomeInitializer>{loading}</CodexHomeInitializer> : loading
   }
 
   if (!user) {
-    return <AppRoutes />
+    return (
+      <main className="flex min-h-dvh items-center justify-center bg-background p-6 text-text-primary">
+        <p role="status" data-testid="studio-gateway-required">{t('workbench.studio_gateway_required')}</p>
+      </main>
+    )
   }
 
   return (
@@ -453,6 +451,7 @@ function AppShell() {
       <LocalRuntimeInitializer
         initialCloudConnection={initialCloudConnection}
         startupReady={workbenchStartupReady || workbenchStartupRevealTimedOut}
+        waitForInitialPage
       >
         <div
           className={cn(
@@ -470,7 +469,7 @@ function AppShell() {
               }
               beforeTabs={<TitlebarSidebarToggle />}
               afterTabs={<AppUpdateTitlebarButton />}
-              iconOnlyTabs={isTauri}
+              iconOnlyTabs={isGateway}
               className={
                 titlebarOverlaysContent
                   ? 'absolute inset-x-0 top-0 z-system bg-transparent'
@@ -481,25 +480,25 @@ function AppShell() {
           <div className="min-h-0 flex-1 overflow-hidden">
             <AppRoutes
               onWorkbenchStartupReadyChange={setWorkbenchStartupReady}
-              onOpenWeworkForAppshot={isTauri ? openWeworkForAppshot : undefined}
+              onOpenKCoderForAppshot={isGateway ? openKCoderForAppshot : undefined}
             />
           </div>
-          <WeworkDevInstanceBadge />
+          <KCoderDevInstanceBadge />
         </div>
       </LocalRuntimeInitializer>
     </CodexHomeInitializer>
   )
 }
 
-function WeworkDevInstanceBadge() {
-  const info = getWeworkDevInstanceInfo()
+function KCoderDevInstanceBadge() {
+  const info = getKCoderDevInstanceInfo()
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
   const [collapsed, setCollapsed] = useState(true)
   const [position, setPosition] = useState<CSSProperties>()
   const draggedRef = useRef(false)
   if (!info) return null
 
-  const rows = getWeworkDevInstanceRows(info)
+  const rows = getKCoderDevInstanceRows(info)
   const popoverAbove = typeof position?.top !== 'number' || position.top > window.innerHeight / 2
   const popoverAlignRight =
     typeof position?.left !== 'number' || position.left > window.innerWidth / 2
@@ -618,7 +617,7 @@ function WeworkDevInstanceBadge() {
                 </div>
                 <button
                   type="button"
-                  data-testid={`copy-wework-dev-${row.key}-button`}
+                  data-testid={`copy-kcoder-dev-${row.key}-button`}
                   className="flex h-7 w-7 items-center justify-center rounded-md text-text-secondary hover:bg-black/[0.04] hover:text-text-primary"
                   title={`Copy ${row.label}`}
                   aria-label={`Copy ${row.label}`}

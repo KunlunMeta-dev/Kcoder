@@ -1,26 +1,26 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import { createLocalAttachmentApi } from './localAttachments'
 
-const tauriMocks = vi.hoisted(() => ({
+const gatewayMocks = vi.hoisted(() => ({
   invoke: vi.fn(),
 }))
 
-vi.mock('@tauri-apps/api/core', () => ({
-  invoke: tauriMocks.invoke,
+vi.mock('@/kcoder/gatewayServiceBridge', () => ({
+  invokeRuntimeCommand: gatewayMocks.invoke,
 }))
 
 vi.mock('@/lib/runtime-environment', () => ({
-  isTauriRuntime: () => true,
+  isGatewayRuntime: () => true,
 }))
 
 describe('local attachment API', () => {
   beforeEach(() => {
-    tauriMocks.invoke.mockReset()
+    gatewayMocks.invoke.mockReset()
     document.head.innerHTML = ''
   })
 
   test('stores uploaded files under executor home instead of the active project workspace', async () => {
-    tauriMocks.invoke.mockResolvedValue(
+    gatewayMocks.invoke.mockResolvedValue(
       '/Users/me/.wegent-executor/workspace/attachments/draft/123/photo.png'
     )
     const file = new File([new Uint8Array([1, 2, 3])], 'photo.png', { type: 'image/png' })
@@ -37,7 +37,7 @@ describe('local attachment API', () => {
       workspacePath: '/Users/me/project',
     })
 
-    expect(tauriMocks.invoke).toHaveBeenCalledWith('save_local_attachment_file', {
+    expect(gatewayMocks.invoke).toHaveBeenCalledWith('save_local_attachment_file', {
       workspacePath: null,
       filename: 'photo.png',
       mimeType: 'image/png',
@@ -58,11 +58,11 @@ describe('local attachment API', () => {
 
     await expect(createLocalAttachmentApi().uploadAttachment(file)).rejects.toThrow('100 MB')
     expect(arrayBuffer).not.toHaveBeenCalled()
-    expect(tauriMocks.invoke).not.toHaveBeenCalled()
+    expect(gatewayMocks.invoke).not.toHaveBeenCalled()
   })
 
   test('keeps the Gateway device capability returned with a staged attachment', async () => {
-    tauriMocks.invoke.mockResolvedValue({ path: '/tmp/photo.png', deviceId: 'server-b' })
+    gatewayMocks.invoke.mockResolvedValue({ path: '/tmp/photo.png', deviceId: 'server-b' })
     const attachment = await createLocalAttachmentApi().uploadAttachment(
       new File([new Uint8Array([1])], 'photo.png', { type: 'image/png' })
     )
@@ -77,7 +77,7 @@ describe('local attachment API', () => {
   test('streams Gateway Web uploads in chunks to keep the renderer responsive', async () => {
     document.head.innerHTML = '<meta name="kcoder-rpc-token" content="token">'
     const chunkCalls: unknown[] = []
-    tauriMocks.invoke.mockImplementation(async (command: string, payload: unknown) => {
+    gatewayMocks.invoke.mockImplementation(async (command: string, payload: unknown) => {
       if (command === 'start_local_attachment_upload') {
         return { uploadId: 'upload-1', deviceId: 'server-b' }
       }
@@ -97,21 +97,86 @@ describe('local attachment API', () => {
 
     const attachment = await createLocalAttachmentApi().uploadAttachment(file, progress)
 
-    expect(tauriMocks.invoke).toHaveBeenCalledWith('start_local_attachment_upload', {
-      filename: 'photo.png',
-      mimeType: 'image/png',
-      fileSize: file.size,
-    })
+    expect(gatewayMocks.invoke).toHaveBeenCalledWith(
+      'start_local_attachment_upload',
+      {
+        filename: 'photo.png',
+        mimeType: 'image/png',
+        fileSize: file.size,
+      },
+      undefined
+    )
     expect(chunkCalls).toHaveLength(3)
-    expect(tauriMocks.invoke).toHaveBeenCalledWith('finish_local_attachment_upload', {
-      uploadId: 'upload-1',
-    })
-    expect(tauriMocks.invoke).not.toHaveBeenCalledWith(
+    expect(gatewayMocks.invoke).toHaveBeenCalledWith(
+      'finish_local_attachment_upload',
+      {
+        uploadId: 'upload-1',
+      },
+      undefined
+    )
+    expect(gatewayMocks.invoke).not.toHaveBeenCalledWith(
       'save_local_attachment_file',
       expect.anything()
     )
     expect(progress).toHaveBeenCalledWith(0)
     expect(progress).toHaveBeenLastCalledWith(100)
     expect(attachment.runtime_device_id).toBe('server-b')
+  })
+
+  test('large text uploads do not reread the complete file for a character count', async () => {
+    document.head.innerHTML = '<meta name="kcoder-rpc-token" content="token">'
+    gatewayMocks.invoke.mockImplementation(async (command: string) => {
+      if (command === 'start_local_attachment_upload')
+        return { uploadId: 'upload-text', deviceId: 'server-b' }
+      if (command === 'finish_local_attachment_upload')
+        return { path: '/tmp/notes.txt', deviceId: 'server-b' }
+      return {}
+    })
+    const file = new File([new Uint8Array(512 * 1024)], 'notes.txt', { type: 'text/plain' })
+    const text = vi.spyOn(file, 'text')
+    const attachment = await createLocalAttachmentApi().uploadAttachment(file)
+    expect(text).not.toHaveBeenCalled()
+    expect(attachment.text_length).toBeNull()
+  })
+
+  test('cancel returns without waiting for a stalled chunk or a stalled cleanup', async () => {
+    document.head.innerHTML = '<meta name="kcoder-rpc-token" content="token">'
+    const controller = new AbortController()
+    let reached!: () => void
+    const chunkStarted = new Promise<void>(resolve => {
+      reached = resolve
+    })
+    gatewayMocks.invoke.mockImplementation(
+      async (command: string, _args: unknown, options?: { signal?: AbortSignal }) => {
+        if (command === 'start_local_attachment_upload')
+          return { uploadId: 'stalled', deviceId: 'server-b' }
+        if (command === 'append_local_attachment_upload') {
+          reached()
+          return new Promise((_resolve, reject) =>
+            options?.signal?.addEventListener(
+              'abort',
+              () => reject(new DOMException('Aborted', 'AbortError')),
+              { once: true }
+            )
+          )
+        }
+        return new Promise(() => {})
+      }
+    )
+    const pending = createLocalAttachmentApi().uploadAttachment(
+      new File(['fixture'], 'slow.bin'),
+      undefined,
+      controller.signal
+    )
+    const rejected = expect(pending).rejects.toThrow('Upload cancelled')
+    await chunkStarted
+    controller.abort()
+    await rejected
+    expect(gatewayMocks.invoke).toHaveBeenCalledWith('cancel_local_attachment_upload', {
+      uploadId: 'stalled',
+    })
+    expect(
+      gatewayMocks.invoke.mock.calls.some(([command]) => command === 'finish_local_attachment_upload')
+    ).toBe(false)
   })
 })

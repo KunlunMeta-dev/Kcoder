@@ -1,8 +1,8 @@
 import type { RuntimeWorkSearchRequest, RuntimeWorkSearchResponse } from '@/types/api'
 
-export const WORKBENCH_CLOUD_SEARCH_RESULTS_EVENT = 'wework:cloud-search-results'
-export const WORKBENCH_CLOUD_ARCHIVES_CHANGED_EVENT = 'wework:cloud-archives-changed'
-export const WORKBENCH_MODELS_CHANGED_EVENT = 'wework:workbench-models-changed'
+export const WORKBENCH_CLOUD_SEARCH_RESULTS_EVENT = 'kcoder:cloud-search-results'
+export const WORKBENCH_CLOUD_ARCHIVES_CHANGED_EVENT = 'kcoder:cloud-archives-changed'
+export const WORKBENCH_MODELS_CHANGED_EVENT = 'kcoder:workbench-models-changed'
 
 export interface WorkbenchCloudSearchResultsDetail {
   request: RuntimeWorkSearchRequest

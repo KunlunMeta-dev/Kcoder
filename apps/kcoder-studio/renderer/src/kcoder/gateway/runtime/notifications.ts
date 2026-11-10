@@ -1,8 +1,20 @@
+import { hasConflictingTurnIdentity } from '../../../../../shared/turnNotificationIdentity'
+import { normalizeWebSources } from '../../../../../shared/webSources'
+import { isApprovalResponse, isAsyncQuestionRecord } from '../../../../../shared/generated/contractGuards.mjs'
+import { asyncQuestionRevisionFingerprint } from '../../../../../shared/asyncQuestionRevision'
+import { projectTaskTurn } from './taskTurnProjection'
+import { normalizeReviewEvidence } from '../../../../../shared/reviewEvidence'
+import { publishCommittedWidget } from '../../widgetEvents'
+import { sameAgentRun } from './agentRunConstraint'
+import { acceptWidgetPreviewNotification } from '../../widgetPreviewEvents'
+import { validateWidgetReference } from '../../widgetApi'
+import { parseThreadGoalStatusObservation } from '../../threadGoalStatus'
 import { computerUseConsent } from '../../computerUseConsent'
 import { notifyRuntimeWorkChanged } from '../../runtimeWorkEvents'
 import { toolObservationOutput } from '../../toolObservationOutput'
 import { computerUseStates } from '../../computerUseState'
 import i18n from '@/i18n'
+import { normalizeTurnFileCapture } from '../../../../../shared/turnFileCapture'
 import { decodeProviderFailure } from '@wegent/chat-core'
 import {
   reportBackgroundRunDiagnostic,
@@ -17,8 +29,45 @@ import {
   record,
   runtimeTaskId,
   text,
+  type PendingGatewayQuestion,
 } from './contracts'
 import type { GatewayRuntimeCore } from './core'
+import { forwardTaskState } from './taskState'
+import { settleSteerNotification } from './turnSteer'
+import { visibleUserItem } from './userMessages'
+import { isCurrentInteractionTaskBinding, publishInteractionResolution } from './interactions'
+import { releaseUnviewedTaskClient } from './sessionLifetime'
+
+function isStaleTaskNotification(
+  runtime: GatewayRuntimeCore,
+  params: Record<string, unknown>,
+  serverId: string | undefined,
+  client?: GatewayClient,
+  connection?: DiagnosticConnection
+) {
+  if (connection !== undefined &&
+    client?.diagnosticConnection?.connectionId !== connection.connectionId) return true
+  // Every task projection shares the same client fence, including streams and
+  // starts. A matching old socket identity does not make it the current client.
+  if (!serverId || !client) return false
+  const threadId = text(params.threadId) ?? text(record(params.thread).id)
+  const taskId = threadId ? runtime.taskByThread.get(runtime.threadKey(serverId, threadId)) : undefined
+  return taskId !== undefined && runtime.clientByTask.get(taskId) !== client
+}
+
+function matchesInteractionResolution(
+  runtime: GatewayRuntimeCore,
+  pending: PendingGatewayQuestion,
+  params: Record<string, unknown>,
+  sourceClient?: GatewayClient
+) {
+  return pending.turnId === text(params.turnId) &&
+    // Legacy omission is compatible only with another omitted/null epoch.
+    (pending.appServerEpoch ?? null) === (params.appServerEpoch ?? null) &&
+    (sourceClient === undefined || pending.client === sourceClient) &&
+    runtime.clientByTask.get(pending.taskId) === pending.client &&
+    isCurrentInteractionTaskBinding(runtime, pending)
+}
 
 export async function forwardNotification(
   this: GatewayRuntimeCore,
@@ -28,24 +77,46 @@ export async function forwardNotification(
   sourceClient?: GatewayClient,
   diagnosticConnection?: DiagnosticConnection
 ) {
-  if (this.disposed) return
-  if (method.startsWith('agent/stream/'))
-    return this.forwardAcceptedNotification(
+  if (this.disposed || hasConflictingTurnIdentity({ method, params })) return
+  // Legacy transports can bypass the Gateway's terminal-outcome validation.
+  // Invalid outcomes must not close a card or claim its recovery replay ID.
+  if ((method === 'question/resolved' || method === 'approval/resolved') &&
+      (typeof params.reason !== 'string' ||
+        (method === 'approval/resolved' && params.decision !== undefined &&
+          !isApprovalResponse({ decision: params.decision })))) return
+  // Rejected old frames cannot consume a current client's replay identity.
+  if (isStaleTaskNotification(this, params, sourceServerId, sourceClient, diagnosticConnection)) return
+  if (method === 'thread/goal/updated' || method === 'thread/goal/continuation') {
+    const threadId = text(params.threadId) ?? text(record(params.thread).id)
+    const taskId = threadId && sourceServerId
+      ? this.taskByThread.get(this.threadKey(sourceServerId, threadId))
+      : undefined
+    const task = taskId ? this.tasks.get(taskId) : undefined
+    if (!task || !sourceClient || task.threadId !== threadId || task.serverId !== sourceServerId ||
+        sourceClient !== this.clientByTask.get(task.taskId)) return
+  }
+  if (method.startsWith('agent/stream/')) {
+    await this.forwardAcceptedNotification(
       method,
       params,
       sourceServerId,
       sourceClient,
       diagnosticConnection
     )
+    return
+  }
   if (!this.notificationReplayGuard.accept(method, params, sourceServerId)) return
   try {
-    return await this.forwardAcceptedNotification(
+    const projected = await this.forwardAcceptedNotification(
       method,
       params,
       sourceServerId,
       sourceClient,
       diagnosticConnection
     )
+    // A discarded question frame has not refreshed any card. Leave its native
+    // event identity available for the current owner's recovery replay.
+    if (projected === false) this.notificationReplayGuard.release(method, params, sourceServerId)
   } catch (error) {
     this.notificationReplayGuard.release(method, params, sourceServerId)
     throw error
@@ -60,6 +131,107 @@ export async function forwardAcceptedNotification(
   sourceClient?: GatewayClient,
   diagnosticConnection?: DiagnosticConnection
 ) {
+  if (hasConflictingTurnIdentity({ method, params })) return false
+  if (isStaleTaskNotification(this, params, sourceServerId, sourceClient, diagnosticConnection)) return
+  if (await settleSteerNotification(this, method, params, sourceServerId)) return
+  // Projection yields above. The same client can reconnect in that gap; the
+  // discarded frame must leave its identity available for current recovery.
+  if (isStaleTaskNotification(this, params, sourceServerId, sourceClient, diagnosticConnection)) {
+    this.notificationReplayGuard.release(method, params, sourceServerId)
+    return
+  }
+  if (method === 'gateway/interaction/replyRejected') {
+    const threadId = text(params.threadId)
+    const taskId = threadId && sourceServerId
+      ? this.taskByThread.get(this.threadKey(sourceServerId, threadId)) : undefined
+    const pending = taskId && typeof params.requestId === 'number'
+      ? this.pendingQuestionByKey.get(`${taskId}\0${params.requestId}`) : undefined
+    if (!pending?.responsePending || !sourceClient || pending.client !== sourceClient ||
+        this.clientByTask.get(pending.taskId) !== sourceClient ||
+        this.appServerDisconnectedClients.has(sourceClient)) return false
+    if (!isCurrentInteractionTaskBinding(this, pending)) return false
+    const bound = ['turnId', 'appServerEpoch', 'questionId', 'approvalId']
+      .some(key => Object.hasOwn(params, key))
+    // Legacy Gateways name only the task and transport request. New bindings
+    // must match completely, including epoch absence and interaction kind.
+    if (bound && (pending.turnId !== params.turnId ||
+        (pending.appServerEpoch ?? null) !== (params.appServerEpoch ?? null) ||
+        (pending.approvalId
+          ? pending.approvalId !== params.approvalId || params.questionId !== undefined
+          : pending.questionId !== params.questionId || params.approvalId !== undefined))) return false
+    // A later receipt may confirm another client's answer. The rejected local
+    // answer must never become that receipt's confirmed presentation.
+    delete pending.submittedResponse
+    if (pending.autoResolutionTimer !== undefined) {
+      window.clearTimeout(pending.autoResolutionTimer)
+      delete pending.autoResolutionTimer
+    }
+    const explanation = i18n.t('workbench.runtime_send_failed')
+    await emit(EXECUTOR_EVENT, {
+      event: 'response.block.updated',
+      payload: {
+        taskId: pending.taskId,
+        subtaskId: pending.presentationSubtaskId ?? pending.turnId,
+        turnId: pending.turnId,
+        attemptId: pending.presentationSubtaskId ?? pending.turnId,
+        deviceId: sourceServerId,
+        data: {
+          blockId: pending.block.id,
+          updates: {
+            status: 'error',
+            renderPayload: pending.renderPayload,
+            tool_output: explanation,
+            toolOutput: explanation,
+          },
+        },
+      },
+    })
+    // Keep the original submission guard until the rejection reaches the UI.
+    // Failed publication can then retry without replaying the answer.
+    pending.responsePending = false
+    return
+  }
+  if (method === 'asyncQuestion/changed') {
+    const threadId = text(params.threadId)
+    const question = record(params.question)
+    const questionId = text(question.questionId)
+    const revision = finiteNumber(question.revision, -1)
+    if (
+      this.disposed ||
+      !sourceServerId ||
+      !sourceClient ||
+      // Disconnect is recorded before the ordered notification queue drains.
+      // Queued changes cannot refresh cards through that invalid owner.
+      this.appServerDisconnectedClients.has(sourceClient) ||
+      !threadId ||
+      question.threadId !== threadId ||
+      !questionId ||
+      !Number.isSafeInteger(revision) ||
+      revision < 1 ||
+      sourceClient.supportsExperimental?.('asyncUserQuestionsV1') !== true
+    )
+      return false
+    const taskId = this.taskByThread.get(this.threadKey(sourceServerId, threadId))
+    const task = taskId ? this.tasks.get(taskId) : undefined
+    if (
+      !task ||
+      task.serverId !== sourceServerId ||
+      task.threadId !== threadId ||
+      this.clientByTask.get(taskId!) !== sourceClient
+    )
+      return false
+    await emit(EXECUTOR_EVENT, {
+      event: 'async-question:changed',
+      payload: { taskId, serverId: sourceServerId, threadId, questionId, revision,
+        ...(isAsyncQuestionRecord(question)
+          ? { revisionFingerprint: asyncQuestionRevisionFingerprint(question) } : {}) },
+    })
+    return
+  }
+  if (method === 'integrations/runtime/taskStateChanged') {
+    if (sourceServerId && sourceClient) await forwardTaskState(this, sourceServerId, sourceClient, params)
+    return
+  }
   if (method === 'server/disconnected' && sourceClient) {
     for (const [id, owned] of this.agentConversationSubscriptions) {
       if (owned.client !== sourceClient) continue
@@ -81,7 +253,11 @@ export async function forwardAcceptedNotification(
       })
     }
   }
-  if (method === 'agent/stream/event' || method === 'agent/stream/reset') {
+  if (
+    method === 'agent/stream/event' ||
+    method === 'agent/stream/reset' ||
+    method === 'agent/stream/closed'
+  ) {
     const id = text(params.subscriptionId)
     const owned = id ? this.agentConversationSubscriptions.get(id) : undefined
     if (
@@ -99,6 +275,62 @@ export async function forwardAcceptedNotification(
       this.agentConversationSubscriptions.delete(id!)
       return
     }
+    if (owned.expectedBackgroundRun) {
+      const closed = method === 'agent/stream/closed'
+      if (
+        closed
+          ? !sameAgentRun(params.expectedBackgroundRun, owned.expectedBackgroundRun)
+          : params.runId !== owned.expectedBackgroundRun.runId
+      ) {
+        owned.removeCloseListener?.()
+        this.agentConversationSubscriptions.delete(id!)
+        void owned.client
+          .request('agent/stream/unsubscribe', { subscriptionId: id })
+          .catch(() => undefined)
+        await emit(EXECUTOR_EVENT, {
+          event: 'response.subagent.conversation',
+          payload: {
+            deviceId: owned.serverId,
+            taskId: owned.taskId,
+            data: {
+              type: 'disconnected',
+              threadId: owned.threadId,
+              agentId: owned.agentId,
+              subscriptionId: id,
+              runId: owned.expectedBackgroundRun.runId,
+              reason: 'agent_run_changed',
+            },
+          },
+        })
+        return
+      }
+      if (closed) {
+        owned.removeCloseListener?.()
+        this.agentConversationSubscriptions.delete(id!)
+        void owned.client
+          .request('agent/stream/unsubscribe', { subscriptionId: id })
+          .catch(() => undefined)
+        await emit(EXECUTOR_EVENT, {
+          event: 'response.subagent.conversation',
+          payload: {
+            deviceId: owned.serverId,
+            taskId: owned.taskId,
+            data: {
+              type: 'disconnected',
+              threadId: owned.threadId,
+              agentId: owned.agentId,
+              subscriptionId: id,
+              runId: owned.expectedBackgroundRun.runId,
+              reason:
+                params.reasonCode === 'run_changed'
+                  ? 'agent_run_changed'
+                  : 'agent_owner_unavailable',
+            },
+          },
+        })
+        return
+      }
+    } else if (method === 'agent/stream/closed') return
     await emit(EXECUTOR_EVENT, {
       event: 'response.subagent.conversation',
       payload: {
@@ -186,27 +418,30 @@ export async function forwardAcceptedNotification(
         : undefined
     if (
       !pending ||
+      !matchesInteractionResolution(this, pending, params, sourceClient) ||
       pending.approvalDecisions ||
+      params.approvalId != null ||
       (pending.questionId && pending.questionId !== text(params.questionId))
     )
-      return
-    this.pendingQuestionByKey.delete(`${pending.taskId}\0${pending.requestId}`)
+      return false
     if (pending.autoResolutionTimer !== undefined) window.clearTimeout(pending.autoResolutionTimer)
     const reason = text(params.reason) ?? 'cancelled'
     const status = reason === 'client_response' ? 'done' : 'error'
     const explanation =
       reason === 'response_error'
         ? '回答发送后未被服务端接受。'
-        : reason === 'cancelled'
+        : reason === 'cancelled' || reason === 'client_cancelled'
           ? '问题请求已取消。'
           : '回答已由服务端确认。'
     const response = pending.submittedResponse
-    const renderPayload = response ? { ...pending.renderPayload, response } : pending.renderPayload
-    await emit(EXECUTOR_EVENT, {
+    const renderPayload = { ...pending.renderPayload, resolved: true, ...(response ? { response } : {}) }
+    await publishInteractionResolution(this, pending, () => emit(EXECUTOR_EVENT, {
       event: 'response.block.updated',
       payload: {
         taskId: pending.taskId,
-        subtaskId: pending.turnId,
+        subtaskId: pending.presentationSubtaskId ?? pending.turnId,
+        turnId: pending.turnId,
+        attemptId: pending.presentationSubtaskId ?? pending.turnId,
         deviceId: sourceServerId,
         data: {
           blockId: pending.block.id,
@@ -218,7 +453,7 @@ export async function forwardAcceptedNotification(
           },
         },
       },
-    })
+    }))
     return
   }
   if (method === 'approval/resolved') {
@@ -235,8 +470,10 @@ export async function forwardAcceptedNotification(
       requestId !== undefined && taskId
         ? this.pendingQuestionByKey.get(`${taskId}\0${requestId}`)
         : undefined
-    if (!pending || (pending.approvalId && pending.approvalId !== text(params.approvalId))) return
-    this.pendingQuestionByKey.delete(`${pending.taskId}\0${pending.requestId}`)
+    if (!pending || !pending.approvalId ||
+        params.questionId != null ||
+        !matchesInteractionResolution(this, pending, params, sourceClient) ||
+        pending.approvalId !== text(params.approvalId)) return false
     if (pending.autoResolutionTimer !== undefined) window.clearTimeout(pending.autoResolutionTimer)
     const reason = text(params.reason) ?? 'cancelled'
     const decision = text(params.decision) ?? 'decline'
@@ -251,22 +488,25 @@ export async function forwardAcceptedNotification(
             : decision === 'accept'
               ? i18n.t('approvalUi.allowed')
               : i18n.t('approvalUi.declined')
-    await emit(EXECUTOR_EVENT, {
+    await publishInteractionResolution(this, pending, () => emit(EXECUTOR_EVENT, {
       event: 'response.block.updated',
       payload: {
         taskId: pending.taskId,
-        subtaskId: pending.turnId,
+        subtaskId: pending.presentationSubtaskId ?? pending.turnId,
+        turnId: pending.turnId,
+        attemptId: pending.presentationSubtaskId ?? pending.turnId,
         deviceId: sourceServerId,
         data: {
           blockId: pending.block.id,
           updates: {
             status,
+            renderPayload: { ...pending.renderPayload, resolved: true },
             tool_output: explanation,
             toolOutput: explanation,
           },
         },
       },
-    })
+    }))
     return
   }
   const threadId = text(params.threadId) ?? text(record(params.thread).id)
@@ -296,7 +536,8 @@ export async function forwardAcceptedNotification(
     currentAttempt !== terminalAttempt
   )
     return
-  if (method === 'turn/started') this.turnAttemptIds.set(turnKey, text(params.attemptId) ?? turnId)
+  if (method === 'turn/started')
+    this.turnAttemptIds.set(turnKey, text(params.attemptId) ?? text(turn.attemptId) ?? turnId)
   const task = this.tasks.get(taskId)
   if (task && sourceServerId && sourceClient) {
     this.toolPathPreviews.handle(
@@ -312,7 +553,33 @@ export async function forwardAcceptedNotification(
   const base = {
     taskId,
     subtaskId: this.turnAttemptIds.get(turnKey) ?? turnId,
+    turnId,
+    attemptId: this.turnAttemptIds.get(turnKey) ?? undefined,
     deviceId: task?.serverId ?? (await this.server()).id,
+  }
+  if (
+    task &&
+    sourceServerId === task.serverId &&
+    sourceClient === this.clientByTask.get(taskId) &&
+    sourceClient?.supportsExperimental?.('inlineWidgetsV1') === true
+  ) {
+    const acceptedAttempt = this.turnAttemptIds.get(turnKey) ?? turnId
+    const suppliedAttempt = text(params.attemptId) ?? text(turn.attemptId)
+    if (suppliedAttempt === acceptedAttempt && threadId)
+      acceptWidgetPreviewNotification(
+        {
+          deviceId: sourceServerId,
+          taskId,
+          threadId,
+          turnId,
+          attemptId: acceptedAttempt,
+          client: sourceClient,
+          serverId: params.serverId,
+          sequence: params.sequence,
+        },
+        method,
+        params.event
+      )
   }
   if (method === 'computerUse/stateChanged') {
     if (
@@ -328,6 +595,30 @@ export async function forwardAcceptedNotification(
     return
   }
   if (method === 'thread/goal/updated' || method === 'thread/goal/continuation') {
+    if (!task || !sourceClient || threadId !== task.threadId ||
+        sourceServerId !== task.serverId || sourceClient !== this.clientByTask.get(taskId)) return
+    if (method === 'thread/goal/updated') {
+      const goal = record(params.goal)
+      const observed = params.goal === null
+        ? { availability: 'available' as const, status: null }
+        : text(goal.threadId) === threadId
+          ? parseThreadGoalStatusObservation({ availability: 'available', status: goal.status })
+          : { availability: 'unavailable' as const }
+      // Goal notifications reflect in-memory state, which may not have persisted.
+      // A completion or cleared Goal needs a verified read before the board can
+      // treat the latest completed turn as a completed task.
+      const observation = observed.availability === 'available' &&
+        (observed.status === 'complete' || observed.status === null)
+        ? { availability: 'unavailable' as const }
+        : observed
+      this.tasks.set(taskId, {
+        ...task,
+        goalStatusObservation: observation,
+        goalStatus: observation.availability === 'available' ? observation.status : undefined,
+      })
+      notifyRuntimeWorkChanged()
+      if (observed.availability === 'unavailable') return
+    }
     await emit(EXECUTOR_EVENT, {
       event:
         method === 'thread/goal/continuation'
@@ -360,15 +651,64 @@ export async function forwardAcceptedNotification(
     if (this.activeTurnByTask.get(taskId)?.turnId !== turnId) {
       this.trackActiveTurn(taskId, turnId, turn.internal === true)
     }
-    if (task) this.tasks.set(taskId, { ...task, running: true, updatedAt: Date.now() })
-    this.turnText.set(turnKey, '')
+    if (task) {
+      let runtimeHandle = task.runtimeHandle
+      let snapshotChanged = false
+      const serverInstanceId = text(params.serverId)
+      if (
+        sourceServerId === task.serverId &&
+        sourceClient === this.clientByTask.get(taskId) &&
+        threadId === task.threadId &&
+        attemptId &&
+        serverInstanceId &&
+        Number.isSafeInteger(params.sequence) &&
+        (params.sequence as number) >= 0
+      ) {
+        const previous = runtimeHandle.memoryTaskSnapshot
+        const retired = previous?.retiredServerInstances ?? []
+        if (
+          !retired.includes(serverInstanceId) &&
+          (!previous ||
+            previous.serverInstanceId !== serverInstanceId ||
+            (params.sequence as number) > previous.sequence)
+        ) {
+          const id = text(
+            Object.hasOwn(turn, 'memorySnapshotId')
+              ? turn.memorySnapshotId
+              : params.memorySnapshotId
+          )
+          runtimeHandle = {
+            ...runtimeHandle,
+            memoryTaskSnapshot: {
+              snapshotId: id && id.length <= 256 ? id : null,
+              threadId,
+              turnId,
+              attemptId,
+              serverInstanceId,
+              retiredServerInstances:
+                previous && previous.serverInstanceId !== serverInstanceId
+                  ? [...retired, previous.serverInstanceId].slice(-64)
+                  : retired,
+              sequence: params.sequence as number,
+            },
+          }
+          snapshotChanged = true
+        }
+      }
+      this.tasks.set(taskId, { ...projectTaskTurn(task, 'inProgress'), runtimeHandle })
+      if (snapshotChanged) notifyRuntimeWorkChanged()
+    }
+    if (this.turnText.get(turnKey) !== null || currentAttempt !== (attemptId ?? turnId)) {
+      this.turnText.set(turnKey, '')
+    }
     await emit(EXECUTOR_EVENT, { event: 'response.created', payload: { ...base, data: {} } })
     return
   }
   if (method === 'item/delta') {
     const delta = rawDeltaText(record(params.delta).text)
     if (delta === null || delta === '') return
-    this.turnText.set(turnKey, `${this.turnText.get(turnKey) ?? ''}${delta}`)
+    const previousText = this.turnText.get(turnKey)
+    if (previousText !== null) this.turnText.set(turnKey, `${previousText ?? ''}${delta}`)
     await emit(EXECUTOR_EVENT, {
       event: 'response.output_text.delta',
       payload: { ...base, data: { delta } },
@@ -552,6 +892,7 @@ export async function forwardAcceptedNotification(
         })
       this.backgroundJobById.delete(jobId, job)
       this.toolNameByCall.delete(`${job.taskId}\0${job.toolCallId}`)
+      if (sourceClient) setTimeout(() => releaseUnviewedTaskClient(this, job.taskId, sourceClient), 0)
       return
     }
     if (eventType !== 'assistant_thinking_delta') return
@@ -565,6 +906,16 @@ export async function forwardAcceptedNotification(
   }
   if (method === 'item/started') {
     const item = record(params.item)
+    if (item.type === 'userMessage') {
+      if (!task || !sourceClient || sourceServerId !== task.serverId ||
+          sourceClient !== this.clientByTask.get(taskId) || threadId !== task.threadId) return
+      const message = visibleUserItem(item)
+      if (message) await emit(EXECUTOR_EVENT, {
+        event: 'runtime.user_message',
+        payload: { ...base, data: { message: { ...message, turnId } } },
+      })
+      return
+    }
     if (item.type !== 'toolCall') return
     const callId = text(item.id)
     const toolName = text(item.name) ?? 'tool'
@@ -638,6 +989,27 @@ export async function forwardAcceptedNotification(
           status: 'running',
         }
       : undefined
+    if (
+      item.widgetRef &&
+      item.status !== 'failed' &&
+      threadId &&
+      task &&
+      sourceServerId === task.serverId &&
+      sourceClient === this.clientByTask.get(taskId)
+    ) {
+      try {
+        const widget = validateWidgetReference(item.widgetRef, threadId ?? undefined)
+        if (
+          widget.turnId === turnId &&
+          widget.attemptId === (this.turnAttemptIds.get(turnKey) ?? turnId) &&
+          widget.attemptId === (text(params.attemptId) ?? text(turn.attemptId)) &&
+          widget.toolCallId === callId
+        )
+          publishCommittedWidget({ deviceId: sourceServerId, taskId, widget })
+      } catch {
+        // Invalid presentation metadata never becomes a trusted artifact.
+      }
+    }
     await emit(EXECUTOR_EVENT, {
       event: 'response.output_item.done',
       payload: {
@@ -649,6 +1021,15 @@ export async function forwardAcceptedNotification(
             name: text(item.name) ?? 'tool',
             status: item.status === 'failed' ? 'failed' : 'completed',
             output: backgroundOutput ?? toolObservationOutput(item),
+            webSources:
+              sourceServerId === task?.serverId && sourceClient === this.clientByTask.get(taskId) && callId
+                ? normalizeWebSources(item.webSources, {
+                    threadId: threadId ?? undefined,
+                    turnId,
+                    attemptId: this.turnAttemptIds.get(turnKey) ?? text(params.attemptId) ?? undefined,
+                    toolCallId: callId,
+                  })
+                : undefined,
           },
         },
       },
@@ -664,10 +1045,18 @@ export async function forwardAcceptedNotification(
     return
   }
   if (method === 'turn/completed') {
+    const reviewEvidence = sourceClient?.supportsExperimental?.('turnReviewEvidenceV1') === true
+      && sourceClient === this.clientByTask.get(taskId) && sourceServerId === task?.serverId
+      ? normalizeReviewEvidence(params.reviewEvidence, { threadId: threadId ?? undefined, turnId, attemptId: base.attemptId ?? turnId })
+      : undefined
+    const fileCapture = sourceClient?.supportsExperimental?.('turnFileCaptureV1') === true
+      && sourceClient === this.clientByTask.get(taskId) && sourceServerId === task?.serverId
+      ? normalizeTurnFileCapture(params.fileChangesCapture, { threadId: threadId ?? undefined, turnId, attemptId: base.attemptId ?? turnId })
+      : undefined
     if (task) computerUseStates.unconfirmed(this, task.serverId, taskId, turnId)
     const status = text(turn.status) ?? 'completed'
     const terminalError = text(record(params.error).message)
-    const content = this.turnText.get(turnKey) ?? ''
+    const content = this.turnText.get(turnKey)
     this.turnText.delete(turnKey)
     this.turnAttemptIds.delete(turnKey)
     if (this.pendingTurnStartByTask.has(taskId)) {
@@ -678,9 +1067,13 @@ export async function forwardAcceptedNotification(
       }
     }
     const active = this.activeTurnByTask.get(taskId)
-    if (task && (!active || active.turnId === turnId))
-      this.tasks.set(taskId, { ...task, running: false, updatedAt: Date.now() })
-    if (task?.scheduled) notifyRuntimeWorkChanged()
+    if (task && (!active || active.turnId === turnId)) {
+      const outcome = status === 'completed' || status === 'failed' || status === 'interrupted' ? status : undefined
+      this.tasks.set(taskId, outcome
+        ? projectTaskTurn(task, outcome, [...this.backgroundJobById.values()].some(job => job.taskId === taskId))
+        : { ...task, running: false, updatedAt: Date.now() })
+      notifyRuntimeWorkChanged()
+    }
     if (active?.turnId === turnId) {
       active.complete()
       this.activeTurnByTask.delete(taskId)
@@ -712,12 +1105,16 @@ export async function forwardAcceptedNotification(
         ...base,
         data: {
           terminalStatus: status,
-          ...(status === 'completed' ? { value: content } : { message: terminalError ?? status }),
+          ...(status === 'completed'
+            ? (content === null ? {} : { value: content ?? '' })
+            : { message: terminalError ?? status }),
           ...(status !== 'completed'
             ? { provider_failure: decodeProviderFailure(record(params.error).details) }
             : {}),
           turnId,
           turn_id: turnId,
+          ...(fileCapture && { file_changes_capture: fileCapture }),
+          ...(reviewEvidence && { review_evidence: reviewEvidence }),
           ...(text(record(params.fileChanges).artifact_id)
             ? {
                 file_changes: {
@@ -729,5 +1126,15 @@ export async function forwardAcceptedNotification(
         },
       },
     })
+    if (content === null && task) {
+      // Deltas lost during disconnection cannot be reconstructed from this socket.
+      await emit(EXECUTOR_EVENT, {
+        event: 'executor.task_stream_gap',
+        payload: { taskId, deviceId: task.serverId },
+      })
+    }
+    // Receipt reconciliation still needs this client until its caller has
+    // published the recovered terminal state and requested a transcript refresh.
+    if (sourceClient) setTimeout(() => releaseUnviewedTaskClient(this, taskId, sourceClient), 0)
   }
 }

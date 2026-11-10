@@ -1,6 +1,7 @@
 import { Terminal } from "@xterm/xterm";
 import { describe, expect, it } from "vitest";
 import { darkColors, lightColors } from "@/theme";
+import { classicPalette } from "@/features/interface/classic-colors";
 import { createTerminalTheme } from "./terminal-theme";
 import { TerminalCommandQueue } from "./terminal-command-queue";
 import { TerminalWebViewOptionsSync } from "./terminal-webview-options";
@@ -52,8 +53,11 @@ describe("terminal themes", () => {
     expect(dark.blue).not.toBe(light.blue);
   });
 
-  it("keeps every light ANSI foreground at readable contrast while distinguishing bright variants", () => {
-    const theme = createTerminalTheme("light", lightColors);
+  it.each([
+    ["current", lightColors],
+    ["classic", classicPalette("light", lightColors)],
+  ] as const)("keeps every %s light ANSI foreground at readable contrast while distinguishing bright variants", (_name, colors) => {
+    const theme = createTerminalTheme("light", colors);
 
     for (const key of lightAnsiColors) {
       const foreground = theme[key];

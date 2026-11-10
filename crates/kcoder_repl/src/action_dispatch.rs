@@ -9,8 +9,34 @@ pub(super) async fn handle_user_action(
     tx: &AppEventSender,
     prompt: &TuiPermissionPrompt,
 ) -> Result<bool> {
+    if app.input_shutdown_pending && !matches!(&action, UserAction::Quit) {
+        return Ok(false);
+    }
     match action {
         UserAction::Quit => {
+            app.cancel_preparing_inputs();
+            app.cancel_all_side_questions();
+            if !app.input_shutdown_timed_out
+                && (app.input_preparation.has_unsettled()
+                    || app
+                        .input_admission
+                        .as_ref()
+                        .is_some_and(|admission| admission.observer.is_some())
+                    || app.has_current_input_uncertainty())
+            {
+                if let Some(cancel) = app.turn_state.cancel_flag() {
+                    cancel.cancel();
+                }
+                app.input_shutdown_pending = true;
+                app.input_shutdown_deadline
+                    .get_or_insert_with(|| Instant::now() + Duration::from_secs(2));
+                app.set_transient_status("Finishing input…");
+                return Ok(false);
+            }
+            app.input_shutdown_pending = false;
+            if let Some(task) = app.migration_task.take() {
+                task.stop().await;
+            }
             if let Some(handle) = app.abort_turn_for_shutdown() {
                 match handle.await {
                     Err(error) if !error.is_cancelled() => {
@@ -33,6 +59,13 @@ pub(super) async fn handle_user_action(
             command,
             history_text,
         } => {
+            if app.has_cancelled_input_barrier() {
+                if app.input.is_empty() {
+                    app.prefill_input(history_text);
+                }
+                app.show_cancelled_input_notice();
+                return Ok(false);
+            }
             if app.has_interruptible_turn() {
                 if !app.enqueue_user_message_for_turn(QueuedUserMessage::from_shell_prompt(
                     history_text,
@@ -52,12 +85,71 @@ pub(super) async fn handle_user_action(
             Ok(false)
         }
         UserAction::SlashCommand(command) => {
-            let (slash_name, _) = parse_slash_input(&command);
+            let (slash_name, slash_args) = parse_slash_input(&command);
+            if app.has_cancelled_input_barrier()
+                && !matches!(
+                    slash_name.to_ascii_lowercase().as_str(),
+                    "/new" | "/clear" | "/luna" | "/queue" | "/help" | "/quit" | "/q" | "/exit"
+                )
+            {
+                if app.input.is_empty() {
+                    app.prefill_input(command.clone());
+                }
+                app.show_cancelled_input_notice();
+                return Ok(false);
+            }
             let is_side_question = slash_name.eq_ignore_ascii_case("/btw");
+            let is_model_command = slash_name.eq_ignore_ascii_case("/model");
+            if app.has_unconfirmed_input()
+                && slash_name.eq_ignore_ascii_case("/agent")
+                && slash_args
+                    .split_whitespace()
+                    .next()
+                    .is_some_and(|action| action.eq_ignore_ascii_case("steer"))
+            {
+                if app.input.is_empty() {
+                    app.prefill_input(command.clone());
+                }
+                app.push_message(MessageRole::System, "An input is still being saved. Wait or check the conversation before trying again.".to_string());
+                return Ok(false);
+            }
             let is_immediate_control = matches!(
                 slash_name.to_ascii_lowercase().as_str(),
-                "/agent" | "/stop" | "/clean" | "/outline" | "/jump"
+                "/agent"
+                    | "/stop"
+                    | "/clean"
+                    | "/outline"
+                    | "/jump"
+                    | "/queue"
+                    | "/migration"
+                    | "/migrate"
             );
+            if app.has_interruptible_turn() && is_model_command {
+                if slash_args.trim().is_empty() || slash_args.trim().eq_ignore_ascii_case("info") {
+                    if let Some(action) = handle_slash_command(&command, app, engine).await {
+                        match action {
+                            UserAction::Quit => return Ok(true),
+                            other => {
+                                app.push_message(
+                                    MessageRole::System,
+                                    format!("This model action is unavailable during streaming: {other:?}"),
+                                );
+                            }
+                        }
+                    }
+                } else {
+                    app.pending_model_switch = Some(slash_args.trim().to_string());
+                    app.push_message(
+                        MessageRole::System,
+                        format!(
+                            "Model switch queued: {}. It will apply after the next tool result, or when the current response finishes.",
+                            slash_args.trim()
+                        ),
+                    );
+                }
+                app.refresh_engine_metadata(engine);
+                return Ok(false);
+            }
             if app.has_interruptible_turn() && !is_side_question && !is_immediate_control {
                 if !app
                     .enqueue_user_message_for_turn(QueuedUserMessage::from_slash_command(command))
@@ -82,6 +174,12 @@ pub(super) async fn handle_user_action(
                 Some(UserAction::StartMoaPlan(request)) => {
                     start_moa_plan(engine, app, tx, request);
                 }
+                Some(UserAction::StartMigration(arguments)) => {
+                    migration_terminal::start(arguments, engine, app, tx);
+                }
+                Some(UserAction::StartMigrate(arguments)) => {
+                    migration_terminal::start_general(arguments, engine, app, tx);
+                }
                 _ => {}
             }
             app.refresh_engine_metadata(engine);
@@ -99,7 +197,26 @@ pub(super) async fn handle_user_action(
             start_moa_plan(engine, app, tx, request);
             Ok(false)
         }
+        UserAction::StartMigration(arguments) => {
+            if app.has_cancelled_input_barrier() {
+                app.show_cancelled_input_notice();
+                return Ok(false);
+            }
+            migration_terminal::start(arguments, engine, app, tx);
+            Ok(false)
+        }
+        UserAction::StartMigrate(arguments) => {
+            if app.has_cancelled_input_barrier() {
+                app.show_cancelled_input_notice();
+                return Ok(false);
+            }
+            migration_terminal::start_general(arguments, engine, app, tx);
+            Ok(false)
+        }
         UserAction::ResumeSession(path) => {
+            if let Some(task) = app.migration_task.take() {
+                task.stop().await;
+            }
             resume_session_from_history_path(&path, engine, app);
             Ok(false)
         }
@@ -109,6 +226,10 @@ pub(super) async fn handle_user_action(
             mode,
             verification_kind,
         } => {
+            if app.has_unconfirmed_input() {
+                app.push_message(MessageRole::System, "An input is still being saved. Wait or check the conversation before trying again.".to_string());
+                return Ok(false);
+            }
             match prepare_goal_objective(engine.state.cwd(), objective.trim()) {
                 Ok(prepared) => {
                     let context_snapshot =
@@ -233,6 +354,10 @@ pub(super) async fn handle_user_action(
             Ok(false)
         }
         UserAction::EditPreviousMessage => {
+            if app.has_unconfirmed_input() {
+                app.push_message(MessageRole::System, "An input is still being saved. Wait or check the conversation before trying again.".to_string());
+                return Ok(false);
+            }
             app.edit_previous_message(engine);
             Ok(false)
         }

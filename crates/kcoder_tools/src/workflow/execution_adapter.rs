@@ -48,6 +48,12 @@ impl AgentExecutor for ToolAgentExecutor {
         node_id: &str,
         fingerprint: &str,
     ) -> Result<Option<Value>, String> {
+        if let Some(artifacts) = &self.collaboration_artifacts {
+            artifacts
+                .ensure_initialized(self.runner.as_ref())
+                .await
+                .map_err(|error| format!("{error:#}"))?;
+        }
         if let Some(root) = &self.tool_run_dir {
             let output = super::checkpoints::load(root, node_id, fingerprint)
                 .map_err(|e| format!("{e:#}"))?;
@@ -66,6 +72,20 @@ impl AgentExecutor for ToolAgentExecutor {
             return Err("workflow_recovery_settings_required: this historical run did not record its execution limits and no exact checkpoint proves reuse; supply the original timeout_seconds and max_agent_turns before continuing. No unmatched node was executed.".into());
         }
         Ok(None)
+    }
+    async fn recheck_node_checkpoint(
+        &self,
+        node: &kcoder_types::workflow::WorkflowNode,
+        _fingerprint: &str,
+        output: Value,
+    ) -> Result<Value, String> {
+        if let Some(artifacts) = &self.collaboration_artifacts {
+            return artifacts
+                .recheck(self.runner.as_ref(), node, output)
+                .await
+                .map_err(|error| format!("{error:#}"));
+        }
+        Ok(output)
     }
     async fn save_node_checkpoint(
         &self,
@@ -162,6 +182,11 @@ impl AgentExecutor for ToolAgentExecutor {
                 return Err("workflow_recovery_settings_required: this historical run did not record its execution limits and no saved Agent receipt proves this request; supply the original timeout_seconds and max_agent_turns before continuing. This Agent was not executed.".into());
             }
         }
+        let recovery_request = self
+            .checkpoint_run_dir
+            .as_ref()
+            .filter(|path| self.tool_run_dir.as_ref() == Some(*path))
+            .map(|_| request.clone());
         let kind = crate::AgentKind::from_alias(&request.agent_type)
             .ok_or_else(|| format!("unknown workflow agent_type `{}`", request.agent_type))?;
         if self.arrangement_mode
@@ -195,7 +220,13 @@ impl AgentExecutor for ToolAgentExecutor {
             verification: request.verification,
         };
         let prompt = kind.build_prompt_with_contract(&request.prompt, Some(&contract));
+        let artifact_requirements =
+            super::collaboration::artifact_requirements(&request.artifact_requirements)?;
+        if !artifact_requirements.is_empty() && self.native_parent_state.is_none() {
+            return Err("workflow_artifact: actual native parent state is unavailable".into());
+        }
         let mut options = AgentRunOptions::with_allowed_write_paths(request.allowed_write_paths)
+            .with_artifact_requirements(artifact_requirements.clone())
             .with_block_shell_file_mutation(crate::agent::agent_kind_blocks_shell_file_mutation(
                 kind,
                 self.arrangement_mode,
@@ -218,7 +249,28 @@ impl AgentExecutor for ToolAgentExecutor {
                     agent_id,
                 )?;
         }
-        self.runner
+        if let Some(selection) = request.model_selection {
+            options.runtime_selection = super::collaboration::model_runtime(&selection);
+            options.configuration_observer =
+                Some(super::collaboration::RoleModelObserver::for_role(
+                    *selection,
+                    self.pinned_model.clone(),
+                    kind,
+                    options.configuration_observer.take(),
+                )?);
+        }
+        if let Some(recovery_request) = recovery_request {
+            options.workflow_recovery = super::agent_recovery::capture(
+                self,
+                agent_id,
+                &recovery_request,
+                &prompt,
+                kind,
+                &options,
+            )?;
+        }
+        let result = self
+            .runner
             .run_agent_session_with_options(
                 agent_id.to_string(),
                 prompt,
@@ -227,7 +279,22 @@ impl AgentExecutor for ToolAgentExecutor {
                 options,
             )
             .await
-            .map_err(|error| error.to_string())
+            .map_err(|error| error.to_string())?;
+        if let Some(state) = &self.native_parent_state {
+            super::collaboration::require_artifact_report(state, agent_id, &artifact_requirements)?;
+            if !artifact_requirements.is_empty()
+                && let Some(artifacts) = &self.collaboration_artifacts
+            {
+                let report = state
+                    .task(agent_id)
+                    .and_then(|task| task.artifact_validation_report)
+                    .ok_or("workflow_artifact: original report unavailable")?;
+                artifacts
+                    .record(agent_id, &artifact_requirements, &report)
+                    .map_err(|error| format!("{error:#}"))?;
+            }
+        }
+        Ok(result)
     }
 }
 

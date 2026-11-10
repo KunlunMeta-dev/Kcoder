@@ -3,11 +3,14 @@ use serde::{Deserialize, Serialize};
 
 /// An observer only. Subscribing never creates, resumes, or controls a worker.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "json-schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct AgentStreamSubscribeParams {
     pub thread_id: String,
     pub agent_id: String,
     pub subscription_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expected_background_run: Option<kcoder_types::BackgroundRunKey>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -57,16 +60,20 @@ pub struct AgentListParams {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "json-schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct AgentLiveReadParams {
     pub thread_id: String,
     pub agent_id: String,
     #[serde(default)]
     pub previous_revision: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expected_background_run: Option<kcoder_types::BackgroundRunKey>,
 }
 
 /// Public presentation data only; private checkpoints and thinking are excluded.
 #[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "json-schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct AgentLiveReadResult {
     pub thread_id: String,
@@ -77,6 +84,8 @@ pub struct AgentLiveReadResult {
     pub phase: Option<String>,
     pub content: String,
     pub truncated: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub background_run: Option<kcoder_types::BackgroundRunKey>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -130,6 +139,7 @@ pub struct AgentListResult {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "json-schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct AgentArtifactReadParams {
     pub thread_id: String,
@@ -146,9 +156,12 @@ pub struct AgentArtifactReadParams {
     pub revision: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tail: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expected_background_run: Option<kcoder_types::BackgroundRunKey>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "json-schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum AgentArtifactKind {
     Output,
@@ -156,6 +169,7 @@ pub enum AgentArtifactKind {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "json-schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct AgentArtifactReadResult {
     pub thread_id: String,
@@ -173,9 +187,12 @@ pub struct AgentArtifactReadResult {
     pub next_offset: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub modified_at: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub background_run: Option<kcoder_types::BackgroundRunKey>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "json-schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct AgentSteerParams {
     pub thread_id: String,
@@ -183,9 +200,12 @@ pub struct AgentSteerParams {
     pub message: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub client_message_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expected_background_run: Option<kcoder_types::BackgroundRunKey>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "json-schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum AgentSteerStatus {
     Applied,
@@ -200,14 +220,18 @@ pub enum AgentSteerStatus {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "json-schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct AgentMessageReadParams {
     pub thread_id: String,
     pub agent_id: String,
     pub client_message_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expected_background_run: Option<kcoder_types::BackgroundRunKey>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "json-schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct AgentMessageReadResult {
     pub thread_id: String,
@@ -285,6 +309,7 @@ pub struct AgentStopResult {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "json-schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct AgentMessageReceipt {
     pub client_message_id: String,
@@ -301,6 +326,7 @@ pub struct AgentMessageReceipt {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "json-schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct AgentSteerResult {
     pub agent_id: String,
@@ -314,6 +340,8 @@ pub struct AgentSteerResult {
     pub reason_code: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub client_message_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expected_background_run: Option<kcoder_types::BackgroundRunKey>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -363,6 +391,7 @@ mod tests {
         assert!(list["agents"][0].get("message").is_none());
 
         let params = AgentSteerParams {
+            expected_background_run: None,
             thread_id: "thread-1".to_string(),
             agent_id: "agent-1".to_string(),
             message: "change course".to_string(),
@@ -394,6 +423,7 @@ mod tests {
     #[test]
     fn agent_artifact_read_wire_types_use_camel_case() {
         let params = AgentArtifactReadParams {
+            expected_background_run: None,
             thread_id: "thread-1".to_string(),
             agent_id: "agent-1".to_string(),
             kind: Some(AgentArtifactKind::Transcript),
@@ -410,6 +440,7 @@ mod tests {
         assert!(value.get("path").is_none());
 
         let result = AgentArtifactReadResult {
+            background_run: None,
             thread_id: "thread-1".to_string(),
             agent_id: "agent-1".to_string(),
             kind: AgentArtifactKind::Output,

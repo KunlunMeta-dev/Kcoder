@@ -1,0 +1,29 @@
+{
+  "name": "@kunlunmeta/kcoder-channel-host",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "check": "node --check src/index.mjs",
+    "start": "node src/applications/stdio.mjs"
+  },
+  "dependencies": {
+    "@alicloud/dingtalk": "2.2.58",
+    "@alicloud/openapi-client": "0.4.15",
+    "@alicloud/tea-util": "1.4.11",
+    "@larksuiteoapi/node-sdk": "1.76.0",
+    "@octokit/rest": "22.0.1",
+    "@tencent-connect/qqbot-connector": "1.2.0",
+    "@tencent-connect/qqbot-nodejs": "1.0.5",
+    "@wecom/aibot-node-sdk": "1.0.7",
+    "dingtalk-stream": "2.1.5",
+    "jsonc-parser": "3.3.1",
+    "qrcode": "1.5.4",
+    "remove-markdown": "0.6.4",
+    "ws": "8.22.0"
+  }
+}

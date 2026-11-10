@@ -281,3 +281,12 @@ test('hiding a canvas aborts manual output reads and preserves its validated gra
   expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent('Saved')
   view.unmount()
 })
+
+
+test('selected workspace is carried through fixed definition and original run polling', async () => {
+  vi.mocked(workflowApi.run).mockResolvedValue({ ...run, workspace: '/ssh/non-default' })
+  const view = render(<WorkflowExecutionCanvas serverId="original-ssh" workspacePath="/ssh/non-default" threadId="thread" reference={{ id: 'flow', version: 1, runId: 'run-1', title: 'Original' }} active onClose={() => {}} />)
+  await vi.waitFor(() => expect(workflowApi.run).toHaveBeenCalledWith('original-ssh', 'run-1', null, { signal: expect.any(AbortSignal), workspacePath: '/ssh/non-default' }))
+  expect(workflowApi.exportDefinition).toHaveBeenCalledWith('original-ssh', 'flow', 1, { signal: expect.any(AbortSignal), workspacePath: '/ssh/non-default' })
+  view.unmount()
+})

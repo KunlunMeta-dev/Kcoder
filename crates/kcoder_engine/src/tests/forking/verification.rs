@@ -39,6 +39,7 @@ async fn verifier_final_internal_turn_hides_tools_and_returns_a_verdict() {
             active_skills: Vec::new(),
             snapshot_provider: engine.provider_name(),
             snapshot_model: engine.model_name(),
+            context_history_anchor: None,
             full_context_compatible: true,
         }
         .into(),
@@ -86,6 +87,7 @@ async fn verifier_result_retains_authenticated_large_tool_output_after_transcrip
             active_skills: Vec::new(),
             snapshot_provider: engine.provider_name(),
             snapshot_model: engine.model_name(),
+            context_history_anchor: None,
             full_context_compatible: true,
         }
         .into(),
@@ -147,6 +149,7 @@ async fn verifier_that_ignores_final_boundary_fails_closed_as_flaky_not_infrastr
         active_skills: Vec::new(),
         snapshot_provider: engine.provider_name(),
         snapshot_model: engine.model_name(),
+        context_history_anchor: None,
         full_context_compatible: true,
     };
 
@@ -325,6 +328,7 @@ fn verifier_vote_cache_safe(engine: &QueryEngine) -> crate::agent::CacheSafePara
         active_skills: Vec::new(),
         snapshot_provider: engine.provider_name(),
         snapshot_model: engine.model_name(),
+        context_history_anchor: None,
         full_context_compatible: true,
     }
 }

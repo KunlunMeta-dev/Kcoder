@@ -305,9 +305,13 @@ async fn turn_file_snapshot_excludes_ignored_content_in_a_repository_workspace()
         .await
         .unwrap()
         .unwrap();
-    let tree = run_git_command(
+    let tree = run_git_command_with_private_repository(
         workspace.path(),
         &["ls-tree", "-r", "--name-only", &snapshot.tree],
+        &private_snapshot_repository(&artifact_dir, "turn-1"),
+        None,
+        None,
+        None,
         4096,
         Duration::from_secs(10),
     )
@@ -606,9 +610,13 @@ async fn snapshot_policy_keeps_oversized_and_ignored_files_out_of_the_tree() {
     .unwrap()
     .unwrap();
 
-    let tree = run_git_command(
+    let tree = run_git_command_with_private_repository(
         workspace.path(),
         &["ls-tree", "-r", "--name-only", &snapshot.tree],
+        &private_snapshot_repository(&artifact_dir, "turn-1"),
+        None,
+        None,
+        None,
         4096,
         Duration::from_secs(10),
     )
@@ -628,6 +636,209 @@ async fn snapshot_policy_keeps_oversized_and_ignored_files_out_of_the_tree() {
 }
 
 #[tokio::test]
+async fn snapshot_policy_excluded_bytes_never_enter_the_object_database() {
+    let workspace = tempfile::tempdir().unwrap();
+    let artifacts = tempfile::tempdir().unwrap();
+    let init = run_git_command(workspace.path(), &["init"], 4096, Duration::from_secs(10))
+        .await
+        .unwrap();
+    assert!(init.success, "{}", init.stderr);
+    std::fs::write(workspace.path().join("visible.txt"), "visible\n").unwrap();
+    std::fs::write(
+        workspace.path().join("private.gguf"),
+        "excluded secret bytes\n",
+    )
+    .unwrap();
+    std::fs::write(workspace.path().join("large.bin"), vec![b'z'; 4096]).unwrap();
+    let policy = kcoder_config::TurnFileChangesSettings {
+        max_file_bytes: 1024,
+        ignore_globs: vec!["**/*.gguf".into()],
+        ..Default::default()
+    };
+    let mut excluded_objects = Vec::new();
+    for path in ["private.gguf", "large.bin"] {
+        let hash = run_git_command(
+            workspace.path(),
+            &["hash-object", "--no-filters", "--", path],
+            4096,
+            Duration::from_secs(10),
+        )
+        .await
+        .unwrap();
+        assert!(hash.success, "{}", hash.stderr);
+        excluded_objects.push(hash.stdout.as_str().unwrap().trim().to_string());
+    }
+    let artifact_dir = artifacts.path().join("thread").join("turn-file-changes");
+    capture_worktree_tree_with_policy(workspace.path(), &artifact_dir, "turn-1", "before", &policy)
+        .await
+        .unwrap()
+        .unwrap();
+    for oid in excluded_objects {
+        let read = run_git_command(
+            workspace.path(),
+            &["cat-file", "-e", &oid],
+            4096,
+            Duration::from_secs(10),
+        )
+        .await
+        .unwrap();
+        assert!(
+            !read.success,
+            "excluded bytes were written to the shared object database"
+        );
+    }
+}
+
+#[tokio::test]
+async fn snapshot_policy_invalid_exclusions_cannot_produce_a_successful_snapshot() {
+    let workspace = tempfile::tempdir().unwrap();
+    let artifacts = tempfile::tempdir().unwrap();
+    let init = run_git_command(workspace.path(), &["init"], 4096, Duration::from_secs(10))
+        .await
+        .unwrap();
+    assert!(init.success, "{}", init.stderr);
+    std::fs::write(workspace.path().join("note.txt"), "retain me\n").unwrap();
+    let policy = kcoder_config::TurnFileChangesSettings {
+        ignore_globs: vec!["[".into()],
+        ..Default::default()
+    };
+    let result = capture_worktree_tree_with_policy(
+        workspace.path(),
+        artifacts.path(),
+        "turn-invalid",
+        "before",
+        &policy,
+    )
+    .await;
+    assert!(
+        result.is_err(),
+        "invalid exclusion policy was reported as a complete snapshot"
+    );
+}
+
+#[tokio::test]
+async fn snapshot_policy_excludes_internal_writer_and_recovery_files() {
+    let workspace = tempfile::tempdir().unwrap();
+    let artifacts = tempfile::tempdir().unwrap();
+    let init = run_git_command(workspace.path(), &["init"], 4096, Duration::from_secs(10))
+        .await
+        .unwrap();
+    assert!(init.success, "{}", init.stderr);
+    for name in [
+        "visible.txt",
+        ".kcoder-previous-probe",
+        ".kcoder-workspace-write.lock",
+    ] {
+        std::fs::write(workspace.path().join(name), format!("content of {name}\n")).unwrap();
+    }
+    let snapshot = capture_worktree_tree(workspace.path(), artifacts.path(), "turn-1", "before")
+        .await
+        .unwrap()
+        .unwrap();
+    let listing = run_git_command_with_private_repository(
+        workspace.path(),
+        &["ls-tree", "-r", "--name-only", &snapshot.tree],
+        &private_snapshot_repository(artifacts.path(), "turn-1"),
+        None,
+        None,
+        None,
+        4096,
+        Duration::from_secs(10),
+    )
+    .await
+    .unwrap();
+    assert!(listing.success, "{}", listing.stderr);
+    assert_eq!(listing.stdout.as_str().unwrap().trim(), "visible.txt");
+}
+
+#[tokio::test]
+async fn snapshot_policy_literal_paths_preserve_deletions_and_the_real_index() {
+    let workspace = tempfile::tempdir().unwrap();
+    let artifacts = tempfile::tempdir().unwrap();
+    for args in [
+        vec!["init"],
+        vec!["config", "user.name", "KCoder Test"],
+        vec!["config", "user.email", "kcoder@example.invalid"],
+    ] {
+        let result = run_git_command(workspace.path(), &args, 4096, Duration::from_secs(10))
+            .await
+            .unwrap();
+        assert!(result.success, "{}", result.stderr);
+    }
+    std::fs::write(workspace.path().join("deleted.txt"), "tracked\n").unwrap();
+    for args in [
+        vec!["add", "deleted.txt"],
+        vec!["-c", "commit.gpgsign=false", "commit", "-m", "baseline"],
+    ] {
+        let result = run_git_command(workspace.path(), &args, 4096, Duration::from_secs(10))
+            .await
+            .unwrap();
+        assert!(result.success, "{}", result.stderr);
+    }
+    let original_index = std::fs::read(workspace.path().join(".git/index")).unwrap();
+    std::fs::remove_file(workspace.path().join("deleted.txt")).unwrap();
+    for name in ["report [draft].txt", "资料.txt"] {
+        std::fs::write(workspace.path().join(name), "new content\n").unwrap();
+    }
+    let snapshot = capture_worktree_tree(workspace.path(), artifacts.path(), "turn-1", "before")
+        .await
+        .unwrap()
+        .unwrap();
+    let listing = run_git_command_with_private_repository(
+        workspace.path(),
+        &["ls-tree", "-rz", "--name-only", &snapshot.tree],
+        &private_snapshot_repository(artifacts.path(), "turn-1"),
+        None,
+        None,
+        None,
+        4096,
+        Duration::from_secs(10),
+    )
+    .await
+    .unwrap();
+    assert!(listing.success, "{}", listing.stderr);
+    let paths = listing.stdout.as_str().unwrap();
+    assert!(paths.split('\0').any(|path| path == "report [draft].txt"));
+    assert!(paths.split('\0').any(|path| path == "资料.txt"));
+    assert!(!paths.split('\0').any(|path| path == "deleted.txt"));
+    assert_eq!(
+        original_index,
+        std::fs::read(workspace.path().join(".git/index")).unwrap()
+    );
+}
+
+#[tokio::test]
+#[cfg(unix)]
+#[ignore = "requires an unprivileged Unix UID"]
+async fn snapshot_policy_unreadable_file_cannot_be_reported_as_success() {
+    use std::os::unix::fs::{MetadataExt, PermissionsExt};
+    let workspace = tempfile::tempdir().unwrap();
+    let artifacts = tempfile::tempdir().unwrap();
+    assert_ne!(
+        std::fs::metadata(workspace.path()).unwrap().uid(),
+        0,
+        "run this test as a non-root UID"
+    );
+    let init = run_git_command(workspace.path(), &["init"], 4096, Duration::from_secs(10))
+        .await
+        .unwrap();
+    assert!(init.success, "{}", init.stderr);
+    let denied = workspace.path().join("unreadable.txt");
+    std::fs::write(&denied, "private\n").unwrap();
+    std::fs::set_permissions(&denied, std::fs::Permissions::from_mode(0o000)).unwrap();
+    assert!(
+        std::fs::read(&denied).is_err(),
+        "the fixture must actually deny reading"
+    );
+    let result =
+        capture_worktree_tree(workspace.path(), artifacts.path(), "turn-denied", "before").await;
+    assert!(
+        result.is_err(),
+        "an unreadable file was reported as a complete snapshot"
+    );
+}
+
+#[tokio::test]
 async fn snapshot_policy_defaults_keep_small_files_inside_the_tree() {
     let workspace = tempfile::tempdir().unwrap();
     let artifacts = tempfile::tempdir().unwrap();
@@ -642,9 +853,13 @@ async fn snapshot_policy_defaults_keep_small_files_inside_the_tree() {
         .await
         .unwrap()
         .unwrap();
-    let tree = run_git_command(
+    let tree = run_git_command_with_private_repository(
         workspace.path(),
         &["ls-tree", "-r", "--name-only", &snapshot.tree],
+        &private_snapshot_repository(&artifact_dir, "turn-1"),
+        None,
+        None,
+        None,
         4096,
         Duration::from_secs(10),
     )
@@ -710,4 +925,395 @@ fn snapshot_repository_debris_is_repaired_and_reclaimed() {
     for repository in &repositories {
         assert!(!repository.exists(), "{repository:?}");
     }
+}
+
+#[cfg(windows)]
+#[tokio::test]
+async fn isolated_turn_snapshot_supports_windows_paths_beyond_max_path() {
+    let workspace = tempfile::tempdir().unwrap();
+    let artifacts = tempfile::tempdir().unwrap();
+    std::fs::write(workspace.path().join("kept.txt"), "owned baseline\n").unwrap();
+    let mut artifact_dir = artifacts.path().to_path_buf();
+    while artifact_dir.as_os_str().len() < 320 {
+        artifact_dir.push("owned-snapshot-subdirectory");
+    }
+    artifact_dir.push("thread-1");
+    artifact_dir.push("turn-file-changes");
+    let snapshot = capture_worktree_tree(workspace.path(), &artifact_dir, "turn-1", "before")
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(snapshot.backend, GitSnapshotBackend::Isolated);
+    let tree = run_git_command_with_private_repository(
+        workspace.path(),
+        &["ls-tree", "-r", "--name-only", &snapshot.tree],
+        &private_snapshot_repository(&artifact_dir, "turn-1"),
+        None,
+        None,
+        None,
+        4096,
+        Duration::from_secs(10),
+    )
+    .await
+    .unwrap();
+    assert!(tree.success, "{}", tree.stderr);
+    assert!(tree.stdout.as_str().unwrap().contains("kept.txt"));
+    let retained = artifact_dir.join("retained-data.txt");
+    std::fs::write(&retained, "keep the actual artifact directory\n").unwrap();
+    assert!(
+        private_snapshot_repository(&artifact_dir, "turn-1")
+            .join("objects")
+            .is_dir()
+    );
+
+    std::fs::write(workspace.path().join("kept.txt"), "changed by turn\n").unwrap();
+    std::fs::write(workspace.path().join("created.txt"), "created by turn\n").unwrap();
+    let artifact = finalize_turn_file_changes(
+        workspace.path(),
+        &artifact_dir,
+        "thread-1",
+        "turn-1",
+        snapshot,
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    assert_eq!(artifact.file_count, 2);
+    assert_eq!(artifact.snapshot_backend, GitSnapshotBackend::Isolated);
+    let patch =
+        std::fs::read_to_string(artifact_dir.join(format!("{}.patch", artifact.artifact_id)))
+            .unwrap();
+    assert_eq!(hex_sha256(patch.as_bytes()), artifact.patch_sha256);
+    assert_eq!(
+        std::fs::read_to_string(&retained).unwrap(),
+        "keep the actual artifact directory\n"
+    );
+    assert!(!private_snapshot_repository(&artifact_dir, "turn-1").exists());
+
+    let revert_repository =
+        artifact_dir.join(format!("revert-repository-{}", artifact.artifact_id));
+    let revert_cleanup = RemovePrivateDirectoryOnDrop::armed(revert_repository.clone()).unwrap();
+    let init = run_git_command_with_private_repository(
+        workspace.path(),
+        &["init", "--bare"],
+        &revert_repository,
+        None,
+        None,
+        None,
+        4096,
+        Duration::from_secs(10),
+    )
+    .await
+    .unwrap();
+    assert!(init.success, "{}", init.stderr);
+    for args in [
+        &["apply", "--reverse", "--check", "--binary", "-"][..],
+        &["apply", "--reverse", "--binary", "-"][..],
+    ] {
+        let result = run_git_command_with_private_repository(
+            workspace.path(),
+            args,
+            &revert_repository,
+            Some(workspace.path()),
+            None,
+            Some(&patch),
+            4096,
+            Duration::from_secs(10),
+        )
+        .await
+        .unwrap();
+        assert!(result.success, "{}", result.stderr);
+    }
+    drop(revert_cleanup);
+    assert!(!revert_repository.exists());
+    assert_eq!(
+        std::fs::read_to_string(workspace.path().join("kept.txt")).unwrap(),
+        "owned baseline\n"
+    );
+    assert!(!workspace.path().join("created.txt").exists());
+    assert_eq!(
+        std::fs::read_to_string(&retained).unwrap(),
+        "keep the actual artifact directory\n"
+    );
+    assert!(!workspace.path().join(".git").exists());
+}
+
+#[tokio::test]
+#[cfg(unix)]
+async fn snapshot_policy_does_not_execute_repository_filters_or_fsmonitor() {
+    let workspace = tempfile::tempdir().unwrap();
+    let artifacts = tempfile::tempdir().unwrap();
+    let marker = workspace.path().join("unexpected-execution");
+    let filter = format!("printf triggered >> '{}'; cat", marker.display());
+    let monitor = format!("printf triggered >> '{}'", marker.display());
+    for args in [
+        vec!["init"],
+        vec!["config", "filter.fixture.clean", &filter],
+        vec!["config", "core.fsmonitor", &monitor],
+    ] {
+        let result = run_git_command(workspace.path(), &args, 4096, Duration::from_secs(10))
+            .await
+            .unwrap();
+        assert!(result.success, "{}", result.stderr);
+    }
+    std::fs::write(
+        workspace.path().join(".gitattributes"),
+        "*.txt text eol=lf filter=fixture ident\n",
+    )
+    .unwrap();
+    std::fs::write(workspace.path().join("report.txt"), "original bytes\r\n").unwrap();
+    let before = capture_worktree_tree(workspace.path(), artifacts.path(), "turn-filter", "before")
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(!marker.exists(), "capture executed user configuration");
+    assert_eq!(before.backend, GitSnapshotBackend::Isolated);
+    let hash = run_git_command(
+        workspace.path(),
+        &["hash-object", "--no-filters", "report.txt"],
+        4096,
+        Duration::from_secs(10),
+    )
+    .await
+    .unwrap();
+    let expected = hash.stdout.as_str().unwrap().trim();
+    let actual = run_git_command_with_private_repository(
+        workspace.path(),
+        &["rev-parse", &format!("{}:report.txt", before.tree)],
+        &private_snapshot_repository(artifacts.path(), "turn-filter"),
+        None,
+        None,
+        None,
+        4096,
+        Duration::from_secs(10),
+    )
+    .await
+    .unwrap();
+    assert!(actual.success, "{}", actual.stderr);
+    assert_eq!(
+        actual.stdout.as_str().unwrap().trim(),
+        expected,
+        "snapshot normalized the source bytes"
+    );
+    let shared = run_git_command(
+        workspace.path(),
+        &["cat-file", "-e", expected],
+        4096,
+        Duration::from_secs(10),
+    )
+    .await
+    .unwrap();
+    assert!(
+        !shared.success,
+        "snapshot content leaked into the user's object database"
+    );
+}
+
+#[tokio::test]
+async fn snapshot_policy_uses_actual_bytes_for_tracked_ignored_and_index_flagged_files() {
+    let workspace = tempfile::tempdir().unwrap();
+    let artifacts = tempfile::tempdir().unwrap();
+    std::fs::write(workspace.path().join("tracked.txt"), "old bytes\n").unwrap();
+    std::fs::write(workspace.path().join("sparse.txt"), "old sparse\n").unwrap();
+    for args in [
+        vec!["init"],
+        vec!["add", "tracked.txt", "sparse.txt"],
+        vec!["update-index", "--assume-unchanged", "tracked.txt"],
+        vec!["update-index", "--skip-worktree", "sparse.txt"],
+    ] {
+        let result = run_git_command(workspace.path(), &args, 4096, Duration::from_secs(10))
+            .await
+            .unwrap();
+        assert!(result.success, "{}", result.stderr);
+    }
+    std::fs::write(workspace.path().join(".gitignore"), "*.txt\n").unwrap();
+    std::fs::write(workspace.path().join("tracked.txt"), "current bytes\r\n").unwrap();
+    std::fs::write(workspace.path().join("sparse.txt"), "current sparse\n").unwrap();
+    std::fs::write(workspace.path().join("ignored.txt"), "stay ignored\n").unwrap();
+    let index = std::fs::read(workspace.path().join(".git/index")).unwrap();
+    let snapshot = capture_worktree_tree(workspace.path(), artifacts.path(), "flags", "before")
+        .await
+        .unwrap()
+        .unwrap();
+    for name in ["tracked.txt", "sparse.txt"] {
+        let expected = run_git_command(
+            workspace.path(),
+            &["hash-object", "--no-filters", name],
+            4096,
+            Duration::from_secs(10),
+        )
+        .await
+        .unwrap();
+        let actual = run_git_command_with_private_repository(
+            workspace.path(),
+            &["rev-parse", &format!("{}:{name}", snapshot.tree)],
+            &private_snapshot_repository(artifacts.path(), "flags"),
+            None,
+            None,
+            None,
+            4096,
+            Duration::from_secs(10),
+        )
+        .await
+        .unwrap();
+        assert!(actual.success, "{}", actual.stderr);
+        assert_eq!(actual.stdout, expected.stdout);
+    }
+    let absent = run_git_command_with_private_repository(
+        workspace.path(),
+        &["cat-file", "-e", &format!("{}:ignored.txt", snapshot.tree)],
+        &private_snapshot_repository(artifacts.path(), "flags"),
+        None,
+        None,
+        None,
+        4096,
+        Duration::from_secs(10),
+    )
+    .await
+    .unwrap();
+    assert!(!absent.success);
+    assert_eq!(
+        std::fs::read(workspace.path().join(".git/index")).unwrap(),
+        index
+    );
+}
+
+#[tokio::test]
+async fn turn_file_changes_native_review_remains_read_only_when_reversal_is_requested() {
+    let workspace = tempfile::tempdir().unwrap();
+    let engine = catalog_list_test_engine(workspace.path());
+    let artifacts = engine
+        .session_storage_dir_for(&engine.session_id())
+        .join("turn-file-changes");
+    let file = workspace.path().join("result.txt");
+    std::fs::write(&file, "before\n").unwrap();
+    let before = capture_worktree_tree(workspace.path(), &artifacts, "review", "before")
+        .await
+        .unwrap()
+        .unwrap();
+    std::fs::write(&file, "after\n").unwrap();
+    let artifact = finalize_turn_file_changes(
+        workspace.path(),
+        &artifacts,
+        &engine.session_id(),
+        "review",
+        before,
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    assert_eq!(turn_file_changes_summary(&artifact)["revertible"], false);
+    let mut params = DeviceExecuteParams {
+        command_key: "turn_file_changes_review".into(),
+        thread_id: None,
+        path: Some(workspace.path().to_string_lossy().into_owned()),
+        args: vec![artifact.artifact_id.clone()],
+        max_output_bytes: None,
+        timeout_seconds: None,
+        stdin: None,
+        expected_revision: None,
+    };
+    let review = turn_file_changes_command(&engine, &params).await.unwrap();
+    assert!(review.success);
+    assert!(review.stdout.to_string().contains("+after"));
+    let metadata_path = artifacts.join(format!("{}.json", artifact.artifact_id));
+    let retained = std::fs::read(&metadata_path).unwrap();
+    std::fs::write(&file, "concurrent user content\n").unwrap();
+    params.command_key = "turn_file_changes_revert".into();
+    let denied = turn_file_changes_command(&engine, &params).await.unwrap();
+    assert_eq!(denied.stdout["success"], false);
+    assert_eq!(std::fs::read(&file).unwrap(), b"concurrent user content\n");
+    assert_eq!(std::fs::read(metadata_path).unwrap(), retained);
+}
+
+#[tokio::test]
+async fn snapshot_policy_limit_crossings_do_not_fabricate_file_creation_or_deletion() {
+    let workspace = tempfile::tempdir().unwrap();
+    let artifacts = tempfile::tempdir().unwrap();
+    let artifact_dir = artifacts.path().join("thread/turn-file-changes");
+    let policy = kcoder_config::TurnFileChangesSettings {
+        max_file_bytes: 64,
+        ..Default::default()
+    };
+    for (name, bytes) in [
+        ("growing.txt", vec![b'a'; 16]),
+        ("shrinking.txt", vec![b'b'; 128]),
+        ("visible.txt", b"before\n".to_vec()),
+    ] {
+        std::fs::write(workspace.path().join(name), bytes).unwrap();
+    }
+    let before = capture_worktree_tree_with_policy(
+        workspace.path(),
+        &artifact_dir,
+        "crossing",
+        "before",
+        &policy,
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    std::fs::write(workspace.path().join("growing.txt"), vec![b'c'; 128]).unwrap();
+    std::fs::write(workspace.path().join("shrinking.txt"), vec![b'd'; 16]).unwrap();
+    std::fs::write(workspace.path().join("visible.txt"), "after\n").unwrap();
+    let capture = finalize_turn_file_changes_with_policy(
+        workspace.path(),
+        &artifact_dir,
+        "thread",
+        "crossing",
+        before,
+        &policy,
+    )
+    .await
+    .unwrap();
+    assert!(capture.has_exclusions);
+    let artifact = capture.artifact.unwrap();
+    assert_eq!(artifact.file_count, 1);
+    assert_eq!(artifact.files[0].path, "visible.txt");
+    let patch =
+        std::fs::read_to_string(artifact_dir.join(format!("{}.patch", artifact.artifact_id)))
+            .unwrap();
+    assert!(!patch.contains("growing.txt"));
+    assert!(!patch.contains("shrinking.txt"));
+}
+
+#[tokio::test]
+async fn turn_file_change_summary_preserves_unicode_names_and_renames() {
+    let workspace = tempfile::tempdir().unwrap();
+    let artifacts = tempfile::tempdir().unwrap();
+    let artifact_dir = artifacts.path().join("thread/turn-file-changes");
+    std::fs::write(workspace.path().join("资料.txt"), "old document\n").unwrap();
+    std::fs::write(
+        workspace.path().join("before name.txt"),
+        "unchanged rename body\n",
+    )
+    .unwrap();
+    let before = capture_worktree_tree(workspace.path(), &artifact_dir, "names", "before")
+        .await
+        .unwrap()
+        .unwrap();
+    std::fs::write(workspace.path().join("资料.txt"), "new document\n").unwrap();
+    std::fs::rename(
+        workspace.path().join("before name.txt"),
+        workspace.path().join("新路径.txt"),
+    )
+    .unwrap();
+    let artifact =
+        finalize_turn_file_changes(workspace.path(), &artifact_dir, "thread", "names", before)
+            .await
+            .unwrap()
+            .unwrap();
+    assert_eq!(artifact.file_count, 2);
+    let changed = artifact
+        .files
+        .iter()
+        .find(|file| file.path == "资料.txt")
+        .expect("Unicode path was quoted or lost");
+    assert_eq!((changed.additions, changed.deletions), (1, 1));
+    let renamed = artifact
+        .files
+        .iter()
+        .find(|file| file.path == "新路径.txt")
+        .expect("Unicode rename was quoted or lost");
+    assert_eq!(renamed.old_path.as_deref(), Some("before name.txt"));
+    assert_eq!(renamed.change_type, "renamed");
 }

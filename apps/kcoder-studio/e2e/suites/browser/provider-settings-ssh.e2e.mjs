@@ -121,7 +121,7 @@ await runE2E(
     // Catalog selection and provider routing are model-independent assertions.
     await page.getByTestId("desktop-sidebar").waitFor({ timeout: 30000 });
     const rpc = (method, params) => page.evaluate(({ method, params }) =>
-      window.__TAURI_INTERNALS__.invoke('local_executor_request', { method, params }),
+      window.__ELECTRON_INTERNALS__.invoke('local_executor_request', { method, params }),
       { method, params });
     await rpc('runtime.projects.upsert_local', {
       deviceId: 'ssh-loopback', projectKey: 'remote-model-project', name: 'Remote model project', roots: [remoteWorkspace],

@@ -104,6 +104,7 @@ impl ReplApp {
     pub(super) fn draw_current_surface(&mut self, frame: &mut Frame) {
         let area = frame.area();
         self.last_frame_area = Some(area);
+        self.last_scroll_to_bottom_area = None;
         if self.copy_view.is_some() {
             self.navigation_footer.clear();
             self.draw_copy_view(frame);
@@ -250,21 +251,6 @@ impl ReplApp {
             } else {
                 (visible_lines, render_top)
             };
-            self.last_transcript_visible_rows = if self.navigation.displaying {
-                transcript_selection::navigation_visible_rows_for_selection(
-                    &visible_lines,
-                    inner_width,
-                    inner_area.height,
-                    render_top,
-                )
-            } else {
-                transcript_visible_rows_for_selection(
-                    &visible_lines,
-                    inner_width,
-                    inner_area.height,
-                    render_top,
-                )
-            };
             frame.render_widget(ratatui::widgets::Clear, inner_area);
             // Navigation output already contains visual rows; replay its cells directly without wrapping or truncating again.
             if self.navigation.displaying {
@@ -284,6 +270,20 @@ impl ReplApp {
                     inner_area,
                 );
             }
+            if let Some(snapshot) = self.transcript_selection_buffer.as_ref() {
+                if snapshot.area == inner_area {
+                    transcript_selection::restore_transcript_buffer(snapshot, frame.buffer_mut());
+                } else {
+                    // A resized/repositioned surface must not copy from stale screen coordinates.
+                    self.clear_transcript_selection();
+                }
+            }
+            self.last_transcript_buffer = Some(transcript_selection::capture_transcript_buffer(
+                frame.buffer_mut(),
+                inner_area,
+            ));
+            self.last_transcript_visible_rows =
+                transcript_selection::visible_rows_from_buffer(frame.buffer_mut(), inner_area);
             render_transcript_selection_highlight(
                 frame,
                 inner_area,
@@ -340,6 +340,7 @@ impl ReplApp {
             }
         } else {
             self.last_transcript_visible_rows.clear();
+            self.last_transcript_buffer = None;
             self.clear_transcript_selection();
         }
         if self.transcript_viewport.scrollbar_area().is_none() {
@@ -376,7 +377,11 @@ impl ReplApp {
                     self.status_elapsed(),
                     StatusIndicatorControls {
                         show_interrupt_hint: self.has_interruptible_turn(),
-                        interrupt_hint: "esc",
+                        interrupt_hint: if self.can_return_to_bottom() {
+                            "ctrl+c"
+                        } else {
+                            "esc"
+                        },
                         is_running: self.spinner.is_running(),
                     },
                     &KCODER_UI_THEME,
@@ -499,7 +504,11 @@ impl ReplApp {
                 text: &transient_status_label,
             }
         } else if fullscreen_status_in_footer && self.has_interruptible_turn() {
-            FooterHint::Interrupt
+            if self.can_return_to_bottom() {
+                FooterHint::InterruptWithCtrlC
+            } else {
+                FooterHint::Interrupt
+            }
         } else if fullscreen_status_in_footer && self.spinner.is_running() {
             FooterHint::Activity
         } else if self.spinner.is_running() && has_draft {
@@ -625,6 +634,7 @@ impl ReplApp {
         if let Some((area, content_rows, viewport_rows, top)) = deferred_transcript_scrollbar {
             render_transcript_scrollbar(frame, area, content_rows, viewport_rows, top);
         }
+        self.draw_scroll_to_bottom(frame, layout.transcript_actions);
 
         if !self.centered_overlay_active() {
             if let Some((cursor_x, cursor_y)) = self.history_search_footer_cursor(footer_area) {

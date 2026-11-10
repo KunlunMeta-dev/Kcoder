@@ -181,7 +181,8 @@ await runE2E(
       "Git ref=main 创建的托管 worktree 必须从 source HEAD 起步",
     );
 
-    await page.getByTestId("workspace-tab-switcher").click();
+    await page.getByTestId("task-more").click();
+    await page.getByTestId("task-menu-workspace").click();
     const closeTerminal = page.locator('[aria-label^="关闭终端"]').first();
     await closeTerminal.waitFor({ state: "visible", timeout: 30_000 });
     page.once("dialog", (dialog) => void dialog.accept());
@@ -191,7 +192,8 @@ await runE2E(
     );
 
     await page.reload({ waitUntil: "domcontentloaded" });
-    await page.getByTestId("workspace-tab-switcher").click();
+    await page.getByTestId("task-more").click();
+    await page.getByTestId("task-menu-workspace").click();
     await page.getByTestId("workspace-tab-agent").click();
     await page
       .getByTestId("send-message")
@@ -364,6 +366,7 @@ await runE2E(
       .getByTestId("send-message")
       .waitFor({ state: "visible", timeout: 30_000 });
     await page.getByLabel("更多", { exact: true }).click();
+    await page.getByTestId("task-menu-management").click();
     await page
       .getByTestId("delete-task")
       .waitFor({ state: "visible", timeout: 30_000 });
@@ -532,7 +535,8 @@ function activeTerminal(page) {
 }
 
 async function selectPanel(page, id) {
-  await page.getByTestId("workspace-tab-switcher").click();
+  await page.getByTestId("task-more").click();
+  await page.getByTestId("task-menu-workspace").click();
   await page.getByTestId(`workspace-tab-${id}`).click();
   await page
     .getByTestId("terminal-emulator")

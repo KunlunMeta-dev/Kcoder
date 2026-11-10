@@ -1,3 +1,6 @@
+import { ToolSelectionsSettingsPage } from './ToolSelectionsSettingsPage'
+import { ChannelsSettingsPage } from '@/features/connectivity/ChannelsSettingsPage'
+import { navigateTo } from '@/lib/navigation'
 import {
   Archive,
   ArrowLeft,
@@ -15,7 +18,8 @@ import {
   Cpu,
   UserRound,
 } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { stripAppBasePath } from '@/config/runtime'
 import { AppearanceSettingsPage } from '@/features/appearance/AppearanceSettingsPage'
 import { SHOW_PLUGINS_NAVIGATION } from '@/features/plugins/visibility'
 import { useTranslation } from '@/hooks/useTranslation'
@@ -67,9 +71,35 @@ export function MobileSettingsPage({
     | 'usage'
     | 'quick-phrases'
     | 'plugins'
+    | 'tools'
+    | 'channels'
     | 'worktrees'
     | 'archived-conversations'
-  >('menu')
+  >(() => {
+    const path = stripAppBasePath(window.location.pathname)
+    return path === '/settings/channels'
+      ? 'channels'
+      : path === '/settings/tools'
+        ? 'tools'
+        : 'menu'
+  })
+
+  useEffect(() => {
+    const changed = () => {
+      const path = stripAppBasePath(window.location.pathname)
+      setActivePage(current =>
+        path === '/settings/channels'
+          ? 'channels'
+          : path === '/settings/tools'
+            ? 'tools'
+            : current === 'tools' || current === 'channels'
+              ? 'menu'
+              : current
+      )
+    }
+    window.addEventListener('popstate', changed)
+    return () => window.removeEventListener('popstate', changed)
+  }, [])
 
   if (activePage === 'usage' && kcoderGatewayPage) {
     return (
@@ -281,6 +311,31 @@ export function MobileSettingsPage({
             onRefreshWorkLists={onRefreshWorkLists}
             onLeaveSettings={onLeaveToRuntimeTask ?? onBack}
           />
+        </div>
+      </main>
+    )
+  }
+
+  if (activePage === 'tools' || activePage === 'channels') {
+    return (
+      <main
+        data-testid={`mobile-${activePage}-settings-page`}
+        className="flex h-dvh flex-col overflow-hidden bg-background p-5 text-text-primary"
+      >
+        <button
+          type="button"
+          data-testid={`mobile-${activePage}-back-button`}
+          className="flex min-h-11 items-center gap-2 text-base"
+          onClick={() => {
+            setActivePage('menu')
+            navigateTo('/settings')
+          }}
+        >
+          <ArrowLeft className="h-5 w-5" />
+          {t('workbench.settings_back_to_app')}
+        </button>
+        <div className="min-h-0 flex-1 overflow-auto">
+          {activePage === 'channels' ? <ChannelsSettingsPage /> : <ToolSelectionsSettingsPage />}
         </div>
       </main>
     )
@@ -541,6 +596,36 @@ export function MobileSettingsPage({
           </span>
           <ChevronRight className="h-5 w-5 shrink-0 text-text-muted" />
         </button>
+        {kcoderGatewayPage && (
+          <button
+            type="button"
+            data-testid="mobile-settings-channels-button"
+            onClick={() => {
+              setActivePage('channels')
+              navigateTo('/settings/channels')
+            }}
+            className="flex min-h-11 w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-base text-text-primary hover:bg-muted"
+          >
+            <MessageSquareText className="h-5 w-5" />
+            <span className="flex-1">{t('workbench.settings_nav_channels')}</span>
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        )}
+        {kcoderGatewayPage && (
+          <button
+            type="button"
+            data-testid="mobile-settings-tools-button"
+            onClick={() => {
+              setActivePage('tools')
+              navigateTo('/settings/tools')
+            }}
+            className="flex min-h-11 w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-base text-text-primary hover:bg-muted"
+          >
+            <SlidersHorizontal className="h-5 w-5" />
+            <span className="flex-1">{t('tool_selections.title')}</span>
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        )}
         <button
           type="button"
           data-testid="mobile-settings-worktrees-button"

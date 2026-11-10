@@ -1,11 +1,14 @@
 import { act, renderHook } from '@testing-library/react'
 import { describe, expect, test, vi } from 'vitest'
-import { createRequestUserInputAliasTracker } from '@/components/chat/requestUserInputMessages'
+import {
+  createRequestUserInputAliasTracker,
+  requestUserInputPayloadKeys,
+} from '@/components/chat/requestUserInputMessages'
 import type { RequestUserInputPayload } from '@/components/chat/RequestUserInputCard'
 import { usePaneInteractions } from './usePaneInteractions'
 
 describe('source-bound question ignore preserves parent and other pending work', () => {
-  function setup(accepted = true) {
+  function setup(accepted = true, reusedIds = false) {
     const source: RequestUserInputPayload = {
       requestId: 7,
       itemId: 'question-7',
@@ -15,7 +18,9 @@ describe('source-bound question ignore preserves parent and other pending work',
         backgroundRun: { parentSessionId: 'parent', agentId: 'child', runId: 'actual-run' },
       },
     }
-    const other: RequestUserInputPayload = { requestId: 8, itemId: 'question-8' }
+    const other: RequestUserInputPayload = reusedIds
+      ? { requestId: 7, itemId: 'question-7' }
+      : { requestId: 8, itemId: 'question-8' }
     const tracker = createRequestUserInputAliasTracker()
     tracker.previousPayloads = [source, other]
     let answered = new Set<string>()
@@ -58,29 +63,36 @@ describe('source-bound question ignore preserves parent and other pending work',
       cancelRuntimePaneTask,
     }
   }
-  test('ignores only the exact source request with an empty real response, without cancelling a run', async () => {
-    const value = setup()
-    await act(async () => {
-      await value.result.current.ignoreRequestUserInput(value.source)
-    })
-    expect(value.cancelRuntimePaneTask).not.toHaveBeenCalled()
-    expect(value.parent.running).toBe(true)
-    expect(value.context.dispatchMessages).not.toHaveBeenCalled()
-    expect(value.sendRuntimePaneMessage).toHaveBeenCalledWith(
-      expect.objectContaining({
-        requestUserInputResponse: {
-          requestId: 7,
-          itemId: 'question-7',
-          sourceAgent: value.source.sourceAgent,
-          answers: {},
-          annotations: { ignored: true },
-        },
+  test.each([false, true])(
+    'ignores only the exact source request without cancelling a run, reused IDs=%s',
+    async reusedIds => {
+      const value = setup(true, reusedIds)
+      await act(async () => {
+        await value.result.current.ignoreRequestUserInput(value.source)
       })
-    )
-    expect(value.answered().has('request:7')).toBe(true)
-    expect(value.answered().has('request:8')).toBe(false)
-    expect(value.answered().has('item:question-8')).toBe(false)
-  })
+      expect(value.cancelRuntimePaneTask).not.toHaveBeenCalled()
+      expect(value.parent.running).toBe(true)
+      expect(value.context.dispatchMessages).not.toHaveBeenCalled()
+      expect(value.sendRuntimePaneMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          requestUserInputResponse: {
+            requestId: 7,
+            itemId: 'question-7',
+            sourceAgent: value.source.sourceAgent,
+            answers: {},
+            annotations: { ignored: true },
+          },
+        })
+      )
+      for (const key of requestUserInputPayloadKeys(value.source))
+        expect(value.answered().has(key)).toBe(true)
+      for (const key of requestUserInputPayloadKeys(value.other))
+        expect(value.answered().has(key)).toBe(false)
+      expect(value.answered().has('request:7')).toBe(false)
+      expect(value.answered().has('request:8')).toBe(false)
+      expect(value.answered().has('item:question-8')).toBe(false)
+    }
+  )
   test('failed source response keeps the question pending and still cannot cancel the parent', async () => {
     const value = setup(false)
     await act(async () => {

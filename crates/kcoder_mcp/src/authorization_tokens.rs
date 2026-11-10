@@ -104,6 +104,8 @@ impl OAuthTokens {
         let record = StoredTokens {
             version: 2,
             refresh_pending: Some(pending),
+            credential_revision: None,
+            provider_revocation: None,
             resource: self.resource.as_str().into(),
             issuer: self.issuer.as_str().into(),
             client_id: self.client_id.clone(),
@@ -132,13 +134,22 @@ impl OAuthTokens {
             .map_err(|_| anyhow::anyhow!("Invalid OAuth credential record"))?;
         let pending = match record.version {
             1 => record.refresh_pending.unwrap_or(false),
-            2 => record
+            2 | 3 => record
                 .refresh_pending
                 .ok_or_else(|| anyhow::anyhow!("OAuth credential refresh state is missing"))?,
             _ => bail!("Unsupported OAuth credential version"),
         };
         if pending {
             return Err(RefreshRecoveryRequired.into());
+        }
+        if let Some(marker) = record.provider_revocation {
+            return Err(ProviderRevocationBlocked {
+                accepted: marker.accepted,
+            }
+            .into());
+        }
+        if record.version == 3 {
+            bail!("OAuth revocation state is missing");
         }
         if record.resource != resource.as_str()
             || record.issuer != issuer.as_str()
@@ -229,6 +240,10 @@ struct StoredTokens {
     version: u32,
     #[serde(default)]
     refresh_pending: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    credential_revision: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    provider_revocation: Option<ProviderRevocationMarker>,
     resource: String,
     issuer: String,
     client_id: String,
@@ -237,6 +252,84 @@ struct StoredTokens {
     refresh_token: Option<Zeroizing<String>>,
     expires_at_ms: Option<u64>,
     scope: Option<String>,
+}
+
+#[derive(Debug)]
+pub struct ProviderRevocationBlocked {
+    pub accepted: bool,
+}
+impl std::fmt::Display for ProviderRevocationBlocked {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("OAuth provider revocation requires original receipt reconciliation or new authorization")
+    }
+}
+impl std::error::Error for ProviderRevocationBlocked {}
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ProviderRevocationMarker {
+    request_id: String,
+    accepted: bool,
+}
+
+/// Create an opaque private version only for a prepared revocation. Ordinary
+/// refresh/save replaces it, invalidating the old prepared token without changing
+/// the persistent authorization epoch or exposing a digest of private values.
+pub(crate) fn prepare_revocation_revision(bytes: &[u8]) -> Result<(Zeroizing<Vec<u8>>, String)> {
+    let mut record: StoredTokens = serde_json::from_slice(bytes)
+        .map_err(|_| anyhow::anyhow!("MCP_REVOCATION_CREDENTIAL_INVALID"))?;
+    if record.provider_revocation.is_some()
+        || record.refresh_pending == Some(true)
+        || !matches!(record.version, 1 | 2)
+    {
+        bail!("MCP_REVOCATION_CREDENTIAL_UNAVAILABLE");
+    }
+    let revision = match record.credential_revision.clone() {
+        Some(value) => value,
+        None => {
+            let mut bytes = [0u8; 32];
+            getrandom::fill(&mut bytes)
+                .map_err(|_| anyhow::anyhow!("MCP_REVOCATION_RANDOM_UNAVAILABLE"))?;
+            bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+        }
+    };
+    if revision.len() != 64 || !revision.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        bail!("MCP_REVOCATION_CREDENTIAL_INVALID");
+    }
+    record.credential_revision = Some(revision.clone());
+    Ok((
+        Zeroizing::new(
+            serde_json::to_vec(&record)
+                .map_err(|_| anyhow::anyhow!("MCP_REVOCATION_CREDENTIAL_INVALID"))?,
+        ),
+        revision,
+    ))
+}
+pub(crate) fn mark_provider_revocation(
+    bytes: &[u8],
+    revision: &str,
+    request_id: &str,
+    accepted: Option<bool>,
+) -> Result<Zeroizing<Vec<u8>>> {
+    let mut record: StoredTokens = serde_json::from_slice(bytes)
+        .map_err(|_| anyhow::anyhow!("MCP_REVOCATION_CREDENTIAL_INVALID"))?;
+    if record.credential_revision.as_deref() != Some(revision)
+        || record.refresh_pending == Some(true)
+        || record
+            .provider_revocation
+            .as_ref()
+            .is_some_and(|marker| marker.request_id != request_id)
+    {
+        bail!("MCP_REVOCATION_CREDENTIAL_CHANGED");
+    }
+    record.version = if accepted.is_some() { 3 } else { 2 };
+    record.refresh_pending = Some(false);
+    record.provider_revocation = accepted.map(|accepted| ProviderRevocationMarker {
+        request_id: request_id.to_owned(),
+        accepted,
+    });
+    Ok(Zeroizing::new(serde_json::to_vec(&record).map_err(
+        |_| anyhow::anyhow!("MCP_REVOCATION_CREDENTIAL_INVALID"),
+    )?))
 }
 
 fn validate_bearer(token: &str) -> Result<()> {
@@ -264,7 +357,7 @@ struct TokenResponse {
     scope: Option<String>,
 }
 
-fn basic_component(value: &str) -> Result<Zeroizing<String>> {
+pub(crate) fn basic_component(value: &str) -> Result<Zeroizing<String>> {
     let encoded = serde_urlencoded::to_string([("x", value)])
         .map_err(|_| anyhow::anyhow!("Cannot encode OAuth client authentication"))?;
     Ok(Zeroizing::new(encoded[2..].to_string()))

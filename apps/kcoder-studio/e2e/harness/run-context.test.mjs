@@ -1,18 +1,23 @@
+import { chmod } from "node:fs/promises";
 import assert from "node:assert/strict";
-import { access, mkdir, readFile, rm, symlink } from "node:fs/promises";
+import { access, lstat, mkdir, readFile, readdir, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { Readable } from "node:stream";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { artifactSourceRoot, createRedactingStream, isolatedEnvironment, portableTimestamp, redact, repoRoot, runE2E, RunContext } from "./run-context.mjs";
+import { artifactSourceRoot, createRedactingStream, isolatedEnvironment, portableTimestamp, redact, repoRoot, retainedArtifactRunRoot, runE2E, RunContext } from "./run-context.mjs";
 
-test("artifact mapping mirrors the exact E2E source path under target/test", () => {
-  const source = new URL("../suites/browser/ssh-browser.e2e.mjs", import.meta.url);
+test("artifact mapping groups E2E runs by the Shanghai date of their UTC run ID", () => {
+  const source = fileURLToPath(new URL("../suites/browser/ssh-browser.e2e.mjs", import.meta.url));
+  const start = new Date("2026-07-28T16:15:30.482Z");
+  const id = portableTimestamp(start);
   assert.equal(
-    artifactSourceRoot(source.pathname),
-    `${repoRoot}/target/test/apps/kcoder-studio/e2e/suites/browser/ssh-browser.e2e.mjs`,
+    artifactSourceRoot(source, start),
+    resolve(repoRoot, "target/e2e/2026/07/29/suites/browser/ssh-browser.e2e.mjs"),
   );
-  assert.equal(portableTimestamp(new Date("2026-07-28T09:15:30.482Z")), "20260728-091530.482Z");
+  assert.equal(id, "20260728-161530.482Z");
+  assert.equal(retainedArtifactRunRoot(source, id), resolve(artifactSourceRoot(source, start), id));
+  assert.throws(() => retainedArtifactRunRoot(source, "../escape"), /invalid retained E2E run ID/);
 });
 
 test("run roots are collision safe and case paths use project/test slugs", async () => {
@@ -62,6 +67,28 @@ test("retained child logs redact known secrets even when writes split the value"
   const log = await readFile(`${context.runRoot}/logs/secret-writer.log`, "utf8");
   assert.equal(log.includes("DUMMY_SECRET_123456"), false);
   assert.match(log, /value=\[REDACTED\]/);
+});
+
+test("public numeric model budgets survive replay snapshots while authentication stays redacted", () => {
+  assert.deepEqual(redact({ cacheReadTokens: 42, cacheCreationTokens: 0, cache_read_tokens: 43, cache_creation_tokens: 1 }),
+    { cacheReadTokens: 42, cacheCreationTokens: 0, cache_read_tokens: 43, cache_creation_tokens: 1 });
+  assert.equal(redact("secret-reference", "cacheReadTokens"), "[REDACTED]");
+  assert.equal(redact(42, "cacheReadTokens", ["42"]), "[REDACTED]");
+  const output = redact({
+    context_window_tokens: 128000, outputHeadroomTokens: 8192, max_output_tokens: 2048,
+    usage: { input_tokens: 500, output_tokens: 40, total_tokens: 540 },
+    access_token: 123456, token: 123456, apiKey: "private",
+    max_tokens: "private", summary_max_tokens: -1,
+    credential: { max_tokens: 2048 },
+  });
+  assert.deepEqual(output, {
+    context_window_tokens: 128000, outputHeadroomTokens: 8192, max_output_tokens: 2048,
+    usage: { input_tokens: 500, output_tokens: 40, total_tokens: 540 },
+    access_token: "[REDACTED]", token: "[REDACTED]", apiKey: "[REDACTED]",
+    max_tokens: "[REDACTED]", summary_max_tokens: "[REDACTED]",
+    credential: "[REDACTED]",
+  });
+  assert.equal(redact(2048, "max_tokens", ["2048"]), "[REDACTED]");
 });
 
 test("streaming redactor hides a long Unicode secret across bytes, newlines and the old 64KiB boundary", async () => {
@@ -134,11 +161,14 @@ test("runE2E bounds a body that ignores AbortSignal and records cancellation fai
   assert.match(result.error, /did not stop within 50ms after abort/);
 });
 
-test("finish bounds a cleanup that never cooperates and records the failure", async () => {
+test("finish bounds a cleanup that never cooperates and preserves its unconfirmed owner state", async t => {
   const context = await RunContext.create(import.meta.url, {
     testId: "non-cooperative-cleanup",
     cleanupTimeoutMs: 50,
   });
+  const checkpoint = await context.writeStateJson("unconfirmed-writer.json", { revision: 7 });
+  // This fixture has no real writer; release only its test-owned state after assertions.
+  t.after(() => rm(context.stateDir, { recursive: true, force: true }));
   context.addCleanup("never resolves", () => new Promise(() => {}));
   const startedAt = Date.now();
 
@@ -148,6 +178,8 @@ test("finish bounds a cleanup that never cooperates and records the failure", as
   const result = JSON.parse(await readFile(`${context.runRoot}/artifacts/result.json`, "utf8"));
   assert.equal(result.status, "failed");
   assert.match(result.cleanupErrors.join("\n"), /cleanup never resolves did not finish/);
+  assert.deepEqual(JSON.parse(await readFile(checkpoint, "utf8")), { revision: 7 });
+  assert.equal(JSON.parse(await readFile(`${context.runRoot}/manifest.json`, "utf8")).status, "failed");
 });
 
 test("isolated environments omit unrelated credentials and preserve explicit values", () => {
@@ -251,6 +283,116 @@ test("owned process groups are terminated by label without broad process matchin
   await access(context.runRoot);
 });
 
+test("owned scratch records filesystem identity, enforces 0700, and removes only its directory", {
+  skip: typeof process.getuid !== "function",
+}, async () => {
+  const context = await RunContext.create(import.meta.url, { testId: "owned-scratch-identity-cleanup" });
+  const baseDirectory = context.pathInState("scratch-base");
+  await mkdir(baseDirectory, { mode: 0o700 });
+  let scratch;
+  try {
+    scratch = await context.createOwnedScratchDirectory("unit-scratch", {
+      baseDirectory,
+      requiredBytes: 10n,
+      reserveBytes: 20n,
+      availableMemoryBytes: 100n,
+    });
+    const info = await lstat(scratch.path);
+    assert.equal(info.isDirectory(), true);
+    assert.equal(info.isSymbolicLink(), false);
+    assert.equal(info.mode & 0o777, 0o700);
+    if (typeof process.getuid === "function") assert.equal(info.uid, process.getuid());
+    assert.equal(scratch.dev, String(info.dev));
+    assert.equal(scratch.ino, String(info.ino));
+    assert.equal(scratch.realPath, scratch.path);
+    assert.equal(scratch.requiredMemoryBytes, "30");
+    assert.match(scratch.filesystemType, /^0x[\da-f]+$/);
+    assert.equal(context.pathInScratch(scratch, "owned.txt"), `${scratch.path}/owned.txt`);
+    await context.finish("passed", { scratchAllocatedAndCleaned: true });
+  } catch (error) {
+    if (!context.finished) await context.finish("failed", null, error).catch(() => undefined);
+    throw error;
+  }
+
+  const manifest = JSON.parse(await readFile(`${context.runRoot}/manifest.json`, "utf8"));
+  assert.equal(manifest.scratchDirectories.length, 1);
+  assert.equal(manifest.scratchDirectories[0].cleanupStatus, "removed");
+  assert.ok(manifest.scratchDirectories[0].cleanedAt);
+  assert.equal(manifest.scratchDirectories[0].baseDev, scratch.baseDev);
+  assert.equal(manifest.scratchDirectories[0].requiredMemoryBytes, "30");
+  assert.equal(manifest.scratchDirectories[0].filesystemType, scratch.filesystemType);
+  assert.ok(manifest.cleanupSteps.some(step => step.label === "remove owned scratch unit-scratch" && step.status === "completed"));
+  await assert.rejects(access(scratch.path), error => error?.code === "ENOENT");
+});
+
+test("owned scratch capacity preflight rejects before allocating a path", {
+  skip: typeof process.getuid !== "function",
+}, async () => {
+  const context = await RunContext.create(import.meta.url, { testId: "owned-scratch-capacity-preflight" });
+  const baseDirectory = context.pathInState("scratch-base");
+  await mkdir(baseDirectory, { mode: 0o700 });
+  try {
+    await assert.rejects(
+      context.createOwnedScratchDirectory("too-large", {
+        baseDirectory,
+        requiredBytes: 1n << 120n,
+        reserveBytes: 0n,
+      }),
+      error => error?.code === "KCODER_E2E_SCRATCH_CAPACITY" && /filesystem capacity is insufficient/.test(error.message),
+    );
+    await assert.rejects(
+      context.createOwnedScratchDirectory("too-memory-intensive", {
+        baseDirectory,
+        requiredBytes: 0n,
+        reserveBytes: 0n,
+        requiredMemoryBytes: 100n,
+        availableMemoryBytes: 99n,
+      }),
+      error => error?.code === "KCODER_E2E_SCRATCH_CAPACITY" && /memory capacity is insufficient/.test(error.message),
+    );
+    await assert.rejects(
+      context.createOwnedScratchDirectory("filesystem-changed", {
+        baseDirectory,
+        expectedFilesystemType: "0x0",
+      }),
+      /filesystem type changed during capacity preflight/,
+    );
+    assert.deepEqual(await readdir(baseDirectory), []);
+  } finally {
+    await context.finish("passed", { capacityRejectedBeforeAllocation: true });
+  }
+});
+
+test("owned scratch replacement fails closed and leaves the replacement target intact", {
+  skip: typeof process.getuid !== "function",
+}, async () => {
+  const context = await RunContext.create(import.meta.url, { testId: "owned-scratch-replacement" });
+  const baseDirectory = context.pathInState("scratch-base");
+  const outside = context.pathInState("outside");
+  const held = context.pathInState("held-original-scratch");
+  await mkdir(baseDirectory, { mode: 0o700 });
+  await mkdir(outside, { mode: 0o700 });
+  const outsideSentinel = `${outside}/keep.txt`;
+  await writeFile(outsideSentinel, "keep");
+  let scratch;
+  let replacementInstalled = false;
+  try {
+    scratch = await context.createOwnedScratchDirectory("replace-check", { baseDirectory });
+    await rename(scratch.path, held);
+    await symlink(outside, scratch.path);
+    replacementInstalled = true;
+    assert.throws(() => context.pathInScratch(scratch, "escaped.txt"), /symbolic link|identity changed/);
+    await assert.rejects(context.removeOwnedScratchDirectory(scratch), /identity changed/);
+    assert.equal(await readFile(outsideSentinel, "utf8"), "keep");
+  } finally {
+    if (replacementInstalled) {
+      await rm(scratch.path, { force: true });
+      await rename(held, scratch.path);
+    }
+    if (!context.finished) await context.finish("passed", { replacementRejected: true });
+  }
+});
+
 test("Windows owned cleanup terminates a nested child after its leader exits", { skip: process.platform !== "win32" }, async () => {
   const context = await RunContext.create(import.meta.url, { testId: "windows-owned-process-tree" });
   const pidPath = context.pathInState("nested-child.pid");
@@ -271,4 +413,57 @@ test("Windows owned cleanup terminates a nested child after its leader exits", {
 
 test.after(async () => {
   await rm(artifactSourceRoot(new URL(import.meta.url).pathname), { recursive: true, force: true });
+});
+
+test('isolated browser processes preserve filename encoding without inheriting secrets', () => {
+  const names=['LANG','LC_ALL','LC_CTYPE','KCODER_PRIVATE_ENCODING_CANARY'];
+  const previous=Object.fromEntries(names.map(name=>[name,process.env[name]]));
+  try {
+    process.env.LANG='C.UTF-8';process.env.LC_ALL='C.UTF-8';process.env.LC_CTYPE='C.UTF-8';process.env.KCODER_PRIVATE_ENCODING_CANARY='not-in-child';
+    const env=isolatedEnvironment();
+    assert.equal(env.LANG,'C.UTF-8');assert.equal(env.LC_ALL,'C.UTF-8');assert.equal(env.LC_CTYPE,'C.UTF-8');assert.equal(env.KCODER_PRIVATE_ENCODING_CANARY,undefined);
+  } finally {
+    for(const name of names){if(previous[name]===undefined)delete process.env[name];else process.env[name]=previous[name];}
+  }
+});
+
+test("owned worker outer traversal permits only its fixed 0711 mode and retains identity cleanup", {
+  skip: typeof process.getuid !== "function",
+}, async () => {
+  const context = await RunContext.create(import.meta.url, { testId: "owned-worker-outer-traversal" });
+  const baseDirectory = context.pathInState("worker-outer-base");
+  await mkdir(baseDirectory, { mode:0o700 });
+  try {
+    const scratch = await context.createOwnedScratchDirectory("worker-outer", { baseDirectory, ownedWorkerTraversal:true });
+    assert.equal((await lstat(scratch.path)).mode & 0o777, 0o711);
+    assert.equal(scratch.mode,"0711");
+    const privateChild = context.pathInScratch(scratch,"profile");
+    await mkdir(privateChild,{mode:0o700});
+    assert.equal((await lstat(privateChild)).mode & 0o777,0o700);
+    await chmod(scratch.path,0o777);
+    assert.throws(()=>context.pathInScratch(scratch,"replaced"),/identity changed/);
+    await chmod(scratch.path,0o711);
+    await assert.rejects(context.createOwnedScratchDirectory("invalid-mode",{baseDirectory,ownedWorkerTraversal:0o777}),/traversal policy/);
+    await context.finish("passed",{fixedOuterOnly:true});
+    await assert.rejects(access(scratch.path),error=>error?.code==="ENOENT");
+  } catch(error) {
+    if(!context.finished)await context.finish("failed",null,error).catch(()=>undefined);
+    throw error;
+  }
+});
+
+
+test("failed owner cleanup retains state and artifacts even with no tracked process survivors", async t => {
+  const context = await RunContext.create(import.meta.url, { testId: "unknown-owner-state" });
+  const checkpoint = await context.writeStateJson("original-operation.json", { operation: "owned-original", phase: "pending" });
+  const evidence = await context.writeArtifactJson("original-receipt.json", { observed: true });
+  // The injected callback represents an unknown owner result, not an actual live writer.
+  t.after(() => rm(context.stateDir, { recursive: true, force: true }));
+  context.addCleanup("owner exit unknown", () => { throw Error("Original owner exit unconfirmed"); });
+  await assert.rejects(context.finish("passed", { ok: true }), /Original owner exit unconfirmed/);
+  assert.deepEqual(JSON.parse(await readFile(checkpoint, "utf8")), { operation: "owned-original", phase: "pending" });
+  assert.deepEqual(JSON.parse(await readFile(evidence, "utf8")), { observed: true });
+  const manifest = JSON.parse(await readFile(`${context.runRoot}/manifest.json`, "utf8"));
+  assert.equal(manifest.status, "failed");
+  assert.equal(manifest.cleanupSteps.find(step => step.label === "owner exit unknown").status, "failed");
 });

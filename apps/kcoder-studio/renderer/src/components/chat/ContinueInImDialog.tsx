@@ -5,7 +5,8 @@ import { useTranslation } from '@/hooks/useTranslation'
 import { cn } from '@/lib/utils'
 import type { IMPrivateSession } from '@/types/api'
 
-const LAST_CONTINUE_IM_SESSION_KEYS_STORAGE_KEY = 'wework.continueInIm.lastSessionKeys'
+const LAST_CONTINUE_IM_SESSION_KEYS_STORAGE_KEY = 'kcoder.continueInIm.lastSessionKeys'
+const LEGACY_LAST_CONTINUE_IM_SESSION_KEYS_STORAGE_KEY = 'wework.continueInIm.lastSessionKeys'
 
 interface ContinueInImDialogProps {
   open: boolean
@@ -63,7 +64,9 @@ function readRememberedSessionKeys(): string[] {
   if (typeof window === 'undefined') return []
 
   try {
-    const raw = window.localStorage.getItem(LAST_CONTINUE_IM_SESSION_KEYS_STORAGE_KEY)
+    const raw =
+      window.localStorage.getItem(LAST_CONTINUE_IM_SESSION_KEYS_STORAGE_KEY) ??
+      window.localStorage.getItem(LEGACY_LAST_CONTINUE_IM_SESSION_KEYS_STORAGE_KEY)
     const parsed = raw ? JSON.parse(raw) : []
     return Array.isArray(parsed)
       ? parsed.filter((value): value is string => typeof value === 'string')

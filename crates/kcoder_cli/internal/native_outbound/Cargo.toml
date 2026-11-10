@@ -1,0 +1,41 @@
+[package]
+name = "kcoder_native_outbound"
+description = "Original accepted-turn Native outgoing execution and receipt reconciliation."
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish = false
+
+[lib]
+path = "../../src/internal/native_outbound/lib.rs"
+test = false
+
+[dependencies]
+kcoder_cli_commands = { path = "../cli_commands" }
+base64 = "0.22"
+anyhow.workspace = true
+async-trait.workspace = true
+futures.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+tracing.workspace = true
+tempfile.workspace = true
+uuid.workspace = true
+kcoder_acp = { path = "../../../kcoder_acp" }
+kcoder_app_rpc_codec = { path = "../../../kcoder_app_protocol/internal/app_rpc_codec" }
+kcoder_config = { path = "../../../kcoder_config" }
+kcoder_engine = { path = "../../../kcoder_engine" }
+kcoder_host_transport = { path = "../host_transport" }
+kcoder_native_journal = { path = "../native_journal" }
+kcoder_native_scope = { path = "../native_scope" }
+kcoder_office_worker = { path = "../office_worker" }
+kcoder_runtime_driver = { path = "../runtime_driver" }
+kcoder_state = { path = "../../../kcoder_state" }
+kcoder_tools = { path = "../../../kcoder_tools" }
+kcoder_types = { path = "../../../kcoder_types" }

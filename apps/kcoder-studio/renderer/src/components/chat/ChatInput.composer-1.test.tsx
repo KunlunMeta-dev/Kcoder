@@ -1,4 +1,4 @@
-import type { DeviceInfo, RuntimeGoal } from '@/types/api'
+import type { DeviceInfo, RuntimeGoal, RuntimePlanEventPayload } from '@/types/api'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
@@ -38,6 +38,20 @@ vi.mock('@/hooks/useTranslation', () => ({
     },
   }),
 }))
+
+function composerStatusTrigger(id: string) {
+  const row = screen.getByTestId('composer-status-region')
+  const trigger = row.querySelector(`[data-status-item="${id}"] button`)
+  if (!(trigger instanceof HTMLButtonElement)) throw new Error(`${id} status trigger is missing`)
+  return trigger
+}
+
+async function expandDesktopGoal() {
+  const trigger = composerStatusTrigger('goal')
+  await userEvent.click(trigger)
+  return screen.getByTestId('goal-status-detail')
+}
+
 describe('ChatInput composer', () => {
   const originalCreateObjectUrl = URL.createObjectURL
   const originalInnerWidth = window.innerWidth
@@ -51,7 +65,6 @@ describe('ChatInput composer', () => {
       configurable: true,
       value: originalInnerWidth,
     })
-    delete (window as typeof window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__
   })
   test('renders the desktop composer sections', () => {
     render(
@@ -65,7 +78,7 @@ describe('ChatInput composer', () => {
     )
 
     expect(screen.getByTestId('project-chat-composer-form')).toHaveClass(
-      'min-h-[76px]',
+      'min-h-[91px]',
       'pb-1.5',
       'pt-2',
       'bg-background'
@@ -76,8 +89,8 @@ describe('ChatInput composer', () => {
     )
     expect(screen.getByTestId('chat-message-input')).toHaveAttribute('rows', '2')
     expect(screen.getByTestId('chat-message-input')).toHaveClass(
-      'min-h-[48px]',
-      'max-h-[112px]',
+      'min-h-[58px]',
+      'max-h-[134px]',
       'pt-1',
       'placeholder:text-text-muted/55'
     )
@@ -468,10 +481,10 @@ describe('ChatInput composer', () => {
       />
     )
 
-    const bar = screen.getByTestId('goal-status-bar')
-    expect(bar).toHaveTextContent('进行中的目标')
-    expect(bar).toHaveTextContent('实现 plan 里的功能')
-    expect(bar).toHaveTextContent('2m 58s')
+    const detail = await expandDesktopGoal()
+    expect(detail).toHaveTextContent('进行中的目标')
+    expect(detail).toHaveTextContent('实现 plan 里的功能')
+    expect(detail).toHaveTextContent('2m 58s')
 
     await userEvent.click(screen.getByTestId('edit-goal-button'))
     await userEvent.click(screen.getByTestId('pause-goal-button'))
@@ -482,7 +495,7 @@ describe('ChatInput composer', () => {
     expect(onClearGoal).toHaveBeenCalledTimes(1)
   })
 
-  test('renders a newly created active goal with a zero-second timer', () => {
+  test('renders a newly created active goal with a zero-second timer', async () => {
     const goal: RuntimeGoal = {
       threadId: 'pending',
       objective: '立刻显示目标条',
@@ -505,11 +518,40 @@ describe('ChatInput composer', () => {
       />
     )
 
-    expect(screen.getByTestId('goal-status-bar')).toHaveTextContent('立刻显示目标条')
-    expect(screen.getByTestId('goal-status-bar')).toHaveTextContent('0s')
+    const detail = await expandDesktopGoal()
+    expect(detail).toHaveTextContent('立刻显示目标条')
+    expect(detail).toHaveTextContent('0s')
   })
 
-  test('shows an active goal as continuing only while a new goal turn is running', () => {
+  test('shows plan progress and the active step in the compact status entry', async () => {
+    const taskPlan: RuntimePlanEventPayload = {
+      plan: [
+        { step: 'Inspect existing behavior', status: 'completed' },
+        { step: 'Implement the change', status: 'inProgress' },
+        { step: 'Verify the result', status: 'pending' },
+        { step: 'Update documentation', status: 'pending' },
+      ],
+    }
+    render(
+      <ChatInput
+        value=""
+        onChange={vi.fn()}
+        onSubmit={vi.fn()}
+        disabled={false}
+        variant="desktop"
+        taskPlan={taskPlan}
+      />
+    )
+
+    const trigger = composerStatusTrigger('plan')
+    expect(trigger).toHaveTextContent('计划 2/4')
+    expect(trigger).toHaveTextContent('Implement the change')
+    await userEvent.click(trigger)
+    expect(screen.getByTestId('runtime-plan-detail')).toBeVisible()
+    expect(screen.getByTestId('runtime-plan-detail')).toHaveTextContent('Verify the result')
+  })
+
+  test('shows an active goal as continuing only while a new goal turn is running', async () => {
     render(
       <ChatInput
         value=""
@@ -531,7 +573,7 @@ describe('ChatInput composer', () => {
       />
     )
 
-    expect(screen.getByTestId('goal-status-bar')).toHaveTextContent('目标继续执行中')
+    expect(await expandDesktopGoal()).toHaveTextContent('目标继续执行中')
     expect(screen.getByTestId('pause-goal-button')).toBeInTheDocument()
   })
 
@@ -559,6 +601,7 @@ describe('ChatInput composer', () => {
       />
     )
 
+    await expandDesktopGoal()
     await userEvent.click(screen.getByTestId('resume-goal-button'))
 
     expect(onResumeGoal).toHaveBeenCalledTimes(1)
@@ -566,7 +609,7 @@ describe('ChatInput composer', () => {
 
   test.each(['usageLimited', 'budgetLimited'] as const)(
     'does not offer the pause action for a %s goal',
-    status => {
+    async status => {
       render(
         <ChatInput
           value=""
@@ -587,6 +630,7 @@ describe('ChatInput composer', () => {
         />
       )
 
+      await expandDesktopGoal()
       expect(screen.queryByTestId('pause-goal-button')).not.toBeInTheDocument()
       expect(screen.queryByTestId('resume-goal-button')).not.toBeInTheDocument()
     }
@@ -615,7 +659,7 @@ describe('ChatInput composer', () => {
       />
     )
 
-    expect(screen.queryByTestId('goal-status-bar')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('composer-status-region')).not.toBeInTheDocument()
   })
 
   test('renders goal draft pill with a hover-only cancel affordance', () => {

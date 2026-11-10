@@ -29,6 +29,39 @@ test('displays the primary icon without waiting for the optional light probe', a
   expect(view.container.querySelector('img')).toHaveAttribute('src', 'https://icons.test/dark.svg')
 })
 
+test('waits for the preferred icon instead of cycling through catalog and light images', async () => {
+  const primary = deferred<string | null>()
+  const light = deferred<string | null>()
+  const loader = vi.fn((_id: string, dark: boolean) => dark ? primary.promise : light.promise)
+  const view = render(
+    <PluginIcon id="owned" source="https://icons.test/catalog.svg" loader={loader} />
+  )
+  await waitFor(() => expect(loader).toHaveBeenCalledTimes(2))
+  expect(view.container.querySelector('img')).toBeNull()
+  await act(async () => light.resolve('https://icons.test/light.svg'))
+  expect(view.container.querySelector('img')).toBeNull()
+  await act(async () => primary.resolve('https://icons.test/dark.svg'))
+  expect(view.container.querySelector('img')).toHaveAttribute('src', 'https://icons.test/dark.svg')
+  const image = view.container.querySelector('img')
+  view.rerender(
+    <PluginIcon id="owned" source="https://icons.test/catalog.svg" loader={loader} className="size-10" />
+  )
+  expect(view.container.querySelector('img')).toBe(image)
+  expect(loader).toHaveBeenCalledTimes(2)
+})
+
+test('uses catalog artwork only after both target theme lookups have settled without an icon', async () => {
+  const light = deferred<string | null>()
+  const loader = vi.fn((_id: string, dark: boolean) => dark ? Promise.resolve(null) : light.promise)
+  const view = render(
+    <PluginIcon id="owned" source="https://icons.test/catalog.svg" loader={loader} />
+  )
+  await waitFor(() => expect(loader).toHaveBeenCalledTimes(2))
+  expect(view.container.querySelector('img')).toBeNull()
+  await act(async () => light.resolve(null))
+  expect(view.container.querySelector('img')).toHaveAttribute('src', 'https://icons.test/catalog.svg')
+})
+
 test('keeps a valid dark icon when the optional light read fails', async () => {
   const loader = vi.fn((_id: string, dark: boolean) =>
     dark

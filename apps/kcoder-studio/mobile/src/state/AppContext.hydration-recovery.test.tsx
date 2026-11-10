@@ -18,7 +18,7 @@ const api = vi.hoisted(() => ({
   migrate: vi.fn<() => Promise<ProfileSnapshot | null>>(),
   exchange: vi.fn<() => Promise<GatewayProfile>>(),
   persist: vi.fn<(profiles: GatewayProfile[], activeId: string | null) => Promise<void>>(),
-  listServers: vi.fn(), revoke: vi.fn(), cleanup: vi.fn(),
+  listServers: vi.fn(), revoke: vi.fn(), cleanup: vi.fn(), cacheCleanup: vi.fn(),
   platform: "web", storageListener: undefined as ((event: { key: string | null }) => void) | undefined,
 }));
 vi.mock("react", async importOriginal => {
@@ -47,6 +47,7 @@ vi.mock("@/storage/profile-store", () => ({
 vi.mock("@/gateway/http", () => ({
   GatewaySessionExpiredError: class extends Error {}, exchangeMobileSessionWithBootstrap: async (...args: Parameters<typeof api.exchange>) => ({ profile: await api.exchange(...args) }),
   revokeMobileSession: api.revoke, listServers: api.listServers, listServerStatuses: vi.fn(),
+  getServerStatusSnapshot: vi.fn(async () => ({ gatewayRuntimeVersion: null, statuses: [] })),
   ensureGatewayAuthorization: vi.fn(async (profile: GatewayProfile) => profile), installGatewayAuthorizationResolver: vi.fn(),
 }));
 vi.mock("@/runtime/task-runtime", () => ({ taskRuntimeRegistry: { removeProfile: vi.fn() } }));
@@ -54,6 +55,7 @@ vi.mock("@/runtime/task-runtime/modelCatalog", () => ({ clearModelCache: vi.fn()
 vi.mock("@/runtime/task-runtime/workspaces", () => ({ clearWorkspaceOptionsCache: vi.fn() }));
 vi.mock("@/storage/workspace-preferences", () => ({ workspaceStateAuthorizationScope: vi.fn(), markWorkspaceStateRemoval: vi.fn(() => 1), removeWorkspaceStatesForProfile: api.cleanup }));
 vi.mock("@/storage/thread-deletion-cleanup", () => ({ installThreadDeletionCleanupAuthorityResolver: vi.fn(), retryThreadDeletionCleanup: vi.fn() }));
+vi.mock("@/storage/session-transcript-cache", () => ({ sessionTranscriptCache: { clearRemovedProfile: api.cacheCleanup, invalidateProfile: vi.fn(async () => {}) } }));
 vi.mock("./device-authorization", () => ({ DeviceAuthorizationManager: class {} }));
 import { AppProvider } from "./AppContext";
 import { ProfileCoordinator } from "./profile-coordinator";
@@ -86,6 +88,7 @@ beforeEach(() => {
   api.stored = snapshot(); api.platform = "web"; api.storageListener = undefined;
   vi.clearAllMocks();
   api.load.mockImplementation(async () => ({ profiles: [...api.stored.profiles], activeId: api.stored.activeId }));
+  api.cacheCleanup.mockResolvedValue(undefined);
   api.migrate.mockResolvedValue(null); api.cleanup.mockResolvedValue(undefined); api.revoke.mockResolvedValue(undefined);
   api.persist.mockImplementation(async (profiles, activeId) => { api.stored = { profiles: [...profiles], activeId }; });
   vi.stubGlobal("navigator", {});
@@ -166,7 +169,7 @@ it.each(["activate", "remove"] as const)("fences a retry that starts during the 
 
 it("lets authoritative storage synchronization supersede a retry begun during its read", async () => {
   api.stored = snapshot(profile("a")); await render().retryStoredProfiles(); render();
-  const storageEffect = host.effects.find(effect => effect.callback.toString().includes("window.addEventListener"));
+  const storageEffect = host.effects.find(effect => effect.callback.toString().includes('window.addEventListener("storage"'));
   expect(storageEffect).toBeDefined(); const cleanup = storageEffect!.callback();
   const synchronized = deferred<ProfileSnapshot>(); let readStarted = false;
   api.load.mockImplementationOnce(() => { readStarted = true; return synchronized.promise; });
@@ -181,7 +184,7 @@ it("lets authoritative storage synchronization supersede a retry begun during it
 
 it("keeps a completed fresh retry when an older coordinator synchronization read resolves afterwards", async () => {
   api.stored = snapshot(profile("a")); await render().retryStoredProfiles(); render();
-  const effect = host.effects.find(effect => effect.callback.toString().includes("window.addEventListener"))!;
+  const effect = host.effects.find(effect => effect.callback.toString().includes('window.addEventListener("storage"'))!;
   const cleanup = effect.callback(); const oldRead = deferred<ProfileSnapshot>(); let started = false;
   const synchronizations = vi.spyOn(coordinator(), "synchronize");
   api.load.mockImplementationOnce(() => { started = true; return oldRead.promise; });
@@ -208,4 +211,14 @@ it("drops a late restoration after the actual hydration effect unmounts", async 
   const { cleanup } = startHydration(); if (typeof cleanup === "function") cleanup();
   held.resolve(snapshot(profile("stale"))); await Promise.resolve(); await Promise.resolve();
   expect(render().profiles).toEqual([]); await expect(render().retryStoredProfiles()).resolves.toBeNull();
+});
+
+
+it("retains the removal cleanup proof when the optional transcript cache cleanup fails", async () => {
+  api.stored = snapshot(profile("a"), profile("b")); await render().retryStoredProfiles();
+  api.cacheCleanup.mockRejectedValueOnce(new Error("cache unavailable"));
+  await expect(render().removeGateway("a")).rejects.toThrow("cache unavailable");
+  expect(render().profiles.map(profile => profile.id)).toEqual(["b"]);
+  expect(api.cleanup).not.toHaveBeenCalled();
+  expect(api.cacheCleanup).toHaveBeenCalledWith(expect.objectContaining({ id: "a" }), 1, expect.any(Function));
 });

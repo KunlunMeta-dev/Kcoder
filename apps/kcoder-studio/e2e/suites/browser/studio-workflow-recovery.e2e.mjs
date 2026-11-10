@@ -59,7 +59,7 @@ await runE2E(import.meta.url, {
     socket.on('framereceived', event => record('received', event));
   });
   let moved = false;
-  const rpc = (method, params = {}) => page.evaluate(({ method, params }) => window.__TAURI_INTERNALS__.invoke('local_executor_request', { method, params }), { method, params });
+  const rpc = (method, params = {}) => page.evaluate(({ method, params }) => window.__ELECTRON_INTERNALS__.invoke('local_executor_request', { method, params }), { method, params });
   const project = () => page.getByTestId('project-item').filter({ hasText: 'Workflow project' }).first();
   const expand = async () => { const toggle = project().getByTestId('project-item-button'); if (await toggle.getAttribute('aria-expanded') !== 'true') await toggle.click(); };
   const settle = async count => {
@@ -148,7 +148,7 @@ await runE2E(import.meta.url, {
     }, recoveredId, { timeout: 30000 });
     const goalAddress = { ...address, taskId: new URL(page.url()).searchParams.get('taskId') };
     await page.waitForFunction(async address => {
-      const result = await window.__TAURI_INTERNALS__.invoke('local_executor_request', { method: 'runtime.tasks.goal.get', params: { address } });
+      const result = await window.__ELECTRON_INTERNALS__.invoke('local_executor_request', { method: 'runtime.tasks.goal.get', params: { address } });
       return result.goal?.status === 'complete';
     }, goalAddress, { timeout: 30000 });
     await page.getByTestId('goal-status-bar').waitFor({ state: 'detached', timeout: 30000 });

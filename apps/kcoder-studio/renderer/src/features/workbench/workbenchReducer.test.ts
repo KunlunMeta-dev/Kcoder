@@ -3,6 +3,33 @@ import { initialWorkbenchState, workbenchReducer } from './workbenchReducer'
 import { runtimeProjectUiId } from '@/lib/runtime-project'
 
 describe('workbenchReducer', () => {
+  const expertSelection = { deviceId: 'owned-target', workspacePath: '/owned/project',
+    title: 'Fixed expert', reference: { id: 'personal.fixed', version: '1', definitionSha256: 'a'.repeat(64) } }
+  test('selecting and clearing a project draft expert preserve project, workspace selection and draft identity', () => {
+    const original = { ...initialWorkbenchState, currentProject: { id: 7, name: 'Project', tasks: [] },
+      selectedDeviceWorkspaceId: 21, standaloneChatKey: 9 }
+    const selected = workbenchReducer(original, { type: 'expert_draft_selected', expert: expertSelection,
+      projectId: 7, draftKey: 9 })
+    expect(selected.currentProject).toBe(original.currentProject)
+    expect(selected.selectedDeviceWorkspaceId).toBe(21)
+    expect(selected.standaloneChatKey).toBe(9)
+    expect(selected.expertDraft).toEqual({ ...expertSelection, projectId: 7, draftKey: 9, entry: 'task' })
+    const cleared = workbenchReducer(selected, { type: 'expert_draft_selected', expert: null,
+      projectId: 7, draftKey: 9 })
+    expect(cleared.expertDraft).toBeNull()
+    expect(cleared.currentProject).toBe(original.currentProject)
+    expect(cleared.selectedDeviceWorkspaceId).toBe(21)
+    expect(cleared.currentRuntimeTask).toBeNull()
+  })
+  test('a late expert selection cannot cross project/draft boundaries or mutate a persistent task', () => {
+    const original = { ...initialWorkbenchState, currentProject: { id: 7, name: 'Project', tasks: [] }, standaloneChatKey: 9 }
+    for (const owner of [{ projectId: 8, draftKey: 9 }, { projectId: 7, draftKey: 8 }]) {
+      expect(workbenchReducer(original, { type: 'expert_draft_selected', expert: expertSelection, ...owner })).toBe(original)
+    }
+    const persistent = { ...original, currentRuntimeTask: { deviceId: 'owned-target', taskId: 'original-task' } }
+    expect(workbenchReducer(persistent, { type: 'expert_draft_selected', expert: expertSelection,
+      projectId: 7, draftKey: 9 })).toBe(persistent)
+  })
   test('selects a project and keeps runtime task empty', () => {
     const state = workbenchReducer(initialWorkbenchState, {
       type: 'project_selected',
@@ -743,13 +770,36 @@ describe('workbenchReducer', () => {
         deviceId: 'device-uuid',
         taskId: 'task-1',
         threadId: 'direct-thread-id',
-        ...(currentDeviceId === 'local-device' ? { workspacePath: '/Users/me/chat' } : {}),
+        workspacePath: '/Users/me/chat',
         runtimeHandle: {
           threadId: '019ee7f6-456a-78a1-96b1-66451afc310e',
         },
       })
     }
   )
+
+  test('preserves the selected workspace when refreshed task metadata names another path', () => {
+    const refreshed = workbenchReducer(
+      {
+        ...initialWorkbenchState,
+        currentRuntimeTask: {
+          deviceId: 'selected-target', taskId: 'task-1', workspacePath: '/selected',
+        },
+      },
+      {
+        type: 'runtime_work_refreshed',
+        runtimeWork: {
+          projects: [],
+          chats: [{
+            deviceId: 'selected-target', workspacePath: '/other', available: true, mapped: true,
+            tasks: [{ taskId: 'task-1', title: 'Original task', runtime: 'kcoder', workspacePath: '/other' }],
+          }],
+          totalTasks: 1,
+        },
+      }
+    )
+    expect(refreshed.currentRuntimeTask?.workspacePath).toBe('/selected')
+  })
 
   test('updates cached device and runtime workspace status from websocket events', () => {
     const state = workbenchReducer(initialWorkbenchState, {

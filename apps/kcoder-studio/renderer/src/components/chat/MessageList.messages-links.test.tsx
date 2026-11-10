@@ -6,15 +6,17 @@ import { MessageList } from './MessageList'
 import { clearPersistentProcessingExpansions } from './blocks/processingExpansionState'
 import '@/i18n'
 
-const tauriCoreMock = vi.hoisted(() => ({
-  convertFileSrc: vi.fn((path: string) => `asset://localhost/${path.replace(/^\/+/, '')}`),
+const runtimeCommandMock = vi.hoisted(() => ({
+  clientResourceUrl: vi.fn((path: string) => `asset://localhost/${path.replace(/^\/+/, '')}`),
   invoke: vi.fn(),
-  isTauri: vi.fn(() => false),
+  isGateway: vi.fn(() => false),
 }))
 const openExternalUrlMock = vi.hoisted(() => vi.fn().mockResolvedValue(true))
 const requestEmbeddedBrowserOpenMock = vi.hoisted(() => vi.fn(() => true))
 
-vi.mock('@tauri-apps/api/core', () => tauriCoreMock)
+vi.mock('@/lib/client-resource-url', () => runtimeCommandMock)
+vi.mock('@/lib/runtime-commands', () => ({ invoke: runtimeCommandMock.invoke }))
+
 vi.mock('@/lib/external-links', async importOriginal => ({
   ...(await importOriginal<typeof import('@/lib/external-links')>()),
   openExternalUrl: openExternalUrlMock,
@@ -88,11 +90,11 @@ describe('MessageList', () => {
     clearPersistentProcessingExpansions()
     vi.unstubAllGlobals()
     vi.restoreAllMocks()
-    tauriCoreMock.convertFileSrc
+    runtimeCommandMock.clientResourceUrl
       .mockReset()
       .mockImplementation((path: string) => `asset://localhost/${path.replace(/^\/+/, '')}`)
-    tauriCoreMock.invoke.mockReset()
-    tauriCoreMock.isTauri.mockReset().mockReturnValue(false)
+    runtimeCommandMock.invoke.mockReset()
+    runtimeCommandMock.isGateway.mockReset().mockReturnValue(false)
     openExternalUrlMock.mockClear()
     requestEmbeddedBrowserOpenMock.mockClear()
     localStorage.clear()
@@ -817,6 +819,27 @@ describe('MessageList', () => {
     })
   })
 
+  test.each(['kcoder.invalid', 'wework.local'])('opens workspace file links encoded with %s', host => {
+    const onOpenWorkspaceFile = vi.fn()
+    const path = '/Users/dev/workspace/report.md'
+    render(
+      <MessageList
+        onOpenWorkspaceFile={onOpenWorkspaceFile}
+        messages={[
+          {
+            id: 'assistant-encoded-file-link',
+            role: 'assistant',
+            content: `[report](https://${host}/markdown-file?path=${encodeURIComponent(path)})`,
+            status: 'done',
+            createdAt: '2026-07-22T08:00:00.000Z',
+          },
+        ]}
+      />
+    )
+    fireEvent.click(screen.getByTestId('assistant-markdown-link'))
+    expect(onOpenWorkspaceFile).toHaveBeenCalledWith(path)
+  })
+
   test('opens local HTML file links in the Wework built-in browser', () => {
     const onOpenWorkspaceFile = vi.fn()
     render(
@@ -842,16 +865,16 @@ describe('MessageList', () => {
     expect(onOpenWorkspaceFile).not.toHaveBeenCalled()
   })
 
-  test('treats local filesystem paths encoded as Tauri URLs as file links', () => {
+  test('treats local filesystem paths encoded as file URLs as file links', () => {
     const onOpenWorkspaceFile = vi.fn()
     render(
       <MessageList
         onOpenWorkspaceFile={onOpenWorkspaceFile}
         messages={[
           {
-            id: 'assistant-tauri-file-link',
+            id: 'assistant-gateway-file-link',
             role: 'assistant',
-            content: '[report](tauri://localhost/Users/dev/workspace/report.md)',
+            content: '[report](file:///Users/dev/workspace/report.md)',
             status: 'done',
             createdAt: '2026-07-22T08:00:00.000Z',
           },
@@ -864,14 +887,14 @@ describe('MessageList', () => {
     expect(onOpenWorkspaceFile).toHaveBeenCalledWith('/Users/dev/workspace/report.md')
   })
 
-  test('opens Tauri-encoded local HTML paths in the Wework built-in browser', () => {
+  test('opens file URL-encoded local HTML paths in the Wework built-in browser', () => {
     render(
       <MessageList
         messages={[
           {
-            id: 'assistant-tauri-html-file-link',
+            id: 'assistant-gateway-html-file-link',
             role: 'assistant',
-            content: '[trend](tauri://localhost/Users/dev/workspace/trend.html)',
+            content: '[trend](file:///Users/dev/workspace/trend.html)',
             status: 'done',
             createdAt: '2026-07-22T08:00:00.000Z',
           },
@@ -980,7 +1003,7 @@ describe('MessageList', () => {
           {
             id: 'assistant-inline-code',
             role: 'assistant',
-            content: 'Use `.env` and `pnpm run tauri:build` for local configuration.',
+            content: 'Use `.env` and `pnpm build` for local configuration.',
             status: 'done',
             createdAt: '2026-06-24T08:00:01.000Z',
           },
@@ -993,7 +1016,7 @@ describe('MessageList', () => {
     expect(inlineCodes).toHaveLength(2)
     expect(inlineCodes[0]).toHaveTextContent('.env')
     expect(inlineCodes[0]).toHaveClass('rounded', 'bg-muted')
-    expect(inlineCodes[1]).toHaveTextContent('pnpm run tauri:build')
+    expect(inlineCodes[1]).toHaveTextContent('pnpm build')
     expect(inlineCodes[1]).toHaveClass('rounded', 'bg-muted')
   })
 

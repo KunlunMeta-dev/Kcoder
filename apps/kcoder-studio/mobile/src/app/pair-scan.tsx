@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { useRouter } from "expo-router";
+import { useRouter, type Href } from "expo-router";
 import type { BarcodeScanningResult } from "expo-camera";
 import {
   ActivityIndicator,
+  BackHandler,
   Platform,
   Pressable,
   StyleSheet,
@@ -17,12 +18,13 @@ import {
 } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Button } from "@/components/ui";
-import { parsePairingLink } from "@/gateway/pairing";
+import { pairingRouteFromLink } from "@/gateway/pairing";
 import { t } from "@/i18n";
 import { useLocale } from "@/i18n/use-locale";
-import { useApp } from "@/state/AppContext";
 import { useTheme, useThemedStyles, type ThemeColors, radius, spacing } from "@/theme";
 import { backOrReplace } from "@/navigation/back-or-replace";
+
+type PairScanError = { message: string };
 
 export default function PairScanRoute() {
   if (Platform.OS === "web") return <WebPairingFallback />;
@@ -62,7 +64,7 @@ function WebPairingFallback() {
         <Button
           testID="pairing-web-paste-link"
           variant="primary"
-          onPress={() => router.replace("/welcome")}
+          onPress={() => router.dismissTo({ pathname: "/welcome", params: { connectMode: "pairing" } })}
         >
           {t("welcome.paste_pairing_link")}
         </Button>
@@ -82,69 +84,46 @@ function NativePairScanRoute() {
     require("expo-camera") as typeof import("expo-camera");
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { connectGateway } = useApp();
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
   const [torch, setTorch] = useState(false);
   const [connecting, setConnecting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<PairScanError | null>(null);
   const processingRef = useRef(false);
   const mountedRef = useRef(true);
-  const connectionAttemptRef = useRef(0);
-  const connectionControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
-      connectionAttemptRef.current += 1;
-      connectionControllerRef.current?.abort();
-      connectionControllerRef.current = null;
     };
   }, []);
 
   const leaveScanner = () => {
-    connectionAttemptRef.current += 1;
-    connectionControllerRef.current?.abort();
-    connectionControllerRef.current = null;
+    processingRef.current = true;
     backOrReplace(router, "/welcome");
   };
 
-  const handleBarcode = async (result: BarcodeScanningResult) => {
-    if (processingRef.current || scanned || connecting) return;
+  useEffect(() => {
+    const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
+      leaveScanner();
+      return true;
+    });
+    return () => subscription.remove();
+  }, [router]);
+
+  const handleBarcode = (result: BarcodeScanningResult) => {
+    if (!mountedRef.current || processingRef.current || scanned || connecting) return;
     processingRef.current = true;
-    const attempt = ++connectionAttemptRef.current;
-    const controller = new AbortController();
-    connectionControllerRef.current = controller;
     setScanned(true);
     setConnecting(true);
     setError(null);
     try {
-      const pairing = parsePairingLink(result.data);
-      const profile = await connectGateway({
-        baseUrl: pairing.gateway,
-        token: pairing.token,
-        signal: controller.signal,
-      });
-      if (!mountedRef.current || attempt !== connectionAttemptRef.current) return;
-      if (!profile) {
-        setConnecting(false);
-        setScanned(false);
-        processingRef.current = false;
-        return;
-      }
-      router.replace({
-        pathname: "/h/[profileId]",
-        params: { profileId: profile.id },
-      });
+      // Release the camera and use the same hydration, verification and grant owner as native deep links.
+      router.replace(pairingRouteFromLink(result.data) as Href);
     } catch (value) {
-      if (!mountedRef.current || attempt !== connectionAttemptRef.current) return;
-      setError(value instanceof Error ? value.message : String(value));
+      setError({ message: value instanceof Error ? value.message : String(value) });
       setConnecting(false);
-      processingRef.current = false;
-    } finally {
-      if (connectionControllerRef.current === controller)
-        connectionControllerRef.current = null;
     }
   };
 
@@ -199,6 +178,13 @@ function NativePairScanRoute() {
               {t("pair_scan.camera_permission_settings")}
             </Text>
           ) : null}
+          <Button
+            testID="pairing-native-paste-link"
+            variant="ghost"
+            onPress={() => router.dismissTo({ pathname: "/welcome", params: { connectMode: "pairing" } })}
+          >
+            {t("welcome.paste_pairing_link")}
+          </Button>
         </View>
       ) : (
         <View style={styles.cameraWrap}>
@@ -212,7 +198,7 @@ function NativePairScanRoute() {
               scanned ? undefined : (result) => void handleBarcode(result)
             }
           />
-          <View pointerEvents="none" style={styles.cameraShade}>
+          <View style={[styles.cameraShade, { pointerEvents: "none" }]}>
             <View style={styles.scanFrame}>
               <View style={[styles.corner, styles.cornerTopLeft]} />
               <View style={[styles.corner, styles.cornerTopRight]} />
@@ -243,7 +229,7 @@ function NativePairScanRoute() {
                 {t("pair_scan.scan_again")}
               </Button>
             ) : null}
-            {error ? <Text style={styles.scanError}>{error}</Text> : null}
+            {error ? <Text accessibilityRole="alert" style={styles.scanError}>{error.message}</Text> : null}
           </View>
         </View>
       )}
@@ -306,7 +292,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   cameraWrap: { flex: 1, overflow: "hidden", backgroundColor: "#000" },
   cameraShade: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "rgba(0,0,0,0.24)",

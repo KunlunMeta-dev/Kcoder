@@ -1,4 +1,7 @@
+import { workspaceThreadScopeIdentity, workspaceThreadScopeServers } from "@/gateway/target-identity";
+export { workspaceThreadScopeIdentity, workspaceThreadScopeServers } from "@/gateway/target-identity";
 import { captureWorkspaceProfileIdentity, startWorkspaceProfileRpc } from "@/storage/workspace-profile-fence";
+import { profileAuthorizationScopeKey } from "@/state/profile-coordinator";
 import { prepareCatalogRead, type NewCatalogReadSource } from "./new-catalog-read-source";
 import { ScopedReadCache } from "../scoped-read-cache";
 import { threadListScopeKey } from "../thread-list-projection";
@@ -39,7 +42,7 @@ export async function openWorkspaceWithReceipt(
       onProgress,
     });
   } finally {
-    client.close();
+    closeWorkspaceMutationClient(profile.id, client);
   }
 }
 
@@ -47,6 +50,38 @@ export interface WorkspaceOption {
   path: string;
   label: string;
   kind: "workspace" | "worktree";
+  /** App-server registry identity; scoped to its owning Gateway target. */
+  projectKey?: string;
+  /** User-visible project name supplied by the app-server registry. */
+  projectName?: string;
+  /** Registry roots for this project; never inferred from a similarly named target. */
+  projectRoots?: string[];
+  projectNameKey?: "currentComputer";
+  /** Target-owned sidebar metadata, absent on older servers. */
+  projectPinned?: boolean;
+  projectPinnedOrder?: number;
+  projectPinSupported?: boolean;
+  /** Synthetic target root and registry keys may have the same spelling. */
+  rootProject?: boolean;
+}
+
+/** Stable identity for one project within one authorization and Gateway target. */
+export function workspaceProjectIdentity(
+  profile: GatewayProfile,
+  server: KCoderServer,
+  projectKey: string,
+): string {
+  return JSON.stringify([profileAuthorizationScopeKey(profile), server.id, projectKey]);
+}
+
+/** Exact workspace identity nested under the project identity. */
+export function workspaceEntryIdentity(
+  profile: GatewayProfile,
+  server: KCoderServer,
+  projectKey: string,
+  cwd: string | undefined,
+): string {
+  return JSON.stringify([workspaceProjectIdentity(profile, server, projectKey), workspaceThreadScopeIdentity(cwd)]);
 }
 
 export interface WorkspaceThreadScopes {
@@ -122,31 +157,6 @@ class LoadedDefaultReadConnection implements WorkspaceDefaultReadConnection {
   }
 }
 
-export function workspaceThreadScopeIdentity(path: string | undefined): string {
-  if (path === undefined) return "\u0000default";
-  if (/^[A-Za-z]:[\\/]+$/.test(path)) return `${path.slice(0, 2)}\\`;
-  const trimmed = path.replace(/[\\/]+$/, "");
-  return trimmed || (path.startsWith("\\") ? "\\" : "/");
-}
-
-export function workspaceThreadScopeServers(
-  server: KCoderServer,
-  options: readonly WorkspaceOption[],
-): KCoderServer[] {
-  const paths = new Map<string, string | undefined>();
-  const addPath = (path: string | undefined) => {
-    const identity = workspaceThreadScopeIdentity(path);
-    if (!paths.has(identity)) paths.set(identity, path);
-  };
-  addPath(server.workspacePath);
-  for (const option of options) addPath(option.path);
-  if (paths.size === 0) addPath(undefined);
-  return [...paths.values()].map((workspacePath) => ({
-    ...server,
-    workspacePath,
-  }));
-}
-
 export interface ManagedWorktree {
   deviceId: string;
   worktreeId: string;
@@ -204,6 +214,19 @@ export function managedWorktree(item: JsonRecord): ManagedWorktree | null {
       ? item.conversations.filter(isRecord)
       : [],
   };
+}
+
+export interface WorkspaceCatalogSnapshot {
+  options: WorkspaceOption[];
+  managedWorktrees: ManagedWorktree[];
+}
+
+/** Carries a registry success only to history loading, which can retain old worktree rows. */
+export class WorkspaceCatalogPartialError extends Error {
+  constructor(readonly snapshot: WorkspaceCatalogSnapshot, message: string) {
+    super(message);
+    this.name = "WorkspaceCatalogPartialError";
+  }
 }
 
 export async function listManagedWorktrees(
@@ -295,7 +318,7 @@ export async function archiveManagedWorktree(
     if (!worktree) throw new Error("app-server 未返回已归档 worktree");
     return worktree;
   } finally {
-    client.close();
+    closeWorkspaceMutationClient(profile.id, client);
   }
 }
 
@@ -379,7 +402,7 @@ export async function restoreManagedWorktree(
     if (!restored) throw new Error("app-server 未返回已恢复 worktree");
     return restored;
   } finally {
-    client.close();
+    closeWorkspaceMutationClient(profile.id, client);
   }
 }
 
@@ -408,34 +431,41 @@ export async function forgetManagedWorktree(
     if (result.forgotten !== true)
       throw new Error("app-server 未永久删除 worktree 快照");
   } finally {
-    client.close();
+    closeWorkspaceMutationClient(profile.id, client);
   }
 }
 
-const workspaceOptionsCache = new ScopedReadCache<WorkspaceOption[]>(32, 30_000);
+const workspaceCatalogCache = new ScopedReadCache<WorkspaceCatalogSnapshot>(32, 30_000);
 export function clearWorkspaceOptionsCache(profileId?: string): void {
-  workspaceOptionsCache.clear(profileId ? (key) => JSON.parse(key)[0] === profileId : undefined);
+  workspaceCatalogCache.clear(profileId ? (key) => JSON.parse(key)[0] === profileId : undefined);
 }
-export function listWorkspaceOptions(profile: GatewayProfile, server: KCoderServer, options: GatewayConnectOptions = {}, source?: NewCatalogReadSource): Promise<WorkspaceOption[]> {
-  return readWorkspaceOptions(profile, server, options, undefined, source);
+function closeWorkspaceMutationClient(profileId: string, client: GatewayRpcClient): void {
+  try { client.close(); } finally { clearWorkspaceOptionsCache(profileId); }
+}
+export function listWorkspaceCatalog(profile: GatewayProfile, server: KCoderServer, options: GatewayConnectOptions = {}, source?: NewCatalogReadSource): Promise<WorkspaceCatalogSnapshot> {
+  return readWorkspaceCatalog(profile, server, options, undefined, source);
 }
 
-async function readWorkspaceOptions(profile: GatewayProfile, server: KCoderServer, options: GatewayConnectOptions, borrowLoaded?: (client: GatewayRpcClient) => boolean, source?: NewCatalogReadSource, borrowEarly?: (client: GatewayRpcClient, close: () => void) => (() => void) | undefined): Promise<WorkspaceOption[]> {
+export function listWorkspaceOptions(profile: GatewayProfile, server: KCoderServer, options: GatewayConnectOptions = {}, source?: NewCatalogReadSource): Promise<WorkspaceOption[]> {
+  return listWorkspaceCatalog(profile, server, options, source).then(snapshot => snapshot.options);
+}
+
+async function readWorkspaceCatalog(profile: GatewayProfile, server: KCoderServer, options: GatewayConnectOptions, borrowLoaded?: (client: GatewayRpcClient) => boolean, source?: NewCatalogReadSource, borrowEarly?: (client: GatewayRpcClient, close: () => void) => (() => void) | undefined): Promise<WorkspaceCatalogSnapshot> {
   const key = await prepareCatalogRead(profile, server, options.signal);
   source?.assertOwner(profile, server);
-  const read = () => workspaceOptionsCache.get(key, signal => source
-    ? source.withClient("workspace", signal, client => readWorkspaceOptionsOnClient(client, server))
-    : loadWorkspaceOptions(profile, server, { ...options, signal }, borrowLoaded, borrowEarly), options.signal);
+  const read = () => workspaceCatalogCache.get(key, signal => source
+    ? source.withClient("workspace", signal, client => readWorkspaceCatalogOnClient(client, server))
+    : loadWorkspaceCatalog(profile, server, { ...options, signal }, borrowLoaded, borrowEarly), options.signal);
   return source ? source.cacheRead("workspace", read) : read();
 }
 
-async function loadWorkspaceOptions(
+async function loadWorkspaceCatalog(
   profile: GatewayProfile,
   server: KCoderServer,
   options: GatewayConnectOptions = {},
   borrowLoaded?: (client: GatewayRpcClient) => boolean,
   borrowEarly?: (client: GatewayRpcClient, close: () => void) => (() => void) | undefined,
-): Promise<WorkspaceOption[]> {
+): Promise<WorkspaceCatalogSnapshot> {
   const client = await taskClientConnector(
     profile,
     server,
@@ -455,7 +485,7 @@ async function loadWorkspaceOptions(
     // The directory requests and default page start in the same job/slot.
     finishCatalog = borrowEarly?.(client, close);
     transferred = Boolean(finishCatalog);
-    const result = await readWorkspaceOptionsOnClient(client, server);
+    const result = await readWorkspaceCatalogOnClient(client, server);
     if (!transferred && !options.signal?.aborted && borrowLoaded) transferred = borrowLoaded(client);
     return result;
   } finally {
@@ -465,31 +495,76 @@ async function loadWorkspaceOptions(
   }
 }
 
-async function readWorkspaceOptionsOnClient(client: Pick<GatewayRpcClient, "request">, server: KCoderServer): Promise<WorkspaceOption[]> {
+type WorkspaceRegistryClient = Pick<GatewayRpcClient, "request"> & Partial<Pick<GatewayRpcClient, "supportsExperimental">>;
+interface WorkspaceRegistryResponse { items?: JsonRecord[]; rootProjectPinned?: boolean }
+
+function workspaceRegistryOptions(workspaceOutcome: WorkspaceRegistryResponse, client: WorkspaceRegistryClient, server: KCoderServer): Map<string, WorkspaceOption> {
+  if (!Array.isArray(workspaceOutcome.items)) throw new Error("app-server 未返回有效的已登记项目列表");
   const byPath = new Map<string, WorkspaceOption>();
-  const [workspaces, worktrees] = await Promise.all([
-    client.request<{ items?: JsonRecord[] }>("runtime.workspaces.list", {
-      deviceId: server.id,
-    }),
-    client.request<{ items?: JsonRecord[] }>("runtime.worktrees.list", {
-      deviceId: server.id,
-    }),
-  ]);
-  if (!Array.isArray(workspaces.items) || !Array.isArray(worktrees.items))
-    throw new Error("app-server 未返回有效的已登记项目列表");
-  for (const item of workspaces.items) {
+  // A registry row at the same path still replaces this synthetic root, as on Desktop.
+  if (server.workspacePath && typeof workspaceOutcome.rootProjectPinned === "boolean") byPath.set(workspaceThreadScopeIdentity(server.workspacePath), {
+    path: server.workspacePath,
+    label: server.workspacePath.split(/[\\/]+/).filter(Boolean).at(-1) ?? server.workspacePath,
+    kind: "workspace",
+    projectKey: `runtime-target:${server.id}`,
+    projectName: server.label,
+    ...(server.labelKey === "currentComputer" ? { projectNameKey: "currentComputer" as const } : {}),
+    projectPinned: workspaceOutcome.rootProjectPinned,
+    rootProject: true,
+    ...(client.supportsExperimental ? { projectPinSupported: client.supportsExperimental("sidebarRootPinning") === true } : {}),
+  });
+  for (const item of workspaceOutcome.items) {
     const path = text(item.workspacePath);
     if (!path) continue;
-    byPath.set(path, {
+    const projectRoots = Array.isArray(item.projectRoots)
+      ? item.projectRoots.filter((value): value is string => typeof value === "string" && value.length > 0)
+      : undefined;
+    byPath.set(workspaceThreadScopeIdentity(path), {
       path,
       label: text(item.label) ?? path.split("/").at(-1) ?? path,
       kind: item.workspaceKind === "worktree" ? "worktree" : "workspace",
+      ...(text(item.projectKey) ? { projectKey: text(item.projectKey)! } : {}),
+      ...(text(item.projectName) ? { projectName: text(item.projectName)! } : {}),
+      ...(projectRoots ? { projectRoots } : {}),
+      ...(item.labelKey === "currentComputer" ? { projectNameKey: "currentComputer" as const } : {}),
+      ...(typeof item.projectPinned === "boolean" ? { projectPinned: item.projectPinned, rootProject: false } : {}),
+      ...(typeof item.projectPinnedOrder === "number" && Number.isSafeInteger(item.projectPinnedOrder) && item.projectPinnedOrder >= 0 ? { projectPinnedOrder: item.projectPinnedOrder } : {}),
     });
   }
-  for (const item of worktrees.items) {
+  return byPath;
+}
+
+/** Sidebar authority can be read even when the independent managed-worktree directory is unavailable. */
+export async function readWorkspaceSidebarOnClient(client: WorkspaceRegistryClient, server: KCoderServer): Promise<{ options: WorkspaceOption[]; rootProjectPinned?: boolean }> {
+  const response = await client.request<WorkspaceRegistryResponse>("runtime.workspaces.list", { deviceId: server.id });
+  return {
+    options: [...workspaceRegistryOptions(response, client, server).values()],
+    ...(typeof response.rootProjectPinned === "boolean" ? { rootProjectPinned: response.rootProjectPinned } : {}),
+  };
+}
+
+export async function readWorkspaceCatalogOnClient(client: WorkspaceRegistryClient, server: KCoderServer): Promise<WorkspaceCatalogSnapshot> {
+  const [workspaceOutcome, worktreeResult] = await Promise.all([
+    client.request<WorkspaceRegistryResponse>("runtime.workspaces.list", { deviceId: server.id }),
+    client.request<{ items?: JsonRecord[] }>("runtime.worktrees.list", { deviceId: server.id }).then(
+      value => ({ status: "fulfilled" as const, value }),
+      reason => ({ status: "rejected" as const, reason }),
+    ),
+  ]);
+  const byPath = workspaceRegistryOptions(workspaceOutcome, client, server);
+  if (worktreeResult.status === "rejected" || !Array.isArray(worktreeResult.value.items)) {
+    const message = worktreeResult.status === "rejected"
+      ? worktreeResult.reason instanceof Error ? worktreeResult.reason.message : String(worktreeResult.reason)
+      : "app-server 未返回有效的已登记 worktree 列表";
+    throw new WorkspaceCatalogPartialError({ options: [...byPath.values()], managedWorktrees: [] }, message);
+  }
+  const worktreeOutcome = worktreeResult.value;
+  const worktreeItems = worktreeOutcome.items as JsonRecord[];
+  const managedWorktrees = worktreeItems.map(managedWorktree).filter((item): item is ManagedWorktree => item !== null);
+  for (const item of worktreeItems) {
     const path = text(item.path);
     if (!path || item.state !== "active") continue;
-    byPath.set(path, {
+    byPath.set(workspaceThreadScopeIdentity(path), {
       path,
       label:
         text(item.repositoryName) ??
@@ -497,9 +572,20 @@ async function readWorkspaceOptionsOnClient(client: Pick<GatewayRpcClient, "requ
         path.split("/").at(-1) ??
         path,
       kind: "worktree",
+      // Desktop associates active managed worktrees with the owning target's root project.
+      projectKey: `runtime-target:${server.id}`,
+      rootProject: true,
+      projectName: server.label,
+      ...(server.workspacePath ? { projectRoots: [server.workspacePath] } : {}),
+      ...(server.labelKey === "currentComputer" ? { projectNameKey: "currentComputer" as const } : {}),
+      ...(typeof workspaceOutcome.rootProjectPinned === "boolean" ? { projectPinned: workspaceOutcome.rootProjectPinned } : {}),
+      ...(typeof workspaceOutcome.rootProjectPinned === "boolean" && client.supportsExperimental ? { projectPinSupported: client.supportsExperimental("sidebarRootPinning") === true } : {}),
     });
   }
-  return [...byPath.values()];
+  return {
+    options: [...byPath.values()],
+    managedWorktrees,
+  };
 }
 
 /** Resolve the default workspace plus every registered workspace/worktree for history queries. */
@@ -515,7 +601,7 @@ export async function listWorkspaceThreadScopes(
   let options: WorkspaceOption[] = [];
   let error: string | null = null;
   try {
-    options = await readWorkspaceOptions(profile, server, connectOptions, borrowDefault ? client => {
+    const catalog = await readWorkspaceCatalog(profile, server, connectOptions, borrowDefault ? client => {
       if (connectOptions.signal?.aborted || !borrowDefault.isCurrent() || owner !== defaultReadOwner(profile, server)) return false;
       const connection = new LoadedDefaultReadConnection(profile, server, client, connectOptions.signal);
       try { borrowDefault.onOwned(connection); } catch (error) { connection.close(); throw error; }
@@ -535,11 +621,37 @@ export async function listWorkspaceThreadScopes(
       }
       return () => connection.finishCatalog();
     } : undefined);
+    options = [...catalog.options];
   } catch (value) {
     // An independent catalog failure must not cancel an already-started page.
     if (!borrowDefault?.onReady) { defaultRead?.close(); defaultRead = undefined; }
-    options = [...knownOptions];
-    error = value instanceof Error ? value.message : String(value);
+    if (value instanceof WorkspaceCatalogPartialError) {
+      options = [...value.snapshot.options];
+      error = value.message;
+      const included = new Set(options.map(option => workspaceThreadScopeIdentity(option.path)));
+      // Retain known worktrees while their independent index is unavailable, but
+      // keep every freshly read registry row (including pin metadata) authoritative.
+      for (const option of knownOptions) {
+        const identity = workspaceThreadScopeIdentity(option.path);
+        if (option.kind === "worktree" && !included.has(identity)) {
+          const freshRoot = option.rootProject ? options.find(candidate => candidate.rootProject === true && typeof candidate.projectPinned === "boolean") : undefined;
+          options.push(freshRoot ? {
+            ...option,
+            projectKey: freshRoot.projectKey ?? option.projectKey,
+            projectName: freshRoot.projectName ?? option.projectName,
+            ...(freshRoot.projectNameKey ? { projectNameKey: freshRoot.projectNameKey } : {}),
+            projectPinned: freshRoot.projectPinned,
+            projectPinnedOrder: freshRoot.projectPinnedOrder,
+            projectPinSupported: freshRoot.projectPinSupported,
+            rootProject: true,
+          } : option);
+          included.add(identity);
+        }
+      }
+    } else {
+      options = [...knownOptions];
+      error = value instanceof Error ? value.message : String(value);
+    }
   }
 
   return {
@@ -579,7 +691,7 @@ export async function prepareManagedWorktreeWithReceipt(
       request: (method, params, timeoutMs) => client.request(method, params, timeoutMs),
     });
   } finally {
-    client.close();
+    closeWorkspaceMutationClient(profile.id, client);
   }
 }
 

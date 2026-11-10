@@ -1,0 +1,421 @@
+{
+  "key": "home-samples-r2",
+  "root": "apps/kcoder-studio/e2e/private/mobile-home-minute-boundary-samples-only.r2.candidate.e2e.mjs",
+  "original": {
+    "blob": "7dfa5795ad760533ffa3481568b8f326b3d9a48e",
+    "sha256": "9e365dfec6ec90a2e82756fbf32867a631a67b345e1b6fbbb3442e1e14cc86de"
+  },
+  "groups": [
+    {
+      "key": "inputs",
+      "factory": "createPrivateHomeSamplesR2Inputs",
+      "path": "apps/kcoder-studio/e2e/harness/private-candidate-modules/home-samples-r2/inputs.mjs",
+      "names": [
+        "resolvePrivateBeforeComplementRoot",
+        "prepareSnapshot",
+        "reuseMobileWebExport",
+        "hashMobileExportSourceRoots",
+        "appendExportSourceFiles",
+        "exportSourceExcluded",
+        "hashBundleTree",
+        "prepareGatewayRuntimeSnapshot",
+        "inspectGatewayRuntimeSnapshot",
+        "hashGatewayRuntimeInputs",
+        "appendGatewaySnapshotFiles",
+        "sourceSnapshotFilter",
+        "dependencySnapshotFilter",
+        "dependencySnapshotExcluded",
+        "sourceSnapshotExcluded",
+        "assertNoEscapingLinks",
+        "readGatewayExecutableInputs",
+        "regularFileIdentity",
+        "gatewayRuntimeStable",
+        "startFrozenGateway",
+        "copySanitizedTree",
+        "createDependencySnapshot",
+        "removeDependencyCacheAndSecretFiles",
+        "dependencyExcludedCategory",
+        "copyArtifactTree",
+        "excludedCategory",
+        "hashComplement",
+        "appendFileHashes",
+        "listFiles",
+        "pruneEmptyDirectories"
+      ],
+      "parameters": [
+        "access",
+        "appRoot",
+        "assert",
+        "basename",
+        "copyFile",
+        "cp",
+        "lstat",
+        "mkdir",
+        "randomBytes",
+        "readFile",
+        "readdir",
+        "readlink",
+        "realpath",
+        "relative",
+        "repoRoot",
+        "resolve",
+        "resolveExistingPrivateGatewaySnapshot",
+        "resolveExistingPrivatePath",
+        "reuseExportDirectory",
+        "reuseExportManifest",
+        "rm",
+        "rmdir",
+        "sep",
+        "sha256",
+        "snapshotMode",
+        "stat",
+        "waitFor",
+        "writeFile"
+      ],
+      "segments": [
+        {
+          "start": 57898,
+          "end": 58986
+        },
+        {
+          "start": 58986,
+          "end": 68920
+        },
+        {
+          "start": 68920,
+          "end": 73394
+        },
+        {
+          "start": 73394,
+          "end": 73999
+        },
+        {
+          "start": 73999,
+          "end": 74759
+        },
+        {
+          "start": 74759,
+          "end": 75085
+        },
+        {
+          "start": 75085,
+          "end": 75949
+        },
+        {
+          "start": 75949,
+          "end": 82959
+        },
+        {
+          "start": 82959,
+          "end": 84236
+        },
+        {
+          "start": 84236,
+          "end": 85283
+        },
+        {
+          "start": 85283,
+          "end": 86427
+        },
+        {
+          "start": 86427,
+          "end": 86661
+        },
+        {
+          "start": 86661,
+          "end": 86843
+        },
+        {
+          "start": 86843,
+          "end": 87333
+        },
+        {
+          "start": 87333,
+          "end": 87623
+        },
+        {
+          "start": 87623,
+          "end": 88177
+        },
+        {
+          "start": 88177,
+          "end": 88866
+        },
+        {
+          "start": 88866,
+          "end": 89165
+        },
+        {
+          "start": 89165,
+          "end": 89660
+        },
+        {
+          "start": 89660,
+          "end": 91464
+        },
+        {
+          "start": 91464,
+          "end": 92415
+        },
+        {
+          "start": 92415,
+          "end": 94143
+        },
+        {
+          "start": 94143,
+          "end": 94790
+        },
+        {
+          "start": 94790,
+          "end": 95354
+        },
+        {
+          "start": 95354,
+          "end": 95951
+        },
+        {
+          "start": 95951,
+          "end": 96441
+        },
+        {
+          "start": 96441,
+          "end": 96848
+        },
+        {
+          "start": 96848,
+          "end": 97556
+        },
+        {
+          "start": 97556,
+          "end": 97981
+        },
+        {
+          "start": 97981,
+          "end": 98293
+        }
+      ]
+    },
+    {
+      "key": "network",
+      "factory": "createPrivateHomeSamplesR2Network",
+      "path": "apps/kcoder-studio/e2e/harness/private-candidate-modules/home-samples-r2/network.mjs",
+      "names": [
+        "sanitizeRpcEventForCheckpoint",
+        "pendingRouteRequestsAt",
+        "recordRoutedWebSocketCloseInvocation",
+        "beginNavigationSampleCapture",
+        "writeNavigationSampleCheckpoint",
+        "installPageInstrumentation",
+        "installNetworkInstrumentation",
+        "waitForGatewayRpcQuiescence",
+        "pendingGatewayActivity",
+        "gatewayActivityFingerprint",
+        "snapshotNetworkEvidence",
+        "deepFreeze",
+        "createNetworkLedger",
+        "summarizeObservations",
+        "scenarioStatus",
+        "summarizeNetwork",
+        "correlateRpcFrames",
+        "pairApplicationAndRouteSockets",
+        "summarizeActionTimelines",
+        "createCoverageLedger"
+      ],
+      "parameters": [
+        "APPLICATION_DELAY_TIMER_TOLERANCE_MS",
+        "DEFAULT_SAMPLES",
+        "REFRESH_HOME_MINUTE_BOUNDARY_ELAPSED_MS",
+        "REFRESH_HOME_MINUTE_BOUNDARY_TARGET_OFFSET_MS",
+        "SERVER_ID",
+        "THREAD_ID",
+        "createTurnStartErrorFixtureFrame",
+        "delay",
+        "distribution",
+        "drawerCloseDiagnosticsEnabled",
+        "epochNow",
+        "mobileApiPath",
+        "parseFrame",
+        "percentile",
+        "performance",
+        "refreshCoverageMode",
+        "refreshHomeMinuteBoundaryDiagnosticMode",
+        "refreshSingleSampleMode",
+        "round",
+        "rpcIdFingerprint",
+        "safePath",
+        "safeWebSocketRouteInfo",
+        "sampleCount",
+        "sanitizeGatewayPath",
+        "sha256",
+        "sumResponseDelayMs",
+        "waitUntilPerformanceDeadline"
+      ],
+      "segments": [
+        {
+          "start": 297662,
+          "end": 298248
+        },
+        {
+          "start": 298248,
+          "end": 299305
+        },
+        {
+          "start": 299305,
+          "end": 299633
+        },
+        {
+          "start": 299633,
+          "end": 300638
+        },
+        {
+          "start": 300638,
+          "end": 305680
+        },
+        {
+          "start": 305680,
+          "end": 317804
+        },
+        {
+          "start": 317804,
+          "end": 349678
+        },
+        {
+          "start": 349678,
+          "end": 351134
+        },
+        {
+          "start": 351134,
+          "end": 351609
+        },
+        {
+          "start": 351609,
+          "end": 351965
+        },
+        {
+          "start": 351965,
+          "end": 352166
+        },
+        {
+          "start": 352166,
+          "end": 352384
+        },
+        {
+          "start": 352384,
+          "end": 353720
+        },
+        {
+          "start": 353720,
+          "end": 355140
+        },
+        {
+          "start": 355140,
+          "end": 355260
+        },
+        {
+          "start": 355260,
+          "end": 358951
+        },
+        {
+          "start": 358951,
+          "end": 368552
+        },
+        {
+          "start": 368552,
+          "end": 373904
+        },
+        {
+          "start": 373904,
+          "end": 376340
+        },
+        {
+          "start": 376340,
+          "end": 387460
+        }
+      ]
+    },
+    {
+      "key": "scenarios",
+      "factory": "createPrivateHomeSamplesR2Scenarios",
+      "path": "apps/kcoder-studio/e2e/harness/private-candidate-modules/home-samples-r2/scenarios.mjs",
+      "names": [
+        "runPhoneUxFaultScenarios"
+      ],
+      "parameters": [
+        "APPLICATION_DELAY_TIMER_TOLERANCE_MS",
+        "DEFAULT_DELAYS",
+        "DEFAULT_SAMPLES",
+        "REFRESH_BACKGROUND_MOBILE_SESSIONS",
+        "REFRESH_HOME_MINUTE_BOUNDARY_FIRST_REQUEST_LEAD_MS",
+        "REFRESH_HOME_MINUTE_BOUNDARY_REQUEST_LEAD_MARGIN_MS",
+        "SERVER_ID",
+        "THREAD_ID",
+        "applyRefreshBackgroundMobileEmulation",
+        "assert",
+        "assertApplicationDelay",
+        "assertHomeThreadPresentationStableExceptRelativeTime",
+        "assertRunningControlsStayHiddenAfterTwoFrames",
+        "captureHomeThreadPresentation",
+        "capturePrivateFailureScreenshot",
+        "closeOwnedMobilePage",
+        "closeRefreshDiagnosticMobilePage",
+        "connectMobile",
+        "createAcceptedTurnReceiptFixture",
+        "createRefreshProgressWriter",
+        "createResponseJitter",
+        "delayValues",
+        "describeVisiblePage",
+        "distribution",
+        "drainAndArmBackgroundHttpResponseHold",
+        "ensureFixtureSessionVisible",
+        "epochNow",
+        "faultScenarioIds",
+        "findHttpResponseForRouteRequest",
+        "formalOwnedAuthLifecycle",
+        "newMobilePage",
+        "normalizeHomeThreadRowText",
+        "observeLoginResponses",
+        "observeOwnedMobileAuth",
+        "openFixtureSession",
+        "ownedMobileDeviceStorePath",
+        "percentile",
+        "performance",
+        "readOwnedMobileDeviceSummary",
+        "readRefreshBackgroundMobileFacts",
+        "refreshBackgroundDiagnosticId",
+        "refreshBackgroundDiagnosticMode",
+        "refreshBackgroundMobileFactsMatch",
+        "refreshBackgroundWindowMode",
+        "refreshCoverageMode",
+        "refreshDiagnosticMode",
+        "refreshHomeMinuteBoundaryDiagnosticMode",
+        "refreshHomeMinuteBoundarySamplesOnlyMode",
+        "refreshPerSampleAuthCleanupMode",
+        "refreshScenarioId",
+        "refreshSendDiagnostic",
+        "refreshSendDiagnosticMode",
+        "refreshSharedBackgroundDiagnosticMode",
+        "refreshSingleSampleMode",
+        "refreshSmokeMode",
+        "releaseOwnedMobileAuthSample",
+        "round",
+        "safePath",
+        "sampleCount",
+        "sanitizeGatewayPath",
+        "selectedFaultScenario",
+        "sha256",
+        "startRefreshBackgroundChromium",
+        "summarizeHttpDelaySample",
+        "summarizeNetwork",
+        "summarizeWebSocketDelaySample",
+        "waitFor",
+        "waitForGatewayRpcQuiescence"
+      ],
+      "segments": [
+        {
+          "start": 98293,
+          "end": 228729
+        }
+      ]
+    }
+  ]
+}

@@ -1,20 +1,109 @@
 //! Connection lifecycle: extracted from the app-server connection boundary.
 
 use super::*;
+use futures::{FutureExt, future::LocalBoxFuture};
 
-pub(crate) async fn run_with_retention_parent(
+pub(crate) fn run_with_native_launches(
+    engine: QueryEngine,
+    factory: AppServerEngineFactory,
+    permission_mode: kcoder_config::PermissionMode,
+    retention_launch: Option<RetentionLaunchConfiguration>,
+    migration_launch: Option<RetentionLaunchConfiguration>,
+    office_launch: Option<std::ffi::OsString>,
+    connectivity_launch: Option<std::ffi::OsString>,
+) -> LocalBoxFuture<'static, Result<()>> {
+    run_with_native_launches_inner(
+        engine,
+        factory,
+        permission_mode,
+        retention_launch,
+        migration_launch,
+        office_launch,
+        connectivity_launch,
+    )
+    .boxed_local()
+}
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Composition keeps optional verified parents and channel owners separate"
+)]
+async fn run_with_native_launches_inner(
     mut engine: QueryEngine,
     engine_factory: AppServerEngineFactory,
     permission_mode: kcoder_config::PermissionMode,
     retention_launch: Option<RetentionLaunchConfiguration>,
+    migration_launch: Option<RetentionLaunchConfiguration>,
+    office_launch: Option<std::ffi::OsString>,
+    connectivity_launch: Option<std::ffi::OsString>,
 ) -> Result<()> {
+    ensure!(
+        migration_launch.is_none() || retention_launch.is_none(),
+        "source_transfer_parent_conflict"
+    );
+    let migration_source_authority = match migration_launch.as_ref().or(retention_launch.as_ref()) {
+        None => None,
+        Some(launch) => {
+            let captured = (|| -> Result<_> {
+                let settings = engine_factory.hook_user_settings_path()?;
+                ensure!(
+                    settings
+                        .file_name()
+                        .is_some_and(|name| name == "settings.json"),
+                    "source_transfer_invalid_profile"
+                );
+                migration_source_authority::MigrationSourceAuthority::capture(
+                    &launch.parent,
+                    &launch.account_root,
+                    settings
+                        .parent()
+                        .context("source_transfer_invalid_profile")?,
+                )
+            })();
+            match captured {
+                Ok(authority) => Some(Arc::new(authority)),
+                Err(_) if migration_launch.is_some() => {
+                    anyhow::bail!("source_transfer_authority_unavailable")
+                }
+                Err(_) => None,
+            }
+        }
+    };
+    let _migration_source_close_guard = migration_source_authority
+        .as_ref()
+        .map(|authority| authority.close_guard());
+    #[cfg(windows)]
+    let windows_component_parent = retention_launch.as_ref().and_then(|configuration| {
+        match native_component_parent::WindowsComponentParent::capture(configuration, &engine) {
+            Ok(parent) => Some(Arc::new(parent)),
+            Err(_) => {
+                tracing::warn!(
+                    code = "NATIVE_WINDOWS_PARENT_UNAVAILABLE",
+                    "Native component parent unavailable"
+                );
+                None
+            }
+        }
+    });
+    #[cfg(target_os = "macos")]
+    let macos_component_parent = retention_launch.as_ref().and_then(|configuration| {
+        match native_component_parent::MacosComponentParent::capture(configuration, &engine) {
+            Ok(parent) => Some(Arc::new(parent)),
+            Err(_) => {
+                tracing::warn!(
+                    code = "NATIVE_MACOS_PARENT_UNAVAILABLE",
+                    "Native component parent unavailable"
+                );
+                None
+            }
+        }
+    });
     let retention_authority = match retention_launch {
         None => None,
         Some(launch) => {
             crate::retention_parent_environment::validate_identity(&launch.parent)?;
             let optional = launch.optional;
-            match retention_context::VerifiedRetentionAuthority::capture(launch, &engine) {
-                Ok(authority) => Some(authority),
+            match retention_context::capture(launch, &engine) {
+                Ok(authority) => Some(Arc::new(authority)),
                 Err(_) if optional => {
                     // Never expose raw parent facts, filesystem paths or secrets.
                     tracing::warn!(
@@ -27,6 +116,45 @@ pub(crate) async fn run_with_retention_parent(
             }
         }
     };
+    let component_parent_owner = retention_authority
+        .as_ref()
+        .map(native_component_parent::from_retention);
+    #[cfg(windows)]
+    let component_parent_owner = component_parent_owner.or_else(|| {
+        windows_component_parent.as_ref().map(|parent| {
+            parent.clone() as Arc<dyn native_component_parent::NativeComponentParentAuthority>
+        })
+    });
+    #[cfg(target_os = "macos")]
+    let component_parent_owner = component_parent_owner.or_else(|| {
+        macos_component_parent.as_ref().map(|parent| {
+            parent.clone() as Arc<dyn native_component_parent::NativeComponentParentAuthority>
+        })
+    });
+    let component_parent = component_parent_owner.as_deref();
+    let integration_office_resources = if component_parent.is_some() {
+        match office_launch {
+            Some(raw) => {
+                let captured = raw.to_str().ok_or_else(|| anyhow::anyhow!("OFFICE_STARTUP_INVALID"))
+                    .and_then(|value| integrations::office::startup_binding::NativeOfficeStartupBinding::capture_with_verified_parent_owner(
+                        component_parent_owner.clone(), &engine, Some(value),
+                    ));
+                match captured {
+                    Ok(binding) => binding.map(Arc::new),
+                    Err(_) => {
+                        tracing::warn!(
+                            code = "OFFICE_NATIVE_UNAVAILABLE",
+                            "Office startup configuration unavailable; ordinary runtime remains available"
+                        );
+                        None
+                    }
+                }
+            }
+            None => None,
+        }
+    } else {
+        None
+    };
     let workspace_engine = engine.clone();
     let provider_settings_state =
         provider_settings::capture_state(&workspace_engine).map(|state| {
@@ -36,18 +164,23 @@ pub(crate) async fn run_with_retention_parent(
         });
     let _attachment_cleanup = attachments::AttachmentCleanupSweep::spawn();
     let (outbound_tx, mut outbound_rx) = mpsc::channel::<Value>(OUTBOUND_CAPACITY);
-    let next_question_id = Arc::new(AtomicU64::new(1_000_000));
-    let next_approval_id = Arc::new(AtomicU64::new(2_000_000));
+    let (mut native_runtime, native_runtime_client) =
+        integrations::core::runtime_pump::NativeRuntimePump::new();
+    native_runtime.enable_task_owners();
+    let next_interaction_id = Arc::new(AtomicU64::new(1_000_000));
     // Replies to an already resolved interaction are answered from here, so a
     // repeated reply is never delivered twice and never applied to a new turn.
-    let connection_receipts = Arc::new(StdMutex::new(InteractionReceipts::default()));
+    let app_server_epoch = uuid::Uuid::new_v4().simple().to_string();
+    let connection_receipts = Arc::new(StdMutex::new(InteractionReceipts::new(app_server_epoch)));
     let automation_responses =
         project_automations::AutomationResponses::new(engine.cron_scheduler());
     let writer_automations = automation_responses.clone();
-    let mut writer = tokio::spawn(async move {
+    let rpc_hub = native_runtime.rpc_hub();
+    let mut writer = crate::app_server::task_spawn::spawn(async move {
         let mut stdout = tokio::io::stdout();
         while let Some(message) = outbound_rx.recv().await {
             writer_automations.observe(&message);
+            rpc_hub.observe(&message, None);
             let Some(mut bytes) = bounded_outbound_frame(message, OUTBOUND_FRAME_LIMIT_BYTES)
             else {
                 continue;
@@ -70,7 +203,67 @@ pub(crate) async fn run_with_retention_parent(
     let _terminal_guard = TerminalRegistryGuard(terminals.clone());
     let server_id = format!("server-{}", engine.session_id());
     let sequence = Arc::new(AtomicU64::new(1));
+    let integration_connectivity_resources = match connectivity_launch.as_ref().and_then(|raw| raw.to_str()) {
+        Some(raw) => match integrations::connectivity::installed_resources::NativeConnectivityStartupBinding::capture_after_verified_parent(
+            component_parent, &engine, Some(raw),
+        ) {
+            Ok(binding) => binding.map(Arc::new),
+            Err(_) => { tracing::warn!(code="CHANNEL_NATIVE_UNAVAILABLE", "Channel native startup binding unavailable"); None }
+        },
+        None => None,
+    };
+    // Gateway owns app-server. The component descriptor enables its Node workers.
+    #[cfg(any(target_os = "linux", target_os = "macos", windows))]
+    let (scope_host, _legacy_host_guard) = {
+        let channels_enabled = workspace_engine
+            .settings
+            .read()
+            .map_err(|_| anyhow::anyhow!("INTEGRATION_SETTINGS_UNAVAILABLE"))?
+            .integrations
+            .connectivity
+            .enabled;
+        if integration_connectivity_resources.is_some()
+            && channels_enabled
+            && integrations::core::service_leases::channel_account_supported()
+        {
+            (
+                Some(NativeScopeHostBootstrap::open_gateway(
+                    integrations::core::capture_scope(&engine)?,
+                )?),
+                None,
+            )
+        } else {
+            // Keep the original scope fence until stdio shuts down, even without SDK workers.
+            let guard = integrations::core::service_leases::scope_host::task_frontend::guard_stdio_against_legacy_host(&engine)?;
+            (None, guard)
+        }
+    };
+    #[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
+    let scope_host: Option<Arc<NativeScopeHostBootstrap>> = None;
+    let native_remote_host_client = component_parent_owner
+        .as_ref()
+        .and_then(|parent| {
+            integrations::core::remote_delegations::transport::host_client::NativeRemoteHostClient::capture_if_configured(
+                parent.clone(),
+                &|| engine.settings_persistence_path(),
+                &|| engine.state.cwd(),
+                outbound_tx.clone(),
+            ).map_err(|_| tracing::warn!(code = "REMOTE_HOST_PARENT_UNAVAILABLE", "Native remote host byte lane unavailable")).ok().flatten()
+        });
+    let _native_remote_host_connection = native_remote_host_client
+        .as_ref()
+        .map(|client| client.connection_guard());
     let mut state = ConnectionState {
+        native_scope_host: scope_host.clone(),
+        direct_task_stdio: true,
+        integration_context: scope_host
+            .as_ref()
+            .map(|host| host.native().recapture_for_owned_service())
+            .transpose()?,
+        native_remote_host_client,
+        integration_office_resources,
+        integration_connectivity_resources,
+        integration_runtime: Some(native_runtime_client),
         tool_profiles_v1: engine_factory.supports_session_reload(),
         ..ConnectionState::default()
     };
@@ -81,7 +274,7 @@ pub(crate) async fn run_with_retention_parent(
     .into_iter()
     .flatten()
     {
-        if let Err(error) = knowledge_archive_owner::scavenge(&parent) {
+        if let Err(error) = kcoder_knowledge_rpc::scavenge_archive_staging(&parent) {
             tracing::warn!(%error, "failed to scavenge abandoned Wiki archive owners");
         }
     }
@@ -105,19 +298,33 @@ pub(crate) async fn run_with_retention_parent(
     )
     .context("failed to initialize app-server plugin processor")?;
     let mcp_authorization = mcp_authorization_processor::McpAuthorizationProcessor::default();
+    let migration_processor = Arc::new(migration_processor::MigrationProcessor::new());
+    let _migration_cancellation_guard = migration_processor.cancellation().drop_guard();
+    let mut migration_control_tasks = tokio::task::JoinSet::new();
+    let mut migration_observation_tasks = tokio::task::JoinSet::new();
     let mut plugin_tasks = tokio::task::JoinSet::new();
     let mut provider_tasks = tokio::task::JoinSet::new();
     let storage_scans = storage_scans::StorageScans::default();
     let mut indexed_read_tasks = tokio::task::JoinSet::new();
     let mut indexed_read_gates = indexed_read_gate::IndexedReadGate::default();
-    let mut stdin = BufReader::new(tokio::io::stdin());
-    let mut input_state = protocol_io::JsonRpcLineState::default();
+    let thread_presence_gate = Arc::new(tokio::sync::Semaphore::new(1));
+    let thread_presence_cancellation = CancellationToken::new();
+    let thread_goal_status_gate = Arc::new(tokio::sync::Semaphore::new(1));
+    let thread_goal_status_cancellation = CancellationToken::new();
+    let _thread_goal_status_cancellation_guard =
+        thread_goal_status_cancellation.clone().drop_guard();
+    let _thread_presence_cancellation_guard =
+        thread_presence_requests::CancellationGuard::new(thread_presence_cancellation.clone());
+    let mut input = connection_input::ConnectionInput::stdin();
+    state.input_ended = input.ended();
     let mut automations = project_automations::ProjectAutomations::new(
         workspace_engine.cron_scheduler(),
         !workspace_engine.settings.read().unwrap().training_mode,
         workspace_engine.state.cwd().to_string_lossy().into_owned(),
     );
+    let business_automation = integrations::knowledge::NativeAutomationScheduler::default();
     let mut automation_tick = tokio::time::interval(Duration::from_millis(500));
+    automation_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     let mut automation_requested = false;
     let mut idle_shutdown_requested = false;
     #[cfg(unix)]
@@ -127,7 +334,32 @@ pub(crate) async fn run_with_retention_parent(
     #[cfg(unix)]
     let mut terminated_by_signal = false;
 
+    let mut next_scope_host_check = std::time::Instant::now();
     loop {
+        if let Some(host) = &scope_host {
+            // Infrastructure liveness is independent of per-input/per-effect
+            // authorization. Busy RPC/event traffic must not replay this audit
+            // on every dispatcher iteration. Admission still checks revocation.
+            // TODO(channel-latency): replace this bounded infrastructure poll
+            // with owned process/configuration notifications.
+            if std::time::Instant::now() >= next_scope_host_check {
+                if host.verify_original_main_lifetime().is_err() {
+                    tracing::warn!(
+                        code = "CHANNEL_HOST_OWNER_CHANGED",
+                        "Original scope owner ended; closing its owned tree"
+                    );
+                    break;
+                }
+                next_scope_host_check = std::time::Instant::now() + Duration::from_secs(1);
+            }
+        }
+        #[cfg(target_os = "linux")]
+        state.native_interrupts.reap();
+        while let Some(result) = state.mcp_app_tasks.try_join_next() {
+            if let Err(error) = result {
+                tracing::warn!(%error,"MCP App owned request task exited unexpectedly");
+            }
+        }
         while let Some(result) = state.desktop_recovery_tasks.try_join_next() {
             if let Ok(Some(ready)) = result {
                 state.desktop_recovery_ready.push_back(ready);
@@ -136,6 +368,21 @@ pub(crate) async fn run_with_retention_parent(
         while let Some(result) = state.knowledge_rpc_tasks.try_join_next() {
             if result.is_err() {
                 tracing::warn!("Wiki request task exited unexpectedly");
+            }
+        }
+        while let Some(result) = state.continuous_work_read_tasks.try_join_next() {
+            if result.is_err() {
+                tracing::warn!("continuous work read task exited unexpectedly");
+            }
+        }
+        while let Some(result) = state.continuous_work_mutation_tasks.try_join_next() {
+            if result.is_err() {
+                tracing::warn!("continuous work mutation task exited unexpectedly");
+            }
+        }
+        while let Some(result) = state.wiki_rpc_tasks.try_join_next() {
+            if result.is_err() {
+                tracing::warn!("Wiki RPC task exited unexpectedly");
             }
         }
         while let Some(result) = state.knowledge_tasks.try_join_next() {
@@ -158,12 +405,203 @@ pub(crate) async fn run_with_retention_parent(
                 tracing::warn!(%error, "app-server plugin request task failed");
             }
         }
+        while migration_control_tasks.try_join_next().is_some() {}
+        while migration_observation_tasks.try_join_next().is_some() {}
+        let task_state_notifications = (state.initialized && state.integration_task_state_v1)
+            || native_runtime.rpc_hub().needs_task_state();
+        native_runtime.set_task_state_notifications(task_state_notifications);
+        if (state.initialized || scope_host.is_some()) && state.desktop_recovery_ready.is_empty() {
+            thread_manager.enforce_session_lifetimes().await;
+            native_runtime
+                .retire_ended_ui_tasks(&mut thread_manager, &mut engine, &workspace_engine)
+                .await;
+            if let Some(request) = native_runtime.next_rpc_request() {
+                rpc_connection::dispatch(
+                    request,
+                    rpc_connection::HostContext {
+                        engine_factory: &engine_factory,
+                        workspace_engine: &workspace_engine,
+                        permission_mode,
+                        thread_manager: &mut thread_manager,
+                        next_interaction_id: &next_interaction_id,
+                        server_id: &server_id,
+                        sequence: &sequence,
+                        owners: native_runtime.ui_task_owners(),
+                        #[cfg(target_os = "linux")]
+                        interruptions: &mut state.native_interrupts,
+                    },
+                )
+                .boxed_local()
+                .await;
+                continue;
+            }
+            // Erase large local futures at their existing allocation boundaries
+            // so their nested types do not propagate into the resident loop.
+            if let Some(request) = native_runtime.next_ui_task_turn() {
+                integrations::core::runtime_pump::NativeUiTaskTurnDispatch {
+                    engine: &mut engine,
+                    factory: &engine_factory,
+                    manager: &mut thread_manager,
+                    server: &server_id,
+                    sequence: &sequence,
+                    interactions: &next_interaction_id,
+                    attachments: &mut attachment_directories,
+                    #[cfg(target_os = "linux")]
+                    interruptions: &mut state.native_interrupts,
+                }
+                .dispatch(request)
+                .boxed_local()
+                .await;
+                continue;
+            }
+            if let Some(request) = native_runtime.next_ui_task_start() {
+                integrations::core::runtime_pump::NativeUiTaskStartDispatch {
+                    owners: native_runtime.ui_task_owners(),
+                    engine: &mut engine,
+                    workspace: &workspace_engine,
+                    factory: &engine_factory,
+                    permission_mode,
+                    manager: &mut thread_manager,
+                    interactions: &next_interaction_id,
+                    receipts: &connection_receipts,
+                    server: &server_id,
+                    sequence: &sequence,
+                    automations: &mut automations,
+                }
+                .dispatch(request)
+                .boxed_local()
+                .await;
+                continue;
+            }
+            if let Some(request) = native_runtime.next_ui_task_resume() {
+                // The actual peer's state uses the same original manager,
+                // factory, lease, history and normal restore dispatch.
+                integrations::core::runtime_pump::NativeUiTaskResumeDispatch {
+                    owners: native_runtime.ui_task_owners(),
+                    engine: &mut engine,
+                    workspace: &workspace_engine,
+                    factory: &engine_factory,
+                    permission_mode,
+                    manager: &mut thread_manager,
+                    interactions: &next_interaction_id,
+                    receipts: &connection_receipts,
+                    server: &server_id,
+                    sequence: &sequence,
+                }
+                .dispatch(request)
+                .boxed_local()
+                .await;
+                continue;
+            }
+            if let Some(request) = native_runtime.next_ui_task_read() {
+                integrations::core::runtime_pump::ui_task_read::dispatch(
+                    request,
+                    &workspace_engine,
+                    &mut thread_manager,
+                )
+                .boxed_local()
+                .await;
+                continue;
+            }
+            let generated = match native_runtime.next_request(&mut thread_manager) {
+                Ok(generated) => generated,
+                Err(_) => {
+                    tracing::warn!(
+                        code = "native_runtime_command_unconfirmed",
+                        "Native command preparation requires reconciliation"
+                    );
+                    None
+                }
+            };
+            if let Some(generated) = generated {
+                // Only the actual in-process ticket branch marks a non-public origin.
+                // Until its receipt is bound at Accepted, source selection fails closed.
+                let previous_source_origin =
+                    std::mem::replace(&mut state.native_source_dispatch, true);
+                let previous_request_origin = std::mem::replace(
+                    &mut state.request_origin,
+                    request_origin::RequestOrigin::NativeSource,
+                );
+                // This same-image private ticket understands its fixed presentation
+                // declaration. Public UI streams retain independent negotiation.
+                let previous_work_modes = std::mem::replace(&mut state.studio_work_modes_v1, true);
+                let previous_source_observer = std::mem::replace(
+                    &mut state.native_source_accepted,
+                    generated.accepted_observer.clone(),
+                );
+                let previous_thread_initializer = std::mem::replace(
+                    &mut state.native_runtime_thread_initializer,
+                    generated.thread_initializer.clone(),
+                );
+                eprintln!(
+                    "{}",
+                    serde_json::json!({"event":"native_runtime_ticket_stage","stage":"dispatch_enter","method":generated.method})
+                );
+                let result = rpc_dispatch::dispatch(
+                    generated.method,
+                    Value::String(generated.ticket.id().into()),
+                    generated.params,
+                    &mut engine,
+                    &workspace_engine,
+                    &generated.outbound,
+                    &mut thread_manager,
+                    &terminals,
+                    &mut history_refresh,
+                    &mut browsers,
+                    &plugin_tasks,
+                    migration_control_tasks.len()
+                        + migration_observation_tasks.len()
+                        + migration_processor.activity(),
+                    &mut provider_tasks,
+                    &indexed_read_tasks,
+                    &mut automations,
+                    &mut automation_requested,
+                    &mut idle_shutdown_requested,
+                    &engine_factory,
+                    &storage_scans,
+                    &provider_settings_state,
+                    &mut attachment_directories,
+                    &next_terminal_id,
+                    permission_mode,
+                    &next_interaction_id,
+                    &connection_receipts,
+                    &server_id,
+                    &sequence,
+                    &None,
+                    &mut state,
+                    &mut thread_list_snapshots,
+                    None,
+                    retention_authority.as_deref(),
+                )
+                .boxed_local()
+                .await;
+                eprintln!(
+                    "{}",
+                    serde_json::json!({"event":"native_runtime_ticket_stage","stage":"dispatch_returned","method":generated.method,"isError":result.is_err()})
+                );
+                state.native_source_dispatch = previous_source_origin;
+                state.request_origin = previous_request_origin;
+                state.studio_work_modes_v1 = previous_work_modes;
+                state.native_source_accepted = previous_source_observer;
+                state.native_runtime_thread_initializer = previous_thread_initializer;
+                if result.is_err() {
+                    native_runtime.dispatch_failed(&generated.ticket);
+                }
+                // Only this in-process branch has the private response sender and
+                // ticket. Public JSON IDs cannot settle a native command.
+                continue;
+            }
+        }
         let queued = if state.desktop_recovery_ready.is_empty() {
             automations.next_request()
         } else {
             None
         };
         let automation_fire = queued.as_ref().and_then(|(_, fire)| fire.clone());
+        let request_origin = request_origin::RequestOrigin::selected_by_owner(
+            !state.desktop_recovery_ready.is_empty(),
+            queued.is_some(),
+        );
         let next_line = if let Some(ready) = state.desktop_recovery_ready.pop_front() {
             let request = json!({"jsonrpc":"2.0", "id":ready.id, "method":method::COMPUTER_USE_RECOVER, "params":ready.params});
             state.private_desktop_recovery = Some(ready);
@@ -174,7 +612,11 @@ pub(crate) async fn run_with_retention_parent(
         } else {
             #[cfg(unix)]
             let result = tokio::select! {
-                result = input_state.read(&mut stdin) => result.context("failed to read app-server stdin")?,
+                result = input.read() => result?,
+                event = native_runtime.receive() => {
+                    native_runtime.observe_with_task_owners(event, &outbound_tx, &mut thread_manager).await?;
+                    continue;
+                },
                 ready = state.desktop_recovery_tasks.join_next(), if !state.desktop_recovery_tasks.is_empty() => {
                     if let Some(Ok(Some(ready))) = ready { state.desktop_recovery_ready.push_back(ready); }
                     continue;
@@ -185,6 +627,9 @@ pub(crate) async fn run_with_retention_parent(
                 },
                 _ = automations.receive() => continue,
                 _ = automation_tick.tick() => {
+                    if state.initialized {
+                        business_automation.queue_tick(&workspace_engine, &mut state);
+                    }
                 if state.initialized && automation_requested {
                         automations.activate();
                         automations.queue_if_idle(thread_manager.project_is_idle());
@@ -197,13 +642,20 @@ pub(crate) async fn run_with_retention_parent(
             };
             #[cfg(not(unix))]
             let result = tokio::select! {
-                result = input_state.read(&mut stdin) => result.context("failed to read app-server stdin")?,
+                result = input.read() => result?,
+                event = native_runtime.receive() => {
+                    native_runtime.observe_with_task_owners(event, &outbound_tx, &mut thread_manager).await?;
+                    continue;
+                },
                 ready = state.desktop_recovery_tasks.join_next(), if !state.desktop_recovery_tasks.is_empty() => {
                     if let Some(Ok(Some(ready))) = ready { state.desktop_recovery_ready.push_back(ready); }
                     continue;
                 },
                 _ = automations.receive() => continue,
                 _ = automation_tick.tick() => {
+                    if state.initialized {
+                        business_automation.queue_tick(&workspace_engine, &mut state);
+                    }
                 if state.initialized && automation_requested {
                         automations.activate();
                         automations.queue_if_idle(thread_manager.project_is_idle());
@@ -239,718 +691,74 @@ pub(crate) async fn run_with_retention_parent(
         if line.trim().is_empty() {
             continue;
         }
-        let request: Value = match serde_json::from_str(&line) {
-            Ok(value) => value,
-            Err(error) => {
-                tracing::warn!(
-                    frame_bytes = line.len(),
-                    object_offset = line.find('{'),
-                    %error,
-                    "invalid app-server JSON-RPC frame"
-                );
-                send(
-                    &outbound_tx,
-                    error_response(
-                        Value::Null,
-                        -32700,
-                        &format!(
-                            "{error} (frame bytes: {}, object offset: {:?})",
-                            line.len(),
-                            line.find('{')
-                        ),
-                    ),
-                )
-                .await?;
-                continue;
-            }
-        };
-        let has_id = request
-            .as_object()
-            .is_some_and(|object| object.contains_key("id"));
-        let id = request.get("id").cloned().unwrap_or(Value::Null);
-        let method = request.get("method").and_then(Value::as_str).unwrap_or("");
-        let params = request.get("params").cloned().unwrap_or_else(|| json!({}));
-        if kcoder_app_protocol::is_workspace_operation_v2(method) {
-            if let Some(response) = state.require_initialized(id.clone()) {
-                send(&outbound_tx, response).await?;
-                continue;
-            }
-            let response = match &retention_authority {
-                None => error_response(id, -32001, "Workspace receipt authority unavailable"),
-                Some(authority) => {
-                    match kcoder_app_protocol::decode_private_retention_request(&line) {
-                        Err(_) => error_response(id, -32602, "Invalid private workspace request"),
-                        Ok(private) => match authority.validate(&private) {
-                            Err(code) => error_response(
-                                id,
-                                code,
-                                "Workspace receipt authority or parameters rejected",
-                            ),
-                            Ok(()) => match workspace_operation_receipts_v2::dispatch(
-                                authority,
-                                &workspace_engine,
-                                &private,
-                            )
-                            .await
-                            {
-                                Ok(result) => success_response(id, result),
-                                Err(error) => error_response(
-                                    id,
-                                    workspace_operation_receipts_v2::error_code(&error),
-                                    "Workspace receipt scope conflict or completion unknown",
-                                ),
-                            },
-                        },
-                    }
-                }
-            };
-            send(&outbound_tx, response).await?;
-            continue;
-        }
-        if kcoder_app_protocol::is_attachment_retention_method(method) {
-            if let Some(response) = state.require_initialized(id.clone()) {
-                send(&outbound_tx, response).await?;
-                continue;
-            }
-            // Decode the original frame, not its duplicate-key-erasing Value.
-            // Missing/null IDs and request-shaped notifications cannot execute.
-            let response = match kcoder_app_protocol::decode_private_retention_request(&line) {
-                Err(_) => error_response(
-                    id,
-                    -32602,
-                    attachment_retention_dispatch::error_message(-32602),
-                ),
-                Ok(private) => match &retention_authority {
-                    None => error_response(
-                        id,
-                        kcoder_app_protocol::RETENTION_ERROR_AUTHORITY,
-                        attachment_retention_dispatch::error_message(
-                            kcoder_app_protocol::RETENTION_ERROR_AUTHORITY,
-                        ),
-                    ),
-                    Some(authority) => match authority.validate(&private) {
-                        Err(code) => error_response(
-                            id,
-                            code,
-                            attachment_retention_dispatch::error_message(code),
-                        ),
-                        Ok(()) => match if kcoder_app_protocol::is_retention_upload_method(
-                            &private.method,
-                        ) {
-                            attachment_retention_dispatch::dispatch_upload(authority, &private)
-                                .and_then(|result| serde_json::to_value(result).map_err(Into::into))
-                        } else {
-                            attachment_retention_dispatch::dispatch_scoped(authority, &private)
-                                .and_then(|result| serde_json::to_value(result).map_err(Into::into))
-                        } {
-                            Ok(result) => success_response(id, json!(result)),
-                            Err(error) => {
-                                let code = attachment_retention_dispatch::error_code(&error);
-                                error_response(
-                                    id,
-                                    code,
-                                    attachment_retention_dispatch::error_message(code),
-                                )
-                            }
-                        },
-                    },
-                },
-            };
-            // Synchronous service transactions and owner leases have all dropped
-            // before the outbound await. No provider/session activation occurs.
-            send(&outbound_tx, response).await?;
-            continue;
-        }
-        if retention_context::has_private_authority(&request) {
-            let code = match &retention_authority {
-                None => -32001,
-                Some(authority) => {
-                    match kcoder_app_protocol::decode_private_retention_request(&line) {
-                        Err(_) => -32602,
-                        Ok(private) => match authority.validate(&private) {
-                            Err(code) => code,
-                            // Validated but intentionally not wired to the service yet.
-                            Ok(()) => -32601,
-                        },
-                    }
-                }
-            };
-            send(
-                &outbound_tx,
-                error_response(
-                    id,
-                    code,
-                    match code {
-                        -32001 => "Private retention authority unavailable",
-                        -32601 => "Retention lifecycle unavailable",
-                        _ => "Invalid private retention request",
-                    },
-                ),
-            )
-            .await?;
-            continue;
-        }
-        // Wiki operations are requests, never executable client notifications.
-        if (method.starts_with("knowledge/")
-            || matches!(
-                method,
-                method::WORKFLOW_REQUESTS
-                    | method::WORKFLOW_RESPOND
-                    | method::COMPUTER_USE_RECOVER
-                    | method::COMPUTER_USE_REVOKE
-            ))
-            && !request
-                .as_object()
-                .is_some_and(|object| object.contains_key("id"))
-        {
-            continue;
-        }
-
-        if method.is_empty() && !id.is_null() {
-            let mut outcome = InteractionReply::Unmatched;
-            for turn_state in thread_manager.turn_states() {
-                outcome = turn_state.resolve_response(&request, state.interaction_binding_v1);
-                if !matches!(outcome, InteractionReply::Unmatched) {
-                    break;
-                }
-            }
-            if matches!(outcome, InteractionReply::Misattributed)
-                && let Some(request_id) = id.as_u64()
-            {
-                // The interaction is still pending: replay its request so the
-                // client can answer with the identity the connection requires,
-                // and never accept the unattributable decision.
-                let request_notification = {
-                    let mut receipts = connection_receipts
-                        .lock()
-                        .unwrap_or_else(|poisoned| poisoned.into_inner());
-                    let request = receipts.outstanding_request(request_id);
-                    receipts.note_misattributed();
-                    request
-                };
-                tracing::warn!(
-                    request_id,
-                    "app-server interaction reply did not name its interaction and was rejected"
-                );
-                if let Some(notification) = request_notification {
-                    send(&outbound_tx, notification).await?;
-                }
-                continue;
-            }
-            if matches!(outcome, InteractionReply::Unmatched)
-                && let Some(request_id) = id.as_u64()
-            {
-                let replayed = {
-                    let mut receipts = connection_receipts
-                        .lock()
-                        .unwrap_or_else(|poisoned| poisoned.into_inner());
-                    receipts.replay(request_id)
-                };
-                match replayed {
-                    Some(notification) => send(&outbound_tx, notification).await?,
-                    None => {
-                        connection_receipts
-                            .lock()
-                            .unwrap_or_else(|poisoned| poisoned.into_inner())
-                            .note_unmatched();
-                        tracing::warn!(
-                            request_id,
-                            "app-server reply matched no pending interaction and was not applied"
-                        );
-                    }
-                }
-            }
-            continue;
-        }
-
-        // Responses and interaction replies were handled above. From here on,
-        // only protocol-typed request IDs may reach a method dispatcher. The
-        // sole id-less inbound notification is `initialized`; it is a no-op
-        // even before the initialize handshake completes.
-        if method.is_empty() {
-            continue;
-        }
-        if method == "initialized" && !has_id {
-            continue;
-        }
-        if !has_id {
-            continue;
-        }
-        if serde_json::from_value::<kcoder_app_protocol::RequestId>(id.clone()).is_err() {
-            send(
-                &outbound_tx,
-                error_response(Value::Null, -32600, "Invalid request ID"),
-            )
-            .await?;
-            continue;
-        }
-        if method == "initialized" {
-            send(
-                &outbound_tx,
-                error_response(id, -32600, "initialized must be sent as a notification"),
-            )
-            .await?;
-            continue;
-        }
-
-        if method == "initialize" {
-            let mut response = state.initialize_with_workspace_authority(
-                id,
-                &params,
-                &workspace_engine,
-                retention_authority.is_some(),
-            );
-            if response.get("error").is_none() {
-                if let Some(authority) = &retention_authority {
-                    if let Ok(admission) = authority.retention_service().upload_admission() {
-                        state.attach_upload_admission(&mut response, admission)?;
-                    }
-                }
-            }
-            if state.initialized
-                && params["capabilities"]["experimental"]["projectAutomations"] == true
-            {
-                automation_requested = true;
-            }
-            send(&outbound_tx, response).await?;
-            continue;
-        }
-        if let Some(response) = state.require_initialized(id.clone()) {
-            send(&outbound_tx, response).await?;
-            continue;
-        }
-        if method == method::THREAD_READ_INDEXED {
-            if indexed_read_tasks.len() >= 4 {
-                send(
-                    &outbound_tx,
-                    error_response(
-                        id,
-                        -32044,
-                        "Indexed history read capacity reached; retry later",
-                    ),
-                )
-                .await?;
-                continue;
-            }
-            let params = match serde_json::from_value::<ThreadReadParams>(params) {
-                Ok(params) => params,
-                Err(_) => {
-                    send(
-                        &outbound_tx,
-                        error_response(id, -32602, "invalid indexed transcript params"),
-                    )
-                    .await?;
-                    continue;
-                }
-            };
-            let target = thread_manager
-                .engine(&params.thread_id)
-                .unwrap_or_else(|| workspace_engine.clone());
-            let read_gate = match indexed_read_gates.for_thread(&params.thread_id) {
-                Ok(gate) => gate,
-                Err(_) => {
-                    send(
-                        &outbound_tx,
-                        error_response(id, -32602, "invalid transcript thread"),
-                    )
-                    .await?;
-                    continue;
-                }
-            };
-            let running = thread_manager.running_thread_ids();
-            let run_projection = ThreadRunProjection::for_thread(
-                &thread_manager,
-                state.run_summary_v1,
-                &params.thread_id,
-            );
-            let outbound = outbound_tx.clone();
-            indexed_read_tasks.spawn(async move {
-                let read_guard = read_gate.lock_owned().await;
-                let read = indexed_transcript::read(&target, params, &running, run_projection);
-                let response = match read.await {
-                    Ok(mut result) => {
-                        recent_error::decorate(
-                            &target,
-                            &mut result.thread,
-                            run_projection.negotiated,
-                        );
-                        success_response(
-                            id,
-                            serde_json::to_value(result).expect("transcript serializes"),
-                        )
-                    }
-                    Err(error) => {
-                        let message = error.to_string();
-                        error_response(
-                            id,
-                            if message == "TRANSCRIPT_CURSOR_STALE" {
-                                -32041
-                            } else {
-                                -32021
-                            },
-                            &message,
-                        )
-                    }
-                };
-                drop(read_guard);
-                if let Err(error) = send(&outbound, response).await {
-                    tracing::warn!(%error, "failed to send indexed transcript");
-                }
-            });
-            continue;
-        }
-        if method == method::SKILL_LIST {
-            let result = serde_json::from_value::<kcoder_app_protocol::SkillListParams>(params)
-                .map_err(|_| anyhow::anyhow!("Invalid skill list parameters"))
-                .and_then(|params| {
-                    engine_factory
-                        .current_skills()
-                        .map(|registry| skill_processor::list(&registry, params.include_disabled))
-                })
-                .and_then(|result| serde_json::to_value(result).map_err(Into::into));
-            let response = match result {
-                Ok(result) => success_response(id, result),
-                Err(error) => error_response(id, -32021, &error.to_string()),
-            };
-            send(&outbound_tx, response).await?;
-            continue;
-        }
-        if matches!(
-            method,
-            method::SKILL_IMPORT | method::SKILL_REMOVE | method::SKILL_SET_ENABLED
-        ) {
-            if plugin_tasks.len() >= 4 {
-                send(
-                    &outbound_tx,
-                    error_response(
-                        id,
-                        -32044,
-                        "Extension management capacity reached; retry later",
-                    ),
-                )
-                .await?;
-                continue;
-            }
-            let outbound = outbound_tx.clone();
-            let operation = method.to_owned();
-            let registry =
-                (operation == method::SKILL_SET_ENABLED).then(|| engine_factory.current_skills());
-            plugin_tasks.spawn(async move {
-                let result: Result<Value> = if operation == method::SKILL_IMPORT {
-                    match serde_json::from_value::<kcoder_app_protocol::SkillImportParams>(params) {
-                        Ok(params) => skill_processor::import(params)
-                            .await
-                            .and_then(|result| serde_json::to_value(result).map_err(Into::into)),
-                        Err(_) => Err(anyhow::anyhow!("Invalid skill import parameters")),
-                    }
-                } else if operation == method::SKILL_SET_ENABLED {
-                    match (
-                        serde_json::from_value::<kcoder_app_protocol::SkillSetEnabledParams>(
-                            params,
-                        ),
-                        registry,
-                    ) {
-                        (Ok(params), Some(Ok(registry))) => {
-                            skill_processor::set_enabled(params, registry)
-                                .await
-                                .and_then(|result| serde_json::to_value(result).map_err(Into::into))
-                        }
-                        (_, Some(Err(error))) => Err(error),
-                        _ => Err(anyhow::anyhow!("Invalid skill activation parameters")),
-                    }
-                } else {
-                    match serde_json::from_value::<kcoder_app_protocol::SkillRemoveParams>(params) {
-                        Ok(params) => skill_processor::remove(params)
-                            .await
-                            .and_then(|result| serde_json::to_value(result).map_err(Into::into)),
-                        Err(_) => Err(anyhow::anyhow!("Invalid skill removal parameters")),
-                    }
-                };
-                let response = match result {
-                    Ok(result) => success_response(id, result),
-                    Err(error) => error_response(id, -32021, &error.to_string()),
-                };
-                if let Err(error) = send(&outbound, response).await {
-                    tracing::warn!(%error, "failed to send skill management response");
-                }
-            });
-            continue;
-        }
-        if matches!(
-            method,
-            method::HOOK_CONFIGURATION_READ | method::HOOK_CONFIGURATION_UPDATE
-        ) {
-            if plugin_tasks.len() >= 4 {
-                send(
-                    &outbound_tx,
-                    error_response(id, -32044, "Hook management capacity reached; retry later"),
-                )
-                .await?;
-                continue;
-            }
-            let factory = engine_factory.clone();
-            let outbound = outbound_tx.clone();
-            let operation = method.to_owned();
-            plugin_tasks.spawn(async move {
-                let response = hook_configuration::process(factory, id, operation, params).await;
-                if let Err(error) = send(&outbound, response).await {
-                    tracing::warn!(%error, "failed to send Hook configuration response");
-                }
-            });
-            continue;
-        }
-        if matches!(
-            method,
-            method::MCP_LIST
-                | method::MCP_INSTALL
-                | method::MCP_REMOVE
-                | method::MCP_LOGOUT
-                | method::MCP_LOGIN
-                | method::MCP_CALLBACK
-                | method::MCP_CANCEL
-        ) {
-            if plugin_tasks.len() >= 4 {
-                send(
-                    &outbound_tx,
-                    error_response(id, -32044, "MCP management capacity reached; retry later"),
-                )
-                .await?;
-                continue;
-            }
-            let factory = engine_factory.clone();
-            let outbound = outbound_tx.clone();
-            let operation = method.to_owned();
-            let authorization = mcp_authorization.clone();
-            plugin_tasks.spawn(async move {
-                let result = if operation == method::MCP_LIST {
-                    mcp_processor::list(factory)
-                        .await
-                        .and_then(|result| Ok(serde_json::to_value(result)?))
-                } else if operation == method::MCP_INSTALL {
-                    match serde_json::from_value::<kcoder_app_protocol::McpInstallParams>(params) {
-                        Ok(params) => mcp_processor::install(factory, params)
-                            .await
-                            .and_then(|value| Ok(serde_json::to_value(value)?)),
-                        Err(_) => Err(anyhow::anyhow!("Invalid MCP installation parameters")),
-                    }
-                } else if operation == method::MCP_REMOVE {
-                    match serde_json::from_value::<kcoder_app_protocol::McpServerParams>(params) {
-                        Ok(params) => mcp_processor::remove(factory, params)
-                            .await
-                            .and_then(|value| Ok(serde_json::to_value(value)?)),
-                        Err(_) => Err(anyhow::anyhow!("Invalid MCP removal parameters")),
-                    }
-                } else if operation == method::MCP_LOGIN {
-                    match serde_json::from_value::<kcoder_app_protocol::McpLoginParams>(params) {
-                        Ok(params) => authorization
-                            .login(factory, params)
-                            .await
-                            .and_then(|value| Ok(serde_json::to_value(value)?)),
-                        Err(_) => Err(anyhow::anyhow!("Invalid MCP login parameters")),
-                    }
-                } else if operation == method::MCP_CALLBACK {
-                    match serde_json::from_value::<kcoder_app_protocol::McpCallbackParams>(params) {
-                        Ok(params) => authorization
-                            .callback(factory, params)
-                            .await
-                            .map(|()| json!({"authorized":true})),
-                        Err(_) => Err(anyhow::anyhow!("Invalid MCP callback parameters")),
-                    }
-                } else if operation == method::MCP_CANCEL {
-                    match serde_json::from_value::<kcoder_app_protocol::McpCancelParams>(params) {
-                        Ok(params) => authorization
-                            .cancel(params)
-                            .await
-                            .map(|()| json!({"cancelled":true})),
-                        Err(_) => Err(anyhow::anyhow!("Invalid MCP cancellation parameters")),
-                    }
-                } else {
-                    match serde_json::from_value::<kcoder_app_protocol::McpServerParams>(params) {
-                        Ok(params) => mcp_processor::logout(factory, params)
-                            .await
-                            .and_then(|result| Ok(serde_json::to_value(result)?)),
-                        Err(_) => Err(anyhow::anyhow!("Invalid MCP server selection")),
-                    }
-                };
-                let response = match result {
-                    Ok(result) => success_response(id, result),
-                    Err(error) => error_response(id, -32021, &error.to_string()),
-                };
-                if let Err(error) = send(&outbound, response).await {
-                    tracing::warn!(%error, "failed to send MCP management response");
-                }
-            });
-            continue;
-        }
-        if PluginProcessor::handles(method) {
-            let desktop_revocation =
-                matches!(method, method::PLUGIN_DISABLE | method::PLUGIN_UNINSTALL)
-                    && params.get("pluginId").and_then(Value::as_str)
-                        == Some(kcoder_plugins::COMPUTER_USE_PLUGIN_ID);
-            let desktop_grants = if desktop_revocation {
-                thread_manager
-                    .turn_states()
-                    .into_iter()
-                    .map(|state| state.desktop_grant)
-                    .collect::<Vec<_>>()
-            } else {
-                Vec::new()
-            };
-            let observation = if method == method::PLUGIN_ACTIVATION_READ {
-                let result = (|| -> Result<_> {
-                    let input: kcoder_app_protocol::PluginActivationParams =
-                        serde_json::from_value(params.clone())?;
-                    if let Some(thread_id) = input.thread_id {
-                        let target = thread_manager
-                            .engine(&thread_id)
-                            .context("Plugin conversation is not resident")?;
-                        ensure_active_thread(
-                            &target,
-                            thread_manager.lease(&thread_id),
-                            &thread_id,
-                        )?;
-                        Ok(Some(plugin_processor::RuntimeObservation::capture(
-                            &target,
-                            &input.plugin_id,
-                            &engine_factory,
-                        )))
-                    } else {
-                        Ok(None)
-                    }
-                })();
-                match result {
-                    Ok(value) => value,
-                    Err(error) => {
-                        send(&outbound_tx, error_response(id, -32602, &error.to_string())).await?;
-                        continue;
-                    }
-                }
-            } else {
-                None
-            };
-            let processor = plugin_processor.clone();
-            let outbound_tx = outbound_tx.clone();
-            let method = method.to_string();
-            plugin_tasks.spawn(async move {
-                let response = processor
-                    .process_observed(id, &method, params, observation)
-                    .await;
-                if response.get("error").is_none() {
-                    for grant in desktop_grants {
-                        grant
-                            .lock()
-                            .unwrap_or_else(|error| error.into_inner())
-                            .revoke();
-                    }
-                }
-                if let Err(error) = send(&outbound_tx, response).await {
-                    tracing::warn!(%error, "failed to send app-server plugin response");
-                }
-            });
-            continue;
-        }
-
-        if matches!(
-            method,
-            kcoder_app_protocol::method::PROVIDERS_UPSERT
-                | kcoder_app_protocol::method::PROVIDERS_PROBE
-        ) {
-            if provider_tasks.len() >= 4 {
-                send(
-                    &outbound_tx,
-                    error_response(
-                        id,
-                        -32034,
-                        "[provider_probe_busy] Too many API validations; retry shortly",
-                    ),
-                )
-                .await?;
-                continue;
-            }
-            let Ok(snapshot) = provider_settings_state.as_ref() else {
-                send(
-                    &outbound_tx,
-                    error_response(id, -32602, "Provider configuration snapshot is unavailable"),
-                )
-                .await?;
-                continue;
-            };
-            let snapshot = snapshot.clone();
-            let target = match runtime_requests::selected_provider_engine(
-                &workspace_engine,
-                &thread_manager,
-                &params,
-            ) {
-                Ok(target) => target,
-                Err(error) => {
-                    send(&outbound_tx, error_response(id, -32602, &error.to_string())).await?;
-                    continue;
-                }
-            };
-            let independent_probe = method == kcoder_app_protocol::method::PROVIDERS_PROBE;
-            let outbound = outbound_tx.clone();
-            provider_tasks.spawn(async move {
-                let result = if independent_probe {
-                    provider_settings::probe(target, params).await
-                } else {
-                    provider_settings::upsert(target, snapshot, params).await
-                };
-                let response = match result {
-                    Ok(result) => success_response(id, result),
-                    Err(error) => error_response(id, -32602, &error.to_string()),
-                };
-                let _ = send(&outbound, response).await;
-            });
-            continue;
-        }
-
-        let dispatched_request_id = id.clone();
-        let dispatch_result = rpc_dispatch::dispatch(
-            method,
-            id,
-            params,
-            &mut engine,
-            &workspace_engine,
-            &outbound_tx,
-            &mut thread_manager,
-            &terminals,
-            &mut history_refresh,
-            &mut browsers,
-            &plugin_tasks,
-            &mut provider_tasks,
-            &indexed_read_tasks,
-            &mut automations,
-            &mut automation_requested,
-            &mut idle_shutdown_requested,
-            &engine_factory,
-            &storage_scans,
-            &provider_settings_state,
-            &mut attachment_directories,
-            &next_terminal_id,
-            permission_mode,
-            &next_question_id,
-            &next_approval_id,
-            &connection_receipts,
-            &server_id,
-            &sequence,
-            &automation_fire,
-            &mut state,
-            &mut thread_list_snapshots,
+        let control = connection_requests::dispatch(
+            connection_requests::RequestContext {
+                engine: &mut engine,
+                engine_factory: &engine_factory,
+                workspace_engine: &workspace_engine,
+                permission_mode,
+                outbound_tx: &outbound_tx,
+                thread_manager: &mut thread_manager,
+                terminals: &terminals,
+                history_refresh: &mut history_refresh,
+                browsers: &mut browsers,
+                plugin_tasks: &mut plugin_tasks,
+                migration_control_tasks: &mut migration_control_tasks,
+                migration_observation_tasks: &mut migration_observation_tasks,
+                provider_tasks: &mut provider_tasks,
+                indexed_read_tasks: &mut indexed_read_tasks,
+                automations: &mut automations,
+                automation_requested: &mut automation_requested,
+                idle_shutdown_requested: &mut idle_shutdown_requested,
+                storage_scans: &storage_scans,
+                provider_settings_state: &provider_settings_state,
+                attachment_directories: &mut attachment_directories,
+                next_terminal_id: &next_terminal_id,
+                next_interaction_id: &next_interaction_id,
+                connection_receipts: &connection_receipts,
+                server_id: &server_id,
+                sequence: &sequence,
+                automation_fire: &automation_fire,
+                state: &mut state,
+                thread_list_snapshots: &mut thread_list_snapshots,
+                retention_authority: &retention_authority,
+                migration_source_authority: &migration_source_authority,
+                migration_processor: &migration_processor,
+                plugin_processor: &plugin_processor,
+                mcp_authorization: &mcp_authorization,
+                indexed_read_gates: &mut indexed_read_gates,
+                thread_presence_gate: &thread_presence_gate,
+                thread_presence_cancellation: &thread_presence_cancellation,
+                thread_goal_status_gate: &thread_goal_status_gate,
+                thread_goal_status_cancellation: &thread_goal_status_cancellation,
+                request_origin,
+                automation_responses: &automation_responses,
+            },
+            &line,
         )
-        .await;
-        if let Err(error) = &dispatch_result {
-            automation_responses.dispatch_failed(&dispatched_request_id, &error.to_string());
-        }
-        if matches!(dispatch_result?, DispatchControl::Shutdown) {
+        .await?;
+        if matches!(control, DispatchControl::Shutdown) {
             break;
         }
     }
 
-    drop(automations);
-    state.agent_streams.shutdown().await;
-    plugin_processor.cancel();
+    #[cfg(target_os = "linux")]
+    state.native_acp_receiver_closed.close();
+    #[cfg(target_os = "linux")]
+    state.native_interrupts.drain().await;
+    thread_presence_cancellation.cancel();
+    thread_goal_status_cancellation.cancel();
+    native_runtime.close().await;
     indexed_read_tasks.abort_all();
     while indexed_read_tasks.join_next().await.is_some() {}
+    drop(automations);
+    if let Err(error) = mcp_apps_rpc::revoke_thread(&mut state, None).await {
+        tracing::warn!(%error,"MCP Apps revocation did not settle before disconnect");
+    }
+    state.mcp_app_tasks.abort_all();
+    while state.mcp_app_tasks.join_next().await.is_some() {}
+    state.agent_streams.shutdown().await;
+    plugin_processor.cancel();
     drop(storage_scans);
     for turn_state in thread_manager.turn_states() {
         turn_state
@@ -965,11 +773,25 @@ pub(crate) async fn run_with_retention_parent(
     state.private_desktop_recovery = None;
     state.knowledge_rpc_tasks.abort_all();
     while state.knowledge_rpc_tasks.join_next().await.is_some() {}
+    close_owned_tasks(&mut state.continuous_work_read_tasks).await;
+    close_owned_tasks(&mut state.continuous_work_mutation_tasks).await;
+    state.wiki_rpc_tasks.abort_all();
+    while state.wiki_rpc_tasks.join_next().await.is_some() {}
+    if let Err(error) = state.integration_connectivity.close().await {
+        tracing::warn!(code = "CHANNEL_OWNER_CLOSE_UNCONFIRMED", %error,
+            "Owned channel host cleanup requires reconciliation");
+    }
     state.knowledge_tasks.abort_all();
     while state.knowledge_tasks.join_next().await.is_some() {}
     provider_tasks.abort_all();
     while provider_tasks.join_next().await.is_some() {}
+    migration_processor.cancellation().cancel();
+    if let Some(authority) = &migration_source_authority {
+        authority.close();
+    }
     if tokio::time::timeout(Duration::from_secs(10), async {
+        while migration_control_tasks.join_next().await.is_some() {}
+        while migration_observation_tasks.join_next().await.is_some() {}
         while let Some(result) = plugin_tasks.join_next().await {
             if let Err(error) = result {
                 tracing::warn!(%error, "app-server plugin request task failed during shutdown");
@@ -980,8 +802,13 @@ pub(crate) async fn run_with_retention_parent(
     .is_err()
     {
         plugin_tasks.abort_all();
+        migration_control_tasks.abort_all();
+        migration_observation_tasks.abort_all();
+        while migration_control_tasks.join_next().await.is_some() {}
+        while migration_observation_tasks.join_next().await.is_some() {}
         while plugin_tasks.join_next().await.is_some() {}
     }
+    migration_processor.shutdown().await;
     let diagnostic_deadline =
         std::time::Instant::now() + thread_runtime::DIAGNOSTIC_SHUTDOWN_TIMEOUT;
     for runtime in thread_manager.drain() {
@@ -1005,15 +832,17 @@ pub(crate) async fn run_with_retention_parent(
     drop(engine);
     drop(engine_factory);
     drop(workspace_engine);
+    let mcp_cleanup = session_mcp::await_cleanup(&mut state.temporary_mcp_cleanup).await;
     #[cfg(unix)]
     if terminated_by_signal {
         // Tokio's process-global stdin reader uses a blocking read which cannot be cancelled.
         // Returning from this async function after SIGTERM can therefore leave runtime shutdown
-        // waiting forever. All owned subprocesses and temporary data are explicitly released
-        // above, so terminate the app-server itself without waiting on that blocked reader.
+        // waiting forever. Cleanup is explicitly awaited above; an unconfirmed MCP cleanup
+        // exits with failure rather than claiming that all owned resources were released.
         writer.abort();
-        std::process::exit(0);
+        std::process::exit(if mcp_cleanup.is_ok() { 0 } else { 1 });
     }
+    mcp_cleanup?;
     let writer_result = match tokio::time::timeout(Duration::from_secs(2), &mut writer).await {
         Ok(result) => result
             .context("app-server stdout task failed")
@@ -1034,3 +863,14 @@ pub(crate) async fn run_with_retention_parent(
     }
     writer_result
 }
+
+/// Abort and await one connection-owned task set so no owned work outlives its
+/// owner. A blocking task already running still finishes its own store write.
+async fn close_owned_tasks(tasks: &mut tokio::task::JoinSet<()>) {
+    tasks.abort_all();
+    while tasks.join_next().await.is_some() {}
+}
+
+#[cfg(test)]
+#[path = "connection_lifecycle.test.rs"]
+mod tests;

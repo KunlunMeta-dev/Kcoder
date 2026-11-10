@@ -1,8 +1,21 @@
+vi.mock("@/storage/interface-version", () => ({ useInterfaceVersion: () => "modern" }));
+vi.mock("react-native-safe-area-context", () => ({ SafeAreaView: "SafeAreaView", useSafeAreaInsets: () => ({ top: 0, right: 0, bottom: 0, left: 0 }) }));
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { shouldAnchorLatest } from "@/components/message-follow-state";
 import { AgentPanel } from "./TaskAgent";
-import { TaskTranscript } from "./TaskTranscript";
+import { JumpToLatestButton, TaskTranscript } from "./TaskTranscript";
+import type { useTaskHistory } from "./useTaskHistory";
+vi.hoisted(() => { Object.defineProperty(globalThis, "__DEV__", { value: false, configurable: true }); });
 type TaskTranscriptModel = Parameters<typeof TaskTranscript>[0]["model"];
+type TaskHistoryConsumerModel = TaskTranscriptModel &
+  Pick<ReturnType<typeof useTaskHistory>, "handleMessageListLayout">;
+
+function layoutChangeEvent(height: number): Parameters<TaskHistoryConsumerModel["handleMessageListLayout"]>[0] {
+  // This direct-call fixture supplies the real layout shape; the production callback only reads its height.
+  return {
+    nativeEvent: { layout: { x: 0, y: 0, width: 0, height } },
+  } as Parameters<TaskHistoryConsumerModel["handleMessageListLayout"]>[0];
+}
 
 // Direct production-hook/component calls with a deterministic hook and RAF
 // host. This is not a mounted React or browser test.
@@ -14,17 +27,33 @@ type TaskTranscriptModel = Parameters<typeof TaskTranscript>[0]["model"];
 // not dynamically run here.
 const harness = vi.hoisted(() => ({
   context: null as any,
-  model: null as any,
   refs: [] as { current: unknown }[],
   refCursor: 0,
+  states: [] as unknown[],
+  stateCursor: 0,
+  effects: [] as Array<() => void | (() => void)>,
   platformOS: "web",
   layoutEffects: [] as (() => void | (() => void))[],
 }));
 
 vi.mock("react", async importOriginal => ({
   ...await importOriginal<typeof import("react")>(),
+  useState: (initial: unknown) => {
+    const index = harness.stateCursor++;
+    if (!(index in harness.states))
+      harness.states[index] = typeof initial === "function" ? (initial as () => unknown)() : initial;
+    return [harness.states[index], (next: unknown) => {
+      harness.states[index] = typeof next === "function"
+        ? (next as (value: unknown) => unknown)(harness.states[index])
+        : next;
+    }];
+  },
   useCallback: (callback: (...args: any[]) => any) => callback,
   useMemo: <T>(factory: () => T) => factory(),
+  useSyncExternalStore: (_subscribe: unknown, read: () => unknown) => read(),
+  useEffect: (effect: () => void | (() => void)) => {
+    harness.effects.push(effect);
+  },
   useLayoutEffect: (effect: () => void | (() => void)) => {
     harness.layoutEffects.push(effect);
   },
@@ -36,6 +65,8 @@ vi.mock("react", async importOriginal => ({
 }));
 
 vi.mock("react-native", () => ({
+  AppState: { currentState: "active", addEventListener: () => ({ remove() {} }) },
+  AccessibilityInfo: { isReduceMotionEnabled: async () => false, addEventListener: () => ({ remove() {} }) },
   ActivityIndicator: "ActivityIndicator",
   FlatList: "FlatList",
   Platform: { get OS() { return harness.platformOS; } },
@@ -44,6 +75,9 @@ vi.mock("react-native", () => ({
   Text: "Text",
   View: "View",
 }));
+vi.mock("expo-router", () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn(), back: vi.fn() }), useIsFocused: () => true }));
+vi.mock("expo-clipboard", () => ({ setStringAsync: vi.fn(async () => true) }));
+vi.mock("@/components/keyboard-safe-view", () => ({ KeyboardSafeView: "KeyboardSafeView" }));
 
 vi.mock("@/i18n", () => ({ t: (key: string) => key }));
 vi.mock("@/i18n/use-locale", () => ({ useLocale: () => "en" }));
@@ -58,6 +92,7 @@ vi.mock("lucide-react-native", () => ({
   ChevronDown: () => null,
   X: () => null,
 }));
+vi.mock("react-native-svg", () => ({ default: () => null, Path: () => null }));
 vi.mock("@/components/interaction-cards", () => ({
   ApprovalCard: () => null,
   QuestionCard: () => null,
@@ -68,6 +103,7 @@ vi.mock("@/storage/new-workspace-preferences", () => ({
 }));
 vi.mock("./TaskAttachments", () => ({ StagedAttachmentChip: () => null }));
 vi.mock("./TaskComposer", () => ({ TaskComposer: () => null }));
+vi.mock("./TaskPermissionSelector", () => ({ TaskPermissionSelector: () => null }));
 vi.mock("./TaskInteractions", () => ({ TaskInteractions: () => null }));
 vi.mock("./TaskSubagents", () => ({
   TaskSubagents: () => null,
@@ -95,10 +131,7 @@ vi.mock("./useTaskAttachments", () => ({
   useTaskAttachments: (context: unknown) => context,
 }));
 vi.mock("./useTaskModelPreferences", () => ({
-  useTaskModelPreferences: (model: unknown) => {
-    harness.model = model;
-    return model;
-  },
+  useTaskModelPreferences: (model: unknown) => model,
 }));
 
 type Frame = (time: number) => void;
@@ -138,6 +171,19 @@ function findByTestId(node: any, testID: string): any {
   if (!node || typeof node !== "object") return undefined;
   if (node.props?.testID === testID) return node;
   return findByTestId(node.props?.children, testID);
+}
+
+function findByType(node: any, type: unknown): any {
+  if (Array.isArray(node)) {
+    for (const child of node) {
+      const found = findByType(child, type);
+      if (found) return found;
+    }
+    return undefined;
+  }
+  if (!node || typeof node !== "object") return undefined;
+  if (node.type === type) return node;
+  return findByType(node.props?.children, type);
 }
 
 function deferred<T>() {
@@ -247,8 +293,12 @@ function makeContext(loadOlderMessages: () => Promise<void> = async () => {}) {
     scrollToOffset,
   };
   const context: any = {
-    task: { loadOlderMessages: vi.fn(loadOlderMessages) },
+    task: {
+      loadOlderMessages: vi.fn(loadOlderMessages),
+      getSnapshot: () => context.snapshot,
+    },
     snapshot: {
+      cwd: "/workspace/follow-intent",
       activeTurnId: undefined,
       archivedAt: undefined,
       connected: true,
@@ -306,14 +356,21 @@ function makeContext(loadOlderMessages: () => Promise<void> = async () => {}) {
 
 function renderActualConsumers(context: any) {
   harness.context = context;
-  harness.model = null;
   harness.refCursor = 0;
   harness.refs = [];
+  harness.stateCursor = 0;
+  harness.states = [];
+  harness.effects = [];
   harness.layoutEffects = [];
   const panel = AgentPanel({} as never);
-  const jumpButton = findByTestId(panel, "jump-to-latest");
+  const jumpElement = findByType(panel, JumpToLatestButton);
+  const jumpButton = jumpElement ? findByTestId(JumpToLatestButton(jumpElement.props), "jump-to-latest") : undefined;
+  const transcriptElement = findByType(panel, TaskTranscript);
+  if (!transcriptElement?.props?.model) throw new Error("actual TaskTranscript element did not expose its production model");
+  const model = transcriptElement.props.model as TaskHistoryConsumerModel;
   const transcriptRefStart = harness.refCursor;
-  const transcript = TaskTranscript({ model: harness.model });
+  const transcriptStateStart = harness.stateCursor;
+  const transcript = TaskTranscript(transcriptElement.props);
   const list = findByTestId(transcript, "message-list");
   if (!jumpButton || !list) throw new Error("actual route consumers did not expose expected controls");
 
@@ -324,18 +381,20 @@ function renderActualConsumers(context: any) {
     // observable raw scrollToOffset implementation.
     ref(context.messageListRef.current);
   }
-  const cleanups = harness.layoutEffects
+  const cleanups = [...harness.layoutEffects, ...harness.effects]
     .map(effect => effect())
     .filter((cleanup): cleanup is () => void => typeof cleanup === "function")
     .map(trackEffectCleanup);
 
   return {
-    model: harness.model, panel, jumpButton, list: list.props, wheelHost: context.scroller,
+    model, panel, jumpButton, list: list.props, wheelHost: context.scroller,
     dispose() { cleanups.forEach(cleanup => cleanup()); },
     rerenderTranscript(nextModel: TaskTranscriptModel) {
       harness.refCursor = transcriptRefStart;
+      harness.stateCursor = transcriptStateStart;
       harness.layoutEffects = [];
-      const nextTree = TaskTranscript({ model: nextModel });
+      harness.effects = [];
+      const nextTree = TaskTranscript({ ...transcriptElement.props, model: nextModel });
       const nextList = findByTestId(nextTree, "message-list");
       if (!nextList) throw new Error("rerendered TaskTranscript did not expose its production list");
       return nextList.props;
@@ -379,9 +438,11 @@ function userWheelTowardOlder(listProps: any, context: any, nextRawTop: number):
 
 beforeEach(() => {
   harness.context = null;
-  harness.model = null;
   harness.refs = [];
   harness.refCursor = 0;
+  harness.states = [];
+  harness.stateCursor = 0;
+  harness.effects = [];
   harness.platformOS = "web";
   frames = new Map();
   nextFrameId = 1;
@@ -391,6 +452,7 @@ beforeEach(() => {
 
 afterEach(() => {
   activeEffectCleanups.splice(0).reverse().forEach(cleanup => cleanup());
+  harness.effects = [];
   harness.layoutEffects = [];
   harness.platformOS = "web";
   vi.unstubAllGlobals();
@@ -401,7 +463,7 @@ describe("Task history follow intent consumers", () => {
     const context = makeContext();
     const { model, list } = renderActualConsumers(context);
 
-    model.handleMessageListLayout({ nativeEvent: { layout: { height: 480 } } });
+    model.handleMessageListLayout(layoutChangeEvent(480));
     userWheelTowardOlder(list, context, 425);
     expect(context.messageFollowState.current.followsLatest).toBe(false);
 
@@ -416,7 +478,7 @@ describe("Task history follow intent consumers", () => {
     const context = makeContext();
     const { model, jumpButton, list } = renderActualConsumers(context);
 
-    model.handleMessageListLayout({ nativeEvent: { layout: { height: 480 } } });
+    model.handleMessageListLayout(layoutChangeEvent(480));
     userWheelTowardOlder(list, context, 425);
     jumpButton.props.onPress();
     expect(context.scrollToOffset).toHaveBeenCalledTimes(1);
@@ -435,7 +497,7 @@ describe("Task history follow intent consumers", () => {
     const oldScrollToEnd = context.scrollToEnd;
     const { model } = renderActualConsumers(context);
 
-    model.handleMessageListLayout({ nativeEvent: { layout: { height: 480 } } });
+    model.handleMessageListLayout(layoutChangeEvent(480));
     context.mountedRef.current = false;
     context.mountGeneration.current++;
     const replacementScrollToEnd = vi.fn();
@@ -578,7 +640,7 @@ describe("Task history follow intent consumers", () => {
     const context = makeContext();
     const { model, list } = renderActualConsumers(context);
 
-    model.handleMessageListLayout({ nativeEvent: { layout: { height: 480 } } });
+    model.handleMessageListLayout(layoutChangeEvent(480));
     context.scroller.dispatchWheel(0, -25);
 
     // The layout callback was queued first. The user input candidate exists,
@@ -604,7 +666,7 @@ describe("Task history follow intent consumers", () => {
     const context = makeContext();
     const { model, list } = renderActualConsumers(context);
 
-    model.handleMessageListLayout({ nativeEvent: { layout: { height: 480 } } });
+    model.handleMessageListLayout(layoutChangeEvent(480));
     context.scroller.dispatchWheel(0, -25);
     expect(runNextFrame()).toBe(true);
     expect(context.scrollToOffset).not.toHaveBeenCalled();
@@ -674,7 +736,10 @@ describe("Task history follow intent consumers", () => {
 
     // Hold the follow-intent ref stable so owner identity is the fence under
     // test; the old listener/effect remains mounted across this same-hook rerender.
-    const replacementModel = { ...model, task: { ...model.task } };
+    const replacementModel = {
+      ...model,
+      task: { ...model.task! } as NonNullable<TaskTranscriptModel["task"]>,
+    };
     const replacementList = rendered.rerenderTranscript(replacementModel);
     wheelHost.scrollTop = 425;
     replacementList.onScroll(nativeScrollEvent(context, 425));
@@ -690,7 +755,7 @@ describe("Task history follow intent consumers", () => {
     const context = makeContext();
     const { model, list } = renderNativeConsumers(context);
 
-    model.handleMessageListLayout({ nativeEvent: { layout: { height: 480 } } });
+    model.handleMessageListLayout(layoutChangeEvent(480));
     list.onScrollBeginDrag(nativeScrollEvent(context, 400));
     expect(runNextFrame()).toBe(true);
     expect(context.scrollToEnd).not.toHaveBeenCalled();
@@ -710,7 +775,7 @@ describe("Task history follow intent consumers", () => {
       context.scroller.scrollTop = context.scroller.scrollHeight - context.scroller.clientHeight;
     });
 
-    model.handleMessageListLayout({ nativeEvent: { layout: { height: 480 } } });
+    model.handleMessageListLayout(layoutChangeEvent(480));
     list.onScrollBeginDrag(nativeScrollEvent(context, 400));
     expect(runNextFrame()).toBe(true);
     expect(context.scrollToEnd).not.toHaveBeenCalled();

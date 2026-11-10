@@ -1,4 +1,11 @@
+import { getToken } from '@/api/auth'
+import { ConversationWidget, DeferredWidgetNotice } from './widgets/ConversationWidget'
+import { WidgetMessageContext } from './widgets/widgetContext'
+import { splitWidgetDirectives, type WidgetMarkdownPart } from './widgets/widgetDirectives'
+import './conversation-reading.css'
+import { conversationFontStack, useConversationFontStatus } from '@/features/appearance/conversationFonts'
 import { memo, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
+import { useTranslation } from '@/hooks/useTranslation'
 import type { ComponentProps, HTMLAttributes, ReactNode } from 'react'
 import type { Element as HastElement } from 'hast'
 import { FileText, Folder, Link2 } from 'lucide-react'
@@ -15,14 +22,16 @@ import {
   isAuthenticatedAttachmentImageSrc,
   isHtmlFilePath,
   isLocalMarkdownImagePath,
+  isWorkspaceMarkdownHost,
   isWorkspaceMarkdownImagePath,
   localPathFromMarkdownImageSrc,
   localHtmlBrowserUrl,
   resolveDirectMarkdownImageSrc,
+  WORKSPACE_MARKDOWN_HOST,
   type MarkdownLinkTarget,
 } from './assistantMarkdownLinks'
 import { MarkdownCodeBlock } from './MarkdownCodeBlock'
-import { MarkdownMermaidBlock } from './MarkdownMermaidBlock'
+import { MarkdownMermaidBlock, MermaidErrorFallback } from './MarkdownMermaidBlock'
 import { MarkdownImagePreview } from './MarkdownImagePreview'
 import { CodexInlineVisualizationHost } from './CodexInlineVisualizationHost'
 import { splitStaticMarkdownChunks } from './assistantMarkdownWindowing'
@@ -31,9 +40,11 @@ import { WorkspaceMarkdownImageLoaderContext } from './workspaceMarkdownImageLoa
 import { splitCodexInlineVisualizations } from '@/lib/codex-directives'
 import { openExternalUrl } from '@/lib/external-links'
 import { requestEmbeddedBrowserOpen } from '@/lib/embedded-browser'
-import { isTauriRuntime } from '@/lib/runtime-environment'
+import { isGatewayRuntime } from '@/lib/runtime-environment'
 import type { WorkspaceFileOpenOptions } from '@/types/workspace-files'
 import type { TurnFileChangesSummary } from '@/types/api'
+import { useConversationPreferences } from '@/features/appearance/useConversationPreferences'
+import { resolveAssistantReplyTypography } from './assistantReplyTypography'
 
 const ASSISTANT_MARKDOWN_LINK_CLASS = [
   'inline-flex max-w-full items-center gap-1 rounded-md px-0.5 align-baseline',
@@ -43,44 +54,75 @@ const ASSISTANT_MARKDOWN_LINK_CLASS = [
   '[&_code]:!rounded-none [&_code]:!bg-transparent [&_code]:!px-0 [&_code]:!py-0 [&_code]:!font-[inherit] [&_code]:!text-inherit',
 ].join(' ')
 const CODEX_PLAN_TAG_PATTERN = /<\/?\s*proposed_plan\s*>/gi
-const KCODER_STUDIO_MARKDOWN_FILE_LINK_HOST = 'wework.local'
 const KCODER_STUDIO_MARKDOWN_FILE_LINK_PATH = '/markdown-file'
-const KCODER_STUDIO_MARKDOWN_FILE_LINK_PREFIX = `https://${KCODER_STUDIO_MARKDOWN_FILE_LINK_HOST}${KCODER_STUDIO_MARKDOWN_FILE_LINK_PATH}?path=`
+const KCODER_STUDIO_MARKDOWN_FILE_LINK_PREFIX = `https://${WORKSPACE_MARKDOWN_HOST}${KCODER_STUDIO_MARKDOWN_FILE_LINK_PATH}?path=`
 const MARKDOWN_LINK_PATTERN = /(!?)\[([^\]\n]+)\]\(([^)\n]+)\)/g
 const STREAMDOWN_PLUGINS = {
   cjk,
   math: createMathPlugin({ singleDollarTextMath: true }),
   mermaid,
 }
+const HISTORICAL_MARKDOWN_PLUGINS = { cjk, math: STREAMDOWN_PLUGINS.math }
 interface AssistantMarkdownProps {
   content: string
   isStreaming?: boolean
   variant?: 'default' | 'process'
+  conversationReading?: boolean
   onOpenFile?: (path: string, options?: WorkspaceFileOpenOptions) => void
   fileChanges?: TurnFileChangesSummary
+  historical?: boolean
 }
 
-type AssistantMarkdownPart =
-  { kind: 'markdown'; content: string } | { kind: 'visualization'; file: string }
+type AssistantMarkdownPart = WidgetMarkdownPart | { kind: 'visualization'; file: string }
 
 export const AssistantMarkdown = memo(function AssistantMarkdown({
   content,
   isStreaming = false,
   variant = 'default',
+  conversationReading = false,
   onOpenFile,
   fileChanges,
+  historical = false,
 }: AssistantMarkdownProps) {
+  const conversationPreferences = useConversationPreferences()
+  const fontStatus = useConversationFontStatus(conversationReading && conversationPreferences.conversationFontFamily !== 'system')
+  const replyTypography = useMemo(() => resolveAssistantReplyTypography(
+    conversationPreferences.conversationFontScale,
+    conversationPreferences.conversationLineSpacing,
+    conversationReading ? {
+      blockSpacing: conversationPreferences.conversationBlockSpacing ?? 'normal',
+      letterSpacing: conversationPreferences.conversationLetterSpacing ?? 'normal',
+      fontFamily: conversationPreferences.conversationFontFamily === 'system' || fontStatus === 'error' ? 'var(--font-ui)' : conversationFontStack,
+    } : undefined,
+  ), [conversationPreferences.conversationFontScale, conversationPreferences.conversationLineSpacing,
+    conversationReading, conversationPreferences.conversationBlockSpacing,
+    conversationPreferences.conversationLetterSpacing, conversationPreferences.conversationFontFamily, fontStatus])
   const bufferedContent = useBufferedStreamingText(content, isStreaming)
-  const windowMarkdown = isTauriRuntime() && variant === 'default'
+  const widgetMessage = useContext(WidgetMessageContext)
+  const deferFileVisualization =
+    isStreaming ||
+    variant === 'process' ||
+    (widgetMessage.active !== undefined && !widgetMessage.terminal)
+  // Long live replies split into memoized chunks so each streamed update
+  // re-parses only the growing tail (~7x cheaper on long replies). Reading
+  // mode owns chunk spacing in CSS; other surfaces keep the single tree.
+  const windowMarkdown =
+    !historical && variant === 'default' && (conversationReading || isGatewayRuntime())
   const contentParts = useMemo(() => {
+    if (historical) return [{ kind: 'markdown' as const, content: bufferedContent }]
     const parts = splitCodexInlineVisualizations(bufferedContent)
     return parts.flatMap<AssistantMarkdownPart>(part => {
       if (part.kind === 'visualization') return [part]
       // Keep chunk boundaries and wrapper types stable as a live response grows.
-      const chunks = windowMarkdown ? splitStaticMarkdownChunks(part.content, 0) : [part.content]
-      return chunks.map(content => ({ kind: 'markdown', content }))
+      return splitWidgetDirectives(part.content).flatMap<AssistantMarkdownPart>(widgetPart => {
+        if (widgetPart.kind === 'widget') return [widgetPart]
+        const chunks = windowMarkdown
+          ? splitStaticMarkdownChunks(widgetPart.content, 0)
+          : [widgetPart.content]
+        return chunks.map(content => ({ kind: 'markdown', content }))
+      })
     })
-  }, [bufferedContent, windowMarkdown])
+  }, [bufferedContent, windowMarkdown, historical])
   const openFileRef = useRef(onOpenFile)
 
   useEffect(() => {
@@ -99,6 +141,7 @@ export const AssistantMarkdown = memo(function AssistantMarkdown({
       h1: ({ children }: { children?: ReactNode }) => (
         <h1
           data-scroll-anchor
+          style={replyTypography.heading1}
           className={
             variant === 'process'
               ? 'mb-2 mt-3 text-base font-semibold text-text-primary'
@@ -111,6 +154,7 @@ export const AssistantMarkdown = memo(function AssistantMarkdown({
       h2: ({ children }: { children?: ReactNode }) => (
         <h2
           data-scroll-anchor
+          style={replyTypography.heading2}
           className={
             variant === 'process'
               ? 'mb-1.5 mt-3 text-sm font-semibold text-text-primary'
@@ -123,6 +167,7 @@ export const AssistantMarkdown = memo(function AssistantMarkdown({
       h3: ({ children }: { children?: ReactNode }) => (
         <h3
           data-scroll-anchor
+          style={replyTypography.heading3}
           className={
             variant === 'process'
               ? 'mb-1 mt-2 text-sm font-semibold text-text-primary'
@@ -132,9 +177,21 @@ export const AssistantMarkdown = memo(function AssistantMarkdown({
           {children}
         </h3>
       ),
+      ...(conversationReading ? {
+        h4: ({ children }: { children?: ReactNode }) => (
+          <h4 data-scroll-anchor style={replyTypography.body} className="font-semibold text-text-primary">{children}</h4>
+        ),
+        h5: ({ children }: { children?: ReactNode }) => (
+          <h5 data-scroll-anchor style={replyTypography.body} className="font-medium text-text-secondary">{children}</h5>
+        ),
+        h6: ({ children }: { children?: ReactNode }) => (
+          <h6 data-scroll-anchor style={replyTypography.body} className="font-medium italic text-text-secondary">{children}</h6>
+        ),
+      } : {}),
       p: ({ children }: { children?: ReactNode }) => (
         <p
           data-scroll-anchor
+          style={replyTypography.body}
           className={`${variant === 'process' ? 'mb-1.5' : 'mb-3'} min-w-0 break-words leading-6`}
         >
           {children}
@@ -142,6 +199,7 @@ export const AssistantMarkdown = memo(function AssistantMarkdown({
       ),
       ul: ({ children }: { children?: ReactNode }) => (
         <ul
+          style={replyTypography.body}
           className={`${variant === 'process' ? 'mb-1.5 space-y-0.5' : 'mb-3 space-y-1.5'} list-disc pl-5`}
         >
           {children}
@@ -149,6 +207,7 @@ export const AssistantMarkdown = memo(function AssistantMarkdown({
       ),
       ol: ({ children }: { children?: ReactNode }) => (
         <ol
+          style={replyTypography.body}
           className={`${variant === 'process' ? 'mb-1.5 space-y-0.5 pl-5' : 'mb-3 space-y-1.5 pl-8'} list-decimal`}
         >
           {children}
@@ -157,6 +216,7 @@ export const AssistantMarkdown = memo(function AssistantMarkdown({
       li: ({ children }: { children?: ReactNode }) => (
         <li
           data-scroll-anchor
+          style={replyTypography.body}
           className={`min-w-0 break-words leading-6 ${variant === 'process' ? '' : 'pl-1'}`}
         >
           {children}
@@ -166,7 +226,7 @@ export const AssistantMarkdown = memo(function AssistantMarkdown({
         <strong className="font-semibold">{children}</strong>
       ),
       code: (props: MarkdownCodeProps) => (
-        <MarkdownCode {...props} compact={variant === 'process'} />
+        <MarkdownCode {...props} compact={variant === 'process'} historical={historical} />
       ),
       inlineCode: ({ children }: { children?: ReactNode }) => (
         <MarkdownInlineCode compact={variant === 'process'}>{children}</MarkdownInlineCode>
@@ -174,14 +234,15 @@ export const AssistantMarkdown = memo(function AssistantMarkdown({
       blockquote: ({ children }: { children?: ReactNode }) => (
         <blockquote
           data-scroll-anchor
+          style={replyTypography.body}
           className={`${variant === 'process' ? 'mb-1.5 pl-3 opacity-80' : 'mb-3 pl-4'} border-l-3 border-border text-text-secondary`}
         >
           {children}
         </blockquote>
       ),
       table: ({ children }: { children?: ReactNode }) => (
-        <div data-scroll-anchor className="mb-3 max-w-full overflow-x-auto">
-          <table className="w-full min-w-max border-collapse text-chat">{children}</table>
+        <div data-scroll-anchor data-reading-table className="mb-3 max-w-full overflow-x-auto">
+          <table style={replyTypography.body} className={`w-full ${conversationReading ? 'min-w-0' : 'min-w-max'} border-collapse text-chat`}>{children}</table>
         </div>
       ),
       th: ({ children }: { children?: ReactNode }) => (
@@ -191,42 +252,65 @@ export const AssistantMarkdown = memo(function AssistantMarkdown({
         <td className="border-b border-border px-3 py-2">{children}</td>
       ),
       a: ({ href, children }: { href?: string; children?: ReactNode }) => (
-        <AssistantMarkdownLink href={href} onOpenFile={openFile}>
+        historical ? <span title={href}>{children}</span> : <AssistantMarkdownLink href={href} onOpenFile={openFile}>
           {children}
         </AssistantMarkdownLink>
       ),
       img: ({ src, alt }: { src?: string; alt?: string }) => (
-        <AssistantMarkdownImage src={src} alt={alt} />
+        historical ? <HistoricalImageReference alt={alt} /> : <AssistantMarkdownImage src={src} alt={alt} />
       ),
     }),
-    [openFile, variant]
+    [openFile, replyTypography, variant, historical, conversationReading]
   )
 
   return (
     <div
+      style={replyTypography.body}
+      data-conversation-reading={conversationReading || undefined}
+      data-block-spacing={conversationReading ? conversationPreferences.conversationBlockSpacing : undefined}
+      data-letter-spacing={conversationReading ? conversationPreferences.conversationLetterSpacing : undefined}
+      data-font-family={conversationReading ? conversationPreferences.conversationFontFamily : undefined}
+      data-font-status={conversationReading ? fontStatus : undefined}
+      data-font-scale={conversationPreferences.conversationFontScale}
+      data-line-spacing={conversationPreferences.conversationLineSpacing}
       className={`${variant === 'process' ? 'thinking-markdown text-text-secondary' : 'assistant-markdown'} min-w-0 max-w-full break-words`}
     >
       {contentParts.map((part, index) =>
-        part.kind === 'visualization' ? (
-          <CodexInlineVisualizationHost
-            key={`${part.file}-${index}`}
-            file={part.file}
-            fileChanges={fileChanges}
+        part.kind === 'widget' ? (
+          <ConversationWidget
+            key={`widget-${part.reference.widgetId}-${part.reference.revision}-${index}`}
+            reference={part.reference}
+            duplicate={part.duplicate}
+            passive={isStreaming || variant === 'process'}
           />
+        ) : part.kind === 'visualization' ? (
+          deferFileVisualization ? (
+            <DeferredWidgetNotice key={`${part.file}-${index}`} />
+          ) : (
+            <CodexInlineVisualizationHost
+              key={`${part.file}-${index}`}
+              file={part.file}
+              fileChanges={fileChanges}
+            />
+          )
         ) : windowMarkdown ? (
           <StableMarkdownChunk
             key={`markdown-${index}`}
             content={part.content}
             isStreaming={isStreaming && index === contentParts.length - 1}
             components={components}
+            conversationReading={conversationReading}
           />
         ) : (
           <Streamdown
             key={`markdown-${index}`}
+            className={conversationReading ? 'conversation-markdown-blocks' : undefined}
             mode={isStreaming ? 'streaming' : 'static'}
             isAnimating={isStreaming}
             controls={false}
-            plugins={STREAMDOWN_PLUGINS}
+            plugins={historical ? HISTORICAL_MARKDOWN_PLUGINS : STREAMDOWN_PLUGINS}
+            skipHtml={historical}
+            mermaid={{ errorComponent: MermaidErrorFallback }}
             linkSafety={{ enabled: false }}
             lineNumbers={false}
             urlTransform={url => url}
@@ -240,11 +324,18 @@ export const AssistantMarkdown = memo(function AssistantMarkdown({
   )
 }, areAssistantMarkdownPropsEqual)
 
+function HistoricalImageReference({ alt }: {alt?: string}) {
+  const { t } = useTranslation('chat')
+  return <span className="text-sm text-text-secondary">{alt || t('history_image_reference')}</span>
+}
+
 const StableMarkdownChunk = memo(function StableMarkdownChunk({
   content,
   isStreaming,
   components,
+  conversationReading,
 }: {
+  conversationReading: boolean
   content: string
   isStreaming: boolean
   components: ComponentProps<typeof Streamdown>['components']
@@ -255,10 +346,12 @@ const StableMarkdownChunk = memo(function StableMarkdownChunk({
   return (
     <div data-markdown-window-chunk>
       <Streamdown
+        className={conversationReading ? 'conversation-markdown-blocks' : undefined}
         mode={isStreaming ? 'streaming' : 'static'}
         isAnimating={isStreaming}
         controls={false}
         plugins={STREAMDOWN_PLUGINS}
+        mermaid={{ errorComponent: MermaidErrorFallback }}
         linkSafety={{ enabled: false }}
         lineNumbers={false}
         urlTransform={url => url}
@@ -273,9 +366,10 @@ const StableMarkdownChunk = memo(function StableMarkdownChunk({
 type MarkdownCodeProps = {
   node?: HastElement
   compact?: boolean
+  historical?: boolean
 } & HTMLAttributes<HTMLElement>
 
-function MarkdownCode({ className, children, node, compact = false, ...props }: MarkdownCodeProps) {
+function MarkdownCode({ className, children, node, compact = false, historical = false, ...props }: MarkdownCodeProps) {
   const match = /language-(\w*)/.exec(className || '')
   const text = reactNodeToText(children)
   const isBlock =
@@ -285,7 +379,7 @@ function MarkdownCode({ className, children, node, compact = false, ...props }: 
     text.includes('\n')
   if (isBlock) {
     const lang = match ? match[1] || '' : ''
-    if (lang.toLowerCase() === 'mermaid') {
+    if (lang.toLowerCase() === 'mermaid' && !historical) {
       return <MarkdownMermaidBlock chart={text} compact={compact} />
     }
     return (
@@ -306,6 +400,7 @@ function MarkdownInlineCode({
 }) {
   return (
     <code
+      style={{ fontFamily: 'var(--font-code)', letterSpacing: 0 }}
       className={`break-words rounded bg-muted px-1.5 py-0.5 font-medium text-text-primary ${compact ? 'text-xs' : 'text-code'}`}
     >
       {children}
@@ -322,7 +417,9 @@ function areAssistantMarkdownPropsEqual(
     previous.isStreaming === next.isStreaming &&
     previous.fileChanges === next.fileChanges &&
     previous.onOpenFile === next.onOpenFile &&
-    previous.variant === next.variant
+    previous.variant === next.variant &&
+    previous.conversationReading === next.conversationReading &&
+    previous.historical === next.historical
   )
 }
 
@@ -508,7 +605,7 @@ function decodeLocalMarkdownHref(href?: string): string | undefined {
     const url = new URL(href)
     if (
       url.protocol === 'https:' &&
-      url.hostname === KCODER_STUDIO_MARKDOWN_FILE_LINK_HOST &&
+      isWorkspaceMarkdownHost(url.hostname) &&
       url.pathname === KCODER_STUDIO_MARKDOWN_FILE_LINK_PATH
     ) {
       return url.searchParams.get('path') ?? href
@@ -720,7 +817,7 @@ function AssistantMarkdownImage({ src, alt }: { src?: string; alt?: string }) {
 
     async function loadAuthenticatedImage() {
       try {
-        const token = localStorage.getItem('auth_token')
+        const token = getToken()
         const response = await fetch(getAuthenticatedImageFetchUrl(rawSrc), {
           headers: token ? { Authorization: `Bearer ${token}` } : undefined,
         })
@@ -792,6 +889,7 @@ function AssistantMarkdownImage({ src, alt }: { src?: string; alt?: string }) {
     return (
       <span
         data-testid="assistant-markdown-image-error"
+        data-reading-image
         className="my-2 inline-flex max-w-full rounded-xl border border-border bg-surface px-3 py-2 text-xs text-text-muted"
       >
         {alt || rawSrc}
@@ -803,6 +901,7 @@ function AssistantMarkdownImage({ src, alt }: { src?: string; alt?: string }) {
     return (
       <span
         data-testid="assistant-markdown-image-loading"
+        data-reading-image
         className="my-2 inline-flex h-20 w-32 max-w-full items-center justify-center rounded-xl border border-border bg-surface text-xs text-text-muted"
       >
         {alt || 'Image'}

@@ -27,7 +27,6 @@ function createCloudDeviceApi(connection: CloudDeviceDialogConnection) {
     createHttpClient({
       baseUrl: connection.apiBaseUrl,
       getToken: () => connection.token,
-      redirectOnUnauthorized: false,
     })
   )
 }
@@ -100,7 +99,7 @@ export function AddCloudDeviceDialog({
     >
       <div
         data-testid="add-cloud-device-dialog"
-        className="max-h-[calc(100vh-32px)] w-full max-w-[760px] overflow-hidden rounded-lg border border-border bg-popover shadow-[0_18px_50px_rgba(0,0,0,0.28)]"
+        className="studio-card max-h-[calc(100vh-32px)] w-full max-w-[760px] overflow-hidden rounded-lg border border-border bg-popover shadow-[0_18px_50px_rgba(0,0,0,0.28)]"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-start gap-3 px-5 pt-5">
@@ -131,7 +130,7 @@ export function AddCloudDeviceDialog({
         )}
 
         <div className="mt-5 max-h-[calc(100vh-176px)] space-y-3 overflow-y-auto px-5 pb-1">
-          <div className="flex items-start gap-3 rounded-lg border border-border bg-background p-3">
+          <div className="studio-card-spacing flex items-start gap-3 rounded-lg border border-border bg-background p-3">
             <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-background text-text-secondary">
               <Cloud className="h-4 w-4" />
             </div>
@@ -158,7 +157,7 @@ export function AddCloudDeviceDialog({
             </div>
           </div>
 
-          <div className="flex items-start gap-3 rounded-lg border border-border bg-background p-3">
+          <div className="studio-card-spacing flex items-start gap-3 rounded-lg border border-border bg-background p-3">
             <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-background text-text-secondary">
               <Server className="h-4 w-4" />
             </div>
@@ -182,7 +181,7 @@ export function AddCloudDeviceDialog({
               </div>
 
               {remoteCommand && (
-                <div className="mt-3 overflow-hidden rounded-lg border border-border bg-background">
+                <div className="studio-card mt-3 overflow-hidden rounded-lg border border-border bg-background">
                   <div className="flex h-8 items-center justify-between border-b border-border px-3">
                     <span className="text-xs font-semibold text-text-secondary">Docker 命令</span>
                     <button

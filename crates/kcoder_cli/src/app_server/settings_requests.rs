@@ -1,6 +1,8 @@
 //! Settings requests: extracted from the app-server connection boundary.
 
 use super::*;
+use crate::app_server::task_spawn::JoinSetExt as _;
+use kcoder_app_rpc_codec as rpc_codec;
 
 #[expect(
     clippy::too_many_arguments,
@@ -12,15 +14,14 @@ pub(super) async fn dispatch(
     params: Value,
     workspace_engine: &QueryEngine,
     engine_factory: &AppServerEngineFactory,
+    thread_manager: &thread_runtime::ThreadManager,
     outbound_tx: &mpsc::Sender<Value>,
     provider_tasks: &mut tokio::task::JoinSet<()>,
     storage_scans: &storage_scans::StorageScans,
 ) -> Result<DispatchControl> {
     match method {
         method::COMPUTER_USE_STATUS => {
-            if serde_json::from_value::<kcoder_app_protocol::ComputerUseStatusParams>(params)
-                .is_err()
-            {
+            if rpc_codec::decode::<kcoder_app_protocol::ComputerUseStatusParams>(params).is_err() {
                 send(
                     outbound_tx,
                     error_response(id, -32602, "invalid computer use status parameters"),
@@ -35,7 +36,7 @@ pub(super) async fn dispatch(
             } else {
                 let outbound = outbound_tx.clone();
                 let factory = engine_factory.clone();
-                provider_tasks.spawn(async move {
+                provider_tasks.spawn_shared(async move {
                     // Settings and filesystem metadata reads must not block turn/interrupt dispatch.
                     let result = tokio::task::spawn_blocking(move || {
                         factory.current_settings().map(computer_use_status::inspect)
@@ -53,7 +54,7 @@ pub(super) async fn dispatch(
             let scan = (|| -> Result<_> {
                 anyhow::ensure!(provider_tasks.len() < 4, "diagnostics are busy");
                 let input: kcoder_app_protocol::StorageScanParams =
-                    serde_json::from_value(params.clone())?;
+                    rpc_codec::decode(params.clone())?;
                 storage_scans.start(
                     input
                         .scan_id
@@ -63,7 +64,7 @@ pub(super) async fn dispatch(
             match scan {
                 Ok(scan) => {
                     let outbound = outbound_tx.clone();
-                    provider_tasks.spawn(async move {
+                    provider_tasks.spawn_shared(async move {
                         let result = tokio::task::spawn_blocking(move || {
                             let scan_guard = scan;
                             storage_diagnostics::read_report(&scan_guard.token)
@@ -91,11 +92,10 @@ pub(super) async fn dispatch(
             }
         }
         method::DIAGNOSTICS_STORAGE_CANCEL => {
-            let result = serde_json::from_value::<kcoder_app_protocol::StorageScanCancelParams>(
-                params.clone(),
-            )
-            .map_err(anyhow::Error::from)
-            .and_then(|params| storage_scans.cancel(&params.scan_id));
+            let result =
+                rpc_codec::decode::<kcoder_app_protocol::StorageScanCancelParams>(params.clone())
+                    .map_err(anyhow::Error::from)
+                    .and_then(|params| storage_scans.cancel(&params.scan_id));
             let response = match result {
                 Ok(cancelled) => success_response(
                     id,
@@ -106,7 +106,7 @@ pub(super) async fn dispatch(
             send(outbound_tx, response).await?;
         }
         method::DIAGNOSTICS_STORAGE_CLEAN => {
-            let input = serde_json::from_value::<StorageCleanParams>(params.clone())
+            let input = rpc_codec::decode::<StorageCleanParams>(params.clone())
                 .map_err(anyhow::Error::from)
                 .and_then(|input| {
                     anyhow::ensure!(provider_tasks.len() < 4, "diagnostics are busy");
@@ -115,7 +115,7 @@ pub(super) async fn dispatch(
             match input {
                 Ok(input) => {
                     let outbound = outbound_tx.clone();
-                    provider_tasks.spawn(async move {
+                    provider_tasks.spawn_shared(async move {
                         let result = tokio::task::spawn_blocking(move || {
                             storage_diagnostics::clean(&input.target, input.confirm)
                         })
@@ -154,6 +154,8 @@ pub(super) async fn dispatch(
             }
         },
         method::WORKFLOW_UPDATE
+        | kcoder_app_protocol::WORKFLOW_COLLABORATION_CATALOG
+        | kcoder_app_protocol::WORKFLOW_COLLABORATION_APPLY
         | method::WORKFLOW_VERSIONS
         | method::WORKFLOW_CLONE
         | method::WORKFLOW_EXPORT
@@ -190,14 +192,56 @@ pub(super) async fn dispatch(
                 )
                 .await?;
             } else {
+                let observed_model =
+                    if method == kcoder_app_protocol::WORKFLOW_COLLABORATION_CATALOG {
+                        let captured = (|| -> Result<_> {
+                            let request: kcoder_app_protocol::WorkflowCollaborationCatalogParams =
+                                rpc_codec::decode(params.clone())?;
+                            request
+                                .thread_id
+                                .as_deref()
+                                .map(|thread| {
+                                    workflow_canvas::collaboration::observe_resident_model(
+                                        workspace_engine,
+                                        thread_manager,
+                                        thread,
+                                    )
+                                })
+                                .transpose()
+                                .map(Option::flatten)
+                        })();
+                        match captured {
+                            Ok(fact) => fact,
+                            Err(error) => {
+                                send(outbound_tx, error_response(id, -32602, &error.to_string()))
+                                    .await?;
+                                return Ok(DispatchControl::Continue);
+                            }
+                        }
+                    } else {
+                        None
+                    };
                 let engine = workspace_engine.clone();
                 let method = method.to_owned();
                 let outbound = outbound_tx.clone();
                 // File locks and durable publication must not retain the connection's dispatcher.
                 // A dispatched write may commit after its client disconnects; do not replay it.
-                provider_tasks.spawn(async move {
+                provider_tasks.spawn_shared(async move {
                     let result = tokio::task::spawn_blocking(move || {
-                        workflow_canvas::request(&engine, &method, params)
+                        if matches!(
+                            method.as_str(),
+                            kcoder_app_protocol::WORKFLOW_COLLABORATION_CATALOG
+                                | kcoder_app_protocol::WORKFLOW_COLLABORATION_APPLY
+                        ) {
+                            workflow_canvas::collaboration::request_observed(
+                                &engine,
+                                &method,
+                                params,
+                                observed_model,
+                            )
+                        } else {
+                            workflow_canvas::request(&engine, &method, params)
+                        }
                     })
                     .await;
                     let response = match result {
@@ -209,19 +253,43 @@ pub(super) async fn dispatch(
                 });
             }
         }
+        method::SETTINGS_TOOL_SELECTIONS_READ | method::SETTINGS_TOOL_SELECTIONS_SAVE => {
+            let result = if method == method::SETTINGS_TOOL_SELECTIONS_READ {
+                rpc_codec::decode::<kcoder_app_protocol::ToolSelectionsReadParams>(params.clone())
+                    .map_err(anyhow::Error::from)
+                    .and_then(|input| engine_factory.read_studio_tool_selections(&input))
+            } else {
+                rpc_codec::decode::<kcoder_app_protocol::ToolSelectionsSaveParams>(params.clone())
+                    .map_err(anyhow::Error::from)
+                    .and_then(|value| {
+                        let mut result = engine_factory.studio_tool_selections(Some(value))?;
+                        // Preserve the V1 response shape for existing strict clients.
+                        result.luna_allowed_tools = None;
+                        Ok(result)
+                    })
+            };
+            match result {
+                Ok(value) => {
+                    send(
+                        outbound_tx,
+                        success_response(id, serde_json::to_value(value)?),
+                    )
+                    .await?
+                }
+                Err(error) => {
+                    send(outbound_tx, error_response(id, -32602, &error.to_string())).await?
+                }
+            }
+        }
         method::SETTINGS_TOOLS_READ | method::SETTINGS_TOOLS_SAVE => {
             let result = if method == method::SETTINGS_TOOLS_READ {
-                serde_json::from_value::<kcoder_app_protocol::ToolsSettingsReadParams>(
-                    params.clone(),
-                )
-                .map_err(anyhow::Error::from)
-                .and_then(|_| engine_factory.tool_profile_settings(None))
+                rpc_codec::decode::<kcoder_app_protocol::ToolsSettingsReadParams>(params.clone())
+                    .map_err(anyhow::Error::from)
+                    .and_then(|_| engine_factory.tool_profile_settings(None))
             } else {
-                serde_json::from_value::<kcoder_app_protocol::ToolsSettingsSaveParams>(
-                    params.clone(),
-                )
-                .map_err(anyhow::Error::from)
-                .and_then(|value| engine_factory.tool_profile_settings(Some(value.profile)))
+                rpc_codec::decode::<kcoder_app_protocol::ToolsSettingsSaveParams>(params.clone())
+                    .map_err(anyhow::Error::from)
+                    .and_then(|value| engine_factory.tool_profile_settings(Some(value.profile)))
             };
             match result {
                 Ok(value) => {
@@ -283,7 +351,7 @@ pub(super) async fn dispatch(
             }
         }
         method::SETTINGS_TEMPLATES_READ => {
-            let result = serde_json::from_value::<SettingsTemplateReadParams>(params.clone())
+            let result = rpc_codec::decode::<SettingsTemplateReadParams>(params.clone())
                 .map_err(anyhow::Error::from)
                 .and_then(|params| user_template_store()?.read(&params.id));
             match result {
@@ -300,7 +368,7 @@ pub(super) async fn dispatch(
             }
         }
         method::SETTINGS_TEMPLATES_SAVE => {
-            let result = serde_json::from_value::<SettingsTemplateSaveParams>(params.clone())
+            let result = rpc_codec::decode::<SettingsTemplateSaveParams>(params.clone())
                 .map_err(anyhow::Error::from)
                 .and_then(|params| user_template_store()?.save(&params));
             match result {
@@ -317,7 +385,7 @@ pub(super) async fn dispatch(
             }
         }
         method::SETTINGS_TEMPLATES_DELETE => {
-            let result = serde_json::from_value::<SettingsTemplateDeleteParams>(params.clone())
+            let result = rpc_codec::decode::<SettingsTemplateDeleteParams>(params.clone())
                 .map_err(anyhow::Error::from)
                 .and_then(|params| user_template_store()?.delete(&params.id));
             match result {
@@ -334,9 +402,42 @@ pub(super) async fn dispatch(
             }
         }
         method::SETTINGS_TEMPLATES_DEFAULT => {
-            let result = serde_json::from_value::<SettingsTemplateDefaultParams>(params.clone())
+            let result = rpc_codec::decode::<SettingsTemplateDefaultParams>(params.clone())
                 .map_err(anyhow::Error::from)
                 .and_then(|params| user_template_store()?.set_default(params.id.as_deref()));
+            match result {
+                Ok(result) => {
+                    send(
+                        outbound_tx,
+                        success_response(id, serde_json::to_value(result)?),
+                    )
+                    .await?;
+                }
+                Err(error) => {
+                    send(outbound_tx, error_response(id, -32602, &error.to_string())).await?;
+                }
+            }
+        }
+        method::SETTINGS_EXECUTION_DEFAULTS_READ => {
+            match execution_defaults::read(workspace_engine, engine_factory) {
+                Ok(result) => {
+                    send(
+                        outbound_tx,
+                        success_response(id, serde_json::to_value(result)?),
+                    )
+                    .await?;
+                }
+                Err(error) => {
+                    send(outbound_tx, error_response(id, -32602, &error.to_string())).await?;
+                }
+            }
+        }
+        method::SETTINGS_EXECUTION_DEFAULTS_SAVE => {
+            let result = rpc_codec::decode::<kcoder_app_protocol::ExecutionDefaultsSaveParams>(
+                params.clone(),
+            )
+            .map_err(anyhow::Error::from)
+            .and_then(|params| execution_defaults::save(workspace_engine, engine_factory, params));
             match result {
                 Ok(result) => {
                     send(

@@ -29,11 +29,7 @@ struct CodeHighlightCache {
     parsed_lines: usize,
 }
 
-pub(super) fn highlight_cached(
-    code: &str,
-    language: &str,
-    theme: &'static Theme,
-) -> Option<LineSpans> {
+pub fn highlight_cached(code: &str, language: &str, theme: &'static Theme) -> Option<LineSpans> {
     CACHE.with_borrow_mut(|caches| {
         if !can_highlight(code) {
             // Over-limit blocks return entirely plain text and never append a previously cached colored prefix.

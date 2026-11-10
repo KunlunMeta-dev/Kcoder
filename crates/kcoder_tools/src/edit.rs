@@ -1,12 +1,11 @@
 use crate::{
     Tool, ToolContext, ToolError, ToolOutput, parse_input,
-    text_file::{LineEndings, resolve_path, write_text_file},
+    text_file::{LineEndings, resolve_path, write_text_file, write_text_file_with_digest},
 };
 use async_trait::async_trait;
 use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer, de::Error as DeError};
 use serde_json::Value;
-use sha2::{Digest, Sha256};
 use similar::TextDiff;
 use std::path::{Path, PathBuf};
 use tracing::debug;
@@ -260,7 +259,7 @@ impl Tool for FileEditTool {
             apply_single_edit(&content, &actual_old_string, &new_string)
         };
 
-        write_text_file(&path, &new_content, encoding, line_endings)
+        let sha256 = write_text_file_with_digest(&path, &new_content, encoding, line_endings)
             .await
             .map_err(|e| {
                 ToolError::Execution(format!("failed to write {}: {}", path.display(), e))
@@ -278,14 +277,8 @@ impl Tool for FileEditTool {
         let text =
             crate::lsp::append_post_write_diagnostics(text, &path, lsp_baseline, &new_content)
                 .await;
-        Ok(
-            ToolOutput::text(text).with_execution_metadata(
-                crate::ToolExecutionMetadata::Artifact {
-                    path,
-                    sha256: format!("{:x}", Sha256::digest(new_content.as_bytes())),
-                },
-            ),
-        )
+        Ok(ToolOutput::text(text)
+            .with_execution_metadata(crate::ToolExecutionMetadata::Artifact { path, sha256 }))
     }
 }
 

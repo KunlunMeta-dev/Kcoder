@@ -3,6 +3,7 @@ import { Monitor, LoaderCircle } from 'lucide-react'
 import { computerUseStates } from '@/kcoder/computerUseState'
 import { useTranslation } from '@/hooks/useTranslation'
 import { Button } from '@/components/ui/button'
+import { ComposerStatusItem } from '@/components/chat/composer/ComposerStatusRegion'
 import { ComputerUseRecovery, type ComputerUseRecoveryFacts } from './ComputerUseRecovery'
 
 export function ComputerUseStatus({
@@ -12,6 +13,7 @@ export function ComputerUseStatus({
   diagnostics,
   recoveryAvailable = false,
   onRecover,
+  presentation,
 }: {
   serverId: string
   taskId: string
@@ -19,6 +21,7 @@ export function ComputerUseStatus({
   diagnostics?: ComputerUseRecoveryFacts
   recoveryAvailable?: boolean
   onRecover?: (previousTurnId: string) => Promise<void>
+  presentation?: 'detail' | 'embedded'
 }) {
   const { t } = useTranslation('common')
   const snapshot = useSyncExternalStore(
@@ -31,18 +34,50 @@ export function ComputerUseStatus({
   if (!snapshot || (snapshot.state === 'stopped' && !facts)) return null
   const pending = snapshot.state === 'stopping'
   const active = snapshot.state === 'active'
-  return (
+  const attention =
+    snapshot.state === 'unknown' ||
+    snapshot.state === 'stop_failed' ||
+    Boolean(facts?.failureCode) ||
+    facts?.authorization === 'revoked' ||
+    facts?.authorization === 'unknown' ||
+    facts?.channel === 'unavailable' ||
+    facts?.channel === 'unknown' ||
+    facts?.cleanup === 'failed' ||
+    facts?.cleanup === 'unknown'
+  const stateSummary = t(`computerUse.state.${snapshot.state}`)
+  const recoverySummary = facts
+    ? [
+        facts.failureCode
+          ? t(`computerUse.recovery.failure.${facts.failureCode}`, {
+              defaultValue: t('computerUse.recovery.cleanup.unknown'),
+            })
+          : null,
+        facts.authorization !== 'valid'
+          ? t(`computerUse.recovery.authorization.${facts.authorization}`)
+          : null,
+        facts.channel !== 'available' ? t(`computerUse.recovery.channel.${facts.channel}`) : null,
+        facts.cleanup !== 'confirmed' && facts.cleanup !== 'pending'
+          ? t(`computerUse.recovery.cleanup.${facts.cleanup}`)
+          : null,
+      ].filter(Boolean)
+    : []
+  const summary = [stateSummary, ...recoverySummary].join(' · ')
+  const detail = (
     <div
       role="status"
       aria-live="polite"
       data-testid="computer-use-status"
       data-state={snapshot.state}
-      className="mb-2 flex min-w-0 items-center gap-2 rounded-lg bg-surface px-3 py-2 text-sm text-text-secondary"
+      className={
+        presentation === 'embedded'
+          ? 'flex min-w-0 items-start gap-2 text-sm text-text-secondary'
+          : 'mb-2 flex min-w-0 items-center gap-2 rounded-lg bg-surface px-3 py-2 text-sm text-text-secondary'
+      }
     >
       {pending ? (
-        <LoaderCircle aria-hidden className="size-4 shrink-0 animate-spin" />
+        <LoaderCircle aria-hidden className="mt-0.5 size-4 shrink-0 animate-spin" />
       ) : (
-        <Monitor aria-hidden className="size-4 shrink-0" />
+        <Monitor aria-hidden className="mt-0.5 size-4 shrink-0" />
       )}
       {facts ? (
         <ComputerUseRecovery
@@ -59,9 +94,7 @@ export function ComputerUseStatus({
           onRecover={onRecover}
         />
       ) : (
-        <span className="min-w-0 flex-1 break-words">
-          {t(`computerUse.state.${snapshot.state}`)}
-        </span>
+        <span className="min-w-0 flex-1 break-words">{stateSummary}</span>
       )}
       {active && onStop && (
         <Button
@@ -76,4 +109,22 @@ export function ComputerUseStatus({
       )}
     </div>
   )
+
+  if (presentation === 'detail') return detail
+  if (presentation === 'embedded') {
+    return (
+      <ComposerStatusItem
+        id="computer-use"
+        title={t('computerUse.title')}
+        statusText={stateSummary}
+        summary={summary}
+        icon={Monitor}
+        attention={attention}
+        order={50}
+      >
+        {detail}
+      </ComposerStatusItem>
+    )
+  }
+  return detail
 }

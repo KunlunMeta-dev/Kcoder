@@ -66,7 +66,17 @@ async fn genai_parameter_fragments_outlive_the_idle_window_without_snapshots() {
             _ => None,
         })
         .collect();
-    assert_eq!(inputs, [&json!({"text":"x".repeat(40)}).to_string()]);
+    assert!(
+        inputs.len() > 1,
+        "tool arguments must retain real incremental fragments"
+    );
+    assert_eq!(
+        inputs
+            .iter()
+            .map(|value| value.as_str())
+            .collect::<String>(),
+        json!({"text":"x".repeat(40)}).to_string()
+    );
     assert_eq!(events.iter().filter(|event| matches!(event, Ok(StreamEvent::ContentBlockStart { content_block: ContentBlock::ToolUse { id, name, .. }, .. }) if id == "call-real" && name == "read")).count(), 1);
 }
 

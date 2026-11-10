@@ -17,6 +17,7 @@ use serde::{Deserialize, Serialize};
 /// `turn/start.retryFromTurnId`), and a client must gate on the capability rather
 /// than infer it from these booleans.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "json-schema", derive(schemars::JsonSchema))]
 pub struct ProviderFailureDetails {
     pub category: ProviderFailureCategory,
     pub recovery_action: ProviderFailureRecoveryAction,
@@ -27,6 +28,7 @@ pub struct ProviderFailureDetails {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "json-schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum ProviderFailureCategory {
     AuthenticationError,
@@ -62,6 +64,7 @@ impl ProviderFailureCategory {
 
 /// Terminal instructions never schedule another invocation or approval request.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "json-schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum ProviderFailureRecoveryAction {
     NeedsHuman,

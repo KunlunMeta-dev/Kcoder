@@ -4,10 +4,12 @@ use serde_json::json;
 use std::collections::BTreeMap;
 use std::ffi::{OsStr, OsString};
 use std::io::{BufRead, BufReader, Write};
+use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStderr, ChildStdin, ChildStdout, Command, ExitStatus, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::{fs::File, os::windows::io::AsRawHandle};
 
 static NEXT_NONCE: AtomicU64 = AtomicU64::new(1);
 
@@ -107,11 +109,33 @@ impl SupervisedChild {
         supervisor: &Path,
         ready_timeout: Duration,
     ) -> Result<Self> {
+        Self::spawn_inner(spec, supervisor, ready_timeout, None)
+    }
+
+    /// Transfer only this original private file into the exact helper process.
+    /// The target never inherits the completion-writing handle.
+    pub fn spawn_with_cleanup_receipt(
+        spec: SpawnSpec,
+        receipt: &File,
+        supervisor: &Path,
+    ) -> Result<Self> {
+        Self::spawn_inner(spec, supervisor, Duration::from_secs(10), Some(receipt))
+    }
+
+    fn spawn_inner(
+        spec: SpawnSpec,
+        supervisor: &Path,
+        ready_timeout: Duration,
+        receipt: Option<&File>,
+    ) -> Result<Self> {
         anyhow::ensure!(
             supervisor.is_absolute(),
             "process supervisor path must be absolute"
         );
         anyhow::ensure!(!ready_timeout.is_zero(), "READY timeout must be positive");
+        let receipt_identity = receipt
+            .map(crate::windows_cleanup_receipt::validate_empty)
+            .transpose()?;
         let status_directory = tempfile::Builder::new()
             .prefix("kcoder-process-supervisor-")
             .tempdir()
@@ -127,7 +151,12 @@ impl SupervisedChild {
             NEXT_NONCE.fetch_add(1, Ordering::Relaxed)
         );
         let request = spawn_request(&spec, &status_file, &nonce)?;
-        let mut child = Command::new(supervisor)
+        let mut command = Command::new(supervisor);
+        command.creation_flags(windows_sys::Win32::System::Threading::CREATE_NO_WINDOW);
+        if receipt.is_some() {
+            command.arg(crate::protocol::INTERNAL_CLEANUP_OWNER_V2);
+        }
+        let mut child = command
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -137,7 +166,43 @@ impl SupervisedChild {
             .stdin
             .take()
             .context("supervisor stdin is unavailable")?;
-        serde_json::to_writer(&mut stdin, &request)?;
+        if let Some((file, identity)) = receipt.zip(receipt_identity) {
+            use windows_sys::Win32::Foundation::{DUPLICATE_SAME_ACCESS, DuplicateHandle};
+            use windows_sys::Win32::System::Threading::GetCurrentProcess;
+            let mut transferred = std::ptr::null_mut();
+            // SAFETY: both process handles are held original objects, not PIDs;
+            // FALSE prevents inheritance and the target has a separate allowlist.
+            let duplicated = unsafe {
+                DuplicateHandle(
+                    GetCurrentProcess(),
+                    file.as_raw_handle().cast(),
+                    child.as_raw_handle().cast(),
+                    &mut transferred,
+                    0,
+                    0,
+                    DUPLICATE_SAME_ACCESS,
+                )
+            };
+            if duplicated == 0 {
+                let error = std::io::Error::last_os_error();
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(error).context("cannot transfer cleanup receipt");
+            }
+            let envelope = crate::protocol::CleanupSpawnRequest {
+                version: crate::protocol::CLEANUP_PROTOCOL_VERSION,
+                spawn: request,
+                receipt_handle: transferred as usize as u64,
+                receipt_identity: identity,
+            };
+            if let Err(error) = serde_json::to_writer(&mut stdin, &envelope) {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(error).context("cannot send cleanup spawn request");
+            }
+        } else {
+            serde_json::to_writer(&mut stdin, &request)?;
+        }
         stdin.write_all(b"\n")?;
         stdin.flush()?;
         let target_pid = match wait_ready(&status_file, &nonce, ready_timeout) {

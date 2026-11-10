@@ -15,89 +15,17 @@ pub(super) fn supports(method_name: &str) -> bool {
 }
 
 #[derive(Clone, Default)]
-pub(in crate::app_server) struct RuntimeObservation {
-    thread_id: String,
-    generation: u64,
-    tools: BTreeMap<String, usize>,
-    attempts: BTreeMap<String, kcoder_app_protocol::McpConnectionAttempt>,
-    mcp_configs: Vec<kcoder_mcp::McpServerConfig>,
-    authorizations: BTreeMap<String, kcoder_app_protocol::McpAuthorizationStatus>,
-    skill_paths: Vec<PathBuf>,
-    hooks: Vec<String>,
-    hook_observations: BTreeMap<String, kcoder_hooks::PluginHookObservation>,
-    hooks_disabled: bool,
-}
-impl RuntimeObservation {
-    pub(in crate::app_server) fn capture(
-        engine: &kcoder_engine::QueryEngine,
-        plugin: &str,
-        factory: &super::super::engine_factory::AppServerEngineFactory,
-    ) -> Self {
-        let registry = engine.active_tool_registry();
-        let mut tools = BTreeMap::new();
-        for name in registry.names() {
-            if let Some(kcoder_tools::ToolSource::Plugin {
-                plugin: owner,
-                server,
-                ..
-            }) = registry.source(&name)
-                && owner == plugin
-            {
-                *tools.entry(server.clone()).or_insert(0) += 1;
-            }
-        }
-        let hooks = engine
-            .hook_registry()
-            .settings_hooks
-            .iter()
-            .filter_map(|(event, matcher)| {
-                matcher
-                    .source
-                    .as_ref()
-                    .filter(|source| source.id == plugin)
-                    .map(|_| event.as_str().to_owned())
-            })
-            .collect();
-        let snapshot = engine.plugin_snapshot();
-        let attempts = snapshot
-            .mcp_configs
-            .iter()
-            .zip(&snapshot.mcp_config_sources)
-            .filter(|(_, source)| source.plugin_id == plugin)
-            .filter_map(|(config, _)| {
-                factory
-                    .mcp_connection_attempt_for_registry(config, &registry)
-                    .map(|status| (config.name.clone(), status))
-            })
-            .collect();
-        Self {
-            thread_id: engine.session_id(),
-            generation: engine.plugin_snapshot().generation,
-            tools,
-            attempts,
-            mcp_configs: snapshot
-                .mcp_configs
-                .iter()
-                .zip(&snapshot.mcp_config_sources)
-                .filter(|(_, source)| source.plugin_id == plugin)
-                .map(|(config, _)| config.clone())
-                .collect(),
-            authorizations: BTreeMap::new(),
-            skill_paths: engine
-                .client_skill_catalog()
-                .into_iter()
-                .map(|skill| skill.path)
-                .collect(),
-            hooks,
-            hook_observations: engine
-                .hook_registry()
-                .plugin_observations(plugin)
-                .into_iter()
-                .map(|observation| (observation.event.as_str().into(), observation))
-                .collect(),
-            hooks_disabled: engine.hook_registry().disabled,
-        }
-    }
+pub struct RuntimeObservation {
+    pub thread_id: String,
+    pub generation: u64,
+    pub tools: BTreeMap<String, usize>,
+    pub attempts: BTreeMap<String, kcoder_app_protocol::McpConnectionAttempt>,
+    pub mcp_configs: Vec<kcoder_mcp::McpServerConfig>,
+    pub authorizations: BTreeMap<String, kcoder_app_protocol::McpAuthorizationStatus>,
+    pub skill_paths: Vec<PathBuf>,
+    pub hooks: Vec<String>,
+    pub hook_observations: BTreeMap<String, kcoder_hooks::PluginHookObservation>,
+    pub hooks_disabled: bool,
 }
 
 fn mcp_activation_outcome(
@@ -135,7 +63,7 @@ fn mcp_activation_outcome(
 }
 
 impl PluginProcessor {
-    pub(in crate::app_server) async fn process_observed(
+    pub async fn process_observed(
         &self,
         id: Value,
         method_name: &str,
@@ -326,7 +254,7 @@ impl PluginProcessor {
             for config in &fact.mcp_configs {
                 let status = match tokio::time::timeout_at(
                     deadline,
-                    super::super::mcp_processor::status(config),
+                    crate::mcp_authorization::status(config),
                 )
                 .await
                 {
@@ -420,7 +348,7 @@ impl PluginProcessor {
         if observation.is_none() {
             result.effective_from = Some("next_turn".into());
         }
-        let private_values = crate::plugin_credentials::by_operation(
+        let private_values = crate::credentials::by_operation(
             &self.credentials_path,
             self.credential_mode,
             &self.manager,
@@ -612,7 +540,7 @@ mod tests {
         assert!(configured.get("error").is_none(), "{configured}");
         assert_eq!(configured["result"]["effectiveFrom"], "next_turn");
         assert!(!configured.to_string().contains("p09-synthetic-value"));
-        let resolved = crate::plugin_credentials::by_operation(
+        let resolved = crate::credentials::by_operation(
             &processor.credentials_path,
             processor.credential_mode,
             &processor.manager,

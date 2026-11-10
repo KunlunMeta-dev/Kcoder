@@ -1,4 +1,4 @@
-import { clearMocks } from '@tauri-apps/api/mocks'
+import { clearTestTransports } from '@/test/runtime-transport'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { FakeGatewayClient } from './gateway/runtime/contractFixture.test-support'
 import { KCoderGatewayRuntime as CoreRuntime } from './gatewayRuntime'
@@ -19,7 +19,7 @@ describe.each([
   afterEach(async () => {
     await Promise.all([...runtimes].map(runtime => runtime.disposeAsync?.() ?? runtime.dispose()))
     runtimes.clear()
-    clearMocks()
+    clearTestTransports()
     vi.restoreAllMocks()
   })
   test('requires explicit node-contract capability before forwarding bindings or checks', async () => {

@@ -1,3 +1,4 @@
+import { installTestTransport, clearTestTransports } from '@/test/runtime-transport'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import './i18n'
@@ -12,13 +13,7 @@ vi.mock('@/features/auth/useAuth', () => ({
   useAuth: () => ({
     user: { id: 1, user_name: 'alice', email: 'alice@example.com' },
     isLoading: false,
-    adminPasswordSetupRequired: false,
-    adminUsername: 'admin',
-    login: vi.fn(),
     logout: vi.fn(),
-    refresh: vi.fn(),
-    loginWithOidcToken: vi.fn(),
-    setupAdminPassword: vi.fn(),
   }),
 }))
 
@@ -39,7 +34,7 @@ vi.mock('@/features/appshots/AppshotBridge', () => ({
   AppshotBridge: () => null,
 }))
 
-vi.mock('@/tauri/localExecutor', () => ({
+vi.mock('@/host/localExecutor', () => ({
   ensureLocalExecutorStarted: vi
     .fn()
     .mockResolvedValue({ running: true, ready: true, deviceId: 'local-device' }),
@@ -74,24 +69,21 @@ vi.mock('@/api/local/codexPlugins', () => ({
 }))
 
 vi.mock('@/pages/WorkbenchPage', () => ({
-  WorkbenchPage: () => <div data-testid="workbench-page">WeWork 工作台</div>,
+  WorkbenchPage: () => <div data-testid="workbench-page">KCoder 工作台</div>,
 }))
 
 vi.mock('@/pages/SitesPage', () => ({
   SitesPage: () => <div data-testid="sites-page">Sites</div>,
 }))
 
-function enableTauri() {
-  Object.defineProperty(window, '__TAURI_INTERNALS__', {
-    configurable: true,
-    value: {},
-  })
+function enableGateway() {
+  installTestTransport(() => null)
 }
 
 describe('App center route', () => {
   beforeEach(() => {
     localStorage.clear()
-    enableTauri()
+    enableGateway()
     vi.stubEnv('DEV', false)
     vi.stubGlobal(
       'fetch',
@@ -199,7 +191,7 @@ describe('App center route', () => {
     expect(screen.queryByTestId('chrome-tab-todo')).not.toBeInTheDocument()
     expect(screen.queryByTestId('chrome-tab-apps')).not.toBeInTheDocument()
     expect(screen.getByTestId('collapse-sidebar-button')).toBeInTheDocument()
-    expect(screen.getByTestId('apps-page')).toBeInTheDocument()
+    expect(await screen.findByTestId('apps-page')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: '管理你的办公与编码应用' })).toBeInTheDocument()
     expect(await screen.findByText('Executor 状态')).toBeInTheDocument()
     expect(screen.getByText('Claude Code')).toBeInTheDocument()
@@ -260,9 +252,9 @@ describe('App center route', () => {
     )
     fireEvent.click(screen.getByTestId('kcoder-dev-instance-trigger'))
     expect(screen.getByTestId('kcoder-dev-instance-badge')).toHaveTextContent('Runtime task')
-    fireEvent.click(screen.getByTestId('copy-wework-dev-port-button'))
+    fireEvent.click(screen.getByTestId('copy-kcoder-dev-port-button'))
     expect(writeText).toHaveBeenCalledWith('1420')
-    fireEvent.click(screen.getByTestId('copy-wework-dev-parent-title-button'))
+    fireEvent.click(screen.getByTestId('copy-kcoder-dev-parent-title-button'))
     expect(writeText).toHaveBeenCalledWith('Parent task')
 
     fireEvent.click(screen.getByTestId('collapse-kcoder-dev-instance-button'))
@@ -325,10 +317,10 @@ describe('App center route', () => {
     await waitForStartupScreenToClose()
     expect(await screen.findByText('Executor 状态')).toBeInTheDocument()
 
-    const weworkTab = screen.getByTestId('chrome-tab-studio')
+    const studioTab = screen.getByTestId('chrome-tab-studio')
     expect(screen.queryByTestId('chrome-tab-todo')).not.toBeInTheDocument()
     expect(screen.queryByTestId('chrome-tab-apps')).not.toBeInTheDocument()
-    expect(weworkTab).toBeInTheDocument()
+    expect(studioTab).toBeInTheDocument()
 
     fireEvent.click(screen.getByTestId('collapse-sidebar-button'))
 
@@ -357,7 +349,7 @@ describe('App center route', () => {
     fireEvent.click(screen.getByTestId('installed-app-open-sites'))
 
     await waitFor(() => expect(window.location.pathname).toBe('/sites'))
-    expect(screen.getByTestId('sites-page')).toBeInTheDocument()
+    expect(await screen.findByTestId('sites-page')).toBeInTheDocument()
   })
 
   test('collapses the apps page header while scrolling the overview', async () => {

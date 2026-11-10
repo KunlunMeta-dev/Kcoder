@@ -1,5 +1,5 @@
 import type { ModelCatalogTarget } from '@/api/models'
-import { ensureLocalExecutorStarted, requestLocalExecutor } from '@/tauri/localExecutor'
+import { ensureLocalExecutorStarted, requestLocalExecutor } from '@/host/localExecutor'
 import {
   normalizeCodexOfficialModelList,
   type CodexOfficialModelList,

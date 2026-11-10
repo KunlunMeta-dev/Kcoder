@@ -6,6 +6,8 @@ use std::io::{BufRead, BufReader, Write};
 use std::process::{Command, Stdio};
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
+#[path = "migration/rpc.rs"]
+mod migration_rpc;
 #[path = "../../kcoder_knowledge/tests/fixtures/organization.rs"]
 #[allow(dead_code)]
 mod wiki_organization_fixture;
@@ -135,6 +137,7 @@ impl Drop for TestAppServer {
 }
 
 struct TestAppServerBuilder {
+    binary: Option<std::path::PathBuf>,
     workspace: std::path::PathBuf,
     settings: std::path::PathBuf,
     config_dir: std::path::PathBuf,
@@ -149,11 +152,13 @@ struct TestAppServerBuilder {
     wiki_account: Option<String>,
     temp_dir: Option<std::path::PathBuf>,
     extra_env: Vec<(String, std::ffi::OsString)>,
+    extra_args: Vec<String>,
 }
 
 impl TestAppServerBuilder {
     fn new(workspace: &std::path::Path, settings: &std::path::Path) -> Self {
         Self {
+            binary: None,
             workspace: workspace.to_path_buf(),
             settings: settings.to_path_buf(),
             config_dir: workspace.join("config"),
@@ -168,10 +173,11 @@ impl TestAppServerBuilder {
             wiki_account: None,
             temp_dir: None,
             extra_env: Vec::new(),
+            extra_args: Vec::new(),
         }
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", windows))]
     fn env(mut self, name: &str, value: impl AsRef<std::ffi::OsStr>) -> Self {
         self.extra_env.push((name.into(), value.as_ref().into()));
         self
@@ -189,6 +195,12 @@ impl TestAppServerBuilder {
 
     fn config_dir(mut self, config_dir: &std::path::Path) -> Self {
         self.config_dir = config_dir.to_path_buf();
+        self
+    }
+
+    #[cfg(any(target_os = "linux", windows))]
+    fn binary(mut self, binary: &std::path::Path) -> Self {
+        self.binary = Some(binary.to_path_buf());
         self
     }
 
@@ -233,7 +245,11 @@ impl TestAppServerBuilder {
     }
 
     fn spawn(self) -> TestAppServer {
-        let mut command = Command::new(env!("CARGO_BIN_EXE_kcoder"));
+        let mut command = Command::new(
+            self.binary
+                .as_deref()
+                .unwrap_or_else(|| std::path::Path::new(env!("CARGO_BIN_EXE_kcoder"))),
+        );
         command
             .args([
                 "--settings-file",
@@ -248,6 +264,7 @@ impl TestAppServerBuilder {
             .env_remove("SSH_TTY")
             .env_remove("KCODER_ACCOUNT_PRINCIPAL_ID")
             .env_remove("KCODER_WIKI_WORKER_MANAGED")
+            .env_remove("KCODER_PRIVATE_RETENTION_PARENT_V1")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(if self.discard_stderr {
@@ -271,6 +288,7 @@ impl TestAppServerBuilder {
         if self.training_mode {
             command.arg("--training-mode");
         }
+        command.args(self.extra_args);
         for (name, value) in [
             ("KCODER_TUI_LAB_STREAM_DELAY_MS", self.stream_delay_ms),
             (
@@ -513,15 +531,21 @@ include!("app_server_stdio/browser_preflight.rs");
 include!("app_server_stdio/worktree.rs");
 include!("app_server_stdio/resident.rs");
 include!("app_server_stdio/resume_history.rs");
+include!("app_server_stdio/transcript_observation.rs");
 include!("app_server_stdio/agent_artifacts.rs");
+include!("app_server_stdio/agent_exact_run.rs");
 include!("app_server_stdio/plugins.rs");
 include!("app_server_stdio/goals.rs");
 include!("app_server_stdio/modes.rs");
+include!("app_server_stdio/mcp_apps.rs");
 include!("app_server_stdio/tools_catalog.rs");
 include!("app_server_stdio/history_refresh.rs");
 include!("app_server_stdio/settings_templates.rs");
+include!("app_server_stdio/execution_defaults.rs");
+include!("app_server_stdio/web_search.rs");
 include!("app_server_stdio/storage_diagnostics.rs");
 include!("app_server_stdio/turn_file_changes_settings.rs");
+include!("app_server_stdio/turn_file_capture.rs");
 
 include!("app_server_stdio/session_reload.rs");
 include!("app_server_stdio/run_summary.rs");
@@ -529,8 +553,12 @@ include!("app_server_stdio/turn_submission.rs");
 include!("app_server_stdio/provider_fixture.rs");
 #[path = "app_server_stdio/compaction_background.rs"]
 mod compaction_background;
+#[path = "app_server_stdio/inline_widgets.rs"]
+mod inline_widgets;
 #[path = "app_server_stdio/tool_input_streaming.rs"]
 mod tool_input_streaming;
+#[path = "app_server_stdio/widget_render_repair.rs"]
+mod widget_render_repair;
 include!("app_server_stdio/continuation_race.rs");
 include!("app_server_stdio/continuation_safety.rs");
 include!("app_server_stdio/continuation_attachments.rs");
@@ -545,17 +573,51 @@ include!("app_server_stdio/continuation_retry_operation.rs");
 include!("app_server_stdio/partial_stream_crash.rs");
 include!("app_server_stdio/continuation_hook_delivery.rs");
 include!("app_server_stdio/continuation_background_delivery.rs");
+include!("app_server_stdio/background_task_followup.rs");
+include!("app_server_stdio/turn_steer.rs");
+include!("app_server_stdio/continuous_task_m1_demo.rs");
 
 include!("app_server_stdio/thread_creation_receipts.rs");
+include!("app_server_stdio/thread_runtime_handoff.rs");
+include!("app_server_stdio/integrations_scope.rs");
+include!("app_server_stdio/integrations_knowledge.rs");
+include!("app_server_stdio/browser_profiles.rs");
+include!("app_server_stdio/integrations_automation_scheduler.rs");
+include!("app_server_stdio/integrations_automation_file_selection.rs");
+include!("app_server_stdio/integrations_office.rs");
+include!("app_server_stdio/agent_definitions.rs");
+include!("app_server_stdio/integrations_office_material.rs");
+include!("app_server_stdio/integrations_office_settings.rs");
+include!("app_server_stdio/integrations_knowledge_settings.rs");
+include!("app_server_stdio/integrations_task_workspace.rs");
+include!("app_server_stdio/integrations_task_workspace_capability_scope.rs");
+include!("app_server_stdio/task_capability_scope_directory.rs");
 include!("app_server_stdio/workspace_task_handoff_contract.review.rs");
 
 include!("app_server_stdio/workflow_canvas.rs");
+#[cfg(target_os = "linux")]
+include!("app_server_stdio/thread_presence.rs");
+
+#[cfg(any(target_os = "linux", windows))]
+#[path = "app_server_stdio/continuous_task_ct99_l1.rs"]
+mod continuous_task_ct99_l1;
+#[cfg(target_os = "linux")]
+#[path = "app_server_stdio/goal_append_probe.rs"]
+mod goal_append_probe;
+#[cfg(any(target_os = "linux", windows))]
+#[path = "app_server_stdio/thread_goal_status_batch.rs"]
+mod thread_goal_status_batch;
+#[cfg(target_os = "linux")]
+#[path = "app_server_stdio/work_scope_closed.rs"]
+mod work_scope_closed;
 
 include!("app_server_stdio/computer_use.rs");
 
 include!("app_server_stdio/knowledge.rs");
 
 include!("app_server_stdio/retention_authority.rs");
+#[path = "migration/source_transfer_rpc.rs"]
+mod source_transfer_rpc;
 include!("app_server_stdio/workspace_receipts_v2.rs");
 #[cfg(target_os = "linux")]
 mod owned_process_lifecycle {
@@ -564,3 +626,18 @@ mod owned_process_lifecycle {
 }
 
 include!("app_server_stdio/retained_upload_review.rs");
+#[cfg(target_os = "linux")]
+include!("app_server_stdio/retained_turn_batch_review.rs");
+
+include!("app_server_stdio/integrations_task_capability_scope.rs");
+
+include!("app_server_stdio/integrations_connectivity.rs");
+
+include!("app_server_stdio/integrations_model_policies.rs");
+
+include!("app_server_stdio/integrations_model_policy_settings.rs");
+
+include!("app_server_stdio/remote_capability_declarations.rs");
+
+include!("app_server_stdio/async_user_questions.rs");
+include!("app_server_stdio/m2_restart_recovery.rs");

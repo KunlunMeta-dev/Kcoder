@@ -51,12 +51,30 @@ describe("移动端项目管理", () => {
           ? {
               items: [
                 { workspacePath: "/workspace", label: "Workspace root" },
-                { workspacePath: "/workspace/project/", label: "Project" },
+                {
+                  workspacePath: "/workspace/registered",
+                  label: "Registered project",
+                  projectKey: "registry-project",
+                  projectName: "Project A",
+                  projectRoots: ["/workspace/registered", "/workspace/shared-root"],
+                },
+                {
+                  workspacePath: "/workspace/project/",
+                  label: "Project folder",
+                  projectKey: "registry-worktree-path",
+                  projectName: "Project folder",
+                  projectRoots: ["/workspace"],
+                },
               ],
             }
           : {
               items: [
-                { path: "/workspace/project", state: "active" },
+                {
+                  path: "/workspace/project",
+                  state: "active",
+                  worktreeId: "project-worktree",
+                  repositoryName: "Project repository",
+                },
                 { path: "/workspace/old", state: "restorable" },
               ],
             },
@@ -73,16 +91,28 @@ describe("移动端项目管理", () => {
     expect(result.error).toBeNull();
     expect(result.options).toEqual([
       { path: "/workspace", label: "Workspace root", kind: "workspace" },
-      { path: "/workspace/project/", label: "Project", kind: "workspace" },
+      {
+        path: "/workspace/registered",
+        label: "Registered project",
+        kind: "workspace",
+        projectKey: "registry-project",
+        projectName: "Project A",
+        projectRoots: ["/workspace/registered", "/workspace/shared-root"],
+      },
       {
         path: "/workspace/project",
-        label: "project",
+        label: "Project repository",
         kind: "worktree",
+        projectKey: "runtime-target:local",
+        rootProject: true,
+        projectName: "Local",
+        projectRoots: ["/workspace/"],
       },
     ]);
     expect(result.servers.map((item) => item.workspacePath)).toEqual([
       "/workspace/",
-      "/workspace/project/",
+      "/workspace/registered",
+      "/workspace/project",
     ]);
     expect(connect).toHaveBeenCalledWith(
       profile,

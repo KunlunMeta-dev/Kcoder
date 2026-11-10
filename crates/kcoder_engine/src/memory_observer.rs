@@ -4,6 +4,12 @@ use crate::verification_target::verification_command_label;
 
 mod diagnostics;
 mod model_codec;
+mod review_accounting;
+pub(crate) mod runtime_queue;
+use crate::integrations::knowledge::{
+    ObserverExtractionKind, ObserverExtractionOutcome, ObserverExtractionRequest,
+};
+use review_accounting::ObserverAttempt;
 
 pub use diagnostics::{
     MemoryObserverEventLogDiagnostics, MemoryObserverRecoveryAuditDiagnostics,
@@ -20,6 +26,7 @@ use model_codec::{
 struct MemoryObserverWriteResult {
     observations_written: usize,
     summaries_written: usize,
+    candidates_proposed: usize,
 }
 
 impl QueryEngine {
@@ -261,7 +268,10 @@ impl QueryEngine {
     pub(super) fn memory_observer_event_bundle(&self) -> MemoryObserverEventBundle {
         MemoryObserverEventBundle::new(
             self.state.session_id(),
-            String::new(),
+            self.memory_manager
+                .structured_project_key()
+                .map(str::to_owned)
+                .unwrap_or_else(|| kcoder_memory::project_key_for_path(&self.cwd)),
             self.current_memory_prompt_number(),
             None,
             self.memory_observer_sanitization_options(),
@@ -285,12 +295,26 @@ impl QueryEngine {
     }
 
     fn submit_memory_observer_bundle(&self, bundle: MemoryObserverEventBundle) {
+        let owner = match self.capture_auxiliary_model_work(
+            crate::native_model_requests::NativeModelRequestPurpose::MemoryObserver,
+        ) {
+            Ok(owner) => owner,
+            Err(_) => {
+                self.record_memory_observer_event_log(
+                    "fallback",
+                    Some(&bundle),
+                    serde_json::json!({"kind":"native_queue_ownership_unavailable"}),
+                );
+                self.process_memory_observer_bundle_deterministically(bundle);
+                return;
+            }
+        };
         let submitted_event_count = bundle.events.len();
         let submitted_prompt_number = bundle.prompt_number;
         let result = {
             let mut queue =
                 recover_write_lock(&self.memory_observer_queue, "memory_observer_queue");
-            queue.submit(bundle)
+            queue.submit(bundle, owner)
         };
 
         match result {
@@ -406,7 +430,7 @@ impl QueryEngine {
             let bundles = {
                 let mut queue =
                     recover_write_lock(&self.memory_observer_queue, "memory_observer_queue");
-                queue.drain_all()
+                queue.drain_owned()
             };
 
             if bundles.is_empty() {
@@ -427,7 +451,7 @@ impl QueryEngine {
                 break;
             }
 
-            for bundle in bundles {
+            for (bundle, owner) in bundles {
                 self.record_memory_observer_event_log(
                     "dequeue",
                     Some(&bundle),
@@ -436,14 +460,20 @@ impl QueryEngine {
                         "queue": self.memory_observer_queue_stats_details(),
                     }),
                 );
-                self.process_memory_observer_bundle_with_model(bundle).await;
+                if let Some(owner) = owner {
+                    owner
+                        .run(self.process_memory_observer_bundle_with_model(bundle))
+                        .await;
+                } else {
+                    self.process_memory_observer_bundle_deterministically(bundle);
+                }
             }
         }
     }
 
     async fn process_memory_observer_bundle_with_model(&self, bundle: MemoryObserverEventBundle) {
         match self.request_memory_observer_model_draft(&bundle).await {
-            Ok((draft, observer_model)) => {
+            Ok((draft, observer_model, reviewed_candidates)) => {
                 if let Err(issues) = validate_memory_observer_draft(&bundle, &draft) {
                     self.record_memory_observer_validation_failure(&issues);
                     self.record_memory_observer_validation_failure_event(&bundle, &issues);
@@ -471,8 +501,14 @@ impl QueryEngine {
                     self.process_memory_observer_bundle_deterministically(bundle);
                     return;
                 }
-                let write_result =
-                    self.write_memory_observer_draft(&bundle, &draft, Some(observer_model.clone()));
+                let write_result = if let Some(candidates_proposed) = reviewed_candidates {
+                    MemoryObserverWriteResult {
+                        candidates_proposed,
+                        ..Default::default()
+                    }
+                } else {
+                    self.write_memory_observer_draft(&bundle, &draft, Some(observer_model.clone()))
+                };
                 self.record_memory_observer_event_log(
                     "model_success",
                     Some(&bundle),
@@ -480,11 +516,17 @@ impl QueryEngine {
                         "observer_model": observer_model,
                         "observations_written": write_result.observations_written,
                         "summaries_written": write_result.summaries_written,
+                        "candidates_proposed": write_result.candidates_proposed,
                     }),
                 );
                 self.record_memory_observer_model_success();
             }
             Err(error) => {
+                if !error.deterministic_fallback_allowed {
+                    self.record_memory_observer_event_log("review_unconfirmed",Some(&bundle),serde_json::json!({"purpose":"memory_observer","outcome":"not_replayed","phase":error.phase,"reason_code":error.reason}));
+                    warn!("memory observer review attempt is unconfirmed; no fallback is replayed");
+                    return;
+                }
                 self.record_memory_observer_model_fallback(error.kind, error.reason.clone());
                 self.record_memory_observer_model_fallback_event(
                     &bundle,
@@ -497,7 +539,9 @@ impl QueryEngine {
                     error = error.reason,
                     "model memory observer failed; using deterministic fallback"
                 );
-                self.process_memory_observer_bundle_deterministically(bundle);
+                if error.deterministic_fallback_allowed {
+                    self.process_memory_observer_bundle_deterministically(bundle);
+                }
             }
         }
     }
@@ -505,22 +549,135 @@ impl QueryEngine {
     async fn request_memory_observer_model_draft(
         &self,
         bundle: &MemoryObserverEventBundle,
-    ) -> Result<(MemoryObserverDraft, String), MemoryObserverModelDraftError> {
+    ) -> Result<(MemoryObserverDraft, String, Option<usize>), MemoryObserverModelDraftError> {
         let observer_model = self.memory_observer_model_name();
-        let request = self.memory_observer_model_request(bundle, &observer_model);
-        let mut stream = self
-            .current_provider()
-            .stream_messages(request)
-            .map(default_timed_stream)
-            .map_err(|error| {
-                MemoryObserverModelDraftError::provider(error, MemoryObserverFailurePhase::Start)
+        let mut request = self.memory_observer_model_request(bundle, &observer_model);
+        let observer_purpose =
+            crate::native_model_requests::NativeModelRequestPurpose::MemoryObserver;
+        let provider = self.current_provider_for_purpose(observer_purpose);
+        let sink = self.curated_memory_observer_sink.clone();
+        let review_permit = if let Some(sink) = &sink {
+            let facts = ObserverExtractionRequest {
+                kind: ObserverExtractionKind::Model,
+                requested_model_id: Some(observer_model.clone()),
+                requested_maximum_output_tokens: request.max_tokens,
+                input_bytes: serde_json::to_vec(&request)
+                    .map_err(|_| {
+                        MemoryObserverModelDraftError::review(
+                            "MEMORY_OBSERVER_INPUT_INVALID",
+                            false,
+                        )
+                    })?
+                    .len(),
+            };
+            Some(sink.authorize(bundle, &facts).map_err(|_| {
+                MemoryObserverModelDraftError::review("MEMORY_OBSERVER_AUTHORIZATION_DENIED", true)
+            })?)
+        } else {
+            None
+        };
+        if let Some(permit) = &review_permit {
+            request.max_tokens = request.max_tokens.min(permit.maximum_output_tokens);
+        }
+        let mut accounting =
+            ObserverAttempt::new(self, &observer_model, sink.clone(), review_permit.clone());
+        let deadline = review_permit.as_ref().map(|permit| {
+            tokio::time::Instant::now()
+                + std::time::Duration::from_millis(permit.maximum_runtime_ms)
+        });
+        let admission = crate::request_admission::acquire(
+            &provider,
+            crate::request_admission::RequestClass::SessionMemory,
+        );
+        let admitted = if let Some(deadline) = deadline {
+            tokio::time::timeout_at(deadline, admission)
+                .await
+                .map_err(|_| {
+                    MemoryObserverModelDraftError::review(
+                        "MEMORY_OBSERVER_ADMISSION_TIMEOUT",
+                        false,
+                    )
+                })?
+        } else {
+            admission.await
+        }
+        .map_err(|_| {
+            MemoryObserverModelDraftError::review("MEMORY_OBSERVER_ADMISSION_UNAVAILABLE", true)
+        })?;
+        if !Arc::ptr_eq(
+            &provider,
+            &self.current_provider_for_purpose(observer_purpose),
+        ) || observer_model != self.memory_observer_model_name()
+        {
+            return Err(MemoryObserverModelDraftError::review(
+                "MEMORY_OBSERVER_MODEL_CHANGED",
+                true,
+            ));
+        }
+        if let (Some(sink), Some(permit)) = (&sink, &review_permit) {
+            sink.revalidate(permit, bundle).map_err(|_| {
+                MemoryObserverModelDraftError::review("MEMORY_OBSERVER_SOURCE_REVOKED", false)
             })?;
+        }
+        accounting.started();
+        let stream = match provider.stream_messages(request) {
+            Ok(stream) => stream,
+            Err(error) => {
+                let _ = accounting.finish(ObserverExtractionOutcome::ProviderFailed);
+                return Err(MemoryObserverModelDraftError::provider(
+                    error,
+                    MemoryObserverFailurePhase::Start,
+                ));
+            }
+        };
+        let mut stream = admitted.wrap(default_timed_stream(stream));
         let mut text = String::new();
-
-        while let Some(event) = stream.next().await {
-            match event.map_err(|error| {
-                MemoryObserverModelDraftError::provider(error, MemoryObserverFailurePhase::Stream)
-            })? {
+        loop {
+            let next = loop {
+                if let (Some(sink), Some(permit)) = (&sink, &review_permit) {
+                    sink.revalidate(permit, bundle).map_err(|_| {
+                        MemoryObserverModelDraftError::review(
+                            "MEMORY_OBSERVER_SOURCE_REVOKED",
+                            false,
+                        )
+                    })?;
+                }
+                if let Some(deadline) = deadline {
+                    // Bound source-revocation latency while this owned provider stream is quiet.
+                    tokio::select! {
+                        next=tokio::time::timeout_at(deadline,stream.next())=>break next.map_err(|_|MemoryObserverModelDraftError::review("MEMORY_OBSERVER_REQUEST_TIMEOUT",false))?,
+                        _=tokio::time::sleep(std::time::Duration::from_millis(250))=>continue,
+                    }
+                } else {
+                    break stream.next().await;
+                }
+            };
+            let Some(next) = next else {
+                break;
+            };
+            let event = match next {
+                Ok(event) => event,
+                Err(error) => {
+                    let _ = accounting.finish(ObserverExtractionOutcome::ProviderFailed);
+                    return Err(MemoryObserverModelDraftError::provider(
+                        error,
+                        MemoryObserverFailurePhase::Stream,
+                    ));
+                }
+            };
+            accounting.observe(&event);
+            if let Some(permit) = &review_permit
+                && accounting
+                    .total_observed()
+                    .is_some_and(|tokens| tokens > permit.maximum_total_tokens)
+            {
+                let _ = accounting.finish(ObserverExtractionOutcome::BudgetExceeded);
+                return Err(MemoryObserverModelDraftError::review(
+                    "MEMORY_OBSERVER_TOKEN_BUDGET_EXCEEDED",
+                    false,
+                ));
+            }
+            match event {
                 StreamEvent::ContentBlockStart {
                     content_block: ContentBlock::Text { text: block_text },
                     ..
@@ -530,6 +687,7 @@ impl QueryEngine {
                     ..
                 } => text.push_str(&delta_text),
                 StreamEvent::Error { error } => {
+                    let _ = accounting.finish(ObserverExtractionOutcome::ProviderFailed);
                     return Err(MemoryObserverModelDraftError::provider(
                         kcoder_api::ApiErrorKind::Api {
                             error_type: error.error_type,
@@ -540,23 +698,77 @@ impl QueryEngine {
                 }
                 _ => {}
             }
+            if text.len() > 512 * 1024 {
+                let _ = accounting.finish(ObserverExtractionOutcome::ParseFailed);
+                return Err(MemoryObserverModelDraftError::review(
+                    "MEMORY_OBSERVER_RESPONSE_TOO_LARGE",
+                    false,
+                ));
+            }
         }
-
+        accounting.completed_stream();
         if text.trim().is_empty() {
+            let _ = accounting.finish(ObserverExtractionOutcome::ParseFailed);
             return Err(MemoryObserverModelDraftError::parse(
                 "provider returned no observer draft text",
             ));
         }
-
-        let mut draft = parse_memory_observer_model_draft(&text)
-            .map_err(MemoryObserverModelDraftError::parse)?;
+        let mut draft = match parse_memory_observer_model_draft(&text) {
+            Ok(draft) => draft,
+            Err(error) => {
+                let _ = accounting.finish(ObserverExtractionOutcome::ParseFailed);
+                return Err(MemoryObserverModelDraftError::parse(error));
+            }
+        };
+        if sink.is_some()
+            && draft
+                .audit
+                .model
+                .as_ref()
+                .is_some_and(|model| model != &observer_model)
+        {
+            let _ = accounting.finish(ObserverExtractionOutcome::ValidationFailed);
+            return Err(MemoryObserverModelDraftError::review(
+                "MEMORY_OBSERVER_MODEL_RECEIPT_MISMATCH",
+                true,
+            ));
+        }
         if draft.audit.model.is_none() {
             draft.audit.model = Some(observer_model.clone());
         }
         if draft.audit.generated_at_epoch.is_none() {
             draft.audit.generated_at_epoch = Some(current_time_millis());
         }
-        Ok((draft, observer_model))
+        if sink.is_some()
+            && let Err(issues) = validate_memory_observer_draft(bundle, &draft)
+        {
+            self.record_memory_observer_validation_failure(&issues);
+            self.record_memory_observer_validation_failure_event(bundle, &issues);
+            let _ = accounting.finish(ObserverExtractionOutcome::ValidationFailed);
+            return Err(MemoryObserverModelDraftError::review(
+                "MEMORY_OBSERVER_DRAFT_VALIDATION_FAILED",
+                true,
+            ));
+        }
+        let receipt = accounting
+            .finish(ObserverExtractionOutcome::Validated)
+            .map_err(|_| {
+                MemoryObserverModelDraftError::review("MEMORY_OBSERVER_USAGE_UNCONFIRMED", false)
+            })?;
+        let reviewed_candidates = if let (Some(sink), Some(permit)) = (&sink, &review_permit) {
+            Some(
+                sink.stage_candidates(permit, bundle, &draft, &receipt)
+                    .map_err(|_| {
+                        MemoryObserverModelDraftError::review(
+                            "MEMORY_OBSERVER_CANDIDATE_COMMIT_UNCONFIRMED",
+                            false,
+                        )
+                    })?,
+            )
+        } else {
+            None
+        };
+        Ok((draft, observer_model, reviewed_candidates))
     }
 
     fn memory_observer_model_name(&self) -> String {
@@ -665,13 +877,52 @@ impl QueryEngine {
             );
             return;
         }
-        let write_result = self.write_memory_observer_draft(&bundle, &draft, None);
+        let write_result = if let Some(sink) = &self.curated_memory_observer_sink {
+            let result = (|| -> anyhow::Result<usize> {
+                let facts = ObserverExtractionRequest {
+                    kind: ObserverExtractionKind::Deterministic,
+                    requested_model_id: None,
+                    requested_maximum_output_tokens: 0,
+                    input_bytes: serde_json::to_vec(&bundle)?.len(),
+                };
+                let permit = sink.authorize(&bundle, &facts)?;
+                sink.revalidate(&permit, &bundle)?;
+                let now = current_time_millis();
+                let receipt = crate::integrations::knowledge::ObserverExtractionReceipt {
+                    operation_id: permit.origin.operation_id.clone(),
+                    provider_started: false,
+                    requested_model_id: None,
+                    actual_model_id: None,
+                    usage: None,
+                    usage_evidence:
+                        crate::integrations::knowledge::ObserverUsageEvidence::NotStarted,
+                    started_at_ms: now,
+                    finished_at_ms: now,
+                    outcome: ObserverExtractionOutcome::Validated,
+                };
+                sink.record_attempt(&permit, &receipt)?;
+                sink.stage_candidates(&permit, &bundle, &draft, &receipt)
+            })();
+            match result {
+                Ok(candidates_proposed) => MemoryObserverWriteResult {
+                    candidates_proposed,
+                    ..Default::default()
+                },
+                Err(_) => {
+                    warn!("memory observer review sink did not confirm candidate submission");
+                    return;
+                }
+            }
+        } else {
+            self.write_memory_observer_draft(&bundle, &draft, None)
+        };
         self.record_memory_observer_event_log(
             "deterministic_success",
             Some(&bundle),
             serde_json::json!({
                 "observations_written": write_result.observations_written,
                 "summaries_written": write_result.summaries_written,
+                "candidates_proposed": write_result.candidates_proposed,
             }),
         );
     }
@@ -691,9 +942,14 @@ impl QueryEngine {
 
         let mut result = MemoryObserverWriteResult::default();
         for write in writes.observations {
-            match self.memory_manager.save_structured_observation(write.input) {
-                Ok(Some(id)) => {
-                    result.observations_written = result.observations_written.saturating_add(1);
+            match self
+                .memory_manager
+                .save_structured_observation_with_status(write.input)
+            {
+                Ok(Some((id, inserted))) => {
+                    if inserted {
+                        result.observations_written = result.observations_written.saturating_add(1);
+                    }
                     debug!(
                         observation_id = id,
                         "recorded observer structured observation"
@@ -840,3 +1096,6 @@ fn append_memory_observer_event_log_line(path: &Path, line: &str) -> Result<()> 
 #[cfg(test)]
 #[path = "tests/memory_observer_unit.rs"]
 mod tests;
+
+#[cfg(test)]
+mod review_tests;

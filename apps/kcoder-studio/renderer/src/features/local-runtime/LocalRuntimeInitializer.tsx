@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { AlertCircle, Check, Copy, RefreshCw } from 'lucide-react'
 import {
@@ -24,9 +24,8 @@ import {
   readLocalExecutorLog,
   type LocalExecutorLog,
   type LocalExecutorStatus,
-} from '@/tauri/localExecutor'
+} from '@/host/localExecutor'
 
-const LOCAL_EXECUTOR_LOG_PATH = '~/.wegent-executor/logs/executor.log'
 const LOCAL_RUNTIME_SLOW_STARTUP_MS = 10000
 
 type LocalRuntimePhase = 'starting' | 'ready' | 'failed' | 'account-login'
@@ -36,6 +35,7 @@ interface LocalRuntimeInitializerProps {
   children: ReactNode
   initialCloudConnection?: LocalExecutorCloudConnection
   startupReady?: boolean
+  waitForInitialPage?: boolean
 }
 
 interface LocalRuntimeState {
@@ -78,7 +78,7 @@ function errorMessage(error: unknown, fallback: string): string {
 }
 
 function sanitizeLocalRuntimeDebugText(text: string): string {
-  return text.replace(/\btauri\b/gi, 'desktop app').replace(/\bsidecar\b/gi, 'executor process')
+  return text.replace(/\bsidecar\b/gi, 'executor process')
 }
 
 async function resolveLocalRuntimeState(
@@ -104,7 +104,7 @@ async function resolveLocalRuntimeState(
 }
 
 function formatLocalRuntimeDebugInfo(info: LocalRuntimeDebugInfo): string {
-  const logPath = info.log?.path ?? LOCAL_EXECUTOR_LOG_PATH
+  const logPath = info.log?.path?.trim()
   const logContent = info.logError
     ? `Failed to read executor log: ${info.logError}`
     : info.log?.content || '(executor log is empty)'
@@ -129,7 +129,7 @@ function formatLocalRuntimeDebugInfo(info: LocalRuntimeDebugInfo): string {
     `Backend auth token configured: ${info.log ? String(info.log.hasBackendAuthToken) : 'unknown'}`,
     `Pending request count: ${info.log?.pendingRequestCount ?? 'unknown'}`,
     `Local executor status: running=${info.log?.status.running ?? 'unknown'} ready=${info.log?.status.ready ?? 'unknown'} deviceId=${info.log?.status.deviceId ?? 'none'} version=${info.log?.status.version ?? 'none'} error=${info.log?.status.error ?? 'none'}`,
-    `Executor log path: ${logPath}`,
+    ...(logPath ? [`Executor log path: ${logPath}`] : []),
     `Executor log truncated: ${info.log?.truncated ? 'true' : 'false'}`,
     `Executor log lines: last ${info.log?.lineCount ?? 0}`,
     '',
@@ -153,12 +153,12 @@ async function copyDebugInfoText(text: string): Promise<void> {
   await copyLocalExecutorDebugInfo(text)
 }
 
-interface SlowStartupHelpProps {
+interface CopyStartupDiagnosticsProps {
   copyState: CopyDebugState
   onCopyDebugInfo: () => void
 }
 
-function SlowStartupHelp({ copyState, onCopyDebugInfo }: SlowStartupHelpProps) {
+function CopyStartupDiagnostics({ copyState, onCopyDebugInfo }: CopyStartupDiagnosticsProps) {
   const { t } = useTranslation('localRuntime')
   const copied = copyState === 'copied'
   const copying = copyState === 'copying'
@@ -173,36 +173,17 @@ function SlowStartupHelp({ copyState, onCopyDebugInfo }: SlowStartupHelpProps) {
   const Icon = copied ? Check : Copy
 
   return (
-    <div
-      data-testid="local-runtime-slow-startup-help"
-      className="mt-5 flex w-full max-w-[480px] flex-col items-stretch gap-3 rounded-lg border border-amber-500/20 bg-amber-500/10 px-3.5 py-3 text-left sm:flex-row sm:items-center sm:px-4"
+    <Button
+      type="button"
+      variant="outline"
+      className="h-11 min-w-[44px] border-border bg-base px-3 text-xs text-text-primary hover:bg-muted sm:h-9 sm:w-auto"
+      onClick={onCopyDebugInfo}
+      disabled={copying}
+      data-testid="local-runtime-copy-debug-button"
     >
-      <div className="flex min-w-0 flex-1 items-start gap-3 sm:items-center">
-        <span
-          data-testid="local-runtime-slow-startup-icon"
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-amber-500/15 text-amber-700 sm:h-8 sm:w-8 dark:text-amber-300"
-        >
-          <AlertCircle className="h-4 w-4" />
-        </span>
-        <div className="min-w-0">
-          <p className="text-sm font-medium text-text-primary">{t('slow_startup_title')}</p>
-          <p className="mt-0.5 text-xs leading-5 text-text-secondary">
-            {t('slow_startup_description')}
-          </p>
-        </div>
-      </div>
-      <Button
-        type="button"
-        variant="outline"
-        className="h-11 min-w-[44px] border-border bg-base px-3 text-xs text-text-primary hover:bg-muted sm:h-9 sm:w-auto"
-        onClick={onCopyDebugInfo}
-        disabled={copying}
-        data-testid="local-runtime-copy-debug-button"
-      >
-        <Icon className="h-4 w-4" />
-        {buttonLabel}
-      </Button>
-    </div>
+      <Icon className="h-4 w-4" />
+      {buttonLabel}
+    </Button>
   )
 }
 
@@ -210,14 +191,23 @@ export function LocalRuntimeInitializer({
   children,
   initialCloudConnection,
   startupReady = true,
+  waitForInitialPage = false,
 }: LocalRuntimeInitializerProps) {
   const { t } = useTranslation('localRuntime')
+  const { t: tCommon } = useTranslation('common')
   const enabled = useMemo(() => shouldInitializeLocalRuntime(), [])
   const fallbackError = t('fallback_error')
   const initialCloudConnectionRef = useRef(initialCloudConnection)
   const [slowStartupTimedOut, setSlowStartupTimedOut] = useState(false)
   const [startupAttempt, setStartupAttempt] = useState(0)
+  const appContentRef = useRef<HTMLDivElement>(null)
+  const [initialPageReady, setInitialPageReady] = useState(false)
   const [copyDebugState, setCopyDebugState] = useState<CopyDebugState>('idle')
+  const [diagnosticLog, setDiagnosticLog] = useState<{
+    attempt: number
+    error: string | null
+    path: string
+  } | null>(null)
   const runtimeErrorText = useMemo(
     () => ({
       notRunning: t('error_not_running'),
@@ -230,8 +220,26 @@ export function LocalRuntimeInitializer({
     error: null,
   }))
 
+  useLayoutEffect(() => {
+    const content = appContentRef.current
+    if (!waitForInitialPage || initialPageReady || state.phase !== 'ready' || !content) return
+    // Let the initial route mount under the same startup scene. A fallback
+    // in a retained, hidden page must not delay the visible route.
+    const reveal = () => {
+      const pending = Array.from(content.querySelectorAll('[data-studio-page-pending]'))
+      if (pending.some(element => element.getClientRects().length > 0)) return
+      observer.disconnect()
+      setInitialPageReady(true)
+    }
+    const observer = new MutationObserver(reveal)
+    observer.observe(content, { childList: true, subtree: true, attributes: true,
+      attributeFilter: ['hidden', 'aria-hidden', 'class', 'style'] })
+    reveal()
+    return () => observer.disconnect()
+  }, [waitForInitialPage, initialPageReady, state.phase])
+
   useEffect(() => {
-    if (!enabled) {
+    if (!enabled && !waitForInitialPage) {
       return undefined
     }
 
@@ -239,7 +247,7 @@ export function LocalRuntimeInitializer({
       setSlowStartupTimedOut(true)
     }, LOCAL_RUNTIME_SLOW_STARTUP_MS)
     return () => window.clearTimeout(timer)
-  }, [enabled, startupAttempt])
+  }, [enabled, startupAttempt, waitForInitialPage])
 
   const retryInitialize = useCallback(async () => {
     if (!enabled) return
@@ -262,6 +270,21 @@ export function LocalRuntimeInitializer({
       cancelled = true
     }
   }, [enabled, fallbackError, runtimeErrorText])
+
+  useEffect(() => {
+    if (state.phase !== 'failed') return
+    let cancelled = false
+    void (async () => {
+      try {
+        const log = await readLocalExecutorLog()
+        const path = log?.path?.trim()
+        if (!cancelled && path) setDiagnosticLog({ attempt: startupAttempt, error: state.error, path })
+      } catch {
+        // A failed diagnostic read cannot establish a log file location.
+      }
+    })()
+    return () => { cancelled = true }
+  }, [state.phase, state.error, startupAttempt])
 
   useEffect(() => {
     if (!enabled || state.phase !== 'ready' || !initialCloudConnectionRef.current) return
@@ -306,14 +329,17 @@ export function LocalRuntimeInitializer({
     return <KCoderAccountStartup onChanged={retryInitialize} />
   }
   const canMountChildren = state.phase === 'ready'
-  const canRevealChildren = canMountChildren
+  const canRevealChildren = canMountChildren && (!waitForInitialPage || initialPageReady)
   const shouldShowStartupScreen = !canRevealChildren
   const failed = state.phase === 'failed'
+  const diagnosticPath = failed && diagnosticLog?.attempt === startupAttempt && diagnosticLog.error === state.error
+    ? diagnosticLog.path : null
 
   return (
     <>
       {canMountChildren && (
-        <div hidden={!canRevealChildren} aria-hidden={!canRevealChildren}>
+        <div ref={appContentRef} aria-hidden={!canRevealChildren} inert={!canRevealChildren}
+          style={canRevealChildren ? undefined : { position: 'absolute', inset: 0, visibility: 'hidden' }}>
           {children}
         </div>
       )}
@@ -352,18 +378,30 @@ export function LocalRuntimeInitializer({
             <h1 className={failed ? 'heading-base' : 'kcoder-startup-heading'}>
               {failed ? t('failed_title') : t('starting_title')}
             </h1>
-            <p
-              className={
-                failed
-                  ? 'mt-3 max-w-[360px] text-sm leading-6 text-text-secondary'
-                  : 'kcoder-startup-description'
-              }
-            >
-              {failed ? t('failed_description') : t('starting_description')}
-            </p>
+            {failed ? (
+              <p className="mt-3 max-w-[360px] text-sm leading-6 text-text-secondary">
+                {t('failed_description')}
+              </p>
+            ) : (
+              <div className="grid w-full justify-items-center">
+                <p className={`kcoder-startup-description col-start-1 row-start-1 ${slowStartupTimedOut ? 'invisible' : ''}`}>
+                  {t('starting_description')}
+                </p>
+                <div
+                  data-testid="local-runtime-slow-startup-help"
+                  aria-hidden={!slowStartupTimedOut}
+                  className={`col-start-1 row-start-1 mt-3 flex flex-wrap items-center justify-center gap-x-3 text-sm text-text-secondary ${slowStartupTimedOut ? '' : 'invisible'}`}
+                >
+                  <p>{t('slow_startup_description')}</p>
+                  <Button variant="ghost" onClick={() => window.location.reload()}>
+                    {tCommon('common.reload_page')}
+                  </Button>
+                </div>
+              </div>
+            )}
 
             {failed ? (
-              <div className="mt-6 w-full rounded-lg border border-border bg-surface px-4 py-3 text-left">
+              <div className="studio-card-spacing mt-6 w-full rounded-lg border border-border bg-surface px-4 py-3 text-left">
                 {state.error && (
                   <p
                     data-testid="local-runtime-error"
@@ -372,32 +410,34 @@ export function LocalRuntimeInitializer({
                     {state.error}
                   </p>
                 )}
-                <div className="mt-3 text-xs leading-5 text-text-secondary">
+                {diagnosticPath && <div className="mt-3 text-xs leading-5 text-text-secondary" data-testid="local-runtime-log-path">
                   <span className="font-medium">{t('log_label')}: </span>
                   <code className="break-all rounded bg-base px-1.5 py-0.5 text-text-primary">
-                    {LOCAL_EXECUTOR_LOG_PATH}
+                    {diagnosticPath}
                   </code>
-                </div>
+                </div>}
               </div>
             ) : (
               <StartupSteps />
             )}
 
-            {!failed && slowStartupTimedOut && (
-              <SlowStartupHelp copyState={copyDebugState} onCopyDebugInfo={handleCopyDebugInfo} />
-            )}
-
             {failed && (
-              <Button
-                type="button"
-                variant="primary"
-                className="mt-6 h-10 min-w-[112px]"
-                onClick={() => void retryInitialize()}
-                data-testid="local-runtime-retry-button"
-              >
-                <RefreshCw className="h-4 w-4" />
-                {t('retry')}
-              </Button>
+              <div className="mt-6 flex flex-col items-center gap-3">
+                <Button
+                  type="button"
+                  variant="primary"
+                  className="h-10 min-w-[112px]"
+                  onClick={() => void retryInitialize()}
+                  data-testid="local-runtime-retry-button"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                  {t('retry')}
+                </Button>
+                <details className="text-sm text-text-secondary">
+                  <summary className="cursor-pointer">{t('startup_diagnostics')}</summary>
+                  <CopyStartupDiagnostics copyState={copyDebugState} onCopyDebugInfo={handleCopyDebugInfo} />
+                </details>
+              </div>
             )}
           </section>
           {!failed && <StartupSignature />}

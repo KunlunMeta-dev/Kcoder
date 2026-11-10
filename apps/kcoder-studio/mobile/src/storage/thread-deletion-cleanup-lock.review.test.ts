@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { installBrowserProfileFixture } from "@/test/browser-profile-fixture";
 
+// The lock contract controls only cache completion, not the IDB backend.
+vi.mock("./session-transcript-cache", () => ({ sessionTranscriptCache: {
+  capture: async (scope: unknown, isCurrent: () => boolean) => { if (!isCurrent()) throw new Error("stale"); return { scope }; },
+  invalidateThread: async () => {},
+} }));
 const storage = vi.hoisted(() => ({
   values: new Map<string, string>(),
   setItemGate: undefined as undefined | { entered: () => void; promise: Promise<void> },
@@ -44,6 +50,7 @@ const boundedRace = async <T>(promise: Promise<T>, milliseconds = 100): Promise<
   ]);
 
 beforeEach(() => { storage.values.clear(); storage.setItemGate = undefined; });
+beforeEach(() => installBrowserProfileFixture([profile]));
 let uninstallAuthority: (() => void) | undefined;
 afterEach(() => {
   taskRuntimeTestHelpers.resetConnector();
@@ -124,15 +131,16 @@ it("same-ticket paths added during a claimed cleanup survive late per-path ACK m
   expect(remaining.claim).toBeUndefined();
 });
 
-it("one live storage claim prevents a second retry worker, and late positive read does not erase confirmation", async () => {
-  const id = await prepareThreadDeletionCleanup(profile, server, "confirm-race", undefined, []);
+it("one confirmed storage claim prevents a second retry worker and survives repeated confirmation", async () => {
+  const id = await prepareThreadDeletionCleanup(profile, server, "confirm-race", undefined, ["/staged/claim"]);
+  await confirmThreadDeletionCleanup(profile.id, id);
   const entered = deferred();
   const release = deferred();
   const request = vi.fn(async (method: string) => {
-    if (method === "thread/read") {
+    if (method === "gateway/attachments/discardRetained") {
       entered.resolve();
       await release.promise;
-      return { thread: { id: "confirm-race" } };
+      return { cleared: ["/staged/claim"], pending: [] };
     }
     return undefined;
   });
@@ -140,16 +148,16 @@ it("one live storage claim prevents a second retry worker, and late positive rea
 
   const first = retryThreadDeletionCleanup(profile, [server]);
   await entered.promise;
+  const claim = readTickets()[0].claim;
+  expect(claim).toBeDefined();
   await retryThreadDeletionCleanup(profile, [server]);
   await confirmThreadDeletionCleanup(profile.id, id);
   expect(readTickets()[0].confirmed).toBe(true);
+  expect(readTickets()[0].claim).toEqual(claim);
   release.resolve();
   await first;
 
-  const current = readTickets()[0];
-  expect(current.id).toBe(id);
-  expect(current.confirmed).toBe(true);
-  expect(current.claim).toBeUndefined();
+  expect(readTickets()).toEqual([]);
   expect(request).toHaveBeenCalledTimes(1);
 });
 

@@ -1,5 +1,7 @@
 #[path = "background_delivery_runtime.rs"]
 mod delivery;
+#[path = "background_runtime/exact_run.rs"]
+mod exact_run;
 use super::*;
 
 /// Reserves jobs, prefire, and memory worker admission, not foreground turns.
@@ -293,15 +295,21 @@ impl QueryEngine {
     }
 
     /// Whether a finished background job should wake the main model with a
-    /// follow-up turn. Sub-agent and workflow jobs do this; internal
-    /// maintenance jobs and explicit tool background tasks update state/UI but
-    /// are consumed via their own mechanisms.
+    /// follow-up turn. Every background-delivered sub-agent, workflow and tool
+    /// job does this, so a failed background test reaches the original task.
+    /// Foreground-delivered jobs and internal maintenance jobs never do.
     pub fn background_job_triggers_followup(&self, id: &str) -> bool {
-        self.state.task(id).is_some_and(|task| {
-            matches!(task.kind, TaskKind::Subagent)
-                && task.notify_parent_on_completion
-                && !Self::is_internal_background_task(&self.state, id)
-        })
+        self.state
+            .task(id)
+            .is_some_and(|task| self.background_task_wakes_parent(&task))
+    }
+
+    /// The single kind-independent wake rule shared by run-keyed and legacy
+    /// background deliveries in every client.
+    pub fn background_task_wakes_parent(&self, task: &kcoder_state::Task) -> bool {
+        task.notify_parent_on_completion
+            && task.delivery == kcoder_state::TaskDelivery::Background
+            && !Self::is_internal_background_task(&self.state, &task.id)
     }
 
     /// Apply one lifecycle event and return it only when this event won the
@@ -436,7 +444,7 @@ impl QueryEngine {
                     ),
                 ));
             }
-            BackgroundJobEvent::Failed { id, error } => {
+            BackgroundJobEvent::Failed { id, error, .. } => {
                 if Self::is_internal_background_task(state, id) {
                     if !state.claim_task_notification_injected(id) {
                         return None;
@@ -647,7 +655,11 @@ impl QueryEngine {
                         id,
                         output: ToolOutput::text(output),
                     },
-                    TaskStatus::Failed => BackgroundJobEvent::Failed { id, error: output },
+                    TaskStatus::Failed => BackgroundJobEvent::Failed {
+                        id,
+                        error: output,
+                        execution_metadata: Vec::new(),
+                    },
                     TaskStatus::Cancelled => BackgroundJobEvent::Cancelled { id, reason: output },
                     TaskStatus::Halted => BackgroundJobEvent::Halted { id, reason: output },
                     _ => return None,
@@ -676,6 +688,7 @@ impl QueryEngine {
                             .output
                             .clone()
                             .unwrap_or_else(|| "background job failed".to_string()),
+                        execution_metadata: Vec::new(),
                     }),
                     TaskStatus::Cancelled => Some(BackgroundJobEvent::Cancelled {
                         id: task.id.clone(),
@@ -816,7 +829,7 @@ impl QueryEngine {
                     "output": tool_output_text(output),
                 }),
             ),
-            BackgroundJobEvent::Failed { id, error } => (
+            BackgroundJobEvent::Failed { id, error, .. } => (
                 id.clone(),
                 serde_json::json!({
                     "id": id,

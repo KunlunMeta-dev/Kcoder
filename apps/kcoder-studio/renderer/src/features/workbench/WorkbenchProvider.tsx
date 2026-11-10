@@ -1,6 +1,12 @@
+import { expertConversationRoute } from '@/features/experts/conversationRoutes'
+import { knownTaskRecipient } from '@/features/task-comparison/taskRecipient'
+import { setStudioWorkMode, type StudioWorkMode } from './studioWorkMode'
 import { safeErrorDiagnostic } from '@/lib/error-diagnostics'
 import { useTranslation } from '@/hooks/useTranslation'
-import { listenAccountContextChanges } from '@/kcoder/accountContextEvents'
+import {
+  captureAccountContextRevision,
+  listenAccountContextChanges,
+} from '@/kcoder/accountContextEvents'
 import { workbenchModelTarget } from './workbenchModelTarget'
 import { isKCoderGatewayPage } from '@/kcoder/gatewayRpc'
 import {
@@ -32,10 +38,10 @@ import {
   getRuntimeRemoteProjectRegistrations,
 } from '@/lib/runtime-project-state'
 import { requestNewChatComposerFocus } from '@/lib/workbenchComposerFocus'
-import { installLocalWorkspaceOpenListener } from '@/tauri/localWorkspaceOpen'
+import { installLocalWorkspaceOpenListener } from '@/host/localWorkspaceOpen'
 import { createLocalCodexPluginApi } from '@/api/local/codexPlugins'
 import { listWegentInstalledConnectorApps } from '@/api/cloud/connectorApps'
-import { requestLocalExecutor } from '@/tauri/localExecutor'
+import { requestLocalExecutor } from '@/host/localExecutor'
 import { runtimeNameForCurrentHost } from '@/kcoder/legacyRuntimeAbi'
 import type {
   LocalDeviceApp,
@@ -101,13 +107,18 @@ import {
   findSelectableProject,
   findProjectDeviceWorkspace,
   findRuntimeTask,
+  findRuntimeTaskWorkspace,
   getRememberedStandaloneDeviceId,
   getRuntimeTaskRouteKey,
   getDefaultProjectDeviceWorkspaceId,
   readLastProjectId,
   writeLastProjectId,
 } from './workbenchRuntimeHelpers'
-import { defaultNewChatModelSelection, disableCrossProviderModels } from './runtimeModelSelection'
+import {
+  defaultNewChatModelSelection,
+  disableCrossProviderModels,
+  selectedModelExecutionFields,
+} from './runtimeModelSelection'
 import {
   createDefaultWorkbenchServices,
   createExecutorClientForWorkbenchServices,
@@ -291,7 +302,10 @@ export function WorkbenchProvider({
   const consumeQueuedPluginTrial = useCallback(() => {
     const trial = consumePluginTrial()
     if (!trial) return
-    if (trial.target && !state.devices.some(device => device.device_id === trial.target!.deviceId)) {
+    if (
+      trial.target &&
+      !state.devices.some(device => device.device_id === trial.target!.deviceId)
+    ) {
       dispatch({ type: 'error_set', error: t('pluginNetwork.installTargetUnavailable') })
       return
     }
@@ -489,6 +503,43 @@ export function WorkbenchProvider({
         ? findModelForSelection(modelSelection.models, modelSelectionConfig)
         : null,
     [modelSelection.models, modelSelectionConfig, state.currentRuntimeTask]
+  )
+  const queueActiveTurnModelSelection = useCallback(
+    async (model: UnifiedModel) => {
+      const address = state.currentRuntimeTask
+      if (!address || findRuntimeTask(state.runtimeWork, address)?.runtime !== 'kcoder') {
+        return false
+      }
+      if (model.config?.supportsTurnModelSwitch !== true) return false
+      const queueSelection = executorClient.runtime.queueRuntimeModelSelection
+      if (!queueSelection) return false
+      const selection = selectedModelExecutionFields(
+        model,
+        modelSelection.getSelectedModelOptions()
+      )
+      const modelId = selection.modelId
+      const providerId =
+        typeof selection.modelOptions?.codexProviderId === 'string'
+          ? selection.modelOptions.codexProviderId
+          : null
+      const qualifiedModel =
+        modelId && modelId.includes('::')
+          ? modelId
+          : modelId && providerId
+            ? providerId + '::' + modelId
+            : null
+      if (!qualifiedModel) {
+        throw new Error('Choose a provider-qualified KCoder model for the running conversation.')
+      }
+      const result = await queueSelection({ address, model: qualifiedModel })
+      return result.accepted
+    },
+    [
+      executorClient.runtime,
+      modelSelection.getSelectedModelOptions,
+      state.currentRuntimeTask,
+      state.runtimeWork,
+    ]
   )
   const conversationModels = useMemo(
     () =>
@@ -917,6 +968,52 @@ export function WorkbenchProvider({
     user,
   ])
 
+  const switchStudioWorkMode = useCallback(
+    (mode: StudioWorkMode) => {
+      const active = state.currentRuntimeTask
+      const workspace = active ? findRuntimeTaskWorkspace(state.runtimeWork, active) : null
+      if (active && state.currentProject && (!workspace || workspace.id == null)) {
+        dispatch({ type: 'error_set', error: t('workbench.work_mode.workspace_unavailable') })
+        return
+      }
+      setStudioWorkMode(mode)
+      // A product-mode switch selects a blank task; it never edits or interrupts a resident thread.
+      if (active) {
+        modelSelection.setSelectionForScope?.(
+          getProjectChatScopeKey({
+            currentRuntimeTask: null,
+            standaloneChatKey: state.standaloneChatKey,
+          }),
+          modelSelection.getSelectedModel?.() ?? modelSelection.selectedModel,
+          modelSelection.getSelectedModelOptions?.() ?? modelSelection.selectedModelOptions
+        )
+        if (state.currentProject && workspace)
+          dispatch({
+            type: 'project_workspace_selected',
+            project: state.currentProject,
+            deviceWorkspaceId: workspace.id ?? null,
+          })
+        else
+          dispatch({
+            type: 'project_cleared',
+            standaloneDeviceId: active.deviceId,
+            standaloneWorkspacePath: active.workspacePath ?? state.standaloneWorkspacePath,
+          })
+      }
+      navigateTo('/')
+      requestNewChatComposerFocus()
+    },
+    [
+      state.currentRuntimeTask,
+      state.currentProject,
+      state.runtimeWork,
+      state.standaloneWorkspacePath,
+      state.standaloneChatKey,
+      modelSelection,
+      t,
+    ]
+  )
+
   const listLocalSkills = useCallback(
     async (forceReload = false) => {
       const selectedProjectWorkspace = findProjectDeviceWorkspace(
@@ -1041,6 +1138,28 @@ export function WorkbenchProvider({
       state.standaloneDeviceId,
       user,
     ]
+  )
+
+  const startExpertTask = useCallback(
+    (expert: Omit<import('@/types/workbench').ExpertTaskDraft, 'draftKey'>) => {
+      writeLastProjectId(user.id, null)
+      dispatch({
+        type: 'project_cleared',
+        standaloneDeviceId: expert.deviceId,
+        standaloneWorkspacePath: expert.workspacePath,
+        startFreshChat: true,
+        expert: { ...expert, entry: 'expert' },
+      })
+      setStudioWorkMode('kcoder')
+      navigateTo(expertConversationRoute({ ...expert, expertId: expert.reference.id }))
+      requestNewChatComposerFocus()
+    },
+    [user.id]
+  )
+
+  const selectDraftExpert = useCallback<import('@/types/workbench').SelectDraftExpert>(
+    (expert, owner) => dispatch({ type: 'expert_draft_selected', expert,
+      draftKey: owner.draftKey, projectId: owner.projectId }), []
   )
 
   const startStandaloneChat = useCallback(() => {
@@ -1560,6 +1679,7 @@ export function WorkbenchProvider({
       isAttachmentReadyToSend: attachmentSelection.isAttachmentReadyToSend,
       setSelectedModel: modelSelection.setSelectedModel,
       setSelectedModelAndOptions: modelSelection.setSelectedModelAndOptions,
+      queueActiveTurnModelSelection,
       setSelectedModelOption: modelSelection.setSelectedModelOption,
       getSelectedModel: modelSelection.getSelectedModel,
       isSelectedModelUnavailable: modelSelection.isSelectedModelUnavailable,
@@ -1602,6 +1722,7 @@ export function WorkbenchProvider({
       modelSelection.selectedModelOptions,
       modelSelection.setSelectedModel,
       modelSelection.setSelectedModelAndOptions,
+      queueActiveTurnModelSelection,
       modelSelection.setSelectedModelOption,
       modelSelection.getSelectedModel,
       modelSelection.isSelectedModelUnavailable,
@@ -1634,6 +1755,7 @@ export function WorkbenchProvider({
       isAttachmentReadyToSend: attachmentSelection.isAttachmentReadyToSend,
       setSelectedModel: modelSelection.setSelectedModel,
       setSelectedModelAndOptions: modelSelection.setSelectedModelAndOptions,
+      queueActiveTurnModelSelection,
       setSelectedModelOption: modelSelection.setSelectedModelOption,
       getSelectedModel: modelSelection.getSelectedModel,
       isSelectedModelUnavailable: modelSelection.isSelectedModelUnavailable,
@@ -1675,6 +1797,7 @@ export function WorkbenchProvider({
       modelSelection.selectedModelOptions,
       modelSelection.setSelectedModel,
       modelSelection.setSelectedModelAndOptions,
+      queueActiveTurnModelSelection,
       modelSelection.setSelectedModelOption,
       modelSelection.getSelectedModel,
       modelSelection.isSelectedModelUnavailable,
@@ -1686,6 +1809,26 @@ export function WorkbenchProvider({
       skillSelection.skills,
       skillSelection.toggleSkill,
     ]
+  )
+
+  const appendRuntimeTaskDraft = useCallback(
+    (address: RuntimeTaskAddress, text: string) => {
+      const currentAccount = captureAccountContextRevision()
+      const target = knownTaskRecipient(state.runtimeWork, address)
+      if (!currentAccount(address.deviceId) || !target || !text.trim() || text.length > 64 * 1024)
+        return false
+      const scope = getRuntimeTaskChatScopeKey(target)
+      setDraftInputByScope(current =>
+        currentAccount(address.deviceId)
+          ? {
+              ...current,
+              [scope]: current[scope] ? `${current[scope]}\n\n${text}` : text,
+            }
+          : current
+      )
+      return true
+    },
+    [state.runtimeWork]
   )
 
   const value: WorkbenchContextValue = {
@@ -1707,10 +1850,14 @@ export function WorkbenchProvider({
     selectStandaloneDevice,
     openStandaloneWorkspace,
     startNewChat,
+    switchStudioWorkMode,
     startNewSkillChat,
+    startExpertTask,
+    selectDraftExpert,
     startStandaloneChat,
     startNewProjectChat,
     openRuntimeTask: runtimeTasks.openRuntimeTask,
+    appendRuntimeTaskDraft,
     searchRuntimeWork: runtimeTasks.searchRuntimeWork,
     loadRuntimeTranscriptForPane: runtimeTasks.loadRuntimeTranscriptForPane,
     subscribeRuntimeTaskStream: stableSubscribeRuntimeTaskStream,
@@ -1797,10 +1944,14 @@ export function WorkbenchProvider({
       selectStandaloneDevice: stableSelectStandaloneDevice,
       openStandaloneWorkspace: stableOpenStandaloneWorkspace,
       startNewChat: stableStartNewChat,
+      switchStudioWorkMode,
       startNewSkillChat: stableStartNewSkillChat,
+      startExpertTask,
+    selectDraftExpert,
       startStandaloneChat: stableStartStandaloneChat,
       startNewProjectChat: stableStartNewProjectChat,
       openRuntimeTask: stableOpenRuntimeTask,
+      appendRuntimeTaskDraft,
       searchRuntimeWork: stableSearchRuntimeWork,
       loadRuntimeTranscriptForPane: stableLoadRuntimeTranscriptForPane,
       subscribeRuntimeTaskStream: stableSubscribeRuntimeTaskStream,
@@ -1869,6 +2020,8 @@ export function WorkbenchProvider({
       revertTurnFileChanges: stableRevertTurnFileChanges,
     }),
     [
+      startExpertTask,
+    selectDraftExpert,
       isStartupReady,
       paneProjectChatValue,
       paneState,
@@ -1912,8 +2065,10 @@ export function WorkbenchProvider({
       stableLoadRuntimeTranscriptForPane,
       stableLoadTurnFileChangesDiff,
       stableOpenRuntimeTask,
+      appendRuntimeTaskDraft,
       stableOpenStandaloneWorkspace,
       stablePauseCurrentResponse,
+      stableShortenCurrentWait,
       stablePushEnvironmentChanges,
       stablePrepareDeviceWorkspace,
       stableRefreshDevices,
@@ -1943,6 +2098,7 @@ export function WorkbenchProvider({
       stableSetWorkbenchError,
       stableSetProjectWorktreeBranch,
       stableStartNewChat,
+      switchStudioWorkMode,
       stableStartNewSkillChat,
       stableStartNewProjectChat,
       stableStartStandaloneChat,

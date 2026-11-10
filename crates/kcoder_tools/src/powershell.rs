@@ -27,7 +27,7 @@ use tracing::debug;
 #[derive(Debug, Default)]
 pub struct PowerShellTool;
 
-const DEFAULT_TIMEOUT_MS: u64 = 300_000;
+const DEFAULT_TIMEOUT_MS: u64 = kcoder_config::DEFAULT_SHELL_TIMEOUT_MS;
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct PowerShellInput {
@@ -38,7 +38,7 @@ pub struct PowerShellInput {
     /// logs and background task summaries. Omit only when the command is
     /// already self-explanatory.
     pub description: Option<String>,
-    /// Timeout in milliseconds. Use a JSON integer. Defaults to 300 seconds
+    /// Total command lifetime in milliseconds. Use a JSON integer. Defaults to 30 minutes
     /// unless the engine injects a session-specific default.
     #[serde(default = "default_timeout_ms")]
     pub timeout: u64,
@@ -488,7 +488,10 @@ async fn run_powershell_command(
 }
 
 enum PowerShellChild {
-    Tokio(tokio::process::Child),
+    Tokio(
+        tokio::process::Child,
+        #[cfg(windows)] kcoder_process_supervisor::suspended_child::SuspendedChildJob,
+    ),
     #[cfg(windows)]
     Windows(crate::windows_sandbox::WindowsSandboxChild),
 }
@@ -503,14 +506,14 @@ impl PowerShellChild {
     #[cfg(windows)]
     fn id(&self) -> Option<u32> {
         match self {
-            Self::Tokio(child) => child.id(),
+            Self::Tokio(child, ..) => child.id(),
             Self::Windows(child) => Some(child.pid),
         }
     }
 
     async fn wait(&mut self) -> std::io::Result<std::process::ExitStatus> {
         match self {
-            Self::Tokio(child) => child.wait().await,
+            Self::Tokio(child, ..) => child.wait().await,
             #[cfg(windows)]
             Self::Windows(child) => child.wait().await,
         }
@@ -518,7 +521,10 @@ impl PowerShellChild {
 
     fn start_kill(&mut self) -> std::io::Result<()> {
         match self {
+            #[cfg(not(windows))]
             Self::Tokio(child) => child.start_kill(),
+            #[cfg(windows)]
+            Self::Tokio(_, job) => job.terminate().map_err(std::io::Error::other),
             #[cfg(windows)]
             Self::Windows(child) => {
                 child.terminate();
@@ -529,7 +535,7 @@ impl PowerShellChild {
 
     #[cfg(windows)]
     fn uses_native_job(&self) -> bool {
-        matches!(self, Self::Windows(_))
+        true
     }
 }
 
@@ -547,6 +553,14 @@ fn spawn_regular_powershell(
     if let Some(environment) = isolation_environment {
         command_builder.envs(environment.iter().cloned());
     }
+    #[cfg(windows)]
+    let mut job =
+        kcoder_process_supervisor::suspended_child::SuspendedChildJob::new().map_err(|error| {
+            ToolError::Execution(format!("cannot create PowerShell process job: {error}"))
+        })?;
+    #[cfg(windows)]
+    command_builder
+        .creation_flags(kcoder_process_supervisor::suspended_child::SUSPENDED_CHILD_FLAGS);
     let mut child = command_builder
         .env("SHELL", shell)
         .current_dir(cwd)
@@ -555,6 +569,17 @@ fn spawn_regular_powershell(
         .kill_on_drop(true)
         .spawn()
         .map_err(|e| ToolError::Execution(format!("failed to spawn PowerShell: {e}")))?;
+    #[cfg(windows)]
+    {
+        let handle = child
+            .raw_handle()
+            .ok_or_else(|| ToolError::Execution("PowerShell process handle unavailable".into()))?;
+        // SAFETY: the fresh suspended child owns the borrowed process handle.
+        job.assign_and_resume(unsafe { std::os::windows::io::BorrowedHandle::borrow_raw(handle) })
+            .map_err(|error| {
+                ToolError::Execution(format!("cannot assign PowerShell process job: {error}"))
+            })?;
+    }
     let stdout = child
         .stdout
         .take()
@@ -575,7 +600,11 @@ fn spawn_regular_powershell(
         limits.clone(),
         live_output.map(|capture| (capture, OutputStream::Stderr)),
     ));
-    Ok((PowerShellChild::Tokio(child), stdout_reader, stderr_reader))
+    #[cfg(windows)]
+    let child = PowerShellChild::Tokio(child, job);
+    #[cfg(not(windows))]
+    let child = PowerShellChild::Tokio(child);
+    Ok((child, stdout_reader, stderr_reader))
 }
 
 fn powershell_invocation_args(command: &str) -> Vec<String> {
@@ -718,8 +747,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn powershell_fallback_timeout_is_five_minutes() {
-        assert_eq!(DEFAULT_TIMEOUT_MS, 300_000);
+    fn powershell_fallback_timeout_is_thirty_minutes() {
+        assert_eq!(DEFAULT_TIMEOUT_MS, 1_800_000);
     }
 
     #[cfg(windows)]
@@ -833,6 +862,17 @@ mod tests {
     #[cfg(windows)]
     #[tokio::test]
     async fn native_windows_job_closes_pipes_left_open_by_background_descendant() {
+        windows_job_closes_descendant_pipes(true).await;
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn regular_windows_job_closes_pipes_left_open_by_background_descendant() {
+        windows_job_closes_descendant_pipes(false).await;
+    }
+
+    #[cfg(windows)]
+    async fn windows_job_closes_descendant_pipes(sandboxed: bool) {
         let tmp = tempfile::tempdir().unwrap();
         let workspace = tmp.path().join("workspace");
         std::fs::create_dir_all(&workspace).unwrap();
@@ -844,7 +884,12 @@ mod tests {
                 ..Default::default()
             },
         ));
-        let ctx = ToolContext::new(kcoder_state::AppState::new(&workspace)).with_sandbox(sandbox);
+        let ctx = ToolContext::new(kcoder_state::AppState::new(&workspace));
+        let ctx = if sandboxed {
+            ctx.with_sandbox(sandbox)
+        } else {
+            ctx
+        };
         let command = probe.command(true);
         let mut execution = Box::pin(PowerShellTool.call(
             serde_json::json!({ "command": command, "timeout": 12_000 }),

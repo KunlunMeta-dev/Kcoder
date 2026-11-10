@@ -17,7 +17,7 @@ import { useWorkbench } from '@/features/workbench/useWorkbench'
 import { useIsMobile } from '@/hooks/useIsMobile'
 import { useTranslation } from '@/hooks/useTranslation'
 import { navigateTo } from '@/lib/navigation'
-import { isTauriRuntime } from '@/lib/runtime-environment'
+import { isGatewayRuntime } from '@/lib/runtime-environment'
 import { createPluginRouteRuntimeTaskOpener } from './plugin-route-navigation'
 
 const PluginsWorkspace = lazy(() =>
@@ -48,7 +48,7 @@ function PluginsWorkspaceRouteFallback({
           {topBarLeftActions}
         </div>
       </div>
-      <div className="mx-auto flex w-full max-w-[1040px] flex-col gap-7 px-5 pb-14 pt-5 md:px-8 md:pt-4">
+      <div className="studio-page-column flex flex-col gap-4 pb-14 pt-5">
         <section className="space-y-1.5">
           <h1 className="text-xl font-normal leading-9 tracking-normal text-text-primary">
             {t('workbench.plugins_tab', '插件')}
@@ -130,7 +130,7 @@ export function PluginsPage() {
   const [searchOpen, setSearchOpen] = useState(false)
   const { sidebarCollapsed, compact, overlayNavigation, drawerOpen, setDrawerOpen, toggleSidebar } =
     usePluginPageNavigation(isMobile)
-  const isTauri = isTauriRuntime()
+  const isGateway = isGatewayRuntime()
   const handleOpenRuntimeTask = createPluginRouteRuntimeTaskOpener(openRuntimeTask)
 
   const handleSelectProject = (projectId: number) => {
@@ -142,6 +142,25 @@ export function PluginsPage() {
     setSettingsOpen(false)
     navigateTo('/plugins')
   }
+
+  const topBarLeftActions = (
+    <div className="flex min-w-0 items-center gap-2">
+      {!isMobile && (!isGateway || compact) && (
+        <DesktopWindowControls
+          sidebarCollapsed={sidebarCollapsed}
+          onToggleSidebar={toggleSidebar}
+          onNewChat={
+            sidebarCollapsed
+              ? () => {
+                  navigateTo('/')
+                  startNewChat()
+                }
+              : undefined
+          }
+        />
+      )}
+    </div>
+  )
 
   if (settingsOpen) {
     if (mobileSettingsLayout) {
@@ -265,17 +284,7 @@ export function PluginsPage() {
         fallback={
           <PluginsWorkspaceRouteFallback
             sidebarCollapsed={sidebarCollapsed && !isMobile}
-            topBarLeftActions={
-              !isMobile && sidebarCollapsed && (!isTauri || compact) ? (
-                <DesktopWindowControls
-                  sidebarCollapsed
-                  onToggleSidebar={toggleSidebar}
-                  onNewChat={handleNewChat}
-                />
-              ) : !isMobile && (!isTauri || compact) ? (
-                <DesktopWindowControls sidebarCollapsed={false} onToggleSidebar={toggleSidebar} />
-              ) : undefined
-            }
+            topBarLeftActions={topBarLeftActions}
           />
         }
       >
@@ -298,17 +307,7 @@ export function PluginsPage() {
           })()}
           cloudMarketplaceAvailable={cloudConnection.isConnected}
           sidebarCollapsed={sidebarCollapsed && !isMobile}
-          topBarLeftActions={
-            !isMobile && sidebarCollapsed && (!isTauri || compact) ? (
-              <DesktopWindowControls
-                sidebarCollapsed
-                onToggleSidebar={toggleSidebar}
-                onNewChat={handleNewChat}
-              />
-            ) : !isMobile && (!isTauri || compact) ? (
-              <DesktopWindowControls sidebarCollapsed={false} onToggleSidebar={toggleSidebar} />
-            ) : undefined
-          }
+          topBarLeftActions={topBarLeftActions}
         />
       </Suspense>
       <WorkbenchSearchDialog

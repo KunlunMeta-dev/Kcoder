@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from 'vitest'
-import { listen } from '@tauri-apps/api/event'
+import { listen } from '@/lib/runtime-events'
 import {
   createTestGatewayRuntime,
   FakeGatewayClient,
@@ -97,6 +97,17 @@ test.each([
     else await resumed
     await new Promise(resolve => setTimeout(resolve, 0))
     const inputs = toolPathPreviews.readInputs('local', 'kcoder:local:late-thread')
+    if (scenario === 'live')
+      expect(observed).toContainEqual(
+        expect.objectContaining({
+          event: 'response.created',
+          payload: expect.objectContaining({
+            turnId: 'live-turn',
+            attemptId: 'live-attempt',
+            subtaskId: 'live-attempt',
+          }),
+        })
+      )
     expect(inputs).toHaveLength(scenario === 'live' || scenario === 'watermark-replay' ? 1 : 0)
     if (scenario === 'live' || scenario === 'watermark-replay')
       expect(inputs[0].lines?.generatedLines).toBe(3)

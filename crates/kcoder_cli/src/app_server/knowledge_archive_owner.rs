@@ -51,7 +51,7 @@ fn generated_name(path: &Path) -> bool {
         })
 }
 /// Each pass is bounded and only generated, ready roots with an unlocked lease are eligible.
-pub(super) fn scavenge(parent: &Path) -> Result<usize> {
+pub fn scavenge(parent: &Path) -> Result<usize> {
     let entries = match std::fs::read_dir(parent) {
         Ok(entries) => entries,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(0),
@@ -150,7 +150,7 @@ mod tests {
         let child = std::process::Command::new(std::env::current_exe()?)
             .args([
                 "--exact",
-                "app_server::knowledge_archive_owner::tests::archive_owner_crash_child",
+                "knowledge_archive_owner::tests::archive_owner_crash_child",
                 "--nocapture",
             ])
             .env("KCODER_ARCHIVE_CRASH_FIXTURE_OUT", &output)

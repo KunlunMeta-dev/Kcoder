@@ -1,0 +1,441 @@
+{
+  "WorkflowAgentModelSelection": [
+    {
+      "decoded": {
+        "expectedRevision": "original-revision",
+        "mode": "explicit",
+        "model": "native-model",
+        "provider": "native-provider"
+      },
+      "name": "native-declarative-collaboration",
+      "value": {
+        "expectedRevision": "original-revision",
+        "mode": "explicit",
+        "model": "native-model",
+        "provider": "native-provider"
+      }
+    }
+  ],
+  "WorkflowArtifactRequirement": [
+    {
+      "decoded": {
+        "forbiddenLiterals": [],
+        "minBytes": 1,
+        "path": "report.md",
+        "requireChanged": true,
+        "required": true,
+        "uniqueContent": false
+      },
+      "name": "native-declarative-collaboration",
+      "value": {
+        "forbiddenLiterals": [],
+        "minBytes": 1,
+        "path": "report.md",
+        "requireChanged": true,
+        "required": true,
+        "uniqueContent": false
+      }
+    }
+  ],
+  "WorkflowCollaborationApplyParams": [
+    {
+      "decoded": {
+        "expectedRevision": 1,
+        "id": "original-empty-draft",
+        "plan": {
+          "inputSchema": {
+            "type": "object"
+          },
+          "members": [
+            {
+              "acceptanceCriteria": [
+                "The file exists and contains source evidence."
+              ],
+              "allowedWritePaths": [
+                "report.md"
+              ],
+              "artifactRequirements": [
+                {
+                  "forbiddenLiterals": [],
+                  "minBytes": 1,
+                  "path": "report.md",
+                  "requireChanged": true,
+                  "required": true,
+                  "uniqueContent": false
+                }
+              ],
+              "dependsOn": [],
+              "id": "writer",
+              "inputBindings": {},
+              "instructions": "Use the supplied source and validate the actual file.",
+              "maxTurns": 5,
+              "modelSelection": {
+                "mode": "inherit_current"
+              },
+              "outputSchema": {
+                "type": "object"
+              },
+              "resultCheck": {
+                "source": "return true;",
+                "timeoutMs": 1000
+              },
+              "role": "writer",
+              "title": "撰写报告"
+            }
+          ],
+          "version": 1
+        }
+      },
+      "name": "nonexecuting-original-workflow-authoring",
+      "value": {
+        "expectedRevision": 1,
+        "id": "original-empty-draft",
+        "plan": {
+          "inputSchema": {
+            "type": "object"
+          },
+          "members": [
+            {
+              "acceptanceCriteria": [
+                "The file exists and contains source evidence."
+              ],
+              "allowedWritePaths": [
+                "report.md"
+              ],
+              "artifactRequirements": [
+                {
+                  "forbiddenLiterals": [],
+                  "minBytes": 1,
+                  "path": "report.md",
+                  "requireChanged": true,
+                  "required": true,
+                  "uniqueContent": false
+                }
+              ],
+              "dependsOn": [],
+              "id": "writer",
+              "inputBindings": {},
+              "instructions": "Use the supplied source and validate the actual file.",
+              "maxTurns": 5,
+              "modelSelection": {
+                "mode": "inherit_current"
+              },
+              "outputSchema": {
+                "type": "object"
+              },
+              "resultCheck": {
+                "source": "return true;"
+              },
+              "role": "writer",
+              "title": "撰写报告"
+            }
+          ],
+          "version": 1
+        }
+      }
+    }
+  ],
+  "WorkflowCollaborationCatalogParams": [
+    {
+      "decoded": {
+        "threadId": "original-thread"
+      },
+      "name": "nonexecuting-original-workflow-authoring",
+      "value": {
+        "threadId": "original-thread"
+      }
+    }
+  ],
+  "WorkflowCollaborationCatalogResult": [
+    {
+      "decoded": {
+        "modelOrigin": "thread_unobserved",
+        "modelSnapshot": null,
+        "roles": [
+          {
+            "agentType": "verifier",
+            "instructions": "Use the supplied source and validate the actual file.",
+            "outputSchema": {
+              "type": "object"
+            },
+            "resultCheck": {
+              "source": "return true;",
+              "timeoutMs": 1000
+            },
+            "role": "writer"
+          }
+        ],
+        "schemaVersion": 1,
+        "threadId": "original-thread",
+        "tools": [
+          {
+            "name": "read",
+            "readOnly": true,
+            "registered": true
+          }
+        ]
+      },
+      "name": "nonexecuting-original-workflow-authoring",
+      "value": {
+        "modelOrigin": "thread_unobserved",
+        "modelSnapshot": null,
+        "roles": [
+          {
+            "agentType": "verifier",
+            "instructions": "Use the supplied source and validate the actual file.",
+            "outputSchema": {
+              "type": "object"
+            },
+            "resultCheck": {
+              "source": "return true;"
+            },
+            "role": "writer"
+          }
+        ],
+        "schemaVersion": 1,
+        "threadId": "original-thread",
+        "tools": [
+          {
+            "name": "read",
+            "readOnly": true,
+            "registered": true
+          }
+        ]
+      }
+    }
+  ],
+  "WorkflowCollaborationMember": [
+    {
+      "decoded": {
+        "acceptanceCriteria": [
+          "The file exists and contains source evidence."
+        ],
+        "allowedWritePaths": [
+          "report.md"
+        ],
+        "artifactRequirements": [
+          {
+            "forbiddenLiterals": [],
+            "minBytes": 1,
+            "path": "report.md",
+            "requireChanged": true,
+            "required": true,
+            "uniqueContent": false
+          }
+        ],
+        "dependsOn": [],
+        "id": "writer",
+        "inputBindings": {},
+        "instructions": "Use the supplied source and validate the actual file.",
+        "maxTurns": 5,
+        "modelSelection": {
+          "mode": "inherit_current"
+        },
+        "outputSchema": {
+          "type": "object"
+        },
+        "resultCheck": {
+          "source": "return true;",
+          "timeoutMs": 1000
+        },
+        "role": "writer",
+        "title": "撰写报告"
+      },
+      "name": "native-declarative-collaboration",
+      "value": {
+        "acceptanceCriteria": [
+          "The file exists and contains source evidence."
+        ],
+        "allowedWritePaths": [
+          "report.md"
+        ],
+        "artifactRequirements": [
+          {
+            "forbiddenLiterals": [],
+            "minBytes": 1,
+            "path": "report.md",
+            "requireChanged": true,
+            "required": true,
+            "uniqueContent": false
+          }
+        ],
+        "dependsOn": [],
+        "id": "writer",
+        "inputBindings": {},
+        "instructions": "Use the supplied source and validate the actual file.",
+        "maxTurns": 5,
+        "modelSelection": {
+          "mode": "inherit_current"
+        },
+        "outputSchema": {
+          "type": "object"
+        },
+        "resultCheck": {
+          "source": "return true;"
+        },
+        "role": "writer",
+        "title": "撰写报告"
+      }
+    }
+  ],
+  "WorkflowCollaborationModelOrigin": [
+    {
+      "decoded": "thread_unobserved",
+      "name": "nonexecuting-original-workflow-authoring",
+      "value": "thread_unobserved"
+    }
+  ],
+  "WorkflowCollaborationPlan": [
+    {
+      "decoded": {
+        "inputSchema": {
+          "type": "object"
+        },
+        "members": [
+          {
+            "acceptanceCriteria": [
+              "The file exists and contains source evidence."
+            ],
+            "allowedWritePaths": [
+              "report.md"
+            ],
+            "artifactRequirements": [
+              {
+                "forbiddenLiterals": [],
+                "minBytes": 1,
+                "path": "report.md",
+                "requireChanged": true,
+                "required": true,
+                "uniqueContent": false
+              }
+            ],
+            "dependsOn": [],
+            "id": "writer",
+            "inputBindings": {},
+            "instructions": "Use the supplied source and validate the actual file.",
+            "maxTurns": 5,
+            "modelSelection": {
+              "mode": "inherit_current"
+            },
+            "outputSchema": {
+              "type": "object"
+            },
+            "resultCheck": {
+              "source": "return true;",
+              "timeoutMs": 1000
+            },
+            "role": "writer",
+            "title": "撰写报告"
+          }
+        ],
+        "version": 1
+      },
+      "name": "native-declarative-collaboration",
+      "value": {
+        "inputSchema": {
+          "type": "object"
+        },
+        "members": [
+          {
+            "acceptanceCriteria": [
+              "The file exists and contains source evidence."
+            ],
+            "allowedWritePaths": [
+              "report.md"
+            ],
+            "artifactRequirements": [
+              {
+                "forbiddenLiterals": [],
+                "minBytes": 1,
+                "path": "report.md",
+                "requireChanged": true,
+                "required": true,
+                "uniqueContent": false
+              }
+            ],
+            "dependsOn": [],
+            "id": "writer",
+            "inputBindings": {},
+            "instructions": "Use the supplied source and validate the actual file.",
+            "maxTurns": 5,
+            "modelSelection": {
+              "mode": "inherit_current"
+            },
+            "outputSchema": {
+              "type": "object"
+            },
+            "resultCheck": {
+              "source": "return true;"
+            },
+            "role": "writer",
+            "title": "撰写报告"
+          }
+        ],
+        "version": 1
+      }
+    }
+  ],
+  "WorkflowCollaborationRole": [
+    {
+      "decoded": "verifier",
+      "name": "native-declarative-collaboration",
+      "value": "verifier"
+    }
+  ],
+  "WorkflowCollaborationRoleContract": [
+    {
+      "decoded": {
+        "role": "reviewer",
+        "version": 1
+      },
+      "name": "native-declarative-collaboration",
+      "value": {
+        "role": "reviewer",
+        "version": 1
+      }
+    }
+  ],
+  "WorkflowCollaborationRolePreset": [
+    {
+      "decoded": {
+        "agentType": "verifier",
+        "instructions": "Use the supplied source and validate the actual file.",
+        "outputSchema": {
+          "type": "object"
+        },
+        "resultCheck": {
+          "source": "return true;",
+          "timeoutMs": 1000
+        },
+        "role": "writer"
+      },
+      "name": "nonexecuting-original-workflow-authoring",
+      "value": {
+        "agentType": "verifier",
+        "instructions": "Use the supplied source and validate the actual file.",
+        "outputSchema": {
+          "type": "object"
+        },
+        "resultCheck": {
+          "source": "return true;"
+        },
+        "role": "writer"
+      }
+    }
+  ],
+  "WorkflowCollaborationToolFact": [
+    {
+      "decoded": {
+        "name": "read",
+        "readOnly": true,
+        "registered": true
+      },
+      "name": "nonexecuting-original-workflow-authoring",
+      "value": {
+        "name": "read",
+        "readOnly": true,
+        "registered": true
+      }
+    }
+  ]
+}

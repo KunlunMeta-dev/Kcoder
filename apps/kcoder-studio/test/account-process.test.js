@@ -63,3 +63,49 @@ test('workspace startup failures do not revoke valid account credentials', () =>
     assert.equal(rejected, expected);
   }
 });
+
+test('a synchronous identity veto rejects the same-chunk runtime frames before anything reaches the broker', () => {
+  const { child } = processFixture();
+  let failures = 0;
+  const proxy = authenticatedAccountProcess(child, { username: 'alice', password: 'private-fixture-password' }, {
+    onAuthenticated: () => false,
+    onFailure: value => { assert.equal(value.authenticationRejected, false); failures++; },
+  });
+  let output = '', errors = 0;
+  proxy.on('error', () => { errors++; }); proxy.stdout.on('data', bytes => { output += bytes; });
+  const hello = { protocol: 'kcoder-account-v1', authenticated: true, username: 'alice',
+    principalId: 'ab87c7c1-34bd-4fb0-a309-11f086d08d09', uid: 2001, role: 'user' };
+  child.stdout.write(JSON.stringify(hello) + '\n' + '{"jsonrpc":"2.0","id":1,"result":{"mustNotLeak":true}}\n');
+  child.stdout.write('{"jsonrpc":"2.0","id":2,"result":{"alsoHidden":true}}\n');
+  assert.equal(output, ''); assert.equal(child.killed, true);
+  assert.equal(failures, 1); assert.equal(errors, 1);
+});
+
+test('legacy undefined and explicit true identity callbacks still forward an accepted same-chunk response', () => {
+  for (const accepted of [undefined, true]) {
+    const { child } = processFixture();
+    const proxy = authenticatedAccountProcess(child, { username: 'alice', password: 'private-fixture-password' }, {
+      onAuthenticated: () => accepted,
+    });
+    let output = ''; proxy.stdout.on('data', bytes => { output += bytes; });
+    const hello = { protocol: 'kcoder-account-v1', authenticated: true, username: 'alice',
+      principalId: 'ab87c7c1-34bd-4fb0-a309-11f086d08d09', uid: 2001, role: 'user' };
+    const runtime = '{"jsonrpc":"2.0","id":3,"result":{}}\n';
+    child.stdout.write(JSON.stringify(hello) + '\n' + runtime);
+    assert.equal(output, runtime); assert.notEqual(child.killed, true); child.kill();
+  }
+});
+
+test('an identity callback exception fails closed without escaping or forwarding its private error', () => {
+  const { child } = processFixture();
+  const proxy = authenticatedAccountProcess(child, { username: 'alice', password: 'private-fixture-password' }, {
+    onAuthenticated: () => { throw new Error('PRIVATE_CALLBACK_CONTEXT'); },
+  });
+  let output = '', error;
+  proxy.on('error', value => { error = value; }); proxy.stdout.on('data', bytes => { output += bytes; });
+  const hello = { protocol: 'kcoder-account-v1', authenticated: true, username: 'alice',
+    principalId: 'ab87c7c1-34bd-4fb0-a309-11f086d08d09', uid: 2001, role: 'user' };
+  assert.doesNotThrow(() => child.stdout.write(JSON.stringify(hello) + '\n' + '{"jsonrpc":"2.0","id":4,"result":{}}\n'));
+  assert.equal(output, ''); assert.equal(child.killed, true);
+  assert.ok(error instanceof Error && !error.message.includes('PRIVATE_CALLBACK_CONTEXT'));
+});

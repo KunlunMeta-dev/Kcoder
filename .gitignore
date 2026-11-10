@@ -28,7 +28,13 @@ scripts/install/launch/.kcoder/
 /vendor-config.toml
 /vendor.stderr
 /.playwright-mcp/
+/.codex/
+/AGENTS.override.md
 /.kcoder/tmp/
+# Cross-process provider transaction locks are local runtime state.
+/.kcoder/.provider-transaction.json.lock
+# Figma sync ownership locks are local runtime state.
+/docs/phone/figma-sync-checkpoint.json.lock
 /config/
 /docs/Snipaste_*.png
 /logo/download.png
@@ -51,3 +57,6 @@ node_modules/.vite/
 # Generated release inventories are embedded in packages, not source control.
 /apps/kcoder-studio/kcoder-release-manifest.json
 /apps/kcoder-studio/mobile/kcoder-release-manifest.json
+
+# Local weather notification receipt is runtime state.
+/.kcoder/.weather-last-push

@@ -44,10 +44,7 @@ fn arm_gate(phase: &str, retention_id: &str) -> Arc<ProjectionGate> {
 
 /// Called only by the product's cfg(test) seam. The global registry lock is
 /// released before waiting so the test can release this exact phase and ID.
-pub(in crate::app_server::attachment_retention) fn pause_before_final_projection(
-    phase: &str,
-    retention_id: &str,
-) {
+pub(crate) fn pause_before_final_projection(phase: &str, retention_id: &str) {
     let gate = gates()
         .lock()
         .expect("projection gate registry poisoned")

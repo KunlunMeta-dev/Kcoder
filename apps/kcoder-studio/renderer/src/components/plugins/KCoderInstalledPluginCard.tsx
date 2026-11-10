@@ -51,7 +51,7 @@ export function KCoderInstalledPluginCard({
   return (
     <article
       data-testid={`kcoder-plugin-row-${id}`}
-      className="flex flex-wrap items-center gap-x-7 gap-y-4 rounded-xl border border-border/60 bg-background px-4 py-3 md:flex-nowrap"
+      className="studio-card-spacing flex flex-wrap items-center gap-x-7 gap-y-4 rounded-xl border border-border/60 bg-background px-4 py-3 md:flex-nowrap"
     >
       <PluginIcon
         id={id}

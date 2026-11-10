@@ -1,11 +1,11 @@
 import { render, screen } from '@testing-library/react'
-import { convertFileSrc } from '@tauri-apps/api/core'
+import { clientResourceUrl } from '@/lib/client-resource-url'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, test, vi } from 'vitest'
 import '@/i18n'
 
-vi.mock('@tauri-apps/api/core', () => ({
-  convertFileSrc: vi.fn((path: string) => `asset://localhost/${path.replace(/^\/+/, '')}`),
+vi.mock('@/lib/client-resource-url', () => ({
+  clientResourceUrl: vi.fn((path: string) => `asset://localhost/${path.replace(/^\/+/, '')}`),
 }))
 import {
   InstalledMcpRow,
@@ -157,7 +157,7 @@ describe('InstalledPluginRow icon', () => {
     const image = tile.querySelector('img')
     expect(image).not.toBeNull()
     expect(image).toHaveAttribute('src', expect.stringContaining('logo.png'))
-    expect(convertFileSrc).toHaveBeenCalled()
+    expect(clientResourceUrl).toHaveBeenCalled()
   })
 
   test('falls back to a glyph when the plugin declares no icon', () => {

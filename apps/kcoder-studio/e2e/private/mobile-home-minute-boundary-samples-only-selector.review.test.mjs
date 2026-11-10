@@ -1,16 +1,12 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 import test from "node:test";
+import { readOriginalPrivateCandidate } from "../harness/private-candidate-original-source.mjs";
 
-const directory = dirname(fileURLToPath(import.meta.url));
-const candidatePath = resolve(directory, "mobile-home-minute-boundary-samples-only.r2.candidate.e2e.mjs");
 const candidateSha256 = "9e365dfec6ec90a2e82756fbf32867a631a67b345e1b6fbbb3442e1e14cc86de";
 
 test("Home samples-only selector skips the separate auth gate and keeps exact per-sample cleanup", async () => {
-  const source = await readFile(candidatePath, "utf8");
+  const source = readOriginalPrivateCandidate("home-samples-r2");
   assert.equal(createHash("sha256").update(source).digest("hex"), candidateSha256, "reviewed candidate bytes changed");
 
   assert.match(source, /const refreshHomeMinuteBoundarySamplesOnlyMode = process\.argv\.includes\("--home-minute-boundary-samples-only"\)/);

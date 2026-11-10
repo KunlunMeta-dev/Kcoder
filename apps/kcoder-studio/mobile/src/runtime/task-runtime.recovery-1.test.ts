@@ -1,7 +1,8 @@
 import { gatewaySessionExpired } from "@/gateway/http";
-import type { JsonRecord } from "@/gateway/rpc";
+import { MobileRpcError, type JsonRecord } from "@/gateway/rpc";
 import type { ThreadMessage } from "@/gateway/types";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { resetTaskRuntimeAsyncStorage } from "@/test/task-runtime-async-storage-fixture";
 import { TaskRuntime, taskRuntimeTestHelpers } from "./task-runtime";
 import {
   FakeClient,
@@ -12,7 +13,12 @@ vi.mock("@/gateway/http", () => ({
   ensureGatewayAuthorization: vi.fn(async () => {}),
   gatewaySessionExpired: vi.fn(async () => false),
 }));
+vi.mock("@react-native-async-storage/async-storage", async () => {
+  const { taskRuntimeAsyncStorage } = await import("@/test/task-runtime-async-storage-fixture");
+  return { default: taskRuntimeAsyncStorage };
+});
 beforeEach(() => {
+  resetTaskRuntimeAsyncStorage();
   vi.spyOn(Math, "random").mockReturnValue(0.5);
   vi.mocked(gatewaySessionExpired).mockResolvedValue(false);
 });
@@ -27,6 +33,8 @@ describe("TaskRuntime 断线恢复", () => {
     async (failFresh) => {
       let reads = 0;
       const client = {
+        // History-only fixtures have no initialized app-server identity.
+        getAppServerId: () => null,
         subscribe: () => () => undefined,
         respond: () => undefined,
         close: vi.fn(),
@@ -38,10 +46,11 @@ describe("TaskRuntime 断线恢复", () => {
             };
           if (method === "thread/read/indexed") {
             reads++;
-            if (params.beforeCursor) throw new Error("TRANSCRIPT_CURSOR_STALE");
+            if (params.beforeCursor) throw new MobileRpcError("cursor changed", -32041, "remote");
             if (reads > 2 && failFresh)
               throw new Error("fresh page unavailable");
             return {
+              transcriptSnapshotV1: { status: "available", snapshotId: (reads === 1 ? "a" : "c").repeat(64), viewKey: "b".repeat(64) },
               messages: [
                 {
                   id: reads === 1 ? "old-page" : "new-page",
@@ -321,6 +330,8 @@ describe("TaskRuntime 断线恢复", () => {
   it("归档任务保持只读，恢复后才允许继续发送", async () => {
     const calls: Array<{ method: string; params: JsonRecord }> = [];
     const client = {
+      // History-only fixtures have no initialized app-server identity.
+      getAppServerId: () => null,
       subscribe: () => () => undefined,
       respond: () => undefined,
       close: vi.fn(),
@@ -474,12 +485,17 @@ describe("TaskRuntime 断线恢复", () => {
     runtime.close();
   });
 
-  it("初次只读取最近一页并可按游标载入更早消息", async () => {
+  it("初次只读取最近一页并按已验证观察游标载入更早消息", async () => {
     const requests: Array<{ method: string; params: JsonRecord }> = [];
+    const observation = { observationId: "a".repeat(64), viewKey: "b".repeat(64) };
+    const cursor = `tp1:ob1-${observation.observationId}:2`;
     const client = {
+      // History-only fixtures have no initialized app-server identity.
+      getAppServerId: () => null,
       subscribe: () => () => undefined,
       respond: () => undefined,
       close: vi.fn(),
+      supportsExperimental: (name: string) => ["threadIndexedPagesV1", "threadTranscriptObservationV1"].includes(name),
       request: vi.fn(async (method: string, params: JsonRecord = {}) => {
         requests.push({ method, params });
         if (method === "thread/resume")
@@ -491,8 +507,9 @@ describe("TaskRuntime 断线恢复", () => {
               status: "idle",
             },
           };
-        if (method === "thread/read" && params.beforeCursor === "2") {
+        if (method === "thread/read/indexed" && params.beforeCursor === cursor) {
           return {
+            transcriptObservationV1: observation,
             messages: [
               {
                 id: "message-0",
@@ -511,8 +528,9 @@ describe("TaskRuntime 断线恢复", () => {
             beforeCursor: null,
           };
         }
-        if (method === "thread/read") {
+        if (method === "thread/read/indexed") {
           return {
+            transcriptObservationV1: observation,
             messages: [
               {
                 id: "message-2",
@@ -528,7 +546,7 @@ describe("TaskRuntime 断线恢复", () => {
               },
             ],
             hasMoreBefore: true,
-            beforeCursor: "2",
+            beforeCursor: cursor,
           };
         }
         return {};
@@ -546,7 +564,7 @@ describe("TaskRuntime 断线恢复", () => {
     expect(runtime.getSnapshot()).toMatchObject({
       messages: [{ id: "message-2" }, { id: "message-3" }],
       hasMoreBefore: true,
-      beforeCursor: "2",
+      beforeCursor: cursor,
     });
 
     await runtime.loadOlderMessages();
@@ -563,12 +581,12 @@ describe("TaskRuntime 断线恢复", () => {
       loadingOlder: false,
     });
     expect(
-      requests.filter((request) => request.method === "thread/read"),
+      requests.filter((request) => request.method === "thread/read/indexed"),
     ).toEqual([
-      { method: "thread/read", params: { threadId: "thread-1", limit: 50 } },
+      { method: "thread/read/indexed", params: { threadId: "thread-1", limit: 50 } },
       {
-        method: "thread/read",
-        params: { threadId: "thread-1", limit: 50, beforeCursor: "2" },
+        method: "thread/read/indexed",
+        params: { threadId: "thread-1", limit: 50, beforeCursor: cursor },
       },
     ]);
     runtime.close();
@@ -747,7 +765,7 @@ describe("TaskRuntime 断线恢复", () => {
     runtime.close();
   });
 
-  it("重连尾页与本地历史不连续时丢弃旧区间并采用新游标", async () => {
+  it("重连首屏无证明时保留旧历史区间和分页意图", async () => {
     vi.useFakeTimers();
     const oldMessages = Array.from({ length: 60 }, (_, index) => ({
       id: `old-${index + 40}`,
@@ -785,16 +803,17 @@ describe("TaskRuntime 断线恢复", () => {
     });
     await vi.advanceTimersByTimeAsync(500);
 
-    expect(runtime.getSnapshot().messages).toHaveLength(50);
-    expect(runtime.getSnapshot().messages[0]?.id).toBe("new-110");
+    expect(runtime.getSnapshot().messages).toHaveLength(60);
+    expect(runtime.getSnapshot().messages[0]?.id).toBe("old-40");
     expect(runtime.getSnapshot()).toMatchObject({
       hasMoreBefore: true,
-      beforeCursor: "110",
+      beforeCursor: "40",
     });
+    expect(runtime.getSnapshot().error).toBeTruthy();
     runtime.close();
   });
 
-  it("重连降级为旧服务器时不保留有重叠的索引历史和游标", async () => {
+  it("重连降级为无证明旧服务器时保留历史和原游标并提示重试", async () => {
     vi.useFakeTimers();
     const shared: ThreadMessage = {
       id: "shared",
@@ -835,8 +854,9 @@ describe("TaskRuntime 断线恢复", () => {
       await vi.advanceTimersByTimeAsync(500);
       expect(
         runtime.getSnapshot().messages.map((message) => message.id),
-      ).toEqual(["shared"]);
-      expect(runtime.getSnapshot().beforeCursor).toBe("1");
+      ).toEqual(["older", "shared"]);
+      expect(runtime.getSnapshot().beforeCursor).toBe("tp1:old:1");
+      expect(runtime.getSnapshot().error).toBeTruthy();
     } finally {
       runtime.close();
     }

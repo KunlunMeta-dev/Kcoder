@@ -1,12 +1,47 @@
+import { createBrowserSessionCookies } from './src/browser-session-cookie.js';
+import { requestBody } from './src/gateway-http-body.js';
+import { createServerMutationQueue, writeServerConfiguration } from './src/server-mutation.mjs';
+import { targetWorkspaceBrokerKey } from './src/remotes/target-workspace-path.mjs';
+import { captureGatewayStartupResources } from './src/gateway-startup-resources.js';
+import { createStudioPublicAssets } from './src/studio-public-assets.js';
+import { createGatewayStartupObservation } from './src/gateway-startup-observation.js';
+import { consumeGatewayNativeComponentImageStartup, captureGatewayWindowsComponentImage, nativeWindowsComponentEnvironment } from './src/integrations/native-component-image.mjs';
+import { settleSourceConnectivityLaunch } from './src/integrations/connectivity/resource-host.mjs';
+import { createServerInventoryRoutes } from "./src/server-inventory-routes.js";
+import { createGatewayMigrationSourceSessions } from './src/migration-source-session-gateway.js';
+import { terminateMigrationSourceSessionChild as terminateOwnedAppServer } from './src/migration-source-session-launch.js';
+import { createStudioStaticRoute } from './src/studio-static-route.js';
+import { sourceAppServerBinary } from './src/source-app-server-binary.js';
+import { createStudioViteRenderer, studioRendererMode } from './src/studio-vite-renderer.js';
+import { safeReturnTo, escapeHtml, loginPage } from './src/gateway-login-presentation.js';
+import { createMobileWebCors } from './src/mobile-web-cors.js';
+import { createWebSocketFrameCodec } from "./src/websocket-frame-codec.js";
+import { watchWebSocketUpgrade } from './src/websocket-upgrade-guard.mjs';
 import { createMobileWebStatic } from "./src/mobile-web-static.js";
-import { captureRetentionAuthority, registerMobileDeviceGrantState } from "./src/retention-context.js";
+import { createMobileWebDevProxy } from "./src/mobile-web-dev-proxy.js";
+import { loadGatewayPublicAccess, publicRequestSurface } from "./src/gateway-public-access.js";
+import { captureRetentionAuthority, registerMobileDeviceGrantState, retentionTargetFingerprint } from "./src/retention-context.js";
+import { captureTrustedLocalAppServer } from "./src/trusted-local-app-server.js";
+import { localRetentionRoute } from "./src/retention-device-revocation.js";
+import { createRetentionRevocationPump } from "./src/retention-revocation-pump.js";
+import { createWidgetSandboxRoute } from "./src/widget-sandbox-route.js";
 import { createMobileDeviceAuth, mobileDeviceStoreIdentity } from "./src/mobile-device-auth.js";
+import { accountPairingProofMatches, gatewayRelaySecret, relaySecretMatches, createRelayPairingHandler, createRelayAccountEntryHandler, gatewayMobilePairingToken, fixedMobilePairingTokenMatches, selectMobilePairingCredential } from './src/gateway-relay-auth.js';
+import { createMobilePeerGateway } from "./src/mobile-peer-gateway.js";
+import { gatewayListenHost, gatewayPeerOptions } from "./src/gateway-connectivity.js";
+import { createGatewayAuthSessionRegistry } from './src/browser-session-recovery.js';
+import { attachMobileConnectionRoutes, createMobileConnectionProofHandler, createMobileConnectionRoutesProvider, createPublicPairingReadiness } from "./src/mobile-connection-routes.js";
+import { createMobileRouteAuthorizationHandler } from "./src/mobile-route-authorization.js";
 import { McpOAuthCallbackRegistry } from "./src/mcp-oauth-callback-registry.js";
 import { createGatewayAdmission } from "./src/gateway-admission.js";
-import { createGatewayToken, studioDataDirectory, writeStudioLoginUrl } from "./src/studio-login-link.js";
+import { isGatewayBrowserAdminRequest, websocketSessionCredential } from "./src/gateway-browser-access.js";
+import { createGatewayToken, studioDataDirectory, writeStudioLoginUrl, loginUrl } from "./src/studio-login-link.js";
 import { authenticatedAccountProcess } from "./src/account-process.js";
 import { createAccountCredentialStore } from "./src/account-credentials.js";
-import { administerAccount } from "./src/account-administration.js";
+import { createAccountAdministrationRoute } from "./src/account-administration.js";
+import { createOrganizationOidcRoutes } from "./src/account-oidc-routes.js";
+import { deliverNativeOidcLogout } from "./src/account-oidc-logout.js";
+import { diagnosticBuildVersion, diagnosticProtocolVersion, respondWithServerStatusSnapshot } from "./src/server-status-snapshot.js";
 import {
   ANONYMOUS_LOGIN_OWNER,
   authorityIdFor,
@@ -25,16 +60,15 @@ import {
   accountLogoutCleanupPlan,
   runAccountLogoutCleanup,
 } from "./src/account-logout.js";
-import { mkdirSync, realpathSync } from "node:fs";
+import { realpathSync } from "node:fs";
 import {
   mkdir,
   readFile,
-  readdir,
   rename,
   stat,
   writeFile,
 } from "node:fs/promises";
-import { dirname, extname, isAbsolute, posix, resolve, sep } from "node:path";
+import { dirname, isAbsolute, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { homedir } from "node:os";
 import { loadResourcePolicy } from "./src/resource-policy.js";
@@ -42,13 +76,15 @@ import { GatewayResourceBudget } from "./src/gateway-resource-budget.js";
 import { mergeRequestLoad, requestLoadDiagnostic } from "./src/request-load.js";
 import { WebSocketLivenessLease } from "./src/websocket-liveness-lease.js";
 import { BoundedJsonlDecoder } from "./src/bounded-jsonl-decoder.js";
-import { pendingWorkIdleDelay, releaseIdleBrokers } from "./src/workspace-broker-release.js";
+import { pendingWorkIdleDelay, releaseIdleBrokers, retireRestartScopeAdmissions, workspaceIdleDelay } from "./src/workspace-broker-release.js";
 import { inspectGatewayChannelMessage } from "./src/gateway-channel.js";
 import { createRuntimeTargetAdapter } from "./src/runtime-target-adapter.js";
 import {
   appServerEnvironment,
-  PRIVATE_RETENTION_PARENT_ENV_V1,
+  hasFullServerAccess,
+  reconcileServerAccess,
   workspaceReceiptParentAttempt,
+  nativeComponentParentAttempt,
   launchSpec,
   loadServers,
   normalizeServer,
@@ -57,22 +93,43 @@ import {
   storedServer,
 } from "./src/server-config.js";
 import { WorkspaceAppServerBroker } from "./src/workspace-app-server-broker.js";
+import { createWorkspaceAppServerBridge } from "./src/workspace-app-server-bridge.mjs";
+import { createNativeSshEndpointFactory } from "./src/remotes/native-ssh-endpoint.mjs";
+import { createNativeRemoteHostBackchannel } from "./src/remotes/host-backchannel.mjs";
+import { nativeRemoteSourceClientForAttempt, nativeRemoteSourceClientForManagement } from "./src/remotes/source-client-owner.mjs";
 import { pauseWikiBeforeLogout } from "./src/wiki-logout.js";
 import { createSshConnectionStore } from "./src/ssh-terminal-store.js";
 import { bridgeSshTerminal } from "./src/ssh-channel.js";
+import { createWorkspaceCwdObserver, createWorkspaceCwdObservationHttpHandler, workspaceCwdObservationTargetIdentity } from "./src/workspace-cwd-observation.js";
+import { createChannelsController } from './src/channels-controller.mjs';
+import { createChannelsHttpHandler } from './src/channels-http.mjs';
+import { createLiveGatewayRelay, gatewayPublicOriginSet, replacePublicOrigin } from './src/gateway-relay-live.js';
+import { observeGatewayRelayConnectionStatus, restoreGatewayRelay, createGatewayRelayManagement, gatewayRelayOptions } from './src/gateway-relay-management.js';
 
-// Never let an ambient/private-looking parent declaration reach ordinary
-// Gateway descendants. Only the exact app-server composition sets a new fact.
-for (const name of Object.keys(process.env)) {
-  if (name.toUpperCase() === PRIVATE_RETENTION_PARENT_ENV_V1) delete process.env[name];
-}
+const nativeComponentImageInput = consumeGatewayNativeComponentImageStartup();
+const startupObservation = createGatewayStartupObservation();
+const nativeStartupResources = await captureGatewayStartupResources({ observation: startupObservation });
+const nativeOfficeStartupBinding = nativeStartupResources.office;
+const nativeConnectivityStartupBinding = nativeStartupResources.channel;
 
 const root = resolve(fileURLToPath(new URL(".", import.meta.url)));
 const repoRoot = resolve(root, "../..");
+let relayRestoreFailed = false;
+let relayConnectionStatus = 'offline';
+const relayExternallyConfigured = Boolean(process.env.KCODER_STUDIO_PUBLIC_ACCESS_URL || process.env.KCODER_STUDIO_RELAY_SECRET);
+const ownedRelay = await restoreGatewayRelay(process.env, error => {
+  relayRestoreFailed = true;
+  if (error?.status === 401 || error?.status === 403) relayConnectionStatus = 'denied';
+  console.warn('GATEWAY_RELAY_RESTORE_UNAVAILABLE');
+}, {
+  onOnline: () => { relayConnectionStatus = 'online'; },
+  onDiagnostic: event => { relayConnectionStatus = observeGatewayRelayConnectionStatus(relayConnectionStatus, event); },
+});
+const relayExternallyManaged = !ownedRelay && relayExternallyConfigured;
 const webRoot = resolve(
   process.env.KCODER_STUDIO_WEB_ROOT || resolve(root, "renderer/dist"),
 );
-const host = process.env.KCODER_STUDIO_HOST || "127.0.0.1";
+const host = gatewayListenHost(process.env);
 const configuredPort = Number(process.env.KCODER_STUDIO_PORT || 4173);
 if (
   !Number.isInteger(configuredPort) ||
@@ -82,8 +139,8 @@ if (
   throw new Error("KCODER_STUDIO_PORT must be an integer from 0 to 65535");
 }
 let listeningPort = configuredPort;
-if (!["127.0.0.1", "localhost", "::1", "0.0.0.0"].includes(host))
-  throw new Error("KCoder Studio host must be loopback or 0.0.0.0");
+if (!["127.0.0.1", "localhost", "::1", "0.0.0.0", "::"].includes(host))
+  throw new Error("KCoder Studio host must be loopback or a supported wildcard address");
 const maxConnections = Number(process.env.KCODER_STUDIO_MAX_CONNECTIONS || 256);
 if (
   !Number.isInteger(maxConnections) ||
@@ -107,38 +164,23 @@ if (
 // Keep enough headroom for a 256 KiB text-file response after JSON escaping while retaining a
 // strict per-connection bound. Browser attachments use base64 and stay well below this limit.
 const maxMessageBytes = 2 * 1024 * 1024;
-if (host === "0.0.0.0" && !process.env.KCODER_STUDIO_AUTH_TOKEN &&
+const { frame, decodeFrames } = createWebSocketFrameCodec({ maxMessageBytes });
+let relaySecret = gatewayRelaySecret();
+const mobilePairingToken = gatewayMobilePairingToken();
+if (["0.0.0.0", "::"].includes(host) && !process.env.KCODER_STUDIO_AUTH_TOKEN && !relaySecret && !mobilePairingToken &&
     !(process.env.NODE_ENV === "test" && process.env.KCODER_STUDIO_TEST_DISABLE_AUTH === "1")) {
-  throw new Error("KCODER_STUDIO_AUTH_TOKEN is required when listening on 0.0.0.0");
+  throw new Error("A configured browser, mobile pairing or Relay credential is required when listening on 0.0.0.0 or ::");
 }
 const authToken = createGatewayToken(process.env);
 const authRequired = Boolean(authToken);
 const desktopHost = process.env.KCODER_STUDIO_DESKTOP_HOST === "1";
-const publicOrigins = new Set(
-  (process.env.KCODER_STUDIO_PUBLIC_ORIGINS || "")
-    .split(",")
-    .map((value) => value.trim())
-    .filter(Boolean)
-    .map((value) => {
-      const parsed = new URL(value);
-      if (
-        !/^https?:$/.test(parsed.protocol) ||
-        parsed.username ||
-        parsed.password ||
-        parsed.pathname !== "/" ||
-        parsed.search ||
-        parsed.hash
-      ) {
-        throw new Error(`Invalid KCODER_STUDIO_PUBLIC_ORIGINS entry: ${value}`);
-      }
-      return parsed.origin;
-    }),
-);
+const publicOrigins = gatewayPublicOriginSet(process.env.KCODER_STUDIO_PUBLIC_ORIGINS);
+const retiredAuthorities = new Set();
 const trustedTunnelAuthorities = new Set();
 const { isAllowedAuthority, isAllowedOrigin } = createGatewayAdmission({
-  authRequired, publicOrigins, listeningPort: () => listeningPort, trustedTunnelAuthorities,
+  authRequired, publicOrigins, listeningPort: () => listeningPort, trustedTunnelAuthorities, retiredAuthorities,
 });
-const publicAccessUrl = (() => {
+let publicAccessUrl = (() => {
   const configured = process.env.KCODER_STUDIO_PUBLIC_ACCESS_URL;
   if (!configured) return null;
   const parsed = new URL(configured);
@@ -192,13 +234,12 @@ const loginHtmlHeaders = {
   "referrer-policy": "no-referrer",
   "content-security-policy": contentSecurityPolicy,
 };
-if (host === "0.0.0.0" && !authRequired) {
+if (["0.0.0.0", "::"].includes(host) && !authRequired) {
   throw new Error(
-    "KCODER_STUDIO_AUTH_TOKEN is required when listening on 0.0.0.0",
+    "KCODER_STUDIO_AUTH_TOKEN is required when listening on a wildcard address",
   );
 }
 const gatewayToken = authRequired ? "cookie-auth" : randomUUID();
-const authSessions = new Map();
 const sessionSockets = new Map();
 const mobileDeviceFamilies = new Map();
 const loginAttempts = new Map();
@@ -216,6 +257,7 @@ if (
   );
 }
 const maxAuthSessions = 32;
+const maxMobileDevices = 32;
 let activeConnections = 0;
 let activeBrowserConnections = 0;
 // Refusals are counted per limit so a browser-class cap is never reported as
@@ -228,9 +270,10 @@ const connectionRefusals = {
 const mock = process.env.KCODER_STUDIO_MOCK === "1";
 const appServerBin =
   process.env.KCODER_STUDIO_KCODER_BIN ||
-  resolve(repoRoot, "target/debug/kcoder");
+  sourceAppServerBinary(repoRoot);
+const trustedWindowsComponentImage = await startupObservation.run('component_image', () => captureGatewayWindowsComponentImage(appServerBin, nativeComponentImageInput));
 const workspace = resolve(process.env.KCODER_STUDIO_WORKSPACE || repoRoot);
-mkdirSync(workspace, { recursive: true });
+const workspaceCwdObserver = createWorkspaceCwdObserver({ delayMs: process.env.NODE_ENV === "test" ? Number(process.env.KCODER_STUDIO_TEST_CWD_OBSERVATION_DELAY_MS || 0) : 0 });
 const scenario = process.env.KCODER_STUDIO_SCENARIO || "";
 const serverDefaults = {
   repoRoot,
@@ -239,35 +282,76 @@ const serverDefaults = {
   chromiumBin: process.env.KCODER_STUDIO_CHROMIUM_BIN,
   chromiumNoSandbox: process.env.KCODER_STUDIO_CHROMIUM_NO_SANDBOX === "1",
 };
-let servers = await loadServers({ env: process.env, ...serverDefaults });
-for (const configuredServer of servers) {
-  if (configuredServer.transport !== "local") continue;
-  const workspaceInfo = await stat(configuredServer.cwd).catch(() => null);
-  if (!workspaceInfo?.isDirectory())
-    throw new Error(
-      `local runtime target workspace is not an existing directory: ${configuredServer.cwd}`,
-    );
-}
+let servers = await startupObservation.run('server_configuration', () => loadServers({ env: process.env, ...serverDefaults }));
 let serversById = new Map(servers.map((server) => [server.id, server]));
 const serversStore = process.env.KCODER_STUDIO_SERVERS_STORE
   ? resolve(process.env.KCODER_STUDIO_SERVERS_STORE)
   : null;
-const sshConnections = createSshConnectionStore({
-  filePath: serversStore ? resolve(dirname(serversStore), "ssh_connections.jsonc") : undefined,
+const accountStorageRoot = studioDataDirectory({ serversStore, dataDirectory: process.env.KCODER_STUDIO_DATA_DIR });
+const publicAccess = await loadGatewayPublicAccess(accountStorageRoot);
+const browserCookies = createBrowserSessionCookies({
+  publicOrigins, forceSecure: process.env.KCODER_STUDIO_SECURE_COOKIE === "1",
 });
-const accountStorageRoot = studioDataDirectory({ serversStore });
-const mobileDeviceAuth = createMobileDeviceAuth({ directory: accountStorageRoot, identity: mobileDeviceStoreIdentity(authToken), accessTtlMs: Number(process.env.KCODER_STUDIO_MOBILE_ACCESS_TTL_MS || 15 * 60_000), idleTtlMs: Number(process.env.KCODER_STUDIO_MOBILE_DEVICE_IDLE_TTL_MS ?? 0), absoluteTtlMs: Number(process.env.KCODER_STUDIO_MOBILE_DEVICE_ABSOLUTE_TTL_MS ?? 0), socketGraceMs: Number(process.env.KCODER_STUDIO_MOBILE_SOCKET_GRACE_MS || 5 * 60_000), maximumDevices: maxAuthSessions });
+
+const liveRelay = createLiveGatewayRelay({ initial: ownedRelay, environment: { ...process.env },
+  initialStatus: () => relayConnectionStatus, options: gatewayRelayOptions(), localBase: localAccessBase, present: setRelayPresentation });
+const handleRelayManagement = createGatewayRelayManagement({ restoreFailed: relayRestoreFailed, externallyManaged: relayExternallyManaged,
+  getConnectionStatus: () => liveRelay.status, liveRelay,
+  isAdmin: (request, session) => isGatewayBrowserAdminRequest(request, session, servers, authRequired), sameOrigin: requireSameOriginMutation,
+  requestBody, jsonResponse, cookiePath: requestCookiePath, accountCookies: browserCookies,
+  publicAccess: { get state() { return publicAccess.state; }, update: input => publicAccess.update(input, () => mobilePeerGateway.closeDisabled()) } });
+const sshConnections = createSshConnectionStore({
+  filePath: resolve(accountStorageRoot, "ssh_connections.jsonc"),
+});
+let mobileConnectionRoutesProvider;
+const mobileDeviceAuth = createMobileDeviceAuth({ directory: accountStorageRoot, identity: relaySecret || mobilePairingToken ? null : mobileDeviceStoreIdentity(authToken), fixedPairingToken: mobilePairingToken, accessTtlMs: Number(process.env.KCODER_STUDIO_MOBILE_ACCESS_TTL_MS || 15 * 60_000), idleTtlMs: Number(process.env.KCODER_STUDIO_MOBILE_DEVICE_IDLE_TTL_MS ?? 0), absoluteTtlMs: Number(process.env.KCODER_STUDIO_MOBILE_DEVICE_ABSOLUTE_TTL_MS ?? 0), socketGraceMs: Number(process.env.KCODER_STUDIO_MOBILE_SOCKET_GRACE_MS || 5 * 60_000), maximumDevices: maxMobileDevices, isConnectionEndpointAllowed: endpoint => mobileConnectionRoutesProvider?.allows(endpoint) === true });
+let accountOidcRoutes;
+const authSessionRegistry = createGatewayAuthSessionRegistry({ authRequired, getServerIds: () => servers.map(item => item.id),
+  observe: process.env.KCODER_E2E_AUTH_OBSERVE === '1'
+    ? value => console.log('KCODER_AUTH_OBSERVE ' + JSON.stringify(value)) : undefined,
+  maximumSessions: maxAuthSessions, ttlMs: authSessionTtlMs, persistence: authRequired ? await startupObservation.run('browser_sessions', () => mobileDeviceAuth.browserSessions()) : null,
+  sessionSockets, invalidateOwner: id => { invalidateServerHealthOwner(id); accountOidcRoutes?.expireOwner(id); }, expireDevice: id => expireMobileDeviceFamily(id) });
+const authSessions = authSessionRegistry.sessions;
+const authSessionById = id => authSessionRegistry.get(id);
+const createAuthSession = options => authSessionRegistry.create(options);
+const deleteAuthSession = id => authSessionRegistry.delete(id);
+if (publicAccessUrl) {
+  mobileConnectionRoutesProvider = createMobileConnectionRoutesProvider({ identity: await mobileDeviceAuth.getConnectionIdentity(), publicAccessUrl, isAllowedAuthority });
+}
+// Purpose-derived installation key remains in this process and authenticated
+// LocalOs child startup only. Never add it to initialize, pairing or public data.
+const trustedRetentionAppServer = captureTrustedLocalAppServer(appServerBin, process.platform, accountStorageRoot);
+const retentionRevocationVerifier = ['linux', 'darwin'].includes(process.platform) ? await mobileDeviceAuth.privateRetentionVerifier() : undefined;
+const retentionRevocationPump = createRetentionRevocationPump({ auth: mobileDeviceAuth,
+  brokerForRoute(route) {
+    const target = serversById.get(route.targetId);
+    if (!target || !trustedRetentionAppServer?.matches(target) || !workspaceReceiptParentAttempt(target)) return null;
+    const workspace = realpathSync(route.workspacePath);
+    if (workspace !== route.workspacePath) return null;
+    const key = workspaceBrokerKey(target, route.workspaceSelection ?? undefined);
+    if (retentionTargetFingerprint(target, route.workspaceSelection ?? undefined, key) !== route.targetFingerprint) return null;
+    return [...(workspaceAppServerBrokers.get(key) ?? [])].find(broker => !broker.closed && !broker.nativeManagementOnly && broker.retentionRevocationTrusted) ?? createWorkspaceBroker(target, route.workspaceSelection ?? undefined, key);
+  },
+});
+async function revokeMobileDeviceAndScheduleCleanup(deviceId) {
+  // Failure before this await resolves cannot expire authority as if a durable
+  // revocation fact existed. Cleanup delivery failure never restores authority.
+  await mobileDeviceAuth.revokeAndReadProof(deviceId);
+  expireMobileDeviceFamily(deviceId);
+  void retentionRevocationPump.drain().catch(() => {});
+}
 const accountCredentials = createAccountCredentialStore({
   filePath: resolve(accountStorageRoot, 'account_credentials.json'),
   keyPath: resolve(accountStorageRoot, '.account-credential-key'),
 });
-await accountCredentials.load();
+await startupObservation.run('account_credentials', () => accountCredentials.load());
 const loginContexts = createAccountLoginContexts();
 const contextSockets = new Map();
 const accountLoginAttempts = new Map();
 const publicAccountServer = (target, loginOwner) => {
   const principal = loginOwner ? loginContexts.identity(loginOwner, target.id) : null;
   return { ...publicServer(target),
+    observationTargetIdentity: workspaceCwdObservationTargetIdentity(serverHealthSignature(target)),
     ...(target.transport === "ssh" ? { authorityId: authorityIdFor(target) } : {}),
     ...(principal ? { accountIdentity: principal } : {}) };
 };
@@ -316,13 +400,15 @@ function recordAccountLoginFailure(key) {
   accountLoginAttempts.set(key, attempts);
 }
 const appServerChildren = new Set();
+const channelAppServerChildren = new WeakSet();
+const nativeRemoteEndpointOwners = new Set();
 const appServerChildTargets = new Map();
 const workspaceAppServerBrokers = new Map();
 const resourceBudgetBrokers = new Set();
-const resourcePolicy = await loadResourcePolicy(
+const resourcePolicy = await startupObservation.run('resource_policy', () => loadResourcePolicy(
   process.env.KCODER_STUDIO_RESOURCE_POLICY_FILE || resolve(accountStorageRoot, 'resource_policy.jsonc'),
   { required: Boolean(process.env.KCODER_STUDIO_RESOURCE_POLICY_FILE) },
-);
+));
 let lastResourceBudgetSummary;
 const resourceBudget = new GatewayResourceBudget({ policy: resourcePolicy, getBrokers: () => resourceBudgetBrokers,
   onError: () => process.stderr.write('{"event":"broker-resource-budget-error"}\n'),
@@ -370,36 +456,16 @@ function trackAppServerChild(child, serverId, loginOwner) {
   return child;
 }
 
-function waitForAppServerClose(child, timeoutMs) {
-  if (!appServerChildren.has(child)) return Promise.resolve(true);
-  return new Promise((resolveWait) => {
-    const timer = setTimeout(() => {
-      child.off("close", closed);
-      resolveWait(false);
-    }, timeoutMs);
-    timer.unref?.();
-    const closed = () => {
-      clearTimeout(timer);
-      resolveWait(true);
-    };
-    child.once("close", closed);
-  });
-}
-
-async function terminateAppServerChild(child) {
+async function terminateAppServerChild(child, { eofMs = 5_000 } = {}) {
   if (!appServerChildren.has(child)) return;
-  if (child.stdin.writable && !child.stdin.destroyed) child.stdin.end();
-  child.kill("SIGTERM");
-  if (await waitForAppServerClose(child, 750)) return;
-  child.kill("SIGKILL");
-  await waitForAppServerClose(child, 750);
+  await terminateOwnedAppServer({ child }, { eofMs, graceMs: 750, killMs: 5_000 });
 }
 
 async function terminateServerChildren(serverId) {
   const children = [...appServerChildTargets.entries()]
     .filter(([, ownership]) => ownership?.serverId === serverId)
     .map(([child]) => child);
-  await Promise.all(children.map(terminateAppServerChild));
+  await Promise.all(children.map(child => terminateAppServerChild(child)));
 }
 
 // Logout/switch only reclaims the processes of one login context; other
@@ -408,7 +474,7 @@ async function terminateContextChildren(serverId, loginOwner) {
   const children = [...appServerChildTargets.entries()]
     .filter(([, ownership]) => ownership?.serverId === serverId && ownership.loginOwner === loginOwner)
     .map(([child]) => child);
-  await Promise.all(children.map(terminateAppServerChild));
+  await Promise.all(children.map(child => terminateAppServerChild(child)));
 }
 const serverHealth = new Map();
 const serverHealthInFlight = new Map();
@@ -425,94 +491,6 @@ if (
     "KCODER_STUDIO_HEALTH_TIMEOUT_MS must be an integer from 100 to 30000",
   );
 }
-const mime = {
-  ".html": "text/html; charset=utf-8",
-  ".js": "text/javascript; charset=utf-8",
-  ".mjs": "text/javascript; charset=utf-8",
-  ".css": "text/css; charset=utf-8",
-  ".json": "application/json; charset=utf-8",
-  ".wasm": "application/wasm",
-  ".svg": "image/svg+xml",
-  ".png": "image/png",
-  ".jpg": "image/jpeg",
-  ".jpeg": "image/jpeg",
-  ".gif": "image/gif",
-  ".webp": "image/webp",
-  ".ico": "image/x-icon",
-  ".woff": "font/woff",
-  ".woff2": "font/woff2",
-  ".ttf": "font/ttf",
-  ".otf": "font/otf",
-  ".pdf": "application/pdf",
-};
-
-async function collectStaticHtmlRoutes(directory = webRoot, prefix = "") {
-  const routes = [];
-  for (const entry of await readdir(directory, { withFileTypes: true })) {
-    if (entry.isDirectory()) {
-      if (
-        entry.name === "assets" ||
-        entry.name === "_expo" ||
-        entry.name.startsWith(".")
-      )
-        continue;
-      routes.push(
-        ...(await collectStaticHtmlRoutes(
-          resolve(directory, entry.name),
-          `${prefix}${entry.name}/`,
-        )),
-      );
-    } else if (entry.isFile() && entry.name.endsWith(".html")) {
-      routes.push(`${prefix}${entry.name}`);
-    }
-  }
-  return routes;
-}
-
-function staticRouteExpression(relativeFile) {
-  let route = relativeFile.replaceAll("\\", "/").replace(/\.html$/, "");
-  route = route === "index" ? "" : route.replace(/\/index$/, "");
-  const pattern = route
-    .split("/")
-    .filter(Boolean)
-    .map((segment) =>
-      /^\[[^/]+\]$/.test(segment)
-        ? "[^/]+"
-        : segment.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
-    )
-    .join("/");
-  return new RegExp(`^${pattern}$`);
-}
-
-let staticHtmlRoutesPromise;
-async function staticRouteFile(relative) {
-  const directHtml = resolve(webRoot, `${relative}.html`);
-  try {
-    if ((await stat(directHtml)).isFile()) return directHtml;
-  } catch {
-    // Dynamic static routes are matched below using Expo Router [param] templates.
-  }
-  staticHtmlRoutesPromise ??= collectStaticHtmlRoutes().catch(() => []);
-  const route = relative.replace(/^\/+|\/+$/g, "");
-  const matched = (await staticHtmlRoutesPromise).find((file) =>
-    staticRouteExpression(file).test(route),
-  );
-  return matched ? resolve(webRoot, matched) : null;
-}
-
-function cookieValue(request, name) {
-  const cookies = String(request.headers.cookie || "").split(";");
-  for (const cookie of cookies) {
-    const separator = cookie.indexOf("=");
-    if (separator < 0 || cookie.slice(0, separator).trim() !== name) continue;
-    try {
-      return decodeURIComponent(cookie.slice(separator + 1).trim());
-    } catch {
-      return null;
-    }
-  }
-  return null;
-}
 
 function bearerValue(request) {
   const match = String(request.headers.authorization || "").match(
@@ -521,76 +499,12 @@ function bearerValue(request) {
   return match?.[1] || null;
 }
 
-function removeExpiredAuthSessions(now = Date.now()) {
-  for (const [id, session] of authSessions) {
-    if (session.expiresAt <= now) deleteAuthSession(id);
-  }
-}
-
-function deleteAuthSession(id) {
-  const session = authSessions.get(id);
-  if (session?.deviceId) { expireMobileDeviceFamily(session.deviceId); return; }
-  if (session?.expiryTimer) clearTimeout(session.expiryTimer);
-  authSessions.delete(id);
-  const sockets = sessionSockets.get(id);
-  sessionSockets.delete(id);
-  for (const socket of sockets ?? []) socket.destroy();
-}
-
 function authenticatedSessionId(request) {
-  return request.headers.authorization !== undefined ? bearerValue(request) : cookieValue(request, "kcoder_studio_session");
-}
-
-function authSessionById(id) {
-  if (!authRequired)
-    return { allowedServerIds: new Set(servers.map((item) => item.id)) };
-  const now = Date.now();
-  removeExpiredAuthSessions(now);
-  const session = id ? authSessions.get(id) : null;
-  if (!session || (session.accessExpiresAt ?? session.expiresAt) <= now) return null;
-  return session;
+  return request.headers.authorization !== undefined ? bearerValue(request) : browserCookies.read(request);
 }
 
 function authenticatedSession(request) {
   return authSessionById(authenticatedSessionId(request));
-}
-
-function websocketSessionCredential(request) {
-  const protocols = String(request.headers["sec-websocket-protocol"] || "")
-    .split(",").map(value => value.trim());
-  const carriers = protocols.filter(value => value.startsWith("kcoder-session."));
-  if (carriers.length === 0) return { id: null, invalid: false };
-  // A malformed or duplicated mobile carrier is never hidden by a valid
-  // Bearer/cookie or by another subprotocol in the same request.
-  const match = carriers.length === 1 && carriers[0].match(/^kcoder-session\.([A-Za-z0-9-]{32,128})$/);
-  return { id: match ? match[1] : null, invalid: !match };
-}
-
-function createAuthSession() {
-  removeExpiredAuthSessions();
-  // Refuse before evicting anything if protected device grants leave no room.
-  const neededSlots = Math.max(0, authSessions.size - maxAuthSessions + 1);
-  if (neededSlots > 0 && [...authSessions.values()].filter(session => !session.deviceId).length < neededSlots) {
-    const error = new Error('Gateway session limit reached'); error.status = 429; throw error;
-  }
-  while (authSessions.size >= maxAuthSessions) {
-    const candidate = [...authSessions].find(([, session]) => !session.deviceId);
-    if (!candidate) { const error = new Error('Gateway session limit reached'); error.status = 429; throw error; }
-    deleteAuthSession(candidate[0]);
-  }
-  const id = randomUUID();
-  const session = {
-    expiresAt: Date.now() + authSessionTtlMs,
-    allowedServerIds: new Set(servers.map((item) => item.id)),
-    expiryTimer: null,
-  };
-  authSessions.set(id, session);
-  session.expiryTimer = setTimeout(
-    () => deleteAuthSession(id),
-    authSessionTtlMs,
-  );
-  session.expiryTimer.unref?.();
-  return { id, session };
 }
 
 function expireMobileDeviceFamily(deviceId) {
@@ -613,7 +527,7 @@ function registerMobileDeviceGrant(payload) {
   const expire = () => { const remaining = family.expiresAt - Date.now(); if (remaining <= 0) expireMobileDeviceFamily(payload.deviceId); else { family.timer = setTimeout(expire, Math.min(remaining, 2_147_000_000)); family.timer.unref?.(); } };
   authSessions.set(payload.accessToken, session);
   expire();
-  return { ...publicPayload, rpcToken: gatewayToken };
+  return attachMobileConnectionRoutes({ ...publicPayload, rpcToken: gatewayToken }, mobileConnectionRoutesProvider?.get());
 }
 
 function tokenMatches(value) {
@@ -623,17 +537,8 @@ function tokenMatches(value) {
   return timingSafeEqual(expected, actual);
 }
 
-function loginUrl(base, token) {
-  const url = new URL(base);
-  const prefix = url.pathname.replace(/\/+$/, "");
-  url.pathname = `${prefix}/login`;
-  url.search = new URLSearchParams({ token, returnTo: `${prefix}/` }).toString();
-  url.hash = "";
-  return url.toString();
-}
-
 function localAccessBase() {
-  const localHost = host === "0.0.0.0" ? "127.0.0.1" : host === "::1" ? "[::1]" : host;
+  const localHost = host === "0.0.0.0" ? "127.0.0.1" : ["::", "::1"].includes(host) ? "[::1]" : host;
   return `http://${localHost}:${listeningPort}`;
 }
 
@@ -679,17 +584,6 @@ function recordLoginFailure(request) {
   loginAttempts.set(key, attempts);
 }
 
-async function requestBody(request, maxBytes = 4096) {
-  const chunks = [];
-  let size = 0;
-  for await (const chunk of request) {
-    size += chunk.length;
-    if (size > maxBytes) throw new Error("Request body is too large");
-    chunks.push(chunk);
-  }
-  return Buffer.concat(chunks).toString("utf8");
-}
-
 function jsonResponse(response, status, payload, extraHeaders = {}) {
   response.writeHead(status, {
     "content-type": "application/json; charset=utf-8",
@@ -698,6 +592,14 @@ function jsonResponse(response, status, payload, extraHeaders = {}) {
     ...extraHeaders,
   });
   response.end(JSON.stringify(payload));
+}
+
+let gatewayRuntimeVersionPromise;
+function gatewayRuntimeVersion() {
+  gatewayRuntimeVersionPromise ??= readFile(resolve(root, "package.json"), "utf8")
+    .then((contents) => diagnosticBuildVersion(JSON.parse(contents)?.version))
+    .catch(() => null);
+  return gatewayRuntimeVersionPromise;
 }
 
 function requireSameOriginMutation(request) {
@@ -711,22 +613,14 @@ function requireSameOriginMutation(request) {
   );
 }
 
+const runServerMutation = createServerMutationQueue();
 async function persistServers(values = servers) {
-  if (!serversStore) return;
-  await mkdir(dirname(serversStore), { recursive: true, mode: 0o700 });
-  const temporary = `${serversStore}.${process.pid}.tmp`;
-  await writeFile(
-    temporary,
-    `${JSON.stringify(values.map(storedServer), null, 2)}\n`,
-    { mode: 0o600 },
-  );
-  await rename(temporary, serversStore);
+  await writeServerConfiguration(serversStore, values.map(storedServer));
 }
 
-function refreshSessionServerAccess() {
-  const currentIds = new Set(servers.map((item) => item.id));
-  for (const session of authSessions.values())
-    session.allowedServerIds = new Set(currentIds);
+async function refreshSessionServerAccess(previousIds) {
+  const currentIds = servers.map((item) => item.id);
+  await authSessionRegistry.saveAccess(previousIds, currentIds, reconcileServerAccess);
 }
 
 async function testServerConnection(
@@ -736,10 +630,12 @@ async function testServerConnection(
   const key = workspaceBrokerKey(target);
   const sameContext = (candidate) =>
     target.security ? candidate.loginOwner === loginOwner : true;
-  const broker =
+  const existingBroker =
     (fresh ? undefined : [...(workspaceAppServerBrokers.get(key) ?? [])].find(
-      (candidate) => !candidate.closed && sameContext(candidate),
-    )) ?? createWorkspaceBroker(target, undefined, key, { authentication, loginOwner });
+      (candidate) => !candidate.closed && !candidate.nativeManagementOnly && sameContext(candidate),
+    ));
+  const broker = existingBroker ?? createWorkspaceBroker(target, undefined, key, { authentication, loginOwner });
+  if (broker.child.oidcAuthorizationPending) throw new Error("Complete the original organization SSO request first");
   if (broker.idleTimer) {
     clearTimeout(broker.idleTimer);
     broker.idleTimer = null;
@@ -823,9 +719,10 @@ async function testServerConnection(
     broker.detach(healthClient);
     if (healthy) {
       scheduleWorkspaceBrokerIdle(key, broker);
-    } else {
+    } else if (!existingBroker && broker.clientCount === 0 && !broker.ownsChannelHost) {
+      // A failed probe cannot dispose a peer's runtime or an owned channel host.
       removeWorkspaceBroker(key, broker);
-      await terminateAppServerChild(broker.child);
+      await terminateAppServerChild(broker.child, { eofMs: 0 });
     }
   }
 }
@@ -834,17 +731,61 @@ function serverHealthSignature(target) {
   return target ? JSON.stringify(storedServer(target)) : "";
 }
 
+function serverHealthScopeKey(target, loginOwner) {
+  const principal = target?.security && loginOwner
+    ? loginContexts.identity(loginOwner, target.id)
+    : null;
+  const generation = target?.security && loginOwner
+    ? loginContexts.generation(loginOwner, target.id)
+    : null;
+  return JSON.stringify([
+    target?.security ? [loginOwner ?? null,
+      principal ? [principal.principalId, principal.username, principal.role] : null,
+      generation] : null,
+    serverHealthSignature(target),
+  ]);
+}
+
+function invalidateServerHealth(targetId) {
+  for (const [key, entry] of serverHealth) {
+    if (entry.targetId === targetId) serverHealth.delete(key);
+  }
+  for (const [key, entry] of serverHealthInFlight) {
+    if (entry.targetId === targetId) serverHealthInFlight.delete(key);
+  }
+}
+
+function invalidateServerHealthOwner(loginOwner) {
+  if (loginOwner === null || loginOwner === undefined) return;
+  for (const [key, entry] of serverHealth) {
+    if (entry.loginOwner === loginOwner) serverHealth.delete(key);
+  }
+  for (const [key, entry] of serverHealthInFlight) {
+    if (entry.loginOwner === loginOwner) serverHealthInFlight.delete(key);
+  }
+}
+
+function pruneExpiredServerHealth(now = Date.now()) {
+  for (const [key, entry] of serverHealth) {
+    if (now - entry.result.checkedAt >= serverHealthTtlMs) serverHealth.delete(key);
+  }
+}
+
 function updateServerHealth(
   target,
   startedAt,
+  scopeKey,
   error = null,
   connection = null,
+  loginOwner = null,
 ) {
   const result = {
     id: target.id,
     status: error ? "offline" : "online",
     latencyMs: Math.max(0, Date.now() - startedAt),
     checkedAt: Date.now(),
+    appServerVersion: diagnosticBuildVersion(connection?.serverInfo?.version),
+    protocolVersion: diagnosticProtocolVersion(connection?.protocolVersion),
     ...(connection?.capabilities
       ? { capabilities: connection.capabilities }
       : {}),
@@ -857,7 +798,9 @@ function updateServerHealth(
         }
       : {}),
   };
-  serverHealth.set(target.id, {
+  serverHealth.set(scopeKey, {
+    targetId: target.id,
+    loginOwner: target.security ? loginOwner : null,
     signature: serverHealthSignature(target),
     result,
   });
@@ -865,14 +808,8 @@ function updateServerHealth(
 }
 
 async function probeServerHealth(target, loginOwner) {
+  pruneExpiredServerHealth();
   const signature = serverHealthSignature(target);
-  const cached = serverHealth.get(target.id);
-  if (
-    cached?.signature === signature &&
-    Date.now() - cached.result.checkedAt < serverHealthTtlMs
-  ) {
-    return cached.result;
-  }
   // An isolated target without an authenticated login context is never
   // probed: saved credentials must not silently bring a target back online
   // after logout, and anonymous fallback to a shared app-server is forbidden.
@@ -882,6 +819,8 @@ async function probeServerHealth(target, loginOwner) {
       status: "offline",
       latencyMs: 0,
       checkedAt: Date.now(),
+      appServerVersion: null,
+      protocolVersion: null,
       error: "需要登录 KCoder 账号",
     };
   }
@@ -891,22 +830,52 @@ async function probeServerHealth(target, loginOwner) {
       status: "offline",
       latencyMs: 0,
       checkedAt: Date.now(),
+      appServerVersion: null,
+      protocolVersion: null,
       error: "需要登录 KCoder 账号",
     };
   }
-  const existing = serverHealthInFlight.get(target.id);
+  const scopeKey = serverHealthScopeKey(target, loginOwner);
+  const cached = serverHealth.get(scopeKey);
+  if (
+    cached?.signature === signature &&
+    Date.now() - cached.result.checkedAt < serverHealthTtlMs
+  ) {
+    return cached.result;
+  }
+  const existing = serverHealthInFlight.get(scopeKey);
   if (existing?.signature === signature) return existing.promise;
   const startedAt = Date.now();
   const promise = testServerConnection(target, { loginOwner })
-    .then((connection) =>
-      updateServerHealth(target, startedAt, null, connection),
-    )
-    .catch((error) => updateServerHealth(target, startedAt, error))
+    .then((connection) => serverHealthScopeKey(target, loginOwner) === scopeKey
+      ? updateServerHealth(target, startedAt, scopeKey, null, connection, loginOwner)
+      : {
+          id: target.id,
+          status: "offline",
+          latencyMs: Math.max(0, Date.now() - startedAt),
+          checkedAt: Date.now(),
+          appServerVersion: null,
+          protocolVersion: null,
+          error: "账号状态在检查期间已变更，请重新检查",
+        })
+    .catch((error) => serverHealthScopeKey(target, loginOwner) === scopeKey
+      ? updateServerHealth(target, startedAt, scopeKey, error, null, loginOwner)
+      : {
+          id: target.id,
+          status: "offline",
+          latencyMs: Math.max(0, Date.now() - startedAt),
+          checkedAt: Date.now(),
+          appServerVersion: null,
+          protocolVersion: null,
+          error: "账号状态在检查期间已变更，请重新检查",
+        })
     .finally(() => {
-      if (serverHealthInFlight.get(target.id)?.promise === promise)
-        serverHealthInFlight.delete(target.id);
+      if (serverHealthInFlight.get(scopeKey)?.promise === promise)
+        serverHealthInFlight.delete(scopeKey);
     });
-  serverHealthInFlight.set(target.id, { signature, promise });
+  serverHealthInFlight.set(scopeKey, {
+    targetId: target.id, loginOwner: target.security ? loginOwner : null, signature, promise,
+  });
   return promise;
 }
 
@@ -925,115 +894,128 @@ async function probeServerHealthBounded(targets, loginOwner, concurrency = 4) {
   return results;
 }
 
-function safeReturnTo(value) {
-  if (
-    typeof value !== "string" ||
-    !value.startsWith("/") ||
-    value.startsWith("//") ||
-    value.includes("\\") ||
-    /[\r\n]/.test(value)
-  )
-    return null;
-  try {
-    const parsed = new URL(value, "http://kcoder.local");
-    if (
-      parsed.origin !== "http://kcoder.local" ||
-      parsed.pathname === "/login" ||
-      parsed.pathname.startsWith("/login/")
-    )
-      return null;
-    return `${parsed.pathname}${parsed.search}${parsed.hash}`;
-  } catch {
-    return null;
-  }
-}
+const { isAllowedMobileWebOrigin, isMobileApiPath, applyMobileCors } = createMobileWebCors({
+  mobileWebOrigins, isAllowedOrigin, jsonResponse,
+});
+const handleMobileConnectionProof = createMobileConnectionProofHandler({
+  getConnectionRoutes: () => mobileConnectionRoutesProvider?.get(),
+  signConnectionProof: (nonce, endpoint) => mobileDeviceAuth.signConnectionProof(nonce, endpoint),
+  jsonResponse,
+});
+const publicPairingReadiness = createPublicPairingReadiness({
+  signConnectionProof: (nonce, endpoint) => mobileDeviceAuth.signConnectionProof(nonce, endpoint),
+});
+const handleMobileRouteAuthorization = createMobileRouteAuthorizationHandler({
+  authRequired, tokenMatches: value => relaySecret ? relaySecretMatches(relaySecret, value) : tokenMatches(value), authSessions, inspectAccessAuthorization: accessToken => mobileDeviceAuth.inspectAccessAuthorization(accessToken),
+  rpcToken: gatewayToken, readBody: requestBody, jsonResponse, allowsSurface: publicAccess.allows,
+});
+const createPeerGateway = (env, url) => createMobilePeerGateway({ ...gatewayPeerOptions(env, url),
+  mobileDeviceAuth, authSessionById, authSessions, mobileDeviceFamilies, sessionSockets, contextSockets, loginContexts, contextSocketKey,
+  getServers: () => servers, getTarget: id => serversById.get(id), jsonResponse, getLocalBase: localAccessBase, rpcToken: gatewayToken, allowsSurface: surface => !url || publicAccess.allows(surface) });
 
-function escapeHtml(value) {
-  return String(value)
-    .replaceAll("&", "&amp;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;");
-}
-
-function loginPage(error = "", returnTo = null, loginActionPath = "/login") {
-  const message = error ? `<p class="error">${error}</p>` : "";
-  const returnInput = returnTo
-    ? `<input name="returnTo" type="hidden" value="${escapeHtml(returnTo)}">`
-    : "";
-  return `<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>KCoder Studio 登录</title><style>body{margin:0;background:#111;color:#eee;font:14px system-ui;display:grid;place-items:center;min-height:100vh}.card{box-sizing:border-box;width:min(360px,calc(100vw - 40px));padding:28px;border:1px solid #333;border-radius:14px;background:#1b1b1b}h1{font-size:20px;margin:0 0 8px}p{color:#aaa}input,button{box-sizing:border-box;width:100%;padding:11px 12px;border-radius:8px;border:1px solid #444;background:#111;color:#fff}button{margin-top:12px;background:#e8e8e8;color:#111;border:0;font-weight:600;cursor:pointer}.error{color:#ff7777}</style><body><form class="card" method="post" action="${escapeHtml(loginActionPath)}"><h1>KCoder Studio</h1><p>请输入服务器访问令牌后进入远程工作台。</p><p><a href="mobile/">打开手机 Web</a></p>${message}${returnInput}<input name="token" type="password" autocomplete="current-password" autofocus required><button type="submit">登录</button></form></body></html>`;
-}
-
-function isAllowedMobileWebOrigin(origin) {
-  if (!origin) return false;
-  try {
-    const parsed = new URL(origin);
-    return /^https?:$/.test(parsed.protocol) && parsed.origin === origin && mobileWebOrigins.has(parsed.origin);
-  } catch {
-    return false;
-  }
-}
-
-function isMobileApiPath(pathname) {
-  return (
-    pathname === "/api/mobile/session" ||
-    pathname === "/api/mobile/session/refresh" ||
-    pathname === "/api/mobile/devices" ||
-    /^\/api\/mobile\/devices\/[a-zA-Z0-9-]{16,128}$/.test(pathname) ||
-    pathname === "/api/servers" ||
-    pathname === "/api/servers/status" ||
-    pathname === "/api/servers/test" ||
-    /^\/api\/servers\/[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/.test(pathname)
-  );
-}
-
-function applyMobileCors(request, response, pathname) {
-  if (!isMobileApiPath(pathname) || !request.headers.origin)
-    return { handled: false, allowed: true };
-  let origin;
-  try {
-    origin = new URL(request.headers.origin).origin;
-  } catch {
-    return { handled: false, allowed: false };
-  }
-  const allowed =
-    isAllowedOrigin(request.headers.origin, request.headers.host) ||
-    isAllowedMobileWebOrigin(request.headers.origin);
-  if (!allowed) {
-    if (request.method === "OPTIONS") {
-      jsonResponse(response, 403, {
-        error: "Mobile Web origin is not allowed",
-      });
-      return { handled: true, allowed: false };
-    }
-    return { handled: false, allowed: false };
-  }
-  response.setHeader("access-control-allow-origin", origin);
-  response.setHeader("vary", "Origin");
-  response.setHeader(
-    "access-control-allow-methods",
-    "GET, POST, PUT, DELETE, OPTIONS",
-  );
-  response.setHeader(
-    "access-control-allow-headers",
-    "Authorization, Content-Type",
-  );
-  response.setHeader("access-control-max-age", "600");
-  if (request.method === "OPTIONS") {
-    response.writeHead(204, { "cache-control": "no-store" });
-    response.end();
-    return { handled: true, allowed: true };
-  }
-  return { handled: false, allowed: true };
-}
-
+let mobilePeerGateway = createPeerGateway(process.env, publicAccessUrl);
 const mobileWebRoot = resolve(process.env.KCODER_STUDIO_MOBILE_WEB_ROOT || resolve(root, "mobile/dist"));
 const serveMobileWeb = createMobileWebStatic({
-  root: mobileWebRoot, publicOrigins, pairingToken: authToken, contentSecurityPolicy,
-  directPort: () => listeningPort,
+  root: mobileWebRoot, publicOrigins, contentSecurityPolicy, directPort: () => listeningPort,
+  getPresentation: () => ({ publicAccessUrl, pairingToken: relaySecret || authToken }),
+});
+const mobileDev = createMobileWebDevProxy({
+  port: process.env.KCODER_STUDIO_MOBILE_DEV_PORT, rendererMode: studioRendererMode(), publicAccessUrl, allowedOrigin: isAllowedOrigin,
 });
 
 const mcpCallbacks = new McpOAuthCallbackRegistry();
+const workspaceCwdObservationHandler = createWorkspaceCwdObservationHttpHandler({
+  gateway: { getTarget: (id) => serversById.get(id), authenticatedSession, requestLoginOwner, loginContexts, serverHealthSignature, jsonResponse },
+  observe: workspaceCwdObserver,
+});
+const serveWidgetSandbox = createWidgetSandboxRoute({
+  roots: [webRoot, resolve(root, 'renderer/public')],
+});
+const servePublicStudioAsset = createStudioPublicAssets({ webRoot });
+const serveStudioStatic = createStudioStaticRoute({
+  webRoot, gatewayToken, desktopHost, contentSecurityPolicy, requestPublicPrefix,
+});
+const initialPublicUrl = publicAccessUrl;
+const makeVite = (url, cache) => createStudioViteRenderer({ rendererRoot: resolve(root, 'renderer'),
+  cacheDir: resolve(accountStorageRoot, cache), publicAccessUrl: url, gatewayToken, desktopHost, contentSecurityPolicy, requestPublicPrefix });
+const localVite = studioRendererMode() === 'vite' ? await makeVite(initialPublicUrl, 'renderer-vite-cache') : null;
+let relayVite = null;
+const viteFor = request => requestPublicPrefix(request) && relayVite ? relayVite : localVite;
+const mobileDevFor = request => requestPublicPrefix(request) && publicAccessUrl?.href !== initialPublicUrl?.href ? null : mobileDev;
+async function setRelayPresentation(env) {
+  const url = env.KCODER_STUDIO_PUBLIC_ACCESS_URL ? new URL(env.KCODER_STUDIO_PUBLIC_ACCESS_URL) : null;
+  if (url?.href === publicAccessUrl?.href) return;
+  const identity = url ? await mobileDeviceAuth.getConnectionIdentity() : null;
+  const peer = createPeerGateway({ ...process.env, ...env }, url);
+  const vite = url && localVite && url.href !== initialPublicUrl?.href ? await makeVite(url, 'renderer-vite-relay-cache') : null;
+  replacePublicOrigin(publicOrigins, retiredAuthorities, publicAccessUrl, url);
+  publicAccessUrl = url;
+  relaySecret = gatewayRelaySecret(env);
+  mobileConnectionRoutesProvider = identity ? createMobileConnectionRoutesProvider({ identity, publicAccessUrl, isAllowedAuthority }) : undefined;
+  mobileConnectionRoutesProvider?.setListeningPort(listeningPort);
+  void mobilePeerGateway.close().catch(() => {});
+  mobilePeerGateway = peer;
+  void relayVite?.close().catch(() => {});
+  relayVite = vite;
+  if (authRequired) void writeStudioLoginUrl(loginUrl(url || localAccessBase(), authToken), { dataDirectory: accountStorageRoot }).catch(() => {});
+}
+const migrationSourceSessions = createGatewayMigrationSourceSessions({
+  maxMessageBytes, trackAppServerChild, loginContexts, closeContextSockets,
+  requireSameOriginMutation, requestBody, jsonResponse, requestLoginOwner,
+  authenticatedSessionId, authSessionById, serverHealthSignature,
+  getTarget: id => serversById.get(id), isMock: () => mock,
+});
+
+const handleAccountAdministration = createAccountAdministrationRoute({ getTarget: id => serversById.get(id), requireSameOriginMutation, requestBody, requestLoginOwner, loginContexts, launchSpec, environment: spec => appServerEnvironment(process.env, spec.env), track: trackAppServerChild, jsonResponse });
+const channels = createChannelsController({ directory: resolve(accountStorageRoot, 'channels'),
+  settingsDirectory: accountStorageRoot,
+  selectBroker: async target => {
+    const serverTarget = serversById.get(target.serverId);
+    if (!serverTarget) throw new Error('CHANNEL_TASK_TARGET_UNAVAILABLE');
+    return reusableWorkspaceBroker(serverTarget, target.workspacePath, target.loginOwner);
+  },
+});
+const handleChannels = createChannelsHttpHandler({ controller: channels, requestBody, jsonResponse, requireSameOriginMutation,
+  targetLabel: id => serversById.get(id)?.label ?? id,
+  resolveTarget: async (target, { session, loginOwner }) => {
+    if (!target || typeof target.threadId !== 'string' || !target.threadId || target.threadId.length > 512
+      || (target.workspacePath !== undefined && typeof target.workspacePath !== 'string')
+      || !session.allowedServerIds.has(target.serverId) || !serversById.has(target.serverId)) {
+      throw new Error('CHANNEL_TASK_TARGET_UNAVAILABLE');
+    }
+    return { serverId: target.serverId, workspacePath: target.workspacePath, threadId: target.threadId,
+      ...(serversById.get(target.serverId).security ? { loginOwner } : {}) };
+  },
+});
+accountOidcRoutes = createOrganizationOidcRoutes({ getTarget: id => serversById.get(id), targetSignature: serverHealthSignature, loginContexts, loginOwner: requestLoginOwner,
+  captureOwner: (request, session, targetId) => ({ id: authenticatedSessionId(request), session, targetId, origin: request.headers.origin, localStart: ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(request.socket.remoteAddress) && ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(request.socket.localAddress) }),
+  ownerActive: proof => !authRequired || (authSessions.get(proof.id) === proof.session && (proof.session.accessExpiresAt ?? proof.session.expiresAt) > Date.now() && proof.session.allowedServerIds.has(proof.targetId)),
+  isAllowedRedirectOrigin: (origin, proof) => publicOrigins.has(origin) || (proof?.localStart === true && [`http://127.0.0.1:${listeningPort}`, `http://[::1]:${listeningPort}`].includes(origin) && [`http://127.0.0.1:${listeningPort}`, `http://localhost:${listeningPort}`, `http://[::1]:${listeningPort}`].includes(proof?.origin)),
+  callbackOwner: async request => requestLoginOwner(request, await authenticatedSession(request)), deliverLogout: (target, token) => { const spec = launchSpec(target); return deliverNativeOidcLogout(spec, appServerEnvironment(process.env, spec.env), token, child => trackAppServerChild(child, target.id)); },
+  listeningPort: () => listeningPort, publicCallbackPath: request => `${requestPublicPrefix(request) || ''}/api/account/oidc/callback`,
+  createBroker: (target, options) => createWorkspaceBroker(target, undefined, workspaceBrokerKey(target), options), finishBroker: (target, loginOwner) => testServerConnection(target, { loginOwner }),
+  stopBroker: broker => terminateAppServerChild(broker.child), stopOwner: (owner, targetId) => terminateContextChildren(targetId, owner), closeSockets: closeContextSockets, invalidateHealth: invalidateServerHealth,
+  requireSameOriginMutation, requestBody, jsonResponse });
+
+const handleServerInventory = createServerInventoryRoutes({
+  getServers: () => servers, sshConnections, jsonResponse, requireSameOriginMutation, requestBody,
+  requestLoginOwner, publicServerInventory, serverHealthScopeKey, mock, probeServerHealthBounded,
+  respondWithServerStatusSnapshot, loginContexts, gatewayRuntimeVersion, remoteTransportMetadata: { getEnvironment: () => liveRelay.environment, canRead: (request, session) => isGatewayBrowserAdminRequest(request, session, servers, authRequired) },
+});
+
+const handleRelayPairing = createRelayPairingHandler({ getSecret: () => relaySecret, jsonResponse,
+  getPairing: async mode => attachMobileConnectionRoutes({ ...await selectMobilePairingCredential(mode, mobilePairingToken, () => mobileDeviceAuth.getPairingCredential()),
+    publicBaseUrl: publicAccessUrl?.toString().replace(/\/$/, '') || null }, mobileConnectionRoutesProvider?.get()),
+});
+const handleRelayAccountEntry = createRelayAccountEntryHandler({
+  getSecret: () => authRequired ? relaySecret : '', publicPrefix: requestPublicPrefix, requestBody, jsonResponse, allowsSurface: publicAccess.allows,
+  async browserCookie(request, browserAdmin) {
+    const current = await authSessionById(browserCookies.read(request));
+    if (current && (!browserAdmin || isGatewayBrowserAdminRequest(request, current, servers, authRequired))) return null;
+    const { id } = await createAuthSession({ browserAdmin });
+    return browserCookies.header(request, id, Math.floor(authSessionTtlMs / 1000), requestCookiePath(request));
+  },
+});
 const server = createServer(async (request, response) => {
   try {
     const initialUrl = new URL(request.url, "http://localhost");
@@ -1050,14 +1032,21 @@ const server = createServer(async (request, response) => {
     }
     const requestUrl = initialUrl;
     const pathname = requestUrl.pathname;
+    const publicRequest = Boolean(requestPublicPrefix(request));
     if (!authRequired && request.headers.origin &&
         !isAllowedOrigin(request.headers.origin, request.headers.host) &&
         !(isMobileApiPath(pathname) && isAllowedMobileWebOrigin(request.headers.origin))) {
       jsonResponse(response, 403, { error: "Origin is not allowed" });
       return;
     }
-    if (await serveMobileWeb(request, response, pathname)) return;
+    if (await handleRelayPairing(request, response, requestUrl)) return;
+    if (await handleRelayAccountEntry(request, response, requestUrl)) return;
+    if (await handleMobileRouteAuthorization(request, response, requestUrl)) return;
+    if (publicRequest && !await publicAccess.admitHttp(request, response, pathname, authenticatedSession, jsonResponse)) return;
+    if (await serveWidgetSandbox(request, response, pathname)) return;
+    if (!mobileDevFor(request)?.matches(pathname) && await serveMobileWeb(request, response, pathname)) return;
     if (mcpCallbacks.handle(request, response)) return;
+    if (await accountOidcRoutes.handleCallback(request, response, requestUrl)) return;
     const mobileCors = applyMobileCors(request, response, pathname);
     if (mobileCors.handled) return;
     if (!mobileCors.allowed) {
@@ -1066,6 +1055,8 @@ const server = createServer(async (request, response) => {
       });
       return;
     }
+    if (await mobilePeerGateway.handleHttp(request, response, requestUrl)) return;
+    if (await handleMobileConnectionProof(request, response, requestUrl)) return;
     if (pathname === "/favicon.ico") {
       response.writeHead(204, { "cache-control": "public, max-age=3600" });
       response.end();
@@ -1099,10 +1090,12 @@ const server = createServer(async (request, response) => {
         jsonResponse(response, 400, { error: "登录请求不是有效 JSON" });
         return;
       }
-      const rotatingPairingToken = authRequired && /^[a-f0-9]{64}$/.test(token)
-        ? await mobileDeviceAuth.matchesPairingCredential(token).catch(() => false)
-        : false;
-      if ((!tokenMatches(token) && !rotatingPairingToken) || (rotatingPairingToken && !deviceAuthorization)) {
+      const webPairing = authRequired && (accountPairingProofMatches(relaySecret, token, request.headers['x-kcoder-relay-account-pairing'], 'mobileWeb') || await mobileDeviceAuth.matchesPairingCredential(token, 'mobileWeb').catch(() => false));
+      const surface = webPairing ? 'mobileWeb' : 'mobileApp';
+      if (publicRequest && !publicAccess.allows(surface)) { jsonResponse(response, 403, { error: 'Public access is disabled' }); return; }
+      const devicePairingToken = authRequired && (webPairing || accountPairingProofMatches(relaySecret, token, request.headers['x-kcoder-relay-account-pairing']) || fixedMobilePairingTokenMatches(mobilePairingToken, token) || (/^[a-f0-9]{64}$/.test(token)
+        && await mobileDeviceAuth.matchesPairingCredential(token).catch(() => false)));
+      if (((relaySecret || !tokenMatches(token)) && !devicePairingToken) || (devicePairingToken && !deviceAuthorization)) {
         recordLoginFailure(request);
         jsonResponse(response, 401, { error: "访问令牌不正确。" });
         return;
@@ -1110,7 +1103,10 @@ const server = createServer(async (request, response) => {
       loginAttempts.delete(request.socket.remoteAddress || "unknown");
       if (deviceAuthorization && authRequired) {
         try {
-          const granted = registerMobileDeviceGrant(await mobileDeviceAuth.pair(deviceLabel));
+          const { grant, evictedDeviceIds } = await mobileDeviceAuth.pairWithEviction(deviceLabel, surface);
+          for (const deviceId of evictedDeviceIds) expireMobileDeviceFamily(deviceId);
+          if (evictedDeviceIds.length) void retentionRevocationPump.drain().catch(() => {});
+          const granted = registerMobileDeviceGrant(grant);
           const session = authSessions.get(granted.accessToken);
           if (!session) throw new Error("New device session unavailable");
           jsonResponse(response, 200, requestInitialServers ? {
@@ -1123,34 +1119,32 @@ const server = createServer(async (request, response) => {
         return;
       }
       let id; let session;
-      try { ({ id, session } = createAuthSession()); }
+      try { ({ id, session } = await createAuthSession()); }
       catch (error) {
         if (error.status !== 429) throw error;
         jsonResponse(response, 429, { error: "Gateway session limit reached. Revoke an unused device and retry." });
         return;
       }
-      const secure =
-        process.env.KCODER_STUDIO_SECURE_COOKIE === "1" ? "; Secure" : "";
-      const currentCookieId = cookieValue(request, "kcoder_studio_session");
+      const currentCookieId = browserCookies.read(request);
       const preserveAuthenticatedHostCookie = Boolean(
-        currentCookieId && authSessionById(currentCookieId),
+        currentCookieId && await authSessionById(currentCookieId),
       );
       jsonResponse(
         response,
         200,
-        {
+        attachMobileConnectionRoutes({
           accessToken: id,
           expiresAt: session.expiresAt,
           rpcToken: gatewayToken,
           capabilities: { mobileRefreshV1: false, mobileDeviceManagementV1: false,
             ...(requestInitialServers ? { mobileInitialServersV1: true } : {}) },
           ...(requestInitialServers ? initialServerBootstrap(session, authRequired ? id : ANONYMOUS_LOGIN_OWNER) : {}),
-        },
+        }, mobileConnectionRoutesProvider?.get()),
         preserveAuthenticatedHostCookie
           ? {}
           : {
               // Preserve same-origin Mobile Web cookie authentication when no independent web-login session exists.
-              "set-cookie": `kcoder_studio_session=${encodeURIComponent(id)}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${Math.floor(authSessionTtlMs / 1000)}${secure}`,
+              "set-cookie": browserCookies.header(request, id, Math.floor(authSessionTtlMs / 1000)),
             },
       );
       return;
@@ -1160,7 +1154,7 @@ const server = createServer(async (request, response) => {
       if (request.headers['content-type']?.split(';', 1)[0].trim().toLowerCase() !== 'application/json') { jsonResponse(response, 415, { error: 'Refresh requires application/json' }); return; }
       try {
         const payload = JSON.parse(await requestBody(request));
-        const grant = await mobileDeviceAuth.refresh(payload?.refreshToken, payload?.rotationId);
+        const grant = await mobileDeviceAuth.refresh(payload?.refreshToken, payload?.rotationId, publicRequest ? publicAccess.allows : undefined);
         if (payload?.deviceId && payload.deviceId !== grant.deviceId) { jsonResponse(response, 401, { error: 'Device authorization rejected' }); return; }
         jsonResponse(response, 200, registerMobileDeviceGrant(grant));
       } catch (error) {
@@ -1183,16 +1177,16 @@ const server = createServer(async (request, response) => {
         jsonResponse(response, 401, { error: "Authentication required" });
         return;
       }
-      if (session.deviceId) await mobileDeviceAuth.revoke(session.deviceId);
-      deleteAuthSession(id);
+      if (session.deviceId) await revokeMobileDeviceAndScheduleCleanup(session.deviceId);
+      await deleteAuthSession(id);
       const deletingCurrentCookie =
-        cookieValue(request, "kcoder_studio_session") === id;
+        browserCookies.read(request) === id;
       response.writeHead(204, {
         "cache-control": "no-store",
         ...(deletingCurrentCookie
           ? {
               "set-cookie":
-                "kcoder_studio_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0",
+                browserCookies.header(request, '', 0),
             }
           : {}),
       });
@@ -1215,13 +1209,11 @@ const server = createServer(async (request, response) => {
           return;
         }
         loginAttempts.delete(request.socket.remoteAddress || "unknown");
-        const id = createAuthSession().id;
-        const secure = process.env.KCODER_STUDIO_SECURE_COOKIE === "1" ||
-          (publicAccessUrl?.protocol === "https:" && request.headers.host === publicAccessUrl.host) ? "; Secure" : "";
+        const { id } = await createAuthSession({ browserAdmin: true });
         const returnTo = safeReturnTo(requestUrl.searchParams.get("returnTo"));
         response.writeHead(303, {
           location: returnTo || prefixedLocation(request, "/"),
-          "set-cookie": `kcoder_studio_session=${encodeURIComponent(id)}; HttpOnly; SameSite=Strict; Path=${requestCookiePath(request)}; Max-Age=${Math.floor(authSessionTtlMs / 1000)}${secure}`,
+          "set-cookie": browserCookies.header(request, id, Math.floor(authSessionTtlMs / 1000), requestCookiePath(request)),
           "cache-control": "no-store",
           "referrer-policy": "no-referrer",
           "x-kcoder-session-ttl-ms": String(authSessionTtlMs),
@@ -1239,15 +1231,12 @@ const server = createServer(async (request, response) => {
         const returnTo = safeReturnTo(form.get("returnTo"));
         if (tokenMatches(form.get("token") || "")) {
           loginAttempts.delete(request.socket.remoteAddress || "unknown");
-          let id = form.get("renewSession") === "1" ? authenticatedSessionId(request) : null;
-          const existing = id ? authSessionById(id) : null;
-          if (existing) {
-            clearTimeout(existing.expiryTimer);
-            existing.expiresAt = Date.now() + authSessionTtlMs;
-            existing.expiryTimer = setTimeout(() => deleteAuthSession(id), authSessionTtlMs);
-            existing.expiryTimer.unref?.();
-          } else {
-            try { id = createAuthSession().id; }
+          let id = form.get("renewSession") === "1" && request.headers.authorization === undefined
+            ? browserCookies.read(request)
+            : null;
+          const renewed = Boolean(id) && await authSessionRegistry.renew(id);
+          if (!renewed) {
+            try { ({ id } = await createAuthSession({ browserAdmin: true })); }
             catch (error) {
               if (error.status !== 429) throw error;
               response.writeHead(429, loginHtmlHeaders);
@@ -1255,11 +1244,9 @@ const server = createServer(async (request, response) => {
               return;
             }
           }
-          const secure = process.env.KCODER_STUDIO_SECURE_COOKIE === "1" ||
-            (publicAccessUrl?.protocol === "https:" && request.headers.host === publicAccessUrl.host) ? "; Secure" : "";
           response.writeHead(303, {
             location: returnTo || prefixedLocation(request, "/"),
-            "set-cookie": `kcoder_studio_session=${encodeURIComponent(id)}; HttpOnly; SameSite=Strict; Path=${requestCookiePath(request)}; Max-Age=${Math.floor(authSessionTtlMs / 1000)}${secure}`,
+            "set-cookie": browserCookies.header(request, id, Math.floor(authSessionTtlMs / 1000), requestCookiePath(request)),
             "cache-control": "no-store",
             "x-kcoder-session-ttl-ms": String(authSessionTtlMs),
           });
@@ -1279,18 +1266,19 @@ const server = createServer(async (request, response) => {
       return;
     }
     if (authRequired && pathname === "/logout" && request.method === "POST") {
-      const id = cookieValue(request, "kcoder_studio_session");
-      if (id) deleteAuthSession(id);
+      const id = browserCookies.read(request);
+      if (id) await deleteAuthSession(id);
       response.writeHead(303, {
         location: prefixedLocation(request, "/login"),
         "set-cookie":
-          "kcoder_studio_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0",
+          browserCookies.header(request, '', 0),
         "cache-control": "no-store",
       });
       response.end();
       return;
     }
-    const authSession = authenticatedSession(request);
+    if (await servePublicStudioAsset(request, response, pathname)) return;
+    const authSession = await authenticatedSession(request);
     if (!authSession) {
       const navigation = request.headers.accept?.includes("text/html");
       const requestedReturnTo = navigation
@@ -1315,11 +1303,21 @@ const server = createServer(async (request, response) => {
       );
       return;
     }
+    if (mobileDevFor(request)?.matches(pathname)) {
+      if (!isGatewayBrowserAdminRequest(request, authSession, servers, authRequired)) { jsonResponse(response, 403, { error: "Gateway browser authorization required" }); return; }
+      await mobileDevFor(request).handle(request, response, requestUrl);
+      return;
+    }
+    if (await migrationSourceSessions.handle({ pathname, request, response, authSession })) return;
+    if (await handleRelayManagement(request, response, pathname, authSession)) return;
+    if (await workspaceCwdObservationHandler({ pathname, request, response, requestUrl, authSession })) return;
+    if (pathname === '/api/channels') {
+      if (!isGatewayBrowserAdminRequest(request, authSession, servers, authRequired)) { jsonResponse(response, 403, { error: 'Gateway browser authorization required' }); return; }
+      await handleChannels({ request, response, pathname, session: authSession, loginOwner: requestLoginOwner(request, authSession) });
+      return;
+    }
     if (pathname === "/api/gateway/browser-access" && request.method === "GET") {
-      if (!authRequired || bearerValue(request) || authSession.deviceId) {
-        jsonResponse(response, 403, { error: "Gateway browser authorization required" });
-        return;
-      }
+      if (!isGatewayBrowserAdminRequest(request, authSession, servers, authRequired)) { jsonResponse(response, 403, { error: "Gateway browser authorization required" }); return; }
       const publicBaseUrl = publicAccessUrl?.toString().replace(/\/$/, "") || null;
       jsonResponse(response, 200, {
         token: authToken,
@@ -1330,17 +1328,18 @@ const server = createServer(async (request, response) => {
     }
     const mobilePairingAdminDevices = pathname.match(/^\/api\/mobile\/pairing\/devices\/([a-zA-Z0-9-]{16,128})$/);
     if (pathname === "/api/mobile/pairing" || mobilePairingAdminDevices) {
-      const browserAdmin = authRequired && !bearerValue(request) && !authSession.deviceId &&
-        authSession.allowedServerIds && servers.every(target => authSession.allowedServerIds.has(target.id));
+      const browserAdmin = isGatewayBrowserAdminRequest(request, authSession, servers, authRequired);
       if (!browserAdmin) { jsonResponse(response, 403, { error: "Gateway browser authorization required" }); return; }
       if (pathname === "/api/mobile/pairing" && request.method === "GET") {
         try {
           const pairing = await mobileDeviceAuth.getPairingCredential();
-          jsonResponse(response, 200, {
+          const routes = mobileConnectionRoutesProvider?.get();
+          jsonResponse(response, 200, attachMobileConnectionRoutes({
             ...pairing,
             publicBaseUrl: publicAccessUrl?.toString().replace(/\/$/, "") || null,
+            publicReadiness: publicPairingReadiness(routes?.endpoints[0]?.url),
             devices: await mobileDeviceAuth.list(),
-          });
+          }, routes));
         } catch {
           jsonResponse(response, 503, { error: "Mobile pairing is unavailable" });
         }
@@ -1358,8 +1357,7 @@ const server = createServer(async (request, response) => {
       }
       if (mobilePairingAdminDevices && request.method === "DELETE") {
         if (!requireSameOriginMutation(request)) { jsonResponse(response, 403, { error: "Same-origin JSON request required" }); return; }
-        await mobileDeviceAuth.revoke(mobilePairingAdminDevices[1]);
-        expireMobileDeviceFamily(mobilePairingAdminDevices[1]);
+        await revokeMobileDeviceAndScheduleCleanup(mobilePairingAdminDevices[1]);
         response.writeHead(204, { "cache-control": "no-store" }); response.end();
         return;
       }
@@ -1373,101 +1371,12 @@ const server = createServer(async (request, response) => {
     const mobileDeviceMatch = pathname.match(/^\/api\/mobile\/devices\/([a-zA-Z0-9-]{16,128})$/);
     if (mobileDeviceMatch && request.method === 'DELETE') {
       if (!authRequired || !bearerValue(request) || !authSession.deviceId || !servers.every(target => authSession.allowedServerIds.has(target.id))) { jsonResponse(response, 401, { error: 'Bearer authorization required' }); return; }
-      await mobileDeviceAuth.revoke(mobileDeviceMatch[1]); expireMobileDeviceFamily(mobileDeviceMatch[1]);
+      await revokeMobileDeviceAndScheduleCleanup(mobileDeviceMatch[1]);
       response.writeHead(204, { 'cache-control': 'no-store' }); response.end(); return;
     }
-    if (pathname === "/api/ssh-connections" || pathname.startsWith("/api/ssh-connections/")) {
-      if (!servers.every(item => authSession.allowedServerIds.has(item.id))) {
-        jsonResponse(response, 403, { error: "Full Gateway access required" });
-        return;
-      }
-      try {
-        if (pathname === "/api/ssh-connections" && request.method === "GET") {
-          jsonResponse(response, 200, { connections: await sshConnections.list() });
-          return;
-        }
-        if (!requireSameOriginMutation(request)) {
-          jsonResponse(response, 403, { error: "Same-origin JSON request required" });
-          return;
-        }
-        const id = pathname.slice("/api/ssh-connections/".length);
-        if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/.test(id)) throw new Error("Invalid SSH connection ID");
-        if (request.method === "PUT") {
-          const profile = JSON.parse(await requestBody(request, 32 * 1024));
-          if (profile.id !== id) throw new Error("SSH connection ID does not match");
-          jsonResponse(response, 200, { connection: await sshConnections.upsert(profile) });
-        } else if (request.method === "DELETE") {
-          await sshConnections.delete(id);
-          jsonResponse(response, 200, { ok: true });
-        } else jsonResponse(response, 405, { error: "Method not allowed" });
-      } catch {
-        jsonResponse(response, 400, { error: "Unable to read or update SSH connections; check fields and Gateway storage permissions" });
-      }
-      return;
-    }
-    if (pathname === "/api/servers" && request.method === "GET") {
-      const loginOwner = requestLoginOwner(request, authSession);
-      const body = JSON.stringify(publicServerInventory(authSession, loginOwner));
-      response.writeHead(200, {
-        "content-type": "application/json; charset=utf-8",
-        "cache-control": "no-store",
-        "x-content-type-options": "nosniff",
-      });
-      response.end(body);
-      return;
-    }
-    if (pathname === "/api/servers/status" && request.method === "GET") {
-      const loginOwner = requestLoginOwner(request, authSession);
-      const targets = servers.filter((item) =>
-        authSession.allowedServerIds.has(item.id),
-      );
-      // In mock mode the WebSocket is the built-in app-server. Do not probe a live
-      // command on disk, which would make test/demo UI report the available mock runtime as offline and disable input.
-      const statuses = mock
-        ? targets.map((item) => ({
-            id: item.id,
-            status: "online",
-            latencyMs: 0,
-            checkedAt: Date.now(),
-          }))
-        : await probeServerHealthBounded(targets, loginOwner);
-      jsonResponse(response, 200, { statuses: statuses.map(item => ({ ...item,
-        ...(loginOwner && loginContexts.identity(loginOwner, item.id)
-          ? { accountIdentity: loginContexts.identity(loginOwner, item.id) } : {}) })) });
-      return;
-    }
-    const accountAdministration = pathname.match(/^\/api\/servers\/([a-zA-Z0-9][a-zA-Z0-9._-]{0,63})\/accounts$/);
-    if (accountAdministration && request.method === 'POST') {
-      if (!requireSameOriginMutation(request)) {
-        jsonResponse(response, 403, { error: 'Same-origin JSON request required' });
-        return;
-      }
-      const target = serversById.get(accountAdministration[1]);
-      if (!target?.security || !authSession.allowedServerIds.has(target.id)) {
-        jsonResponse(response, 404, { error: 'KCoder account target is unavailable' });
-        return;
-      }
-      try {
-        let operation;
-        try { operation = JSON.parse(await requestBody(request, 4 * 1024 * 1024)); }
-        catch { throw new Error('Invalid account administration request'); }
-        const loginOwner = requestLoginOwner(request, authSession);
-        const principal = loginOwner ? loginContexts.identity(loginOwner, target.id) : null;
-        const credential = loginOwner ? loginContexts.credential(loginOwner, target.id) : null;
-        if (!principal || principal.role !== 'admin' || !credential) {
-          jsonResponse(response, 403, { error: 'KCoder 账号管理失败：请检查管理员身份和操作参数' });
-          return;
-        }
-        const spec = launchSpec(target);
-        const result = await administerAccount(spec, appServerEnvironment(process.env, spec.env),
-          { username: principal.username, password: credential.password }, operation,
-          { track: child => trackAppServerChild(child, target.id) });
-        jsonResponse(response, 200, { result });
-      } catch {
-        jsonResponse(response, 403, { error: 'KCoder 账号管理失败：请检查管理员身份和操作参数' });
-      }
-      return;
-    }
+    if (await handleServerInventory(request, response, pathname, authSession)) return;
+    if (await handleAccountAdministration(request, response, pathname, authSession)) return;
+    if (await accountOidcRoutes.handle(request, response, requestUrl, authSession)) return;
     const accountMutation = pathname.match(/^\/api\/servers\/([a-zA-Z0-9][a-zA-Z0-9._-]{0,63})\/account$/);
     if (accountMutation && ['GET', 'POST', 'DELETE'].includes(request.method)) {
       if (request.method !== 'GET' && !requireSameOriginMutation(request)) {
@@ -1516,7 +1425,7 @@ const server = createServer(async (request, response) => {
               try {
                 const key = workspaceBrokerKey(target);
                 const broker = [...(workspaceAppServerBrokers.get(key) ?? [])].find(
-                  candidate => !candidate.closed && candidate.loginOwner === loginOwner,
+                  candidate => !candidate.closed && !candidate.nativeManagementOnly && candidate.loginOwner === loginOwner,
                 ) ?? createWorkspaceBroker(target, undefined, key, { loginOwner });
                 await pauseWikiBeforeLogout(broker);
               } catch { wikiPauseUnconfirmed = true; }
@@ -1524,7 +1433,7 @@ const server = createServer(async (request, response) => {
             loginContexts.invalidate(loginOwner, target.id);
             closeContextSockets(loginOwner, target.id);
             await terminateContextChildren(target.id, loginOwner);
-            serverHealth.delete(target.id);
+            invalidateServerHealth(target.id);
             const cleanupFailure = await runAccountLogoutCleanup(
               accountLogoutCleanupPlan({ principal, deviceId }),
               accountCredentials,
@@ -1590,7 +1499,7 @@ const server = createServer(async (request, response) => {
             return { principal };
           } catch (error) {
             loginContexts.invalidate(loginOwner, target.id);
-            serverHealth.delete(target.id);
+            invalidateServerHealth(target.id);
             if (error?.authenticationRejected && typeof body.deviceId === 'string') {
               await accountCredentials.forgetIdentity({ deviceId: body.deviceId, username: credential.username }, target).catch(() => {});
             }
@@ -1623,6 +1532,10 @@ const server = createServer(async (request, response) => {
       return;
     }
     if (pathname === "/api/servers/test" && request.method === "POST") {
+      if (!hasFullServerAccess(authSession, servers)) {
+        jsonResponse(response, 403, { error: "Full Gateway authorization required" });
+        return;
+      }
       if (!requireSameOriginMutation(request)) {
         jsonResponse(response, 403, {
           error: "Same-origin JSON request required",
@@ -1635,19 +1548,21 @@ const server = createServer(async (request, response) => {
         const startedAt = Date.now();
         try {
           const result = await testServerConnection(target);
-          if (
+          if (!target.security &&
             serverHealthSignature(serversById.get(target.id)) ===
             serverHealthSignature(target)
           ) {
-            updateServerHealth(target, startedAt);
+            const loginOwner = requestLoginOwner(request, authSession);
+            updateServerHealth(target, startedAt, serverHealthScopeKey(target, loginOwner), null, result, loginOwner);
           }
           jsonResponse(response, 200, result);
         } catch (error) {
-          if (
+          if (!target.security &&
             serverHealthSignature(serversById.get(target.id)) ===
             serverHealthSignature(target)
           ) {
-            updateServerHealth(target, startedAt, error);
+            const loginOwner = requestLoginOwner(request, authSession);
+            updateServerHealth(target, startedAt, serverHealthScopeKey(target, loginOwner), error, null, loginOwner);
           }
           jsonResponse(response, 200, {
             ok: false,
@@ -1672,9 +1587,15 @@ const server = createServer(async (request, response) => {
         return;
       }
       try {
+        const draft = request.method === "PUT"
+          ? JSON.parse(await requestBody(request, 16 * 1024)) : null;
+        await runServerMutation(async () => {
+        if (!hasFullServerAccess(await authenticatedSession(request), servers)) {
+          jsonResponse(response, 403, { error: "Full Gateway authorization required" });
+          return;
+        }
         const id = serverMutation[1];
         if (request.method === "PUT") {
-          const draft = JSON.parse(await requestBody(request, 16 * 1024));
           if (draft.id !== id)
             throw new Error("runtime target id does not match request path");
           const target = normalizeServer(draft, serverDefaults);
@@ -1712,10 +1633,11 @@ const server = createServer(async (request, response) => {
               );
           }
           await persistServers(nextServers);
+          const previousServerIds = servers.map(item => item.id);
           servers = nextServers;
           serversById = new Map(servers.map((item) => [item.id, item]));
-          serverHealth.delete(id);
-          refreshSessionServerAccess();
+          invalidateServerHealth(id);
+          await refreshSessionServerAccess(previousServerIds);
           if (existingIndex >= 0 && connectionChanged) {
             loginContexts.invalidateTarget(id);
             closeTargetSockets(id);
@@ -1732,16 +1654,18 @@ const server = createServer(async (request, response) => {
             throw new Error("the last runtime target cannot be deleted");
           const nextServers = servers.filter((item) => item.id !== id);
           await persistServers(nextServers);
+          const previousServerIds = servers.map(item => item.id);
           servers = nextServers;
           serversById = new Map(servers.map((item) => [item.id, item]));
-          serverHealth.delete(id);
-          refreshSessionServerAccess();
+          invalidateServerHealth(id);
+          await refreshSessionServerAccess(previousServerIds);
           await terminateServerChildren(id);
           loginContexts.invalidateTarget(id);
           closeTargetSockets(id);
           await accountCredentials.forgetTarget(existing);
           jsonResponse(response, 200, { removed: id });
         }
+        });
       } catch (error) {
         jsonResponse(response, 400, {
           error: error instanceof Error ? error.message : String(error),
@@ -1753,59 +1677,11 @@ const server = createServer(async (request, response) => {
       jsonResponse(response, 404, { error: "API endpoint not found" });
       return;
     }
-    const relative =
-      pathname === "/" ? "index.html" : decodeURIComponent(pathname.slice(1));
-    let file = resolve(webRoot, relative);
-    if (file !== webRoot && !file.startsWith(webRoot + sep))
-      throw new Error("path outside root");
-    let body;
-    try {
-      body = await readFile(file);
-    } catch (error) {
-      const requestedExtension = extname(relative).toLowerCase();
-      if (requestedExtension && mime[requestedExtension]) throw error;
-      file =
-        (await staticRouteFile(relative)) ?? resolve(webRoot, "index.html");
-      body = await readFile(file);
-    }
-    if (extname(file) === ".html") {
-      const desktopMeta = desktopHost
-        ? '<meta name="kcoder-desktop-host" content="1">\n'
-        : "";
-      const publicPrefix = requestPublicPrefix(request);
-      const basePathMeta = publicPrefix
-        ? `<meta name="kcoder-app-base-path" content="${escapeHtml(publicPrefix)}">\n`
-        : "";
-      if (publicPrefix) {
-        body = Buffer.from(body.toString("utf8").replace(
-          /\b(src|href|action)=(["'])\/(?!\/)/g,
-          (_match, attribute, quote) => `${attribute}=${quote}${publicPrefix}/`,
-        ));
-      }
-      body = Buffer.from(
-        body
-          .toString("utf8")
-          .replace(
-            "</head>",
-            `<meta name="kcoder-rpc-token" content="${gatewayToken}">\n${desktopMeta}${basePathMeta}</head>`,
-          ),
-      );
-    } else if (extname(file) === ".css") {
-      const publicPrefix = requestPublicPrefix(request);
-      if (publicPrefix) {
-        body = Buffer.from(body.toString("utf8").replace(
-          /url\((["']?)\/(?!\/)/g,
-          (_match, quote) => `url(${quote}${publicPrefix}/`,
-        ));
-      }
-    }
-    response.writeHead(200, {
-      "content-type": mime[extname(file)] || "application/octet-stream",
-      "cache-control": "no-store",
-      "x-content-type-options": "nosniff",
-      "content-security-policy": contentSecurityPolicy,
-    });
-    response.end(body);
+    const viteRenderer = viteFor(request);
+    if (viteRenderer) {
+      if (!isGatewayBrowserAdminRequest(request, authSession, servers, authRequired)) { jsonResponse(response, 403, { error: 'Gateway browser authorization required' }); return; }
+      await viteRenderer.handle(request, response, pathname);
+    } else await serveStudioStatic(request, response, pathname);
   } catch {
     response.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
     response.end("Not found");
@@ -1817,89 +1693,6 @@ server.on("connection", (socket) => {
   openSockets.add(socket);
   socket.on("close", () => openSockets.delete(socket));
 });
-
-function frame(value, opcode = 1) {
-  const payload = Buffer.isBuffer(value) ? value : Buffer.from(value);
-  const first = 0x80 | opcode;
-  if (payload.length < 126)
-    return Buffer.concat([Buffer.from([first, payload.length]), payload]);
-  if (payload.length <= 0xffff) {
-    const head = Buffer.alloc(4);
-    head[0] = first;
-    head[1] = 126;
-    head.writeUInt16BE(payload.length, 2);
-    return Buffer.concat([head, payload]);
-  }
-  const head = Buffer.alloc(10);
-  head[0] = first;
-  head[1] = 127;
-  head.writeBigUInt64BE(BigInt(payload.length), 2);
-  return Buffer.concat([head, payload]);
-}
-
-function decodeFrames(buffer, fragments) {
-  const messages = [];
-  const controls = [];
-  let offset = 0;
-  while (offset + 2 <= buffer.length) {
-    const fin = Boolean(buffer[offset] & 0x80);
-    if (buffer[offset] & 0x70)
-      throw new Error("WebSocket extensions are not supported");
-    const opcode = buffer[offset] & 0x0f;
-    const second = buffer[offset + 1];
-    const masked = Boolean(second & 0x80);
-    let length = second & 0x7f;
-    let cursor = offset + 2;
-    if (length === 126) {
-      if (cursor + 2 > buffer.length) break;
-      length = buffer.readUInt16BE(cursor);
-      cursor += 2;
-    } else if (length === 127) {
-      if (cursor + 8 > buffer.length) break;
-      const wide = buffer.readBigUInt64BE(cursor);
-      cursor += 8;
-      if (wide > BigInt(Number.MAX_SAFE_INTEGER))
-        throw new Error("WebSocket frame too large");
-      length = Number(wide);
-    }
-    if (!masked) throw new Error("Client WebSocket frames must be masked");
-    if (length > maxMessageBytes)
-      throw new Error("WebSocket message is too large");
-    if (opcode >= 8 && (!fin || length > 125))
-      throw new Error("Invalid WebSocket control frame");
-    const maskSize = 4;
-    if (cursor + maskSize + length > buffer.length) break;
-    const mask = masked ? buffer.subarray(cursor, cursor + 4) : null;
-    cursor += maskSize;
-    const payload = Buffer.from(buffer.subarray(cursor, cursor + length));
-    if (mask)
-      for (let index = 0; index < payload.length; index++)
-        payload[index] ^= mask[index % 4];
-    if (opcode === 1) {
-      if (fragments.length)
-        throw new Error("Unexpected text frame during fragmented message");
-      if (fin) messages.push(payload.toString("utf8"));
-      else fragments.push(payload);
-    } else if (opcode === 0) {
-      if (!fragments.length) throw new Error("Unexpected continuation frame");
-      fragments.push(payload);
-      if (
-        fragments.reduce((sum, part) => sum + part.length, 0) > maxMessageBytes
-      )
-        throw new Error("WebSocket message is too large");
-      if (fin) {
-        messages.push(Buffer.concat(fragments).toString("utf8"));
-        fragments.length = 0;
-      }
-    } else if (opcode === 8 || opcode === 9 || opcode === 10)
-      controls.push({ opcode, payload });
-    else throw new Error("Binary WebSocket frames are not supported");
-    offset = cursor + length;
-  }
-  if (buffer.length - offset > maxMessageBytes + 14)
-    throw new Error("WebSocket receive buffer is too large");
-  return { messages, controls, rest: buffer.subarray(offset) };
-}
 
 function acceptWebSocket(request, socket) {
   const key = request.headers["sec-websocket-key"];
@@ -1920,31 +1713,14 @@ function acceptWebSocket(request, socket) {
 }
 
 function workspaceBrokerKey(target, workspacePath) {
-  const requested =
-    workspacePath ||
-    (target.transport === "local" ? target.cwd : target.remoteCwd);
-  if (
-    target.transport === "ssh" &&
-    (typeof requested !== "string" || requested.length === 0)
-  ) {
-    // An SSH target may omit remoteCwd, allowing its remote shell to start app-server
-    // in the default home. The sentinel is shared only with the default directory on
-    // the same target and never merged with an explicit absolute path.
-    return JSON.stringify([
-      serverHealthSignature(target),
-      "<remote-default-cwd>",
-    ]);
-  }
-  if (typeof requested !== "string" || !(target.transport === "local" ? isAbsolute(requested) : posix.isAbsolute(requested))) {
-    throw new Error(
-      `runtime target ${target.id} has no absolute workspace path`,
-    );
-  }
-  const normalized =
-    target.transport === "local"
-      ? realpathSync.native(requested)
-      : posix.normalize(requested);
-  return JSON.stringify([serverHealthSignature(target), normalized]);
+  return targetWorkspaceBrokerKey(target, workspacePath, serverHealthSignature(target));
+}
+
+function hasOwnedChannelAppServer(target) {
+  return Boolean(nativeConnectivityStartupBinding && (
+    (target.transport === "local" && !target.security && nativeComponentParentAttempt(target) &&
+      trustedRetentionAppServer?.matches(target)) || trustedWindowsComponentImage?.matches(target)
+  ));
 }
 
 function removeWorkspaceBroker(key, broker) {
@@ -1954,16 +1730,18 @@ function removeWorkspaceBroker(key, broker) {
   if (!brokers?.size) workspaceAppServerBrokers.delete(key);
 }
 
-function scheduleWorkspaceBrokerIdle(key, broker, delay = workspaceAppServerIdleMs) {
+function scheduleWorkspaceBrokerIdle(key, broker, delay = workspaceAppServerIdleMs, expediteDuplicates = true) {
+  if (broker.child.ownsOidcSessionAuthority && !broker.closed) return;
   if (broker.idleTimer) clearTimeout(broker.idleTimer);
   broker.idleTimer = null;
   if (broker.clientCount !== 0 || broker.closed || broker.idleShutdown.closing || broker.hasLiveTerminals || broker.hasProjectAutomations)
     return;
+  delay = workspaceIdleDelay(workspaceAppServerBrokers.get(key) ?? [], broker, delay, expediteDuplicates);
   broker.idleTimer = setTimeout(() => {
     broker.idleTimer = null;
     if (broker.clientCount !== 0 || broker.closed || broker.hasLiveTerminals || broker.hasProjectAutomations) return;
     if (broker.hasProtectedIdleResources) {
-      scheduleWorkspaceBrokerIdle(key, broker, pendingWorkIdleDelay(workspaceAppServerIdleMs));
+      scheduleWorkspaceBrokerIdle(key, broker, pendingWorkIdleDelay(workspaceAppServerIdleMs), false);
       return;
     }
     void broker.stopWhenIdle().then(result => {
@@ -1974,7 +1752,7 @@ function scheduleWorkspaceBrokerIdle(key, broker, delay = workspaceAppServerIdle
       }
       if (result.status === 'stopped') removeWorkspaceBroker(key, broker);
       else if (!broker.closed && !broker.idleShutdown.closing)
-        scheduleWorkspaceBrokerIdle(key, broker, pendingWorkIdleDelay(workspaceAppServerIdleMs));
+        scheduleWorkspaceBrokerIdle(key, broker, pendingWorkIdleDelay(workspaceAppServerIdleMs), false);
     });
   }, delay);
   broker.idleTimer.unref?.();
@@ -2007,20 +1785,31 @@ async function releaseIdleWorkspaceBrokers(target, workspacePath, loginOwner) {
   });
 }
 
-function createWorkspaceBroker(target, workspacePath, key, { authentication, loginOwner } = {}) {
+function createWorkspaceBroker(target, workspacePath, key, { authentication, loginOwner, onAuthorizationRequired, onAccountAuthenticated, nativeManagementOnly = false } = {}) {
   // Original argv and login shape keep unknown old binaries/entries usable.
   // A new backend advertises readiness only after its own actual capture.
-  const retentionParentV1 = workspaceReceiptParentAttempt(target);
-  const spec = launchSpec(target, { scenario, workspacePath });
+  const retentionParentV1 = nativeComponentParentAttempt(target);
+  const retentionRevocationTrusted = retentionParentV1 && Boolean(trustedRetentionAppServer?.matches(target));
+  const originalSpec = launchSpec(target, { scenario, workspacePath });
+  const spec = retentionRevocationTrusted ? trustedRetentionAppServer.launch(target, originalSpec) : originalSpec;
   if (target.security) {
     authentication ??= loginOwner ? loginContexts.credential(loginOwner, target.id) : null;
     if (!authentication) {
       throw new Error("请先登录此连接的 KCoder 账号");
     }
   }
+  const windowsComponents = trustedWindowsComponentImage?.matches(target)
+    ? nativeWindowsComponentEnvironment(trustedWindowsComponentImage, target, nativeOfficeStartupBinding, nativeConnectivityStartupBinding) : {};
+  const configuredChannelChild = hasOwnedChannelAppServer(target);
+  const authenticationGeneration = target.security && loginOwner ? loginContexts.generation(loginOwner, target.id) : 0;
+  const authenticationSignature = serverHealthSignature(target);
+  let issuedOidcHandle = authentication?.resumeAuthority?.handle;
   const spawnedProcess = spawn(spec.command, spec.args, {
     cwd: spec.cwd,
-    env: appServerEnvironment(process.env, spec.env, retentionParentV1 && !target.security ? "localOs" : undefined),
+    env: { ...appServerEnvironment(process.env, spec.env, retentionParentV1 && !target.security ? "localOs" : undefined,
+      retentionRevocationTrusted ? retentionRevocationVerifier : undefined,
+      retentionRevocationTrusted && target.transport === "local" && !target.security ? nativeOfficeStartupBinding : undefined,
+      retentionRevocationTrusted && target.transport === "local" && !target.security ? nativeConnectivityStartupBinding : undefined), ...windowsComponents },
     stdio: spec.stdio ?? ["pipe", "pipe", "pipe"],
     windowsHide: true,
   });
@@ -2029,14 +1818,19 @@ function createWorkspaceBroker(target, workspacePath, key, { authentication, log
   }, {
     // The new root-owned entry supplies facts after authentication/UID drop;
     // do not add a login field that an old entry rejects.
-    onAuthenticated: principal => {
-      if (target.security && loginOwner) loginContexts.publish(loginOwner, target.id, principal, authentication);
+    onAuthorizationRequired,
+    onAuthenticated: (principal, nativeResume) => {
+      if (authentication?.authentication && (serverHealthSignature(serversById.get(target.id)) !== authenticationSignature || loginContexts.generation(loginOwner, target.id) !== authenticationGeneration)) return false;
+      if (onAccountAuthenticated?.(principal, nativeResume) === false) return false;
+      issuedOidcHandle = nativeResume?.handle ?? issuedOidcHandle;
+      if (target.security && loginOwner) loginContexts.publish(loginOwner, target.id, principal, nativeResume ? { username: principal.username, authentication: 'oidcResume', resumeAuthority: nativeResume } : authentication);
     },
     onFailure: ({ authenticationRejected }) => {
+      if (authentication?.authentication && loginContexts.generation(loginOwner, target.id) !== authenticationGeneration && (!issuedOidcHandle || loginContexts.credential(loginOwner, target.id)?.resumeAuthority?.handle !== issuedOidcHandle)) return;
       if (target.security && loginOwner && authenticationRejected) {
         loginContexts.invalidate(loginOwner, target.id);
         closeContextSockets(loginOwner, target.id);
-        serverHealth.delete(target.id);
+        invalidateServerHealth(target.id);
       }
     },
   }) : spawnedProcess;
@@ -2045,13 +1839,53 @@ function createWorkspaceBroker(target, workspacePath, key, { authentication, log
     target.id,
     target.security ? loginOwner : undefined,
   );
-  const broker = new WorkspaceAppServerBroker({
+  if (configuredChannelChild) channelAppServerChildren.add(child);
+  let broker;
+  let nativeRemoteHostBackchannel;
+  if (retentionRevocationTrusted || trustedWindowsComponentImage?.matches(target)) {
+    const assertSourceNativeChild = ({ child: observed, serverId }) => {
+      const current = serversById.get(target.id);
+      const imageMatches = current && (retentionRevocationTrusted
+        ? trustedRetentionAppServer?.matches(current) : trustedWindowsComponentImage?.matches(current));
+      if (observed !== child || observed !== spawnedProcess || serverId !== target.id ||
+          !appServerChildren.has(child) || child.exitCode !== null || child.signalCode !== null ||
+          broker?.closed || !imageMatches || serverHealthSignature(current) !== authenticationSignature)
+        throw new Error('REMOTE_HOST_SOURCE_OWNER_CHANGED');
+    };
+    const owner = createNativeSshEndpointFactory({ assertSourceNativeChild,
+      sourceClientForAttempt: attempt => nativeRemoteSourceClientForAttempt(broker, attempt),
+      sourceClientForManagement: reference => nativeRemoteSourceClientForManagement(broker, reference) });
+    let closingOwner;
+    const closeOwner = () => closingOwner ??= owner.close().finally(() => nativeRemoteEndpointOwners.delete(closeOwner));
+    nativeRemoteEndpointOwners.add(closeOwner);
+    child.once('close', () => { void closeOwner(); });
+    const backchannel = createNativeRemoteHostBackchannel({ child, serverId: target.id,
+      assertSourceOwner: assertSourceNativeChild,
+      handleOwnedRequest: context => owner.handleOwnedRequest(context),
+      reply: message => broker.writeRaw(JSON.stringify(message), null) });
+    nativeRemoteHostBackchannel = { receiveBackend: message => backchannel.receiveBackend(message),
+      close: () => { backchannel.close(); void closeOwner(); } };
+  }
+  broker = new WorkspaceAppServerBroker({
     child,
+    nativeManagementOnly,
+    ownsChannelHost: configuredChannelChild,
+    nativeRemoteHostBackchannel,
     retentionParentV1,
+    retentionRevocationTrusted,
+    registerRetentionRoute: retentionRevocationTrusted ? authority => {
+      if (!authority || authority.principal?.kind !== 'localOs' || authority.workspaceTargetId !== target.id ||
+          authority.targetFingerprint !== retentionTargetFingerprint(target, workspacePath, key)) throw new Error('Retention route authority changed');
+      const canonicalWorkspace = realpathSync(workspacePath || target.cwd || spec.cwd || process.cwd());
+      const route = localRetentionRoute({ targetId: target.id, targetFingerprint: authority.targetFingerprint, workspacePath: canonicalWorkspace, workspaceSelection: workspacePath ?? null });
+      return mobileDeviceAuth.registerRetentionRoute({ deviceId: authority.deviceId, authorizationGeneration: authority.authorizationGeneration, route });
+    } : undefined,
     adapter: createRuntimeTargetAdapter(target.runtime),
     maxMessageBytes,
     serverId: target.id,
-    residentThreads: serverHealth.get(target.id)?.result?.capabilities
+    targetTransport: target.transport,
+    remotePlatform: target.remotePlatform,
+    residentThreads: serverHealth.get(serverHealthScopeKey(target, loginOwner))?.result?.capabilities
       ?.experimental?.residentThreads,
     onClose: (closed) => removeWorkspaceBroker(key, closed),
     onLifecycleMetrics: (metrics) => {
@@ -2065,8 +1899,9 @@ function createWorkspaceBroker(target, workspacePath, key, { authentication, log
       })}\n`);
     },
     onRestart: async (restarting) => {
+      retireRestartScopeAdmissions(workspaceAppServerBrokers, key, { targetId: target.id, loginOwner: target.security ? loginOwner : undefined });
       removeWorkspaceBroker(key, restarting);
-      serverHealth.delete(target.id);
+      invalidateServerHealth(target.id);
       await terminateAppServerChild(restarting.child);
       if (appServerChildren.has(restarting.child)) throw new Error("app-server did not stop");
     },
@@ -2084,154 +1919,55 @@ function createWorkspaceBroker(target, workspacePath, key, { authentication, log
   child.once('close', () => resourceBudgetBrokers.delete(broker));
   brokers.add(broker);
   workspaceAppServerBrokers.set(key, brokers);
+  for (const peer of brokers) {
+    if (peer !== broker && peer.clientCount === 0 && peer.targetId === broker.targetId &&
+        peer.loginOwner === broker.loginOwner) scheduleWorkspaceBrokerIdle(key, peer);
+  }
   return broker;
 }
 
-async function reusableWorkspaceBroker(target, workspacePath, loginOwner) {
+async function reusableWorkspaceBroker(target, workspacePath, loginOwner, nativeManagementOnly = false, isCancelled = () => false) {
+  if (isCancelled()) return null;
   const key = workspaceBrokerKey(target, workspacePath);
+  const dedicatedManagement = nativeManagementOnly && !hasOwnedChannelAppServer(target);
   const sameOwner = (candidate) =>
     target.security ? candidate.loginOwner === loginOwner : true;
+  if (!dedicatedManagement && nativeConnectivityStartupBinding && key === workspaceBrokerKey(target)) {
+    const starting = serverHealthInFlight.get(serverHealthScopeKey(target, loginOwner));
+    if (starting?.signature === serverHealthSignature(target)) await starting.promise;
+    if (isCancelled()) return null;
+  }
   const brokers = workspaceAppServerBrokers.get(key);
   let broker = [...(brokers ?? [])].find(
-    (candidate) => candidate.acceptsClient && sameOwner(candidate),
+    (candidate) => candidate.acceptsClient && candidate.nativeManagementOnly === dedicatedManagement && sameOwner(candidate),
   );
   if (!broker) {
-    const closing = [...(brokers ?? [])].find(candidate => !candidate.closed && candidate.idleShutdown.closing && sameOwner(candidate));
+    const closing = [...(brokers ?? [])].find(candidate => !candidate.closed && candidate.nativeManagementOnly === dedicatedManagement && candidate.idleShutdown.closing && sameOwner(candidate));
     if (closing) {
       await closing.idleShutdown.operation;
+      if (isCancelled()) return null;
       if (!closing.closed && closing.idleShutdown.closing)
         throw new Error("workspace shutdown is not yet confirmed; retry after the target exits");
-      return reusableWorkspaceBroker(target, workspacePath, loginOwner);
+      return reusableWorkspaceBroker(target, workspacePath, loginOwner, nativeManagementOnly, isCancelled);
     }
-    const probing = [...(brokers ?? [])].find(
-      (candidate) => !candidate.closed && candidate.shareability === "unknown" && sameOwner(candidate),
-    );
-    if (probing) {
-      const shareability = await new Promise((resolveWait, rejectWait) => {
-        const timeout = setTimeout(
-          () =>
-            rejectWait(
-              new Error(
-                `app-server initialize timed out after ${serverHealthTimeoutMs}ms`,
-              ),
-            ),
-          serverHealthTimeoutMs,
-        );
-        probing.whenShareabilityKnown().then((value) => {
-          clearTimeout(timeout);
-          resolveWait(value);
-        });
-      });
-      if (shareability === "resident" && !probing.closed) broker = probing;
-      else if (shareability === "closed")
-        return reusableWorkspaceBroker(target, workspacePath, loginOwner);
-    }
+    // A legacy backend stays exclusive until negotiation. A configured
+    // channel owner accepts peers while its single backend initializes.
   }
-  broker ??= createWorkspaceBroker(target, workspacePath, key, { loginOwner });
+  broker ??= createWorkspaceBroker(target, workspacePath, key, { loginOwner, nativeManagementOnly: dedicatedManagement });
   if (broker.idleTimer) {
     clearTimeout(broker.idleTimer);
     broker.idleTimer = null;
   }
-  return { broker, key };
+  return { broker, key, nativeManagementOnly };
 }
 
-function bridgeWorkspaceAppServer(
-  socket,
-  target,
-  channel,
-  selectedBroker,
-  initialData = Buffer.alloc(0),
-  callbackOrigin,
-  authorizationOwner,
-  authSession,
-  workspacePath,
-) {
-  const { broker, key } = selectedBroker;
-  const retentionAuthority = captureRetentionAuthority({
-    includeWorkspaceAccount: true,
-    session: authSession, familyFor: deviceId => mobileDeviceFamilies.get(deviceId),
-    target, currentTarget: () => serversById.get(target.id), workspacePath,
-    brokerSelection: key, currentBrokerSelection: () => workspaceBrokerKey(serversById.get(target.id), workspacePath),
-    accountIdentity: () => loginContexts.identity(authorizationOwner, target.id),
-    accountGeneration: () => loginContexts.generation(authorizationOwner, target.id),
-  });
-  const client = {
-    channel,
-    authorizationOwner,
-    retentionAuthority,
-    createMcpCallbackReceiver: options => mcpCallbacks.create(callbackOrigin, options),
-    send(message) {
-      if (!socket.writable) return false;
-      const raw =
-        typeof message === "string" ? message : JSON.stringify(message);
-      if (Buffer.byteLength(raw) > maxMessageBytes)
-        throw new Error("Adapted app-server response is too large");
-      const writable = socket.write(frame(raw));
-      if (!writable) {
-        broker.blockStdout(client);
-        socket.once("drain", () => broker.releaseStdout(client));
-      }
-      return writable;
-    },
-    pause() {
-      socket.pause();
-    },
-    resume() {
-      if (!socket.destroyed) socket.resume();
-    },
-    close() {
-      if (!socket.destroyed) socket.end();
-    },
-  };
-  broker.attach(client);
-  let buffered = Buffer.from(initialData);
-  const fragments = [];
-  let detached = false;
-  let liveness;
-  const detach = () => {
-    if (detached) return;
-    detached = true;
-    liveness?.stop();
-    broker.detach(client);
-    scheduleWorkspaceBrokerIdle(key, broker);
-  };
-  liveness = new WebSocketLivenessLease({
-    sendPing: payload => socket.write(frame(payload, 9)),
-    canProbe: () => !socket.isPaused(),
-    onExpired: () => { try { detach(); } finally { socket.destroy(); } },
-  });
-  liveness.start();
-  socket.on("data", (chunk) => {
-    try {
-      buffered = Buffer.concat([buffered, chunk]);
-      const decoded = decodeFrames(buffered, fragments);
-      buffered = decoded.rest;
-      for (const control of decoded.controls) {
-        if (control.opcode === 8) {
-          socket.end(frame(control.payload, 8));
-          return;
-        }
-        if (control.opcode === 9) socket.write(frame(control.payload, 10));
-        if (control.opcode === 10) liveness.pong(control.payload);
-      }
-      for (const raw of decoded.messages) broker.receive(client, raw);
-    } catch (error) {
-      client.send({
-        jsonrpc: "2.0",
-        method: "server/transportError",
-        params: { serverId: target.id, message: error.message },
-      });
-      socket.end(frame(Buffer.from([0x03, 0xea]), 8));
-    }
-  });
-  if (buffered.length) socket.emit("data", Buffer.alloc(0));
-  socket.on("end", () => {
-    detach();
-    if (!socket.destroyed) socket.destroy();
-  });
-  socket.on("close", detach);
-  socket.on("error", detach);
-}
+const bridgeWorkspaceAppServer = createWorkspaceAppServerBridge({
+  captureRetentionAuthority, mobileDeviceFamilies, serversById, workspaceBrokerKey,
+  loginContexts, mcpCallbacks, maxMessageBytes, frame, decodeFrames, WebSocketLivenessLease,
+  scheduleWorkspaceBrokerIdle, serverHealthSignature,
+  verifySession: (id, session) => !authRequired ||
+    (authSessions.get(id) === session && (session.accessExpiresAt ?? session.expiresAt) > Date.now()),
+});
 
 const mockThreadsByTarget = new Map();
 function runMock(socket, initialData = Buffer.alloc(0), channel = "runtime", target, workspacePath) {
@@ -3016,6 +2752,9 @@ function runMock(socket, initialData = Buffer.alloc(0), channel = "runtime", tar
 }
 
 server.on("upgrade", async (request, socket, head) => {
+  const guard = watchWebSocketUpgrade(socket);
+  let selectedBroker = null;
+  let brokerAttached = false;
   try {
     const authority = request.headers.host;
     const origin = request.headers.origin;
@@ -3027,14 +2766,14 @@ server.on("upgrade", async (request, socket, head) => {
     );
     const explicitBearer = bearerValue(request);
     const hasMobileProtocol = String(request.headers['sec-websocket-protocol'] || '').split(',').some(value => value.trim().startsWith('kcoder-session.'));
-    const headerSessionId = request.headers.authorization !== undefined ? explicitBearer : (hasMobileProtocol ? null : cookieValue(request, "kcoder_studio_session"));
+    const headerSessionId = request.headers.authorization !== undefined ? explicitBearer : (hasMobileProtocol ? null : browserCookies.read(request));
     const protocolCredential = websocketSessionCredential(request);
     const protocolSessionId = protocolCredential.id;
     const headerSession = headerSessionId
-      ? authSessionById(headerSessionId)
+      ? await authSessionById(headerSessionId)
       : null;
     const protocolSession = protocolSessionId
-      ? authSessionById(protocolSessionId)
+      ? await authSessionById(protocolSessionId)
       : null;
     const authSessionId = headerSession
       ? headerSessionId
@@ -3045,14 +2784,30 @@ server.on("upgrade", async (request, socket, head) => {
     const authSession = credentialsConflict || protocolCredential.invalid ? null :
       headerSession ||
       protocolSession ||
-      (!authRequired ? authSessionById(null) : null);
+      (!authRequired ? await authSessionById(null) : null);
     const mobileBearerSession = Boolean(bearerValue(request) && headerSession);
     const mobileWebSession = Boolean(protocolSessionId && protocolSession);
+    if (requestPublicPrefix(request) && !publicAccess.track(publicRequestSurface(requestUrl.pathname, authSession, mobileBearerSession || mobileWebSession), socket)) { socket.destroy(); return; }
     const allowedAuthority = isAllowedAuthority(authority);
     const trustedOrigin =
       (!origin && (!authRequired || mobileBearerSession)) ||
       isAllowedOrigin(origin, authority) ||
       (mobileWebSession && isAllowedMobileWebOrigin(origin));
+    if (!guard.isAlive()) { socket.destroy(); return; }
+    const viteRenderer = viteFor(request), mobilePreview = mobileDevFor(request);
+    const devUpgrade = mobilePreview?.isUpgrade(requestUrl.pathname);
+    if (devUpgrade || viteRenderer?.isUpgrade(requestUrl.pathname)) {
+      if (!authSession || !allowedAuthority || !trustedOrigin || !origin ||
+          !isGatewayBrowserAdminRequest(request, authSession, servers, authRequired)) { socket.destroy(); return; }
+      if (authSessionId) {
+        const sockets = sessionSockets.get(authSessionId) ?? new Set();
+        sockets.add(socket); sessionSockets.set(authSessionId, sockets);
+        socket.once('close', () => { sockets.delete(socket); if (!sockets.size) sessionSockets.delete(authSessionId); });
+      }
+      if (devUpgrade) mobilePreview.upgrade(request, socket, head, requestUrl);
+      else viteRenderer.upgrade(request, socket, head);
+      return;
+    }
     const loginOwner = authRequired ? (authSession?.stableLoginOwner || authSessionId) : ANONYMOUS_LOGIN_OWNER;
     // An isolated target only serves authenticated login contexts; a socket
     // bound to an anonymous context is rejected instead of falling back to a
@@ -3080,27 +2835,30 @@ server.on("upgrade", async (request, socket, head) => {
       socket.destroy();
       return;
     }
-    const capacityRefusal = connectionCapacityRefusal({
+    if (!request.headers["sec-websocket-key"]) { socket.destroy(); return; }
+    const atCapacity = () => {
+      const refusal = connectionCapacityRefusal({
       channel,
-      browserSessionsAvailable:
-        runtimeCapabilities(target.runtime).browserSessions === true,
-      activeConnections,
-      maxConnections,
-      activeBrowserConnections,
-      maxBrowserConnections,
+        browserSessionsAvailable: runtimeCapabilities(target.runtime).browserSessions === true,
+        activeConnections, maxConnections, activeBrowserConnections, maxBrowserConnections,
     });
-    if (capacityRefusal) {
-      connectionRefusals[capacityRefusal.reason] += 1;
+      if (!refusal) return false;
+      connectionRefusals[refusal.reason] += 1;
       // Counts only: no token, session, account, or request data.
       process.stderr.write(
-        `${JSON.stringify(connectionRefusalDiagnostic(capacityRefusal, connectionRefusals))}\n`,
+        `${JSON.stringify(connectionRefusalDiagnostic(refusal, connectionRefusals))}\n`,
       );
+      return true;
+    };
+    if (atCapacity()) {
       socket.destroy();
       return;
     }
-    const selectedBroker = mock || channel === "ssh-terminal"
+    selectedBroker = mock || channel === "ssh-terminal"
       ? null
-      : await reusableWorkspaceBroker(target, workspacePath, loginOwner);
+      : await reusableWorkspaceBroker(target, workspacePath, loginOwner, requestUrl.searchParams.get('nativeManagement') === '1', () => !guard.isAlive());
+    if (!guard.isAlive()) { socket.destroy(); return; }
+    if (atCapacity()) { socket.destroy(); return; }
     if (!acceptWebSocket(request, socket)) {
       socket.destroy();
       return;
@@ -3139,13 +2897,18 @@ server.on("upgrade", async (request, socket, head) => {
     });
     if (channel === "ssh-terminal") bridgeSshTerminal(socket, head, { store: sshConnections, frame, decodeFrames });
     else if (mock) runMock(socket, head, channel, target, workspacePath);
-    else
+    else {
       bridgeWorkspaceAppServer(socket, target, channel, selectedBroker, head,
         isAllowedOrigin(origin, authority) ? new URL(origin).origin
           : [...publicOrigins].find(value => new URL(value).host === authority && value.startsWith("https:"))
-            ?? (publicOrigins.size === 1 ? [...publicOrigins][0] : `http://${authority}`), loginOwner, authSession, workspacePath);
+            ?? (publicOrigins.size === 1 ? [...publicOrigins][0] : `http://${authority}`), loginOwner, authSession, workspacePath, authSessionId);
+      brokerAttached = true;
+    }
   } catch {
     socket.destroy();
+  } finally {
+    if (selectedBroker && !brokerAttached) scheduleWorkspaceBrokerIdle(selectedBroker.key, selectedBroker.broker);
+    guard.release();
   }
 });
 
@@ -3153,19 +2916,41 @@ let shuttingDown = false;
 async function shutdown() {
   if (shuttingDown) return;
   shuttingDown = true;
+  liveRelay.close();
+  await Promise.all([localVite?.close(), relayVite?.close()]);
+  await mobilePeerGateway.close();
+  await migrationSourceSessions.close();
+  await Promise.allSettled([...nativeRemoteEndpointOwners].map(closeOwner => closeOwner()));
+  trustedRetentionAppServer?.close();
   resourceBudget.stop();
   mcpCallbacks.close();
   server.close();
+  await channels.close();
   for (const socket of openSockets) socket.destroy();
   const waitUntil = async (deadline) => {
     while (appServerChildren.size && Date.now() < deadline) {
       await new Promise((resolveWait) => setTimeout(resolveWait, 25));
     }
   };
+  // Closing the real stdin lets app-server settle tasks and reap Node on all
+  // platforms. Windows process.kill() does not deliver a graceful SIGTERM.
+  for (const child of appServerChildren) {
+    if (child.stdin.writable && !child.stdin.destroyed) child.stdin.end();
+  }
   await waitUntil(Date.now() + 1_500);
-  for (const child of appServerChildren) child.kill("SIGTERM");
+  for (const child of appServerChildren) {
+    if (!channelAppServerChildren.has(child)) child.kill("SIGTERM");
+  }
   await waitUntil(Date.now() + 400);
-  for (const child of appServerChildren) child.kill("SIGKILL");
+  for (const child of appServerChildren) {
+    if (!channelAppServerChildren.has(child)) child.kill("SIGKILL");
+  }
+  if ([...appServerChildren].some(child => channelAppServerChildren.has(child))) {
+    await waitUntil(Date.now() + 15_000);
+    for (const child of appServerChildren) child.kill("SIGKILL");
+  }
+  await settleSourceConnectivityLaunch(nativeConnectivityStartupBinding, appServerChildren);
+  trustedWindowsComponentImage?.close();
   process.exit(0);
 }
 
@@ -3173,9 +2958,22 @@ process.on("SIGINT", () => void shutdown());
 process.on("SIGTERM", () => void shutdown());
 
 server.listen(configuredPort, host, () => {
+  void channels.start().catch(() => console.warn('CHANNEL_STARTUP_FAILED'));
+  void retentionRevocationPump.drain().catch(() => {});
   const address = server.address();
   if (typeof address === "object" && address) listeningPort = address.port;
-  console.log(`KCoder Studio: http://${host}:${listeningPort}`);
+  void ownedRelay?.connect(`http://${host === '::1' ? '[::1]' : '127.0.0.1'}:${listeningPort}`).catch(() => console.warn('GATEWAY_RELAY_CONNECTION_UNAVAILABLE'));
+  mobileConnectionRoutesProvider?.setListeningPort(listeningPort);
+  if (!mock && nativeConnectivityStartupBinding) {
+    // Only the verified, explicitly configured local channel target starts
+    // before a browser opens. Normal broker negotiation owns the same child.
+    for (const target of servers) {
+      if (target.transport !== "local" || target.security ||
+          !(trustedRetentionAppServer?.matches(target) || trustedWindowsComponentImage?.matches(target))) continue;
+      void probeServerHealth(target).catch(() => {});
+    }
+  }
+  console.log(`KCoder Studio: http://${host.includes(":") ? `[${host}]` : host}:${listeningPort}`);
   if (authRequired) {
     const localLoginUrl = loginUrl(localAccessBase(), authToken);
     const publicLoginUrl = publicAccessUrl ? loginUrl(publicAccessUrl, authToken) : null;
@@ -3189,7 +2987,7 @@ server.listen(configuredPort, host, () => {
     });
   }
   console.log(`Web root: ${webRoot}`);
-  console.log(`Mobile Web (local listener): http://${host}:${listeningPort}/mobile/`);
+  console.log(`Mobile Web (local listener): http://${host.includes(":") ? `[${host}]` : host}:${listeningPort}/mobile/`);
   if (mock) console.log("JavaScript mock /rpc gateway enabled");
   else
     console.log(
@@ -3199,3 +2997,6 @@ server.listen(configuredPort, host, () => {
     `Configured servers: ${servers.map((server) => `${server.id}(${server.runtime}/${server.transport})`).join(", ")}`,
   );
 });
+const retentionRevocationTimer = setInterval(() => { void retentionRevocationPump.drain().catch(() => {}); }, 30_000);
+retentionRevocationTimer.unref();
+server.once('close', () => clearInterval(retentionRevocationTimer));

@@ -5,12 +5,25 @@ import { type RightWorkspacePanelTab } from '../workspace-panels/RightWorkspaceP
 import { BLANK_BROWSER_MIGRATION_TTL_MS } from './paneLayoutStyles'
 import { type PendingBlankBrowserMigration, type WorkbenchPaneWorkspaceState } from './types'
 
-export const PANE_WORKSPACE_STORAGE_PREFIX = 'wework.desktop.pane-workspace.v1:'
+const PANE_WORKSPACE_STORAGE_PREFIX = 'kcoder.desktop.pane-workspace.v1:'
+const LEGACY_PANE_WORKSPACE_STORAGE_PREFIX = 'wework.desktop.pane-workspace.v1:'
 
-export function persistedPaneWorkspaceStorageKey(paneKey: string): string {
+function stablePaneWorkspaceKey(paneKey: string): string {
   // standaloneChatKey increments only within the current process; regular workspaces use stable keys for full-page refresh recovery.
-  const persistedPaneKey = paneKey.startsWith('blank:') ? 'blank' : paneKey
-  return `${PANE_WORKSPACE_STORAGE_PREFIX}${persistedPaneKey}`
+  return paneKey.startsWith('blank:') ? 'blank' : paneKey
+}
+
+export function clearPersistedPaneWorkspacesForTarget(targetId: string) {
+  const targetPrefix = `runtime:${targetId}:`
+  for (let index = localStorage.length - 1; index >= 0; index--) {
+    const key = localStorage.key(index)
+    if (
+      key?.startsWith(PANE_WORKSPACE_STORAGE_PREFIX + targetPrefix) ||
+      key?.startsWith(LEGACY_PANE_WORKSPACE_STORAGE_PREFIX + targetPrefix)
+    ) {
+      localStorage.removeItem(key)
+    }
+  }
 }
 
 export function consumeLatestBlankBrowserMigration(): PendingBlankBrowserMigration | null {
@@ -39,9 +52,12 @@ export function readPersistedPaneWorkspaceState(
   paneKey: string
 ): WorkbenchPaneWorkspaceState | undefined {
   try {
+    const stableKey = stablePaneWorkspaceKey(paneKey)
     const value = JSON.parse(
-      window.localStorage.getItem(persistedPaneWorkspaceStorageKey(paneKey)) ??
-        window.localStorage.getItem(`${PANE_WORKSPACE_STORAGE_PREFIX}${paneKey}`) ??
+      window.localStorage.getItem(PANE_WORKSPACE_STORAGE_PREFIX + stableKey) ??
+        window.localStorage.getItem(LEGACY_PANE_WORKSPACE_STORAGE_PREFIX + stableKey) ??
+        // Older blank panes used their process-local key.
+        window.localStorage.getItem(LEGACY_PANE_WORKSPACE_STORAGE_PREFIX + paneKey) ??
         ''
     ) as Partial<WorkbenchPaneWorkspaceState>
     const rightPanelTabs = Array.isArray(value.rightPanelTabs)
@@ -78,17 +94,21 @@ export function writePersistedPaneWorkspaceState(
   paneKey: string,
   state: WorkbenchPaneWorkspaceState
 ) {
+  const stableKey = stablePaneWorkspaceKey(paneKey)
   const rightPanelTabs = state.rightPanelTabs.filter(tab => PERSISTED_RIGHT_PANEL_TABS.has(tab))
   const rightPanelView = rightPanelTabs.includes(state.rightPanelView as RightWorkspacePanelTab)
     ? state.rightPanelView
     : 'launcher'
   if (rightPanelTabs.length === 0) {
-    window.localStorage.removeItem(persistedPaneWorkspaceStorageKey(paneKey))
-    window.localStorage.removeItem(`${PANE_WORKSPACE_STORAGE_PREFIX}${paneKey}`)
+    window.localStorage.removeItem(LEGACY_PANE_WORKSPACE_STORAGE_PREFIX + stableKey)
+    if (stableKey !== paneKey) {
+      window.localStorage.removeItem(LEGACY_PANE_WORKSPACE_STORAGE_PREFIX + paneKey)
+    }
+    window.localStorage.removeItem(PANE_WORKSPACE_STORAGE_PREFIX + stableKey)
     return
   }
   window.localStorage.setItem(
-    persistedPaneWorkspaceStorageKey(paneKey),
+    PANE_WORKSPACE_STORAGE_PREFIX + stableKey,
     JSON.stringify({
       rightPanelOpen: state.rightPanelOpen,
       rightPanelView,
@@ -96,8 +116,8 @@ export function writePersistedPaneWorkspaceState(
       browserUrl: rightPanelTabs.includes('browser') ? state.browserUrl : null,
     } satisfies WorkbenchPaneWorkspaceState)
   )
-  if (paneKey.startsWith('blank:')) {
-    window.localStorage.removeItem(`${PANE_WORKSPACE_STORAGE_PREFIX}${paneKey}`)
+  if (stableKey !== paneKey) {
+    window.localStorage.removeItem(LEGACY_PANE_WORKSPACE_STORAGE_PREFIX + paneKey)
   }
 }
 

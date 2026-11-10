@@ -96,11 +96,16 @@ pub(crate) fn prepare_shared_request_messages(
 ) -> (kcoder_types::SharedMessages, Option<Vec<Message>>) {
     // The compact-aware view keeps the leading summary and never scans later markers.
     // Canonical histories therefore need no payload materialization or state writeback.
-    if has_canonical_tool_sequence(|index| raw.get(index)) {
+    if shared_request_is_canonical(&raw) {
         return (raw, None);
     }
     let (messages, writeback) = prepare_request_messages(raw.into_vec());
     (messages.into(), writeback)
+}
+
+/// A canonical request keeps its original shared message allocations.
+pub(crate) fn shared_request_is_canonical(raw: &kcoder_types::SharedMessages) -> bool {
+    has_canonical_tool_sequence(|index| raw.get(index))
 }
 
 fn repair_tool_message_sequence_slow(messages: Vec<Message>) -> (Vec<Message>, bool) {

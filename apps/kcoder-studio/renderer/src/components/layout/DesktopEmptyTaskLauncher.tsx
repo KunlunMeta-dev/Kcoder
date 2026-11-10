@@ -1,10 +1,12 @@
-import { ChevronLeft } from 'lucide-react'
+import { useStudioWorkMode } from '@/features/workbench/studioWorkMode'
+import { BookOpen, ChartColumn, ChevronLeft, Files, Presentation } from 'lucide-react'
 import homeLogo from '../../../../../../logo/logo.png'
 import { useEffect, useRef, useState, type ReactNode, type SVGProps } from 'react'
 import { useTranslation } from '@/hooks/useTranslation'
 import { focusComposerAtEnd, WORKBENCH_NEW_CHAT_FOCUS_EVENT } from '@/lib/workbenchComposerFocus'
 import { cn } from '@/lib/utils'
 import styles from './DesktopEmptyTaskLauncher.module.css'
+import { DESKTOP_CHAT_CONTENT_COLUMN_WIDTH_CLASS } from './workbench/paneLayoutStyles'
 
 export interface TaskSuggestion {
   id: string
@@ -92,6 +94,13 @@ const CATEGORY_ICONS = {
   orange: FixSuggestionIcon,
 }
 
+const OFFICE_CATEGORY_ICONS = {
+  documents: Files,
+  sheets: ChartColumn,
+  research: BookOpen,
+  content: Presentation,
+}
+
 const CATEGORY_TONES = {
   blue: 'text-[#0285FF]',
   purple: 'text-[#924FF7]',
@@ -106,10 +115,26 @@ const TASK_SUGGESTION_CATEGORIES: TaskSuggestionCategory[] = [
     fallbackLabel: '探索并理解代码',
     tone: 'blue',
     suggestions: [
-      ['feature', '探索一个功能', '探索一个功能 '],
-      ['implementation', '探索实现方案', '探索一项功能的实现方案 '],
-      ['architecture', '比较架构方案', '探索并比较架构方案 '],
-      ['api', '探索并记录 API', '探索并记录一个 API '],
+      [
+        'feature',
+        '探索一个功能',
+        '梳理当前项目主要功能从输入到输出的完整调用链，先定位入口、核心逻辑和持久化位置。输出流程说明、关键文件与函数位置、正常路径及至少 3 个失败分支。验收：每个结论可由代码定位支持，未知部分明确标注，不修改源码。',
+      ],
+      [
+        'implementation',
+        '探索实现方案',
+        '评估当前项目增加“批量导出数据”的实现方案。先识别现有数据模型与导出能力，比较至少两种方案的接口、依赖、性能和兼容性。交付推荐方案、分步实施计划及验收用例。验收：说明适用数据范围、失败恢复方式和不支持的情况；本次只形成方案。',
+      ],
+      [
+        'architecture',
+        '比较架构方案',
+        '分析当前项目的模块边界，比较保留现有架构与拆分最重耦合模块这两种方案。输出依赖关系、3 个有代码依据的痛点、收益和迁移成本，并给出逐步迁移与回退计划。验收：不凭模块名称猜测职责，不把重写整个项目当作默认建议。',
+      ],
+      [
+        'api',
+        '探索并记录 API',
+        '为当前项目的主要公开接口整理使用说明。列出入口、参数与必填项、返回结构、错误和权限要求，并提供成功与失败示例。验收：示例与当前实现一致，能运行的示例实际核对，不能执行的部分标明原因；不要修改业务逻辑。',
+      ],
     ].map(([id, fallbackLabel, fallbackPrompt]) => ({
       id,
       labelKey: `workbench.task_suggestions.explore.${id}`,
@@ -124,10 +149,26 @@ const TASK_SUGGESTION_CATEGORIES: TaskSuggestionCategory[] = [
     fallbackLabel: '构建新功能、应用或工具',
     tone: 'purple',
     suggestions: [
-      ['feature', '构建功能', '构建一项功能 '],
-      ['ui', '构建 UI 更改', '构建 UI 更改 '],
-      ['prototype', '构建原型', '构建一个原型 '],
-      ['tool', '构建内部工具', '构建一个内部工具 '],
+      [
+        'feature',
+        '构建功能',
+        '为当前项目最常用的列表页增加关键词搜索；若不存在列表页，先和我确认目标。支持清空搜索、无结果提示，并在搜索变化时回到第一页。沿用现有组件与数据接口。验收：搜索与清空结果正确，分页不会落到空页，输入过程中不会被旧请求覆盖，相关检查通过。',
+      ],
+      [
+        'ui',
+        '构建 UI 更改',
+        '完善当前项目主要表单的交互；先定位实际页面，没有表单时确认目标。补齐字段标签、必填校验、就地错误提示、提交中状态和防重复提交。验收：键盘可完成操作，失败后输入保留，成功有明确反馈，窄窗口不溢出，并验证正常与失败路径。',
+      ],
+      [
+        'prototype',
+        '构建原型',
+        '在新的独立目录制作一个可直接打开的离线待办事项原型。支持新增、编辑、删除、完成状态、全部/未完成筛选，并在刷新后保留数据。验收：空任务不能保存，连续操作不丢数据，键盘可用，附打开方式与已验证的功能清单，不覆盖现有项目文件。',
+      ],
+      [
+        'tool',
+        '构建内部工具',
+        '创建一个目录文件统计命令行工具，输出各扩展名的文件数、总大小和最大的 10 个文件，支持 JSON 导出。验收：空目录、无权限路径和符号链接有明确处理；不跟随链接跑出目标目录；提供运行示例并用临时目录核对统计，不修改被扫描的文件。',
+      ],
     ].map(([id, fallbackLabel, fallbackPrompt]) => ({
       id,
       labelKey: `workbench.task_suggestions.build.${id}`,
@@ -142,10 +183,26 @@ const TASK_SUGGESTION_CATEGORIES: TaskSuggestionCategory[] = [
     fallbackLabel: '审查代码并提出修改建议',
     tone: 'green',
     suggestions: [
-      ['changes', '审查我的更改', '审查我的更改并提出修改建议 '],
-      ['pull_request', '审查 Pull Request', '审查一个 Pull Request '],
-      ['coverage', '审查测试覆盖率', '审查测试覆盖率并补充缺失测试 '],
-      ['refactor', '审查并重构代码', '审查并重构代码 '],
+      [
+        'changes',
+        '审查我的更改',
+        '审查当前未提交的改动，重点检查正确性、回归、错误处理和数据丢失风险；没有 Git 时先确认待审文件。按严重程度列出可复现问题、文件位置、触发条件和修复建议。验收：不把猜测当缺陷，不报告纯风格偏好；没有发现则明确说明，本次不自动改代码。',
+      ],
+      [
+        'pull_request',
+        '审查 Pull Request',
+        '审查我指定的 Pull Request；未提供链接或编号时先询问。对照需求检查改动、测试和兼容性，重点关注异常路径与权限边界。交付按严重度排序的问题、证据和建议。验收：每项发现对应具体代码，不把未运行的测试写成通过，不自行合并或发布。',
+      ],
+      [
+        'coverage',
+        '审查测试覆盖率',
+        '检查当前改动涉及的关键逻辑有哪些未覆盖的行为，优先补充异常输入、取消、并发或恢复场景的测试。先说明每个新增用例能防止什么回归。验收：测试能验证外部可观察行为，修复前失败、修复后通过；不只重复实现，不为提高百分比添加无意义断言。',
+      ],
+      [
+        'refactor',
+        '审查并重构代码',
+        '选择当前改动附近职责最混杂的一处代码进行小范围重构，先说明边界与风险。保持公开接口、数据格式和行为不变，抽取清晰的小模块。验收：相关测试通过，关键正常和异常路径有证据，改动范围可审阅；不要顺带重写无关模块。',
+      ],
     ].map(([id, fallbackLabel, fallbackPrompt]) => ({
       id,
       labelKey: `workbench.task_suggestions.review.${id}`,
@@ -160,10 +217,26 @@ const TASK_SUGGESTION_CATEGORIES: TaskSuggestionCategory[] = [
     fallbackLabel: '修复问题和失败',
     tone: 'orange',
     suggestions: [
-      ['bug', '修复 bug', '修复一个 bug '],
-      ['tests', '修复失败测试', '修复失败的测试 '],
-      ['ci', '修复 CI', '修复 CI 失败 '],
-      ['conflicts', '修复合并冲突', '修复合并冲突 '],
+      [
+        'bug',
+        '修复 bug',
+        '修复我提供的报错或复现步骤；缺少触发条件时先确认。先复现并定位根因，再做最小修改，补充能防止再次出现的回归用例。验收：原复现不再失败，正常路径不受影响，说明实际运行的检查和仍未验证的范围，不靠隐藏错误解决问题。',
+      ],
+      [
+        'tests',
+        '修复失败测试',
+        '运行当前项目与改动最相关的测试，定位首个失败的根因并修复。区分产品缺陷、过时断言与环境问题。验收：原失败用例及直接相关测试通过，不能删除断言、跳过测试或扩大超时来掩盖问题；报告命令和结果。',
+      ],
+      [
+        'ci',
+        '修复 CI',
+        '根据最近一次 CI 失败日志修复问题；没有日志时先确认对应任务。定位最先失败的步骤，在本地尽量用同一命令复现，然后做最小修复。验收：失败步骤和相关检查通过，不关闭门禁、不泄露凭证；区分本地通过与远程 CI 的实际状态。',
+      ],
+      [
+        'conflicts',
+        '修复合并冲突',
+        '检查当前合并冲突，逐个核对两边改动的目的并解决；若没有正在进行的合并，先说明状态。保留双方必要行为，检查配置与锁文件的一致性。验收：没有残留冲突标记，相关构建或测试通过，解释每处关键取舍，不自行强制推送。',
+      ],
     ].map(([id, fallbackLabel, fallbackPrompt]) => ({
       id,
       labelKey: `workbench.task_suggestions.fix.${id}`,
@@ -174,6 +247,89 @@ const TASK_SUGGESTION_CATEGORIES: TaskSuggestionCategory[] = [
   },
 ]
 
+const OFFICE_SUGGESTION_CATEGORIES: TaskSuggestionCategory[] = [
+  [
+    'documents',
+    '整理文档',
+    'blue',
+    [
+      [
+        'organize',
+        '按主题归档并建立索引',
+        '请整理我提供的文件或指定目录；如果尚未提供，请先确认资料位置。\n执行：列出文件清单，识别主题、重复内容和版本冲突，将文件副本按主题放入新建的“整理结果”目录，保留原件且不覆盖已有文件。\n交付：一份 Markdown 索引，逐项列出原路径、归档路径、3 条以内要点，以及无法读取或无法分类的原因。\n验收：输入文件全部有去向记录，重复与冲突单独列出，摘要能对应到原文，不遗漏、不编造。',
+      ],
+      [
+        'document',
+        '把资料写成项目立项说明',
+        '将我提供的项目资料整理为一份供负责人决策的立项说明；缺少资料时先确认来源和读者。\n结构：背景与问题、目标与不做事项、方案、里程碑、人员与预算、风险、待决策事项。\n交付：一份可编辑的 Markdown 文档和不超过 200 字的摘要。\n验收：目标可衡量，里程碑有日期或明确的待确认标记；预算注明依据，所有未知信息标记“待确认”，不能自行补造。',
+      ],
+    ],
+  ],
+  [
+    'sheets',
+    '分析表格',
+    'purple',
+    [
+      [
+        'analyze',
+        '核对月度销售与异常数据',
+        '分析我提供的销售表；先确认日期、产品、销售额和成本列的含义，缺少必要列时先说明。\n执行：检查空值、重复行与异常值，按月汇总销售额、成本和毛利，并按产品排名。异常数据单列，不擅自删除。\n交付：月度汇总 CSV、异常清单、趋势图，以及 3 条有数据依据的结论。\n验收：汇总金额与原表可核对，清洗前后行数与金额变化有记录，图表标注单位，缺失成本不能当作 0。',
+      ],
+      [
+        'compare',
+        '按统一口径比较供应商报价',
+        '比较我提供的供应商报价，先确认币种、税费、数量和服务范围。\n执行：按采购价、后续费用、交付周期、售后和风险建立对照表，计算可比的首年总成本；缺失费用单独标注。\n交付：对照 CSV、每家优势与限制、推荐方案及其成立条件。\n验收：同口径比较，所有金额能追溯原报价，计算过程可复核，不把“未报价”当成免费，不凭空添加评分权重。',
+      ],
+    ],
+  ],
+  [
+    'research',
+    '研究汇总',
+    'green',
+    [
+      [
+        'research',
+        '调研十人团队的协作工具',
+        '为一个 10 人团队比较飞书、钉钉和企业微信，重点关注文档协作、任务管理、外部协作和费用。\n执行：优先查阅官方当前资料，记录查询日期，区分免费版与付费版；无法确认的信息明确标注。\n交付：对照表、按适用场景给出的建议、引用链接，以及迁移前需要确认的问题。\n验收：每项关键功能与价格有可访问来源，不能混用不同套餐；推荐理由对应这个团队的需求。',
+      ],
+      [
+        'summary',
+        '把会议资料变成行动清单',
+        '整理我提供的会议纪要或录音转写。\n执行：区分已达成的决定、讨论中的建议、待确认问题与行动项；行动项列明负责人、截止时间、前置依赖和完成标准。\n交付：一页会议摘要和可编辑的行动清单 CSV。\n验收：每项决定和行动都能定位到原文，未指定的负责人或日期写“待确认”，不把建议写成已达成的共识。',
+      ],
+    ],
+  ],
+  [
+    'content',
+    '制作内容',
+    'orange',
+    [
+      [
+        'slides',
+        '制作八页项目进展汇报',
+        '根据我提供的项目资料，制作面向管理层的 8 页进展汇报；缺少汇报周期时先确认。\n页序：结论、目标与进度、关键指标、已完成事项、主要问题、风险与应对、下阶段计划、需要决策的事项。\n交付：可编辑的演示文稿，并附每页演讲要点。\n验收：每页一个核心结论，数字有来源和时间范围，问题有负责人或待确认标记，检查文字溢出与图表可读性；缺失数据不编造。',
+      ],
+      [
+        'visualize',
+        '制作可调参数的复利试算器',
+        '制作一个复利试算器，示例默认值为本金 100000 元、年利率 5%、期限 10 年，不追加本金。\n要求：本金、年利率和期限可调整，实时显示最终金额与累计利息，并用图表区分本金和利息；说明采用每年复利一次的公式。\n验收：默认最终金额约为 162889.46 元；利率或期限为 0 时总额等于本金；金额保留两位小数，并标明这是计算示例。',
+      ],
+    ],
+  ],
+].map(([id, label, tone, suggestions]) => ({
+  id: id as string,
+  labelKey: `workbench.office_suggestions.${id}.label`,
+  fallbackLabel: label as string,
+  tone: tone as TaskSuggestionCategory['tone'],
+  suggestions: (suggestions as string[][]).map(([suggestionId, suggestionLabel, prompt]) => ({
+    id: suggestionId,
+    labelKey: `workbench.office_suggestions.${id}.${suggestionId}`,
+    fallbackLabel: suggestionLabel,
+    promptKey: `workbench.office_suggestions.${id}.${suggestionId}_prompt`,
+    fallbackPrompt: prompt,
+  })),
+}))
+
 export function DesktopEmptyTaskLauncher({
   projectName,
   onOpenProjectSelector,
@@ -181,11 +337,11 @@ export function DesktopEmptyTaskLauncher({
   composer,
 }: DesktopEmptyTaskLauncherProps) {
   const { t } = useTranslation('common')
+  const mode = useStudioWorkMode()
+  const categories = mode === 'kworker' ? OFFICE_SUGGESTION_CATEGORIES : TASK_SUGGESTION_CATEGORIES
   const launcherRef = useRef<HTMLElement>(null)
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null)
-  const selectedCategory = TASK_SUGGESTION_CATEGORIES.find(
-    category => category.id === selectedCategoryId
-  )
+  const selectedCategory = categories.find(category => category.id === selectedCategoryId)
 
   useEffect(() => {
     const focusComposer = () => {
@@ -215,7 +371,13 @@ export function DesktopEmptyTaskLauncher({
       className="flex min-h-0 min-w-0 flex-1 flex-col px-6 pb-2 pt-8"
     >
       <div className="flex min-h-0 flex-1 items-center justify-center pb-8">
-        <div className="mx-auto flex w-[min(46rem,calc(100%_-_2rem))] min-w-0 flex-col items-center">
+        <div
+          data-testid="desktop-empty-hero-column"
+          className={cn(
+            'mx-auto flex min-w-0 flex-col items-center',
+            DESKTOP_CHAT_CONTENT_COLUMN_WIDTH_CLASS
+          )}
+        >
           <img
             data-testid="home-brand-logo"
             src={homeLogo}
@@ -226,27 +388,35 @@ export function DesktopEmptyTaskLauncher({
             className="mb-5 h-9 w-44 max-w-full object-contain dark:rounded dark:bg-white"
           />
           <h1 className="mb-9 max-w-full text-center text-xl font-normal leading-9 tracking-normal text-text-primary/95">
-            {projectName ? (
-              <>
-                {t('workbench.project_empty_title_prefix', '我们应该在')}{' '}
-                <button
-                  type="button"
-                  data-testid="empty-project-title-button"
-                  onClick={event => onOpenProjectSelector(event.currentTarget)}
-                  title={t('workbench.change_project', '更改项目')}
-                  className="max-w-[18rem] truncate align-bottom underline decoration-text-muted decoration-dotted underline-offset-4 transition-colors hover:text-text-secondary focus-visible:rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
-                >
-                  {projectName}
-                </button>{' '}
-                {t('workbench.project_empty_title_suffix', '中做些什么？')}
-              </>
-            ) : (
-              t('workbench.empty_title', '我们该做什么？')
-            )}
+            <span key={mode} className={cn('inline-block max-w-full', styles.modeEntry)}>
+              {mode === 'kworker' ? (
+                t('workbench.work_mode.office_title')
+              ) : projectName ? (
+                <>
+                  {t('workbench.project_empty_title_prefix', '我们应该在')}{' '}
+                  <button
+                    type="button"
+                    data-testid="empty-project-title-button"
+                    onClick={event => onOpenProjectSelector(event.currentTarget)}
+                    title={t('workbench.change_project', '更改项目')}
+                    className="max-w-[18rem] truncate align-bottom underline decoration-text-muted decoration-dotted underline-offset-4 transition-colors hover:text-text-secondary focus-visible:rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                  >
+                    {projectName}
+                  </button>{' '}
+                  {t('workbench.project_empty_title_suffix', '中做些什么？')}
+                </>
+              ) : (
+                t('workbench.empty_title', '我们该做什么？')
+              )}
+            </span>
           </h1>
 
           {selectedCategory ? (
-            <div className="w-full" data-testid="task-suggestion-list">
+            <div
+              key={mode}
+              className={cn('w-full', styles.modeEntry)}
+              data-testid="task-suggestion-list"
+            >
               <button
                 type="button"
                 data-testid="task-suggestions-back-button"
@@ -273,13 +443,16 @@ export function DesktopEmptyTaskLauncher({
               </div>
             </div>
           ) : (
-            <div className={styles.suggestionContainer}>
+            <div key={mode} className={cn(styles.suggestionContainer, styles.modeEntry)}>
               <div
                 data-testid="task-suggestion-categories"
                 className={cn(styles.suggestionGrid, 'gap-3')}
               >
-                {TASK_SUGGESTION_CATEGORIES.map(category => {
-                  const Icon = CATEGORY_ICONS[category.tone]
+                {categories.map(category => {
+                  const Icon =
+                    mode === 'kworker'
+                      ? OFFICE_CATEGORY_ICONS[category.id as keyof typeof OFFICE_CATEGORY_ICONS]
+                      : CATEGORY_ICONS[category.tone]
                   return (
                     <button
                       key={category.id}
@@ -303,7 +476,7 @@ export function DesktopEmptyTaskLauncher({
 
       <div
         data-testid="desktop-empty-composer-dock"
-        className="mx-auto w-[min(46rem,calc(100%_-_2rem))] min-w-0 shrink-0"
+        className={cn('mx-auto min-w-0 shrink-0', DESKTOP_CHAT_CONTENT_COLUMN_WIDTH_CLASS)}
       >
         {composer}
       </div>

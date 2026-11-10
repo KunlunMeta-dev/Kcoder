@@ -19,7 +19,8 @@ beforeEach(() => {
       ok: true,
       json: async () =>
         url.includes('/mobile/pairing')
-          ? { token: 'weekly-pairing-token', expiresAt: Date.now() + 60_000, devices: [] }
+          ? { token: 'weekly-pairing-token', expiresAt: Date.now() + 60_000, devices: [],
+              publicBaseUrl: 'https://relay.example/g/gateway-one' }
           : {
               token,
               localBaseUrl: 'http://127.0.0.1:4173',
@@ -50,6 +51,10 @@ test('shows separate local and phone QR links and supports copy and open actions
   await screen.findByTestId('browser-access-settings-page')
   await waitFor(() => expect(screen.getByTestId('browser-access-qr')).toBeInTheDocument())
   await waitFor(() => expect(screen.getByTestId('mobile-pairing-qr')).toBeInTheDocument())
+  expect(screen.getByTestId('browser-access-qr').closest('details')).not.toHaveAttribute('open')
+  for (const section of [screen.getByTestId('mobile-web-address'), screen.getByTestId('browser-access-qr')]) {
+    await user.click(section.closest('details')!.querySelector('summary')!)
+  }
   await user.clear(screen.getByTestId('mobile-web-address'))
   await user.type(screen.getByTestId('mobile-web-address'), 'https://mobile.example')
   await waitFor(() => expect(screen.getByTestId('mobile-web-pairing-qr')).toBeInTheDocument())
@@ -57,15 +62,46 @@ test('shows separate local and phone QR links and supports copy and open actions
     '/api/gateway/browser-access',
     expect.objectContaining({ cache: 'no-store' })
   )
-  await user.click(screen.getAllByRole('button', { name: '复制' })[0])
+  const local = screen.getByLabelText('访问地址').closest('details')!
+  await user.click(local.querySelector('summary')!)
+  await user.click(local.querySelector('button')!)
   await waitFor(() =>
     expect(writeText).toHaveBeenCalledWith(
       'http://127.0.0.1:4173/login?token=existing-gateway-token&returnTo=%2F'
     )
   )
-  await user.click(screen.getAllByRole('button', { name: '打开浏览器' })[1])
+  await user.click(screen.getAllByRole('button', { name: '打开浏览器' })[0])
   expect(openExternalUrl).toHaveBeenCalledWith(
     'https://relay.example/g/gateway-one/login?token=existing-gateway-token&returnTo=%2Fg%2Fgateway-one%2F',
     { target: 'system' }
   )
+})
+
+test('disables App public access while keeping the Web and local entry points', async () => {
+  const user = userEvent.setup()
+  const previous = fetchMock.getMockImplementation()!
+  const surfaces = { desktopWeb: true, mobileWeb: true, mobileApp: true }
+  fetchMock.mockImplementation(async (input, init) => {
+    const url = String(input)
+    if (url.endsWith('/api/relay')) return {
+      ok: true,
+      json: async () => ({ publicBaseUrl: 'https://relay.example/g/gateway-one',
+        configured: true, publicAccess: { revision: 1, surfaces } }),
+    }
+    if (url.endsWith('/api/relay/public-access')) return {
+      ok: true,
+      json: async () => ({ revision: 2, surfaces: JSON.parse(init.body).surfaces }),
+    }
+    return previous(input, init)
+  })
+  render(<BrowserAccessSettingsPage />)
+  const app = await screen.findByRole('switch', { name: '手机 App 公网访问' })
+  expect(app).toBeChecked()
+  await user.click(app)
+  await waitFor(() => expect(app).not.toBeChecked())
+  expect(screen.getByRole('switch', { name: '移动 Web 公网访问' })).toBeChecked()
+  expect(screen.getByRole('switch', { name: '桌面 Web 公网访问' })).toBeChecked()
+  expect(screen.queryByTestId('mobile-pairing-qr')).not.toBeInTheDocument()
+  expect(screen.getByTestId('mobile-web-pairing-qr').closest('details')).not.toHaveAttribute('open')
+  expect(screen.getByLabelText('访问地址').closest('details')).not.toHaveAttribute('open')
 })

@@ -2,6 +2,8 @@ import {
   focusTerminal,
   waitForTerminalText,
   waitForComposerText,
+  readComposerText,
+  typeHumanText,
 } from "../terminal-interaction.mjs";
 import path from "node:path";
 import { captureStep } from "../browser-evidence.mjs";
@@ -79,6 +81,22 @@ export async function exercisePaste({
       (window.tuiLab.text().match(/tui-lab-second-turn-sentinel/g) || [])
         .length,
   );
+  const draftBeforeHistory = 'unsent-history-draft';
+  await typeHumanText(page, draftBeforeHistory);
+  await page.keyboard.press('ArrowUp');
+  await waitForComposerText(page, 'paste-small-alpha', options.timeoutMs);
+  const recalledLatest = await readComposerText(page);
+  await page.keyboard.press('ArrowUp');
+  await waitForComposerText(page, options.message.slice(0, 32), options.timeoutMs);
+  const recalledOlder = await readComposerText(page);
+  await page.keyboard.press('ArrowDown');
+  await waitForComposerText(page, 'paste-small-alpha', options.timeoutMs);
+  const recalledForward = await readComposerText(page);
+  await page.keyboard.press('ArrowDown');
+  await waitForComposerText(page, draftBeforeHistory, options.timeoutMs);
+  const restoredDraft = await readComposerText(page);
+  await captureStep(page, trace, 'paste-input-history', path.join(artifacts.dir, 'paste-input-history.png'));
+  await page.keyboard.press('Control+U');
   await page.evaluate(
     (payload) => window.tuiLab.sendInput(`\u001b[200~${payload}\u001b[201~`),
     largePasted,
@@ -126,6 +144,7 @@ export async function exercisePaste({
     inputStart,
   );
   pasteEvidence = {
+    inputHistory: { recalledLatest, recalledOlder, recalledForward, restoredDraft, draftBeforeHistory },
     smallPasted,
     largePasted,
     largePlaceholder,

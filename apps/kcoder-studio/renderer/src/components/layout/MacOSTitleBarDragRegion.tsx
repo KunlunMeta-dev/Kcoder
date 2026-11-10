@@ -1,5 +1,5 @@
-import { getCurrentWindow } from '@tauri-apps/api/window'
 import { cn } from '@/lib/utils'
+import { getKeyboardPlatform } from '@/lib/keyboard-platform'
 
 interface MacOSTitleBarDragRegionProps {
   className?: string
@@ -8,20 +8,16 @@ interface MacOSTitleBarDragRegionProps {
 export function MacOSTitleBarDragRegion({
   className = 'h-full w-full',
 }: MacOSTitleBarDragRegionProps) {
-  const handleMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
-    if (event.button !== 0) return
-
-    void getCurrentWindow()
-      .startDragging()
-      .catch(() => undefined)
-  }
-
+  // Windows already has a separate draggable brand/menu bar above the workbench.
+  const draggable = getKeyboardPlatform() !== 'windows'
   return (
     <div
       data-testid="macos-titlebar-drag-region"
-      data-tauri-drag-region
-      className={cn('pointer-events-auto', className)}
-      onMouseDown={handleMouseDown}
+      data-kcoder-drag-region={draggable ? true : undefined}
+      className={cn(
+        draggable ? 'pointer-events-auto [-webkit-app-region:drag]' : 'pointer-events-none',
+        className
+      )}
       aria-hidden="true"
     />
   )

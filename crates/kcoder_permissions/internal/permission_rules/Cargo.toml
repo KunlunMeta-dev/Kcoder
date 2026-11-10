@@ -1,0 +1,27 @@
+[package]
+name = "kcoder_permission_rules"
+description = "Tool permission rules, prompt context, and audit projection."
+version = { workspace = true }
+edition = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+rust-version = { workspace = true }
+publish = false
+
+[dependencies]
+anyhow = { workspace = true }
+kcoder_config = { path = "../../../kcoder_config" }
+kcoder_tool_input = { path = "../../../kcoder_tools/internal/tool_input" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+tracing = { workspace = true }
+tree-sitter = "0.25"
+tree-sitter-bash = "0.25"
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[lib]
+path = "../../src/internal/permission_rules/lib.rs"

@@ -69,10 +69,17 @@ export function registerDesktopMenu({ ipcMain, window, menu, getGatewayOrigin, c
     // this window's WebContents, never whichever window happens to be focused.
     item.click({ triggeredByAccelerator: false }, window, contents);
   });
-  ipcMain.handle(channels[4], (event, dark) => {
+  ipcMain.handle(channels[4], (event, dark, backgroundColor) => {
     authorize(event);
     if (typeof dark !== 'boolean') throw new Error('Invalid menu theme');
-    window.setTitleBarOverlay?.({ color: dark ? '#181818' : '#ffffff', symbolColor: dark ? '#ffffff' : '#1a1c1f', height: 40 });
+    if (backgroundColor !== undefined && (typeof backgroundColor !== 'string' ||
+        !/^rgb\((?:\d{1,3}, ){2}\d{1,3}\)$/.test(backgroundColor))) {
+      throw new Error('Invalid title bar background color');
+    }
+    window.setTitleBarOverlay?.({
+      color: backgroundColor ?? (dark ? '#111316' : '#ffffff'),
+      symbolColor: dark ? '#ffffff' : '#1a1c1f',
+    });
   });
   const dismissPopup = () => {
     const popup = activePopup;

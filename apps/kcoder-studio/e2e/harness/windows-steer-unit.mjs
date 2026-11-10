@@ -48,6 +48,7 @@ await runE2E(import.meta.url, { testId: appProbe ? 'windows-steer-app-chain' : '
     await execute('tar', ['-czf', archive, '-C', resolve(repoRoot, 'apps/kcoder-studio'), 'renderer/dist', 'dev-server.mjs', 'src']);
     await copy(archive, 'overlay.tar.gz');
     await copy(resolve(repoRoot, 'apps/kcoder-studio/e2e/harness/windows-studio-ui-probe.cjs'), 'probe.cjs');
+    await copy(resolve(repoRoot, 'apps/kcoder-studio/e2e/harness/windows-cdp-document.cjs'), 'windows-cdp-document.cjs');
     await ps(`[IO.Directory]::CreateDirectory('${directory}/overlay')|Out-Null;& tar -xf '${directory}/overlay.tar.gz' -C '${directory}/overlay';if($LASTEXITCODE -ne 0){throw 'extract failed'}`);
     const raw = await execute('ssh', psArgs(`& node '${directory}/probe.cjs' '${directory}/kcoder.exe' '${installation}' '${directory}/overlay' '${directory}' --steer;exit 0`), 210000);
     const result = JSON.parse(raw.trim());

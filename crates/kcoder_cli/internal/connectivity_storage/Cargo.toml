@@ -1,0 +1,21 @@
+[package]
+name = "kcoder_connectivity_storage"
+description = "Private application-host initialization and kernel-lease coordination."
+publish = false
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+kcoder_config = { path = "../../../kcoder_config" }
+kcoder_types = { path = "../../../kcoder_types" }
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+
+[lib]
+path = "../../src/internal/connectivity_storage/lib.rs"

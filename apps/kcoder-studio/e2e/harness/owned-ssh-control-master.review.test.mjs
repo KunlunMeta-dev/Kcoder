@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import test from "node:test";
 import {
   assertOwnedSocketStat,
@@ -9,6 +10,8 @@ import {
   buildSshMasterArgs,
   createOwnedSshDispatcher,
   createManagedSshTransport,
+  runOwnedSshOperation,
+  remoteOwnedProcessGuardSource,
   cleanupOwnedControlSocketDirectory,
   parseSshStageMarkers,
   startOwnedSshControlMaster,
@@ -324,4 +327,108 @@ test("failed master spawn removes only its still-empty private socket directory"
   }), /spawn failed/);
   assert.equal(typeof cleanup, "function");
   await cleanup();
+});
+
+test("owned SSH operation bounds output, checks stage markers, and keeps stderr out of its result", async () => {
+  const { EventEmitter } = await import("node:events");
+  const { PassThrough } = await import("node:stream");
+  const makeChild = (stdoutText, stderrText, code = 0) => {
+    const child = new EventEmitter();
+    child.stdout = new PassThrough(); child.stderr = new PassThrough(); child.stdin = new PassThrough();
+    setImmediate(() => {
+      child.stdout.end(stdoutText); child.stderr.end(stderrText);
+      setImmediate(() => child.emit("close", code, null));
+    });
+    return child;
+  };
+  let stopped = 0;
+  const context = { abortSignal: undefined, isolatedEnvironment: () => ({}), spawnOwned() {}, stopOwned: async () => { stopped++; } };
+  const dispatcher = { spawn: async () => makeChild("{\"safe\":true}\n",
+    "KCUX_STAGE:REMOTE_PYTHON_ENTERED\nKCUX_STAGE:REMOTE_PROGRAM_COMPLETE\n") };
+  const result = await runOwnedSshOperation({ context, dispatcher, label: "test-safe-operation",
+    command: "python3 -c 'print(1)' KCUX_STAGE:REMOTE_PYTHON_ENTERED", cwd: "/tmp", timeoutMs: 1000, maxStdoutBytes: 128, maxStderrBytes: 256 });
+  assert.equal(result.stdout.toString("utf8"), "{\"safe\":true}\n");
+  assert.equal(result.stage.valid, true);
+  assert.equal(result.stderrBytes, Buffer.byteLength("KCUX_STAGE:REMOTE_PYTHON_ENTERED\nKCUX_STAGE:REMOTE_PROGRAM_COMPLETE\n"));
+  assert.equal(stopped, 0);
+
+  const overflowDispatcher = { spawn: async () => makeChild("x".repeat(32), "") };
+  await assert.rejects(runOwnedSshOperation({ context, dispatcher: overflowDispatcher, label: "test-overflow",
+    command: "true", cwd: "/tmp", timeoutMs: 1000, maxStdoutBytes: 8, maxStderrBytes: 256 }), /output bound/);
+  assert.equal(stopped, 1, "overflow stops only this operation's owned SSH child");
+});
+
+test("remote owner guards accept the exact root/process and reject symlink, inode, uid, pid, and starttime drift", () => {
+  const python = remoteOwnedProcessGuardSource() + [
+    'import json,os,stat,tempfile',
+    'base=tempfile.mkdtemp(prefix="owned-remote-guard-")',
+    'root=os.path.join(base,"root"); os.mkdir(root,0o700); os.chmod(root,0o700)',
+    'run_id="a"*24; marker_name=".owner.json"; uid=os.getuid(); rs=os.lstat(root)',
+    'marker={"version":1,"runId":run_id,"uid":uid,"dev":rs.st_dev,"ino":rs.st_ino}',
+    'def write_marker(value):',
+    ' path=os.path.join(root,marker_name)',
+    ' fd=os.open(path,os.O_CREAT|os.O_TRUNC|os.O_WRONLY|os.O_NOFOLLOW,0o600)',
+    ' os.write(fd,(json.dumps(value,separators=(",",":"))+"\\n").encode()); os.close(fd); os.chmod(path,0o600)',
+    'write_marker(marker); _read_owner_marker(root,run_id,marker_name,uid); print("ok exact-owner-root")',
+    'receipt_path=os.path.join(root,"receipt.json"); receipt={"runId":run_id,"state":"complete"}',
+    'fd=os.open(receipt_path,os.O_CREAT|os.O_EXCL|os.O_WRONLY|os.O_NOFOLLOW,0o600); os.write(fd,json.dumps(receipt).encode()); os.close(fd); os.chmod(receipt_path,0o600)',
+    'assert _read_owned_json(root,"receipt.json",uid,512)==receipt; print("ok exact-private-json")',
+    'os.symlink(receipt_path,os.path.join(root,"receipt-link.json"))',
+    'try: _read_owned_json(root,"receipt-link.json",uid,512); raise RuntimeError("private JSON symlink accepted")',
+    'except AssertionError: print("ok private-json-symlink-rejected")',
+    'bad=dict(marker); bad["ino"]=marker["ino"]+1; write_marker(bad)',
+    'try: _read_owner_marker(root,run_id,marker_name,uid); raise RuntimeError("inode drift accepted")',
+    'except AssertionError: print("ok changed-inode-rejected")',
+    'write_marker(marker)',
+    'try: _read_owner_marker(root,run_id,marker_name,uid+1); raise RuntimeError("foreign uid accepted")',
+    'except AssertionError: print("ok foreign-uid-rejected")',
+    'link=os.path.join(base,"root-link"); os.symlink(root,link)',
+    'try: _read_owner_marker(link,run_id,marker_name,uid); raise RuntimeError("symlink root accepted")',
+    'except AssertionError: print("ok symlink-root-rejected")',
+    'old_root=os.path.join(base,"root-old"); os.rename(root,old_root); os.mkdir(root,0o700); os.chmod(root,0o700); write_marker(marker)',
+    'assert os.lstat(root).st_ino != marker["ino"]',
+    'try: _read_owner_marker(root,run_id,marker_name,uid); raise RuntimeError("replaced root inode accepted")',
+    'except AssertionError: print("ok changed-root-inode-rejected")',
+    'import shutil; shutil.rmtree(root); os.rename(old_root,root)',
+    'os.chdir(root); actual=_read_process(os.getpid()); config_sha="b"*64',
+    'receipt={"runId":run_id,"pid":actual["pid"],"startTicks":actual["startTicks"],"euid":actual["euid"],"exe":actual["exe"],"argvSha256":actual["argvSha256"],"cwd":actual["cwd"],"configSha256":config_sha}',
+    'assert_owned_process(receipt,root,run_id,marker_name,uid,actual["exe"],config_sha,actual["argv"]); print("ok exact-process-owner")',
+    'bad=dict(receipt); bad["pid"]=1',
+    'try: assert_owned_process(bad,root,run_id,marker_name,uid,actual["exe"],config_sha,actual["argv"]); raise RuntimeError("foreign pid accepted")',
+    'except AssertionError: print("ok foreign-pid-rejected")',
+    'bad=dict(receipt); bad["startTicks"]=actual["startTicks"]+1',
+    'try: assert_owned_process(bad,root,run_id,marker_name,uid,actual["exe"],config_sha,actual["argv"]); raise RuntimeError("starttime drift accepted")',
+    'except AssertionError: print("ok changed-starttime-rejected")',
+    'os.chdir("/"); import shutil; shutil.rmtree(base)',
+  ].join("\n");
+  const lines = execFileSync("/usr/bin/python3", ["-c", python], { encoding: "utf8", timeout: 5000 }).trim().split(/\r?\n/);
+  assert.deepEqual(lines, ["ok exact-owner-root", "ok exact-private-json", "ok private-json-symlink-rejected",
+    "ok changed-inode-rejected", "ok foreign-uid-rejected", "ok symlink-root-rejected", "ok changed-root-inode-rejected",
+    "ok exact-process-owner", "ok foreign-pid-rejected", "ok changed-starttime-rejected"]);
+});
+
+test("remote owned-tree guard accepts normal Linux directory link counts but rejects file hardlinks", () => {
+  const python = remoteOwnedProcessGuardSource() + [
+    'import json,os,shutil,stat,tempfile',
+    'base=tempfile.mkdtemp(prefix="owned-remote-tree-"); root=os.path.join(base,"root"); os.mkdir(root,0o700); os.chmod(root,0o700)',
+    'for name in ("config","data","tmp"): os.mkdir(os.path.join(root,name),0o700)',
+    'run_id="b"*24; uid=os.getuid(); rs=os.lstat(root); marker={"version":1,"runId":run_id,"uid":uid,"dev":rs.st_dev,"ino":rs.st_ino}',
+    'path=os.path.join(root,".owner.json"); fd=os.open(path,os.O_CREAT|os.O_EXCL|os.O_WRONLY|os.O_NOFOLLOW,0o600); os.write(fd,json.dumps(marker).encode()); os.close(fd); os.chmod(path,0o600)',
+    '_read_owner_marker(root,run_id,".owner.json",uid)',
+    'assert os.lstat(root).st_nlink>1 and all(os.lstat(os.path.join(root,n)).st_nlink>1 for n in ("config","data","tmp"))',
+    'print("ok normal-directory-link-counts")',
+    'file=os.path.join(root,"Caddyfile"); fd=os.open(file,os.O_CREAT|os.O_EXCL|os.O_WRONLY|os.O_NOFOLLOW,0o600); os.write(fd,b"candidate"); os.close(fd); os.chmod(file,0o600)',
+    'allowed={".owner.json","Caddyfile","config","data","tmp"}',
+    'assert _assert_owned_tree(root,uid,allowed)=={"fileCount":2,"totalBytes":len(b"candidate")+len(open(path,"rb").read())}',
+    'print("ok real-private-tree-accepted")',
+    'link=os.path.join(root,"data","candidate-hardlink"); os.link(file,link)',
+    'try: _assert_owned_tree(root,uid,allowed); raise RuntimeError("regular file hardlink accepted")',
+    'except AssertionError: print("ok regular-file-hardlink-rejected")',
+    'os.unlink(link); assert _assert_owned_tree(root,uid,allowed)["fileCount"]==2',
+    'print("ok private-tree-valid-after-hardlink-removal")',
+    'os.chdir("/"); shutil.rmtree(base)',
+  ].join("\n");
+  const lines = execFileSync("/usr/bin/python3", ["-c", python], { encoding: "utf8", timeout: 5000 }).trim().split(/\r?\n/);
+  assert.deepEqual(lines, ["ok normal-directory-link-counts", "ok real-private-tree-accepted",
+    "ok regular-file-hardlink-rejected", "ok private-tree-valid-after-hardlink-removal"]);
 });

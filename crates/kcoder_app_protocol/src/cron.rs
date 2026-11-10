@@ -33,6 +33,9 @@ pub struct CronDeleteParams {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub thread_id: Option<String>,
     pub job_id: String,
+    /// Select one history row, preserving the schedule, conversation and execution receipt.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub trigger_id: Option<String>,
     #[serde(default, skip_serializing_if = "false_flag")]
     pub receipts_only: bool,
     #[serde(default, skip_serializing_if = "false_flag")]
@@ -125,11 +128,14 @@ pub struct AutomationRunStartedParams {
 
 /// Execution evidence is separate from dispatch/delivery acknowledgements.
 pub const CAPABILITY_CRON_EXECUTION_DIAGNOSTICS_V1: &str = "cronExecutionDiagnosticsV1";
+pub const CAPABILITY_CRON_HISTORY_DELETE_V1: &str = "cronHistoryDeleteV1";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CronExecutionDiagnostics {
     pub runs: Vec<CronExecutionRecord>,
+    #[serde(default, skip_serializing_if = "false_flag")]
+    pub history_deletion_supported: bool,
     pub automatic_replay: bool,
     pub service_required: bool,
     pub offline_policy: String,

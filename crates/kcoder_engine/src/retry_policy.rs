@@ -169,7 +169,7 @@ pub(super) fn provider_failure_details(
                     Category::InvalidParameter
                 }
                 ApiErrorKind::Api { error_type, .. } => match error_type.as_str() {
-                    "authentication_error" => Category::AuthenticationError,
+                    "authentication_error" | "missing_api_key" => Category::AuthenticationError,
                     "permission_error" => Category::Forbidden,
                     "invalid_request_error" | "unsupported_parameter" => Category::InvalidParameter,
                     "context_length_exceeded" => Category::ContextLengthExceeded,
@@ -345,6 +345,29 @@ pub(super) async fn sleep_or_cancel(cancel_token: CancellationToken, duration: D
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn missing_credentials_are_non_retryable_typed_authentication_failures() {
+        let error = kcoder_api::ApiErrorKind::Api {
+            error_type: "missing_api_key".into(),
+            message: "SENTINEL_PRIVATE".into(),
+        };
+        let details = super::provider_failure_details(&error, false);
+        assert_eq!(
+            details.category,
+            kcoder_types::ProviderFailureCategory::AuthenticationError
+        );
+        assert_eq!(
+            details.recovery_action,
+            kcoder_types::ProviderFailureRecoveryAction::NeedsHuman
+        );
+        assert!(!details.retryable);
+        assert!(!details.resume_safe);
+        assert!(
+            !serde_json::to_string(&details)
+                .unwrap()
+                .contains("SENTINEL")
+        );
+    }
     #[tokio::test]
     async fn provider_error_precision_builder_reports_request_not_stream_failure() {
         use futures::StreamExt;

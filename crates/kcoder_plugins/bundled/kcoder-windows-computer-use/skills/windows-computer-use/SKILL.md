@@ -61,9 +61,13 @@ UIA scan is always faster than a screenshot.
   to text-only; request an image there only when it adds needed evidence.
 - Choose the intended application/window before entering text. After a window
   switch or substantial UI change, refresh Snapshot before reusing element labels.
-- UIA label positions are desktop coordinates. Screenshot pixels may be scaled
-  or cropped: use the returned scale and origin metadata when selecting loc.
-  Do not scale UIA coordinates a second time or guess a missing transform.
+- UIA label positions are desktop coordinates. When a Screenshot or visual
+  Snapshot returns a Screenshot ID and the input schema supports
+  `screenshot_id`, pass it with image-pixel `loc` (and `from_loc` for drag).
+  The worker applies scale and origin; do not pre-scale. Use the latest image
+  and refresh after layout changes or a stale-ID error. Omit the ID for UIA
+  labels and native desktop coordinates. On older workers use the returned
+  scale and origin; do not guess a missing transform.
 - Perform a small group of related actions, then observe the result. Prefer
   WaitFor's bounded condition checks over long repeated Sleep calls.
 - Keep focus-dependent actions in this turn. Do not delegate simultaneous clicks
@@ -79,9 +83,10 @@ Use a separate OCR workflow only when the user explicitly requests it. Snapshot
 accessibility data is UIA information, not OCR. The tool named `ocr` in KCoder is
 OpenCodeReview for source-code review, not image text recognition.
 
-If an image is rejected as too large, report its actual dimensions/data size and
-the returned limit. Prefer proportional resizing that preserves the full view;
-do not silently crop away context or switch to OCR. If the image is too small to
+The bundled worker compresses large images and proportionally reduces them as
+needed to fit the tool result. If an image is still rejected, report its actual
+dimensions/data size and the returned limit. Do not silently crop away context
+or switch to OCR. If the image is too small to
 read reliably, explain the clarity limitation and request a clearer image or an
 appropriate close-up. Do not claim to have read details that were not visible.
 

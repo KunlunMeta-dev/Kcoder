@@ -30,7 +30,9 @@ pub(super) async fn persist_orchestrate_agent_evidence(
     if !run.tool_trace_complete {
         return Ok(());
     }
-    let workspace_digest = workspace_evidence_digest(execution_root).await;
+    // Schema/citation-only runs do not claim workspace content provenance.
+    // Defer the bounded snapshot until a workspace-bound record actually exists.
+    let mut workspace_digest = None;
     for execution in run.tool_executions {
         if execution.is_error == Some(true) {
             continue;
@@ -103,13 +105,29 @@ pub(super) async fn persist_orchestrate_agent_evidence(
             );
         }
         for evidence in evidence_items {
+            let workspace_bound = matches!(
+                &evidence,
+                kcoder_state::orchestrate_store::AgentEvidenceKind::ProcessExit { .. }
+                    | kcoder_state::orchestrate_store::AgentEvidenceKind::Artifact { .. }
+                    | kcoder_state::orchestrate_store::AgentEvidenceKind::Visual { .. }
+            );
+            if workspace_bound && workspace_digest.is_none() {
+                workspace_digest =
+                    Some(crate::orchestrate::workspace_evidence::digest(execution_root).await?);
+            }
             let record = kcoder_state::orchestrate_store::AgentEvidence {
                 evidence_id: String::new(),
                 work_id: work_id.clone(),
                 revision: snapshot.work.revision,
                 plan_sha256: snapshot.work.plan_sha256.clone(),
                 agent_id: agent_id.to_string(),
-                workspace_digest: workspace_digest.clone(),
+                workspace_digest: if workspace_bound {
+                    workspace_digest
+                        .clone()
+                        .ok_or_else(|| anyhow::anyhow!("workspace evidence snapshot is missing"))?
+                } else {
+                    String::new()
+                },
                 recorded_at: chrono::Utc::now(),
                 evidence,
             };
@@ -162,44 +180,4 @@ pub(super) async fn persist_orchestrate_agent_evidence(
         }
     }
     Ok(())
-}
-
-pub(super) async fn workspace_evidence_digest(root: &Path) -> String {
-    let mut digest = Sha256::new();
-    digest.update(root.to_string_lossy().as_bytes());
-    for args in [
-        &[
-            "diff",
-            "--binary",
-            "--no-ext-diff",
-            "HEAD",
-            "--",
-            ".",
-            ":(exclude).kcoder/orchestrate/**",
-        ] as &[&str],
-        &[
-            "ls-files",
-            "--others",
-            "--exclude-standard",
-            "-z",
-            "--",
-            ".",
-            ":(exclude).kcoder/orchestrate/**",
-        ],
-    ] {
-        match tokio::process::Command::new("git")
-            .args(args)
-            .current_dir(root)
-            .output()
-            .await
-        {
-            Ok(output) => {
-                digest.update(output.status.code().unwrap_or(-1).to_le_bytes());
-                digest.update(&output.stdout);
-                digest.update(&output.stderr);
-            }
-            Err(error) => digest.update(error.to_string().as_bytes()),
-        }
-    }
-    format!("{:x}", digest.finalize())
 }

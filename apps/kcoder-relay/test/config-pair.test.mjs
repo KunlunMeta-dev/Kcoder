@@ -20,7 +20,12 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { WebSocketServer } from 'ws';
 import { credentials, relayServerConfig } from '../src/config.mjs';
 import { startClient } from '../src/client.mjs';
-import { buildPairingLink } from '../src/pair.mjs';
+import { buildPairingLink, fetchGatewayPairing } from '../src/pair.mjs';
+import { isolatedGatewayUrl } from '../src/gateway-origin.mjs';
+
+// Path-routed Gateways are paired on their isolated origin with the /g/<id> mount.
+const isolated = (publicUrl, id) => isolatedGatewayUrl(publicUrl, id).href.replace(/\/$/, '');
+const cyxGateway = isolated('https://hyf2333.top:8451', 'cyx');
 
 const secretA = 'relay-control-secret-alpha-0123456789';
 const secretB = 'relay-control-secret-bravo-0123456789';
@@ -28,11 +33,40 @@ const tokenA = 'gateway-pairing-token-alpha-0123456789';
 const tokenB = 'gateway-pairing-token-bravo-0123456789';
 const relayPackageRoot = fileURLToPath(new URL('../', import.meta.url));
 
-function gateway(id, secret, pairingToken) {
+const dynamicToken = 'f'.repeat(64);
+function pairingFetch(publicGateway, override = {}) {
+  return async (url, options) => {
+    assert.equal(new URL(url).pathname, '/api/mobile/pairing/relay');
+    assert.equal(options.method, 'GET');
+    assert.equal(options.headers['x-kcoder-relay-validation'], tokenA);
+    assert.equal(options.credentials, 'omit');
+    assert.equal(options.redirect, 'error');
+    return Response.json({ kind: 'temporary', token: dynamicToken, expiresAt: Date.now() + 60_000, publicBaseUrl: publicGateway,
+      connectionRoutes: { version: 1, gatewayId: 'c'.repeat(64), publicKey: 'd'.repeat(64),
+        endpoints: [{ kind: 'public', url: publicGateway }] }, ...override });
+  };
+}
+
+test('pairing discovery accepts a fixed mobile credential and enforces an explicitly selected mode', async () => {
+  const publicGateway = 'https://hyf2333.top:8451/g/cyx';
+  const fixed = { kind: 'fixed', token: 'fixed-mobile-pairing-token-'.repeat(3), expiresAt: null };
+  for (const tokenMode of ['auto', 'fixed']) {
+    const result = await fetchGatewayPairing({ localGateway: 'http://127.0.0.1:4186', gatewaySecret: tokenA,
+      publicGateway, tokenMode, fetchImpl: pairingFetch(publicGateway, fixed) });
+    assert.equal(result.kind, 'fixed'); assert.equal(result.token, fixed.token); assert.equal(result.expiresAt, null);
+  }
+  for (const [tokenMode, override] of [['temporary', fixed], ['fixed', {}], ['auto', { ...fixed, token: tokenA }],
+    ['auto', { ...fixed, expiresAt: 0 }]]) {
+    await assert.rejects(fetchGatewayPairing({ localGateway: 'http://127.0.0.1:4186', gatewaySecret: tokenA,
+      publicGateway, tokenMode, fetchImpl: pairingFetch(publicGateway, override) }), /invalid mobile pairing/);
+  }
+});
+
+function gateway(id, secret, gatewaySecret) {
   return {
     id,
     secret,
-    pairingToken,
+    gatewaySecret,
     maxConnections: 128,
     maxBytesPerWindow: 67_108_864,
     trafficWindowMs: 60_000,
@@ -55,10 +89,16 @@ async function privateTempDir(t) {
 async function isolatedPairingModule(directory) {
   const runtimeRoot = join(directory, 'pairing-runtime');
   const sourceDirectory = join(runtimeRoot, 'apps', 'kcoder-relay', 'src');
+  const sharedDirectory = join(runtimeRoot, 'apps', 'kcoder-studio', 'shared');
   await mkdir(sourceDirectory, { recursive: true, mode: 0o700 });
-  for (const name of ['pair.mjs', 'config.mjs', 'client-identity.mjs']) {
+  await mkdir(sharedDirectory, { recursive: true, mode: 0o700 });
+  for (const name of ['pair.mjs', 'config.mjs', 'admin-auth.mjs', 'client-identity.mjs', 'connection-routes.mjs', 'gateway-origin.mjs']) {
     await copyFile(join(relayPackageRoot, 'src', name), join(sourceDirectory, name));
   }
+  await copyFile(
+    join(relayPackageRoot, '../kcoder-studio/shared/gatewayConnectionRoutes.js'),
+    join(sharedDirectory, 'gatewayConnectionRoutes.js'),
+  );
 
   let nodeModulesDirectory = dirname(fileURLToPath(import.meta.resolve('qrcode')));
   while (basename(nodeModulesDirectory) !== 'node_modules' && dirname(nodeModulesDirectory) !== nodeModulesDirectory) {
@@ -144,7 +184,7 @@ test('registry rejects duplicate IDs, ambiguous hosts, and reused Gateway creden
     ['shared relay secret', value => value.gateways.push(gateway('lab', secretA, tokenB)), /share a relay secret/],
     ['shared pairing token', value => value.gateways.push(gateway('lab', secretB, tokenA)), /share a pairing token/],
     ['pair token reused as a relay secret', value => value.gateways.push(gateway('lab', tokenA, tokenB)), /must be distinct/],
-    ['secret reused as its pairing token', value => { value.gateways[0].pairingToken = secretA; }, /must be distinct/],
+    ['secret reused as its pairing token', value => { value.gateways[0].gatewaySecret = secretA; }, /must be distinct/],
   ];
   for (const [name, mutate, pattern] of cases) {
     await t.test(name, async t2 => {
@@ -159,7 +199,7 @@ test('registry rejects duplicate IDs, ambiguous hosts, and reused Gateway creden
 test('registry requires long credentials and bounded resource fields', async t => {
   const cases = [
     ['short relay secret', value => { value.gateways[0].secret = 'short'; }, /secret of at least 32/],
-    ['short pairing token', value => { value.gateways[0].pairingToken = 'short'; }, /pairing token of at least 32/],
+    ['short pairing token', value => { value.gateways[0].gatewaySecret = 'short'; }, /pairing token of at least 32/],
     ['zero max connections', value => { value.gateways[0].maxConnections = 0; }, /maxConnections/],
     ['fractional window size', value => { value.gateways[0].maxBytesPerWindow = 1.5; }, /maxBytesPerWindow/],
     ['excessive traffic window', value => { value.gateways[0].trafficWindowMs = 86_400_001; }, /trafficWindowMs/],
@@ -202,7 +242,8 @@ test('pairing link routes multi-Gateway codes through /g/id and keeps legacy URL
   }));
   assert.equal(multi.protocol, 'kcoder-studio:');
   assert.equal(multi.host, 'connect');
-  assert.equal(multi.searchParams.get('gateway'), 'https://hyf2333.top:8451/g/cyx');
+  assert.equal(multi.searchParams.get('gateway'), cyxGateway);
+  assert.match(new URL(cyxGateway).hostname, /^g-[a-f0-9]{40}\.hyf2333\.top$/);
   assert.equal(multi.searchParams.get('gatewayId'), 'cyx');
   assert.equal(multi.searchParams.get('token'), tokenA);
   assert.equal(multi.toString().includes(secretA), false);
@@ -213,6 +254,42 @@ test('pairing link routes multi-Gateway codes through /g/id and keeps legacy URL
   assert.throws(() => buildPairingLink({
     publicUrl: 'https://hyf2333.top:8451', token: tokenA, gatewayId: 'cyx', routeMode: 'host',
   }), /Unsupported relay route mode/);
+});
+
+test('pairing link embeds only validated nonsecret connection routes and checks the paired public endpoint', () => {
+  const input = { publicUrl: 'https://relay.example:8451', token: tokenA, gatewayId: 'cyx', routeMode: 'path' };
+  const connectionRoutes = {
+    version: 1,
+    gatewayId: 'a'.repeat(64),
+    publicKey: 'b'.repeat(64),
+    endpoints: [
+      { kind: 'public', url: isolated('https://relay.example:8451', 'cyx') },
+    ],
+  };
+  const native = new URL(buildPairingLink({ ...input, connectionRoutes }));
+  assert.deepEqual(JSON.parse(native.searchParams.get('routes')), connectionRoutes);
+  assert.equal(native.searchParams.get('gateway'), isolated('https://relay.example:8451', 'cyx'));
+  assert.equal(native.searchParams.get('token'), tokenA);
+  assert.equal(native.searchParams.get('routes').includes(tokenA), false);
+
+  const web = new URL(buildPairingLink({ ...input, client: 'web', connectionRoutes }));
+  assert.equal(web.searchParams.has('token'), false);
+  assert.deepEqual(JSON.parse(web.searchParams.get('routes')), connectionRoutes);
+  assert.equal(new URLSearchParams(web.hash.slice(1)).get('token'), tokenA, 'Mobile Web keeps its credential in the fragment');
+
+  assert.throws(() => buildPairingLink({ ...input, connectionRoutes: { ...connectionRoutes, gatewayId: 'invalid' } }), /invalid connection routes/);
+  assert.throws(() => buildPairingLink({ ...input, connectionRoutes: {
+    ...connectionRoutes,
+    endpoints: [
+      { kind: 'public', url: isolated('https://relay.example:8451', 'other') },
+    ],
+  } }), /do not contain the paired public Gateway URL/);
+  assert.throws(() => buildPairingLink({ ...input, connectionRoutes: {
+    ...connectionRoutes,
+    endpoints: [{ kind: 'public', url: 'https://relay.example:8451/g/cyx' }],
+  } }), /do not contain the paired public Gateway URL/, 'the old shared-origin endpoint is not the paired Gateway');
+
+  assert.throws(() => buildPairingLink({ ...input, token: 'x'.repeat(8192) }), /8192-character limit/);
 });
 
 test('client authenticates the selected Gateway ID in headers and rejects mismatched open messages', async t => {
@@ -273,7 +350,7 @@ test('pair CLI helper writes a private QR for the selected Gateway token', async
   const output = join(directory, 'pairing.png');
   const { writePairingQr: writePairingQrInIsolatedRuntime } = await isolatedPairingModule(directory);
   const written = await writePairingQrInIsolatedRuntime({
-    output,
+    output, fetchImpl: pairingFetch(cyxGateway),
     env: {
       KCODER_RELAY_REGISTRY_FILE: registryPath,
       KCODER_RELAY_PUBLIC_URL: 'https://hyf2333.top:8451',
@@ -282,6 +359,41 @@ test('pair CLI helper writes a private QR for the selected Gateway token', async
   const info = await stat(written);
   assert.equal(info.mode & 0o777, 0o600);
   assert.ok((await readFile(written)).subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])));
+});
+
+test('pair CLI gets dynamic pairing credentials through its private loopback endpoint without creating a session', async t => {
+  const directory = await privateTempDir(t);
+  const registryPath = await writeRegistry(t, registry());
+  const requests = [];
+  const entries = [];
+  const { writePairingQr: pair } = await isolatedPairingModule(directory);
+  const fetchPairing = pairingFetch(cyxGateway);
+  const output = join(directory, 'dynamic.png');
+  await pair({ output, env: { KCODER_RELAY_REGISTRY_FILE: registryPath,
+    KCODER_RELAY_PUBLIC_URL: 'https://hyf2333.top:8451', KCODER_RELAY_LOCAL_GATEWAY: 'http://127.0.0.1:4186' },
+    fetchImpl: (url, options) => { requests.push(url.toString()); return fetchPairing(url, options); },
+    onMobileEntry: value => entries.push(value) });
+  assert.equal(requests.length, 1, 'no mobile session is allocated for QR generation');
+  assert.deepEqual(entries, [`${cyxGateway}/mobile/`]);
+  assert.equal((await stat(output)).mode & 0o777, 0o600);
+});
+
+test('pair CLI fails closed for invalid dynamic credentials, wrong public identity and unsafe discovery URLs', async t => {
+  const directory = await privateTempDir(t);
+  const registryPath = await writeRegistry(t, registry());
+  const { writePairingQr: pair } = await isolatedPairingModule(directory);
+  for (const override of [{ token: tokenA }, { expiresAt: 0 }, { publicBaseUrl: 'https://other.example' },
+    { connectionRoutes: { version: 1, gatewayId: 'invalid', endpoints: [] } }]) {
+    const output = join(directory, 'must-not-exist.png');
+    await assert.rejects(pair({ output, env: { KCODER_RELAY_REGISTRY_FILE: registryPath, KCODER_RELAY_PUBLIC_URL: 'https://hyf2333.top:8451' },
+      fetchImpl: pairingFetch(cyxGateway, override) }), error => {
+      assert.match(error.message, /invalid (mobile pairing credentials|connection routes)/);
+      assert.ok(!error.message.includes(tokenA) && !error.message.includes(dynamicToken)); return true;
+    });
+    await assert.rejects(stat(output), { code: 'ENOENT' });
+  }
+  await assert.rejects(pair({ env: { KCODER_RELAY_REGISTRY_FILE: registryPath,
+    KCODER_RELAY_PUBLIC_URL: 'https://hyf2333.top:8451', KCODER_RELAY_LOCAL_GATEWAY: 'https://remote.example' } }), /loopback HTTP/);
 });
 
 test('registry pairing rejects every route-mode override except path', async t => {
@@ -309,11 +421,11 @@ test('legacy single-Gateway environment can explicitly use path routing', async 
   const output = join(directory, 'legacy-path.png');
   const { writePairingQr: writePairingQrInIsolatedRuntime } = await isolatedPairingModule(directory);
   const written = await writePairingQrInIsolatedRuntime({
-    output,
+    output, fetchImpl: pairingFetch(cyxGateway),
     env: {
       KCODER_RELAY_SECRET: secretA,
       KCODER_RELAY_DEVICE_ID: 'cyx',
-      KCODER_RELAY_GATEWAY_TOKEN: tokenA,
+      KCODER_RELAY_GATEWAY_SECRET: tokenA,
       KCODER_RELAY_PUBLIC_URL: 'https://hyf2333.top:8451',
       KCODER_RELAY_ROUTE_MODE: 'path',
     },
@@ -326,7 +438,8 @@ test('web pairing uses the same Gateway route with fragment credentials and keep
   const input = { publicUrl: 'https://relay.example', token: tokenA, gatewayId: 'auto-assigned-id', routeMode: 'path' };
   const web = new URL(buildPairingLink({ ...input, client: 'web' }));
   assert.equal(web.pathname, '/g/auto-assigned-id/mobile/connect');
-  assert.equal(web.searchParams.get('gateway'), 'https://relay.example/g/auto-assigned-id');
+  assert.equal(web.origin, new URL(isolated('https://relay.example', 'auto-assigned-id')).origin, 'Mobile Web opens on the Gateway origin');
+  assert.equal(web.searchParams.get('gateway'), isolated('https://relay.example', 'auto-assigned-id'));
   assert.equal(web.searchParams.has('token'), false);
   assert.equal(new URLSearchParams(web.hash.slice(1)).get('token'), tokenA);
   assert.equal(web.searchParams.get('gatewayId'), 'auto-assigned-id');
@@ -341,15 +454,15 @@ test('registered pairing prints only the actual auto-assigned Gateway Mobile Web
   const directory = await privateTempDir(t);
   const identityFile = join(directory, 'identity.json');
   await writeFile(identityFile, JSON.stringify({ version: 1, relayOrigin: 'https://relay.example',
-    pairingTokenHash: createHash('sha256').update(tokenA).digest('hex'), id: 'registered-id', secret: secretA,
+    gatewaySecretHash: createHash('sha256').update(tokenA).digest('hex'), id: 'registered-id', secret: secretA,
   }), { mode: 0o600 });
   const entries = [];
   const { writePairingQr: writePairingQrInIsolatedRuntime } = await isolatedPairingModule(directory);
-  const destination = await writePairingQrInIsolatedRuntime({ env: {
+  const destination = await writePairingQrInIsolatedRuntime({ fetchImpl: pairingFetch(isolated('https://relay.example', 'registered-id')), env: {
     KCODER_RELAY_IDENTITY_FILE: identityFile, KCODER_RELAY_PUBLIC_URL: 'https://relay.example',
-    KCODER_RELAY_GATEWAY_TOKEN: tokenA, KCODER_RELAY_PAIR_CLIENT: 'web',
+    KCODER_RELAY_GATEWAY_SECRET: tokenA, KCODER_RELAY_PAIR_CLIENT: 'web',
   }, output: join(directory, 'pair.png'), onMobileEntry: value => entries.push(value) });
-  assert.deepEqual(entries, ['https://relay.example/g/registered-id/mobile/']);
+  assert.deepEqual(entries, [`${isolated('https://relay.example', 'registered-id')}/mobile/`]);
   assert.ok(!entries[0].includes(tokenA) && !entries[0].includes(secretA));
   assert.ok((await stat(destination)).size > 0);
 });

@@ -1,7 +1,13 @@
-import { invoke } from '@tauri-apps/api/core'
-import { listen, type UnlistenFn } from '@tauri-apps/api/event'
+import { invoke } from '@/lib/runtime-commands'
+import { listen, type UnlistenFn } from '@/lib/runtime-events'
 import { normalizeBrowserUrl } from './browser-url'
-import { isTauriRuntime } from './runtime-environment'
+import { isGatewayRuntime } from './runtime-environment'
+import type {
+  BrowserAccountProfile,
+  BrowserProfileSelection,
+  BrowserHandoffState,
+} from '../../../shared/generated/contracts'
+import { isKCoderGatewayPage } from '@/kcoder/gatewayRpc'
 
 export const DEFAULT_EMBEDDED_BROWSER_LABEL = 'workspace-browser'
 const transferredBrowserLabels = new Set<string>()
@@ -11,7 +17,7 @@ let embeddedBrowserOpenRequestUnlisten: UnlistenFn | null = null
 let embeddedBrowserOpenRequestReleaseTimer: ReturnType<typeof setTimeout> | null = null
 export const EMBEDDED_BROWSER_OPEN_REQUEST_EVENT = 'kcoder:embedded-browser-open-request'
 export const EMBEDDED_BROWSER_DOWNLOAD_EVENT = 'kcoder:embedded-browser-download'
-export const EMBEDDED_BROWSER_DEBUG_PANEL_VISIBILITY_EVENT = 'wework:debug-panel-visibility-change'
+export const EMBEDDED_BROWSER_DEBUG_PANEL_VISIBILITY_EVENT = 'kcoder:debug-panel-visibility-change'
 export const EMBEDDED_BROWSER_OCCLUSION_EVENT = 'kcoder:embedded-browser-occlusion-change'
 
 export interface EmbeddedBrowserOcclusionChange {
@@ -30,6 +36,10 @@ export interface EmbeddedBrowserPageState {
   nativeLabel: string
   title: string | null
   url: string | null
+  profile?: BrowserAccountProfile
+  profileSelection?: BrowserProfileSelection
+  gatewayTargetId?: string
+  handoff?: BrowserHandoffState
 }
 
 export interface EmbeddedBrowserOpenRequest {
@@ -76,7 +86,7 @@ interface EmbeddedBrowserEvalResult {
 }
 
 export function canUseEmbeddedBrowser(): boolean {
-  return isTauriRuntime()
+  return isGatewayRuntime()
 }
 
 export function setEmbeddedBrowserOcclusion(id: string, occluded: boolean): void {
@@ -106,13 +116,31 @@ export function consumeEmbeddedBrowserLabelTransfer(
 export async function openEmbeddedBrowser(
   url: string,
   bounds: EmbeddedBrowserBounds,
-  label = DEFAULT_EMBEDDED_BROWSER_LABEL
+  label = DEFAULT_EMBEDDED_BROWSER_LABEL,
+  profile?: BrowserProfileSelection
 ): Promise<EmbeddedBrowserPageState> {
+  if (profile && !isKCoderGatewayPage()) throw new Error('BROWSER_PROFILE_SESSION_UNAVAILABLE')
   return invoke<EmbeddedBrowserPageState>('embedded_browser_open', {
     ...browserArgs(label),
     url,
     bounds,
+    ...(profile ? { profile } : {}),
   })
+}
+
+export async function closeEmbeddedBrowserForAccountSwitch(
+  label = DEFAULT_EMBEDDED_BROWSER_LABEL
+): Promise<void> {
+  if (!isKCoderGatewayPage()) throw new Error('BROWSER_PROFILE_SESSION_UNAVAILABLE')
+  await invoke('embedded_browser_close_for_account_switch', { label })
+}
+
+export async function setEmbeddedBrowserHandoff(
+  label: string,
+  mode: 'human' | 'automation' | 'read'
+): Promise<BrowserHandoffState> {
+  if (!isKCoderGatewayPage()) throw new Error('BROWSER_PROFILE_SESSION_UNAVAILABLE')
+  return invoke('embedded_browser_handoff', { label, mode })
 }
 
 export async function setEmbeddedBrowserBounds(

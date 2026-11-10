@@ -270,7 +270,7 @@ pub(crate) fn default_tool_timeout_ms() -> u64 {
 }
 
 pub(crate) fn default_tool_foreground_budget_ms() -> u64 {
-    300_000
+    120_000
 }
 
 pub(crate) fn default_task_output_timeout_ms() -> u64 {

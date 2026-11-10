@@ -422,7 +422,7 @@ async function localPreferences(page, label) {
 
 async function rawRuntimeRequest(page, method, params) {
   return page.evaluate(async ({ method, params }) => {
-    const internals = window.__TAURI_INTERNALS__;
+    const internals = window.__ELECTRON_INTERNALS__;
     if (!internals || typeof internals.invoke !== "function") return { unavailable: true };
     return internals.invoke("local_executor_request", { method, params });
   }, { method, params });

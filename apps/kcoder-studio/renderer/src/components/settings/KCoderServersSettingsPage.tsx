@@ -1,3 +1,5 @@
+import { NativeRemoteOperationWorkspace } from '@/features/remote-capabilities/NativeRemoteOperationWorkspace'
+import { NativeRemoteCapabilityCatalog } from '@/features/remote-capabilities/NativeRemoteCapabilityCatalog'
 import { gatewayServerLabel } from '@/kcoder/gatewayServerLabel'
 import { CheckCircle2, Laptop, Loader2, Pencil, Plus, Server, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -15,6 +17,7 @@ import { RuntimeTargetConfirmDialog } from './RuntimeTargetConfirmDialog'
 import { RuntimeTargetEditor } from './RuntimeTargetEditor'
 import { KCoderAccountLogin } from './KCoderAccountLogin'
 import { KCoderAccountManagement } from './KCoderAccountManagement'
+import { KCoderOrganizationManagement } from './KCoderOrganizationManagement'
 import {
   RUNTIME_TARGET_FIELD_ORDER,
   createRuntimeTargetSession,
@@ -401,7 +404,7 @@ export function KCoderServersSettingsPage() {
           {t('targets.loading')}
         </div>
       ) : servers.length === 0 && !loadError ? (
-        <div className="rounded-xl bg-surface/50 px-4 py-8 text-center ring-1 ring-border">
+        <div className="studio-card-spacing rounded-xl bg-surface/50 text-center ring-1 ring-border">
           <Server className="mx-auto h-6 w-6 text-text-muted" aria-hidden="true" />
           <h2 className="mt-3 text-base font-medium text-text-primary">
             {t('targets.emptyTitle')}
@@ -411,7 +414,7 @@ export function KCoderServersSettingsPage() {
       ) : (
         <div
           data-testid="runtime-target-list"
-          className="overflow-hidden rounded-xl bg-surface/40 ring-1 ring-border"
+          className="studio-card overflow-hidden rounded-xl bg-surface/40 ring-1 ring-border"
         >
           {servers.map((server, index) => {
             const status = server.status ?? 'unknown'
@@ -424,7 +427,7 @@ export function KCoderServersSettingsPage() {
               <article
                 key={server.id}
                 data-testid={`runtime-target-row-${server.id}`}
-                className={`flex min-h-16 items-center gap-3 px-3 py-3 max-md:items-start ${index > 0 ? 'border-t border-border' : ''}`}
+                className={`flex min-h-16 items-center gap-3 px-3 py-3 max-md:grid max-md:grid-cols-[44px_minmax(0,1fr)] max-md:items-start ${index > 0 ? 'border-t border-border' : ''}`}
               >
                 <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-background text-text-secondary max-md:h-11 max-md:w-11">
                   {server.transport === 'local' ? (
@@ -433,7 +436,7 @@ export function KCoderServersSettingsPage() {
                     <Server className="h-4 w-4" aria-hidden="true" />
                   )}
                 </div>
-                <div className="min-w-0 flex-1">
+                <div className="min-w-0 flex-1 max-md:col-span-2 max-md:col-start-1 max-md:row-start-2">
                   <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
                     <h2
                       className="min-w-0 truncate text-sm font-medium text-text-primary"
@@ -466,6 +469,9 @@ export function KCoderServersSettingsPage() {
                   {server.accountIdentity?.role === 'admin' && (
                     <KCoderAccountManagement serverId={server.id} />
                   )}
+                  {server.accountIdentity?.role === 'user' && (
+                    <KCoderOrganizationManagement serverId={server.id} accounts={[]} auditOnly />
+                  )}
                   {rowErrors[server.id] && (
                     <div
                       role="alert"
@@ -477,7 +483,7 @@ export function KCoderServersSettingsPage() {
                     </div>
                   )}
                 </div>
-                <div className="flex shrink-0 items-center gap-1 max-md:flex-wrap max-md:justify-end">
+                <div className="flex shrink-0 items-center gap-1 max-md:col-start-2 max-md:row-start-1 max-md:flex-wrap max-md:justify-end">
                   <StatusChip
                     className="mr-1"
                     variant={
@@ -556,6 +562,9 @@ export function KCoderServersSettingsPage() {
           {t('targets.storageNote')}
         </p>
       )}
+
+      <NativeRemoteCapabilityCatalog />
+      <NativeRemoteOperationWorkspace />
 
       {pendingNavigation && (
         <RuntimeTargetConfirmDialog

@@ -60,7 +60,8 @@ export class FakeGatewayClient extends EventTarget {
   }
 
   supportsExperimental(capability: string) {
-    return capability !== 'threadIndexedPagesV1' && capability !== 'threadListCompleteness'
+    return capability !== 'threadIndexedPagesV1' && capability !== 'threadListCompleteness' &&
+      capability !== 'threadGoalStatusBatchV1'
   }
 
   respond(id: number, result: unknown) {

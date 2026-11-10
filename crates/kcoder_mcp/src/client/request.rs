@@ -7,15 +7,6 @@ use serde_json::json;
 use tokio_util::sync::CancellationToken;
 
 impl McpClient {
-    pub(super) async fn request<T: Serialize, R: DeserializeOwned>(
-        &mut self,
-        method: &str,
-        params: T,
-    ) -> Result<R> {
-        let id = self.next_id();
-        self.request_raw(id, method, params).await
-    }
-
     pub(super) async fn request_raw<T: Serialize, R: DeserializeOwned>(
         &mut self,
         id: u64,
@@ -33,6 +24,9 @@ impl McpClient {
         params: T,
         cancellation: Option<&CancellationToken>,
     ) -> Result<R> {
+        if self.server_policy.workspace.is_some() {
+            crate::server_policy::check_workspace(&self.server_policy, &std::env::current_dir()?)?;
+        }
         if let Some(reason) = self.connection_failure_reason() {
             return Err(crate::failure::McpFailure {
                 reason,
@@ -46,7 +40,17 @@ impl McpClient {
         let mut send_complete = false;
         let mut acknowledged = false;
         let mut malformed = false;
-        let deadline = tokio::time::Instant::now() + REQUEST_TIMEOUT;
+        let timeout = if method == "tools/call" {
+            self.server_policy.tool_timeout_secs
+        } else if !self.initialized || method == "tools/list" {
+            self.server_policy.startup_timeout_secs
+        } else {
+            None
+        };
+        let deadline = tokio::time::Instant::now()
+            + timeout
+                .map(std::time::Duration::from_secs)
+                .unwrap_or(REQUEST_TIMEOUT);
         self.active_request = true;
         let wait = async {
             send_started = true;
@@ -103,11 +107,67 @@ impl McpClient {
                                 "MCP server rejected JSON-RPC request",
                             ));
                         }
-                        let decoded =
-                            serde_json::from_value(result.expect("validated result envelope"))
-                                .map_err(|_| {
-                                    crate::failure::protocol("failed to deserialize MCP result")
-                                })?;
+                        let mut result = result.expect("validated result envelope");
+                        if method == "tools/list"
+                            && result
+                                .get("tools")
+                                .and_then(serde_json::Value::as_array)
+                                .is_some_and(|tools| {
+                                    tools.iter().any(|tool| {
+                                        tool.get("name")
+                                            .and_then(serde_json::Value::as_str)
+                                            .is_some_and(|name| {
+                                                self.policy_private_values.contains(name)
+                                            })
+                                    })
+                                })
+                        {
+                            return Err(crate::failure::protocol(
+                                "MCP tool identity contains private data",
+                            ));
+                        }
+                        // Protocol keys, negotiated versions and pagination cursors are not display data.
+                        if method == "tools/list" {
+                            if let Some(tools) = result
+                                .get_mut("tools")
+                                .and_then(serde_json::Value::as_array_mut)
+                            {
+                                for tool in tools {
+                                    for field in ["description", "inputSchema", "_meta"] {
+                                        if let Some(value) = tool.get_mut(field) {
+                                            self.policy_private_values.json(value);
+                                        }
+                                    }
+                                }
+                            }
+                        } else if method == "tools/call" {
+                            for field in ["_meta", "structuredContent"] {
+                                if let Some(value) = result.get_mut(field) {
+                                    self.policy_private_values.json(value);
+                                }
+                            }
+                            if let Some(contents) = result
+                                .get_mut("content")
+                                .and_then(serde_json::Value::as_array_mut)
+                            {
+                                for content in contents {
+                                    if let Some(fields) = content.as_object_mut() {
+                                        for (name, value) in fields {
+                                            if name != "type" {
+                                                self.policy_private_values.json(value);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        } else if method == "resources/read"
+                            && let Some(contents) = result.get_mut("contents")
+                        {
+                            self.policy_private_values.json(contents);
+                        }
+                        let decoded = serde_json::from_value(result).map_err(|_| {
+                            crate::failure::protocol("failed to deserialize MCP result")
+                        })?;
                         acknowledged = true;
                         return Ok(decoded);
                     }

@@ -3,7 +3,7 @@ import type {
   KnowledgeImageImportListResult,
 } from '../../../shared/generated/contracts'
 export type { WikiImageImport } from '../../../shared/generated/contracts'
-import { requestLocalExecutor } from '@/tauri/localExecutor'
+import { requestLocalExecutor } from '@/host/localExecutor'
 import i18n from '@/i18n'
 import type { WikiExtractionReport } from '@/features/knowledge/WikiFileExtraction'
 import type { WikiFileCapability } from '@/features/knowledge/wikiFileCapabilities'
@@ -591,8 +591,8 @@ export const knowledgeApi = {
   status: (serverId: string) => request<WikiModeStatus>(serverId, 'knowledge/status'),
   configure: (serverId: string, enabled: boolean) =>
     request<WikiModeStatus>(serverId, 'knowledge/configure', { enabled }),
-  libraries: (serverId: string, afterId?: string) =>
-    request<WikiPageList<WikiLibrary>>(serverId, 'knowledge/list', { afterId, limit: 50 }),
+  libraries: (serverId: string, afterId?: string, limit = 50, options?: { signal?: AbortSignal }) =>
+    request<WikiPageList<WikiLibrary>>(serverId, 'knowledge/list', { afterId, limit }, options),
   create: (serverId: string, idempotencyKey: string, name: string, purpose = '') =>
     request<WikiLibrary>(serverId, 'knowledge/create', { idempotencyKey, name, purpose }),
   sources: (serverId: string, libraryId: string, afterId?: string, limit = 50) =>
@@ -614,12 +614,12 @@ export const knowledgeApi = {
       title,
       text,
     }),
-  pages: (serverId: string, libraryId: string, afterId?: string, limit = 50) =>
+  pages: (serverId: string, libraryId: string, afterId?: string, limit = 50, options?: { signal?: AbortSignal }) =>
     request<WikiPageList<WikiPageSummary>>(serverId, 'knowledge/page/list', {
       libraryId,
       afterId,
       limit,
-    }),
+    }, options),
   page: (serverId: string, libraryId: string, pageId: string, revisionId?: string) =>
     request<WikiPage>(serverId, 'knowledge/page/read', { libraryId, pageId, revisionId }),
 }

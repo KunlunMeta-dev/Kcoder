@@ -65,6 +65,17 @@ fn adapt_value(value: Value) -> Result<HookAdapterOutcome, String> {
                 ));
             };
             let matcher = group.remove("matcher");
+            let matcher = match (HookEvent::parse(&event_name), matcher) {
+                (
+                    Some(
+                        HookEvent::PreToolUse
+                        | HookEvent::PostToolUse
+                        | HookEvent::PostToolUseFailure,
+                    ),
+                    Some(Value::String(pattern)),
+                ) => Some(Value::String(add_builtin_tool_matcher_aliases(&pattern))),
+                (_, matcher) => matcher,
+            };
             let actions = group
                 .remove("hooks")
                 .ok_or_else(|| format!("Hook event `{event_name}` group is missing `hooks`"))?;
@@ -100,6 +111,42 @@ fn adapt_value(value: Value) -> Result<HookAdapterOutcome, String> {
         matchers: settings.into_matchers(),
         warnings,
     })
+}
+
+fn add_builtin_tool_matcher_aliases(pattern: &str) -> String {
+    let trimmed = pattern.trim();
+    if trimmed.is_empty()
+        || trimmed == "*"
+        || trimmed.starts_with('^')
+        || pattern.contains('*')
+        || pattern.contains('?')
+    {
+        return pattern.to_string();
+    }
+
+    let parts = pattern.split('|').map(str::trim).collect::<Vec<_>>();
+    if parts.iter().any(|part| part.starts_with('^')) {
+        return pattern.to_string();
+    }
+
+    let mut aliases: Vec<&'static str> = Vec::new();
+    for part in &parts {
+        let alias = match *part {
+            "Skill" => "skill",
+            "Write" => "write",
+            "Edit" => "edit",
+            _ => continue,
+        };
+        if !parts.contains(&alias) && !aliases.contains(&alias) {
+            aliases.push(alias);
+        }
+    }
+
+    if aliases.is_empty() {
+        pattern.to_string()
+    } else {
+        format!("{}|{}", pattern, aliases.join("|"))
+    }
 }
 
 fn adapt_action(
@@ -184,6 +231,65 @@ fn adapt_action_for_platform(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn command_group(matcher: &str) -> Value {
+        json!({
+            "matcher": matcher,
+            "hooks": [{"type": "command", "command": "echo hi"}]
+        })
+    }
+
+    fn matcher_for(outcome: &HookAdapterOutcome, event: HookEvent) -> Option<String> {
+        outcome
+            .matchers
+            .iter()
+            .find(|(candidate, _)| *candidate == event)
+            .and_then(|(_, matcher)| matcher.matcher.clone())
+    }
+
+    #[test]
+    fn builtin_tool_matchers_gain_canonical_aliases_only_for_tool_events() {
+        let outcome = adapt_value(json!({
+            "PreToolUse": [command_group("Skill")],
+            "PostToolUse": [command_group("Write")],
+            "PostToolUseFailure": [command_group("Edit")],
+            "UserPromptSubmit": [command_group("Skill")]
+        }))
+        .unwrap();
+
+        assert_eq!(
+            matcher_for(&outcome, HookEvent::PreToolUse).as_deref(),
+            Some("Skill|skill")
+        );
+        assert_eq!(
+            matcher_for(&outcome, HookEvent::PostToolUse).as_deref(),
+            Some("Write|write")
+        );
+        assert_eq!(
+            matcher_for(&outcome, HookEvent::PostToolUseFailure).as_deref(),
+            Some("Edit|edit")
+        );
+        assert_eq!(
+            matcher_for(&outcome, HookEvent::UserPromptSubmit).as_deref(),
+            Some("Skill")
+        );
+    }
+
+    #[test]
+    fn exact_pipe_lists_keep_originals_and_add_only_builtin_aliases() {
+        assert_eq!(
+            add_builtin_tool_matcher_aliases("Skill|CustomTool|Write|Edit"),
+            "Skill|CustomTool|Write|Edit|skill|write|edit"
+        );
+        assert_eq!(
+            add_builtin_tool_matcher_aliases("Skill|skill"),
+            "Skill|skill"
+        );
+        assert_eq!(add_builtin_tool_matcher_aliases("^Skill$"), "^Skill$");
+        assert_eq!(add_builtin_tool_matcher_aliases("*"), "*");
+        assert_eq!(add_builtin_tool_matcher_aliases("Skill*"), "Skill*");
+        assert_eq!(add_builtin_tool_matcher_aliases("CustomTool"), "CustomTool");
+    }
 
     #[test]
     fn generic_plugin_hooks_keep_bash_expansion_on_windows() {

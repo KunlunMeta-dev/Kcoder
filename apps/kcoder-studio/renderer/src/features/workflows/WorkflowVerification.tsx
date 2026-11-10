@@ -10,6 +10,7 @@ import { StatusChip } from '@/components/settings/settings-ui'
 import {
   CheckCircle2,
   ChevronRight,
+  Database,
   Layers,
   MessageSquare,
   ShieldCheck,
@@ -128,19 +129,22 @@ export function WorkflowVerification({
   const runs = evidence?.runs ?? []
   const statuses = new Set(['not_requested', 'pending', 'passed', 'failed', 'incomplete'])
   return (
-    <section className="space-y-4 text-sm" data-testid="workflow-verification" aria-busy={loading}>
-      <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-border/60 bg-background p-5">
-        <div className="flex min-w-0 items-start gap-4">
+    <section
+      className="studio-card-stack text-sm"
+      data-testid="workflow-verification"
+      aria-busy={loading}
+    >
+      <div className="studio-card-spacing flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-border/60 bg-background">
+        <div className="flex min-w-0 items-center gap-3">
           <span
             aria-hidden="true"
-            className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-accent-surface text-focus"
+            className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-surface text-text-secondary"
           >
             <Layers className="size-5" />
           </span>
           <div className="min-w-0 space-y-1">
-            <p className="text-sm text-text-secondary">{t('workflowVerification.title')}</p>
             <div className="flex flex-wrap items-center gap-3">
-              <p className="text-lg font-medium">
+              <p className="text-base font-medium">
                 {version === null
                   ? t('workflowVerification.unsaved')
                   : t(
@@ -151,13 +155,15 @@ export function WorkflowVerification({
                     )}
               </p>
               {evidence?.staticCheck && (
-                <StatusChip variant="success">{t('workflowVerification.staticStatus')}</StatusChip>
+                <StatusChip title={t('workflowVerification.staticPassed')}>
+                  {t('workflowVerification.staticStatus')}
+                </StatusChip>
               )}
             </div>
             <p className="text-text-secondary">
               {t(
                 evidence?.staticCheck
-                  ? 'workflowVerification.staticPassed'
+                  ? 'workflowVerification.summaryDescription'
                   : 'workflowVerification.staticUnrecorded'
               )}
             </p>
@@ -169,7 +175,6 @@ export function WorkflowVerification({
             <Button
               type="button"
               size="sm"
-              variant="secondary"
               disabled={disabled || loading}
               onClick={onPrepareVerification}
               data-testid="workflow-prepare-verification"
@@ -196,15 +201,16 @@ export function WorkflowVerification({
             <DisclosureSection
               testId="workflow-static-coverage"
               title={t('workflowVerification.staticTitle')}
-              description={t('workflowVerification.staticDescription')}
-              icon={<ShieldCheck />}
-              status={
-                <StatusChip variant="success">{t('workflowVerification.staticStatus')}</StatusChip>
+              description={
+                !runs.length && !(evidence?.totalRunCount ?? 0)
+                  ? `${t('workflowVerification.staticDescription')} · ${t('workflowVerification.executionUnverified')}`
+                  : t('workflowVerification.staticDescription')
               }
-              defaultOpen
-              inlineDescription
+              icon={<ShieldCheck />}
+              tone="neutral"
+              status={<StatusChip>{t('workflowVerification.staticStatus')}</StatusChip>}
             >
-              <div className="space-y-3 rounded-xl border border-border/60 bg-background p-4">
+              <div className="studio-card-spacing space-y-3 rounded-xl border border-border/60 bg-background">
                 <p className="sr-only">
                   {t('workflowVerification.checkedNodes', {
                     nodes: evidence.staticCheck.checkedNodes.join(', '),
@@ -234,7 +240,7 @@ export function WorkflowVerification({
               </div>
             </DisclosureSection>
           )}
-          {!runs.length && !(evidence?.totalRunCount ?? 0) && (
+          {!evidence?.staticCheck && !runs.length && !(evidence?.totalRunCount ?? 0) && (
             <p>{t('workflowVerification.executionUnverified')}</p>
           )}
           {!runs.length && (evidence?.totalRunCount ?? 0) > 0 && (
@@ -285,6 +291,7 @@ export function WorkflowVerification({
               title={t('workflowVerification.runTitle')}
               description={run.runId}
               icon={<Workflow />}
+              tone="neutral"
               status={
                 <StatusChip
                   variant={
@@ -299,10 +306,8 @@ export function WorkflowVerification({
                   {t(`workflowVerification.check.${label(checkStatus)}`)}
                 </StatusChip>
               }
-              defaultOpen
-              inlineDescription
             >
-              <div className="space-y-3 rounded-xl border border-border/60 bg-background p-4 leading-relaxed">
+              <div className="studio-card-spacing space-y-3 rounded-xl border border-border/60 bg-background leading-relaxed">
                 <div className="grid gap-3 sm:grid-cols-[8rem_minmax(0,1fr)]">
                   <span className="font-medium">{t('workflowVerification.executionLabel')}</span>
                   <span className="flex items-center gap-2 text-text-secondary">
@@ -400,11 +405,10 @@ export function WorkflowVerification({
                 title={t('workflowVerification.modelConfiguration')}
                 description={t('workflowVerification.modelConfigurationHelp')}
                 icon={<MessageSquare />}
-                defaultOpen
-                inlineDescription
+                tone="neutral"
               >
                 <div className="grid gap-3 lg:grid-cols-2">
-                  <div className="min-w-0 space-y-3 rounded-xl border border-border/60 bg-background p-4">
+                  <div className="studio-card-spacing min-w-0 space-y-3 rounded-xl border border-border/60 bg-background">
                     <h3 className="font-medium">{t('workflowVerification.admissionSnapshot')}</h3>
                     <FrozenModelConfigurationDetails
                       configuration={run.modelSnapshot.configuration}
@@ -428,7 +432,7 @@ export function WorkflowVerification({
                       <div
                         key={agent.agentId}
                         data-testid="workflow-agent-model-configuration"
-                        className="min-w-0 space-y-3 rounded-xl border border-border/60 bg-background p-4"
+                        className="studio-card-spacing min-w-0 space-y-3 rounded-xl border border-border/60 bg-background"
                       >
                         <h3 className="font-medium">
                           {t(
@@ -467,16 +471,14 @@ export function WorkflowVerification({
         </Button>
       )}
       {capacity && (
-        <details
-          className="rounded-xl border border-border/60 p-4 text-text-muted"
-          data-testid="workflow-library-capacity"
+        <DisclosureSection
+          className="text-text-muted"
+          testId="workflow-library-capacity"
+          toggleTestId="workflow-capacity-toggle"
+          title={t('workflowVerification.capacityDetails')}
+          icon={<Database />}
+          tone="neutral"
         >
-          <summary
-            data-testid="workflow-capacity-toggle"
-            className="cursor-pointer focus-visible:ring-2 focus-visible:ring-focus"
-          >
-            {t('workflowVerification.capacityDetails')}
-          </summary>
           <div className="mt-3 space-y-2">
             <p>
               {t('workflowVerification.workflowCapacity', {
@@ -520,7 +522,7 @@ export function WorkflowVerification({
               </p>
             )}
           </div>
-        </details>
+        </DisclosureSection>
       )}
       {capacity?.nearLimit && (
         <p role="status" className="text-text-secondary">

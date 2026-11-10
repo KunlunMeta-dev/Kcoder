@@ -159,6 +159,79 @@ fn effect_then_tail() -> Value {
 }
 
 #[tokio::test]
+async fn public_resume_reuses_completed_nodes_and_starts_a_distinct_unfinished_agent() {
+    #[derive(Default)]
+    struct SessionRunner(Mutex<Vec<(String, String)>>);
+    #[async_trait]
+    impl AgentRunner for SessionRunner {
+        async fn run_agent(&self, _: String, _: usize) -> Result<String, AgentError> {
+            panic!("use the original session interface")
+        }
+        async fn run_agent_session_with_options(
+            &self,
+            id: String,
+            prompt: String,
+            _: usize,
+            _: crate::AgentKind,
+            _: AgentRunOptions,
+        ) -> Result<String, AgentError> {
+            let mut calls = self.0.lock().unwrap();
+            if calls.iter().any(|(old, _)| old == &id) {
+                return Err(AgentError::Execution(
+                    "background task id already exists".into(),
+                ));
+            }
+            let first_b = prompt.contains("WF_RECOVERY_NODE_B")
+                && !calls
+                    .iter()
+                    .any(|(_, text)| text.contains("WF_RECOVERY_NODE_B"));
+            calls.push((id, prompt));
+            if first_b {
+                return Err(AgentError::Cancelled("controlled interruption".into()));
+            }
+            Ok("{\"ok\":true}".into())
+        }
+    }
+    let mut fixture = Fixture::new();
+    let runner = Arc::new(SessionRunner::default());
+    fixture.context = fixture.context.with_agent_runner(runner.clone());
+    let saved = fixture.save(json!([
+        {"id":"A","title":"A","prompt":"WF_RECOVERY_NODE_A","kind":"agent","agentType":"general"},
+        {"id":"B","title":"B","prompt":"WF_RECOVERY_NODE_B","kind":"agent","agentType":"general","dependsOn":["A"]}
+    ]));
+    let first = fixture
+        .run(json!({"definition_id":saved.id,"version":1}))
+        .await;
+    let run = first["run_id"].as_str().unwrap();
+    assert_eq!(fixture.observation(run).status, "failed");
+    fixture.run(json!({"resume":run})).await;
+    fixture.assert_completed(run, &saved);
+    let restored = fixture.observation(run);
+    assert_eq!(restored.resume_count, 1);
+    assert!(
+        restored
+            .node_states
+            .iter()
+            .find(|node| node.node_id == "A")
+            .unwrap()
+            .reused
+    );
+    let calls = runner.0.lock().unwrap();
+    assert_eq!(calls.len(), 3);
+    assert_ne!(calls[1].0, calls[2].0);
+    assert_eq!(
+        restored
+            .node_states
+            .iter()
+            .find(|node| node.node_id == "B")
+            .unwrap()
+            .agent_id
+            .as_deref(),
+        Some(calls[2].0.as_str())
+    );
+}
+
+#[tokio::test]
 async fn omitted_resume_settings_keep_the_original_completed_effect_identity() {
     let fixture = Fixture::new();
     let saved = fixture.save(effect_then_tail());

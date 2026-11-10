@@ -1,0 +1,14 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+group = 'dev.kcoder'
+version = '1.0.0'
+android {
+  namespace 'dev.kcoder.updates'
+  defaultConfig { versionCode 1; versionName '1.0.0' }
+}
+dependencies {
+  implementation 'androidx.core:core-ktx:1.13.1'
+  testImplementation 'junit:junit:4.13.2'
+}

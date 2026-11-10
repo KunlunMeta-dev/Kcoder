@@ -123,9 +123,10 @@ with tempfile.TemporaryDirectory(prefix="kcoder-model-desktop-") as temporary:
                         # Let the real native adapter enforce vision capability;
                         # this test gate only confines the operation to our form.
                         allowed = allowed and short == "Snapshot"
-                elif short == "Click": allowed = inside(args.get("loc")) and args.get("button", "left") == "left"
-                elif short == "Type": allowed = inside(args.get("loc")) and isinstance(args.get("text"), str) and bool(re.fullmatch(r"[0-9]{4}", args["text"])) and args.get("press_enter", False) in (False, "false", "False")
-                elif short == "Move": allowed = inside(args.get("loc")) and args.get("drag", False) in (False, "false", "False")
+                elif args.get("screenshot_id") is None and args.get("label") is None and inside(args.get("loc")):
+                    if short == "Click": allowed = args.get("button", "left") == "left"
+                    elif short == "Type": allowed = isinstance(args.get("text"), str) and bool(re.fullmatch(r"[0-9]{4}", args["text"])) and args.get("press_enter", False) in (False, "false", "False")
+                    elif short == "Move": allowed = args.get("drag", False) in (False, "false", "False")
             report["approvedTools" if allowed else "deniedTools"].append(name or action.get("type"))
             if allowed: record("approvedDesktopCall", {"name":name, "arguments":args})
             else: record("declinedDesktopCall", {"name":name, "arguments":args, "fixtureForeground":user32.GetForegroundWindow() == ready["hwnd"]})
@@ -141,10 +142,13 @@ with tempfile.TemporaryDirectory(prefix="kcoder-model-desktop-") as temporary:
                     delta = frame.get("params", {}).get("delta", {}).get("text")
                     if isinstance(delta, str): assistant_text.append(delta[:4000])
                 item = frame.get("params", {}).get("item", {})
-                if item.get("name") == "mcp__kcoder_computer_use__Screenshot" and item.get("outputImages") and not (output / "fixture-model-screenshot.png").exists():
+                if item.get("name") == "mcp__kcoder_computer_use__Screenshot" and item.get("outputImages"):
                     captured = item["outputImages"][0]
-                    if captured.get("mimeType") == "image/png":
-                        (output / "fixture-model-screenshot.png").write_bytes(base64.b64decode(captured["data"], validate=True))
+                    suffix = {"image/png":"png", "image/jpeg":"jpg"}.get(captured.get("mimeType"))
+                    if suffix:
+                        path = output / f"fixture-model-screenshot.{suffix}"
+                        if not path.exists():
+                            path.write_bytes(base64.b64decode(captured["data"], validate=True))
                 if frame.get("method") == "approval/request":
                     send({"jsonrpc":"2.0", "id":frame["id"], "result":approve(frame["params"])}); continue
                 report["toolImageCount"] += len(frame.get("params",{}).get("item",{}).get("outputImages",[]))
@@ -165,7 +169,7 @@ with tempfile.TemporaryDirectory(prefix="kcoder-model-desktop-") as temporary:
         prompt = ("You are authorized to operate only the already-open KCoder isolated input fixture. Use ONLY the computer-use desktop tools. "
             f"First take Screenshot with region={ready['region']}. Read the random four-digit code painted beside the button from the image. "
             f"Type ONLY those four digits into the textbox at loc={ready['inputLoc']}, clear=true; then click the verification button at loc={ready['buttonLoc']}. "
-            "Use coordinates, not element labels. Every Screenshot or Snapshot must use the exact region above. Do not use shell, file tools, other windows or applications. "
+            "The supplied loc values are already native desktop coordinates; omit screenshot_id and element labels. Every Screenshot or Snapshot must use the exact region above. Do not use shell, file tools, other windows or applications. "
             "When done reply KCODER_DESKTOP_DONE.")
         if uia_only:
             prompt = ("This turn has NO vision capability. Use ONLY the computer-use desktop tools on the already-open KCoder isolated input fixture. "

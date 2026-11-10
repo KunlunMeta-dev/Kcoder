@@ -75,6 +75,7 @@ const codeCustomStyle: CSSProperties = {
   background: 'transparent',
   fontSize: 'var(--text-code)',
   lineHeight: '1.8',
+  letterSpacing: 0,
 }
 
 const markdownWrapStateByKey = new Map<string, boolean>()
@@ -125,6 +126,7 @@ export function MarkdownCodeBlock({
   return (
     <div
       data-testid="markdown-code-block"
+      data-reading-code
       data-color-scheme={colorScheme}
       data-scroll-anchor
       className={[

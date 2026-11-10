@@ -327,7 +327,7 @@ export function ArchivedConversationGroups({
             </div>
           )}
 
-          <div className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-surface/45">
+          <div className="studio-card divide-y divide-border overflow-hidden rounded-2xl border border-border bg-surface/45">
             {group.items.map(item => {
               const suffix = itemTestId(item)
               const rowBusy = busyKey === `delete:${item.id}` || busyKey === `unarchive:${item.id}`

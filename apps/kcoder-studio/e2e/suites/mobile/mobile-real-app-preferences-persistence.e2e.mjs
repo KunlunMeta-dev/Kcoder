@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
-import { mkdir } from "node:fs/promises";
-import { resolve } from "node:path";
+import { createHash } from "node:crypto";
+import { constants } from "node:fs";
+import { access, mkdir, readFile, stat } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
 import { startChromium } from "../../harness/chromium.mjs";
 import { startGateway } from "../../harness/gateway.mjs";
 import { exportMobileWeb } from "../../harness/mobile-web-export.mjs";
@@ -19,7 +21,10 @@ await runE2E(import.meta.url, {
   const mobileWeb = await exportMobileWeb(context, {
     label: "mobile-appearance-expo-web-export",
     outputName: "mobile-web-export",
+    dependencyRoot: process.env.KCODER_E2E_MOBILE_DEPENDENCY_ROOT || undefined,
+    timeoutMs: 10 * 60 * 1000,
   });
+  await recordDependencyPinProvenance(context, mobileWeb);
   const workspaceA = context.pathInState("workspace-a");
   const workspaceB = context.pathInState("workspace-b");
   await mkdir(workspaceA, { recursive: true });
@@ -49,7 +54,10 @@ await runE2E(import.meta.url, {
       KCODER_STUDIO_MOBILE_WEB_ORIGINS: gatewayA.baseUrl,
     },
   });
-  const chromium = await startChromium(context, { label: "mobile-app-preferences-chromium" });
+  const chromium = await startChromium(context, {
+    label: "mobile-app-preferences-chromium",
+    startTimeoutMs: 60_000,
+  });
   const primaryContext = await chromium.browser.newContext({
     locale: "zh-CN",
     colorScheme: "dark",
@@ -65,7 +73,7 @@ await runE2E(import.meta.url, {
     serverCatalogResponses: [],
     serverCatalogResponseTasks: [],
   };
-  observe(page, diagnostics);
+  observe(page, diagnostics, context);
   observeGatewayTransport(page, transport);
 
   await connectPhysicalOrigin(page, gatewayA);
@@ -85,7 +93,23 @@ await runE2E(import.meta.url, {
   await visibleTestId(page, "message-input").fill(draftA);
   await waitForDraftPersistence(page, draftA);
 
+  const settingsDeepLinkPage = await primaryContext.newPage();
+  await settingsDeepLinkPage.goto(`${gatewayA.baseUrl}/settings-appearance`, { waitUntil: "domcontentloaded" });
+  await visibleTestId(settingsDeepLinkPage, "settings-appearance-screen").waitFor({ state: "visible", timeout: 30_000 });
+  await visibleTestId(settingsDeepLinkPage, "settings-appearance-title").waitFor({ state: "visible", timeout: 10_000 });
+  assert.equal(new URL(settingsDeepLinkPage.url()).pathname, "/settings-appearance");
+  await visibleTestId(settingsDeepLinkPage, "settings-detail-back").click();
+  await visibleTestId(settingsDeepLinkPage, "settings-home").waitFor({ state: "visible", timeout: 10_000 });
+  assert.equal(new URL(settingsDeepLinkPage.url()).pathname, "/settings",
+    "a cold Appearance route must fall back to Settings home when no navigation history exists");
+  await settingsDeepLinkPage.close();
+
   await openSettings(page);
+  await visibleTestId(page, "settings-home").waitFor({ state: "visible", timeout: 30_000 });
+  await assertMainSettingsPlaceholdersHidden(page);
+  await page.screenshot({ path: context.pathInArtifacts("settings-home-390-dark.png"), animations: "disabled" });
+  await openSettingsDetail(page, "settings-about", "settings-about-screen", "settings-about-title", "/settings-about");
+  await returnToSettingsHome(page);
   const settingsRpcBaseline = {
     websocketConnections: transport.rpcConnectionCount,
     initializeRequests: transport.rpcInitializeRequestCount,
@@ -94,7 +118,7 @@ await runE2E(import.meta.url, {
     "the active task must have an observed real Gateway app-server WebSocket before changing preferences");
   assert.ok(settingsRpcBaseline.initializeRequests > 0,
     "the active task must have sent an observed app-server initialize request before changing preferences");
-  assert.match(await terminalSettings(page).innerText(), /10,000 行回滚/,
+  assert.match(await terminalSettings(page).innerText(), /10,000 行/,
     "a new browser profile starts with the default terminal scrollback preference");
   const hiddenExecutionSettings = {
     plugins: await visibleText(page, "插件", { exact: true }).count(),
@@ -103,35 +127,48 @@ await runE2E(import.meta.url, {
   assert.deepEqual(hiddenExecutionSettings, { plugins: 0, defaultModel: 0 },
     "Mobile 设置不应暴露无法由 app-server 持久化的插件或默认模型入口");
 
-  const initialLanguage = await appearanceButtonState(page, "settings-language-system");
+  await openSettingsDetail(page, "settings-appearance", "settings-appearance-screen", "settings-appearance-title", "/settings-appearance");
+  await page.screenshot({ path: context.pathInArtifacts("settings-appearance-system-390.png"), animations: "disabled" });
+  const initialLanguage = await appearanceChoiceState(page, "language", "system");
   const initialTheme = {
-    light: await appearanceButtonState(page, "settings-theme-light"),
-    dark: await appearanceButtonState(page, "settings-theme-dark"),
-    system: await appearanceButtonState(page, "settings-theme-system"),
+    light: await appearanceChoiceState(page, "theme", "light"),
+    dark: await appearanceChoiceState(page, "theme", "dark"),
+    system: await appearanceChoiceState(page, "theme", "system"),
   };
-  assert.equal(initialLanguage.ariaPressed, "true", "system language must be selected by default");
-  assert.equal(initialTheme.system.ariaPressed, "true", "system theme must be selected by default");
+  assert.equal(initialLanguage.ariaChecked, "true", "system language must be selected by default");
+  assert.equal(initialTheme.system.ariaChecked, "true", "system theme must be selected by default");
   for (const state of [initialTheme.light, initialTheme.dark, initialTheme.system]) {
     assert.notEqual(state.ariaDisabled, "true", "all three theme choices must be operable");
     assert.equal(state.disabled, false);
   }
 
+  await verifyCompactAppearanceControls(page, context);
+
   await selectLanguage(page, "en", "en");
+  await returnToSettingsHome(page);
+  await assertMainSettingsPlaceholdersHidden(page);
+  await openSettingsDetail(page, "settings-appearance", "settings-appearance-screen", "settings-appearance-title", "/settings-appearance");
   await selectLanguage(page, "zh-CN", "zh-CN");
   await selectLanguage(page, "system", "zh-CN");
   await selectLanguage(page, "en", "en");
 
-  await visibleAppearanceControl(page, "settings-theme-light").click();
+  await assertChoiceDismissalBehavior(page, "theme", "light");
+  await assertChoiceDismissalBehavior(page, "language", "system");
+
+  await selectTheme(page, "light");
   await waitForResolvedTheme(page, "light");
   await assertThemeSelection(page, "light");
-  await page.screenshot({ path: context.pathInArtifacts("mobile-appearance-light.png"), animations: "disabled" });
+  await returnToSettingsHome(page);
+  await page.screenshot({ path: context.pathInArtifacts("settings-home-390-light.png"), animations: "disabled" });
+  await openSettingsDetail(page, "settings-appearance", "settings-appearance-screen", "settings-appearance-title", "/settings-appearance");
+  await page.screenshot({ path: context.pathInArtifacts("settings-appearance-light-390.png"), animations: "disabled" });
 
-  await visibleAppearanceControl(page, "settings-theme-dark").click();
+  await selectTheme(page, "dark");
   await waitForResolvedTheme(page, "dark");
   await assertThemeSelection(page, "dark");
-  await page.screenshot({ path: context.pathInArtifacts("mobile-appearance-dark.png"), animations: "disabled" });
+  await page.screenshot({ path: context.pathInArtifacts("settings-appearance-dark-390.png"), animations: "disabled" });
 
-  await visibleAppearanceControl(page, "settings-theme-system").click();
+  await selectTheme(page, "system");
   await waitForResolvedTheme(page, "dark");
   await assertThemeSelection(page, "system");
   await page.emulateMedia({ colorScheme: "light" });
@@ -140,7 +177,8 @@ await runE2E(import.meta.url, {
   await page.emulateMedia({ colorScheme: "dark" });
   await waitForResolvedTheme(page, "dark");
 
-  const selected50kState = await selectScrollback(page, "50,000");
+  await returnToSettingsHome(page);
+  const selected50kState = await selectScrollback(page, 50_000);
   assert.equal(selected50kState.ariaChecked, "true", "role=radio must expose the selected scrollback size");
   await waitForPreference(page, { language: "en", theme: "system", terminalScrollbackLines: 50_000 });
   const settingsRpcAfterPreferenceChanges = {
@@ -156,10 +194,11 @@ await runE2E(import.meta.url, {
   });
 
   await context.writeArtifactJson("mobile-appearance-screenshot-policy.json", {
-    reason: "Retain two small 390x844 Chromium screenshots so reviewers can inspect the real Expo Web light and dark palettes.",
-    evidence: ["mobile-appearance-light.png", "mobile-appearance-dark.png"],
+    reason: "Retain small Chromium screenshots so reviewers can inspect Settings home, the 390px light and dark appearance pages, 320px choice sheets, and the connection page.",
+    evidence: ["settings-home-390-dark.png", "settings-home-390-light.png", "settings-home-320-dark.png", "settings-home-320-light.png", "settings-appearance-system-390.png", "settings-appearance-light-390.png", "settings-appearance-dark-390.png", "settings-appearance-320.png", "settings-appearance-light-320.png", "settings-appearance-dark-320.png", "settings-theme-choice-320.png", "settings-language-choice-320.png", "settings-connections-390.png", "settings-connections-profiles-390.png", "settings-connections-profiles-320.png"],
     runtime: "Expo Web export served by this run's isolated Gateway in Chromium",
     nativeHermesOrPhysicalDevice: false,
+    credentialsIncluded: false,
   });
 
   await closeSettings(page);
@@ -178,11 +217,10 @@ await runE2E(import.meta.url, {
 
   await openSettings(page);
   await assertPreferenceSelection(page, { language: "en", theme: "system" });
-  await visibleText(page, "Appearance", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
-  const addGatewayLabel = await page.locator("html").getAttribute("lang") === "en" ? "Add Gateway" : "添加 Gateway";
-  const addGateway = visibleText(page, addGatewayLabel, { exact: true });
-  assert.equal(await addGateway.count(), 1, "Settings must expose one Add Gateway action");
-  await addGateway.click();
+  await openSettingsDetail(page, "settings-manage-connections", "settings-connections-screen", "settings-connections-title", "/settings-connections");
+  await visibleTestId(page, "settings-add-gateway").waitFor({ state: "visible", timeout: 10_000 });
+  await page.screenshot({ path: context.pathInArtifacts("settings-connections-390.png"), animations: "disabled" });
+  await visibleTestId(page, "settings-add-gateway").click();
   await visibleTestId(page, "welcome-direct-connection").click();
   await visibleTestId(page, "gateway-endpoint").fill(gatewayB.baseUrl);
   await visibleTestId(page, "gateway-token").fill(gatewayB.authToken);
@@ -208,15 +246,16 @@ await runE2E(import.meta.url, {
   await visibleTestId(page, "message-input").fill(draftB);
   await waitForDraftPersistence(page, draftB);
   await waitFor(() => transport.serverCatalogResponses.find(response =>
-    response.origin === new URL(gatewayB.baseUrl).origin && response.serverIds.includes("local")),
+    response.origin === new URL(gatewayB.baseUrl).origin && response.status === 200 && response.parsed && response.serverIds.includes("local")),
   10_000, "profile B Gateway server catalog includes local", 50, context.abortSignal);
 
   await openSettings(page);
   await assertPreferenceSelection(page, { language: "en", theme: "system" });
-  assert.match(await terminalSettings(page).innerText(), /50,000 lines scrollback/,
+  assert.match(await terminalSettings(page).innerText(), /50,000 lines/,
     "app preferences are shared across Gateway profiles on the same mobile browser");
-  await selectScrollback(page, "100,000");
+  await selectScrollback(page, 100_000);
   await waitForPreference(page, { language: "en", theme: "system", terminalScrollbackLines: 100_000 });
+  await assertConnectionManagementProfileStates(page, context, profileA, profileB);
   await switchProfile(page, profileA);
   assert.equal(profileFromUrl(page.url()), profileA);
   await openTaskFromHome(page, taskA);
@@ -251,12 +290,12 @@ await runE2E(import.meta.url, {
   });
   const isolatedPage = await isolatedContext.newPage();
   const isolatedDiagnostics = [];
-  observe(isolatedPage, isolatedDiagnostics);
+  observe(isolatedPage, isolatedDiagnostics, context);
   await connectPhysicalOrigin(isolatedPage, gatewayA);
   await openSettings(isolatedPage);
   await assertPreferenceSelection(isolatedPage, { language: "system", theme: "system" });
   await assertResolvedTheme(isolatedPage, "light");
-  assert.match(await terminalSettings(isolatedPage).innerText(), /10,000 行回滚/,
+  assert.match(await terminalSettings(isolatedPage).innerText(), /10,000 行/,
     "a separate browser profile must start with default app preferences");
   assert.equal(await isolatedPage.evaluate(key => localStorage.getItem(key), preferenceKey), null);
 
@@ -273,12 +312,12 @@ await runE2E(import.meta.url, {
   }, { key: preferenceKey });
   const corruptedPage = await corruptedContext.newPage();
   const corruptedDiagnostics = [];
-  observe(corruptedPage, corruptedDiagnostics);
+  observe(corruptedPage, corruptedDiagnostics, context);
   await connectPhysicalOrigin(corruptedPage, gatewayA);
   await openSettings(corruptedPage);
   await assertPreferenceSelection(corruptedPage, { language: "system", theme: "system" });
   await assertResolvedTheme(corruptedPage, "light");
-  assert.match(await terminalSettings(corruptedPage).innerText(), /10,000 行回滚/,
+  assert.match(await terminalSettings(corruptedPage).innerText(), /10,000 行/,
     "damaged preference JSON must safely fall back to defaults");
   assert.equal(await corruptedPage.evaluate(key => localStorage.getItem(key), preferenceKey), "{not-valid-json");
 
@@ -295,12 +334,12 @@ await runE2E(import.meta.url, {
   }, { key: preferenceKey });
   const clampedPage = await clampedContext.newPage();
   const clampedDiagnostics = [];
-  observe(clampedPage, clampedDiagnostics);
+  observe(clampedPage, clampedDiagnostics, context);
   await connectPhysicalOrigin(clampedPage, gatewayA);
   await openSettings(clampedPage);
   await assertPreferenceSelection(clampedPage, { language: "system", theme: "system" });
   await assertResolvedTheme(clampedPage, "light");
-  assert.match(await terminalSettings(clampedPage).innerText(), /100,000 行回滚/,
+  assert.match(await terminalSettings(clampedPage).innerText(), /100,000 行/,
     "out-of-range scrollback must clamp to its supported upper bound");
 
   await Promise.all(transport.serverCatalogResponseTasks);
@@ -313,6 +352,12 @@ await runE2E(import.meta.url, {
   assert.ok(catalogB, "profile B's observed Gateway catalog must advertise local");
   assert.equal(catalogB.status, 200, "profile B's observed Gateway catalog must return HTTP 200");
 
+  await context.writeArtifactJson("mobile-browser-console-diagnostics.json", {
+    primary: diagnostics,
+    isolated: isolatedDiagnostics,
+    corrupted: corruptedDiagnostics,
+    clamped: clampedDiagnostics,
+  });
   assert.deepEqual(diagnostics, []);
   assert.deepEqual(isolatedDiagnostics, []);
   assert.deepEqual(corruptedDiagnostics, []);
@@ -392,11 +437,64 @@ await runE2E(import.meta.url, {
   };
 });
 
-function observe(page, output) {
-  page.on("pageerror", error => output.push(`pageerror:${error.name || "Error"}`));
+function observe(page, output, context) {
+  page.on("pageerror", error => appendDiagnostic(output, {
+    kind: "pageerror",
+    type: error.name || "Error",
+    text: boundedDiagnosticText(context, error.message || String(error)),
+    location: null,
+  }));
   page.on("console", message => {
-    if (["error", "warning"].includes(message.type())) output.push(message.type());
+    if (!["error", "warning"].includes(message.type())) return;
+    appendDiagnostic(output, {
+      kind: "console",
+      type: message.type(),
+      text: boundedDiagnosticText(context, message.text()),
+      location: safeConsoleLocation(message.location(), context),
+    });
   });
+}
+
+function appendDiagnostic(output, diagnostic) {
+  const maxDiagnostics = 50;
+  if (output.length < maxDiagnostics) {
+    output.push(diagnostic);
+  } else if (output.length === maxDiagnostics) {
+    output.push({ kind: "truncated", type: "diagnostic-limit", text: "More than 50 browser diagnostics were observed.", location: null });
+  }
+}
+
+function boundedDiagnosticText(context, value) {
+  const redacted = context.redactText(String(value)).replace(/https?:\/\/[^\s<>"']+/gi, candidate => {
+    try {
+      const url = new URL(candidate);
+      return `${url.origin}${url.pathname}`;
+    } catch {
+      return "[REDACTED-URL]";
+    }
+  });
+  return {
+    value: redacted.slice(0, 1_000),
+    truncated: redacted.length > 1_000,
+  };
+}
+
+function safeConsoleLocation(location, context) {
+  if (typeof location?.url !== "string" || !location.url) return null;
+  let url = "[unavailable]";
+  try {
+    const parsed = new URL(location.url);
+    url = parsed.protocol === "http:" || parsed.protocol === "https:"
+      ? `${parsed.origin}${parsed.pathname}`
+      : `[${parsed.protocol}]`;
+  } catch {
+    // Keep malformed or non-URL console locations out of retained artifacts.
+  }
+  return {
+    url: context.redactText(url).slice(0, 500),
+    lineNumber: Number.isSafeInteger(location.lineNumber) ? location.lineNumber : null,
+    columnNumber: Number.isSafeInteger(location.columnNumber) ? location.columnNumber : null,
+  };
 }
 
 function observeGatewayTransport(page, evidence) {
@@ -433,16 +531,29 @@ function observeGatewayTransport(page, evidence) {
   page.on("response", response => {
     try {
       const url = new URL(response.url());
-      if (url.pathname !== "/api/servers") return;
+      const endpoint = url.pathname;
+      const isSessionBootstrap = endpoint === "/api/mobile/session";
+      if (!isSessionBootstrap && endpoint !== "/api/servers") return;
       const catalog = {
         origin: url.origin,
         status: response.status(),
+        endpoint,
+        source: endpoint,
         serverIds: [],
         parsed: false,
       };
       evidence.serverCatalogResponses.push(catalog);
       const task = response.json().then(payload => {
-        const servers = Array.isArray(payload?.servers) ? payload.servers : [];
+        let servers;
+        if (isSessionBootstrap) {
+          const bootstrapServers = response.ok() && payload?.capabilities?.mobileInitialServersV1 === true
+            ? validInitialMobileServers(payload?.initialServers)
+            : null;
+          catalog.bootstrapAccepted = bootstrapServers !== null;
+          servers = bootstrapServers ?? [];
+        } else {
+          servers = Array.isArray(payload?.servers) ? payload.servers : [];
+        }
         catalog.serverIds = servers
           .map(server => server?.id)
           .filter(serverId => typeof serverId === "string");
@@ -452,35 +563,317 @@ function observeGatewayTransport(page, evidence) {
   });
 }
 
-async function appearanceButtonState(page, testId) {
-  const button = visibleAppearanceControl(page, testId);
-  assert.equal(await button.count(), 1, `expected one visible ${testId} appearance control`);
-  return {
-    ariaPressed: await button.getAttribute("aria-pressed"),
-    ariaDisabled: await button.getAttribute("aria-disabled"),
-    disabled: await button.isDisabled(),
+function validInitialMobileServers(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value) || value.version !== 1 ||
+      Object.keys(value).some(key => key !== "version" && key !== "servers") ||
+      !Array.isArray(value.servers) || value.servers.length > 32) return null;
+  const validServer = value.servers.every(server => server && typeof server === "object" && !Array.isArray(server) &&
+    typeof server.id === "string" && /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(server.id) &&
+    typeof server.label === "string" && server.label.length <= 4096 &&
+    typeof server.description === "string" && server.description.length <= 4096 &&
+    server.runtime === "kcoder" && (server.transport === "local" || server.transport === "ssh"));
+  if (!validServer) return null;
+  const ids = value.servers.map(server => server.id);
+  if (new Set(ids).size !== ids.length) return null;
+  return value.servers;
+}
+
+async function openSettingsDetail(page, entryId, screenId, titleId, route) {
+  await visibleTestId(page, entryId).click();
+  await visibleTestId(page, screenId).waitFor({ state: "visible", timeout: 10_000 });
+  await visibleTestId(page, titleId).waitFor({ state: "visible", timeout: 10_000 });
+  assert.equal(new URL(page.url()).pathname, route, `${entryId} must navigate to ${route}`);
+}
+
+async function recordDependencyPinProvenance(context, mobileWeb) {
+  const dependencyRoot = mobileWeb.dependencyRoot;
+  if (!process.env.KCODER_E2E_MOBILE_DEPENDENCY_ROOT) return;
+  await access(dependencyRoot, constants.W_OK);
+  const rootInfo = await stat(dependencyRoot);
+  const privateRoot = dirname(dependencyRoot);
+  const privateRootInfo = await stat(privateRoot);
+  const sourceLockfile = "apps/kcoder-studio/mobile/package-lock.json";
+  const lockfileBytes = await readFile(resolve(repoRoot, sourceLockfile));
+  const keyPackages = ["expo", "expo-router", "react", "react-native"];
+  const packageVersions = {};
+  for (const packageName of keyPackages) {
+    const packageJson = JSON.parse(await readFile(resolve(dependencyRoot, packageName, "package.json"), "utf8"));
+    packageVersions[packageName] = packageJson.version;
+  }
+  const ownerWritable = (rootInfo.mode & 0o200) !== 0;
+  assert.equal(ownerWritable, true, "the private dependency pin must remain owner-writable for RunContext cleanup");
+  if (typeof process.getuid === "function") {
+    assert.equal(rootInfo.uid, process.getuid(), "the private dependency pin must be owned by the E2E process user");
+    assert.equal(privateRootInfo.uid, process.getuid(), "the private dependency pin parent must be owned by the E2E process user");
+  }
+  assert.equal(privateRootInfo.mode & 0o777, 0o700, "the private dependency pin parent must be mode 0700");
+  await context.writeArtifactJson("mobile-dependency-pin-provenance.json", {
+    dependencyRoot,
+    privateRoot,
+    pinCreatedAtUtc: process.env.KCODER_E2E_MOBILE_DEPENDENCY_PIN_CREATED_AT || null,
+    sourceLockfile,
+    sourceLockfileSha256: createHash("sha256").update(lockfileBytes).digest("hex"),
+    packageVersions,
+    dependencyTreeSha256: mobileWeb.dependencySourceTreeSha256,
+    copiedDependencyTreeSha256: mobileWeb.dependencyOwnedTreeSha256,
+    sourceTreeSha256: mobileWeb.sourceTreeSha256,
+    ownerWritable,
+    ownedByCurrentUser: typeof process.getuid === "function" ? rootInfo.uid === process.getuid() : null,
+    privateRootMode: (privateRootInfo.mode & 0o777).toString(8).padStart(4, "0"),
+    privateRootOwnedByCurrentUser: typeof process.getuid === "function" ? privateRootInfo.uid === process.getuid() : null,
+    credentialsIncluded: false,
+  });
+}
+
+async function returnToSettingsHome(page) {
+  await visibleTestId(page, "settings-detail-back").click();
+  await visibleTestId(page, "settings-home").waitFor({ state: "visible", timeout: 10_000 });
+  assert.equal(new URL(page.url()).pathname, "/settings", "a Settings detail Back action must return to Settings home");
+}
+
+function choiceOptionId(kind, preference) {
+  const normalized = preference === "zh-CN" ? "zh-cn" : preference;
+  return `settings-${kind}-choice-${normalized}`;
+}
+
+async function openChoiceSheet(page, kind) {
+  await visibleTestId(page, `settings-${kind}-row`).click();
+  const sheet = visibleTestId(page, `settings-choice-sheet-${kind}`);
+  await sheet.waitFor({ state: "visible", timeout: 10_000 });
+  return sheet;
+}
+
+async function cancelChoiceSheet(page, sheet) {
+  await visibleTestId(page, "settings-choice-cancel").click();
+  await sheet.waitFor({ state: "hidden", timeout: 10_000 });
+}
+
+async function appearanceChoiceState(page, kind, preference) {
+  const sheet = await openChoiceSheet(page, kind);
+  const option = visibleTestId(page, choiceOptionId(kind, preference));
+  await option.waitFor({ state: "visible", timeout: 10_000 });
+  const state = {
+    role: await option.getAttribute("role"),
+    ariaChecked: await option.getAttribute("aria-checked"),
+    ariaDisabled: await option.getAttribute("aria-disabled"),
+    disabled: await option.isDisabled(),
   };
+  await cancelChoiceSheet(page, sheet);
+  return state;
+}
+
+async function assertChoiceFocusReturned(page, kind, action) {
+  const row = visibleTestId(page, `settings-${kind}-row`);
+  assert.equal(
+    await row.evaluate(element => element === document.activeElement || element.contains(document.activeElement)),
+    true,
+    `${kind} choice sheet ${action} must return focus to its opening row`,
+  );
+}
+
+async function assertChoiceDismissalBehavior(page, kind, untouchedPreference) {
+  const before = await readPreferences(page);
+  const row = visibleTestId(page, `settings-${kind}-row`);
+  const summaryBefore = await row.innerText();
+
+  const cancelledSheet = await openChoiceSheet(page, kind);
+  await visibleTestId(page, "settings-choice-cancel").waitFor({ state: "visible", timeout: 10_000 });
+  await visibleTestId(page, choiceOptionId(kind, untouchedPreference)).waitFor({ state: "visible", timeout: 10_000 });
+  await visibleTestId(page, "settings-choice-cancel").click();
+  await cancelledSheet.waitFor({ state: "hidden", timeout: 10_000 });
+  assert.deepEqual(await readPreferences(page), before, `${kind} Cancel must not change stored preferences`);
+  assert.equal(await row.innerText(), summaryBefore, `${kind} Cancel must leave the visible summary unchanged`);
+  await assertChoiceFocusReturned(page, kind, "Cancel");
+
+  const escapedSheet = await openChoiceSheet(page, kind);
+  await visibleTestId(page, choiceOptionId(kind, untouchedPreference)).waitFor({ state: "visible", timeout: 10_000 });
+  await page.keyboard.press("Escape");
+  await escapedSheet.waitFor({ state: "hidden", timeout: 10_000 });
+  assert.deepEqual(await readPreferences(page), before, `${kind} Escape must not change stored preferences`);
+  assert.equal(await row.innerText(), summaryBefore, `${kind} Escape must leave the visible summary unchanged`);
+  await assertChoiceFocusReturned(page, kind, "Escape");
 }
 
 async function selectLanguage(page, preference, expectedLocale) {
-  const button = visibleAppearanceControl(page, `settings-language-${preference === "zh-CN" ? "zh-cn" : preference}`);
-  await button.click();
+  const storedPreference = await readPreferences(page);
+  const row = visibleTestId(page, "settings-language-row");
+  const summaryBefore = await row.innerText();
+  const sheet = await openChoiceSheet(page, "language");
+  const option = visibleTestId(page, choiceOptionId("language", preference));
+  await option.waitFor({ state: "visible", timeout: 10_000 });
+  await option.click();
+  await sheet.waitFor({ state: "hidden", timeout: 10_000 });
+  await assertChoiceFocusReturned(page, "language", "selection");
   await page.waitForFunction(expected => document.documentElement.lang === expected, expectedLocale, { timeout: 10_000 });
-  const appearanceLabel = expectedLocale === "en" ? "Appearance" : "外观";
-  await visibleText(page, appearanceLabel, { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
-  assert.equal(await button.getAttribute("aria-pressed"), "true");
+  await waitForPreference(page, { language: preference });
+  if (storedPreference?.language !== preference) {
+    assert.notEqual(await row.innerText(), summaryBefore, "selecting a language must update the visible row summary");
+  }
+  const state = await appearanceChoiceState(page, "language", preference);
+  assert.equal(state.ariaChecked, "true", `${preference} language choice must expose its selected state`);
+  await waitForAppearanceHeading(page);
+}
+
+async function selectTheme(page, preference) {
+  const storedPreference = await readPreferences(page);
+  const row = visibleTestId(page, "settings-theme-row");
+  const summaryBefore = await row.innerText();
+  const sheet = await openChoiceSheet(page, "theme");
+  const option = visibleTestId(page, choiceOptionId("theme", preference));
+  await option.waitFor({ state: "visible", timeout: 10_000 });
+  await option.click();
+  await sheet.waitFor({ state: "hidden", timeout: 10_000 });
+  await assertChoiceFocusReturned(page, "theme", "selection");
+  await waitForPreference(page, { theme: preference });
+  if (storedPreference?.theme !== preference) {
+    assert.notEqual(await row.innerText(), summaryBefore, "selecting a theme must update the visible row summary");
+  }
+  const state = await appearanceChoiceState(page, "theme", preference);
+  assert.equal(state.ariaChecked, "true", `${preference} theme choice must expose its selected state`);
+  await waitForAppearanceHeading(page);
+}
+
+async function waitForAppearanceHeading(page) {
+  await visibleTestId(page, "settings-appearance-title").waitFor({ state: "visible", timeout: 10_000 });
+}
+
+async function assertFitsCompactViewport(control, testId) {
+  await control.scrollIntoViewIfNeeded();
+  await control.waitFor({ state: "visible", timeout: 10_000 });
+  assert.equal(await control.isEnabled(), true, `${testId} must remain operable at 320px`);
+  const bounds = await control.boundingBox();
+  assert.ok(bounds, `${testId} must have a visible layout box at 320px`);
+  assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= 320,
+    `${testId} must fit within the 320px viewport without horizontal overflow`);
+  assert.ok(bounds.height >= 44, `${testId} must retain a 44px touch target at 320px`);
+}
+
+async function assertNoCompactHorizontalOverflow(page, label) {
+  const width = await page.evaluate(() => ({
+    viewport: window.innerWidth,
+    document: document.documentElement.scrollWidth,
+    body: document.body.scrollWidth,
+  }));
+  assert.equal(width.viewport, 320);
+  assert.ok(Math.max(width.document, width.body) <= width.viewport,
+    `${label} must not introduce horizontal scrolling at 320px`);
+}
+
+async function verifyCompactAppearanceControls(page, context) {
+  await page.setViewportSize({ width: 320, height: 568 });
+  await returnToSettingsHome(page);
+  await page.screenshot({ path: context.pathInArtifacts("settings-home-320-dark.png"), animations: "disabled" });
+  await assertNoCompactHorizontalOverflow(page, "Settings home");
+  for (const testId of [
+    "settings-manage-connections",
+    "settings-appearance",
+    "terminal-settings",
+    "diagnostics-settings",
+    "settings-about",
+  ]) {
+    await assertFitsCompactViewport(visibleTestId(page, testId), testId);
+  }
+
+  await openSettingsDetail(page, "settings-appearance", "settings-appearance-screen", "settings-appearance-title", "/settings-appearance");
+  await page.screenshot({ path: context.pathInArtifacts("settings-appearance-320.png"), animations: "disabled" });
+  await assertNoCompactHorizontalOverflow(page, "Appearance settings");
+  await assertFitsCompactViewport(visibleTestId(page, "settings-theme-row"), "settings-theme-row");
+  await assertFitsCompactViewport(visibleTestId(page, "settings-language-row"), "settings-language-row");
+
+  for (const [kind, choices] of [
+    ["theme", ["system", "light", "dark"]],
+    ["language", ["system", "en", "zh-CN"]],
+  ]) {
+    const sheet = await openChoiceSheet(page, kind);
+    await page.screenshot({ path: context.pathInArtifacts(`settings-${kind}-choice-320.png`), animations: "disabled" });
+    await assertNoCompactHorizontalOverflow(page, `${kind} choice sheet`);
+    for (const choice of choices) {
+      const testId = choiceOptionId(kind, choice);
+      await assertFitsCompactViewport(visibleTestId(page, testId), testId);
+    }
+    await cancelChoiceSheet(page, sheet);
+  }
+
+  await selectTheme(page, "light");
+  await waitForResolvedTheme(page, "light");
+  await page.screenshot({ path: context.pathInArtifacts("settings-appearance-light-320.png"), animations: "disabled" });
+  await returnToSettingsHome(page);
+  await page.screenshot({ path: context.pathInArtifacts("settings-home-320-light.png"), animations: "disabled" });
+  await openSettingsDetail(page, "settings-appearance", "settings-appearance-screen", "settings-appearance-title", "/settings-appearance");
+  await selectTheme(page, "dark");
+  await waitForResolvedTheme(page, "dark");
+  await page.screenshot({ path: context.pathInArtifacts("settings-appearance-dark-320.png"), animations: "disabled" });
+  await selectTheme(page, "system");
+  await waitForResolvedTheme(page, "dark");
+  await selectLanguage(page, "en", "en");
+  await selectLanguage(page, "system", "zh-CN");
+  await page.setViewportSize({ width: 390, height: 844 });
+}
+
+async function assertMainSettingsPlaceholdersHidden(page) {
+  const english = await page.locator("html").getAttribute("lang") === "en";
+  const placeholders = english
+    ? [
+      "Notifications",
+      "Waiting for system push channel",
+      "Voice & dictation",
+      "Waiting for app-server voice stream protocol",
+      "Schedules",
+      "Waiting for app-server scheduling API",
+    ]
+    : [
+      "通知",
+      "等待系统推送通道",
+      "语音与听写",
+      "等待 app-server 语音流协议",
+      "计划任务",
+      "等待 app-server 调度 API",
+    ];
+  for (const placeholder of placeholders) {
+    assert.equal(await visibleText(page, placeholder, { exact: true }).count(), 0,
+      `Settings should not show the unfinished placeholder: ${placeholder}`);
+  }
+}
+
+async function assertConnectionManagementProfileStates(page, context, inactiveProfileId, activeProfileId) {
+  assert.equal(await visibleTestId(page, `remove-profile-${inactiveProfileId}`).count(), 0,
+    "the main Settings page must not expose direct profile deletion");
+  assert.equal(await visibleTestId(page, `remove-profile-${activeProfileId}`).count(), 0,
+    "the main Settings page must not expose direct deletion for the active profile");
+  await openSettingsDetail(page, "settings-manage-connections", "settings-connections-screen", "settings-connections-title", "/settings-connections");
+  const inactiveRow = visibleTestId(page, `settings-gateway-${inactiveProfileId}`);
+  const activeRow = visibleTestId(page, `settings-gateway-${activeProfileId}`);
+  await inactiveRow.waitFor({ state: "visible", timeout: 10_000 });
+  await activeRow.waitFor({ state: "visible", timeout: 10_000 });
+  const english = await page.locator("html").getAttribute("lang") === "en";
+  await inactiveRow.getByText(english ? "Not checked" : "未检测", { exact: true })
+    .waitFor({ state: "visible", timeout: 10_000 });
+  assert.equal(await visibleTestId(page, `remove-profile-${inactiveProfileId}`).count(), 1,
+    "the inactive Gateway profile detail must expose its own removal action");
+  const activeRemoval = visibleTestId(page, `remove-profile-${activeProfileId}`);
+  assert.equal(await activeRemoval.count(), 1,
+    "the active Gateway profile remains removable from connection management details");
+  const confirmationPromise = page.waitForEvent("dialog");
+  const removalClickPromise = activeRemoval.click();
+  const confirmation = await confirmationPromise;
+  assert.equal(confirmation.type(), "confirm", "profile removal must require a native confirmation");
+  assert.match(confirmation.message(), english ? /Remove Gateway\?/ : /移除 Gateway[？?]/);
+  await confirmation.dismiss();
+  await removalClickPromise;
+  await page.setViewportSize({ width: 320, height: 568 });
+  await page.screenshot({ path: context.pathInArtifacts("settings-connections-profiles-320.png"), animations: "disabled" });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: context.pathInArtifacts("settings-connections-profiles-390.png"), animations: "disabled" });
+  await returnToSettingsHome(page);
+  await visibleTestId(page, "settings-manage-connections").waitFor({ state: "visible", timeout: 10_000 });
 }
 
 async function assertThemeSelection(page, preference) {
   for (const candidate of ["light", "dark", "system"]) {
-    const button = visibleAppearanceControl(page, `settings-theme-${candidate}`);
-    assert.equal(await button.getAttribute("aria-pressed"), String(candidate === preference),
-      `${candidate} theme control must expose its selected state`);
+    const state = await appearanceChoiceState(page, "theme", candidate);
+    assert.equal(state.ariaChecked, String(candidate === preference),
+      `${candidate} theme choice must expose its selected state`);
   }
-}
-
-function visibleAppearanceControl(page, testId) {
-  return visibleTestId(page, testId);
 }
 
 function visibleTestId(page, testId) {
@@ -524,10 +917,12 @@ async function readPreferences(page) {
 }
 
 async function assertPreferenceSelection(page, expected) {
-  const language = await appearanceButtonState(page, `settings-language-${expected.language === "zh-CN" ? "zh-cn" : expected.language}`);
-  const theme = await appearanceButtonState(page, `settings-theme-${expected.theme}`);
-  assert.equal(language.ariaPressed, "true");
-  assert.equal(theme.ariaPressed, "true");
+  await openSettingsDetail(page, "settings-appearance", "settings-appearance-screen", "settings-appearance-title", "/settings-appearance");
+  const language = await appearanceChoiceState(page, "language", expected.language);
+  const theme = await appearanceChoiceState(page, "theme", expected.theme);
+  assert.equal(language.ariaChecked, "true");
+  assert.equal(theme.ariaChecked, "true");
+  await returnToSettingsHome(page);
 }
 
 async function waitForDraftPersistence(page, draft) {
@@ -541,29 +936,21 @@ async function waitForDraftPersistence(page, draft) {
   }, draft, { timeout: 10_000 });
 }
 
-async function selectScrollback(page, label) {
+async function selectScrollback(page, lines) {
   const settings = terminalSettings(page);
   assert.equal(await settings.count(), 1, "active Settings route must expose one visible Terminal preference row");
-  await settings.click();
-  const english = await page.locator("html").getAttribute("lang") === "en";
-  const dialogLabel = english ? "Terminal settings" : "终端设置";
-  const closeLabel = english ? "Close" : "关闭";
-  const dialog = page.locator(`[role="dialog"][aria-label="${dialogLabel}"]:visible`);
-  await dialog.waitFor({ state: "visible", timeout: 10_000 });
-  assert.equal(await dialog.count(), 1, "active route must expose exactly one visible scrollback dialog");
-  const option = dialog.getByRole("radio", { name: label, exact: true });
-  assert.equal(await option.count(), 1, `scrollback dialog must expose one radio for ${label}`);
+  await openSettingsDetail(page, "terminal-settings", "settings-terminal-screen", "settings-terminal-title", "/settings-terminal");
+  const option = visibleTestId(page, `terminal-scrollback-${lines}`);
+  await option.waitFor({ state: "visible", timeout: 10_000 });
+  assert.equal(await option.getAttribute("role"), "radio", `terminal-scrollback-${lines} must be an accessible radio option`);
   await option.click();
-  await page.waitForTimeout(100);
+  await waitForPreference(page, { terminalScrollbackLines: lines });
   const state = {
-    label,
     role: await option.getAttribute("role"),
     ariaChecked: await option.getAttribute("aria-checked"),
     ariaSelected: await option.getAttribute("aria-selected"),
   };
-  const close = dialog.getByLabel(closeLabel, { exact: true });
-  assert.equal(await close.count(), 1, "active dialog must expose one visible Close action");
-  await close.click();
+  await returnToSettingsHome(page);
   return state;
 }
 
@@ -583,12 +970,12 @@ async function openSettings(page) {
     assert.equal(await drawerSettings.count(), 1, "active drawer must expose one visible Settings control");
     await drawerSettings.click();
   }
-  await terminalSettings(page).waitFor({ state: "visible", timeout: 30_000 });
+  await visibleTestId(page, "settings-home").waitFor({ state: "visible", timeout: 30_000 });
 }
 
 async function closeSettings(page) {
-  const back = page.locator('[aria-label="返回"]:visible, [aria-label="Back"]:visible');
-  assert.equal(await back.count(), 1, "Settings must expose one visible Back action");
+  const back = visibleTestId(page, "settings-detail-back");
+  assert.equal(await back.count(), 1, "Settings home must expose one visible Back action");
   await back.click();
   await visibleTestId(page, "message-input-root").waitFor({ state: "visible", timeout: 30_000 });
 }
@@ -620,7 +1007,7 @@ async function createTask(page, prompt, context, expectedProfileId, expectedGate
 
     const expectedOrigin = new URL(expectedGatewayBaseUrl).origin;
     const catalog = await waitFor(() => transport.serverCatalogResponses.find(response =>
-      response.origin === expectedOrigin && response.serverIds.includes("local")),
+      response.origin === expectedOrigin && response.status === 200 && response.parsed && response.serverIds.includes("local")),
     15_000, `${stage} Gateway catalog includes local`, 50, context.abortSignal);
     assert.ok(catalog, `${stage} Gateway must return a server catalog containing local`);
 
@@ -755,13 +1142,12 @@ async function openTaskFromHome(page, task) {
 }
 
 async function switchProfile(page, targetProfileId) {
+  await visibleTestId(page, "settings-manage-connections").click();
   const profiles = await readProfiles(page);
   const target = profiles.find(profile => profile.id === targetProfileId);
   assert.ok(target, `target Gateway profile ${targetProfileId} must remain in the profile list`);
-  const english = await page.locator("html").getAttribute("lang") === "en";
-  const label = english ? "Switch to" : "切换到";
-  const action = page.getByLabel(`${label} ${target.label}`, { exact: true }).and(page.locator(":visible"));
-  assert.equal(await action.count(), 1, "Settings must expose one action for the requested Gateway profile");
+  const action = visibleTestId(page, `settings-gateway-${targetProfileId}`);
+  await action.waitFor({ state: "visible", timeout: 10_000 });
   await action.click();
   await visibleTestId(page, "new-workspace").waitFor({ state: "visible", timeout: 30_000 });
   await page.waitForFunction(expected => decodeURIComponent(location.pathname.split("/").filter(Boolean)[1] ?? "") === expected,

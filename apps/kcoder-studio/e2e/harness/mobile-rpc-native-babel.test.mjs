@@ -49,6 +49,20 @@ function loadExpoAndroidRpcModule(
   };
   const moduleRequire = (specifier) => {
     if (specifier === "react-native") return { Platform: { OS: "android" } };
+    if (specifier === "@/protocol/attachment-retention") return {
+      RETENTION_CAPABILITY: "attachmentRetentionV1",
+      parseRetentionAdmission() { throw new Error("unexpected attachment negotiation in RPC-send-only Babel probe"); },
+    };
+    if (specifier === "@/i18n") return { t: (key) => key };
+    if (specifier === "./connection-routes") return {
+      resolveGatewayRoute() { throw new Error("unexpected route discovery in RPC-send-only Babel probe"); },
+      invalidateGatewayRoute() { throw new Error("unexpected route invalidation in RPC-send-only Babel probe"); },
+    };
+    if (specifier === "./peer-transport") return {
+      isPeerTransportUrl() { return false; },
+      isPeerTransportAlive() { return false; },
+      createPeerSocket() { throw new Error("unexpected peer connection in RPC-send-only Babel probe"); },
+    };
     if (specifier.includes("gatewayConnectionBudget"))
       return { gatewayConnectionBudget };
     if (specifier === "./http") {

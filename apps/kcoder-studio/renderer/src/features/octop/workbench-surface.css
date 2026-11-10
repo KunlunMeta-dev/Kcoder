@@ -1,0 +1,183 @@
+/* Compatibility aliases keep the imported layouts on the workbench token system. */
+.octop-surface.kcoder-experts,
+.kcoder-experts .octop-surface {
+  --octop-font-10: var(--text-xs);
+  --octop-font-11: var(--text-xs);
+  --octop-font-12: var(--text-xs);
+  --octop-font-13: var(--text-sm);
+  --octop-font-14: var(--text-base);
+  --octop-font-15: var(--text-base);
+  --octop-font-16: var(--text-lg);
+  --octop-font-17: var(--text-heading-sm);
+  --octop-font-18: var(--text-heading-sm);
+  --octop-font-19: var(--text-heading-sm);
+  --octop-font-20: var(--text-heading-md);
+  --octop-font-21: var(--text-heading-md);
+  --octop-font-22: var(--text-heading-md);
+  --octop-font-23: var(--text-heading-lg);
+  --octop-font-24: var(--text-heading-lg);
+  --fn-bg-primary: rgb(var(--color-bg-base));
+  --fn-bg-secondary: rgb(var(--color-bg-surface));
+  --fn-bg-tertiary: rgb(var(--color-muted));
+  --fn-bg-elevated: rgb(var(--color-popover));
+  --fn-bg-layout: rgb(var(--color-bg-base));
+  --fn-bg-container: rgb(var(--color-bg-base));
+  --fn-bg-hover: rgb(var(--color-surface-hover));
+  --fn-bg-active: rgb(var(--color-sidebar-active));
+  --fn-bg-selected: rgb(var(--color-sidebar-active));
+  --fn-bg-code: rgb(var(--color-code-bg));
+  --fn-bg-toolbar: rgb(var(--color-bg-surface));
+  --fn-bg-toolbar-hover: rgb(var(--color-surface-hover));
+  --fn-bg-input-label: rgb(var(--color-bg-surface));
+  --fn-bg-sidebar: rgb(var(--color-bg-surface));
+  --fn-bg-base: rgb(var(--color-bg-base));
+  --fn-bg-page: rgb(var(--color-bg-base));
+  --fn-bg-quaternary: rgb(var(--color-surface-hover));
+  --fn-bg-subtle: rgb(var(--color-bg-surface));
+  --fn-bg-secondary-hover: rgb(var(--color-surface-hover));
+  --fn-bg-secondary-active: rgb(var(--color-sidebar-active));
+  --fn-surface: rgb(var(--color-bg-base));
+  --fn-surface-sunken: rgb(var(--color-bg-surface));
+  --fn-fill-hover: rgb(var(--color-surface-hover));
+  --fn-fill-tertiary: rgb(var(--color-bg-surface));
+  --fn-text-primary: rgb(var(--color-text-primary));
+  --fn-text-secondary: rgb(var(--color-text-secondary));
+  --fn-text-tertiary: rgb(var(--color-text-muted));
+  --fn-text-quaternary: rgb(var(--color-text-muted));
+  --fn-text-placeholder: rgb(var(--color-text-muted));
+  --fn-text-disabled: rgb(var(--color-text-muted));
+  --fn-text-inverse: rgb(var(--color-bg-base));
+  --fn-text-brand: rgb(var(--color-text-primary));
+  --fn-text-link: rgb(var(--color-focus));
+  --fn-text-danger: rgb(var(--color-destructive));
+  --fn-font-mono: var(--font-code);
+  --fn-border-primary: rgb(var(--color-border));
+  --fn-border-secondary: rgb(var(--color-border) / 0.5);
+  --fn-border-tertiary: rgb(var(--color-border) / 0.3);
+  --fn-border-input: rgb(var(--color-border));
+  --fn-border-input-alt: rgb(var(--color-border));
+  --fn-border-focus: rgb(var(--color-focus));
+  --fn-border: rgb(var(--color-border));
+  --fn-border-color: rgb(var(--color-border));
+  --fn-border-strong: rgb(var(--color-text-primary) / 0.2);
+  --fn-border-subtle: rgb(var(--color-border) / 0.5);
+  --fn-color-brand: rgb(var(--color-text-primary));
+  --fn-color-brand-hover: rgb(var(--color-text-secondary));
+  --fn-color-brand-soft: rgb(var(--color-text-secondary));
+  --fn-color-on-brand: rgb(var(--color-bg-base));
+  --fn-color-brand-bg: rgb(var(--color-surface-hover));
+  --fn-color-brand-light: rgb(var(--color-bg-surface));
+  --fn-color-brand-border: rgb(var(--color-border));
+  --fn-color-brand-shadow: transparent;
+  --fn-color-brand-glow: transparent;
+  --fn-color-success: rgb(var(--color-success));
+  --fn-success: rgb(var(--color-success));
+  --fn-color-danger: rgb(var(--color-destructive));
+  --fn-danger: rgb(var(--color-destructive));
+  --fn-color-error: rgb(var(--color-destructive));
+  --fn-color-warning: rgb(var(--color-warning));
+  --fn-color-warning-text: rgb(var(--color-warning));
+  --fn-warning-color: rgb(var(--color-warning));
+  --fn-color-info: rgb(var(--color-focus));
+  --fn-tag-channel-text: rgb(var(--color-text-secondary));
+  --fn-row-selected-bg: rgb(var(--color-sidebar-active));
+  --fn-row-selected-hover: rgb(var(--color-surface-hover));
+  --fn-row-selected-alt-bg: rgb(var(--color-sidebar-active));
+  --fn-row-selected-alt-hover: rgb(var(--color-surface-hover));
+  --fn-row-selected-border: rgb(var(--color-border));
+  --fn-card-border-normal: rgb(var(--color-border) / 0.7);
+  --fn-card-shadow-normal: none;
+  --fn-card-radius: var(--radius-xl);
+  --fn-sidebar-item-hover: rgb(var(--color-surface-hover));
+  --fn-sidebar-item-active: rgb(var(--color-sidebar-active));
+  --fn-sidebar-item-active-bg: rgb(var(--color-sidebar-active));
+  --fn-sidebar-item-active-text: rgb(var(--color-text-primary));
+  --fn-shadow-xs: none;
+  --fn-shadow-sm: var(--shadow-control);
+  --fn-shadow-md: var(--shadow-card);
+  --fn-shadow-brand: none;
+  --fn-shadow-brand-lg: none;
+  --fn-radius-sm: var(--radius-md);
+  --fn-radius-md: var(--radius-lg);
+  --fn-radius-lg: var(--radius-xl);
+  --fn-radius-xl: var(--radius-dialog);
+  font-family: var(--font-ui);
+  font-size: var(--text-base);
+  color: rgb(var(--color-text-primary));
+}
+
+.octop-surface.kcoder-experts {
+  display: flex;
+  flex-direction: column;
+  background: rgb(var(--color-bg-base));
+}
+
+.kcoder-experts .octop-shell,
+.kcoder-experts .octop-personalization,
+.kcoder-experts .octop-drawer-root {
+  font-family: var(--font-ui);
+}
+
+.expert-page-content {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  padding: var(--studio-page-gutter);
+}
+
+.kcoder-experts .octop-personalization {
+  padding: 0;
+}
+
+.kcoder-experts .octop-personalization-body {
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.kcoder-experts button:focus-visible,
+.kcoder-experts [tabindex='0']:focus-visible {
+  outline: 2px solid rgb(var(--color-focus));
+  outline-offset: 2px;
+}
+
+.kcoder-experts [role='switch']:focus-visible {
+  --tw-ring-color: rgb(var(--color-focus));
+}
+
+.kcoder-experts .octop-btn,
+.kcoder-experts .octop-select-single,
+.kcoder-experts .octop-input-affix-wrapper {
+  min-height: var(--control-height-md);
+}
+
+.kcoder-experts .octop-drawer-header,
+.kcoder-experts .octop-drawer-body,
+.kcoder-experts .octop-drawer-footer {
+  padding: var(--studio-page-gutter);
+}
+
+.kcoder-experts .octop-drawer-title,
+.kcoder-experts .octop-form-item-label > label,
+.kcoder-experts .octop-table-thead > tr > th {
+  font-weight: 500;
+}
+
+.kcoder-experts .octop-drawer-content-wrapper {
+  max-width: 100%;
+}
+
+@media (max-width: 767px) {
+  .expert-page-content {
+    padding: 12px;
+    overflow-y: auto;
+  }
+
+  .kcoder-experts .octop-btn,
+  .kcoder-experts .octop-select-single,
+  .kcoder-experts .octop-input-affix-wrapper {
+    min-height: 44px;
+  }
+}

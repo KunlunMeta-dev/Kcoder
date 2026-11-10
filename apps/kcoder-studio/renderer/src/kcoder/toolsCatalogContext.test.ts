@@ -1,8 +1,8 @@
 import { expect, test, vi } from 'vitest'
-import { requestLocalExecutor } from '@/tauri/localExecutor'
+import { requestLocalExecutor } from '@/host/localExecutor'
 import { readToolsCatalog } from './toolsCatalogContext'
 
-vi.mock('@/tauri/localExecutor', () => ({ requestLocalExecutor: vi.fn() }))
+vi.mock('@/host/localExecutor', () => ({ requestLocalExecutor: vi.fn() }))
 
 // Transport fixtures verify presentation budgets, independent of model behavior.
 test('caps snapshots at 512 entries without shortening invocation identities', async () => {

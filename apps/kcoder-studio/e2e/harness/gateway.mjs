@@ -2,8 +2,13 @@ import { randomBytes } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { appRoot, repoRoot, waitFor } from "./run-context.mjs";
+import { captureOwnedRedactedStderr } from "./owned-redacted-stderr.mjs";
 
 export async function startGateway(context, options = {}) {
+  if (options.uid !== undefined || options.gid !== undefined) {
+    if (process.platform !== 'linux' || !Number.isSafeInteger(options.uid) || options.uid <= 0
+      || !Number.isSafeInteger(options.gid) || options.gid < 0) throw new Error('Invalid isolated Gateway UID/GID');
+  }
   const label = options.label || "gateway";
   const host = options.host || "127.0.0.1";
   const hasGatewayLocation = options.gatewayRoot !== undefined || options.cwd !== undefined;
@@ -54,18 +59,29 @@ export async function startGateway(context, options = {}) {
     env.KCODER_E2E_UI_RECEIPT_FAULT = '1';
     env.KCODER_E2E_UI_RECEIPT_DIRECTORY = context.artifactsDir;
   }
+  if (options.nativeRemoteDisconnectFault) {
+    env.KCODER_E2E_NATIVE_REMOTE_DISCONNECT = '1';
+    env.KCODER_E2E_NATIVE_REMOTE_DISCONNECT_KIND = options.nativeRemoteDisconnectFault.kind || 'completion';
+    env.KCODER_E2E_NATIVE_REMOTE_DISCONNECT_DIRECTORY = options.nativeRemoteDisconnectFault.directory;
+  }
   const nodeArgs = [
     ...(options.dropSaveReply ? ['--import', resolve(appRoot, 'e2e/harness/save-reply-fault.mjs')] : []),
     ...(options.dropSteerReply ? ['--import', resolve(appRoot, 'e2e/harness/steer-reply-fault.mjs')] : []),
     ...(options.delayCancelReply ? ['--import', resolve(appRoot, 'e2e/harness/cancel-reply-fault.mjs')] : []),
     ...(options.delayWorkspaceFileReply ? ['--import', resolve(appRoot, 'e2e/harness/workspace-file-reply-delay.mjs')] : []),
     ...(options.uiReceiptFault ? ['--import', resolve(appRoot, 'e2e/harness/ui-receipt-fault.mjs')] : []),
+    ...(options.nativeRemoteDisconnectFault ? ['--import', resolve(appRoot, 'e2e/harness/remote-native-disconnect-fault.mjs')] : []),
     hasGatewayLocation ? scriptPath : 'dev-server.mjs',
   ];
   const child = context.spawnOwned(label, process.execPath, nodeArgs, {
     cwd,
     env,
+    ...(options.uid === undefined ? {} : { uid: options.uid, gid: options.gid }),
   });
+  // Subscribe before the first await so preload diagnostics cannot precede the owned capture.
+  const stderrDiagnostics = options.redactedStderrDiagnostics
+    ? captureOwnedRedactedStderr(context, label, options.redactedStderrDiagnostics === true ? {} : options.redactedStderrDiagnostics)
+    : null;
   const logPath = resolve(context.logsDir, `${safeSlug(label)}.log`);
   const port = await waitFor(async () => {
     const log = await readFile(logPath, "utf8").catch(() => "");
@@ -86,6 +102,7 @@ export async function startGateway(context, options = {}) {
     cwd,
     scriptPath,
     scriptArgIndex: nodeArgs.length,
+    stderrDiagnostics,
   };
 }
 

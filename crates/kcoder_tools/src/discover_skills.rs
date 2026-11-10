@@ -68,6 +68,7 @@ impl Tool for DiscoverSkillsTool {
             .list()
             .into_iter()
             .filter(|skill| !ctx.is_skill_blocked(&skill.name))
+            .filter(|skill| ctx.inline_widgets_authorized() || !skill.requires_inline_widgets())
             .cloned()
             .collect();
         drop(registry);
@@ -285,6 +286,7 @@ mod tests {
 
     fn make_skill(name: &str, description: &str) -> Skill {
         Skill {
+            activation: None,
             name: name.into(),
             description: description.into(),
             content: String::new(),
@@ -445,7 +447,9 @@ mod tests {
             )
             .unwrap();
         }
-        let registry = Arc::new(RwLock::new(SkillRegistry::load(tmp.path()).unwrap()));
+        let registry = Arc::new(RwLock::new(
+            SkillRegistry::load_project_only(tmp.path()).unwrap(),
+        ));
         let ctx = ToolContext::new(AppState::new(tmp.path()))
             .with_skill_registry(registry)
             .with_blocked_skill_names(vec!["using-specs".to_string()]);
@@ -468,6 +472,51 @@ mod tests {
 
         assert!(text.contains("using-superpowers"));
         assert!(!text.contains("using-specs"));
+    }
+
+    #[tokio::test]
+    async fn discover_inline_skill_requires_current_studio_authority() {
+        use kcoder_skills::SkillRegistry;
+        use kcoder_state::AppState;
+        use std::sync::{Arc, RwLock};
+        let tmp = tempfile::tempdir().unwrap();
+        for (name, requirement) in [
+            ("kworker-visualization", ""),
+            ("custom-chart", "requires_tools: [show_widget]\n"),
+            ("ordinary", ""),
+        ] {
+            let dir = tmp.path().join(".kcoder/skills").join(name);
+            std::fs::create_dir_all(&dir).unwrap();
+            std::fs::write(dir.join("SKILL.md"), format!(
+                "---\nname: {name}\ndescription: Visualization chart workflow\n{requirement}---\nBODY"
+            )).unwrap();
+        }
+        let registry = Arc::new(RwLock::new(
+            SkillRegistry::load_project_only(tmp.path()).unwrap(),
+        ));
+        let ctx = ToolContext::new(AppState::new(tmp.path())).with_skill_registry(registry);
+        let result = DiscoverSkillsTool
+            .call(
+                serde_json::json!({"description":"Visualization chart workflow"}),
+                &ctx,
+            )
+            .await
+            .unwrap();
+        let text = serde_json::to_string(&result.content).unwrap();
+        assert!(text.contains("ordinary"));
+        assert!(!text.contains("kworker-visualization"));
+        assert!(!text.contains("custom-chart"));
+        let ctx = ctx.with_inline_widgets_authorized(true);
+        let result = DiscoverSkillsTool
+            .call(
+                serde_json::json!({"description":"Visualization chart workflow"}),
+                &ctx,
+            )
+            .await
+            .unwrap();
+        let text = serde_json::to_string(&result.content).unwrap();
+        assert!(text.contains("kworker-visualization"));
+        assert!(text.contains("custom-chart"));
     }
 
     #[tokio::test]

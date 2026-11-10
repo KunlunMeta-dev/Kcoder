@@ -2,23 +2,33 @@ use anyhow::Result;
 use kcoder_app_protocol::{
     CronCreateParams, CronDeleteParams, CronParams, CronPreviewParams, CronPreviewResult,
 };
-use kcoder_engine::QueryEngine;
+use kcoder_state::turn_attempt_store::TurnAttemptRecord;
+use kcoder_tools::cron::CronScheduler;
 use serde_json::{Value, json};
+use std::{collections::HashMap, path::PathBuf};
 
-pub(super) fn process(engine: &QueryEngine, method: &str, params: Value) -> Result<Value> {
-    anyhow::ensure!(
-        !engine.settings.read().unwrap().training_mode,
-        "scheduled tasks are disabled in training mode"
-    );
-    let scheduler = engine.cron_scheduler();
-    let session_id = engine.session_id();
+/// Read-only facts from the App Server's verified session and receipt boundary.
+pub trait CronExecutionHistory {
+    fn created_thread(&self, request_id: &str) -> Result<Option<String>>;
+    fn history_path(&self, thread_id: &str) -> Result<PathBuf>;
+    fn attempts(&self, thread_id: &str) -> Result<Vec<TurnAttemptRecord>>;
+    fn bindings(&self, thread_id: &str) -> Result<HashMap<String, String>>;
+}
+
+pub fn process(
+    scheduler: &CronScheduler,
+    session_id: &str,
+    history: &dyn CronExecutionHistory,
+    method: &str,
+    params: Value,
+) -> Result<Value> {
     let owner = kcoder_tools::cron::APP_PROJECT_CRON_OWNER;
     match method {
         kcoder_app_protocol::method::CRON_PREVIEW => {
             let params: CronPreviewParams = serde_json::from_value(params)?;
             let next = kcoder_tools::cron::preview_schedule(&params.schedule)
                 .map_err(anyhow::Error::msg)?;
-            Ok(serde_json::to_value(CronPreviewResult {
+            Ok(kcoder_app_rpc_codec::encode(CronPreviewResult {
                 next_run_at: next.to_rfc3339(),
             })?)
         }
@@ -40,7 +50,7 @@ pub(super) fn process(engine: &QueryEngine, method: &str, params: Value) -> Resu
             let delivery_diagnostics = scheduler
                 .delivery_diagnostics(Some(owner))
                 .map_err(anyhow::Error::msg)?;
-            reconcile_execution(engine, &scheduler);
+            reconcile_execution(scheduler, history);
             let mut execution_diagnostics: kcoder_app_protocol::CronExecutionDiagnostics =
                 serde_json::from_value(
                     scheduler
@@ -100,14 +110,21 @@ pub(super) fn process(engine: &QueryEngine, method: &str, params: Value) -> Resu
                     .is_none_or(|id| id == session_id),
                 "scheduled task thread mismatch"
             );
-            scheduler
-                .migrate_app_jobs_to_project()
-                .map_err(anyhow::Error::msg)?;
             anyhow::ensure!(
                 !params.receipts_only || params.confirmed,
                 "receipt cleanup requires explicit confirmation"
             );
-            let deleted = if params.receipts_only {
+            let history_only = params.trigger_id.is_some();
+            anyhow::ensure!(
+                !history_only || (params.receipts_only && params.confirmed),
+                "history deletion requires receipt-only mode and explicit confirmation"
+            );
+            scheduler
+                .migrate_app_jobs_to_project()
+                .map_err(anyhow::Error::msg)?;
+            let deleted = if let Some(trigger) = &params.trigger_id {
+                scheduler.delete_execution_history(&params.job_id, trigger, Some(owner))
+            } else if params.receipts_only {
                 scheduler.clear_delivery_receipts(&params.job_id, Some(owner))
             } else {
                 scheduler.delete_for_session(&params.job_id, owner)
@@ -118,7 +135,7 @@ pub(super) fn process(engine: &QueryEngine, method: &str, params: Value) -> Resu
                 .ok()
                 .map(|jobs| jobs.len());
             Ok(
-                json!({"deleted": deleted, "jobCount": job_count, "receiptsOnly":params.receipts_only, "schedulePreserved":params.receipts_only}),
+                json!({"deleted": deleted, "jobCount": job_count, "receiptsOnly":params.receipts_only, "schedulePreserved":params.receipts_only,"historyOnly":history_only}),
             )
         }
         _ => anyhow::bail!("unknown scheduled task method"),
@@ -127,10 +144,7 @@ pub(super) fn process(engine: &QueryEngine, method: &str, params: Value) -> Resu
 
 /// Repair projection only from persisted attempt and visible transcript evidence.
 /// Missing, removed, unreadable or oversized history stays unknown; nothing executes.
-pub(super) fn reconcile_execution(
-    engine: &QueryEngine,
-    scheduler: &kcoder_tools::cron::CronScheduler,
-) {
+pub fn reconcile_execution(scheduler: &CronScheduler, history: &dyn CronExecutionHistory) {
     let Ok(runs) = scheduler
         .execution_reconciliation_candidates(Some(kcoder_tools::cron::APP_PROJECT_CRON_OWNER), 16)
     else {
@@ -144,12 +158,9 @@ pub(super) fn reconcile_execution(
             && request.starts_with("kcoder-automation-thread:")
         {
             let recover_link = (|| -> Result<()> {
-                if let Some(record) = super::thread_creations::lookup(engine, request)?
-                    && record.thread.is_some()
-                {
-                    super::thread_history_path(engine, &record.thread_id)?;
+                if let Some(thread_id) = history.created_thread(request)? {
                     scheduler
-                        .execution_reconcile_created_thread(trigger, &record.thread_id)
+                        .execution_reconcile_created_thread(trigger, &thread_id)
                         .map_err(anyhow::Error::msg)?;
                 }
                 Ok(())
@@ -166,9 +177,8 @@ pub(super) fn reconcile_execution(
             continue;
         };
         let reconcile = (|| -> Result<()> {
-            super::validate_thread_id(thread)?;
-            let history_path = super::thread_history_path(engine, thread)?;
-            let records = super::turn_attempts::records(engine, thread)?;
+            let history_path = history.history_path(thread)?;
+            let records = history.attempts(thread)?;
             let Some(record) = records
                 .into_iter()
                 .find(|r| r.identity.turn_id == turn && r.identity.attempt_id == attempt)
@@ -195,7 +205,7 @@ pub(super) fn reconcile_execution(
                     512 * 1024,
                     4096,
                 )?;
-                let bindings = super::turn_admissions::bindings(engine, thread)?;
+                let bindings = history.bindings(thread)?;
                 let Some(reply) = committed_reply(&entries, &bindings, turn, anchor) else {
                     return Ok(());
                 };
@@ -238,13 +248,13 @@ fn committed_reply(
         return None;
     }
     let start = entries.iter().position(|e| {
-        e.uuid.as_ref() == Some(user_uuid) && kcoder_engine::agent::is_real_user_message(&e.message)
+        e.uuid.as_ref() == Some(user_uuid) && kcoder_types::is_real_user_message(&e.message)
     })?;
     let end = entries
         .iter()
         .enumerate()
         .skip(start + 1)
-        .find(|(_, e)| kcoder_engine::agent::is_real_user_message(&e.message))
+        .find(|(_, e)| kcoder_types::is_real_user_message(&e.message))
         .map(|(i, _)| i)
         .unwrap_or(entries.len());
     let anchor_offset = entries[start..end]
@@ -271,6 +281,8 @@ mod execution_reconciliation_tests {
     use super::*;
     fn entry(uuid: &str, message: kcoder_types::Message) -> kcoder_state::HistoryEntry {
         kcoder_state::HistoryEntry {
+            web_sources: Vec::new(),
+            history_attempt: None,
             session_id: "fixture".into(),
             timestamp_ms: 1,
             uuid: Some(uuid.into()),

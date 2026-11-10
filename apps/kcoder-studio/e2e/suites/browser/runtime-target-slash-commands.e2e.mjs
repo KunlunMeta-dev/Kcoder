@@ -80,7 +80,7 @@ await runE2E(import.meta.url, {
   await page.getByTestId("message-assistant").last().waitFor({ state: "visible", timeout: 60_000 });
   await page.evaluate(() => {
     const runtimeWindow = window;
-    const internals = runtimeWindow.__TAURI_INTERNALS__;
+    const internals = runtimeWindow.__ELECTRON_INTERNALS__;
     if (!internals || typeof internals.invoke !== "function") throw new Error("KCoder gateway invoke shim is unavailable");
     const originalInvoke = internals.invoke;
     runtimeWindow.__slashRpcResults = [];
@@ -251,7 +251,7 @@ await runE2E(import.meta.url, {
   assert.equal(goalSetRpc.result?.goal?.mode, "strict");
 
   const persistedGoal = await page.evaluate(async address => {
-    return window.__TAURI_INTERNALS__.invoke("local_executor_request", {
+    return window.__ELECTRON_INTERNALS__.invoke("local_executor_request", {
       method: "runtime.tasks.goal.get",
       params: { address },
     });
@@ -264,7 +264,7 @@ await runE2E(import.meta.url, {
   const secondPage = await secondContext.newPage();
   await login(secondPage, gateway.baseUrl, gateway.authToken);
   const secondBrowserGoal = await secondPage.evaluate(async address => {
-    return window.__TAURI_INTERNALS__.invoke("local_executor_request", {
+    return window.__ELECTRON_INTERNALS__.invoke("local_executor_request", {
       method: "runtime.tasks.goal.get",
       params: { address },
     });
@@ -302,7 +302,6 @@ await runE2E(import.meta.url, {
   const hiddenNativeGeneralControls = [
     "general-show-main-window-on-launch-toggle",
     "general-system-drag-toggle",
-    "general-external-content-import-button",
     "general-close-to-tray-toggle",
     "general-prevent-sleep-while-tasks-running-toggle",
     "general-task-completion-notifications-toggle",
@@ -311,6 +310,7 @@ await runE2E(import.meta.url, {
     "general-tray-usage-toggle",
   ];
   await page.getByTestId("general-language-system-button").waitFor({ state: "visible", timeout: 30_000 });
+  assert.equal(await page.getByTestId("general-external-content-import-button").isVisible(), true, "KCoder migration is available in Gateway settings");
   for (const testId of hiddenNativeGeneralControls) {
     assert.equal(await page.getByTestId(testId).count(), 0, `${testId} 不应出现在 HTTP Gateway 设置中`);
   }

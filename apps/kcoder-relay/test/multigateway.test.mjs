@@ -1,19 +1,30 @@
 // Contract tests for isolated tenants on one public Relay authority. These use
 // real loopback HTTP and WebSocket sockets; the fake Gateways never run a model.
 import assert from 'node:assert/strict';
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { once } from 'node:events';
 import { createServer, request, Agent } from 'node:http';
 import test from 'node:test';
 import WebSocket, { WebSocketServer } from 'ws';
 import { startClient } from '../src/client.mjs';
 import { startRelay } from '../src/server.mjs';
+import { isolatedGatewayAuthority } from '../src/gateway-origin.mjs';
 
 const SHARED_HOST = 'relay.example';
 const GATEWAY_IDS = ['a', 'b'];
+// Each Gateway is reached on its own isolated origin; the shared root only redirects.
+const gatewayHost = id => isolatedGatewayAuthority(SHARED_HOST, id);
+const hostForPath = path => {
+  const match = String(path).match(/^\/g\/([A-Za-z0-9_-]{1,64})(?:\/|\?|$)/);
+  return match ? gatewayHost(match[1]) : SHARED_HOST;
+};
 
 function opaqueToken() {
   return randomBytes(32).toString('hex');
+}
+
+function tokenHash(value) {
+  return createHash('sha256').update(value).digest('hex');
 }
 
 function delay(ms) {
@@ -43,27 +54,100 @@ async function startFakeGateway(id) {
   const state = {
     id,
     label: `gateway-${id}`,
-    pairingToken: opaqueToken(),
-    additionalPairingTokens: new Set(),
+    gatewaySecret: opaqueToken(),
+    additionalGatewaySecrets: new Set(),
     accessTokens: new Set(),
+    browserTokens: new Set(),
+    moduleReads: 0,
+    peakModuleReads: 0,
+    accessGrantMetadata: new Map(),
     rpcToken: opaqueToken(),
+    proofRequests: [],
+    validationRequests: [],
+    protectedApiRequests: [],
+    rpcUpgradeRequests: [],
+    validationDelayMs: 0,
+    validationHang: false,
+    connectionEndpoints: new Set([`https://${gatewayHost(id)}/g/${id}`]),
     server: null,
     websocketServer: null,
   };
 
   const server = createServer(async (req, res) => {
     const url = new URL(req.url, 'http://gateway.invalid');
+    if (req.method === 'POST' && url.pathname === '/api/mobile/session/relay-validation') {
+      let payload;
+      try { payload = JSON.parse((await collectRequestBody(req)).toString('utf8')); }
+      catch { res.writeHead(400); res.end('bad request'); return; }
+      state.validationRequests.push({
+        credentialHash: typeof payload?.credential === 'string' ? tokenHash(payload.credential) : null,
+        requestId: payload?.requestId,
+        path: url.pathname,
+        host: req.headers.host,
+        origin: req.headers.origin,
+        authorization: req.headers.authorization,
+        cookie: req.headers.cookie,
+        relayHeader: req.headers['x-kcoder-relay-validation'],
+      });
+      const keys = payload && typeof payload === 'object' && !Array.isArray(payload) ? Object.keys(payload).sort() : [];
+      if (req.headers['x-kcoder-relay-validation'] !== state.gatewaySecret || req.headers.origin || req.headers.authorization ||
+          req.headers.cookie || req.headers['content-type'] !== 'application/json' ||
+          keys.join(',') !== 'credential,kind,requestId,version' || payload.version !== 1 || payload.kind !== 'access' ||
+          !/^[a-f0-9]{48}$/.test(payload.requestId || '') || typeof payload.credential !== 'string') {
+        res.writeHead(401, { 'content-type': 'text/plain' });
+        res.end('unauthorized');
+        return;
+      }
+      const metadata = state.accessGrantMetadata.get(payload.credential);
+      if (!metadata) {
+        res.writeHead(401, { 'content-type': 'text/plain' });
+        res.end('unauthorized');
+        return;
+      }
+      if (state.validationHang) return;
+      if (state.validationDelayMs > 0) await delay(state.validationDelayMs);
+      res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+      res.end(JSON.stringify({
+        version: 1,
+        kind: 'access',
+        requestId: payload.requestId,
+        accessTokenHash: tokenHash(payload.credential),
+        rpcTokenHash: tokenHash(state.rpcToken),
+        expiresAt: metadata.expiresAt,
+        accessExpiresAt: metadata.expiresAt,
+      }));
+      return;
+    }
+    if (req.method === 'GET' && url.pathname === '/api/mobile/connection-proof') {
+      const proofRequest = {
+        nonce: url.searchParams.get('nonce'),
+        endpoint: url.searchParams.get('endpoint'),
+        authorization: req.headers.authorization,
+        cookie: req.headers.cookie,
+      };
+      state.proofRequests.push(proofRequest);
+      if (!state.connectionEndpoints.has(proofRequest.endpoint)) {
+        res.writeHead(404, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+        res.end(JSON.stringify({ error: 'Connection endpoint is not available' }));
+        return;
+      }
+      res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+      res.end(JSON.stringify({ gateway: state.label, signedNonce: `${state.id}:${proofRequest.nonce}`, endpoint: proofRequest.endpoint }));
+      return;
+    }
     if (req.method === 'POST' && url.pathname === '/api/mobile/session') {
       let payload;
       try { payload = JSON.parse((await collectRequestBody(req)).toString('utf8')); }
       catch { res.writeHead(400); res.end('bad request'); return; }
-      if (payload?.token !== state.pairingToken && !state.additionalPairingTokens.has(payload?.token)) {
+      if (payload?.token !== state.gatewaySecret && !state.additionalGatewaySecrets.has(payload?.token)) {
         res.writeHead(401, { 'content-type': 'text/plain' });
         res.end('unauthorized');
         return;
       }
       const accessToken = opaqueToken();
       state.accessTokens.add(accessToken);
+      const expiresAt = Date.now() + 60_000;
+      state.accessGrantMetadata.set(accessToken, { expiresAt });
       // A Gateway uses one long-lived RPC token for all of its mobile sessions.
       res.writeHead(200, {
         'content-type': 'application/json',
@@ -72,15 +156,41 @@ async function startFakeGateway(id) {
       res.end(JSON.stringify({
         accessToken,
         rpcToken: state.rpcToken,
-        expiresAt: Date.now() + 60_000,
+        expiresAt,
       }));
       return;
     }
 
-    const accessToken = /^Bearer (.+)$/.exec(req.headers.authorization || '')?.[1];
+    const cookie = /(?:^|;\s*)__Host-kcoder_studio_session=([^;]+)/.exec(req.headers.cookie || '')?.[1];
+    const accessToken = req.headers.authorization !== undefined
+      ? /^Bearer (.+)$/.exec(req.headers.authorization)?.[1]
+      : state.browserTokens.has(cookie) ? cookie : undefined;
+    if (url.pathname.startsWith('/api/')) state.protectedApiRequests.push({
+      path: url.pathname,
+      accessHash: accessToken ? tokenHash(accessToken) : null,
+      validationHeader: req.headers['x-kcoder-relay-validation'],
+    });
     if (!accessToken || !state.accessTokens.has(accessToken)) {
       res.writeHead(401, { 'content-type': 'text/plain' });
       res.end('unauthorized');
+      return;
+    }
+
+    if (url.pathname.startsWith('/src/')) {
+      state.moduleReads++;
+      state.peakModuleReads = Math.max(state.peakModuleReads, state.moduleReads);
+      await delay(15);
+      state.moduleReads--;
+      res.writeHead(200, { 'content-type': 'text/javascript' });
+      res.end('export const ready = true;');
+      return;
+    }
+    if (url.pathname === '/logout' && req.method === 'POST') {
+      state.accessTokens.delete(accessToken);
+      state.accessGrantMetadata.delete(accessToken);
+      state.browserTokens.delete(accessToken);
+      res.writeHead(303, { location: '/login', 'set-cookie': '__Host-kcoder_studio_session=; Path=/; Secure; Max-Age=0' });
+      res.end();
       return;
     }
 
@@ -95,9 +205,15 @@ async function startFakeGateway(id) {
       res.end(JSON.stringify({ gateway: state.label, bytes: body.length }));
       return;
     }
-    if (url.pathname === '/api/cookie') {
+    if (url.pathname === '/api/scope-headers') {
+      res.writeHead(200, { 'content-type': 'text/plain', 'service-worker-allowed': '/',
+        'set-cookie': 'session=fixture; Path=/g/a/; path=/; Domain=example.invalid; HttpOnly' });
+      res.end('scoped');
+      return;
+    }
+    if (url.pathname === '/api/cookie' || url.pathname === '/api/kcoder-account') {
       res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ gateway: state.label, hasCookie: Boolean(req.headers.cookie) }));
+      res.end(JSON.stringify({ gateway: state.label, cookie: req.headers.cookie ?? null }));
       return;
     }
     res.writeHead(404, { 'content-type': 'text/plain' });
@@ -110,6 +226,7 @@ async function startFakeGateway(id) {
   });
   server.on('upgrade', (req, socket, head) => {
     const url = new URL(req.url, 'http://gateway.invalid');
+    state.rpcUpgradeRequests.push({ path: url.pathname, cookie: req.headers.cookie ?? null, accessHash: /^Bearer (.+)$/.exec(req.headers.authorization || '')?.[1] ? tokenHash(/^Bearer (.+)$/.exec(req.headers.authorization || '')[1]) : null });
     const offeredProtocols = (req.headers['sec-websocket-protocol'] || '')
       .split(',').map(value => value.trim()).filter(Boolean);
     const mobileAccess = offeredProtocols
@@ -120,7 +237,10 @@ async function startFakeGateway(id) {
       && url.searchParams.get('token') === state.rpcToken;
     const rpcAuthorized = bearer && state.accessTokens.has(bearer)
       && url.searchParams.get('token') === state.rpcToken;
-    if (url.pathname !== '/rpc' || (!mobileWebAuthorized && !rpcAuthorized)) {
+    const cookie = /(?:^|;\s*)__Host-kcoder_studio_session=([^;]+)/.exec(req.headers.cookie || '')?.[1];
+    const browserAuthorized = state.browserTokens.has(cookie) && state.accessTokens.has(cookie)
+      && url.searchParams.get('token') === state.rpcToken;
+    if (url.pathname !== '/rpc' || (!mobileWebAuthorized && !rpcAuthorized && !browserAuthorized)) {
       socket.end('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\nContent-Length: 0\r\n\r\n');
       return;
     }
@@ -152,16 +272,20 @@ function httpThroughRelay(fixture, {
   path,
   method = 'GET',
   accessToken,
-  pairingToken,
+  gatewaySecret,
   cookie,
+  validationHeader,
+  contentType,
   body,
-  host = SHARED_HOST,
+  host = gatewayHost(id),
   agent = false,
   timeoutMs = 4000,
 }) {
   const headers = { host };
   if (accessToken) headers.authorization = `Bearer ${accessToken}`;
-  if (pairingToken) headers['content-type'] = 'application/json';
+  if (gatewaySecret) headers['content-type'] = 'application/json';
+  if (contentType) headers['content-type'] = contentType;
+  if (validationHeader) headers['x-kcoder-relay-validation'] = validationHeader;
   if (cookie) headers.cookie = cookie;
   if (body !== undefined && !headers['content-type']) headers['content-type'] = 'application/octet-stream';
   return new Promise(resolve => {
@@ -194,7 +318,7 @@ function httpThroughRelay(fixture, {
     outgoing.setTimeout(timeoutMs, () => outgoing.destroy());
     outgoing.once('error', () => finish({ status: 0, headers: {}, body: Buffer.alloc(0) }));
     if (body !== undefined) outgoing.write(body);
-    if (pairingToken) outgoing.end(JSON.stringify({ token: pairingToken }));
+    if (gatewaySecret) outgoing.end(JSON.stringify({ token: gatewaySecret }));
     else outgoing.end();
   });
 }
@@ -204,18 +328,25 @@ function parseJsonBody(response) {
   catch { throw new Error('Relay response did not contain valid JSON'); }
 }
 
-async function pairGateway(fixture, id, token = fixture.gateways.get(id).pairingToken) {
+async function pairGateway(fixture, id, token = fixture.gateways.get(id).gatewaySecret) {
   const response = await httpThroughRelay(fixture, {
     id,
     path: '/api/mobile/session',
     method: 'POST',
-    pairingToken: token,
+    gatewaySecret: token,
   });
   assert.equal(response.status, 200, 'valid per-Gateway pairing must succeed');
   const session = parseJsonBody(response);
   assert.equal(typeof session.accessToken, 'string', 'pairing returns a mobile access token');
   assert.equal(typeof session.rpcToken, 'string', 'pairing returns an RPC token');
   return { ...session, setCookie: response.headers['set-cookie'] };
+}
+
+function issueGatewayAccess(gateway, accessToken = opaqueToken()) {
+  const expiresAt = Date.now() + 60_000;
+  gateway.accessTokens.add(accessToken);
+  gateway.accessGrantMetadata.set(accessToken, { expiresAt });
+  return { accessToken, rpcToken: gateway.rpcToken, expiresAt };
 }
 
 function openWebSocket(fixture, {
@@ -229,7 +360,7 @@ function openWebSocket(fixture, {
   const options = {
     handshakeTimeout: timeoutMs,
     perMessageDeflate: false,
-    headers: { host: SHARED_HOST, ...headers },
+    headers: { host: hostForPath(path), ...headers },
   };
   const ws = protocols
     ? new WebSocket(endpoint, protocols, options)
@@ -359,7 +490,7 @@ async function startFixture(t, {
       return {
         id,
         secret,
-        pairingToken: gateway.pairingToken,
+        gatewaySecret: gateway.gatewaySecret,
         maxConnections: id === 'a' ? maxConnectionsA : 8,
         maxBytesPerWindow: id === 'a' ? maxBytesA : maxBytesB,
         trafficWindowMs,
@@ -423,6 +554,13 @@ test('shared /g/id routing isolates HTTP, WebSocket, pairing, cookies, and multi
     assert.equal(parseJsonBody(response).gateway, `gateway-${id}`, 'HTTP path prefix is routed to its owning Gateway');
   }
 
+  const scoped = await httpThroughRelay(fixture, { id: 'a', path: '/api/scope-headers', accessToken: firstA.accessToken });
+  assert.equal(scoped.headers['service-worker-allowed'], '/g/a/');
+  const scopedCookie = scoped.headers['set-cookie'][0];
+  assert.equal((scopedCookie.match(/;\s*path=/ig) || []).length, 1);
+  assert.ok(scopedCookie.endsWith('; Path=/g/a/'));
+  assert.ok(!/;\s*Domain=/i.test(scopedCookie));
+
   const rpcA = await openRpc(fixture, 'a', secondA);
   assert.equal(rpcA.status, 101, 'Bearer plus query RPC token opens Gateway A RPC');
   assert.equal(await websocketEcho(rpcA.ws, 'ping'), 'gateway-a:ping');
@@ -433,12 +571,249 @@ test('shared /g/id routing isolates HTTP, WebSocket, pairing, cookies, and multi
   assert.equal(rpcB.status, 101, 'Gateway B has an independent RPC tunnel');
   assert.equal(await websocketEcho(rpcB.ws, 'ping'), 'gateway-b:ping');
 
+  // Browsers attach parent-domain (pre-isolation) and unrelated cookies to the
+  // isolated subdomain; the target Gateway sees only its own host cookie, byte-exact.
   const aCookieValue = String(aCookie || '').split(';', 1)[0];
-  const cookieResponse = await httpThroughRelay(fixture, {
-    id: 'a', path: '/api/cookie', accessToken: firstA.accessToken, cookie: aCookieValue,
+  const hostCookie = '__Host-kcoder_studio_session=own%2Fvalue=x';
+  const upstreamCookie = async cookie => {
+    const response = await httpThroughRelay(fixture, { id: 'a', path: '/api/cookie', accessToken: firstA.accessToken, cookie });
+    assert.equal(response.status, 200);
+    return parseJsonBody(response).cookie;
+  };
+  assert.equal(await upstreamCookie(`${aCookieValue}; kcoder_studio_session=parent;  ${hostCookie} ;other=1`), hostCookie,
+    'only the isolated host session cookie reaches the Gateway');
+  assert.equal(await upstreamCookie(`${aCookieValue}; kcoder_studio_session=parent`), null, 'legacy and sibling cookies are dropped');
+  assert.equal(await upstreamCookie(`${hostCookie}; __Host-kcoder_studio_session=second`), null, 'a repeated host cookie is dropped');
+  assert.equal(await upstreamCookie(`__host-kcoder_studio_session=case; __Host-kcoder_studio_sessionX=y`), null, 'names match exactly');
+
+  const before = fixture.gateways.get('a').rpcUpgradeRequests.length;
+  const cookieRpc = await openWebSocket(fixture, {
+    path: rpcPath('a', firstA.rpcToken),
+    headers: { authorization: `Bearer ${firstA.accessToken}`, cookie: [`${aCookieValue}; ${hostCookie}`, 'kcoder_studio_session=parent'] },
   });
-  assert.equal(cookieResponse.status, 200, 'Gateway A accepts its scoped cookie');
-  assert.equal(parseJsonBody(cookieResponse).hasCookie, true);
+  assert.equal(cookieRpc.status, 101, 'Bearer RPC does not depend on any cookie');
+  assert.equal(fixture.gateways.get('a').rpcUpgradeRequests[before].cookie, hostCookie,
+    'the raw WebSocket handshake forwards one filtered Cookie line');
+  const duplicateRpc = await openWebSocket(fixture, {
+    path: rpcPath('a', firstA.rpcToken),
+    headers: { authorization: `Bearer ${firstA.accessToken}`, cookie: [hostCookie, '__Host-kcoder_studio_session=second'] },
+  });
+  assert.equal(duplicateRpc.status, 101);
+  assert.equal(fixture.gateways.get('a').rpcUpgradeRequests[before + 1].cookie, null, 'repeated host cookies across lines are dropped');
+});
+
+test('isolated origins: the shared root only redirects safe navigations and host, path or Origin mixing fails', async t => {
+  const fixture = await startFixture(t);
+  const sessionA = await pairGateway(fixture, 'a');
+
+  const own = await httpThroughRelay(fixture, {
+    id: 'a', path: '/api/whoami', accessToken: sessionA.accessToken, host: `${gatewayHost('a').toUpperCase()}:443`,
+  });
+  assert.equal(own.status, 200, 'host case and an explicit default port name the same origin');
+  assert.equal(parseJsonBody(own).gateway, 'gateway-a');
+  assert.equal(own.headers['origin-agent-cluster'], '?1');
+
+  const page = await httpThroughRelay(fixture, { id: 'b', path: '/mobile/connect', host: SHARED_HOST });
+  assert.equal(page.status, 308, 'a shared-root page navigation moves to its own Gateway origin');
+  assert.equal(page.headers.location, `https://${gatewayHost('b')}/g/b/mobile/connect`);
+  assert.equal(page.headers['referrer-policy'], 'no-referrer');
+  for (const [path, method, accessToken] of [
+    ['/api/whoami', 'GET', sessionA.accessToken],
+    ['/login?token=must-not-be-redirected', 'GET'],
+    ['/mobile/?access_token=must-not-be-redirected', 'GET'],
+    // Any query fails closed: non-standard credential names and encodings are never enumerated.
+    ['/mobile/connect?api_key=must-not-leak&jwt=must-not-leak&x-tenant-cred=must-not-leak', 'GET'],
+    ['/mobile/connect?%61ccess%5Ftoken=must-not-leak', 'GET'],
+    ['/mobile/connect?routes=public', 'GET'],
+    ['/mobile/connect?', 'GET'],
+    ['/mobile/', 'POST'],
+    ['/mobile/', 'GET', sessionA.accessToken],
+    [`/rpc?token=${sessionA.rpcToken}`, 'GET'],
+  ]) {
+    const response = await httpThroughRelay(fixture, { id: 'a', path, method, accessToken, host: SHARED_HOST });
+    assert.equal(response.status, 426, `${method} ${path} is not proxied or redirected from the shared root`);
+    assert.equal(response.headers.location, undefined);
+    assert.doesNotMatch(response.body.toString('utf8'), /must-not-leak/, 'the query is never reflected');
+    assert.equal(parseJsonBody(response).code, 'RELAY_ORIGIN_ISOLATION_REQUIRED');
+  }
+
+  const mixed = await httpThroughRelay(fixture, { id: 'b', path: '/api/whoami', accessToken: sessionA.accessToken, host: gatewayHost('a') });
+  assert.equal(mixed.status, 421, 'Gateway A origin cannot address Gateway B by path');
+  const traversal = await httpThroughRelay(fixture, { id: 'a', path: '/../b/api/whoami', accessToken: sessionA.accessToken });
+  assert.equal(traversal.status, 400, 'dot segments cannot re-target another mount');
+
+  const crossOrigin = await openWebSocket(fixture, {
+    path: rpcPath('a', sessionA.rpcToken),
+    headers: { authorization: `Bearer ${sessionA.accessToken}`, origin: `https://${gatewayHost('b')}` },
+  });
+  assert.equal(crossOrigin.status, 403, "another Gateway origin cannot open this Gateway's RPC");
+  const sharedSocket = await openWebSocket(fixture, {
+    path: rpcPath('a', sessionA.rpcToken), headers: { host: SHARED_HOST, authorization: `Bearer ${sessionA.accessToken}` },
+  });
+  assert.equal(sharedSocket.status, 426, 'WebSocket credentials are never accepted on the shared root');
+  const ownSocket = await openRpc(fixture, 'a', sessionA);
+  assert.equal(ownSocket.status, 101);
+
+  const ask = (domain, headers = {}) => new Promise((resolve, reject) => {
+    const outgoing = request({
+      hostname: '127.0.0.1', port: fixture.relay.controlPort, headers,
+      path: `/_relay/tls-ask?domain=${encodeURIComponent(domain)}`,
+    }, response => { response.resume(); resolve(response.statusCode); });
+    outgoing.once('error', reject);
+    outgoing.end();
+  });
+  assert.equal(await ask(gatewayHost('a')), 200, 'Caddy may obtain a certificate for an active Gateway origin');
+  assert.equal(await ask(gatewayHost('unregistered')), 403);
+  assert.equal(await ask(SHARED_HOST), 403);
+  assert.equal(await ask(gatewayHost('a'), { host: SHARED_HOST }), 403, 'the public /_relay route cannot query the ask');
+  assert.equal(await ask(gatewayHost('a'), { 'x-forwarded-for': '203.0.113.9' }), 403);
+});
+
+test('desktop cookies share Gateway validation across API, RPC and a bounded Vite module burst', async t => {
+  const fixture = await startFixture(t, { maxConnectionsA: 64, maxBytesA: 8 * 1024 * 1024,
+    trafficWindowMs: 60_000, connectTimeout: 3000 });
+  const gateway = fixture.gateways.get('a');
+  const session = issueGatewayAccess(gateway, randomUUID());
+  gateway.browserTokens.add(session.accessToken);
+  const cookie = `__Host-kcoder_studio_session=${session.accessToken}`;
+  const first = await httpThroughRelay(fixture, { id: 'a', path: '/api/whoami', cookie });
+  assert.equal(first.status, 200);
+  const productCookie = `__Host-kcoder_studio_session_account_${'a'.repeat(24)}=${'b'.repeat(43)}`;
+  const withProductCookie = `${cookie}; ${productCookie}; unrelated=private`;
+  const account = await httpThroughRelay(fixture, { id: 'a', path: '/api/kcoder-account', cookie: withProductCookie });
+  assert.equal(account.status, 200);
+  assert.equal(parseJsonBody(account).cookie, `${cookie}; ${productCookie}`);
+  const unrelated = await httpThroughRelay(fixture, { id: 'a', path: '/api/cookie', cookie: withProductCookie });
+  assert.equal(parseJsonBody(unrelated).cookie, cookie);
+
+  assert.equal(gateway.validationRequests.length, 1);
+  assert.equal(gateway.validationRequests[0].cookie, undefined);
+  assert.equal(gateway.validationRequests[0].authorization, undefined);
+  assert.equal((await httpThroughRelay(fixture, { id: 'a', path: '/api/whoami',
+    cookie: `kcoder_studio_session=${session.accessToken}` })).status, 401,
+  'a legacy parent-domain cookie cannot authorize an isolated Gateway');
+  assert.equal((await httpThroughRelay(fixture, { id: 'a', path: '/api/whoami',
+    cookie: `kcoder_studio_session=parent; ${cookie}` })).status, 200,
+  'the isolated host cookie remains authoritative beside a parent-domain cookie');
+  const rpc = await openWebSocket(fixture, { path: rpcPath('a', session.rpcToken), headers: { cookie } });
+  assert.equal(rpc.status, 101);
+  assert.equal(await websocketEcho(rpc.ws, 'desktop'), 'gateway-a:desktop');
+
+  const modules = await Promise.all(Array.from({ length: 180 }, (_, n) =>
+    httpThroughRelay(fixture, { id: 'a', path: `/src/module-${n}.ts`, cookie, timeoutMs: 10_000 })));
+  assert.ok(modules.every(response => response.status === 200), 'a module burst must queue instead of dropping imports');
+  assert.ok(gateway.peakModuleReads > 2 && gateway.peakModuleReads <= 16);
+  assert.equal(gateway.validationRequests.length, 1);
+
+  for (const options of [
+    { id: 'b', cookie },
+    { id: 'a', cookie: `${cookie}; ${cookie}` },
+    { id: 'a', cookie, accessToken: opaqueToken() },
+  ]) {
+    assert.equal((await httpThroughRelay(fixture, { ...options, path: '/api/whoami' })).status, 401);
+  }
+  gateway.accessTokens.delete(session.accessToken);
+  assert.equal((await httpThroughRelay(fixture, { id: 'a', path: '/api/whoami', cookie })).status, 401,
+    'a routing grant never replaces Gateway authorization');
+  gateway.accessTokens.add(session.accessToken);
+  const closed = once(rpc.ws, 'close');
+  assert.equal((await httpThroughRelay(fixture, { id: 'a', path: '/logout', method: 'POST', cookie })).status, 303);
+  await withTimeout(closed, 3000, 'logout did not release the browser RPC route');
+  assert.equal((await httpThroughRelay(fixture, { id: 'a', path: '/api/whoami', cookie })).status, 401);
+});
+
+test('unknown LAN-issued access is read-only validated once before Relay HTTP and RPC admission', async t => {
+  const fixture = await startFixture(t);
+  const gatewayA = fixture.gateways.get('a');
+  const directSession = issueGatewayAccess(gatewayA);
+  gatewayA.validationDelayMs = 100;
+
+  const [rest, rpc] = await Promise.all([
+    httpThroughRelay(fixture, { id: 'a', path: '/api/whoami', accessToken: directSession.accessToken }),
+    openRpc(fixture, 'a', directSession),
+  ]);
+  assert.equal(rest.status, 200, 'a real Gateway-issued LAN access token can use public REST');
+  assert.equal(parseJsonBody(rest).gateway, 'gateway-a');
+  assert.equal(rpc.status, 101, 'the same direct-issued access token can use public RPC');
+  assert.equal(await websocketEcho(rpc.ws, 'same-profile'), 'gateway-a:same-profile');
+  const directHash = tokenHash(directSession.accessToken);
+  const validations = gatewayA.validationRequests.filter(value => value.credentialHash === directHash);
+  assert.equal(validations.length, 1, 'concurrent REST/RPC misses share one token-hash validation flight');
+  assert.deepEqual({
+    path: validations[0].path,
+    host: validations[0].host,
+    origin: validations[0].origin,
+    authorization: validations[0].authorization,
+    cookie: validations[0].cookie,
+    relayHeader: validations[0].relayHeader,
+  }, {
+    path: '/api/mobile/session/relay-validation',
+    host: gatewayHost('a'),
+    origin: undefined,
+    authorization: undefined,
+    cookie: undefined,
+    relayHeader: gatewayA.gatewaySecret,
+  }, 'only the selected Gateway pairing credential reaches the private validation endpoint');
+
+  const spoofedHeader = await httpThroughRelay(fixture, {
+    id: 'a', path: '/api/whoami', accessToken: directSession.accessToken, validationHeader: 'public-spoof',
+  });
+  assert.equal(spoofedHeader.status, 200, 'a public internal-header attempt cannot disturb an already admitted token');
+  assert.equal(gatewayA.protectedApiRequests.at(-1).validationHeader, undefined, 'the Relay strips the internal header from public API traffic');
+
+  const validationBeforePublicCall = gatewayA.validationRequests.length;
+  const privatePath = await httpThroughRelay(fixture, {
+    id: 'a',
+    path: '/api/mobile/session/relay-validation?anything=1',
+    method: 'POST',
+    body: JSON.stringify({ version: 1, kind: 'access', credential: directSession.accessToken, requestId: 'c'.repeat(48) }),
+    contentType: 'application/json',
+    validationHeader: gatewayA.gatewaySecret,
+  });
+  assert.equal(privatePath.status, 404, 'public callers cannot invoke the internal validation route');
+  assert.equal(gatewayA.validationRequests.length, validationBeforePublicCall, 'the public path never reaches Gateway validation');
+
+  const gatewayB = fixture.gateways.get('b');
+  const directB = issueGatewayAccess(gatewayB);
+  const crossTenant = await httpThroughRelay(fixture, { id: 'a', path: '/api/whoami', accessToken: directB.accessToken });
+  assert.equal(crossTenant.status, 401, 'a real token from another Gateway cannot be adopted into this Gateway cache');
+  assert.equal(gatewayA.protectedApiRequests.some(value => value.accessHash === tokenHash(directB.accessToken)), false,
+    'failed validation never forwards the original business API request');
+
+  const anonymousBefore = gatewayA.validationRequests.length;
+  const anonymousApi = await httpThroughRelay(fixture, { id: 'a', path: '/api/whoami' });
+  assert.equal(anonymousApi.status, 401, 'other APIs remain authenticated');
+  assert.equal(gatewayA.validationRequests.length, anonymousBefore, 'no credential means no validation tunnel');
+  await closeWebSocket(rpc.ws);
+});
+
+test('unknown access validation has a hard deadline and is fenced when Gateway control drops', async t => {
+  const fixture = await startFixture(t, { connectTimeout: 8_000 });
+  const gatewayA = fixture.gateways.get('a');
+  const timedOutSession = issueGatewayAccess(gatewayA);
+  gatewayA.validationHang = true;
+  const timedOut = await httpThroughRelay(fixture, {
+    id: 'a', path: '/api/whoami', accessToken: timedOutSession.accessToken, timeoutMs: 7_000,
+  });
+  assert.equal(timedOut.status, 504, 'a Gateway that withholds validation cannot hold public access indefinitely');
+  assert.equal(gatewayA.protectedApiRequests.some(value => value.accessHash === tokenHash(timedOutSession.accessToken)), false,
+    'timed-out validation never forwards the original API request');
+
+  gatewayA.validationHang = false;
+  gatewayA.validationDelayMs = 1_000;
+  const disconnectedSession = issueGatewayAccess(gatewayA);
+  const disconnectedHash = tokenHash(disconnectedSession.accessToken);
+  const inFlight = httpThroughRelay(fixture, {
+    id: 'a', path: '/api/whoami', accessToken: disconnectedSession.accessToken, timeoutMs: 3_000,
+  });
+  await withTimeout((async () => {
+    while (!gatewayA.validationRequests.some(value => value.credentialHash === disconnectedHash)) await delay(5);
+  })(), 1_000, 'Relay did not send the read-only validation request');
+  fixture.clientById.get('a').client.close();
+  const disconnected = await withTimeout(inFlight, 2_000, 'Gateway control loss did not settle validation');
+  assert.equal(disconnected.status, 503, 'control loss returns unavailable and fences stale authorization metadata');
+  assert.equal(gatewayA.protectedApiRequests.some(value => value.accessHash === disconnectedHash), false,
+    'a disconnected Gateway cannot admit or receive the original business request');
 });
 
 test('pairing and session credentials are owned by one Gateway, including Mobile Web subprotocols', async t => {
@@ -447,7 +822,7 @@ test('pairing and session credentials are owned by one Gateway, including Mobile
   const sessionB = await pairGateway(fixture, 'b');
 
   const wrongPairing = await httpThroughRelay(fixture, {
-    id: 'a', path: '/api/mobile/session', method: 'POST', pairingToken: fixture.gateways.get('b').pairingToken,
+    id: 'a', path: '/api/mobile/session', method: 'POST', gatewaySecret: fixture.gateways.get('b').gatewaySecret,
   });
   assert.equal(wrongPairing.status, 401, 'Gateway B pairing token cannot pair Gateway A');
 
@@ -470,17 +845,85 @@ test('pairing and session credentials are owned by one Gateway, including Mobile
   assert.equal(await websocketEcho(correctMobileWeb.ws, 'owned'), 'gateway-b:owned');
 });
 
+test('anonymous connection proofs use the selected public Gateway route and accept only the exact probe shape', async t => {
+  const fixture = await startFixture(t);
+  const nonceA = 'a'.repeat(48);
+  const nonceB = 'b'.repeat(48);
+  const endpointA = `https://${gatewayHost('a')}/g/a`;
+  const endpointB = `https://${gatewayHost('b')}/g/b`;
+
+  const proofForBThroughRouteA = await httpThroughRelay(fixture, {
+    id: 'a',
+    path: `/api/mobile/connection-proof?nonce=${nonceA}&endpoint=${encodeURIComponent(endpointB)}`,
+    accessToken: opaqueToken(),
+    cookie: 'kcoder_session=must-not-cross-the-proof-boundary',
+  });
+  assert.equal(proofForBThroughRouteA.status, 404, 'Gateway A cannot sign a challenge naming Gateway B endpoint');
+  assert.deepEqual(fixture.gateways.get('a').proofRequests.at(-1), {
+    nonce: nonceA, endpoint: endpointB, authorization: undefined, cookie: undefined,
+  }, 'proof requests do not forward caller bearer or cookie credentials');
+
+  const proofA = await httpThroughRelay(fixture, {
+    id: 'a', path: `/api/mobile/connection-proof?nonce=${nonceA}&endpoint=${encodeURIComponent(endpointA)}`,
+  });
+  assert.equal(proofA.status, 200, 'a valid proof GET is the only unauthenticated API exception');
+  assert.deepEqual(parseJsonBody(proofA), {
+    gateway: 'gateway-a', signedNonce: `a:${nonceA}`, endpoint: endpointA,
+  }, 'the public /g/a route returns a proof from Gateway A');
+
+  const cacheBustedProof = await httpThroughRelay(fixture, {
+    id: 'a', path: `/api/mobile/connection-proof?nonce=${nonceA}&endpoint=${encodeURIComponent(endpointA)}&_=1234567890123456`,
+  });
+  assert.equal(cacheBustedProof.status, 200, 'one bounded decimal fetch cachebuster preserves proof access');
+  assert.deepEqual(parseJsonBody(cacheBustedProof), parseJsonBody(proofA), 'the cachebuster does not affect the signed proof');
+
+  const proofB = await httpThroughRelay(fixture, {
+    id: 'b',
+    path: `/api/mobile/connection-proof?nonce=${nonceB}&endpoint=${encodeURIComponent(endpointB)}`,
+  });
+  assert.equal(proofB.status, 200);
+  assert.equal(parseJsonBody(proofB).signedNonce, `b:${nonceB}`, 'the public /g/b route reaches only Gateway B');
+  assert.equal(fixture.gateways.get('a').proofRequests.length, 3);
+  assert.equal(fixture.gateways.get('b').proofRequests.length, 1);
+
+  const rejectedPaths = [
+    `/api/mobile/connection-proof?nonce=${nonceA}&endpoint=${encodeURIComponent(endpointA)}&extra=1`,
+    `/api/mobile/connection-proof?nonce=${nonceA}&nonce=${nonceB}&endpoint=${encodeURIComponent(endpointA)}`,
+    `/api/mobile/connection-proof?nonce=${nonceA}&endpoint=${encodeURIComponent(endpointA)}&endpoint=${encodeURIComponent(endpointA)}`,
+    `/api/mobile/connection-proof?nonce=${nonceA}&endpoint=${encodeURIComponent(endpointA)}&_=1&_=2`,
+    `/api/mobile/connection-proof?nonce=${nonceA}&endpoint=${encodeURIComponent(endpointA)}&_=12345678901234567`,
+    `/api/mobile/connection-proof?%6Eonce=${nonceA}&endpoint=${encodeURIComponent(endpointA)}`,
+    `/api/mobile/connection-proof?nonce=${nonceA}&%65ndpoint=${encodeURIComponent(endpointA)}`,
+    `/api/mobile/connection-proof?nonce=${nonceA}&endpoint=${encodeURIComponent(endpointA)}&padding=${'x'.repeat(4096)}`,
+  ];
+  for (const path of rejectedPaths) {
+    const rejected = await httpThroughRelay(fixture, { id: 'a', path });
+    assert.equal(rejected.status, 400, path);
+  }
+  const proofWithBody = await httpThroughRelay(fixture, {
+    id: 'a', method: 'GET', body: 'unexpected',
+    path: `/api/mobile/connection-proof?nonce=${nonceA}&endpoint=${encodeURIComponent(endpointA)}`,
+  });
+  assert.equal(proofWithBody.status, 400, 'GET bodies remain outside the anonymous proof exception');
+  const postProof = await httpThroughRelay(fixture, {
+    id: 'a', method: 'POST', path: `/api/mobile/connection-proof?nonce=${nonceA}&endpoint=${encodeURIComponent(endpointA)}`,
+  });
+  assert.equal(postProof.status, 401, 'the proof path does not open anonymous POST access');
+  const otherApi = await httpThroughRelay(fixture, { id: 'a', path: '/api/whoami' });
+  assert.equal(otherApi.status, 401, 'every other API route still requires Gateway access authorization');
+});
+
 test('Relay forwards a Gateway-rotated phone pairing credential for Gateway validation', async t => {
   const fixture = await startFixture(t);
   const gateway = fixture.gateways.get('a');
-  const rotatedPairingToken = opaqueToken();
-  gateway.additionalPairingTokens.add(rotatedPairingToken);
+  const rotatedGatewaySecret = opaqueToken();
+  gateway.additionalGatewaySecrets.add(rotatedGatewaySecret);
 
-  const paired = await pairGateway(fixture, 'a', rotatedPairingToken);
+  const paired = await pairGateway(fixture, 'a', rotatedGatewaySecret);
   assert.equal(typeof paired.accessToken, 'string', 'Gateway-approved rotating credential receives a mobile session');
   const otherGatewayCredential = await httpThroughRelay(fixture, {
     id: 'a', path: '/api/mobile/session', method: 'POST',
-    pairingToken: fixture.gateways.get('b').pairingToken,
+    gatewaySecret: fixture.gateways.get('b').gatewaySecret,
   });
   assert.equal(otherGatewayCredential.status, 401, 'the selected Gateway rejects a credential that it did not issue');
 });
@@ -491,7 +934,7 @@ test('the shared Host and tenant id are checked per request, keepalive does not 
 
   const offlineA = await httpThroughRelay(fixture, {
     id: 'a', path: '/api/mobile/session', method: 'POST',
-    pairingToken: fixture.gateways.get('a').pairingToken,
+    gatewaySecret: fixture.gateways.get('a').gatewaySecret,
   });
   assert.ok(offlineA.status === 503 || offlineA.status === 0, 'configured but offline Gateway A fails closed');
 
@@ -636,7 +1079,7 @@ test('connection and byte-window limits for A leave Gateway B usable', async t =
   assert.equal(recoveredA.status, 200, 'Gateway A is available again after its short traffic window');
 });
 
-test('Relay restart clears cached pairing sessions and requires re-pairing', async t => {
+test('Relay restart revalidates a still-live Gateway access grant without creating another pairing', async t => {
   const fixture = await startFixture(t);
   const sessionA = await pairGateway(fixture, 'a');
   const beforeRestart = await httpThroughRelay(fixture, {
@@ -652,13 +1095,10 @@ test('Relay restart clears cached pairing sessions and requires re-pairing', asy
   fixture.relay = await startRelay({ ...fixture.relayOptions, controlPort, proxyPort });
   await withTimeout(reconnected, 4000, 'Gateway A client did not reconnect after Relay restart');
 
-  const staleSession = await httpThroughRelay(fixture, {
+  const sessionAfterRestart = await httpThroughRelay(fixture, {
     id: 'a', path: '/api/whoami', accessToken: sessionA.accessToken,
   });
-  assert.equal(staleSession.status, 401, 'cached access token hashes are not restored across Relay restart');
-  const newSession = await pairGateway(fixture, 'a');
-  const afterRepair = await httpThroughRelay(fixture, {
-    id: 'a', path: '/api/whoami', accessToken: newSession.accessToken,
-  });
-  assert.equal(afterRepair.status, 200, 'a fresh Gateway A pairing restores access');
+  assert.equal(sessionAfterRestart.status, 200, 'the Gateway read-only validator restores a live access hash after Relay restart');
+  assert.equal(fixture.gateways.get('a').validationRequests.some(value => value.credentialHash === tokenHash(sessionA.accessToken)), true,
+    'Relay restart recovery consults the Gateway instead of restoring local token state');
 });

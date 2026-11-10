@@ -157,6 +157,88 @@ describe("useTaskSending durable queue staging review", () => {
     vi.restoreAllMocks();
   });
 
+  it.each(["resolve", "reject"] as const)("keeps the original queued draft through its first recovery write (%s)", async outcome => {
+    const entered = deferred();
+    const gate = deferred();
+    const keyArgs = ["review-profile", "review-server", "thread-first-recovery"] as const;
+    await saveWorkspaceState(...keyArgs, { composerDraft: "original queued draft" });
+    let first = true;
+    asyncStorageHarness.beforeSetItem = async () => {
+      if (!first) return;
+      first = false;
+      entered.resolve();
+      await gate.promise;
+    };
+    const context = baseContext({ input: "original queued draft", attachments: [stagedAttachment("/owned-A")],
+      onFailedSubmissionsChange: (failedSubmissions: WorkspaceViewState["failedSubmissions"]) => saveWorkspaceState(...keyArgs, { failedSubmissions }),
+      onDraftChange: (draft: string | undefined) => saveWorkspaceState(...keyArgs, { composerDraft: draft }),
+      onQueueCommit: (value: Pick<WorkspaceViewState, "queuedMessages" | "failedSubmissions">) => saveWorkspaceState(...keyArgs, value),
+    });
+    const sending = renderSendingHook(context).submit();
+    await entered.promise;
+    // Assert actual input state and persisted bytes, not just setter calls.
+    const inputDuringWrite = context.inputIntentRef.current.value;
+    const draftDuringWrite = (await loadWorkspaceState(...keyArgs)).composerDraft;
+    const rpcDuringWrite = vi.mocked(context.task.request).mock.calls.length;
+    if (outcome === "reject") gate.reject(new Error("first recovery write failed"));
+    else gate.resolve();
+    await sending;
+    expect(inputDuringWrite).toBe("original queued draft");
+    expect(draftDuringWrite).toBe("original queued draft");
+    expect(rpcDuringWrite).toBe(0);
+    expect(context.task.send).not.toHaveBeenCalled();
+    if (outcome === "reject") {
+      expect(context.inputIntentRef.current.value).toBe("original queued draft");
+      expect(context.task.request).not.toHaveBeenCalled();
+    } else expect(context.inputIntentRef.current.value).toBe("");
+  });
+
+  it("preserves a newer draft and attachments while the first queued recovery write is held", async () => {
+    const entered = deferred();
+    const gate = deferred();
+    let currentAttachments = [stagedAttachment("/owned-A")];
+    const persisted: Partial<WorkspaceViewState> = {};
+    const context = baseContext({ input: "queued A", attachments: currentAttachments,
+      setAttachments: (update: (items: typeof currentAttachments) => typeof currentAttachments) => { currentAttachments = update(currentAttachments); },
+      onFailedSubmissionsChange: async (failedSubmissions: WorkspaceViewState["failedSubmissions"]) => {
+        entered.resolve(); await gate.promise; persisted.failedSubmissions = failedSubmissions;
+      },
+      onDraftChange: vi.fn(),
+      onQueueCommit: async (value: Pick<WorkspaceViewState, "queuedMessages" | "failedSubmissions">) => { Object.assign(persisted, value); },
+    });
+    const sending = renderSendingHook(context).submit();
+    await entered.promise;
+    context.setInput("new draft B");
+    currentAttachments = [...currentAttachments, stagedAttachment("/owned-B")];
+    gate.resolve();
+    await sending;
+    expect(context.inputIntentRef.current.value).toBe("new draft B");
+    expect(currentAttachments.map(item => item.path)).toEqual(["/owned-B"]);
+    expect(context.onDraftChange).not.toHaveBeenCalled();
+    expect(persisted.queuedMessages).toHaveLength(1);
+    expect(persisted.queuedMessages?.[0]).toMatchObject({ content: "queued A", attachments: [{ path: "/owned-A" }] });
+    expect(context.task.send).not.toHaveBeenCalled();
+  });
+
+  it("keeps the durable same-ID queued recovery if the subsequent draft clear fails", async () => {
+    const keyArgs = ["review-profile", "review-server", "thread-clear-failed"] as const;
+    await saveWorkspaceState(...keyArgs, { composerDraft: "queued A" });
+    const context = baseContext({ input: "queued A", attachments: [stagedAttachment("/owned-A")],
+      onFailedSubmissionsChange: (failedSubmissions: WorkspaceViewState["failedSubmissions"]) => saveWorkspaceState(...keyArgs, { failedSubmissions }),
+      onDraftChange: async () => { throw new Error("draft clear could not be confirmed"); },
+      onQueueCommit: vi.fn(),
+    });
+    await renderSendingHook(context).submit();
+    const saved = await loadWorkspaceState(...keyArgs);
+    const row = renderSendingHook(context).failedSubmissions[0];
+    expect(saved.failedSubmissions?.[0]?.id).toBe(row?.id);
+    expect(saved.failedSubmissions?.[0]).toMatchObject({ content: "queued A", attachments: [{ path: "/owned-A" }] });
+    expect(saved.composerDraft).toBe("queued A");
+    expect(context.task.request).not.toHaveBeenCalled();
+    expect(context.task.send).not.toHaveBeenCalled();
+    expect(context.onQueueCommit).not.toHaveBeenCalled();
+  });
+
   it("does not dispatch when queue commit persistence is absent", async () => {
     const persistedFailed: WorkspaceViewState["failedSubmissions"] = [];
     const context = baseContext({

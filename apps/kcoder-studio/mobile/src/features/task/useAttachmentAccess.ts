@@ -13,22 +13,102 @@ import {
   writeAsStringAsync,
 } from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Linking, Platform } from "react-native";
 import { previewableRasterMimeType } from "./attachmentPreparation";
+
+function decodedBase64ByteLength(value: string): number {
+  const normalized = value.replace(/\s/g, "");
+  const padding = normalized.endsWith("==")
+    ? 2
+    : normalized.endsWith("=")
+      ? 1
+      : 0;
+  return Math.floor((normalized.length * 3) / 4) - padding;
+}
 
 export function useAttachmentAccess(
   attachment: StagedAttachment,
   task: TaskRuntime,
   localPreviewUri?: string,
 ) {
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [previewUri, setPreviewUri] = useState<string | null>(null);
-  const [previewFailed, setPreviewFailed] = useState(false);
+  const threadId = task.getSnapshot().threadId;
+  const ownerRef = useRef({ task, threadId, path: attachment.path });
+  if (
+    ownerRef.current.task !== task ||
+    ownerRef.current.threadId !== threadId ||
+    ownerRef.current.path !== attachment.path
+  ) {
+    ownerRef.current = { task, threadId, path: attachment.path };
+  }
+  const owner = ownerRef.current;
+  const mountedRef = useRef(false);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+  const isOwnerCurrent = (candidate: typeof owner) =>
+    mountedRef.current &&
+    ownerRef.current === candidate &&
+    !candidate.task.isDisposed() &&
+    candidate.task.getSnapshot().threadId === candidate.threadId;
+  const [loadingState, setLoadingState] = useState<{
+    owner: typeof owner;
+    value: boolean;
+  } | null>(null);
+  const [errorState, setErrorState] = useState<{
+    owner: typeof owner;
+    value: string | null;
+  } | null>(null);
+  const [previewUriState, setPreviewUriState] = useState<{
+    owner: typeof owner;
+    value: string | null;
+  } | null>(null);
+  const [previewFailedState, setPreviewFailedState] = useState<{
+    owner: typeof owner;
+    value: boolean;
+  } | null>(null);
+  const loading = loadingState?.owner === owner ? loadingState.value : false;
+  const error = errorState?.owner === owner ? errorState.value : null;
+  const previewUri =
+    previewUriState?.owner === owner ? previewUriState.value : null;
+  const previewFailed =
+    previewFailedState?.owner === owner ? previewFailedState.value : false;
+  const setLoading = (value: boolean) => setLoadingState({ owner, value });
+  const setError = (value: string | null) => setErrorState({ owner, value });
+  const setPreviewUri = (value: string | null) =>
+    setPreviewUriState({ owner, value });
+  const setPreviewFailed = (value: boolean) =>
+    setPreviewFailedState({ owner, value });
+  const [inlinePreviewState, setInlinePreviewState] = useState<{
+    owner: typeof owner;
+    value: string;
+  } | null>(null);
+  const [inlinePreviewLoadingState, setInlinePreviewLoadingState] = useState<{
+    owner: typeof owner;
+    value: boolean;
+  } | null>(null);
+  const inlinePreviewRequestRef = useRef<{
+    owner: typeof owner;
+    promise: Promise<string | null>;
+  } | null>(null);
+  const inlinePreviewUri =
+    localPreviewUri ??
+    (inlinePreviewState?.owner === owner ? inlinePreviewState.value : null);
+  const inlinePreviewLoading =
+    inlinePreviewLoadingState?.owner === owner
+      ? inlinePreviewLoadingState.value
+      : false;
   const contentRef = useRef<string | null>(null);
+  const contentCacheOwnerRef = useRef(owner);
+  if (contentCacheOwnerRef.current !== owner) {
+    contentCacheOwnerRef.current = owner;
+    contentRef.current = null;
+  }
   const previewMime =
-    attachment.fileSize <= DIRECT_ATTACHMENT_BYTES
+    (localPreviewUri || attachment.fileSize <= DIRECT_ATTACHMENT_BYTES)
       ? previewableRasterMimeType(attachment.mimeType)
       : null;
   const closePreview = () => {
@@ -36,15 +116,18 @@ export function useAttachmentAccess(
     setPreviewFailed(false);
     setError(null);
   };
-  const read = async () => {
+  const read = async (): Promise<string | null> => {
+    const requestOwner = owner;
+    if (!isOwnerCurrent(requestOwner)) return null;
     if (contentRef.current) return contentRef.current;
-    const result = await task.request<{
+    const result = await requestOwner.task.request<{
       contentBase64?: string;
       size?: number;
     }>("attachment/read", {
-      threadId: task.getSnapshot().threadId,
-      path: attachment.path,
+      threadId: requestOwner.threadId,
+      path: requestOwner.path,
     });
+    if (!isOwnerCurrent(requestOwner)) return null;
     if (!result.contentBase64)
       throw new Error(t("task.the_appserver_returned_no_attachment_content"));
     if (result.size !== undefined && result.size > 256 * 1024)
@@ -111,6 +194,7 @@ export function useAttachmentAccess(
       attachment.fileSize <= DIRECT_ATTACHMENT_BYTES
     ) {
       const encoded = contentBase64 ?? (await read());
+      if (!encoded) return;
       const uri = `data:${attachment.mimeType};base64,${encoded}`;
       if (Platform.OS === "web" && globalThis.document) {
         const anchor = globalThis.document.createElement("a");
@@ -171,7 +255,7 @@ export function useAttachmentAccess(
     file.create({ overwrite: true, intermediates: true });
     const handle = file.open();
     try {
-      await readChunks((bytes) => handle.writeBytes(bytes));
+      await readChunks((bytes) => handle.writeBytesSync(bytes));
     } catch (value) {
       handle.close();
       file.delete();
@@ -191,6 +275,8 @@ export function useAttachmentAccess(
   };
   const open = async () => {
     if (loading) return;
+    const requestOwner = owner;
+    if (!isOwnerCurrent(requestOwner)) return;
     if (previewMime && localPreviewUri) {
       setError(null);
       setPreviewFailed(false);
@@ -202,24 +288,95 @@ export function useAttachmentAccess(
     try {
       if (previewMime) {
         const encoded = await read();
+        if (!encoded || !isOwnerCurrent(requestOwner)) return;
         setPreviewFailed(false);
         setPreviewUri(`data:${previewMime};base64,${encoded}`);
       } else await saveOrShare();
     } catch (value) {
-      setError(value instanceof Error ? value.message : String(value));
+      if (isOwnerCurrent(requestOwner))
+        setError(value instanceof Error ? value.message : String(value));
     } finally {
-      setLoading(false);
+      if (isOwnerCurrent(requestOwner)) setLoading(false);
     }
   };
+  const loadInlinePreview = async (): Promise<string | null> => {
+    if (!previewMime || !isOwnerCurrent(owner)) return null;
+    if (localPreviewUri) return localPreviewUri;
+    if (inlinePreviewState?.owner === owner) return inlinePreviewState.value;
+    if (inlinePreviewRequestRef.current?.owner === owner)
+      return inlinePreviewRequestRef.current.promise;
+
+    const requestOwner = owner;
+    const promise = (async () => {
+      if (isOwnerCurrent(requestOwner)) {
+        setInlinePreviewLoadingState({ owner: requestOwner, value: true });
+        setError(null);
+      }
+      try {
+        const result = await requestOwner.task.request<{
+          contentBase64?: string;
+          size?: number;
+        }>("attachment/read", {
+          threadId: requestOwner.threadId,
+          path: requestOwner.path,
+        });
+        if (!isOwnerCurrent(requestOwner)) return null;
+        if (!result.contentBase64)
+          throw new Error(
+            t("task.the_appserver_returned_no_attachment_content"),
+          );
+        if (
+          (result.size !== undefined &&
+            result.size > DIRECT_ATTACHMENT_BYTES) ||
+          decodedBase64ByteLength(result.contentBase64) >
+            DIRECT_ATTACHMENT_BYTES
+        )
+          throw new Error(
+            t("task.the_attachment_exceeds_the_256_kib_preview_limit"),
+          );
+        const uri = `data:${previewMime};base64,${result.contentBase64.replace(/\s/g, "")}`;
+        if (isOwnerCurrent(requestOwner))
+          setInlinePreviewState({ owner: requestOwner, value: uri });
+        return uri;
+      } catch (value) {
+        if (isOwnerCurrent(requestOwner))
+          setError(value instanceof Error ? value.message : String(value));
+        return null;
+      } finally {
+        if (isOwnerCurrent(requestOwner))
+          setInlinePreviewLoadingState({ owner: requestOwner, value: false });
+      }
+    })();
+    inlinePreviewRequestRef.current = { owner: requestOwner, promise };
+    try {
+      return await promise;
+    } finally {
+      if (inlinePreviewRequestRef.current?.promise === promise)
+        inlinePreviewRequestRef.current = null;
+    }
+  };
+  const showInlinePreview = () => {
+    if (!isOwnerCurrent(owner)) return;
+    const uri =
+      localPreviewUri ??
+      (inlinePreviewState?.owner === owner ? inlinePreviewState.value : null);
+    if (!uri) return;
+    setError(null);
+    setPreviewFailed(false);
+    setPreviewUri(uri);
+  };
   const download = async () => {
+    const requestOwner = owner;
+    if (!isOwnerCurrent(requestOwner)) return;
     setLoading(true);
     setError(null);
     try {
       await saveOrShare();
     } catch (value) {
-      setError(value instanceof Error ? value.message : String(value));
+      if (isOwnerCurrent(requestOwner))
+        setError(value instanceof Error ? value.message : String(value));
     } finally {
-      setLoading(false);
+      if (isOwnerCurrent(requestOwner)) setLoading(false);
     }
   };
   return {
@@ -228,8 +385,12 @@ export function useAttachmentAccess(
     previewUri,
     previewFailed,
     previewMime,
+    inlinePreviewUri,
+    inlinePreviewLoading,
     closePreview,
     open,
+    loadInlinePreview,
+    showInlinePreview,
     download,
     setError,
     setPreviewFailed,

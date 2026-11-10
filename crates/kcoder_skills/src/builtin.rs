@@ -11,6 +11,11 @@ use std::path::{Path, PathBuf};
 
 /// Hidden directory used by skills bundled with the KCoder binary.
 pub const BUILTIN_SKILLS_DIR_NAME: &str = ".builtin";
+
+/// Names are available before materialization so imports cannot shadow shipped capabilities.
+pub fn skill_names() -> impl Iterator<Item = &'static str> {
+    BUILTIN_SKILLS.iter().map(|(name, _)| *name)
+}
 const BUILTIN_MANIFEST_FILENAME: &str = ".builtin_manifest";
 const BUILTIN_MANIFEST_VERSION: u32 = 1;
 
@@ -242,7 +247,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(manifest.version, BUILTIN_MANIFEST_VERSION);
-        assert_eq!(manifest.skills.len(), 14);
+        assert_eq!(manifest.skills.len(), 15);
         assert_eq!(
             manifest.skills["kcoder-settings"].source,
             "kcoder_skills/assets/builtin/kcoder-settings/SKILL.md"
@@ -483,13 +488,13 @@ mod tests {
         let project = TempDir::new().unwrap();
         let root = ensure_builtin_skills(config.path()).unwrap();
         let packages = crate::bundled_assets::packages();
-        assert_eq!(packages.len(), 13);
+        assert_eq!(packages.len(), 14);
         assert_eq!(
             packages
                 .iter()
                 .map(|package| package.files.len())
                 .sum::<usize>(),
-            322
+            324
         );
         assert!(
             packages.iter().any(|package| {
@@ -500,6 +505,19 @@ mod tests {
             }),
             "the bundled skill creator must include its KCoder CLI adapter"
         );
+        let visualization = packages
+            .iter()
+            .find(|package| package.name == "kworker-visualization")
+            .unwrap();
+        assert!(
+            visualization
+                .files
+                .iter()
+                .any(|file| file.relative_path == Path::new("LICENSE"))
+        );
+        let skill = crate::parse_skill_file(&root.join("kworker-visualization/SKILL.md")).unwrap();
+        assert!(skill.requires_inline_widgets());
+        assert_eq!(skill.requires_tools, ["show_widget"]);
         for package in &packages {
             for file in &package.files {
                 assert_eq!(

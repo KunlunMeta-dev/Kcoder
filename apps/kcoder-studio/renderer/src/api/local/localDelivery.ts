@@ -1,4 +1,4 @@
-import { convertFileSrc } from '@tauri-apps/api/core'
+import { clientResourceUrl } from '@/lib/client-resource-url'
 
 import type {
   CloudLoopItemAttachment,
@@ -233,7 +233,7 @@ async function fileInput(file: File) {
 
 function localAccess(record: LocalAccessRecord) {
   return {
-    url: convertFileSrc(record.path),
+    url: clientResourceUrl(record.path) ?? '',
     expires_in_seconds: 0,
   }
 }

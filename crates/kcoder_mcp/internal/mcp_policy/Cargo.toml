@@ -1,0 +1,23 @@
+[package]
+name = "kcoder_mcp_policy"
+description = "MCP configuration policy, credential preparation and tool names."
+publish = false
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+base64 = "0.22"
+http = "1"
+kcoder_config = { path = "../../../kcoder_config" }
+kcoder_types = { path = "../../../kcoder_types" }
+serde_json.workspace = true
+serde_urlencoded = "0.7"
+url.workspace = true
+
+[lib]
+path = "../../src/internal/mcp_policy/lib.rs"

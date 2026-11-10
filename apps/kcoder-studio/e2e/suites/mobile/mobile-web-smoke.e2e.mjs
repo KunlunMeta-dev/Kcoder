@@ -1,37 +1,27 @@
 import assert from "node:assert/strict";
-import { access, mkdir } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import { startChromium } from "../../harness/chromium.mjs";
 import { startGateway } from "../../harness/gateway.mjs";
+import { exportMobileWeb } from "../../harness/mobile-web-export.mjs";
 import { appRoot, runE2E } from "../../harness/run-context.mjs";
-
-const mobileDist = resolve(appRoot, "mobile/dist");
-await access(resolve(mobileDist, "index.html"));
 
 const mobileCopy = {
   en: {
     directConnection: "Direct connection",
-    terminalSettings: "Terminal settings",
-    close: "Close",
-    scrollbackLines: "50,000 lines scrollback",
-    connectionDiagnostics: "Connection diagnostics",
+    scrollbackSummary: "50,000 lines",
     rerunDiagnostics: "Run diagnostics again",
     diagnosticsFootnote:
       "Diagnostics refresh the Gateway server list and statuses using the current mobile session; no new SSH or PTY processes are started.",
-    addConnection: "Add connection",
-    back: "Back",
+    hostHistory: "View task history for this host",
   },
   "zh-CN": {
     directConnection: "直接连接",
-    terminalSettings: "终端设置",
-    close: "关闭",
-    scrollbackLines: "50,000 行回滚",
-    connectionDiagnostics: "连接诊断",
+    scrollbackSummary: "50,000 行",
     rerunDiagnostics: "重新运行诊断",
     diagnosticsFootnote:
       "诊断直接使用当前移动会话刷新 Gateway 的服务器列表与状态，不会启动新的 SSH 或 PTY 进程。",
-    addConnection: "添加连接",
-    back: "返回",
+    hostHistory: "查看此主机的任务历史",
   },
 };
 
@@ -51,17 +41,24 @@ await runE2E(
     retainSuccessLogs: true,
   },
   async (context) => {
+    const mobileWeb = await exportMobileWeb(context, {
+      label: "mobile-web-smoke-export",
+      outputName: "mobile-web-smoke-build",
+      dependencyRoot: process.env.KCODER_E2E_MOBILE_DEPENDENCY_ROOT || undefined,
+      timeoutMs: 10 * 60 * 1000,
+    });
     const gateway = await startGateway(context, {
       auth: true,
       label: "mobile-web-gateway",
       workspace: appRoot,
       env: {
         KCODER_STUDIO_MOCK: "1",
-        KCODER_STUDIO_WEB_ROOT: mobileDist,
+        KCODER_STUDIO_WEB_ROOT: mobileWeb.path,
       },
     });
     const chromium = await startChromium(context, {
       label: "mobile-web-chromium",
+      startTimeoutMs: 60_000,
     });
     const page = await chromium.newPage({
       viewport: { width: 390, height: 844 },
@@ -76,7 +73,8 @@ await runE2E(
         browserErrors.push(`console: ${message.text()}`);
     });
     const selectWorkspaceTab = async (tabId) => {
-      await page.getByTestId("workspace-tab-switcher").click();
+      await page.getByTestId("task-more").click();
+      await page.getByTestId("task-menu-workspace").click();
       const target = page.getByTestId(`workspace-tab-${tabId}`);
       await target.waitFor({ state: "visible", timeout: 10_000 });
       await target.click();
@@ -154,6 +152,62 @@ await runE2E(
       new URL(homeUrl).pathname.split("/").filter(Boolean)[1] ?? "",
     );
     assert.ok(profileId, `移动首页 URL 缺少 profileId：${homeUrl}`);
+    await page.goto(`${gateway.baseUrl}/settings`, {
+      waitUntil: "domcontentloaded",
+    });
+    await page.getByTestId("settings-home").waitFor({
+      state: "visible",
+      timeout: 30_000,
+    });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.emulateMedia({ colorScheme: "light" });
+    await page.waitForFunction(
+      () => document.documentElement.style.colorScheme === "light",
+      null,
+      { timeout: 10_000 },
+    );
+    await capture(page, context, "settings-home-light-390.png");
+    await page.emulateMedia({ colorScheme: "dark" });
+    await page.waitForFunction(
+      () => document.documentElement.style.colorScheme === "dark",
+      null,
+      { timeout: 10_000 },
+    );
+    await capture(page, context, "settings-home-dark-390.png");
+    await page.setViewportSize({ width: 320, height: 568 });
+    await capture(page, context, "settings-home-dark-320.png");
+    await page.emulateMedia({ colorScheme: "light" });
+    await page.waitForFunction(
+      () => document.documentElement.style.colorScheme === "light",
+      null,
+      { timeout: 10_000 },
+    );
+    await capture(page, context, "settings-home-light-320.png");
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(`${gateway.baseUrl}/settings-appearance`, {
+      waitUntil: "domcontentloaded",
+    });
+    await page.getByTestId("settings-appearance-screen").waitFor({
+      state: "visible",
+      timeout: 30_000,
+    });
+    await page.getByTestId("settings-appearance-title").waitFor({
+      state: "visible",
+      timeout: 10_000,
+    });
+    await page.waitForFunction(
+      () => document.documentElement.style.colorScheme === "light",
+      null,
+      { timeout: 10_000 },
+    );
+    await capture(page, context, "settings-appearance-light-390.png");
+    await page.setViewportSize({ width: 320, height: 568 });
+    await capture(page, context, "settings-appearance-light-320.png");
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(homeUrl, { waitUntil: "domcontentloaded" });
+    await page
+      .getByTestId("new-workspace")
+      .waitFor({ state: "visible", timeout: 30_000 });
     await page.goto(
       `${gateway.baseUrl}/open-project?profileId=${encodeURIComponent(profileId)}`,
       { waitUntil: "domcontentloaded" },
@@ -184,53 +238,68 @@ await runE2E(
     }
 
     await page.getByLabel("设置", { exact: true }).click();
+    await page.getByTestId("settings-home").waitFor({ state: "visible", timeout: 10_000 });
     await page.getByTestId("terminal-settings").click();
-    const terminalSettingsDialog = page.getByRole("dialog", {
-      name: await mobileText(page, "terminalSettings"),
-      exact: true,
-    });
-    await terminalSettingsDialog.waitFor({ state: "visible", timeout: 10_000 });
-    await page.getByRole("radio", { name: "50,000", exact: true }).click();
-    await page.getByLabel(await mobileText(page, "close"), { exact: true }).click();
+    await page.getByTestId("settings-terminal-screen").waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByTestId("settings-terminal-title").waitFor({ state: "visible", timeout: 10_000 });
+    assert.equal(new URL(page.url()).pathname, "/settings-terminal");
+    const scrollbackOption = page.getByTestId("terminal-scrollback-50000").and(page.locator(":visible"));
+    await scrollbackOption.waitFor({ state: "visible", timeout: 10_000 });
+    await scrollbackOption.click();
+    assert.equal(await scrollbackOption.getAttribute("aria-checked"), "true",
+      "the selected terminal scrollback radio must expose its checked state");
+    await page.waitForFunction(() => {
+      try {
+        return JSON.parse(localStorage.getItem("kcoder-studio:mobile-app-preferences:v1") ?? "null")?.terminalScrollbackLines === 50_000;
+      } catch {
+        return false;
+      }
+    }, null, { timeout: 10_000 });
+    await clickVisibleSettingsBack(page, "settings-terminal-screen");
+    await page.getByTestId("settings-home").waitFor({ state: "visible", timeout: 10_000 });
     assert.ok(
       (await page.getByTestId("terminal-settings").innerText()).includes(
-        await mobileText(page, "scrollbackLines"),
+        await mobileText(page, "scrollbackSummary"),
       ),
       "终端回滚设置应立即反映到设置页",
     );
     await page.reload({ waitUntil: "domcontentloaded" });
     await page
-      .getByTestId("terminal-settings")
+      .getByTestId("settings-home")
       .waitFor({ state: "visible", timeout: 30_000 });
     assert.ok(
       (await page.getByTestId("terminal-settings").innerText()).includes(
-        await mobileText(page, "scrollbackLines"),
+        await mobileText(page, "scrollbackSummary"),
       ),
       "终端回滚设置应持久化到重新加载后的 Web 客户端",
     );
     await capture(page, context, "settings.png");
     await page.getByTestId("diagnostics-settings").click();
-    const diagnosticDialog = page.getByRole("dialog", {
-      name: await mobileText(page, "connectionDiagnostics"),
-      exact: true,
-    });
-    await diagnosticDialog.waitFor({ state: "visible", timeout: 10_000 });
-    await diagnosticDialog
+    const diagnosticsScreen = page.getByTestId("settings-diagnostics-screen").and(page.locator(":visible"));
+    await diagnosticsScreen.waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByTestId("settings-diagnostics-title").waitFor({ state: "visible", timeout: 10_000 });
+    assert.equal(new URL(page.url()).pathname, "/settings-diagnostics");
+    await diagnosticsScreen
       .getByText(gateway.baseUrl, { exact: true })
       .waitFor({ state: "visible", timeout: 10_000 });
-    await page
+    await diagnosticsScreen
       .getByLabel(await mobileText(page, "rerunDiagnostics"), { exact: true })
       .click();
     await page.setViewportSize({ width: 320, height: 568 });
-    const diagnosticFootnote = diagnosticDialog.getByText(
+    const diagnosticFootnote = diagnosticsScreen.getByText(
       await mobileText(page, "diagnosticsFootnote"),
       { exact: true },
     );
     await diagnosticFootnote.scrollIntoViewIfNeeded();
     await diagnosticFootnote.waitFor({ state: "visible", timeout: 10_000 });
     await capture(page, context, "diagnostics-320.png");
-    await page.getByLabel(await mobileText(page, "close"), { exact: true }).click();
+    await clickVisibleSettingsBack(page, "settings-diagnostics-screen");
+    await page.getByTestId("settings-home").waitFor({ state: "visible", timeout: 10_000 });
     await page.setViewportSize({ width: 390, height: 844 });
+    await page.getByTestId("settings-manage-connections").click();
+    await page.getByTestId("settings-connections-screen").waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByTestId("settings-connections-title").waitFor({ state: "visible", timeout: 10_000 });
+    assert.equal(new URL(page.url()).pathname, "/settings-connections");
     await page.getByTestId("settings-host-local").click();
     await page
       .getByTestId("host-details-route")
@@ -239,17 +308,20 @@ await runE2E(
       .getByText("浏览器", { exact: true })
       .waitFor({ state: "visible", timeout: 10_000 });
     await page
-      .getByText("查看此 Host 的任务历史", { exact: true })
+      .getByText(await mobileText(page, "hostHistory"), { exact: true })
       .waitFor({ state: "visible", timeout: 10_000 });
     await capture(page, context, "host-details.png");
     await page
       .getByTestId("host-details-route")
       .getByLabel("返回", { exact: true })
       .click();
+    await page.getByTestId("settings-connections-screen").waitFor({ state: "visible", timeout: 10_000 });
+    await clickVisibleSettingsBack(page, "settings-connections-screen");
     await page
-      .getByTestId("terminal-settings")
+      .getByTestId("settings-home")
       .waitFor({ state: "visible", timeout: 10_000 });
-    await page.getByText(await mobileText(page, "addConnection"), { exact: true }).click();
+    await page.getByTestId("settings-manage-connections").click();
+    await page.getByTestId("settings-add-connection").click();
     await page
       .getByTestId("server-id")
       .waitFor({ state: "visible", timeout: 30_000 });
@@ -303,7 +375,7 @@ await runE2E(
     await page
       .getByTestId("session-mock-active-session")
       .waitFor({ state: "visible", timeout: 30_000 });
-    await page.getByTestId("session-actions-mock-active-session").click();
+    await page.getByTestId("session-mock-active-session").click({ delay: 650 });
     await page
       .getByRole("dialog", { name: "任务操作", exact: true })
       .waitFor({ state: "visible", timeout: 10_000 });
@@ -319,7 +391,7 @@ await runE2E(
       .getByTestId("session-mock-active-session")
       .filter({ hasText: "已重命名移动任务" })
       .waitFor({ state: "visible", timeout: 10_000 });
-    await page.getByTestId("session-actions-mock-active-session").click();
+    await page.getByTestId("session-mock-active-session").click({ delay: 650 });
     await page.getByTestId("thread-archive-action").click();
     await page
       .getByTestId("session-mock-active-session")
@@ -328,7 +400,7 @@ await runE2E(
     await page
       .getByTestId("session-mock-archived-session")
       .waitFor({ state: "visible", timeout: 10_000 });
-    await page.getByTestId("session-actions-mock-archived-session").click();
+    await page.getByTestId("session-mock-archived-session").click({ delay: 650 });
     await page.getByTestId("thread-archive-action").click();
     await page
       .getByTestId("session-mock-archived-session")
@@ -680,7 +752,8 @@ await runE2E(
       throw error;
     }
 
-    await page.getByTestId("workspace-tab-switcher").click();
+    await page.getByTestId("task-more").click();
+    await page.getByTestId("task-menu-workspace").click();
     let terminalCloseDialog = null;
     const dismissTerminalClose = new Promise((resolveDialog) =>
       page.once("dialog", async (dialog) => {
@@ -1148,9 +1221,11 @@ await runE2E(
       await coldPage
         .locator(readySelector)
         .waitFor({ state: "visible", timeout: 30_000 });
-      const backLabel =
-        path === "/settings" ? await mobileText(coldPage, "back") : "返回";
-      await coldPage.getByLabel(backLabel, { exact: true }).first().click();
+      if (path === "/settings") {
+        await clickVisibleSettingsBack(coldPage, "settings-home");
+      } else {
+        await coldPage.getByLabel("返回", { exact: true }).first().click();
+      }
       await coldPage
         .getByTestId("new-workspace")
         .waitFor({ state: "visible", timeout: 30_000 });
@@ -1163,7 +1238,7 @@ await runE2E(
     };
     await assertColdDeepLinkBack(
       "/settings",
-      '[data-testid="terminal-settings"]',
+      '[data-testid="settings-home"]',
     );
     await assertColdDeepLinkBack(
       `/sessions?profileId=${encodeURIComponent(pairedProfileId)}`,
@@ -1254,4 +1329,17 @@ async function capture(page, context, filename) {
   const path = context.pathInCase("system-chromium", "mobile-web", filename);
   await mkdir(resolve(path, ".."), { recursive: true });
   await page.screenshot({ path, fullPage: true });
+}
+
+async function clickVisibleSettingsBack(page, screenTestId) {
+  const screen = page.getByTestId(screenTestId).and(page.locator(":visible"));
+  const back = screen
+    .getByTestId("settings-detail-back")
+    .and(page.locator(":visible"));
+  assert.equal(
+    await back.count(),
+    1,
+    `${screenTestId} must expose exactly one visible Settings Back action`,
+  );
+  await back.click();
 }

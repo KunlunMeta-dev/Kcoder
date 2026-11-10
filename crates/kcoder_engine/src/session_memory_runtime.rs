@@ -1,4 +1,5 @@
 use super::*;
+use kcoder_types::SharedMessages;
 
 #[derive(Clone)]
 struct SessionMemoryUpdateJob {
@@ -10,6 +11,13 @@ struct SessionMemoryUpdateJob {
     model_visible_tokens: usize,
     prior_snapshot: Option<SessionMemorySnapshot>,
     prefix_signature: u64,
+    office_input: Option<SessionMemoryOfficeInput>,
+}
+
+#[derive(Clone)]
+struct SessionMemoryOfficeInput {
+    messages: SharedMessages,
+    current_notes: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -41,6 +49,15 @@ impl QueryEngine {
         let Some(job) = self.prepare_session_memory_update(turn_count, recent_tools) else {
             return;
         };
+        let owner = match self.capture_auxiliary_model_work(
+            crate::native_model_requests::NativeModelRequestPurpose::Summary,
+        ) {
+            Ok(owner) => owner,
+            Err(_) => {
+                debug!("session-memory update has no native queue ownership");
+                return;
+            }
+        };
 
         if self
             .session_memory_update_running
@@ -52,7 +69,14 @@ impl QueryEngine {
 
         let engine = self.clone();
         let handle = tokio::spawn(async move {
-            let result = engine.run_session_memory_update_job(job).await;
+            let result = owner
+                .run(engine.run_session_memory_update_job(job))
+                .await
+                .unwrap_or_else(|| {
+                    Ok(SessionMemoryUpdateOutcome::Skipped(
+                        "original session replaced".into(),
+                    ))
+                });
             engine.mark_session_memory_update_finished();
             match result {
                 Ok(SessionMemoryUpdateOutcome::Updated) => {
@@ -266,6 +290,12 @@ impl QueryEngine {
             model_visible_tokens,
             prior_snapshot,
             prefix_signature: session_memory_prefix_signature(&all_messages, update_end),
+            office_input: self.native_office_projection.as_ref().map(|_| {
+                SessionMemoryOfficeInput {
+                    messages: SharedMessages::from(update_messages.to_vec()),
+                    current_notes,
+                }
+            }),
         })
     }
 
@@ -276,13 +306,26 @@ impl QueryEngine {
         let SessionMemoryUpdateJob {
             summary_provider,
             summary_model,
-            request,
+            mut request,
             summary_path,
             update_end,
             model_visible_tokens,
             prior_snapshot,
             prefix_signature,
+            office_input,
         } = job;
+        if let Some(mut input) = office_input {
+            // Keep the original State prefix and its commit signature. Only the
+            // maintenance request consumes receipt-backed bounded references.
+            self.project_native_office_request(&mut input.messages)
+                .await?;
+            request.messages = SharedMessages::from(vec![Message::user_text(
+                build_session_memory_update_prompt(
+                    Some(&input.current_notes),
+                    &input.messages.to_vec(),
+                ),
+            )]);
+        }
         let permit = match crate::request_admission::acquire(
             &summary_provider,
             crate::request_admission::RequestClass::SessionMemory,

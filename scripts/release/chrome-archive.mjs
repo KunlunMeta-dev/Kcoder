@@ -32,7 +32,7 @@ export function validateChromeZip(bytes, release) {
     names.add(key);
     const mode = attributes >>> 16, type = mode & 0o170000;
     const isDirectory = name.endsWith('/');
-    const symbolicLink = type === 0o120000 && release.platform === 'mac-x64';
+    const symbolicLink = type === 0o120000 && ['mac-x64', 'mac-arm64'].includes(release.platform);
     if ((!symbolicLink && ![0, 0o100000, 0o040000].includes(type)) || (type === 0o040000 && !isDirectory) || (!isDirectory && parts.length < 2)) invalid();
     expanded += length;
     if (expanded > 1024 * 1024 * 1024) invalid();

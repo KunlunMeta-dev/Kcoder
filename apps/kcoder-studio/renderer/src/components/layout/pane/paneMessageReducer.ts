@@ -3,6 +3,7 @@ import { hasSettledAssistantMessage } from '@/features/workbench/runtimePaneStat
 import { persistAttachmentReferences } from '@/lib/attachments'
 import type { Attachment, RequestUserInputResponse } from '@/types/api'
 import type { WorkbenchMessage } from '@/types/workbench'
+import { isActiveToolCallStatus, reduceWorkbenchMessages } from '@wegent/chat-core'
 import type { CodeCommentContext } from '@/types/workspace-files'
 import { type GuidanceSplitBoundary } from './sessionTypes'
 import { hasUnsettledRuntimePaneState } from './subagentState'
@@ -256,10 +257,54 @@ export function reconcileRuntimeConversationMessages(
     : transcriptMessages
 }
 
+/** Preserve original process observations while keeping history authoritative. */
+export function mergeBufferedTranscriptProcessing(
+  transcriptMessages: WorkbenchMessage[],
+  bufferedActions: RuntimePaneMessageAction[],
+  transcriptRunning = false
+): WorkbenchMessage[] {
+  if (transcriptRunning || bufferedActions.length === 0) return transcriptMessages
+  let observed: WorkbenchMessage[] = []
+  for (const action of bufferedActions) observed = reduceWorkbenchMessages(observed, action)
+  return transcriptMessages.map((message, index) => {
+    if (message.role !== 'assistant' || message.status === 'streaming' || !message.turnId ||
+        transcriptMessages.slice(index + 1).some(item => item.role === 'assistant' &&
+          item.turnId === message.turnId)) return message
+    const original = observed.find(item => item.role === 'assistant' && item.turnId === message.turnId &&
+      (item.attemptId ?? item.turnId) === (message.attemptId ?? message.turnId))
+    if (!original) return message
+    const committedBlocks = transcriptMessages.filter(item => item.role === 'assistant' &&
+      item.turnId === message.turnId).flatMap(item => item.blocks ?? [])
+    const missing = (original.blocks ?? []).filter(block => block.type !== 'text' &&
+      !committedBlocks.some(saved => saved.id === block.id ||
+        (block.type === 'thinking' && saved.type === 'thinking')))
+    if (!missing.length) return message
+    return { ...message, blocks: [...(message.blocks ?? []), ...missing.map(block => ({ ...block,
+      status: block.type === 'thinking' ? 'done' :
+        isActiveToolCallStatus(block.status) ? 'unknown' : block.status,
+    }))] }
+  })
+}
+
 export function filterBufferedTranscriptActions(
   transcriptMessages: WorkbenchMessage[],
-  bufferedActions: RuntimePaneMessageAction[]
+  bufferedActions: RuntimePaneMessageAction[],
+  transcriptRunning = false
 ): RuntimePaneMessageAction[] {
+  const latestTurnId = [...transcriptMessages].reverse().find(message => message.turnId)?.turnId
+  const activeStart = transcriptRunning
+    ? [...bufferedActions]
+        .reverse()
+        .find(
+          action =>
+            action.type === 'assistant_started' &&
+            (!latestTurnId ||
+              action.turnId === latestTurnId ||
+              (!action.turnId && action.subtaskId === latestTurnId))
+        )
+    : undefined
+  const activeSubtaskId =
+    activeStart && 'subtaskId' in activeStart ? activeStart.subtaskId : undefined
   const settledTurnIds = new Set(
     transcriptMessages.flatMap(message => {
       const turnId = message.turnId?.trim()
@@ -271,9 +316,18 @@ export function filterBufferedTranscriptActions(
   if (settledTurnIds.size === 0) return bufferedActions
 
   return bufferedActions.filter(action => {
+    // A completed body segment is not the terminal state of its still-running attempt.
+    if (activeSubtaskId && 'subtaskId' in action && action.subtaskId === activeSubtaskId)
+      return true
     if (!('subtaskId' in action) || !action.subtaskId || !settledTurnIds.has(action.subtaskId)) {
       return true
     }
+
+    if (action.type === 'block_created') {
+      if (transcriptMessages.some(message => message.role === 'assistant' &&
+          message.turnId === action.subtaskId && message.blocks?.some(block => block.id === action.block.id))) return false
+    }
+    if (action.type === 'block_updated' && isActiveToolCallStatus(action.updates.status)) return false
 
     // The transcript already contains this turn's authoritative terminal state;
     // replaying text lifecycle would create a second assistant. Tool blocks may

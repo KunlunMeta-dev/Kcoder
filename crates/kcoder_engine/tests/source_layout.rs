@@ -31,6 +31,10 @@ const ROOT_FRAGMENTS: &[&str] = &[
     "turn_duration.rs",
     "arrangement.rs",
     "client_persistence.rs",
+    "historical_seed.rs",
+    "imported_instruction_context.rs",
+    "imported_memory_context.rs",
+    "stop_hooks.rs",
     "project_instructions.rs",
     "lifecycle_config.rs",
     "stream_protocol.rs",
@@ -60,6 +64,7 @@ const ROOT_FRAGMENT_OWNED_MODULES: &[&str] = &[
 
 const RUNTIME_UNITS: &[(&str, &str)] = &[
     ("tool_schema_runtime.rs", "tool_schema_runtime_unit.rs"),
+    ("tool_search_runtime.rs", "tool_search_runtime.rs"),
     ("background_runtime.rs", "background_runtime_unit.rs"),
     ("compaction_runtime.rs", "compaction_runtime_unit.rs"),
     ("forking.rs", "forking_unit.rs"),
@@ -83,6 +88,30 @@ const MODULE_LOCAL_UNITS: &[(&str, &str)] = &[
 ];
 
 const MODULE_LOCAL_PRODUCTION_MODULES: &[(&str, &str, &str)] = &[
+    ("agent.rs", "imported_profile", "agent/imported_profile.rs"),
+    ("agent.rs", "owned_foreground", "agent/owned_foreground.rs"),
+    ("agent.rs", "verifier_owner", "agent/verifier_owner.rs"),
+    ("background.rs", "owned_run", "background/owned_run.rs"),
+    (
+        "background.rs",
+        "terminal_observers",
+        "background/terminal_observers.rs",
+    ),
+    (
+        "context/compact.rs",
+        "projection",
+        "context/compact/projection.rs",
+    ),
+    (
+        "memory_observer.rs",
+        "review_accounting",
+        "memory_observer/review_accounting.rs",
+    ),
+    (
+        "tool_search_runtime.rs",
+        "restored",
+        "tool_search_runtime/restored.rs",
+    ),
     ("agent.rs", "execution", "agent/execution.rs"),
     ("agent.rs", "checkpoint", "agent/checkpoint.rs"),
     ("agent.rs", "delivery", "agent/delivery.rs"),
@@ -139,6 +168,138 @@ const MODULE_LOCAL_PRODUCTION_MODULES: &[(&str, &str, &str)] = &[
     ("tool_repair.rs", "storage", "tool_repair/storage.rs"),
 ];
 
+// Exact additional visibility and ordinary external test-module declarations.
+const MODULE_LOCAL_CRATE_MODULES: &[(&str, &str, &str)] = &[(
+    "memory_observer.rs",
+    "runtime_queue",
+    "memory_observer/runtime_queue.rs",
+)];
+// Exact test-only reexports; helper bodies remain in their registered external tests.
+const RUNTIME_TEST_REEXPORTS: &[(&str, &str, &str)] =
+    &[("moa_runtime.rs", "tests", "run_moa_references")];
+const PLAIN_RUNTIME_TEST_MODULES: &[(&str, &str, &str)] = &[(
+    "memory_observer.rs",
+    "review_tests",
+    "memory_observer/review_tests.rs",
+)];
+const ROOT_TEST_CHILD_INCLUDES: &[(&str, &str)] =
+    &[("tool_search_runtime.rs", "tool_search_lifecycle.rs")];
+// Native modules use explicit path attributes; preserve their exact owner/name/path triples.
+const ADDITIONAL_RUNTIME_PATH_MODULES: &[(&str, &str, &str)] = &[
+    (
+        "agent_definition_context.rs",
+        "agent_skill_resources.rs",
+        "resources",
+    ),
+    (
+        "agent_skill_resources.rs",
+        "agent_skill_resources/tests.rs",
+        "tests",
+    ),
+    ("continuous_work.rs", "continuous_work/tests.rs", "tests"),
+    (
+        "continuous_work/coordinator.rs",
+        "coordinator/tests.rs",
+        "tests",
+    ),
+    ("continuous_work/host_gate.rs", "host_gate.test.rs", "tests"),
+    (
+        "continuous_work/native_result.rs",
+        "native_result/tests.rs",
+        "tests",
+    ),
+    (
+        "continuous_work/native_result/extraction.rs",
+        "extraction/tests.rs",
+        "tests",
+    ),
+    (
+        "lib.rs",
+        "../../kcoder_config/src/test_isolated_profile.rs",
+        "isolated_test_profile",
+    ),
+    (
+        "turn_entry.rs",
+        "turn_entry/side_question_tests.rs",
+        "side_question_tests",
+    ),
+    (
+        "background_runtime.rs",
+        "background_runtime/exact_run.rs",
+        "exact_run",
+    ),
+    (
+        "background_runtime/exact_run.rs",
+        "exact_run/tests.rs",
+        "tests",
+    ),
+    (
+        "engine_configuration.rs",
+        "native_settings_source_tests.rs",
+        "native_settings_source_tests",
+    ),
+    (
+        "integrations/core/child_admission.rs",
+        "child_admission_tests.rs",
+        "tests",
+    ),
+    (
+        "integrations/core/input_context.rs",
+        "input_context/channel_history_tests.rs",
+        "channel_history_tests",
+    ),
+    (
+        "integrations/core/input_context.rs",
+        "input_context/channel_office_tests.rs",
+        "channel_office_tests",
+    ),
+    (
+        "integrations/core/input_context.rs",
+        "input_context/office_projection.rs",
+        "office_projection",
+    ),
+    (
+        "integrations/core/model_requests/additive.rs",
+        "additive_tests.rs",
+        "tests",
+    ),
+    (
+        "integrations/core/model_requests/tests.rs",
+        "accounting_tests.rs",
+        "accounting_tests",
+    ),
+    (
+        "integrations/core/scheduled_child.rs",
+        "scheduled_child_tests.rs",
+        "tests",
+    ),
+    (
+        "integrations/office/native_projection.rs",
+        "history_call.rs",
+        "history_call",
+    ),
+    (
+        "integrations/office/native_projection.rs",
+        "native_projection_tests.rs",
+        "tests",
+    ),
+    (
+        "integrations/office/native_projection_tests.rs",
+        "native_projection_stream_tests.rs",
+        "stream_boundary",
+    ),
+    (
+        "lib.rs",
+        "integrations/core/model_requests/mod.rs",
+        "native_model_requests",
+    ),
+    (
+        "project_knowledge_prompt.rs",
+        "project_knowledge_prompt/confirmed_publication_tests.rs",
+        "confirmed_publication_tests",
+    ),
+];
+
 const MODULE_LOCAL_TEST_INCLUDE_FRAGMENTS: &[(&str, &str, &str)] = &[
     (
         "tool_repair/tests.rs",
@@ -164,6 +325,24 @@ const MODULE_LOCAL_TEST_INCLUDE_FRAGMENTS: &[(&str, &str, &str)] = &[
 
 // Exact owners, path attributes, module names, and source paths for split test domains.
 const TEST_CHILD_MODULES: &[(&str, &str, &str, &str)] = &[
+    (
+        "agent/imported_profile.rs",
+        "imported_profile_tests.rs",
+        "tests",
+        "agent/imported_profile_tests.rs",
+    ),
+    (
+        "background/terminal_observers.rs",
+        "terminal_observers_tests.rs",
+        "tests",
+        "background/terminal_observers_tests.rs",
+    ),
+    (
+        "agent/owned_foreground.rs",
+        "owned_foreground_tests.rs",
+        "tests",
+        "agent/owned_foreground_tests.rs",
+    ),
     (
         "agent/tests.rs",
         "tool_policy_tests.rs",
@@ -371,6 +550,7 @@ fn validate_module_local_test_inventory(
     production_modules: &[(&str, &str, &str)],
     include_fragments: &[(&str, &str, &str)],
     test_children: &[(&str, &str, &str, &str)],
+    plain_tests: &[(&str, &str, &str)],
 ) -> Result<(), (BTreeSet<PathBuf>, BTreeSet<PathBuf>)> {
     let mut expected = units
         .iter()
@@ -396,6 +576,11 @@ fn validate_module_local_test_inventory(
             .iter()
             .filter(|(owner, _, _, _)| !owner.starts_with("tests/"))
             .map(|(_, _, _, target)| PathBuf::from(target)),
+    );
+    expected.extend(
+        plain_tests
+            .iter()
+            .map(|(_, _, target)| PathBuf::from(target)),
     );
     let owned_directories = expected
         .iter()
@@ -588,7 +773,17 @@ fn assert_test_support_module(item: &Item) {
 }
 
 fn validate_plain_private_modules(file: &File, expected_modules: &[&str]) -> Result<(), String> {
+    validate_owned_module_declarations(file, expected_modules, &[], &[])
+}
+
+fn validate_owned_module_declarations(
+    file: &File,
+    expected_modules: &[&str],
+    crate_modules: &[&str],
+    plain_tests: &[&str],
+) -> Result<(), String> {
     let mut actual = Vec::new();
+    let mut actual_plain_tests = Vec::new();
     for item in &file.items {
         let Item::Mod(module) = item else {
             continue;
@@ -596,10 +791,30 @@ fn validate_plain_private_modules(file: &File, expected_modules: &[&str]) -> Res
         if module.ident == "tests" {
             continue;
         }
+        let name = module.ident.to_string();
+        if plain_tests.contains(&name.as_str()) {
+            if module.attrs.len() != 1
+                || !exact_cfg_test_attribute(&module.attrs[0])
+                || !matches!(module.vis, Visibility::Inherited)
+                || module.content.is_some()
+                || module.semi.is_none()
+            {
+                return Err(format!(
+                    "ordinary external test mod {name} changed its exact declaration"
+                ));
+            }
+            actual_plain_tests.push(name);
+            continue;
+        }
         if !module.attrs.is_empty() {
             return Err(format!("mod {} 不得带属性", module.ident));
         }
-        if !matches!(module.vis, Visibility::Inherited) {
+        let valid_visibility = if crate_modules.contains(&name.as_str()) {
+            matches!(&module.vis, Visibility::Restricted(value) if value.in_token.is_none() && value.path.is_ident("crate"))
+        } else {
+            matches!(module.vis, Visibility::Inherited)
+        };
+        if !valid_visibility {
             return Err(format!("mod {} 必须是私有模块", module.ident));
         }
         if module.content.is_some() || module.semi.is_none() {
@@ -607,9 +822,19 @@ fn validate_plain_private_modules(file: &File, expected_modules: &[&str]) -> Res
         }
         actual.push(module.ident.to_string());
     }
+    actual_plain_tests.sort();
+    let mut expected_plain_tests = plain_tests
+        .iter()
+        .map(|name| (*name).to_string())
+        .collect::<Vec<_>>();
+    expected_plain_tests.sort();
+    if actual_plain_tests != expected_plain_tests {
+        return Err("ordinary external test module inventory changed".into());
+    }
     actual.sort();
     let mut expected = expected_modules
         .iter()
+        .chain(crate_modules.iter())
         .map(|module| (*module).to_string())
         .collect::<Vec<_>>();
     expected.sort();
@@ -898,37 +1123,43 @@ fn lib_root_keeps_test_modules_external() {
     let visitor = inspect_embedded_tests(&file);
     assert_no_embedded_test_shapes(&visitor, "lib.rs");
     assert_eq!(
-        visitor.test_conditioned_items, 4,
-        "lib.rs 仅允许四个测试条件私有 item：test_support、\
-         request_assembly_measurements、retry_marker_tests、tests"
+        visitor.test_conditioned_items, 5,
+        "lib.rs 仅允许五个测试条件私有 item：test_support、\
+         request_assembly_measurements、retry_marker_tests、tests、isolated_test_profile"
     );
-    assert!(file.items.len() >= 2);
-    assert_external_test_module(
-        &file.items[file.items.len() - 2],
-        "tests/retry_marker.rs",
-        "retry_marker_tests",
-    );
-    assert_external_test_module(&file.items[file.items.len() - 1], "tests/mod.rs", "tests");
+    for (name, path) in [
+        ("retry_marker_tests", "tests/retry_marker.rs"),
+        ("tests", "tests/mod.rs"),
+    ] {
+        let item = file
+            .items
+            .iter()
+            .find(|item| matches!(item, Item::Mod(module) if module.ident == name))
+            .expect("the explicitly registered root test module must exist");
+        assert_external_test_module(item, path, name);
+    }
 
     let conditioned = file
         .items
         .iter()
         .filter(|item| item_is_test_conditioned(item))
         .collect::<Vec<_>>();
-    assert_eq!(conditioned.len(), 4);
-    let conditioned_mod_idents = conditioned
+    assert_eq!(conditioned.len(), 5);
+    let mut conditioned_mod_idents = conditioned
         .iter()
         .filter_map(|item| match item {
             syn::Item::Mod(module) => Some(module.ident.to_string()),
             _ => None,
         })
         .collect::<Vec<_>>();
+    conditioned_mod_idents.sort();
     assert_eq!(
         conditioned_mod_idents,
         vec![
+            "isolated_test_profile".to_string(),
             "request_assembly_measurements".to_string(),
-            "test_support".to_string(),
             "retry_marker_tests".to_string(),
+            "test_support".to_string(),
             "tests".to_string(),
         ],
         "lib.rs 的测试条件 mod 清单必须精确"
@@ -961,15 +1192,72 @@ fn runtime_modules_keep_tests_external() {
         let file = parse_source(source_root().join(module));
         let visitor = inspect_embedded_tests(&file);
         assert_no_embedded_test_shapes(&visitor, module);
+        let extra = PLAIN_RUNTIME_TEST_MODULES
+            .iter()
+            .filter(|row| row.0 == module)
+            .collect::<Vec<_>>();
+        let reexports = RUNTIME_TEST_REEXPORTS
+            .iter()
+            .filter(|row| row.0 == module)
+            .collect::<Vec<_>>();
         assert_eq!(
-            visitor.test_conditioned_items, 1,
-            "{module} 仅允许一个测试条件 mod"
+            visitor.test_conditioned_items,
+            1 + extra.len() + reexports.len(),
+            "{module} test declarations must match their exact inventory"
         );
-        assert_external_test_module(
-            file.items.last().expect("runtime 文件不能为空"),
-            &format!("tests/{unit}"),
-            "tests",
-        );
+        let tests = file
+            .items
+            .iter()
+            .find(|item| matches!(item, Item::Mod(value) if value.ident == "tests"))
+            .expect("registered runtime tests must exist");
+        assert_external_test_module(tests, &format!("tests/{unit}"), "tests");
+        for (_, owner, name) in reexports {
+            let declarations = file
+                .items
+                .iter()
+                .filter_map(|item| match item {
+                    Item::Use(value) if value.leading_colon.is_none() => match &value.tree {
+                        syn::UseTree::Path(path) if path.ident == *owner => {
+                            match path.tree.as_ref() {
+                                syn::UseTree::Name(import) if import.ident == *name => Some(value),
+                                _ => None,
+                            }
+                        }
+                        _ => None,
+                    },
+                    _ => None,
+                })
+                .collect::<Vec<_>>();
+            assert_eq!(
+                declarations.len(),
+                1,
+                "registered test facade reexport must exist exactly once"
+            );
+            let declaration = declarations[0];
+            assert_eq!(declaration.attrs.len(), 1);
+            assert!(exact_cfg_test_attribute(&declaration.attrs[0]));
+            assert!(
+                matches!(&declaration.vis, Visibility::Restricted(value) if value.in_token.is_none() && value.path.is_ident("super"))
+            );
+        }
+        for (_, name, target) in extra {
+            assert!(source_root().join(target).is_file());
+            let Item::Mod(value) = file
+                .items
+                .iter()
+                .find(|item| matches!(item, Item::Mod(value) if value.ident == *name))
+                .expect("registered ordinary test module must exist")
+            else {
+                unreachable!()
+            };
+            assert!(
+                value.content.is_none()
+                    && value.semi.is_some()
+                    && matches!(value.vis, Visibility::Inherited)
+            );
+            assert_eq!(value.attrs.len(), 1);
+            assert!(exact_cfg_test_attribute(&value.attrs[0]));
+        }
     }
 }
 
@@ -1204,6 +1492,20 @@ fn root_fragments_are_included_exactly_once() {
                 .unwrap_or_else(|error| panic!("{}: {error}", path.display())),
         );
     }
+    for (owner, child) in ROOT_TEST_CHILD_INCLUDES {
+        let includes = collect_include_paths(&parse_source(tests_root.join(owner))).unwrap();
+        assert_eq!(
+            includes,
+            vec![(*child).to_string()],
+            "root child include owner must stay exact"
+        );
+        assert!(tests_root.join(child).is_file());
+        assert_eq!(
+            all_includes.iter().filter(|path| path == child).count(),
+            1,
+            "root child include must have only its registered owner"
+        );
+    }
     for fragment in ROOT_FRAGMENTS {
         assert!(tests_root.join(fragment).is_file(), "缺少 {fragment}");
         assert_eq!(
@@ -1251,6 +1553,7 @@ fn test_source_inventory_is_recursive_and_exact() {
         .copied()
         .chain(RUNTIME_UNITS.iter().map(|(_, unit)| *unit))
         .chain(TEST_FIXTURES.iter().copied())
+        .chain(ROOT_TEST_CHILD_INCLUDES.iter().map(|(_, child)| *child))
         .chain(
             TEST_CHILD_MODULES
                 .iter()
@@ -1265,12 +1568,18 @@ fn test_source_inventory_is_recursive_and_exact() {
 
 #[test]
 fn module_local_test_source_inventory_is_recursive_and_exact() {
+    let production = MODULE_LOCAL_PRODUCTION_MODULES
+        .iter()
+        .chain(MODULE_LOCAL_CRATE_MODULES)
+        .copied()
+        .collect::<Vec<_>>();
     validate_module_local_test_inventory(
         &source_root(),
         MODULE_LOCAL_UNITS,
-        MODULE_LOCAL_PRODUCTION_MODULES,
+        &production,
         MODULE_LOCAL_TEST_INCLUDE_FRAGMENTS,
         TEST_CHILD_MODULES,
+        PLAIN_RUNTIME_TEST_MODULES,
     )
     .unwrap_or_else(|(missing, orphaned)| panic!("缺失: {missing:?}; 孤儿: {orphaned:?}"));
 }
@@ -1296,10 +1605,35 @@ fn module_local_test_include_fragments_are_exact() {
 
 #[test]
 fn module_local_production_units_reject_embedded_tests() {
-    for (_, _, module) in MODULE_LOCAL_PRODUCTION_MODULES {
+    for (_, _, module) in MODULE_LOCAL_PRODUCTION_MODULES
+        .iter()
+        .chain(MODULE_LOCAL_CRATE_MODULES)
+    {
         let file = parse_source(source_root().join(module));
-        validate_root_fragment_owned_module(&file, module)
-            .unwrap_or_else(|error| panic!("{error}"));
+        let registered = TEST_CHILD_MODULES
+            .iter()
+            .filter(|row| row.0 == *module)
+            .collect::<Vec<_>>();
+        if registered.is_empty() {
+            validate_root_fragment_owned_module(&file, module)
+                .unwrap_or_else(|error| panic!("{error}"));
+        } else {
+            let visitor = inspect_embedded_tests(&file);
+            assert_no_embedded_test_shapes(&visitor, module);
+            assert_eq!(
+                visitor.test_conditioned_items,
+                registered.len(),
+                "{module} has unregistered test-conditioned items"
+            );
+            for (_, path, name, _) in registered {
+                let item = file
+                    .items
+                    .iter()
+                    .find(|item| matches!(item, Item::Mod(value) if value.ident == *name))
+                    .expect("registered external child test module must exist");
+                assert_external_test_module(item, path, name);
+            }
+        }
     }
 }
 
@@ -1314,8 +1648,21 @@ fn module_local_production_module_references_are_exact() {
             .iter()
             .filter_map(|(owner, module, _)| (*owner == source).then_some(*module))
             .collect::<Vec<_>>();
-        validate_plain_private_modules(&parse_source(source_root().join(source)), &expected)
-            .unwrap_or_else(|error| panic!("{source}: {error}"));
+        let crate_modules = MODULE_LOCAL_CRATE_MODULES
+            .iter()
+            .filter_map(|(owner, name, _)| (*owner == source).then_some(*name))
+            .collect::<Vec<_>>();
+        let plain_tests = PLAIN_RUNTIME_TEST_MODULES
+            .iter()
+            .filter_map(|(owner, name, _)| (*owner == source).then_some(*name))
+            .collect::<Vec<_>>();
+        validate_owned_module_declarations(
+            &parse_source(source_root().join(source)),
+            &expected,
+            &crate_modules,
+            &plain_tests,
+        )
+        .unwrap_or_else(|error| panic!("{source}: {error}"));
     }
 
     let invalid = [
@@ -1406,6 +1753,15 @@ fn runtime_path_modules_match_exact_reference_inventory() {
             .iter()
             .filter(|(source, _, _, _)| !source.starts_with("tests/"))
             .map(|(source, path, module, _)| PathModuleReference {
+                source: PathBuf::from(source),
+                path: (*path).to_string(),
+                module: (*module).to_string(),
+            }),
+    );
+    expected.extend(
+        ADDITIONAL_RUNTIME_PATH_MODULES
+            .iter()
+            .map(|(source, path, module)| PathModuleReference {
                 source: PathBuf::from(source),
                 path: (*path).to_string(),
                 module: (*module).to_string(),
@@ -1559,7 +1915,7 @@ fn module_local_inventory_detects_nested_orphan() {
 
     let units = [("context/compact.rs", "compact/tests.rs")];
     let (missing, orphaned) =
-        validate_module_local_test_inventory(temp.path(), &units, &[], &[], &[]).unwrap_err();
+        validate_module_local_test_inventory(temp.path(), &units, &[], &[], &[], &[]).unwrap_err();
     assert!(missing.is_empty());
     assert_eq!(
         orphaned,

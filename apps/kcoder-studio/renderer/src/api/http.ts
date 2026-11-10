@@ -1,17 +1,6 @@
-import { fetch as tauriFetch } from '@tauri-apps/plugin-http'
-import { removeToken } from './auth'
-import { redirectToLogin } from '@/features/auth/redirect'
-import { isTauriRuntime } from '@/lib/runtime-environment'
+import { getToken as defaultGetToken } from './auth'
 
 const SLOW_HTTP_REQUEST_MS = 5000
-
-// In a packaged Tauri app the WebView calls the API cross-origin, which
-// triggers CORS preflight. Routing through the Tauri (Rust) HTTP client
-// bypasses the WebView same-origin policy entirely. Outside Tauri (browser
-// dev server via Vite proxy, vitest) fall back to the global fetch.
-export function shouldUseTauriFetch(): boolean {
-  return import.meta.env.MODE !== 'test' && isTauriRuntime()
-}
 
 function nowMs(): number {
   return typeof performance !== 'undefined' ? performance.now() : Date.now()
@@ -31,21 +20,16 @@ function logSlowHttpRequest(
     endpoint,
     elapsedMs,
     status,
-    transport: shouldUseTauriFetch() ? 'tauri-http-ipc' : 'fetch',
+    transport: 'fetch',
   })
 }
 
 function requestUrl(baseUrl: string, endpoint: string): string {
-  const rawUrl = `${baseUrl}${endpoint}`
-  if (!shouldUseTauriFetch() || /^[a-z][a-z\d+\-.]*:\/\//i.test(rawUrl)) {
-    return rawUrl
-  }
-
-  return new URL(rawUrl, window.location.origin).toString()
+  return `${baseUrl}${endpoint}`
 }
 
 function httpFetch(): typeof fetch {
-  return shouldUseTauriFetch() ? tauriFetch : globalThis.fetch.bind(globalThis)
+  return globalThis.fetch.bind(globalThis)
 }
 
 export class ApiError extends Error {
@@ -65,24 +49,18 @@ export class ApiError extends Error {
 export interface HttpClientOptions {
   baseUrl: string
   getToken?: () => string | null
-  redirectOnUnauthorized?: boolean
 }
 
 export interface HttpRequestOptions {
   signal?: AbortSignal
-  redirectOnUnauthorized?: boolean
 }
 
 export interface HttpClient {
   get<T>(endpoint: string, options?: HttpRequestOptions): Promise<T>
-  post<T>(endpoint: string, data?: unknown): Promise<T>
+  post<T>(endpoint: string, data?: unknown, options?: HttpRequestOptions): Promise<T>
   put<T>(endpoint: string, data?: unknown): Promise<T>
   patch<T>(endpoint: string, data?: unknown): Promise<T>
   delete<T>(endpoint: string, data?: unknown): Promise<T>
-}
-
-function defaultGetToken(): string | null {
-  return localStorage.getItem('auth_token')
 }
 
 async function parseError(response: Response): Promise<ApiError> {
@@ -129,8 +107,7 @@ export function createHttpClient(options: HttpClientOptions): HttpClient {
 
   async function request<T>(
     endpoint: string,
-    init: RequestInit,
-    requestOptions: HttpRequestOptions = {}
+    init: RequestInit
   ): Promise<T> {
     const token = getToken()
     const isFormData = init.body instanceof FormData
@@ -158,16 +135,7 @@ export function createHttpClient(options: HttpClientOptions): HttpClient {
       response.status
     )
 
-    if (!response.ok) {
-      const error = await parseError(response)
-      const redirectOnUnauthorized =
-        requestOptions.redirectOnUnauthorized ?? options.redirectOnUnauthorized ?? true
-      if (response.status === 401 && redirectOnUnauthorized) {
-        removeToken()
-        redirectToLogin()
-      }
-      throw error
-    }
+    if (!response.ok) throw await parseError(response)
 
     if (response.status === 204) {
       return null as T
@@ -179,16 +147,16 @@ export function createHttpClient(options: HttpClientOptions): HttpClient {
   function get<T>(endpoint: string, requestOptions: HttpRequestOptions = {}): Promise<T> {
     // Model catalogs coalesce subscriptions above this layer. A caller-owned
     // signal must never cancel an unrelated anonymous GET subscriber.
-    if (requestOptions.signal) return request<T>(endpoint, { method: 'GET', signal: requestOptions.signal }, requestOptions)
+    if (requestOptions.signal)
+      return request<T>(endpoint, { method: 'GET', signal: requestOptions.signal })
     const token = getToken()
-    const redirectKey = requestOptions.redirectOnUnauthorized === false ? 'no-redirect' : 'redirect'
-    const cacheKey = `${redirectKey}:${token ?? ''}:${endpoint}`
+    const cacheKey = `${token ?? ''}:${endpoint}`
     const currentRequest = inFlightGetRequests.get(cacheKey)
     if (currentRequest) {
       return currentRequest as Promise<T>
     }
 
-    const nextRequest = request<T>(endpoint, { method: 'GET' }, requestOptions).finally(() => {
+    const nextRequest = request<T>(endpoint, { method: 'GET' }).finally(() => {
       inFlightGetRequests.delete(cacheKey)
     })
     inFlightGetRequests.set(cacheKey, nextRequest)
@@ -197,12 +165,16 @@ export function createHttpClient(options: HttpClientOptions): HttpClient {
 
   return {
     get,
-    post: (endpoint, data) =>
-      request(endpoint, {
-        method: 'POST',
-        body:
-          data === undefined ? undefined : data instanceof FormData ? data : JSON.stringify(data),
-      }),
+    post: (endpoint, data, requestOptions = {}) =>
+      request(
+        endpoint,
+        {
+          method: 'POST',
+          signal: requestOptions.signal,
+          body:
+            data === undefined ? undefined : data instanceof FormData ? data : JSON.stringify(data),
+        }
+      ),
     put: (endpoint, data) =>
       request(endpoint, {
         method: 'PUT',

@@ -147,6 +147,46 @@ fn credential_store_rejects_mixed_legacy_and_current_documents_without_rewriting
 }
 
 #[test]
+fn policy_load_uses_current_layers_without_hydrating_provider_credentials() {
+    let temp = TempDir::new().unwrap();
+    let config = temp.path().join("config");
+    let project = temp.path().join("project");
+    fs::create_dir_all(&project).unwrap();
+    let loader = SettingsLoader::new(&project).with_config_dir(&config);
+    let paths = loader.paths().unwrap();
+    write(
+        &paths.user_settings,
+        r#"{"credential_store":"file","integrations":{"connectivity":{"enabled":true}}}"#,
+    );
+    let mut credentials = CredentialStore::default();
+    credentials
+        .set_api_key("kunlunmeta", "fixture-key".to_owned())
+        .unwrap();
+    credentials.save_to(&paths.credentials).unwrap();
+
+    let policy = loader.load_policy_configuration().unwrap();
+    assert!(policy.integrations.connectivity.enabled);
+    assert_eq!(policy.credential_store, crate::CredentialStoreMode::File);
+    assert!(policy.stored_provider_credentials.is_empty());
+    assert!(
+        loader
+            .load()
+            .unwrap()
+            .settings
+            .stored_provider_credentials
+            .contains_key("kunlunmeta")
+    );
+
+    write(
+        &paths.user_settings,
+        r#"{"credential_store":"auto","integrations":{"connectivity":{"enabled":false}}}"#,
+    );
+    let policy = loader.load_policy_configuration().unwrap();
+    assert!(!policy.integrations.connectivity.enabled);
+    assert_eq!(policy.credential_store, crate::CredentialStoreMode::Auto);
+}
+
+#[test]
 fn credentials_are_loaded_outside_settings_json() {
     let temp = TempDir::new().unwrap();
     let config = temp.path().join("config");

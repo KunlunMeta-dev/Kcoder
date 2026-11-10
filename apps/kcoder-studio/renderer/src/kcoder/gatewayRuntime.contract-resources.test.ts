@@ -1,7 +1,8 @@
-import { listen } from '@tauri-apps/api/event'
-import { clearMocks, mockIPC } from '@tauri-apps/api/mocks'
+import { listen } from '@/lib/runtime-events'
+import { clearTestTransports, installTestTransport } from '@/test/runtime-transport'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { FakeGatewayClient } from './gateway/runtime/contractFixture.test-support'
+import { GatewayRpcError } from './gatewayRpc'
 import { KCoderGatewayRuntime as CoreRuntime } from './gatewayRuntime'
 import { KCoderGatewayRuntime } from './installGatewayRuntime'
 
@@ -20,11 +21,11 @@ describe.each([
   afterEach(async () => {
     await Promise.all([...runtimes].map(runtime => runtime.disposeAsync?.() ?? runtime.dispose()))
     runtimes.clear()
-    clearMocks()
+    clearTestTransports()
     vi.restoreAllMocks()
   })
   test('projects the app-server terminal error instead of a generic failed label', async () => {
-    mockIPC(() => undefined, { shouldMockEvents: true })
+    installTestTransport(() => undefined)
     const received: Array<{ event: string; payload: Record<string, unknown> }> = []
     const unlisten = await listen<{ event: string; payload: Record<string, unknown> }>(
       'local-executor:event',
@@ -64,7 +65,7 @@ describe.each([
   })
 
   test('projects turn/start RPC errors as a terminal retryable response', async () => {
-    mockIPC(() => undefined, { shouldMockEvents: true })
+    installTestTransport(() => undefined)
     const received: Array<{ event: string; payload: Record<string, unknown> }> = []
     const unlisten = await listen<{ event: string; payload: Record<string, unknown> }>(
       'local-executor:event',
@@ -112,6 +113,41 @@ describe.each([
     ])
     await expect(runtime.request('runtime.tasks.list', {})).resolves.toMatchObject({
       workspaces: [{ tasks: [{ taskId: created.taskId, running: false }] }],
+    })
+    unlisten()
+    runtime.dispose()
+  })
+
+  test('keeps the existing turn running after an authoritative busy rejection without replaying input', async () => {
+    installTestTransport(() => undefined)
+    const received: Array<{ event: string; payload: Record<string, unknown> }> = []
+    const unlisten = await listen<{ event: string; payload: Record<string, unknown> }>(
+      'local-executor:event',
+      event => received.push(event.payload)
+    )
+    const client = new FakeGatewayClient('thread-busy')
+    const runtime = new KCoderGatewayRuntime('token', {
+      loadServers: async () => [
+        { id: 'local', label: 'local', transport: 'local', workspacePath: '/workspace' },
+      ],
+      createClient: () => client,
+    })
+    const created = (await runtime.request('runtime.tasks.create', {
+      taskId: 'busy-task',
+      executionRequest: { prompt: 'first message' },
+    })) as { taskId: string }
+    const before = client.requests.filter(request => request.method === 'turn/start').length
+    const observed = received.length
+    client.turnStartFailure = new GatewayRpcError('Turn already running', -32003)
+    await expect(
+      runtime.request('runtime.tasks.send', { taskId: created.taskId, message: 'keep this input' })
+    ).rejects.toThrow('当前回合仍在运行')
+    expect(client.requests.filter(request => request.method === 'turn/start')).toHaveLength(
+      before + 1
+    )
+    expect(received.slice(observed).some(event => event.event === 'response.failed')).toBe(false)
+    await expect(runtime.request('runtime.tasks.list', {})).resolves.toMatchObject({
+      workspaces: [{ tasks: [{ taskId: created.taskId, running: true }] }],
     })
     unlisten()
     runtime.dispose()
@@ -361,6 +397,9 @@ describe.each([
       session_id: 'terminal-command-terminal',
       data: 'shell ready\r\n',
     })
+    // Notifications are projected through an async per-client queue; let it drain
+    // so the output is buffered before the client attaches and replays it.
+    await new Promise(resolve => setTimeout(resolve, 0))
     const remote = runtime.createTerminalClient(session.session_id)
     const output = vi.fn()
     const exit = vi.fn()

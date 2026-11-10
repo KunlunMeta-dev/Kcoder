@@ -1,3 +1,4 @@
+import type { WebSourcesV1 } from '../../../shared/webSources'
 import type { RuntimeSourceAgent } from './subagents'
 import type { ModelSelectionMode } from './model-selection'
 import type { DeviceSessionTransport, DeviceSessionType } from './device-sessions'
@@ -262,6 +263,17 @@ export interface RuntimeTaskAddress {
   runtimeHandle?: Record<string, unknown> | null
 }
 
+export interface RuntimeModelSelectionRequest {
+  address: RuntimeTaskAddress
+  model: string
+}
+
+export interface RuntimeModelSelectionResponse {
+  accepted: boolean
+  model: string
+  appliesAt: 'next_tool_result_or_response_boundary' | 'next_turn'
+}
+
 export type RuntimeAdditionalContextKind = 'application' | 'untrusted'
 
 export interface RuntimeAdditionalContextEntry {
@@ -316,6 +328,8 @@ export interface NormalizedRuntimeMessage {
   attachments?: Attachment[]
   blocks?: ChatBlock[]
   fileChanges?: TurnFileChangesSummary | null
+  fileChangesCapture?: unknown
+  reviewEvidence?: unknown
   file_changes?: TurnFileChangesSummary | null
   references?: CodexReference[] | null
   memoryCitations?: CodexMemoryCitation[] | null
@@ -377,6 +391,8 @@ export interface RuntimeTaskSummary {
    */
   runActivity?: ThreadRunActivity
   runSummary?: ThreadRunSummary
+  /** A negotiated, read-only observation; unavailable is not the same as no Goal. */
+  goalStatusObservation?: RuntimeGoalStatusObservation
   continuable?: boolean
   threadStatus?: 'notLoaded' | 'idle' | 'systemError' | 'active' | string
   turnStatus?: 'inProgress' | 'completed' | 'interrupted' | 'failed' | null
@@ -535,6 +551,8 @@ export interface RuntimeWorkSearchItem {
   updatedAt?: string | null
   deviceName: string
   workspacePath: string
+  /** History remains readable without registering its original directory as a project. */
+  unassignedProject?: boolean
   project?: RuntimeWorkSearchProjectRef | null
 }
 
@@ -583,6 +601,8 @@ export interface RuntimeTranscriptResponse {
 }
 
 export interface RuntimeTranscriptRequest extends RuntimeTaskAddress {
+  /** Explicitly open the original live conversation; this is not approval authority. */
+  attachToLiveTurn?: boolean
   limit?: number
   beforeCursor?: string | null
   afterCursor?: string | null
@@ -670,6 +690,9 @@ export interface RequestUserInputResponseAnswer {
 }
 
 export interface RequestUserInputResponse {
+  threadId?: string
+  turnId?: string
+  appServerEpoch?: string
   sourceAgent?: RuntimeSourceAgent
   annotations?: Record<string, unknown>
   requestId?: number | string
@@ -711,6 +734,10 @@ export interface RuntimeGuidanceResponse {
 
 export type RuntimeGoalStatus =
   'active' | 'paused' | 'blocked' | 'usageLimited' | 'budgetLimited' | 'complete' | 'cancelled'
+
+export type RuntimeGoalStatusObservation =
+  | { availability: 'available'; status: RuntimeGoalStatus | null }
+  | { availability: 'unavailable' }
 
 export interface RuntimeGoal {
   threadId: string
@@ -783,6 +810,7 @@ export interface RuntimeWorkspaceOpenRequest {
 }
 
 export interface RuntimeLocalProjectUpsertRequest {
+  preserveExisting?: boolean
   deviceId: string
   projectKey: string
   name: string
@@ -995,6 +1023,7 @@ export interface RuntimeWorktreePrepareRequest {
   sourcePath: string
   worktreeId: string
   ref?: string | null
+  branch?: string | null
   permanent?: boolean
 }
 
@@ -1147,6 +1176,10 @@ export interface RuntimeTaskRenameRequest {
   title: string
 }
 
+export interface RuntimeTaskCancelRequest extends RuntimeTaskAddress {
+  expectedTurnId?: string
+}
+
 export interface RuntimeTaskCancelResponse {
   accepted: boolean
   taskId?: string
@@ -1162,6 +1195,8 @@ export interface RuntimeTaskShortenWaitResponse {
 }
 
 export interface RuntimeTaskCreateRequest extends RuntimeExecutionModes {
+  agentDefinition?: import('../../../shared/generated/contracts').AgentDefinitionRef
+  studioWorkMode?: import('./studioWorkMode').StudioWorkMode
   computerUse?: RuntimeComputerUseAuthorization
   projectId?: number
   deviceWorkspaceId?: number
@@ -1565,6 +1600,8 @@ export interface ChatCancelAck {
 export interface ChatStartPayload {
   taskId?: string
   subtaskId?: string
+  turnId?: string
+  attemptId?: string
   bot_name?: string
   shellType?: string
   deviceId?: string
@@ -1585,6 +1622,8 @@ export interface RuntimeContextUsage {
 }
 
 export type ChatResultPayload = Record<string, unknown> & {
+  fileChangesCapture?: unknown
+  reviewEvidence?: unknown
   value?: string
   error?: string
   reasoningChunk?: string
@@ -1611,6 +1650,8 @@ export interface ChatDonePayload {
 }
 
 export interface ChatErrorPayload {
+  fileChangesCapture?: unknown
+  reviewEvidence?: unknown
   providerFailure?: import('@wegent/chat-core').ProviderFailureDetails
   taskId?: string
   subtaskId?: string
@@ -2048,6 +2089,7 @@ export interface ChatBlock {
   tool_output?: unknown
   tool_output_truncated?: boolean
   tool_output_original_bytes?: number
+  webSources?: unknown
   render_payload?: unknown
   renderPayload?: unknown
   file_changes?: TurnFileChangesSummary
@@ -2067,6 +2109,9 @@ export interface ChatBlockCreatedPayload {
 }
 
 export interface ChatBlockUpdatedPayload {
+  webSources?: WebSourcesV1
+  turnId?: string
+  attemptId?: string
   taskId?: string
   subtaskId?: string
   blockId: string
@@ -2108,6 +2153,8 @@ export interface RuntimeSubagentSteerRequest {
   agentId: string
   message: string
   clientMessageId?: string
+  expectedBackgroundRun?: import('./subagents').RuntimeSubagentRun
+  continueOriginalRun?: boolean
 }
 
 export interface RuntimeSubagentSteerResponse {
@@ -2121,9 +2168,11 @@ export interface RuntimeSubagentSteerResponse {
   queued: boolean
   queuePosition?: number
   reasonCode?: string
+  expectedBackgroundRun?: import('./subagents').RuntimeSubagentRun
 }
 
 export interface RuntimeSubagentArtifactRequest {
+  expectedBackgroundRun?: import('./subagents').RuntimeSubagentRun
   address: RuntimeTaskAddress
   path?: string
   agentId?: string
@@ -2135,6 +2184,7 @@ export interface RuntimeSubagentArtifactRequest {
 }
 
 export interface RuntimeSubagentArtifactResponse {
+  backgroundRun?: import('./subagents').RuntimeSubagentRun
   offset?: number
   nextOffset?: number
   revision?: string

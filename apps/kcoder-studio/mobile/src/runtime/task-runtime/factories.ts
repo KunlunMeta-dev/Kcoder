@@ -1,8 +1,13 @@
+import { observeInitialLegacyAcceptance } from "./initialLegacyCleanup";
+import { completeInitialLegacyAttachments } from "./initialLegacyAttachments";
+import { checkInitialTurnCapabilities, prepareInitialTurn } from "./initialTurn";
+import { canCoordinateLegacyCreation } from "@/storage/context-lock";
+import { t } from "@/i18n";
 import { readTurnReceipt } from "../../../../shared/turnReceipt";
 import { withWorkspaceScopeSession, verifyWorkspaceTaskHandoffInSession } from "@/storage/pending-workspace-operation-v2";
 import { WORKSPACE_SCOPE_V2, workspaceScopeV2, sameWorkspaceScopeV2 } from "@/protocol/workspace-operation-receipts-v2";
 import { captureWorkspaceProfileIdentity, startWorkspaceProfileRpc } from "@/storage/workspace-profile-fence";
-import { loadPendingThreadCreation, savePendingThreadCreation, clearPendingThreadCreation, pendingThreadCreationKey, readWorkspaceTaskHandoff, updateWorkspaceTaskHandoff, startWorkspaceTaskHandoffRpc, linkedCreationIntent, type PendingThreadCreation } from "@/storage/pending-thread-creation";
+import { loadPendingThreadCreation, savePendingThreadCreation, clearPendingThreadCreation, pendingThreadCreationKey, readWorkspaceTaskHandoff, updateWorkspaceTaskHandoff, startWorkspaceTaskHandoffRpc, linkedCreationIntent, creationTurnOptions, originalCreationInput, type PendingThreadCreation } from "@/storage/pending-thread-creation";
 import { saveWorkspaceState, workspaceStateAuthorizationScope } from "@/storage/workspace-preferences";
 import { GatewayRpcClient, MobileRpcError } from "@/gateway/rpc";
 import type {
@@ -18,6 +23,9 @@ import {
   threadRunSummaryIsActive,
 } from "../../../../shared/threadRunSummary";
 import { taskClientConnector } from "./connectionFactory";
+import { startRuntimeTranscriptPublication } from "./cache-publication";
+import { captureSessionTranscriptScope } from "@/storage/session-transcript-scope";
+import { workspaceThreadScopeIdentity } from "./workspaces";
 import { TaskRuntime } from "./core";
 import { inlineResumeHistoryPage, normalizeHistoryPage, readHistoryPage } from "./history";
 import {
@@ -25,6 +33,7 @@ import {
   threadModelSelector,
 } from "./modelCatalog";
 import { bufferNotifications } from "./notificationBuffer";
+import { probeThreadPresence, THREAD_PRESENCE_READ_CAPABILITY, type ThreadPresenceObservation } from "./thread-presence";
 import type { ReconnectContext, TaskSnapshot, TaskCreationInput, TaskCreationClaim } from "./types";
 import { type AgentListResult } from "./types";
 import type { TaskCreationRegistration, TaskRuntimeRegistry } from "./registry";
@@ -38,32 +47,45 @@ async function createConnected(
   createRuntime: TaskRuntimeConstructor,
   input: TaskCreationInput,
 ): Promise<TaskRuntime> {
-  if (input.workspaceHandoff) return createLinkedConnected(createRuntime, input);
-  if ((await loadPendingThreadCreation(pendingThreadCreationKey(input.profile, input.server, input.cwd)))?.linked) throw new Error("原任务交接尚未确认；请恢复原任务，不会创建另一个任务");
+  const assertCurrent = () => { if (input.isCurrentOwner?.() === false) throw new MobileRpcError("Task creation owner changed; original submission is preserved", -1, "transport", "not-sent"); };
+  assertCurrent();
+  if (!input.workspaceHandoff && !canCoordinateLegacyCreation()) throw new Error(t("new.original_open_identity_unverified"));
+  const publication = startRuntimeTranscriptPublication(input);
+  if (input.workspaceHandoff) return createLinkedConnected(createRuntime, input, publication);
+  const priorPending = await loadPendingThreadCreation(pendingThreadCreationKey(input.profile, input.server, input.cwd));
+  if (priorPending?.linked) throw new Error("原任务交接尚未确认；请恢复原任务，不会创建另一个任务");
   const workspaceProfileIdentity = captureWorkspaceProfileIdentity(input.profile);
   const client = await taskClientConnector(
     input.profile,
     input.server,
     input.cwd,
   );
+  try { assertCurrent(); } catch (error) { client.close(); throw error; }
+  if (input.agentDefinition && (input.sessionMode !== undefined && input.sessionMode !== "default" ||
+    !priorPending?.dispatched && (client.supportsExperimental("agentDefinitionsV1") !== true || client.supportsExperimental("threadCreationReceiptsV1") !== true))) {
+    client.close();
+    throw new Error(t(input.sessionMode !== undefined && input.sessionMode !== "default" ? "expert.default_session_required" : "expert.creation_unavailable"));
+  }
   if (
     (input.sessionMode === "orchestrate" ||
       (input.turnMode && input.turnMode !== "standard")) &&
-    !client.supportsExperimental?.("sessionModes")
+    !priorPending?.dispatched && !client.supportsExperimental?.("sessionModes")
   ) {
     client.close();
     throw new Error("目标 KCoder 不支持特殊执行模式，请升级后重试");
   }
+  try { if (!priorPending?.dispatched) checkInitialTurnCapabilities(client, input); } catch (error) { client.close(); throw error; }
   let wireModel: string | undefined;
   try {
-    wireModel = await negotiateModelSelector(client, input.model);
+    wireModel = priorPending?.dispatched ? priorPending.input ? priorPending.wireModel : originalCreationInput(priorPending).model : await negotiateModelSelector(client, input.model);
   } catch (error) {
     client.close();
     throw error;
   }
   const receiptSupported = client.supportsExperimental?.("threadCreationReceiptsV1") === true;
+  if (priorPending && !receiptSupported) { client.close(); throw new Error("目标暂不支持原创建回执核对；原 ID 已保留，不会重新创建"); }
   const creationKey = pendingThreadCreationKey(input.profile, input.server, input.cwd);
-  const intent = JSON.stringify([input.cwd, input.prompt, wireModel, input.sessionMode, input.turnMode, input.reasoningEffort, input.managedWorktreeSourcePath]);
+  const intent = JSON.stringify([input.cwd, input.prompt, wireModel, input.sessionMode, input.turnMode, input.reasoningEffort, input.managedWorktreeSourcePath, ...creationTurnOptions(input), ...(input.agentDefinition ? [{ agentDefinition: input.agentDefinition }] : [])]);
   let pending: PendingThreadCreation | null = null;
   let started: { thread?: ThreadSummary };
   const readCreation = async () => {
@@ -73,39 +95,67 @@ async function createConnected(
     return { thread: result.receipt.thread };
   };
   try {
+    assertCurrent();
     if (receiptSupported) {
       pending = await loadPendingThreadCreation(creationKey);
       if (pending && pending.intent !== intent) throw new Error("还有未确认的创建请求，请恢复原始任务内容后核对；不会创建第二个任务。");
       if (pending?.dispatched) {
         started = await readCreation();
-        client.close();
-        const recovered = await resume(createRuntime, { ...input, threadId: started.thread!.id });
+        if (input.attachmentTransport !== "legacy") client.close();
+        const recovered = await resume(createRuntime, { ...input, threadId: started.thread!.id }, publication, input.attachmentTransport === "legacy" ? client : undefined);
+        recovered.patch({ permissionMode: input.permissionMode ?? "default" });
         if (pending.turnDispatched) {
-          recovered.uncertainSend = { threadId: started.thread!.id, clientMessageId: `${pending.clientRequestId}-initial-turn` };
+          recovered.uncertainSend = pending.initialTurnParams ?? { threadId: started.thread!.id, clientMessageId: `${pending.clientRequestId}-initial-turn` };
           recovered.patch({ sendAcceptanceUnknown: true, error: "首次发送结果待核对，不会重复派发。" });
           await recovered.reconcileSendAcceptance().catch(() => {});
+          if (!recovered.snapshot.sendAcceptanceUnknown) { await completeInitialLegacyAttachments(input, started.thread!.id); await clearPendingThreadCreation(creationKey, pending.clientRequestId); }
+        } else if (pending.input) {
+          pending = { ...pending, threadId: started.thread!.id };
+          await savePendingThreadCreation(creationKey, input.profile.id, pending);
+          const params = pending.initialTurnParams ?? await prepareInitialTurn(recovered.client!, { ...input, ...pending.input }, started.thread!.id,
+            `${pending.clientRequestId}-initial-turn`, recovered.getSnapshot().model, () => !recovered.isDisposed() && input.isCurrentOwner?.() !== false, async attachments => {
+              pending = { ...pending!, legacyAttachments: attachments };
+              await savePendingThreadCreation(creationKey, input.profile.id, pending);
+              recovered.patch({ messages: [...recovered.getSnapshot().messages, { id: `local-user-${pending.clientRequestId}`, role: "user", content: input.prompt, timestampMs: Date.now(), attachments }] });
+            });
+          assertCurrent();
+          checkInitialTurnCapabilities(recovered.client!, { ...input, ...pending.input });
+          pending = { ...pending, threadId: started.thread!.id, initialTurnModel: params.model as string | undefined, initialTurnParams: params, turnDispatched: true };
+          await savePendingThreadCreation(creationKey, input.profile.id, pending);
+          try {
+            assertCurrent();
+            await recovered.startOrdinaryTurn(params);
+          } catch (error) {
+            if (error instanceof MobileRpcError && (error.reason === "remote" || error.delivery === "not-sent")) await savePendingThreadCreation(creationKey, input.profile.id, { ...pending, turnDispatched: false });
+            recovered.close(); throw error;
+          }
+          if (!recovered.snapshot.sendAcceptanceUnknown) { await completeInitialLegacyAttachments(input, started.thread!.id); await clearPendingThreadCreation(creationKey, pending.clientRequestId); }
         } else {
           await saveWorkspaceState(input.profile.id, input.server.id, started.thread!.id, { composerDraft: input.prompt }, workspaceStateAuthorizationScope(input.profile, input.server), workspaceProfileIdentity);
+          await clearPendingThreadCreation(creationKey, pending.clientRequestId);
         }
-        if (!recovered.snapshot.sendAcceptanceUnknown) await clearPendingThreadCreation(creationKey);
+        if (pending && recovered.getSnapshot().sendAcceptanceUnknown) observeInitialLegacyAcceptance(recovered, input, creationKey, pending.clientRequestId);
         return recovered;
       }
-      pending = pending ?? { clientRequestId: `mobile-create-${Date.now()}-${Math.random().toString(36).slice(2)}`, intent, dispatched: false };
+      pending = pending ?? { clientRequestId: `mobile-create-${Date.now()}-${Math.random().toString(36).slice(2)}`, intent, dispatched: false, wireModel, input: { cwd: input.cwd, prompt: input.prompt, model: input.model, reasoningEffort: input.reasoningEffort, permissionMode: input.permissionMode, localAttachmentIds: input.localAttachmentIds, attachmentDraftId: input.attachmentDraftId, attachmentTransport: input.attachmentTransport, sessionMode: input.sessionMode, turnMode: input.turnMode, managedWorktreeSourcePath: input.managedWorktreeSourcePath, ...(input.agentDefinition ? { agentDefinition: input.agentDefinition } : {}) } };
       await savePendingThreadCreation(creationKey, input.profile.id, pending);
       pending = { ...pending, dispatched: true };
       await savePendingThreadCreation(creationKey, input.profile.id, pending);
     }
     try {
+      assertCurrent();
+      publication.freeze();
       started = await client.request<{ thread?: ThreadSummary }>("thread/start", {
         cwd: input.cwd,
         ...(input.sessionMode ? { sessionMode: input.sessionMode } : {}),
         ...(wireModel ? { model: wireModel } : {}),
+        ...(input.agentDefinition ? { agentDefinition: input.agentDefinition } : {}),
         ...(pending ? { clientRequestId: pending.clientRequestId } : {}),
       });
     } catch (error) {
       if (pending && error instanceof MobileRpcError && error.reason !== "remote" && error.delivery !== "not-sent") started = await readCreation();
       else {
-        if (pending) await clearPendingThreadCreation(creationKey);
+        if (pending) await clearPendingThreadCreation(creationKey, pending.clientRequestId);
         throw error;
       }
     }
@@ -127,6 +177,7 @@ async function createConnected(
       throw error;
     }
   }
+  try { assertCurrent(); } catch (error) { client.close(); throw error; }
   const effectiveModel =
     input.model?.includes("::") && wireModel !== input.model
       ? wireModel
@@ -136,6 +187,7 @@ async function createConnected(
       ? thread.cwd
       : input.cwd;
   const title = input.prompt.split(/\r?\n/, 1)[0].slice(0, 80) || "新任务";
+  const initialUserMessageId = `local-user-${Date.now()}`;
   if (input.managedWorktreeSourcePath) {
     let registryClient: typeof client | null = null;
     try {
@@ -187,9 +239,10 @@ async function createConnected(
       cwd: threadCwd,
       model: effectiveModel,
       reasoningEffort: input.reasoningEffort,
+      permissionMode: input.permissionMode ?? "default",
       messages: [
         {
-          id: `local-user-${Date.now()}`,
+          id: initialUserMessageId,
           role: "user",
           content: input.prompt,
           timestampMs: Date.now(),
@@ -210,8 +263,13 @@ async function createConnected(
       threadCwd,
       managedWorktreeSourcePath: input.managedWorktreeSourcePath,
       onSessionExpired: input.onSessionExpired,
+      profileActivationEpoch: input.profileActivationEpoch,
+      isCurrentInteractionOwner: input.isCurrentInteractionOwner,
     },
   );
+  try { publication.bind(runtime, typeof thread.cwd === "string" && thread.cwd.length > 0
+    ? captureSessionTranscriptScope(input.profile, input.server, thread.cwd, thread.id) : null); }
+  catch { publication.bind(runtime, null); }
   try {
     await client.request("thread/metadata/update", {
       threadId: thread.id,
@@ -222,31 +280,41 @@ async function createConnected(
     // Continue the conversation when an older app-server lacks metadata support.
   }
   try {
+    const initialParams = pending?.initialTurnParams ?? await prepareInitialTurn(client, input, thread.id,
+      pending ? `${pending.clientRequestId}-initial-turn` : `mobile-initial-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      effectiveModel, () => !runtime.isDisposed() && input.isCurrentOwner?.() !== false, async attachments => {
+        if (!pending) throw new Error("Initial attachment creation receipt is unavailable");
+        pending = { ...pending, legacyAttachments: attachments };
+        await savePendingThreadCreation(creationKey, input.profile.id, pending);
+        runtime.patch({ messages: runtime.getSnapshot().messages.map(message => message.id === initialUserMessageId ? { ...message, attachments } : message) });
+      });
+    assertCurrent();
+    checkInitialTurnCapabilities(runtime.client!, input);
     if (pending) {
-      pending = { ...pending, turnDispatched: true };
+      pending = { ...pending, initialTurnModel: initialParams.model as string | undefined, initialTurnParams: initialParams, turnDispatched: true };
       await savePendingThreadCreation(creationKey, input.profile.id, pending);
     }
-    await runtime.startOrdinaryTurn({
-      threadId: thread.id,
-      ...(pending ? { clientMessageId: `${pending.clientRequestId}-initial-turn` } : {}),
-      input: [{ type: "text", text: input.prompt }],
-      ...(input.turnMode ? { turnMode: input.turnMode } : {}),
-      ...(effectiveModel ? { model: effectiveModel } : {}),
-      ...(input.reasoningEffort
-        ? { reasoningEffort: input.reasoningEffort }
-        : {}),
-    });
-    if (pending) await clearPendingThreadCreation(creationKey).catch(() => {});
+    assertCurrent();
+    if (runtime.client !== client) throw new MobileRpcError("Initial task connection changed", -1, "transport", "not-sent");
+    await runtime.startOrdinaryTurn(initialParams, initialUserMessageId);
+    await completeInitialLegacyAttachments(input, thread.id);
+    if (pending) await clearPendingThreadCreation(creationKey, pending.clientRequestId).catch(() => {});
     return runtime;
   } catch (error) {
     if (runtime.snapshot.sendAcceptanceUnknown) {
+      if (pending) observeInitialLegacyAcceptance(runtime, input, creationKey, pending.clientRequestId);
       return runtime;
+    }
+    if (pending && error instanceof MobileRpcError && (error.reason === "remote" || error.delivery === "not-sent")) {
+      pending = { ...pending, turnDispatched: false };
+      await savePendingThreadCreation(creationKey, input.profile.id, pending).catch(() => {});
     }
     // A transport failure says nothing about acceptance. Never delete a task
     // merely because its turn/start response was lost.
     if (
       error instanceof MobileRpcError &&
       error.reason === "remote" &&
+      !pending && !input.localAttachmentIds?.length &&
       !runtime.snapshot.activeTurnId &&
       runtime.finishedAttempts.size === 0
     ) {
@@ -262,7 +330,8 @@ async function createConnected(
 }
 
 /** Linked creation owns its original identities beyond a form/runtime lifetime. */
-async function createLinkedConnected(createRuntime: TaskRuntimeConstructor, input: TaskCreationInput): Promise<TaskRuntime> {
+async function createLinkedConnected(createRuntime: TaskRuntimeConstructor, input: TaskCreationInput,
+  publication: ReturnType<typeof startRuntimeTranscriptPublication>): Promise<TaskRuntime> {
   return withWorkspaceScopeSession(input.profile, input.server, async sourceSession => {
     const handoff = input.workspaceHandoff!;
     let pending = await verifyWorkspaceTaskHandoffInSession(sourceSession, handoff);
@@ -271,6 +340,7 @@ async function createLinkedConnected(createRuntime: TaskRuntimeConstructor, inpu
     const client = await taskClientConnector(input.profile, input.server, pending.linked!.input.cwd);
     let runtime: TaskRuntime | undefined;
     const fresh = async (connected = client) => {
+      if (input.isCurrentOwner?.() === false) throw new MobileRpcError("Task creation owner changed; original submission is preserved", -1, "transport", "not-sent");
       await verifyWorkspaceTaskHandoffInSession(sourceSession, handoff);
       const sent = await startWorkspaceProfileRpc(pending.linked!.authorization, () => { sourceSession.assertCurrent(); return connected.request(WORKSPACE_SCOPE_V2, {}); });
       const scope = workspaceScopeV2(await sent.response);
@@ -290,12 +360,15 @@ async function createLinkedConnected(createRuntime: TaskRuntimeConstructor, inpu
     try {
       sourceSession.assertCurrent();
       if (!client.supportsExperimental("threadCreationReceiptsV1") || !client.supportsExperimental("turnReceiptsV1")) throw new Error("目标不支持原任务和首次发送回执核对；请升级目标，原 ID 已保留");
-      if ((input.sessionMode === "orchestrate" || input.turnMode && input.turnMode !== "standard") && !client.supportsExperimental("sessionModes")) throw new Error("目标不支持原任务执行模式；原 ID 已保留");
+      if (input.agentDefinition && (input.sessionMode !== undefined && input.sessionMode !== "default" ||
+        (!pending.dispatched || pending.linked!.threadPhase === "not-sent") && client.supportsExperimental("agentDefinitionsV1") !== true)) throw new Error(t(input.sessionMode !== undefined && input.sessionMode !== "default" ? "expert.default_session_required" : "expert.creation_unavailable"));
+      if ((input.sessionMode === "orchestrate" || input.turnMode && input.turnMode !== "standard") && (!pending.dispatched || pending.linked!.threadPhase === "not-sent") && !client.supportsExperimental("sessionModes")) throw new Error("目标不支持原任务执行模式；原 ID 已保留");
+      if (!pending.dispatched || pending.linked!.threadPhase === "not-sent") checkInitialTurnCapabilities(client, input);
       const taskScope = await fresh();
       if (!pending.linked!.startParams) {
         const model = await negotiateModelSelector(client, pending.linked!.input.model);
         pending = await updateWorkspaceTaskHandoff(handoff, value => ({ ...value, linked: { ...value.linked!, taskScope,
-          startParams: { cwd: value.linked!.input.cwd, clientRequestId: value.clientRequestId, ...(value.linked!.input.sessionMode ? { sessionMode: value.linked!.input.sessionMode } : {}), ...(model ? { model } : {}) } } }));
+          startParams: { cwd: value.linked!.input.cwd, clientRequestId: value.clientRequestId, ...(value.linked!.input.sessionMode ? { sessionMode: value.linked!.input.sessionMode } : {}), ...(model ? { model } : {}), ...(value.linked!.input.agentDefinition ? { agentDefinition: value.linked!.input.agentDefinition } : {}) } } }));
       }
       let thread: ThreadSummary;
       if (pending.dispatched && pending.linked!.threadPhase !== "not-sent") thread = await readCreation();
@@ -304,7 +377,7 @@ async function createLinkedConnected(createRuntime: TaskRuntimeConstructor, inpu
         const sent = await startWorkspaceTaskHandoffRpc(handoff, value => {
           if (value.dispatched && value.linked!.threadPhase !== "not-sent") throw new Error("原创建已派发，请核对原 ID");
           return { ...value, dispatched: true, linked: { ...value.linked!, threadPhase: "sent" } };
-        }, () => { sourceSession.assertCurrent(); return client.request<{ thread?: ThreadSummary }>("thread/start", pending.linked!.startParams!); });
+        }, () => { sourceSession.assertCurrent(); publication.freeze(); return client.request<{ thread?: ThreadSummary }>("thread/start", pending.linked!.startParams!); });
         try {
           const reply = await sent.response;
           if (!reply.thread?.id) throw new Error("原任务创建回包无效");
@@ -346,18 +419,23 @@ async function createLinkedConnected(createRuntime: TaskRuntimeConstructor, inpu
           } finally { registryClient.close(); }
         }
       }
-      client.close();
-      runtime = await resume(createRuntime, { ...input, threadId: thread.id, cwd: captured.cwd });
+      if (input.attachmentTransport !== "legacy") client.close();
+      runtime = await resume(createRuntime, { ...input, threadId: thread.id, cwd: captured.cwd }, publication, input.attachmentTransport === "legacy" ? client : undefined);
+      runtime.patch({ permissionMode: captured.permissionMode ?? "default" });
       if (runtime.reconnectContext) runtime.reconnectContext.managedWorktreeSourcePath = captured.managedWorktreeSourcePath;
       await fresh(runtime.client!);
       pending = await readWorkspaceTaskHandoff(handoff);
       if (pending.linked!.turn.phase !== "accepted") {
         if (!pending.linked!.turn.params) {
-          const params = { threadId: thread.id, clientMessageId: pending.linked!.turn.clientMessageId, input: [{ type: "text", text: captured.prompt }], ...(captured.turnMode ? { turnMode: captured.turnMode } : {}), ...(pending.linked!.startParams!.model ? { model: pending.linked!.startParams!.model } : {}), ...(captured.reasoningEffort ? { reasoningEffort: captured.reasoningEffort } : {}) };
+          const params = await prepareInitialTurn(runtime.client!, { ...input, ...captured }, thread.id, pending.linked!.turn.clientMessageId,
+            pending.linked!.startParams!.model as string | undefined, () => !runtime!.isDisposed() && input.isCurrentOwner?.() !== false, async attachments => {
+              pending = await updateWorkspaceTaskHandoff(handoff, value => ({ ...value, legacyAttachments: attachments }));
+            });
           pending = await updateWorkspaceTaskHandoff(handoff, value => ({ ...value, linked: { ...value.linked!, turn: { ...value.linked!.turn, params } } }));
         }
         if (pending.linked!.turn.phase === "prepared" || pending.linked!.turn.phase === "not-sent") {
           await fresh(runtime.client!);
+          checkInitialTurnCapabilities(runtime.client!, { ...input, ...captured });
           const optimisticId = `local-user-${handoff.clientRequestId}`;
           if (!runtime.getSnapshot().messages.some(message => message.id === optimisticId)) runtime.patch({ messages: [...runtime.getSnapshot().messages, { id: optimisticId, role: "user", content: captured.prompt, clientMessageId: pending.linked!.turn.clientMessageId, timestampMs: Date.now() }], title: captured.prompt.split(/\r?\n/, 1)[0].slice(0, 80) || "新任务" });
           const sent = await startWorkspaceTaskHandoffRpc(handoff, value => {
@@ -385,11 +463,12 @@ async function createLinkedConnected(createRuntime: TaskRuntimeConstructor, inpu
           } catch { runtime.patch({ sendAcceptanceUnknown: true, error: "原首次发送结果待核对，不会重复派发。" }); }
         }
       }
+      if (pending.linked!.turn.phase === "accepted") await completeInitialLegacyAttachments(input, thread.id);
       return runtime;
     } catch (error) {
       try { runtime?.close(); } catch { console.warn("task_creation_cleanup_pending"); }
       throw error;
-    } finally { try { client.close(); } catch { console.warn("task_creation_cleanup_pending"); } }
+    } finally { try { if (runtime?.client !== client) client.close(); } catch { console.warn("task_creation_cleanup_pending"); } }
   });
 }
 
@@ -398,7 +477,7 @@ const creating = new Map<string, { intent: string; promise: Promise<TaskRuntime>
 /** Claim synchronously before any storage or handshake await; duplicate taps share one operation. */
 function sharedCreation(createRuntime: TaskRuntimeConstructor, input: CreateInput): Promise<TaskRuntime> {
   const key = pendingThreadCreationKey(input.profile, input.server, input.cwd);
-  const intent = JSON.stringify([input.prompt, input.model, input.reasoningEffort, input.sessionMode, input.turnMode, input.managedWorktreeSourcePath, input.workspaceHandoff ? [input.workspaceHandoff.clientRequestId, input.workspaceHandoff.receiptId, input.workspaceHandoff.key] : null]);
+  const intent = JSON.stringify([input.prompt, input.model, input.reasoningEffort, input.sessionMode, input.turnMode, input.managedWorktreeSourcePath, input.workspaceHandoff ? [input.workspaceHandoff.clientRequestId, input.workspaceHandoff.receiptId, input.workspaceHandoff.key] : null, ...creationTurnOptions(input), ...(input.agentDefinition ? [{ agentDefinition: input.agentDefinition }] : [])]);
   const previous = creating.get(key);
   if (previous) return previous.intent === intent ? previous.promise : Promise.reject(new Error("当前工作区的任务创建仍在处理中"));
   if (creationCleanupSlots >= maxCreationCleanupSlots) return Promise.reject(new Error("本机任务资源清理尚未完成，请稍后重试"));
@@ -550,31 +629,83 @@ export async function resume(
     cwd?: string;
     title?: string;
     reasoningEffort?: string;
+    deferConfiguration?: boolean;
     onSessionExpired?: () => void;
+    profileActivationEpoch?: number;
+    isCurrentInteractionOwner?: ReconnectContext["isCurrentInteractionOwner"];
+    presenceOwnerToken?: object;
+    isCurrentOwner?: () => boolean;
+    signal?: AbortSignal;
+    onThreadPresence?: (observation: ThreadPresenceObservation) => void;
   },
+  publication = startRuntimeTranscriptPublication(input),
+  connectedClient?: GatewayRpcClient,
 ): Promise<TaskRuntime> {
-  const client = await taskClientConnector(
-    input.profile,
-    input.server,
-    input.cwd,
-  );
-  const buffered = bufferNotifications(client);
+  let client: GatewayRpcClient | undefined = connectedClient;
+  let buffered: ReturnType<typeof bufferNotifications> | undefined;
+  const isCurrentResumeOwner = () => !input.signal?.aborted && input.isCurrentOwner?.() !== false;
+  const assertCurrentResumeOwner = () => {
+    if (isCurrentResumeOwner()) return;
+    const error = new Error("Task resume cancelled because its owner changed");
+    error.name = "AbortError";
+    throw error;
+  };
+  const closeOnAbort = () => client?.close();
+  input.signal?.addEventListener("abort", closeOnAbort, { once: true });
   try {
-    const inlineHistory = client.supportsExperimental?.("threadResumeHistoryPageV1") === true;
-    const resumed = await client.request<{ thread?: ThreadSummary }>(
-      "thread/resume",
-      {
-        threadId: input.threadId,
-        ...(inlineHistory ? { history: {
-          limit: 50,
-          indexed: client.supportsExperimental?.("threadIndexedPagesV1") === true,
-        } } : {}),
-      },
-    );
+    assertCurrentResumeOwner();
+    client = connectedClient ?? await (input.signal
+      ? taskClientConnector(input.profile, input.server, input.cwd, "runtime", { signal: input.signal })
+      : taskClientConnector(input.profile, input.server, input.cwd));
+    assertCurrentResumeOwner();
+    const resumeClient = client;
+    const notificationBuffer = bufferNotifications(resumeClient);
+    buffered = notificationBuffer;
+    const readPresenceAfter = async (error: unknown, code: number) => {
+      if (!(error instanceof MobileRpcError) || error.reason !== "remote" || error.code !== code ||
+          !isCurrentResumeOwner() || resumeClient.supportsExperimental?.(THREAD_PRESENCE_READ_CAPABILITY) !== true) return;
+      const isCurrentOwner = isCurrentResumeOwner;
+      const ownerToken = input.presenceOwnerToken ?? input.isCurrentOwner ?? input;
+      try {
+        const observation = await probeThreadPresence({ client: resumeClient, profile: input.profile, server: input.server,
+          cwd: input.cwd, threadId: input.threadId, ownerToken, isCurrentOwner });
+        if (observation && isCurrentOwner() && resumeClient.matchesRetainedAttachmentOwner(input.profile, input.server, input.cwd)) {
+          try { input.onThreadPresence?.(observation); } catch { /* Preserve the original recovery error. */ }
+        }
+      } catch { /* Presence is advisory and never replaces the original RPC error. */ }
+    };
+    const inlineHistory = resumeClient.supportsExperimental?.("threadResumeHistoryPageV1") === true;
+    let resumed: { thread?: ThreadSummary };
+    try {
+      assertCurrentResumeOwner();
+      publication.freeze();
+      resumed = await resumeClient.request<{ thread?: ThreadSummary }>(
+        "thread/resume",
+        {
+          threadId: input.threadId,
+          ...(inlineHistory ? { history: {
+            limit: 50,
+            indexed: resumeClient.supportsExperimental?.("threadIndexedPagesV1") === true,
+          } } : {}),
+        },
+      );
+      assertCurrentResumeOwner();
+    } catch (error) {
+      await readPresenceAfter(error, -32022);
+      throw error;
+    }
     const inlinePage = inlineHistory ? inlineResumeHistoryPage(resumed, input.threadId) : null;
-    const history = inlinePage
-      ? normalizeHistoryPage(inlinePage)
-      : await readHistoryPage(client, input.threadId);
+    let history: Awaited<ReturnType<typeof readHistoryPage>>;
+    if (inlinePage) history = { ...normalizeHistoryPage(inlinePage), sourcePage: inlinePage };
+    else {
+      try {
+        assertCurrentResumeOwner();
+        history = await readHistoryPage(resumeClient, input.threadId);
+        assertCurrentResumeOwner();
+      }
+      catch (error) { await readPresenceAfter(error, -32021); throw error; }
+    }
+    assertCurrentResumeOwner();
     const historyThread = history.thread;
     const resumedThread = resumed.thread;
     const model =
@@ -585,7 +716,7 @@ export async function resume(
           typeof value === "string" && value.length > 0,
       );
     const reasoningEffort = input.reasoningEffort;
-    const configurationPending = Boolean(model && reasoningEffort);
+    const configurationPending = input.deferConfiguration === true || Boolean(model && reasoningEffort);
     const runtime = createRuntime(
       null,
       {
@@ -601,6 +732,8 @@ export async function resume(
         reasoningEffort,
         configurationReady: !configurationPending,
         messages: history.messages,
+        transcriptSnapshotV1: history.transcriptSnapshotV1,
+        transcriptObservationV1: history.transcriptObservationV1,
         hasMoreBefore: history.hasMoreBefore,
         beforeCursor: history.beforeCursor,
         loadingOlder: false,
@@ -622,24 +755,40 @@ export async function resume(
         server: input.server,
         threadCwd,
         onSessionExpired: input.onSessionExpired,
+        profileActivationEpoch: input.profileActivationEpoch,
+        isCurrentInteractionOwner: input.isCurrentInteractionOwner,
       },
     );
-    runtime.attachBufferedClient(client, buffered);
+    runtime.confirmedTranscriptPage = { page: history.sourcePage, confirmedAt: Date.now() };
+    try {
+      const mismatchedThread = [historyThread?.id, resumedThread?.id].some(id => id !== undefined && id !== input.threadId);
+      const confirmedCwds = [historyThread?.cwd, resumedThread?.cwd].filter(
+        (value): value is string => typeof value === "string" && value.length > 0);
+      const confirmedCwd = [historyThread, resumedThread].find(thread => thread?.id === input.threadId &&
+        typeof thread.cwd === "string" && thread.cwd.length > 0)?.cwd;
+      const conflictingCwd = confirmedCwd && confirmedCwds.some(cwd => workspaceThreadScopeIdentity(cwd) !== workspaceThreadScopeIdentity(confirmedCwd));
+      publication.bind(runtime, confirmedCwd && !mismatchedThread && !conflictingCwd
+        ? captureSessionTranscriptScope(input.profile, input.server, confirmedCwd, input.threadId) : null);
+    } catch { publication.bind(runtime, null); }
+    if (input.deferConfiguration) runtime.workspaceConfiguration = null;
+    runtime.attachBufferedClient(resumeClient, notificationBuffer);
+    void runtime.refreshAsyncQuestions();
     runtime.flushPendingDeltas();
     const generation = runtime.clientGeneration;
     const current = () => !runtime.disposed && runtime.clientGeneration === generation;
-    if (client.supportsExperimental?.("agentSteering") === true) {
+    if (resumeClient.supportsExperimental?.("agentSteering") === true) {
+      assertCurrentResumeOwner();
       let changed = false;
       const unsubscribe = runtime.subscribeProtocol((message) => {
         if (message.method?.startsWith("agent/") || message.method?.startsWith("backgroundAgent/")) changed = true;
       });
-      void client.request<AgentListResult>("agent/list", { threadId: input.threadId })
+      void resumeClient.request<AgentListResult>("agent/list", { threadId: input.threadId })
         .then((result) => { if (current() && !changed) runtime.applySubagentSnapshot(Array.isArray(result.agents) ? result.agents : []); })
         .catch(() => {})
         .finally(unsubscribe);
     }
-    if (configurationPending) {
-      void restoreReasoningEffortForThread(client, input.threadId, model, reasoningEffort)
+    if (configurationPending && !input.deferConfiguration) {
+      void restoreReasoningEffortForThread(resumeClient, input.threadId, model, reasoningEffort)
         .then((restored) => {
           if (current() && !runtime.snapshot.pendingTurnPreferences && runtime.snapshot.model === model && runtime.snapshot.reasoningEffort === reasoningEffort)
             runtime.patch({ reasoningEffort: restored, configurationReady: true });
@@ -647,9 +796,33 @@ export async function resume(
     }
     return runtime;
   } catch (error) {
-    buffered.cancel();
-    client.close();
+    buffered?.cancel();
+    client?.close();
     throw error;
+  } finally {
+    input.signal?.removeEventListener("abort", closeOnAbort);
+  }
+}
+
+/** Apply locally restored preferences through the existing read-only configuration projection. */
+export async function restoreWorkspaceConfiguration(
+  this: TaskRuntime,
+  reasoningEffort: string | undefined,
+  isCurrentOwner?: () => boolean,
+): Promise<void> {
+  const isCurrent = isCurrentOwner === undefined ? () => true : isCurrentOwner;
+  if (this.disposed || this.workspaceConfiguration === undefined || !isCurrent()) return;
+  const configuration = { reasoningEffort, isCurrent };
+  this.workspaceConfiguration = configuration;
+  this.patch({ configurationReady: false });
+  const client = this.client;
+  if (!client || !this.snapshot.connected) return; // A reconnect applies this same deferred preference.
+  const generation = this.clientGeneration;
+  const model = this.snapshot.model;
+  const restored = await restoreReasoningEffortForThread(client, this.snapshot.threadId, model, reasoningEffort);
+  if (!this.disposed && isCurrent() && this.workspaceConfiguration === configuration &&
+      this.clientGeneration === generation && this.snapshot.model === model && !this.snapshot.pendingTurnPreferences) {
+    this.patch({ reasoningEffort: restored, configurationReady: true });
   }
 }
 

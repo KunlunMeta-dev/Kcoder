@@ -1,5 +1,10 @@
 #![cfg(windows)]
 
+#[path = "windows_supervisor/cleanup_receipt.rs"]
+mod cleanup_receipt;
+#[path = "windows_supervisor/suspended_child.rs"]
+mod suspended_child;
+
 use kcoder_process_supervisor::client::{SpawnSpec, SupervisedChild};
 use kcoder_process_supervisor::protocol::{PROTOCOL_VERSION, SpawnRequest};
 use serde_json::json;
@@ -46,6 +51,17 @@ impl Drop for OwnedTestProcess {
 }
 
 fn supervisor() -> PathBuf {
+    if let Some(path) = std::env::var_os("KCODER_E2E_PROCESS_SUPERVISOR_BIN") {
+        return PathBuf::from(path);
+    }
+    let sibling = std::env::current_exe()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .join("supervisor.exe");
+    if sibling.is_file() {
+        return sibling;
+    }
     PathBuf::from(env!("CARGO_BIN_EXE_kcoder-process-supervisor"))
 }
 

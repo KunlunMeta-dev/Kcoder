@@ -90,6 +90,11 @@ pub enum EngineEvent {
         id: String,
         preview: WriteInputPreview,
     },
+    /// Only negotiated Studio visualization tools can publish this bounded uncommitted source.
+    WidgetInputPreview {
+        id: String,
+        preview: kcoder_types::widgets::WidgetInputPreview,
+    },
     /// Untrusted, temporary path hint scoped to one provider invocation; None retracts it.
     /// Consumers must also clear temporary state when a turn ends or its stream is dropped.
     ToolPathPreview {
@@ -99,6 +104,8 @@ pub enum EngineEvent {
     },
     /// Assistant finished its message.
     AssistantMessageDone,
+    /// Bounded provider stop semantics; this alone does not complete the turn.
+    AssistantStopReason { reason: &'static str },
     /// Assistant requested to use a tool.
     ToolUseStarted {
         id: String,
@@ -184,6 +191,17 @@ pub enum EngineEvent {
     BackgroundJobCancelled { id: String, reason: String },
 }
 
+pub(crate) fn normalized_stop_reason(reason: &str) -> &'static str {
+    match reason {
+        "end_turn" | "stop" | "STOP" | "stop_sequence" | "completed" => "end_turn",
+        "tool_use" | "tool_calls" | "function_call" => "tool_use",
+        "max_tokens" | "MAX_TOKENS" | "length" | "max_output_tokens" => "max_tokens",
+        "refusal" | "content_filter" | "SAFETY" | "RECITATION" => "refusal",
+        "pause_turn" => "pause_turn",
+        _ => "unknown",
+    }
+}
+
 impl EngineEvent {
     pub fn background_payload(&self) -> &Self {
         match self {
@@ -244,7 +262,7 @@ impl From<BackgroundJobEvent> for EngineEvent {
             BackgroundJobEvent::Completed { id, output } => {
                 EngineEvent::BackgroundJobCompleted { id, output }
             }
-            BackgroundJobEvent::Failed { id, error } => {
+            BackgroundJobEvent::Failed { id, error, .. } => {
                 EngineEvent::BackgroundJobFailed { id, error }
             }
             BackgroundJobEvent::Paused { id, reason } => {
@@ -343,6 +361,7 @@ mod tests {
         let event = EngineEvent::from(BackgroundJobEvent::Failed {
             id: "job-1".into(),
             error: "boom".into(),
+            execution_metadata: Vec::new(),
         });
         assert!(
             matches!(event, EngineEvent::BackgroundJobFailed { id, error } if id == "job-1" && error == "boom")

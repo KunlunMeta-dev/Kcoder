@@ -1,14 +1,17 @@
 """Launch only the pinned, adjacent Windows-MCP runtime; never install packages."""
+import sys
+
+# Defense in depth; bundled Python disables bytecode during encoding bootstrap.
+sys.dont_write_bytecode = True
+
 from pathlib import Path
 import json
 import os
 import site
-import sys
 
 # comtypes initializes the importing thread; use the same COM model as UIA
 # executor threads instead of creating an STA without a Windows message pump.
 sys.coinit_flags = 0
-sys.dont_write_bytecode = True
 root = Path(__file__).resolve().parent
 site.addsitedir(str(root / "packages"))
 sys.path.insert(0, str(root / "source" / "src"))

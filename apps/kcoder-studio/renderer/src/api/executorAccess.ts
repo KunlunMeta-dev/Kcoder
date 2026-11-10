@@ -26,6 +26,9 @@ import type {
   RuntimeSubagentArtifactRequest,
   RuntimeSubagentArtifactResponse,
   RuntimeTaskAddress,
+  RuntimeTaskCancelRequest,
+  RuntimeModelSelectionRequest,
+  RuntimeModelSelectionResponse,
   RuntimeTaskCancelResponse,
   RuntimeTaskShortenWaitResponse,
   RuntimeTaskCreateRequest,
@@ -107,6 +110,9 @@ export interface ExecutorRuntimeClient {
     data: RuntimeFileChangesRevertRequest
   ) => Promise<RuntimeFileChangesRevertResponse>
   sendRuntimeMessage: (data: RuntimeSendRequest) => Promise<RuntimeSendResponse>
+  queueRuntimeModelSelection?: (
+    data: RuntimeModelSelectionRequest
+  ) => Promise<RuntimeModelSelectionResponse>
   interruptAndSendRuntimeMessage: (
     data: RuntimeInterruptAndSendRequest
   ) => Promise<RuntimeSendResponse>
@@ -166,7 +172,7 @@ export interface ExecutorRuntimeClient {
   deleteArchivedConversationsBulk: ReturnType<
     typeof createRuntimeWorkApi
   >['deleteArchivedConversationsBulk']
-  cancelRuntimeTask: (address: RuntimeTaskAddress) => Promise<RuntimeTaskCancelResponse>
+  cancelRuntimeTask: (address: RuntimeTaskCancelRequest) => Promise<RuntimeTaskCancelResponse>
   shortenWaitRuntimeTask: (address: RuntimeTaskAddress) => Promise<RuntimeTaskShortenWaitResponse>
   createRuntimeTask: (data: RuntimeTaskCreateRequest) => Promise<RuntimeTaskCreateResponse>
   forkRuntimeTask: (data: RuntimeTaskForkRequest) => Promise<RuntimeTaskForkResponse>

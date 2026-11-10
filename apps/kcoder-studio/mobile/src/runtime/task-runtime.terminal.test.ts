@@ -552,4 +552,328 @@ describe("TaskRuntime 终端租约", () => {
     ]);
     runtime.close();
   });
+
+  it.each([0, 7])(
+    "确知退出码 %s 保留真实结果且不会自动重启",
+    async (exitCode) => {
+      const fixture = await terminalFixture();
+      await fixture.terminal.start();
+      fixture.client.emit({
+        method: "terminal/exit",
+        params: {
+          session_id: "pty-owned-1",
+          sequence: 1,
+          exit_code: exitCode,
+        },
+      });
+      expect(fixture.terminal.getSnapshot()).toMatchObject({
+        sessionId: null,
+        status: "exited",
+      });
+      expect(fixture.terminal.getTranscript()).toContain(
+        `[进程已退出：${exitCode}]`,
+      );
+      expect(
+        fixture.requests.filter((value) => value.method === "terminal/start"),
+      ).toHaveLength(1);
+      fixture.runtime.close();
+    },
+  );
+
+  it("未知退出即使带序号缺口也停止等待，保留身份并禁止自动附着与写入", async () => {
+    vi.useFakeTimers();
+    const fixture = await terminalFixture();
+    await fixture.terminal.start();
+    fixture.client.emit({
+      method: "terminal/exit",
+      params: {
+        session_id: "pty-owned-1",
+        sequence: 3,
+        exit_code: null,
+      },
+    });
+    expect(fixture.terminal.getSnapshot()).toMatchObject({
+      sessionId: "pty-owned-1",
+      status: "error",
+    });
+    expect(fixture.terminal.getSnapshot().error).toContain("未确认");
+    expect(fixture.terminal.getTranscript()).not.toContain("进程已退出");
+    expect(fixture.runtime.isLiveTerminalSession("owned-panel")).toBe(false);
+    const before = fixture.requests.length;
+    await fixture.terminal.start();
+    fixture.terminal.write("must not run\r");
+    fixture.terminal.resize(40, 120);
+    fixture.client.emit({
+      method: "terminal/output",
+      params: { session_id: "pty-owned-1", sequence: 5, data: "late" },
+    });
+    fixture.client.emit({
+      method: "terminal/exit",
+      params: { session_id: "pty-owned-1", sequence: 2, exit_code: 0 },
+    });
+    await vi.advanceTimersByTimeAsync(10);
+    expect(fixture.requests).toHaveLength(before);
+    expect(fixture.terminal.getSnapshot()).toMatchObject({
+      sessionId: "pty-owned-1",
+      status: "error",
+    });
+    expect(fixture.terminal.getTranscript()).not.toContain("已退出：0");
+    fixture.client.emit({
+      method: "connection/closed",
+      params: { reason: "network lost" },
+    });
+    await vi.advanceTimersByTimeAsync(500);
+    expect(fixture.terminal.getSnapshot()).toMatchObject({
+      sessionId: "pty-owned-1",
+      status: "error",
+    });
+    expect(
+      fixture.requests.filter((value) => value.method === "terminal/attach"),
+    ).toHaveLength(1);
+    expect(
+      fixture.requests.filter((value) => value.method === "terminal/start"),
+    ).toHaveLength(1);
+    fixture.runtime.close();
+  });
+
+  it("附着中的未知退出不会被迟到快照恢复运行，重启须先拿到关闭确认", async () => {
+    let resolveAttach!: (value: unknown) => void;
+    let closeConfirmed = false;
+    const delayedAttach = new Promise((resolve) => {
+      resolveAttach = resolve;
+    });
+    const fixture = await terminalFixture(async (method, params, count) => {
+      if (method === "terminal/attach" && count === 1) return delayedAttach;
+      if (method === "terminal/close") {
+        if (!closeConfirmed) throw new Error("cleanup not confirmed");
+        return { closed: true };
+      }
+    });
+    const starting = fixture.terminal.start();
+    await vi.waitFor(() =>
+      expect(
+        fixture.requests.some((value) => value.method === "terminal/attach"),
+      ).toBe(true),
+    );
+    fixture.client.emit({
+      method: "terminal/exit",
+      params: { session_id: "pty-owned-1", sequence: 1, exit_code: null },
+    });
+    expect(fixture.terminal.getSnapshot()).toMatchObject({
+      sessionId: "pty-owned-1",
+      status: "error",
+    });
+    resolveAttach({
+      session_id: "pty-owned-1",
+      transcript: "late snapshot",
+      through_sequence: 1,
+    });
+    await starting;
+    expect(fixture.terminal.getSnapshot()).toMatchObject({
+      sessionId: "pty-owned-1",
+      status: "error",
+    });
+    expect(
+      fixture.requests.filter((value) => value.method === "terminal/close"),
+    ).toHaveLength(0);
+    await fixture.terminal.restart();
+    expect(fixture.terminal.getSnapshot()).toMatchObject({
+      sessionId: "pty-owned-1",
+      status: "error",
+    });
+    expect(
+      fixture.requests.filter((value) => value.method === "terminal/start"),
+    ).toHaveLength(1);
+    closeConfirmed = true;
+    await fixture.terminal.restart();
+    expect(fixture.terminal.getSnapshot()).toMatchObject({
+      sessionId: "pty-owned-2",
+      status: "running",
+    });
+    fixture.client.emit({
+      method: "terminal/exit",
+      params: { session_id: "pty-owned-1", sequence: 9, exit_code: null },
+    });
+    expect(fixture.terminal.getSnapshot()).toMatchObject({
+      sessionId: "pty-owned-2",
+      status: "running",
+    });
+    fixture.runtime.close();
+  });
+
+  it("创建回复前到达的未知退出只有在 sessionId 确认后归属，并且不再自动 attach", async () => {
+    let resolveStart!: (value: unknown) => void;
+    const delayedStart = new Promise((resolve) => {
+      resolveStart = resolve;
+    });
+    const fixture = await terminalFixture(async (method) =>
+      method === "terminal/start" ? delayedStart : undefined,
+    );
+    const starting = fixture.terminal.start();
+    fixture.client.emit({
+      method: "terminal/exit",
+      params: { session_id: "pty-early-owned", sequence: 1, exit_code: null },
+    });
+    resolveStart({ session_id: "pty-early-owned", cwd: "/workspace" });
+    await starting;
+    expect(fixture.terminal.getSnapshot()).toMatchObject({
+      sessionId: "pty-early-owned",
+      status: "error",
+    });
+    expect(
+      fixture.requests.filter((value) => value.method === "terminal/attach"),
+    ).toHaveLength(0);
+    fixture.runtime.close();
+  });
+
+  it("显式关闭等待中断线也不能把未确认状态恢复为自动重连", async () => {
+    vi.useFakeTimers();
+    let resolveClose!: (value: unknown) => void;
+    const delayedClose = new Promise((resolve) => {
+      resolveClose = resolve;
+    });
+    const fixture = await terminalFixture(async (method) =>
+      method === "terminal/close" ? delayedClose : undefined,
+    );
+    await fixture.terminal.start();
+    fixture.client.emit({
+      method: "terminal/exit",
+      params: { session_id: "pty-owned-1", sequence: 1, exit_code: null },
+    });
+    const restarting = fixture.terminal.restart();
+    fixture.client.emit({
+      method: "connection/closed",
+      params: { reason: "lost while closing" },
+    });
+    expect(fixture.terminal.getSnapshot()).toMatchObject({
+      sessionId: "pty-owned-1",
+      status: "error",
+    });
+    await vi.advanceTimersByTimeAsync(500);
+    resolveClose({ closed: true });
+    await restarting;
+    expect(
+      fixture.requests.filter((value) => value.method === "terminal/start"),
+    ).toHaveLength(1);
+    expect(
+      fixture.requests.filter((value) => value.method === "terminal/attach"),
+    ).toHaveLength(1);
+    fixture.runtime.close();
+  });
+
+  it.each([false, undefined])(
+    "关闭回执 closed=%s 不是清理成功证明",
+    async (closed) => {
+      const fixture = await terminalFixture(async (method) =>
+        method === "terminal/close" ? { closed } : undefined,
+      );
+      await fixture.terminal.start();
+      fixture.client.emit({
+        method: "terminal/exit",
+        params: { session_id: "pty-owned-1", sequence: 1, exit_code: null },
+      });
+      await fixture.terminal.restart();
+      expect(fixture.terminal.getSnapshot()).toMatchObject({
+        sessionId: "pty-owned-1",
+        status: "error",
+      });
+      expect(
+        fixture.requests.filter((value) => value.method === "terminal/start"),
+      ).toHaveLength(1);
+      fixture.runtime.close();
+    },
+  );
+
+  it("明确重启中的退出通知不会丢失随后返回的关闭确认", async () => {
+    let fixture!: Awaited<ReturnType<typeof terminalFixture>>;
+    fixture = await terminalFixture(async (method) => {
+      if (method === "terminal/close") {
+        fixture.client.emit({
+          method: "terminal/exit",
+          params: { session_id: "pty-owned-1", sequence: 1, exit_code: null },
+        });
+        return { closed: true };
+      }
+    });
+    await fixture.terminal.start();
+    await fixture.terminal.restart();
+    expect(fixture.terminal.getSnapshot()).toMatchObject({
+      sessionId: "pty-owned-2",
+      status: "running",
+    });
+    fixture.runtime.close();
+  });
+
+  it("账户生命周期结束后的迟到关闭确认不能创建新终端", async () => {
+    let resolveClose!: (value: unknown) => void;
+    const closing = new Promise((resolve) => {
+      resolveClose = resolve;
+    });
+    const fixture = await terminalFixture(async (method) =>
+      method === "terminal/close" ? closing : undefined,
+    );
+    await fixture.terminal.start();
+    fixture.client.emit({
+      method: "terminal/exit",
+      params: { session_id: "pty-owned-1", sequence: 1, exit_code: null },
+    });
+    const restarting = fixture.terminal.restart();
+    fixture.runtime.close();
+    resolveClose({ closed: true });
+    await restarting;
+    expect(
+      fixture.requests.filter((value) => value.method === "terminal/start"),
+    ).toHaveLength(1);
+  });
 });
+
+async function terminalFixture(
+  override?: (
+    method: string,
+    params: JsonRecord,
+    attachCount: number,
+  ) => Promise<unknown>,
+) {
+  const client = new FakeClient([]);
+  const requests: Array<{ method: string; params: JsonRecord }> = [];
+  let starts = 0,
+    attaches = 0;
+  client.request = vi.fn(async (method: string, params: JsonRecord = {}) => {
+    requests.push({ method, params });
+    if (method === "terminal/attach") attaches++;
+    const replacement = await override?.(method, params, attaches);
+    if (replacement !== undefined) return replacement as never;
+    if (method === "thread/resume")
+      return {
+        thread: { id: "owned-thread", cwd: "/workspace", status: "idle" },
+      } as never;
+    if (method === "thread/read") return { messages: [] } as never;
+    if (method === "terminal/start")
+      return {
+        session_id: `pty-owned-${++starts}`,
+        cwd: "/workspace",
+      } as never;
+    if (method === "terminal/attach")
+      return {
+        session_id: params.session_id,
+        transcript: "",
+        through_sequence: 0,
+      } as never;
+    if (method === "terminal/close") return { closed: true } as never;
+    return {} as never;
+  });
+  taskRuntimeTestHelpers.setConnector(
+    vi.fn(async () => client as never) as never,
+  );
+  const runtime = await TaskRuntime.resume({
+    profile,
+    server,
+    threadId: "owned-thread",
+  });
+  return {
+    runtime,
+    terminal: runtime.terminalSession("owned-panel"),
+    client,
+    requests,
+  };
+}

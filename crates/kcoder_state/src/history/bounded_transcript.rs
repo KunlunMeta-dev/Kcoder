@@ -210,6 +210,8 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let path = root.path().join("source.jsonl");
         let entry = HistoryEntry {
+            web_sources: Vec::new(),
+            history_attempt: None,
             session_id: "fixture".into(),
             timestamp_ms: 123,
             uuid: None,

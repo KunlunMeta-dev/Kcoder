@@ -1,0 +1,618 @@
+{
+  "OfficeGenerateParams": {
+    "valid": [
+      {
+        "name": "case-preserving-bounded-example",
+        "value": {
+          "task": {
+            "threadId": "thread-case",
+            "turnId": "turn-case"
+          },
+          "specification": {
+            "schemaVersion": 1,
+            "kind": "docx",
+            "title": "示例",
+            "paragraphs": []
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-unknown-authority",
+        "value": {
+          "task": {
+            "threadId": "thread-case",
+            "turnId": "turn-case"
+          },
+          "specification": {
+            "schemaVersion": 1,
+            "kind": "docx",
+            "title": "示例",
+            "paragraphs": []
+          },
+          "arbitraryAuthority": true
+        }
+      }
+    ]
+  },
+  "OfficeGenerationKind": {
+    "valid": [
+      {
+        "name": "bounded-office-contract",
+        "value": "docx"
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-unknown-authority",
+        "value": "arbitrary-value"
+      }
+    ]
+  },
+  "OfficeGenerationSpec": {
+    "valid": [
+      {
+        "name": "bounded-office-contract",
+        "value": {
+          "schemaVersion": 1,
+          "kind": "docx",
+          "title": "已核对报告",
+          "template": "report",
+          "paragraphs": [
+            {
+              "text": "金额1234.56元；日期待确认。"
+            }
+          ]
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-unknown-authority",
+        "value": {
+          "schemaVersion": 1,
+          "kind": "docx",
+          "title": "已核对报告",
+          "template": "report",
+          "paragraphs": [
+            {
+              "text": "金额1234.56元；日期待确认。"
+            }
+          ],
+          "arbitraryAuthority": true
+        }
+      }
+    ]
+  },
+  "OfficeParagraphSpec": {
+    "valid": [
+      {
+        "name": "bounded-office-contract",
+        "value": {
+          "text": "确认事项",
+          "heading": 1,
+          "bullet": false
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-unknown-authority",
+        "value": {
+          "text": "确认事项",
+          "heading": 1,
+          "bullet": false,
+          "arbitraryAuthority": true
+        }
+      }
+    ]
+  },
+  "OfficeTextTableSpec": {
+    "valid": [
+      {
+        "name": "bounded-office-contract",
+        "value": {
+          "headers": [
+            "事项",
+            "金额"
+          ],
+          "rows": [
+            [
+              "A",
+              "1234.56"
+            ]
+          ]
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-unknown-authority",
+        "value": {
+          "headers": [
+            "事项",
+            "金额"
+          ],
+          "rows": [
+            [
+              "A",
+              "1234.56"
+            ]
+          ],
+          "arbitraryAuthority": true
+        }
+      }
+    ]
+  },
+  "OfficeSheetColumnSpec": {
+    "valid": [
+      {
+        "name": "bounded-office-contract",
+        "value": {
+          "key": "amount",
+          "title": "金额",
+          "type": "number",
+          "unit": "元"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-unknown-authority",
+        "value": {
+          "key": "amount",
+          "title": "金额",
+          "type": "number",
+          "unit": "元",
+          "arbitraryAuthority": true
+        }
+      }
+    ]
+  },
+  "OfficeFormulaSpec": {
+    "valid": [
+      {
+        "name": "bounded-office-contract",
+        "value": {
+          "cell": "A3",
+          "formula": "SUM(A2:A2)"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-unknown-authority",
+        "value": {
+          "cell": "A3",
+          "formula": "SUM(A2:A2)",
+          "arbitraryAuthority": true
+        }
+      }
+    ]
+  },
+  "OfficeSheetSpec": {
+    "valid": [
+      {
+        "name": "bounded-office-contract",
+        "value": {
+          "name": "金额",
+          "columns": [
+            {
+              "key": "amount",
+              "title": "金额",
+              "type": "number",
+              "unit": "元"
+            }
+          ],
+          "rows": [
+            [
+              1234.56
+            ]
+          ],
+          "formulas": [
+            {
+              "cell": "A3",
+              "formula": "SUM(A2:A2)"
+            }
+          ]
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-unknown-authority",
+        "value": {
+          "name": "金额",
+          "columns": [
+            {
+              "key": "amount",
+              "title": "金额",
+              "type": "number",
+              "unit": "元"
+            }
+          ],
+          "rows": [
+            [
+              1234.56
+            ]
+          ],
+          "formulas": [
+            {
+              "cell": "A3",
+              "formula": "SUM(A2:A2)"
+            }
+          ],
+          "arbitraryAuthority": true
+        }
+      }
+    ]
+  },
+  "OfficeChartType": {
+    "valid": [
+      {
+        "name": "bounded-office-contract",
+        "value": "bar"
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-unknown-authority",
+        "value": "arbitrary-value"
+      }
+    ]
+  },
+  "OfficeChartSeriesSpec": {
+    "valid": [
+      {
+        "name": "bounded-office-contract",
+        "value": {
+          "name": "金额",
+          "values": [
+            1234.56,
+            200
+          ]
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-unknown-authority",
+        "value": {
+          "name": "金额",
+          "values": [
+            1234.56,
+            200
+          ],
+          "arbitraryAuthority": true
+        }
+      }
+    ]
+  },
+  "OfficeSlideChartSpec": {
+    "valid": [
+      {
+        "name": "bounded-office-contract",
+        "value": {
+          "type": "bar",
+          "labels": [
+            "A",
+            "B"
+          ],
+          "series": [
+            {
+              "name": "金额",
+              "values": [
+                1234.56,
+                200
+              ]
+            }
+          ],
+          "unit": "元"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-unknown-authority",
+        "value": {
+          "type": "bar",
+          "labels": [
+            "A",
+            "B"
+          ],
+          "series": [
+            {
+              "name": "金额",
+              "values": [
+                1234.56,
+                200
+              ]
+            }
+          ],
+          "unit": "元",
+          "arbitraryAuthority": true
+        }
+      }
+    ]
+  },
+  "OfficePngSpec": {
+    "valid": [
+      {
+        "name": "bounded-office-contract",
+        "value": {
+          "data": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGMwSpn2HwAEJAIsVIWyawAAAABJRU5ErkJggg==",
+          "alt": "合成测试标记"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-unknown-authority",
+        "value": {
+          "data": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGMwSpn2HwAEJAIsVIWyawAAAABJRU5ErkJggg==",
+          "alt": "合成测试标记",
+          "arbitraryAuthority": true
+        }
+      }
+    ]
+  },
+  "OfficeSlideSpec": {
+    "valid": [
+      {
+        "name": "bounded-office-contract",
+        "value": {
+          "title": "金额核对",
+          "paragraphs": [
+            "金额1234.56元"
+          ],
+          "chart": {
+            "type": "bar",
+            "labels": [
+              "A",
+              "B"
+            ],
+            "series": [
+              {
+                "name": "金额",
+                "values": [
+                  1234.56,
+                  200
+                ]
+              }
+            ],
+            "unit": "元"
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-unknown-authority",
+        "value": {
+          "title": "金额核对",
+          "paragraphs": [
+            "金额1234.56元"
+          ],
+          "chart": {
+            "type": "bar",
+            "labels": [
+              "A",
+              "B"
+            ],
+            "series": [
+              {
+                "name": "金额",
+                "values": [
+                  1234.56,
+                  200
+                ]
+              }
+            ],
+            "unit": "元"
+          },
+          "arbitraryAuthority": true
+        }
+      }
+    ]
+  },
+  "OfficeGeneratorIdentity": {
+    "valid": [
+      {
+        "name": "bounded-canonical-source-contract",
+        "value": {
+          "component": "@kcoder/office-components",
+          "version": "0.1.0",
+          "schemaRevision": "office-generation/v1",
+          "implementationSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "dependencyLockSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown-field-or-state-rejected",
+        "value": {
+          "component": "@kcoder/office-components",
+          "version": "0.1.0",
+          "schemaRevision": "office-generation/v1",
+          "implementationSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "dependencyLockSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "arbitraryPath": "/not-an-input"
+        }
+      }
+    ]
+  },
+  "OfficeCanonicalInputIdentity": {
+    "valid": [
+      {
+        "name": "bounded-canonical-source-contract",
+        "value": {
+          "reference": {
+            "kind": "input",
+            "id": "accepted-input",
+            "revision": "1"
+          },
+          "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown-field-or-state-rejected",
+        "value": {
+          "reference": {
+            "kind": "input",
+            "id": "accepted-input",
+            "revision": "1"
+          },
+          "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          "arbitraryPath": "/not-an-input"
+        }
+      }
+    ]
+  },
+  "OfficeCanonicalSourceDescriptor": {
+    "valid": [
+      {
+        "name": "bounded-canonical-source-contract",
+        "value": {
+          "schemaVersion": 1,
+          "id": "generation-source-fixture",
+          "revision": 1,
+          "owner": {
+            "accountId": "fixture-account",
+            "targetId": "fixture-target",
+            "workspaceId": null
+          },
+          "operationId": "original-generation",
+          "task": {
+            "threadId": "thread",
+            "turnId": "turn"
+          },
+          "artifact": {
+            "id": "artifact",
+            "revision": 1
+          },
+          "outputSha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "specificationSha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "specificationBytes": 128,
+          "generator": {
+            "component": "@kcoder/office-components",
+            "version": "0.1.0",
+            "schemaRevision": "office-generation/v1",
+            "implementationSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "dependencyLockSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          },
+          "inputs": [],
+          "createdAtMs": 1
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown-field-or-state-rejected",
+        "value": {
+          "schemaVersion": 1,
+          "id": "generation-source-fixture",
+          "revision": 1,
+          "owner": {
+            "accountId": "fixture-account",
+            "targetId": "fixture-target",
+            "workspaceId": null
+          },
+          "operationId": "original-generation",
+          "task": {
+            "threadId": "thread",
+            "turnId": "turn"
+          },
+          "artifact": {
+            "id": "artifact",
+            "revision": 1
+          },
+          "outputSha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "specificationSha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "specificationBytes": 128,
+          "generator": {
+            "component": "@kcoder/office-components",
+            "version": "0.1.0",
+            "schemaRevision": "office-generation/v1",
+            "implementationSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "dependencyLockSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          },
+          "inputs": [],
+          "createdAtMs": 1,
+          "arbitraryPath": "/not-an-input"
+        }
+      }
+    ]
+  },
+  "OfficeCanonicalSourceAvailability": {
+    "valid": [
+      {
+        "name": "bounded-canonical-source-contract",
+        "value": "not_recorded"
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown-field-or-state-rejected",
+        "value": "made_up_state"
+      }
+    ]
+  },
+  "OfficeCanonicalSourceReadResult": {
+    "valid": [
+      {
+        "name": "bounded-canonical-source-contract",
+        "value": {
+          "availability": "not_recorded",
+          "source": null,
+          "chunk": null,
+          "offset": 0,
+          "nextOffset": null,
+          "complete": false
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown-field-or-state-rejected",
+        "value": {
+          "availability": "not_recorded",
+          "source": null,
+          "chunk": null,
+          "offset": 0,
+          "nextOffset": null,
+          "complete": false,
+          "arbitraryPath": "/not-an-input"
+        }
+      }
+    ]
+  },
+  "OfficeCanonicalSourceReadParams": {
+    "valid": [
+      {
+        "name": "bounded-canonical-source-contract",
+        "value": {
+          "reference": {
+            "id": "artifact",
+            "revision": 1
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown-field-or-state-rejected",
+        "value": {
+          "reference": {
+            "id": "artifact",
+            "revision": 1
+          },
+          "arbitraryPath": "/not-an-input"
+        }
+      }
+    ]
+  }
+}

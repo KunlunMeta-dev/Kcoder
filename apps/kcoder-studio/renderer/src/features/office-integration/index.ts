@@ -1,0 +1,6 @@
+export { OfficeController, OfficeClientError } from './controller'
+export type { OfficeTransport, OfficeMutation, OfficeAssistantItem } from './controller'
+export { ArtifactCollection } from './ArtifactCollection'
+export type { OfficeTurnPhase } from './ArtifactCollection'
+export { OfficeDatasetView } from './OfficeDatasetView'
+export { officeIntegrationResources } from './locales'

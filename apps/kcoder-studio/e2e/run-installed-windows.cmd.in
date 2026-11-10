@@ -1,0 +1,7 @@
+@echo off
+setlocal
+echo Starting isolated KCoder tests. Please keep this window open.
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0source\apps\kcoder-studio\e2e\run-installed-windows.ps1" -Request "%~dp0interactive-test-request.json" -RequestSha256 @@KCODER_REQUEST_SHA256@@ >> "%~dp0interactive-test-console.txt" 2>&1
+set "KCODER_TEST_EXIT=%ERRORLEVEL%"
+if "%KCODER_TEST_EXIT%"=="0" (echo Tests finished. Results are ready for inspection.) else (echo Test startup or execution failed. Details are in interactive-test-console.txt.)
+endlocal & exit /b %KCODER_TEST_EXIT%

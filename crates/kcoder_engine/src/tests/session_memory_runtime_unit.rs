@@ -36,7 +36,7 @@ fn test_engine_with_settings(
     TestEngineBuilder::new(cwd)
         .provider(provider)
         .settings(settings)
-        .build()
+        .build_with_profile_directory()
 }
 
 #[test]
@@ -446,6 +446,10 @@ async fn session_memory_update_writes_markdown_summary_file() {
 #[tokio::test]
 async fn session_memory_update_does_not_block_turn_completion() {
     let tmp = tempfile::tempdir().unwrap();
+    let _profile = kcoder_config::PrivateDirectory::open_existing(tmp.path())
+        .unwrap()
+        .open_child(std::ffi::OsStr::new("test-config"), true)
+        .unwrap();
     let session_memory_started = Arc::new(AtomicBool::new(false));
     let session_memory_dropped = Arc::new(AtomicBool::new(false));
     let mut settings = settings_using_main_summary_runtime(Settings::default());
@@ -467,11 +471,20 @@ async fn session_memory_update_does_not_block_turn_completion() {
 
     let prompt = kcoder_permissions::AutoAllowPrompt;
     let mut stream = engine.run_turn_stream(&prompt);
+    let mut events = Vec::new();
     timeout(Duration::from_secs(1), async {
-        while stream.next().await.is_some() {}
+        while let Some(event) = stream.next().await {
+            events.push(event);
+        }
     })
     .await
     .expect("turn should finish without waiting for session-memory update");
+    assert!(
+        !events
+            .iter()
+            .any(|event| matches!(event, EngineEvent::Error(_))),
+        "{events:?}"
+    );
 
     timeout(Duration::from_secs(1), async {
         while !session_memory_started.load(Ordering::SeqCst) {

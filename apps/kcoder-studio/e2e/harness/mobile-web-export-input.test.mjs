@@ -14,22 +14,29 @@ test("approved evidence paths reject wrong roots, unapproved private siblings, a
   const temporaryRoot = await mkdtemp(join(tmpdir(), "mobile-export-paths-"));
   try {
     const approvedPrivate = join(temporaryRoot, "target", "private-phone-ux-implementation");
+    const approvedValidation = join(temporaryRoot, "target", "private-phone-ux-validation");
     const unapprovedPrivate = join(temporaryRoot, "target", "private-other-work");
     const wrongRoot = join(temporaryRoot, "outside");
     await mkdir(approvedPrivate, { recursive: true });
+    await mkdir(approvedValidation, { recursive: true });
     await mkdir(unapprovedPrivate, { recursive: true });
     await mkdir(wrongRoot, { recursive: true });
 
     const approvedBundle = join(approvedPrivate, "mobile-web-export-2050");
     const rejectedPrivateBundle = join(unapprovedPrivate, "mobile-web-export");
     const rejectedWrongBundle = join(wrongRoot, "mobile-web-export");
+    const matchedProvenance = join(approvedValidation, "matched-export-provenance.json");
     const escapingLink = join(approvedPrivate, "escape-to-other-private");
     await mkdir(approvedBundle);
     await mkdir(rejectedPrivateBundle);
     await mkdir(rejectedWrongBundle);
+    await writeFile(matchedProvenance, "{}\n");
     await symlink(rejectedPrivateBundle, escapingLink, "dir");
 
     assert.equal(await assertPathWithinApprovedRoots(approvedBundle, [approvedPrivate], "bundle"), approvedBundle);
+    assert.equal(await assertPathWithinApprovedRoots(matchedProvenance, [approvedPrivate, approvedValidation], "combined provenance"), matchedProvenance);
+    await assert.rejects(assertPathWithinApprovedRoots(matchedProvenance, [approvedPrivate], "combined provenance"), /outside every approved evidence root/);
+    await assert.rejects(assertPathWithinApprovedRoots(rejectedPrivateBundle, [approvedPrivate, approvedValidation], "bundle"), /outside every approved evidence root/);
     await assert.rejects(assertPathWithinApprovedRoots(rejectedPrivateBundle, [approvedPrivate], "bundle"), /outside every approved evidence root/);
     await assert.rejects(assertPathWithinApprovedRoots(rejectedWrongBundle, [approvedPrivate], "bundle"), /outside every approved evidence root/);
     await assert.rejects(assertPathWithinApprovedRoots(escapingLink, [approvedPrivate], "bundle"), /symbolic link|outside/);

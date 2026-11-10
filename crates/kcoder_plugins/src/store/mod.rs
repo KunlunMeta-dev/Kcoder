@@ -1,5 +1,7 @@
 mod copy;
+pub(crate) mod migration;
 mod state;
+mod version_lease;
 
 pub(crate) use copy::copy_local_tree;
 pub use copy::{CopyStats, InstallLimits};
@@ -57,6 +59,14 @@ pub struct PluginInUseError;
 #[derive(Debug)]
 pub struct PluginVersionLease {
     _lock: FileLock,
+    version_lock_identity: kcoder_config::PortableLeaseIdentity,
+    plugin_id: PluginId,
+    operation_id: String,
+    store: PrivateDirectory,
+    version_path: PathBuf,
+    version: PrivateDirectory,
+    state_lock_anchor: File,
+    state_lock_identity: kcoder_config::PortableLeaseIdentity,
 }
 
 struct StagedInstallRequest<'a> {
@@ -68,6 +78,9 @@ struct StagedInstallRequest<'a> {
     installed_source: InstalledPluginSource,
     cancellation: &'a PluginCancellationToken,
     deadline: Instant,
+    force_disabled: bool,
+    migration_revision: Option<&'a str>,
+    project_identity: Option<String>,
 }
 
 impl PluginStore {
@@ -77,6 +90,15 @@ impl PluginStore {
     }
 
     pub fn open(root: &Path) -> Result<Self> {
+        Self::open_transaction_store(root, true)
+    }
+
+    /// Migration mutates only its selected target; it does not recover or collect peer versions.
+    pub fn open_for_migration(root: &Path) -> Result<Self> {
+        Self::open_transaction_store(root, false)
+    }
+
+    fn open_transaction_store(root: &Path, recover: bool) -> Result<Self> {
         let private_root = PrivateDirectory::open_or_create(root)
             .with_context(|| format!("failed to open plugin store {}", root.display()))?;
         let root = resolved_store_root(root)?;
@@ -105,10 +127,14 @@ impl PluginStore {
             fault: std::sync::Mutex::new(None),
         };
         store.read_state()?;
-        store.recover_all()?;
-        store.cleanup_unused_versions()?;
-        store
-            .cleanup_orphaned_transaction_directories(SystemTime::now(), ORPHAN_TRANSACTION_TTL)?;
+        if recover {
+            store.recover_all()?;
+            store.cleanup_unused_versions()?;
+            store.cleanup_orphaned_transaction_directories(
+                SystemTime::now(),
+                ORPHAN_TRANSACTION_TTL,
+            )?;
+        }
         Ok(store)
     }
 
@@ -206,7 +232,9 @@ impl PluginStore {
             for record in &snapshot.installed {
                 let lock =
                     self.acquire_shared_lock(&version_lock_name(&record.operation_id)?, deadline)?;
-                leases.push(std::sync::Arc::new(PluginVersionLease { _lock: lock }));
+                leases.push(std::sync::Arc::new(PluginVersionLease::capture(
+                    self, record, lock,
+                )?));
             }
             if self.generation()? == snapshot.generation {
                 if snapshot
@@ -424,6 +452,9 @@ impl PluginStore {
             installed_source,
             cancellation,
             deadline,
+            force_disabled: false,
+            migration_revision: None,
+            project_identity: None,
         });
         if install_result.is_err()
             && self
@@ -448,6 +479,9 @@ impl PluginStore {
             installed_source,
             cancellation,
             deadline,
+            force_disabled,
+            migration_revision,
+            project_identity,
         } = request;
         let staging = self.absolute(&staging_relative)?;
         let stats = copy::copy_local_tree(
@@ -462,6 +496,13 @@ impl PluginStore {
         let loaded = load_plugin_manifest(&staging)
             .map_err(anyhow::Error::from)?
             .context("staged plugin does not contain a supported manifest")?;
+        if let Some(expected) = migration_revision {
+            anyhow::ensure!(
+                crate::migration::package_revision(&staging, self.limits, cancellation)?.sha256
+                    == expected,
+                "plugin_migration_source_changed"
+            );
+        }
         let staged_name = manifest_identity_name(&loaded.manifest)?;
         if staged_name != expected_manifest_name {
             bail!(
@@ -535,12 +576,18 @@ impl PluginStore {
                 plugin_id: plugin_id.clone(),
                 display_name: loaded.manifest.name,
                 version: loaded.manifest.version,
-                enabled_by_default: loaded.manifest.enabled_by_default,
+                enabled_by_default: !force_disabled && loaded.manifest.enabled_by_default,
                 operation_id: marker.operation_id.clone(),
                 file_count: stats.files,
                 total_bytes: stats.total_bytes,
                 cache_relative_path: target_relative,
                 source: installed_source,
+                // Ordinary updates preserve an existing project scope; they cannot promote it.
+                project_identity: project_identity.or_else(|| {
+                    previous
+                        .as_ref()
+                        .and_then(|record| record.project_identity.clone())
+                }),
             };
             self.maybe_fail(TransactionFault::BeforeStatePersist)?;
             cancellation.check()?;
@@ -614,8 +661,21 @@ impl PluginStore {
         purge_data: bool,
         cancellation: &PluginCancellationToken,
     ) -> Result<bool> {
+        self.uninstall_guarded(plugin_id, purge_data, cancellation, true, |_, _, _| Ok(()))
+    }
+
+    fn uninstall_guarded(
+        &self,
+        plugin_id: &PluginId,
+        purge_data: bool,
+        cancellation: &PluginCancellationToken,
+        collect_peers: bool,
+        mut guard: impl FnMut(&InstalledPluginRecord, &Path, bool) -> Result<()>,
+    ) -> Result<bool> {
         cancellation.check()?;
-        self.cleanup_unused_versions()?;
+        if collect_peers {
+            self.cleanup_unused_versions()?;
+        }
         let deadline = Instant::now() + self.operation_timeout;
         let _plugin_lock =
             self.acquire_cancellable_lock(&plugin_lock_name(plugin_id), deadline, cancellation)?;
@@ -643,6 +703,11 @@ impl PluginStore {
                 return Err(PluginInUseError.into());
             }
         }
+        guard(
+            &previous,
+            &previous.root(&self.root),
+            previous_version_lock.is_some(),
+        )?;
         let operation_id = Uuid::new_v4().simple().to_string();
         let backup_relative = PathBuf::from(BACKUPS_DIRECTORY).join(&operation_id);
         let marker = TransactionMarker {
@@ -668,6 +733,15 @@ impl PluginStore {
                     .context("failed to move plugin into uninstall backup")?;
             }
             self.maybe_fail(TransactionFault::AfterBackup)?;
+            guard(
+                &previous,
+                if marker.backup_relative.is_some() {
+                    &backup
+                } else {
+                    &previous_root
+                },
+                previous_version_lock.is_some(),
+            )?;
             cancellation.check()?;
             self.maybe_fail(TransactionFault::BeforeStatePersist)?;
             self.update_state(deadline, |state| {

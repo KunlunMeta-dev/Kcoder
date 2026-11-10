@@ -43,7 +43,7 @@ async fn assert_response_limit_stops_before_dispatch(
             ..settings_using_main_summary_runtime(Settings::default())
         })
         .tool_registry(ToolRegistry::new().register(InputEchoTool { seen: seen.clone() }))
-        .build();
+        .build_with_profile_directory();
     engine.state.add_message(Message::user_text("run it"));
     let events = engine
         .run_turn_stream_with_max_turns(&kcoder_permissions::AutoAllowPrompt, 1)
@@ -142,7 +142,7 @@ async fn response_limits_preserve_complete_start_arguments_and_streamed_override
                 ..settings_using_main_summary_runtime(Settings::default())
             })
             .tool_registry(ToolRegistry::new().register(InputEchoTool { seen: seen.clone() }))
-            .build();
+            .build_with_profile_directory();
         engine.state.add_message(Message::user_text("run it"));
         let events = engine
             .run_turn_stream_with_max_turns(&kcoder_permissions::AutoAllowPrompt, 1)

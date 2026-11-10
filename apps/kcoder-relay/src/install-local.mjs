@@ -16,8 +16,8 @@ const hasRegistrationKey = registrationKey !== undefined && registrationKey !== 
 const automaticRegistration = hasRegistrationKey || existsSync(identityFile) || Boolean(process.env.KCODER_RELAY_IDENTITY_FILE);
 if (automaticRegistration) {
   if (hasRegistrationKey && !/^[A-Za-z0-9._~-]{32,512}$/.test(registrationKey)) throw new Error('Invalid KCODER_RELAY_REGISTRATION_KEY');
-  if (hasRegistrationKey && !existsSync(identityFile) && !/^[A-Za-z0-9._~-]{32,512}$/.test(process.env.KCODER_RELAY_GATEWAY_TOKEN || '')) {
-    throw new Error('Configure KCODER_RELAY_GATEWAY_TOKEN before installing the relay client');
+  if (hasRegistrationKey && !existsSync(identityFile) && !/^[A-Za-z0-9._~-]{32,512}$/.test(process.env.KCODER_RELAY_GATEWAY_SECRET || '')) {
+    throw new Error('Configure KCODER_RELAY_GATEWAY_SECRET before installing the relay client');
   }
   if (!hasRegistrationKey && !existsSync(identityFile)) throw new Error('Client identity is missing; configure registration before installing the relay client');
 } else {

@@ -1,5 +1,5 @@
-import { invoke } from '@tauri-apps/api/core'
-import { clearMocks, mockIPC } from '@tauri-apps/api/mocks'
+import { invoke } from '@/lib/runtime-commands'
+import { clearTestTransports, installTestTransport } from '@/test/runtime-transport'
 import { afterEach, describe, expect, test, vi } from 'vitest'
 import type { KCoderGatewayRuntime } from './gatewayRuntime'
 import {
@@ -10,7 +10,7 @@ import {
 
 type InstalledHandler = (command: string, payload?: unknown) => unknown
 
-afterEach(() => clearMocks())
+afterEach(() => clearTestTransports())
 
 function installer(
   token: string | null = 'sensitive-token-value',
@@ -150,8 +150,8 @@ describe('KCoder gateway runtime installer', () => {
     expect(second.calls.filter(call => call === 'dispose')).toHaveLength(1)
   })
 
-  test('restores the real Tauri mock stack without resurrecting a cleaned older handler', async () => {
-    mockIPC(() => 'original')
+  test('restores the registered command stack without resurrecting a cleaned older handler', async () => {
+    installTestTransport(() => 'original')
     const firstCleanup = installGatewayIpc(() => 'first')
     const secondCleanup = installGatewayIpc(() => 'second')
     await expect(invoke('probe')).resolves.toBe('second')
@@ -162,46 +162,11 @@ describe('KCoder gateway runtime installer', () => {
     await expect(invoke('probe')).resolves.toBe('original')
   })
 
-  test('installs IPC in a fresh browser window without pre-existing Tauri internals', async () => {
-    const tauriWindow = window as typeof window & {
-      __TAURI_INTERNALS__?: Record<string, unknown>
-      __TAURI_EVENT_PLUGIN_INTERNALS__?: Record<string, unknown>
-    }
-    delete tauriWindow.__TAURI_INTERNALS__
-    delete tauriWindow.__TAURI_EVENT_PLUGIN_INTERNALS__
-
+  test('installs and removes the fresh browser command transport', async () => {
     const cleanup = installGatewayIpc(() => 'fresh')
     await expect(invoke('probe')).resolves.toBe('fresh')
     cleanup()
-    expect(Object.prototype.hasOwnProperty.call(tauriWindow, '__TAURI_INTERNALS__')).toBe(false)
-    expect(
-      Object.prototype.hasOwnProperty.call(tauriWindow, '__TAURI_EVENT_PLUGIN_INTERNALS__')
-    ).toBe(false)
-  })
-
-  test('restores original global objects and values after layered out-of-order cleanup', async () => {
-    const tauriWindow = window as typeof window & {
-      __TAURI_INTERNALS__?: Record<string, unknown>
-      __TAURI_EVENT_PLUGIN_INTERNALS__?: Record<string, unknown>
-    }
-    const originalInvoke = vi.fn(() => 'original')
-    const originalInternals = { invoke: originalInvoke, sentinel: { exact: true } }
-    const originalEventInternals = { sentinel: 'event' }
-    tauriWindow.__TAURI_INTERNALS__ = originalInternals
-    tauriWindow.__TAURI_EVENT_PLUGIN_INTERNALS__ = originalEventInternals
-    const firstCleanup = installGatewayIpc(() => 'first')
-    const secondCleanup = installGatewayIpc(() => 'second')
-
-    firstCleanup()
-    await expect(invoke('probe')).resolves.toBe('second')
-    secondCleanup()
-    expect(tauriWindow.__TAURI_INTERNALS__).toBe(originalInternals)
-    expect(tauriWindow.__TAURI_EVENT_PLUGIN_INTERNALS__).toBe(originalEventInternals)
-    expect(tauriWindow.__TAURI_INTERNALS__).toEqual({
-      invoke: originalInvoke,
-      sentinel: { exact: true },
-    })
-    expect(tauriWindow.__TAURI_EVENT_PLUGIN_INTERNALS__).toEqual({ sentinel: 'event' })
+    await expect(invoke('probe')).rejects.toThrow('Gateway service transport is unavailable')
   })
 
   test('normal cleanup attempts every inverse operation and reports the first cleanup error', () => {

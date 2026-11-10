@@ -27,6 +27,7 @@ async fn running_subagent_applies_queued_delivery_before_final_completion() {
         active_skills: Vec::new(),
         snapshot_provider: engine.provider_name(),
         snapshot_model: engine.model_name(),
+        context_history_anchor: None,
         full_context_compatible: true,
     };
 
@@ -144,6 +145,7 @@ async fn child_live_view_exposes_text_before_durable_checkpoint_and_cleans_up() 
         active_skills: Vec::new(),
         snapshot_provider: engine.provider_name(),
         snapshot_model: engine.model_name(),
+        context_history_anchor: None,
         full_context_compatible: true,
     };
     let worker = engine.clone();
@@ -440,6 +442,7 @@ async fn running_subagent_waits_for_complete_parallel_tool_batch_before_applying
         active_skills: Vec::new(),
         snapshot_provider: engine.provider_name(),
         snapshot_model: engine.model_name(),
+        context_history_anchor: None,
         full_context_compatible: true,
     };
 
@@ -551,6 +554,7 @@ async fn live_steer_drain_is_fifo_and_bounded_per_provider_round() {
         active_skills: Vec::new(),
         snapshot_provider: engine.provider_name(),
         snapshot_model: engine.model_name(),
+        context_history_anchor: None,
         full_context_compatible: true,
     };
 
@@ -653,6 +657,7 @@ async fn targeted_live_steer_does_not_reach_sibling_or_parent() {
         active_skills: Vec::new(),
         snapshot_provider: engine.provider_name(),
         snapshot_model: engine.model_name(),
+        context_history_anchor: None,
         full_context_compatible: true,
     };
 
@@ -802,6 +807,7 @@ async fn continued_subagent_acknowledges_initial_delivery_before_live_steer() {
         active_skills: Vec::new(),
         snapshot_provider: engine.provider_name(),
         snapshot_model: engine.model_name(),
+        context_history_anchor: None,
         full_context_compatible: true,
     };
 
@@ -897,6 +903,7 @@ async fn send_message_repairs_legacy_unmatched_tool_use_before_provider_request(
             active_skills: Vec::new(),
             snapshot_provider: engine.provider_name(),
             snapshot_model: engine.model_name(),
+            context_history_anchor: None,
             full_context_compatible: true,
         }
         .into(),
@@ -979,6 +986,7 @@ async fn artifact_requirements_direct_runner_persists_restores_and_rejects_befor
             active_skills: Vec::new(),
             snapshot_provider: engine.provider_name(),
             snapshot_model: engine.model_name(),
+            context_history_anchor: None,
             full_context_compatible: true,
         }
         .into(),
@@ -1113,14 +1121,9 @@ async fn artifact_requirements_direct_runner_persists_restores_and_rejects_befor
             .contains("failed to bind artifact declarations")
     );
     assert!(request.lock().unwrap().is_none());
-    assert!(
-        engine
-            .state
-            .task("artifact-write-failure")
-            .unwrap()
-            .artifact_requirements
-            .is_empty()
-    );
+    // Owned Task/run admission is atomic; a failed private commit leaves no
+    // unowned Pending sidecar that could be mistaken for an accepted worker.
+    assert!(engine.state.task("artifact-write-failure").is_none());
     assert!(
         !engine
             .state
@@ -1138,6 +1141,7 @@ async fn cancelling_fork_during_tool_execution_persists_matched_tool_result() {
         active_skills: Vec::new(),
         snapshot_provider: engine.provider_name(),
         snapshot_model: engine.model_name(),
+        context_history_anchor: None,
         full_context_compatible: true,
     };
     let agent_id = "cancel-during-tool".to_string();

@@ -88,45 +88,11 @@ fn unbound_questions_never_change_execution_grants() {
 }
 
 #[test]
-fn bound_general_question_surface_adds_only_parent_question_tool() {
+fn every_subagent_role_remains_noninteractive_in_all_execution_modes() {
     let parent = kcoder_tools::default_registry();
-    let old = filter_tools_for_agent_kind_in_mode(&parent, AgentKind::General, true, false);
-    let hosted = filter_tools_for_agent_kind_with_bound_questions(
-        &parent,
-        AgentKind::General,
-        true,
-        false,
-        true,
-    );
-    let old_names = old.names().into_iter().collect::<HashSet<_>>();
-    let new_names = hosted.names().into_iter().collect::<HashSet<_>>();
-    assert_eq!(
-        new_names
-            .difference(&old_names)
-            .cloned()
-            .collect::<Vec<_>>(),
-        vec!["AskUserQuestion".to_string()]
-    );
-    assert!(old_names.is_subset(&new_names));
-    assert!(hosted.get("Config").is_none());
-    assert!(hosted.get("TaskStop").is_none());
-    assert!(hosted.get("Workflow").is_none());
-    let plugin = filter_tools_by_owned_names(&hosted, &HashSet::from(["read".to_string()]));
-    assert_eq!(plugin.names(), vec!["read".to_string()]);
-}
-
-#[test]
-fn unbound_and_specialized_or_arrangement_roles_remain_noninteractive() {
-    let parent = kcoder_tools::default_registry();
-    let unbound = filter_tools_for_agent_kind_with_bound_questions(
-        &parent,
-        AgentKind::General,
-        true,
-        false,
-        false,
-    );
-    assert!(unbound.get("AskUserQuestion").is_none());
+    assert!(parent.get("AskUserQuestion").is_some());
     for kind in [
+        AgentKind::General,
         AgentKind::Explore,
         AgentKind::Plan,
         AgentKind::Review,
@@ -134,36 +100,50 @@ fn unbound_and_specialized_or_arrangement_roles_remain_noninteractive() {
         AgentKind::Verifier,
         AgentKind::ToolAgent,
     ] {
-        let actual =
-            filter_tools_for_agent_kind_with_bound_questions(&parent, kind, true, false, true);
-        assert!(actual.get("AskUserQuestion").is_none(), "{kind:?}");
-        assert_eq!(
-            actual.names(),
-            filter_tools_for_agent_kind_in_mode(&parent, kind, true, false).names()
-        );
+        for is_async in [false, true] {
+            for arrangement in [false, true] {
+                let actual =
+                    filter_tools_for_agent_kind_in_mode(&parent, kind, is_async, arrangement);
+                assert!(
+                    actual.get("AskUserQuestion").is_none(),
+                    "{kind:?}, async={is_async}, arrangement={arrangement}"
+                );
+                assert!(actual.get("ask_user_question").is_none());
+                assert!(actual.get("read").is_some());
+            }
+        }
     }
-    assert!(
-        filter_tools_for_agent_kind_with_bound_questions(
-            &parent,
-            AgentKind::General,
-            true,
-            true,
-            true
-        )
-        .get("AskUserQuestion")
-        .is_none()
-    );
+    assert!(parent.get("AskUserQuestion").is_some());
 }
 
 #[test]
-fn parent_hidden_question_profile_is_never_restored_by_host_capability() {
-    let parent = kcoder_tools::default_registry().filtered_to_names(&["read".to_string()]);
-    let actual = filter_tools_for_agent_kind_with_bound_questions(
-        &parent,
+fn role_filter_retains_only_registered_readonly_wiki_and_never_adds_management() {
+    let registry = ToolRegistry::new()
+        .register(kcoder_tools::wiki::WikiTool)
+        .register(kcoder_tools::wiki_manage::WikiManageTool);
+    for kind in [
         AgentKind::General,
-        true,
-        false,
-        true,
-    );
-    assert_eq!(actual.names(), vec!["read".to_string()]);
+        AgentKind::Explore,
+        AgentKind::Plan,
+        AgentKind::Review,
+        AgentKind::Verifier,
+        AgentKind::ToolAgent,
+    ] {
+        for arrangement in [false, true] {
+            let tools = filter_tools_for_agent_kind_in_mode(&registry, kind, true, arrangement);
+            assert!(tools.get("Wiki").is_some());
+            assert!(tools.get("WikiManage").is_none());
+            assert!(
+                filter_tools_for_agent_kind_in_mode(&ToolRegistry::new(), kind, true, arrangement)
+                    .names()
+                    .is_empty()
+            );
+            let disabled = registry.filtered_out_by_patterns(&["Wiki".into()]);
+            assert!(
+                filter_tools_for_agent_kind_in_mode(&disabled, kind, true, arrangement)
+                    .get("Wiki")
+                    .is_none()
+            );
+        }
+    }
 }

@@ -88,7 +88,8 @@ pub fn apply_preflight(cwd: &Path, name: &str) -> Result<SpecApplyPreflightRepor
     let meta = read_metadata(&change_dir.join(".spec.yaml"))
         .with_context(|| format!("failed to read metadata for change '{}'", name))?;
     let schema = metadata_schema_or_default(&meta);
-    let mut blockers = Vec::new();
+    let base = fingerprint::load_base_snapshot(&change_dir)?;
+    let mut blockers = crate::project_knowledge::source_guard_errors(cwd, &base.knowledge_sources)?;
     let mut warnings = Vec::new();
 
     if !config::is_superpowers_schema(&schema) {
@@ -98,7 +99,7 @@ pub fn apply_preflight(cwd: &Path, name: &str) -> Result<SpecApplyPreflightRepor
         return Ok(SpecApplyPreflightReport {
             change_name: meta.name,
             schema,
-            ok: true,
+            ok: blockers.is_empty(),
             blockers,
             warnings,
             modes: SpecApplyModes::default(),

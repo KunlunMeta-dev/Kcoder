@@ -29,6 +29,7 @@ import {
 } from "../scroll-metrics.mjs";
 import path from "node:path";
 import { runStreamingScrollbarAssertions } from "../scenario-assertions.mjs";
+import { verifyBackToBottom } from "../back-to-bottom.mjs";
 import {
   moveRecordedVideo,
   compressVideo,
@@ -104,6 +105,8 @@ export async function runStreamingScrollbarScenario(options) {
     await waitForTerminalText(page, "tui-lab-final-line-", options.timeoutMs);
     await captureStep(page, trace, "after-tool", artifacts.afterToolScreenshot);
 
+    const backToBottomLive = await verifyBackToBottom(page, trace, artifacts, { live: true });
+
     const streamingScrollbarDrag =
       await measureStreamingScrollbarDragDuringOutput(
         page,
@@ -165,6 +168,9 @@ export async function runStreamingScrollbarScenario(options) {
         (markerAfterCollapse?.score ?? -1) >=
           (markerBeforeCollapse?.score ?? -1),
     };
+
+    const backToBottomIdle = await verifyBackToBottom(page, trace, artifacts);
+    await writeJsonArtifact(path.join(artifacts.dir, "back-to-bottom.json"), { live: backToBottomLive, idle: backToBottomIdle });
 
     const text = await page.evaluate(() => window.tuiLab.text());
     const dimensions = await page.evaluate(() => window.tuiLab.dimensions());

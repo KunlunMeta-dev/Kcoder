@@ -1,5 +1,9 @@
 import '@testing-library/jest-dom/vitest'
 import { beforeEach } from 'vitest'
+import { resetRuntimeTaskOrderTimes } from '@/features/workbench/runtimeTaskLifecycle/workListProjection'
+
+// Running task order times are module state; each test starts without them.
+beforeEach(() => resetRuntimeTaskOrderTimes())
 
 if (typeof window.ClipboardEvent === 'undefined') {
   window.ClipboardEvent = Event as unknown as typeof ClipboardEvent

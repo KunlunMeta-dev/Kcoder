@@ -41,6 +41,7 @@ impl McpAuthorizationProcessor {
         }
         let selector = params.server;
         let config = mcp_processor::resolve(factory, selector.clone()).await?;
+        kcoder_mcp::server_policy::validate(&config)?;
         if config.transport != "http"
             || config
                 .headers
@@ -109,7 +110,7 @@ impl McpAuthorizationProcessor {
             challenge.challenges(),
             &protected.scopes_supported,
         )?;
-        let store = crate::mcp_connection::token_store()?;
+        let store = crate::mcp_connection::token_store_for(&config)?;
         let flow = PendingAuthorization::begin_for_endpoint(
             &store, &endpoint, &metadata, &resource, &redirect, &scopes, manual,
         )
@@ -152,10 +153,11 @@ impl McpAuthorizationProcessor {
         if current.transport != pending_flow.config.transport
             || current.url != pending_flow.config.url
             || current.headers != pending_flow.config.headers
+            || current.policy != pending_flow.config.policy
         {
             bail!("MCP configuration changed during authorization; start authorization again");
         }
-        let store = crate::mcp_connection::token_store()?;
+        let store = crate::mcp_connection::token_store_for(&pending_flow.config)?;
         pending_flow.flow.complete(&store, &callback).await?;
         pending.remove(&params.flow_id);
         Ok(())

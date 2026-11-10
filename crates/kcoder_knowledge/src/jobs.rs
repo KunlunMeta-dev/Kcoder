@@ -40,7 +40,32 @@ pub struct WikiJobLease {
     pub(crate) token: String,
 }
 
+impl WikiJobLease {
+    /// A non-secret locator for this exact claim. Native hosts must separately
+    /// validate the original held lease; a digest is never execution authority.
+    pub fn claim_fingerprint(&self) -> String {
+        use sha2::{Digest, Sha256};
+        let mut digest = Sha256::new();
+        digest.update(b"kcoder-wiki-job-claim-v1\0");
+        digest.update(self.job.id.as_bytes());
+        digest.update([0]);
+        digest.update(self.token.as_bytes());
+        format!("{:x}", digest.finalize())
+    }
+}
+
 impl KnowledgeCatalog {
+    /// Verify a borrowed actual claim without extending it or exposing its token.
+    pub fn verify_job_lease(
+        &self,
+        scope: &KnowledgeScope,
+        library: &str,
+        lease: &WikiJobLease,
+    ) -> Result<()> {
+        self.read(scope, library)?;
+        require_lease(&self.connection, library, lease)
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub fn enqueue_ingest(
         &mut self,
@@ -514,6 +539,8 @@ impl KnowledgeCatalog {
                     | "review_required"
                     | "review_required_without_candidate"
                     | "configuration_changed"
+                    | "authorization_unavailable"
+                    | "authorization_changed"
                     | "repair_budget_exceeded"
                     | "invalid_model_output"
                     | "model_output_truncated"
@@ -859,6 +886,71 @@ mod overview_tests {
         )?;
         Ok((root, store, scope, library.id, source))
     }
+
+    #[test]
+    fn original_job_claim_can_be_observed_while_its_writer_stays_open() -> Result<()> {
+        let (root, mut writer, scope, library, source) = catalog()?;
+        kcoder_config::PrivateDirectory::open_or_create(root.path())?;
+        let job = writer.enqueue_ingest(
+            &scope,
+            &library,
+            "original-read",
+            &source.source_id,
+            &source.revision_id,
+            "recipe",
+            "en",
+        )?;
+        let claim = writer.claim_job(&scope, &library, &job.id)?.unwrap();
+        for _ in 0..2 {
+            writer.heartbeat_job(&scope, &library, &claim)?;
+            let reader = KnowledgeCatalog::open_existing_native_directory(
+                kcoder_config::PrivateDirectory::open_existing(root.path())?,
+                std::ffi::OsStr::new("state.sqlite"),
+                std::ffi::OsStr::new("state.objects"),
+                &tokio_util::sync::CancellationToken::new(),
+                crate::integrations::knowledge::CatalogReadLimits::default(),
+            )?;
+            reader.with_catalog(|catalog| catalog.verify_job_lease(&scope, &library, &claim))?;
+        }
+        writer.verify_job_lease(&scope, &library, &claim)?;
+        Ok(())
+    }
+    #[test]
+    fn authority_loss_pauses_only_the_original_claim_and_keeps_a_safe_reason() -> Result<()> {
+        let (_root, mut store, scope, library, source) = catalog()?;
+        for reason in ["authorization_unavailable", "authorization_changed"] {
+            let job = store.enqueue_ingest(
+                &scope,
+                &library,
+                reason,
+                &source.source_id,
+                &source.revision_id,
+                "recipe",
+                "en",
+            )?;
+            let lease = store.claim_job(&scope, &library, &job.id)?.unwrap();
+            assert!(
+                store
+                    .stop_job_with_reason(&scope, &library, &lease, "paused", "untrusted_reason")
+                    .is_err()
+            );
+            store.verify_job_lease(&scope, &library, &lease)?;
+            store.stop_job_with_reason(&scope, &library, &lease, "paused", reason)?;
+            let stopped = store.read_job(&scope, &library, &job.id)?;
+            assert_eq!(stopped.status, "paused");
+            assert_eq!(stopped.error_code.as_deref(), Some(reason));
+            assert!(store.verify_job_lease(&scope, &library, &lease).is_err());
+            store.resume_job(&scope, &library, &job.id)?;
+            let replacement = store.claim_job(&scope, &library, &job.id)?.unwrap();
+            // A stopped owner's later callback cannot stop a separately claimed resume.
+            store.stop_job_with_reason(&scope, &library, &lease, "paused", reason)?;
+            store.verify_job_lease(&scope, &library, &replacement)?;
+            assert_eq!(store.read_job(&scope, &library, &job.id)?.status, "running");
+            store.stop_job_with_reason(&scope, &library, &replacement, "paused", reason)?;
+        }
+        Ok(())
+    }
+
     #[test]
     fn overview_keyset_paginates_beyond_one_hundred_and_prioritizes_active_jobs() -> Result<()> {
         let (_root, mut store, scope, library, source) = catalog()?;

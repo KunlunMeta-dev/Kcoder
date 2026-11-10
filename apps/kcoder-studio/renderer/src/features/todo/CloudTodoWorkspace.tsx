@@ -1,3 +1,4 @@
+import { SettingsSelect } from '@/components/settings/SettingsSelect'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   DndContext,
@@ -273,7 +274,7 @@ function CloudTodoBoardSkeleton() {
             {Array.from({ length: columnIndex % 2 === 0 ? 2 : 1 }, (_, cardIndex) => (
               <div
                 key={cardIndex}
-                className="rounded-xl border border-border bg-background px-3 py-3 shadow-sm"
+                className="studio-card-spacing rounded-xl border border-border bg-background px-3 py-3 shadow-sm"
               >
                 <div className="h-3 w-24 rounded-md bg-text-primary/10" />
                 <div className="mt-2.5 h-4 w-4/5 rounded-md bg-text-primary/10" />
@@ -571,7 +572,7 @@ function StartTaskDialog({
   return (
     <Modal title="开启本地任务" onClose={onClose}>
       <div className="space-y-4 p-5">
-        <div className="flex items-center gap-2.5 rounded-xl border border-border bg-muted px-3 py-2.5">
+        <div className="studio-card-spacing flex items-center gap-2.5 rounded-xl border border-border bg-muted px-3 py-2.5">
           <span className="shrink-0 font-mono text-xs text-text-muted">{item.id}</span>
           <span className="min-w-0 truncate text-sm font-medium text-text-primary">
             {item.title}
@@ -579,7 +580,7 @@ function StartTaskDialog({
         </div>
         <label className="block text-xs font-medium text-text-secondary">
           本地项目
-          <select
+          <SettingsSelect
             data-testid="cloud-todo-local-project"
             value={projectId}
             onChange={event => setProjectId(Number(event.target.value))}
@@ -590,7 +591,7 @@ function StartTaskDialog({
                 {project.name}
               </option>
             ))}
-          </select>
+          </SettingsSelect>
         </label>
         <label className="block text-xs font-medium text-text-secondary">
           启动指令
@@ -1292,7 +1293,7 @@ export function CloudTodoWorkspace({
                         {tagFilter ?? '全部标签'}
                       </span>
                       <ChevronDown className="h-3 w-3 text-text-muted" />
-                      <select
+                      <SettingsSelect
                         data-testid="cloud-todo-tag-filter"
                         aria-label="标签筛选"
                         value={tagFilter ?? ''}
@@ -1305,7 +1306,7 @@ export function CloudTodoWorkspace({
                             {tag}
                           </option>
                         ))}
-                      </select>
+                      </SettingsSelect>
                     </span>
                   )}
                   <button
@@ -1457,7 +1458,7 @@ export function CloudTodoWorkspace({
                                   />
                                 ))}
                                 {columnItems.length === 0 && columnEmptyHints[column.status] && (
-                                  <div className="rounded-xl border border-dashed border-border px-3 py-6 text-center text-xs text-text-muted">
+                                  <div className="studio-card-spacing rounded-xl border border-dashed border-border px-3 py-6 text-center text-xs text-text-muted">
                                     {columnEmptyHints[column.status]}
                                   </div>
                                 )}
@@ -1480,7 +1481,7 @@ export function CloudTodoWorkspace({
                       </div>
                       <DragOverlay dropAnimation={null}>
                         {activeDragItemId ? (
-                          <div className="w-[272px] rotate-1 rounded-xl border border-border bg-background p-3 text-left shadow-lg">
+                          <div className="studio-card-spacing w-[272px] rotate-1 rounded-xl border border-border bg-background text-left shadow-lg">
                             <TodoCardContent
                               item={items.find(item => item.id === activeDragItemId)!}
                             />

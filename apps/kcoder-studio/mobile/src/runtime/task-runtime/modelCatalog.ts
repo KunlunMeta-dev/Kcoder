@@ -1,4 +1,4 @@
-import { prepareCatalogRead, type NewCatalogReadSource } from "./new-catalog-read-source";
+import { modelCatalogReadScopeKey, prepareCatalogRead, type NewCatalogReadSource } from "./new-catalog-read-source";
 import type {
   GatewayProfile,
   KCoderServer,
@@ -73,12 +73,14 @@ const modelCache = new ScopedReadCache<ModelOption[]>(32, 30_000);
 export function clearModelCache(profileId?: string): void {
   modelCache.clear(profileId ? (key) => JSON.parse(key)[0] === profileId : undefined);
 }
-export async function listModels(profile: GatewayProfile, server: KCoderServer, options: { signal?: AbortSignal; source?: NewCatalogReadSource } = {}): Promise<ModelOption[]> {
-  const key = await prepareCatalogRead(profile, server, options.signal);
-  options.source?.assertOwner(profile, server);
+export async function listModels(profile: GatewayProfile, server: KCoderServer, options: { signal?: AbortSignal; source?: NewCatalogReadSource; workspacePath?: string } = {}): Promise<ModelOption[]> {
+  const workspacePath = options.workspacePath ?? server.workspacePath;
+  await prepareCatalogRead(profile, server, options.signal);
+  const key = modelCatalogReadScopeKey(profile, server, workspacePath);
+  options.source?.assertOwner(profile, server, "models", workspacePath);
   const read = () => modelCache.get(key, signal => options.source
     ? options.source.withClient("models", signal, readModelsOnClient)
-    : loadModels(profile, server, signal), options.signal);
+    : loadModels(profile, server, signal, workspacePath), options.signal);
   return options.source ? options.source.cacheRead("models", read) : read();
 }
 
@@ -86,11 +88,12 @@ async function loadModels(
   profile: GatewayProfile,
   server: KCoderServer,
   signal: AbortSignal,
+  workspacePath: string | undefined,
 ): Promise<ModelOption[]> {
   const client = await taskClientConnector(
     profile,
     server,
-    server.workspacePath,
+    workspacePath,
     "runtime",
     { signal },
   );

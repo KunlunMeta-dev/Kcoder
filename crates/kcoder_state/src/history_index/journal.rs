@@ -18,6 +18,8 @@ use std::time::Duration;
 const MAX_TOKEN_BYTES: u64 = 1024;
 const MAX_CHANGES: usize = 4096;
 const MAX_TRACKED_SOURCES: i64 = 100_000;
+// Match the authority-writer fence budget; ordinary readers never use this settling wait.
+const PENDING_MUTATION_WAIT: Duration = Duration::from_secs(2);
 const SCHEMA: [(&str, &str, &str); 3] = [
     (
         "table",
@@ -80,6 +82,17 @@ pub struct JournalChanges {
     pub watermark: JournalWatermark,
     pub session_ids: Vec<String>,
 }
+
+#[derive(Debug)]
+struct JournalMutationPending;
+
+impl std::fmt::Display for JournalMutationPending {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("journal mutation is pending; authoritative fallback is required")
+    }
+}
+
+impl std::error::Error for JournalMutationPending {}
 
 /// An actual cross-process mutation fence. Activation and untracked writes share this lock.
 /// Source writers transfer their already-held lock rather than acquiring it a second time.
@@ -145,6 +158,29 @@ impl JournalFence {
     /// Never create the root or wait for another writer/builder.
     pub fn try_acquire(root: &Path, domain: JournalDomain) -> Result<Self> {
         Self::acquire_with_timeout(root, domain, Duration::ZERO)
+    }
+
+    /// Read observations may use a writer's existing fence, but must not create one or opt in.
+    pub(super) fn try_acquire_existing(root: &Path, domain: JournalDomain) -> Result<Option<Self>> {
+        let directory = PrivateDirectory::open_existing(root)?;
+        // Existing read/write access also supports filesystems that emulate an exclusive
+        // flock with a write-range lock. No byte is written and creation remains disabled.
+        let lock = match directory.open_read_write_file(OsStr::new(domain.names().2), false) {
+            Ok(lock) => lock,
+            Err(error) if missing(&error) => return Ok(None),
+            Err(error) => return Err(error),
+        };
+        FileExt::try_lock_exclusive(&lock).context("journal mutation fence is busy")?;
+        let fence = Self {
+            root: directory,
+            path: dunce::canonicalize(root)?,
+            domain,
+            lock,
+            #[cfg(test)]
+            fail_after_row: false,
+        };
+        fence.verify_fence()?;
+        Ok(Some(fence))
     }
 
     /// Authority writers tolerate short contention from another resident thread/process.
@@ -392,8 +428,8 @@ impl JournalMutation<'_> {
     }
 }
 
-/// A bounded invalidation batch, not a complete session listing. Read-only, no fence acquisition.
-/// None means tracking is disabled; errors (including pending) require authoritative fallback.
+/// A bounded invalidation batch, not a complete session listing. This ordinary read never
+/// acquires a fence. None means tracking is disabled; pending errors require authoritative fallback.
 pub fn changes_since(
     root: &Path,
     domain: JournalDomain,
@@ -404,6 +440,35 @@ pub fn changes_since(
         (1..=MAX_CHANGES).contains(&maximum),
         "invalid journal batch budget"
     );
+    read_changes_snapshot(root, domain, after, maximum)
+}
+
+/// Explicit refresh may settle a concurrent source writer for up to two seconds. Ordinary readers
+/// must use `changes_since` and remain fail-fast; an abandoned pending mutation still fails closed.
+pub(super) fn changes_since_settling_pending(
+    root: &Path,
+    domain: JournalDomain,
+    after: &JournalWatermark,
+    maximum: usize,
+) -> Result<Option<JournalChanges>> {
+    ensure!(
+        (1..=MAX_CHANGES).contains(&maximum),
+        "invalid journal batch budget"
+    );
+    settle_pending_snapshot(
+        root,
+        domain,
+        read_changes_snapshot(root, domain, after, maximum),
+        || read_changes_snapshot(root, domain, after, maximum),
+    )
+}
+
+fn read_changes_snapshot(
+    root: &Path,
+    domain: JournalDomain,
+    after: &JournalWatermark,
+    maximum: usize,
+) -> Result<Option<JournalChanges>> {
     read_snapshot(root, domain, |transaction, watermark| {
         ensure!(
             watermark.instance == after.instance,
@@ -431,9 +496,68 @@ pub fn changes_since(
     })
 }
 
-/// Read only token/schema/header state; never enumerate journal changes or initialize storage.
+fn settle_pending_snapshot<T>(
+    root: &Path,
+    domain: JournalDomain,
+    initial: Result<Option<T>>,
+    retry: impl FnOnce() -> Result<Option<T>>,
+) -> Result<Option<T>> {
+    let pending_error = match initial {
+        Err(error) if error.downcast_ref::<JournalMutationPending>().is_some() => error,
+        Ok(value) => return Ok(value),
+        Err(error) => return Err(error),
+    };
+
+    let started = std::time::Instant::now();
+    loop {
+        match JournalFence::try_acquire_existing(root, domain) {
+            Ok(Some(_fence)) => return retry(),
+            Ok(None) => return Err(pending_error),
+            Err(lock_error)
+                if journal_fence_is_busy(&lock_error)
+                    && started.elapsed() < PENDING_MUTATION_WAIT =>
+            {
+                std::thread::sleep(
+                    Duration::from_millis(5)
+                        .min(PENDING_MUTATION_WAIT.saturating_sub(started.elapsed())),
+                );
+            }
+            Err(lock_error) if journal_fence_is_busy(&lock_error) => return Err(pending_error),
+            Err(lock_error) => {
+                return Err(lock_error)
+                    .context("cannot verify journal fence while settling pending mutation");
+            }
+        }
+    }
+}
+
+fn journal_fence_is_busy(error: &anyhow::Error) -> bool {
+    error.chain().any(|cause| {
+        cause.downcast_ref::<std::io::Error>().is_some_and(|error| {
+            error.kind() == std::io::ErrorKind::WouldBlock
+                || error.raw_os_error() == fs2::lock_contended_error().raw_os_error()
+        })
+    })
+}
+
+/// Read only token/schema/header state without acquiring a fence; pending errors fail fast.
 pub fn current_watermark(root: &Path, domain: JournalDomain) -> Result<Option<JournalWatermark>> {
     read_snapshot(root, domain, |_, watermark| Ok(watermark.clone()))
+}
+
+/// Explicit refresh may settle a concurrent source writer for up to two seconds. Ordinary
+/// observations remain fail-fast; this opens only an existing verified fence and never initializes
+/// or mutates storage.
+pub(super) fn current_watermark_settling_pending(
+    root: &Path,
+    domain: JournalDomain,
+) -> Result<Option<JournalWatermark>> {
+    settle_pending_snapshot(
+        root,
+        domain,
+        read_snapshot(root, domain, |_, watermark| Ok(watermark.clone())),
+        || read_snapshot(root, domain, |_, watermark| Ok(watermark.clone())),
+    )
 }
 
 fn read_snapshot<T>(
@@ -450,10 +574,9 @@ fn read_snapshot<T>(
         open_retrying(&root_path, domain, false)?.context("tracked journal is missing")?;
     let transaction = database.connection.transaction()?;
     let (sequence, pending) = header(&transaction, &token)?;
-    ensure!(
-        pending == 0,
-        "journal mutation is pending; authoritative fallback is required"
-    );
+    if pending != 0 {
+        return Err(JournalMutationPending.into());
+    }
     let result = read(
         &transaction,
         &JournalWatermark {
@@ -876,9 +999,13 @@ mod tests {
         (temp, fence, baseline)
     }
 
-    fn state(root: &Path) -> (i64, i64, i64, i64) {
-        let database = open(root, JournalDomain::History, false).unwrap().unwrap();
+    fn state_for(root: &Path, domain: JournalDomain) -> (i64, i64, i64, i64) {
+        let database = open(root, domain, false).unwrap().unwrap();
         database.connection.query_row("SELECT sequence, pending_count, source_count, (SELECT count(*) FROM journal_changes) FROM journal_header WHERE id=1", [], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))).unwrap()
+    }
+
+    fn state(root: &Path) -> (i64, i64, i64, i64) {
+        state_for(root, JournalDomain::History)
     }
 
     #[test]
@@ -916,15 +1043,147 @@ mod tests {
 
     #[test]
     fn journal_pending_is_durable_and_never_consumable_before_finish() {
-        let temp = tempfile::tempdir().unwrap();
-        let mut fence = JournalFence::try_acquire(temp.path(), JournalDomain::History).unwrap();
-        let baseline = fence.activate().unwrap();
-        let mutation = fence.begin("session").unwrap();
-        assert!(mutation.is_tracking());
-        drop(mutation);
-        drop(fence);
-        assert!(changes_since(temp.path(), JournalDomain::History, &baseline, 10).is_err());
-        assert_eq!(state(temp.path()), (1, 1, 1, 1));
+        for domain in [JournalDomain::History, JournalDomain::ClientMetadata] {
+            let temp = tempfile::tempdir().unwrap();
+            let mut fence = JournalFence::try_acquire(temp.path(), domain).unwrap();
+            let baseline = fence.activate().unwrap();
+            let mutation = fence.begin("session").unwrap();
+            assert!(mutation.is_tracking());
+            drop(mutation);
+            drop(fence);
+
+            let error = changes_since(temp.path(), domain, &baseline, 10)
+                .err()
+                .expect("unfinished mutation must remain fail closed");
+            assert!(error.downcast_ref::<JournalMutationPending>().is_some());
+            let refresh_error = changes_since_settling_pending(temp.path(), domain, &baseline, 10)
+                .err()
+                .expect("refresh must preserve abandoned pending mutations");
+            assert!(
+                refresh_error
+                    .downcast_ref::<JournalMutationPending>()
+                    .is_some()
+            );
+            let watermark_error = current_watermark(temp.path(), domain)
+                .expect_err("ordinary watermark read must fail closed");
+            assert!(
+                watermark_error
+                    .downcast_ref::<JournalMutationPending>()
+                    .is_some()
+            );
+            let refresh_watermark_error = current_watermark_settling_pending(temp.path(), domain)
+                .expect_err("refresh observation must preserve abandoned pending mutations");
+            assert!(
+                refresh_watermark_error
+                    .downcast_ref::<JournalMutationPending>()
+                    .is_some()
+            );
+            assert_eq!(state_for(temp.path(), domain), (1, 1, 1, 1));
+        }
+    }
+
+    #[test]
+    fn journal_refresh_reads_settle_active_writers_for_both_domains_and_entrypoints() {
+        #[derive(Clone, Copy)]
+        enum ReadKind {
+            Changes,
+            Watermark,
+        }
+
+        fn exercise(domain: JournalDomain, read_kind: ReadKind) {
+            let temp = tempfile::tempdir().unwrap();
+            let mut initial = JournalFence::try_acquire(temp.path(), domain).unwrap();
+            let baseline = initial.activate().unwrap();
+            drop(initial);
+
+            let root = temp.path().to_path_buf();
+            let (ready_sender, ready_receiver) = std::sync::mpsc::channel();
+            let (release_sender, release_receiver) = std::sync::mpsc::channel();
+            let writer = std::thread::spawn(move || {
+                let mut fence = JournalFence::try_acquire(&root, domain).unwrap();
+                let mutation = fence.begin("session").unwrap();
+                ready_sender.send(()).unwrap();
+                release_receiver
+                    .recv_timeout(Duration::from_secs(2))
+                    .expect("reader test should release the writer");
+                assert!(mutation.finish().unwrap());
+            });
+            ready_receiver
+                .recv_timeout(Duration::from_secs(1))
+                .expect("writer should publish its pending receipt");
+
+            let started = std::time::Instant::now();
+            let ordinary_changes = changes_since(temp.path(), domain, &baseline, 10)
+                .err()
+                .expect("ordinary change reads must fail fast while a writer is pending");
+            assert!(
+                ordinary_changes
+                    .downcast_ref::<JournalMutationPending>()
+                    .is_some()
+            );
+            let ordinary_watermark = current_watermark(temp.path(), domain)
+                .expect_err("ordinary watermark reads must fail fast while a writer is pending");
+            assert!(
+                ordinary_watermark
+                    .downcast_ref::<JournalMutationPending>()
+                    .is_some()
+            );
+            assert!(started.elapsed() < Duration::from_secs(1));
+
+            let (reader_started_sender, reader_started_receiver) = std::sync::mpsc::channel();
+            let (result_sender, result_receiver) = std::sync::mpsc::channel();
+            let reader_root = temp.path().to_path_buf();
+            let reader_baseline = baseline.clone();
+            let reader = std::thread::spawn(move || {
+                reader_started_sender.send(()).unwrap();
+                let result = match read_kind {
+                    ReadKind::Changes => {
+                        changes_since_settling_pending(&reader_root, domain, &reader_baseline, 10)
+                            .and_then(|changes| {
+                                let changes = changes.context("tracking disabled")?;
+                                ensure!(
+                                    changes.session_ids == ["session"],
+                                    "writer receipt was not observed"
+                                );
+                                Ok(())
+                            })
+                    }
+                    ReadKind::Watermark => current_watermark_settling_pending(&reader_root, domain)
+                        .and_then(|watermark| {
+                            let watermark = watermark.context("tracking disabled")?;
+                            ensure!(
+                                watermark.sequence == reader_baseline.sequence + 2,
+                                "writer watermark was not observed"
+                            );
+                            Ok(())
+                        }),
+                };
+                result_sender
+                    .send(result.map_err(|error| format!("{error:#}")))
+                    .unwrap();
+            });
+            reader_started_receiver
+                .recv_timeout(Duration::from_secs(1))
+                .expect("reader should start while the writer owns the fence");
+            assert!(
+                result_receiver
+                    .recv_timeout(Duration::from_millis(100))
+                    .is_err()
+            );
+            release_sender.send(()).unwrap();
+            result_receiver
+                .recv_timeout(Duration::from_secs(2))
+                .expect("reader should finish after the writer releases its fence")
+                .unwrap();
+            reader.join().unwrap();
+            writer.join().unwrap();
+            assert_eq!(state_for(temp.path(), domain), (2, 0, 1, 1));
+        }
+
+        for domain in [JournalDomain::History, JournalDomain::ClientMetadata] {
+            exercise(domain, ReadKind::Changes);
+            exercise(domain, ReadKind::Watermark);
+        }
     }
 
     #[test]
@@ -1232,6 +1491,7 @@ mod tests {
                 .unwrap();
         assert!(JournalFence::try_acquire(Path::new(&root), JournalDomain::History).is_err());
         assert!(changes_since(Path::new(&root), JournalDomain::History, &watermark, 10).is_err());
+        assert!(current_watermark(Path::new(&root), JournalDomain::History).is_err());
     }
 
     #[test]

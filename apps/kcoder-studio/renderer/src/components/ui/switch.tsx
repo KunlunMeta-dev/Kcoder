@@ -75,7 +75,7 @@ const Switch = React.forwardRef<HTMLButtonElement, SwitchProps>(
         <span
           data-state={state}
           className={cn(
-            'absolute rounded-full bg-white shadow-sm transition-transform duration-fast motion-reduce:transition-none',
+            'absolute rounded-full bg-white shadow-sm transition-transform duration-fast',
             KNOB_SIZE[size],
             KNOB_INSET[size],
             checked ? KNOB_CHECKED_OFFSET[size] : 'translate-x-0'

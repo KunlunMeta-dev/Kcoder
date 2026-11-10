@@ -1,3 +1,4 @@
+import { SettingsSelect } from '@/components/settings/SettingsSelect'
 import { useMemo, useState } from 'react'
 import {
   Check,
@@ -213,7 +214,7 @@ function FilterSelect({
       <span className="text-[#858D95]">{label}</span>
       <span className="font-semibold text-[#30363C] dark:text-text-primary">{selected}</span>
       <ChevronDown className="pointer-events-none absolute right-2 h-3 w-3 text-[#899199]" />
-      <select
+      <SettingsSelect
         data-testid={testId}
         value={value}
         onChange={event => onChange(event.target.value)}
@@ -225,7 +226,7 @@ function FilterSelect({
             {option.label}
           </option>
         ))}
-      </select>
+      </SettingsSelect>
     </label>
   )
 }
@@ -643,7 +644,7 @@ function TodoList({
       data-testid="todo-list-view"
       className="min-h-0 flex-1 overflow-auto bg-[#F7F8F9] p-3 dark:bg-background"
     >
-      <div className="min-w-[760px] overflow-hidden rounded-lg border border-[#DDE1E4] bg-white dark:border-border dark:bg-surface">
+      <div className="studio-card min-w-[760px] overflow-hidden rounded-lg border border-[#DDE1E4] bg-white dark:border-border dark:bg-surface">
         {states.map(state => {
           const stateItems = items.filter(item => item.state === state)
           const meta = STATE_META[state]

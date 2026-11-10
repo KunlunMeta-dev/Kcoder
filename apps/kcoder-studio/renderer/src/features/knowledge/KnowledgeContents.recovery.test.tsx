@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, expect, test, vi } from 'vitest'
 import { KnowledgeContents } from './KnowledgeContents'
 import { knowledgeApi, type WikiPage, type WikiPageSummary } from '@/kcoder/knowledgeApi'
@@ -162,4 +162,18 @@ test('a successful list refresh clears the earlier load error', async () => {
   fireEvent.click(screen.getByText('completed-job-refresh'))
   await screen.findByText('recovered')
   expect(screen.queryByText('initial-load-error')).not.toBeInTheDocument()
+})
+
+test('recycle bin is an independent keyboard tab and returning to sources restores the original catalog', async () => {
+  vi.mocked(knowledgeApi.pages).mockResolvedValue({ items: [] })
+  render(<KnowledgeContents {...props} />)
+  const tabs = screen.getByRole('tablist')
+  expect(within(tabs).getAllByRole('tab')).toHaveLength(3)
+  fireEvent.keyDown(screen.getByTestId('knowledge-tab-pages'), { key: 'End' })
+  expect(screen.getByTestId('wiki-trash-toggle')).toHaveFocus()
+  expect(screen.getByTestId('wiki-trash-toggle')).toHaveAttribute('aria-selected', 'true')
+  await waitFor(() => expect(knowledgeApi.removedSources).toHaveBeenCalled())
+  fireEvent.click(screen.getByTestId('knowledge-tab-sources'))
+  expect(screen.getByTestId('knowledge-tab-sources')).toHaveAttribute('aria-selected', 'true')
+  expect(screen.getByTestId('wiki-trash-toggle')).toHaveAttribute('aria-selected', 'false')
 })

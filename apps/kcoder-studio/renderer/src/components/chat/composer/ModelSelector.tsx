@@ -126,6 +126,12 @@ export function ModelSelector({
     setMobileQuery('')
     setActiveDesktopSubmenu(null)
   }, [setActiveDesktopSubmenu, setMobileQuery, setOpen])
+  useEffect(() => {
+    if (!disabled || !open) return
+    let cancelled = false
+    queueMicrotask(() => { if (!cancelled) closeMenu() })
+    return () => { cancelled = true }
+  }, [disabled, open, closeMenu])
   const handleSelectModelOption = useCallback(
     (optionId: string, value: string) => {
       onSelectModelOption(optionId, value)
@@ -696,8 +702,8 @@ export function ModelSelector({
 
   return (
     <div ref={containerRef} className="group/model-selector relative min-w-0">
-      {open && isMobile && renderMobileSheet()}
-      {open &&
+      {open && !disabled && isMobile && renderMobileSheet()}
+      {open && !disabled &&
         !isMobile &&
         createPortal(
           <div
@@ -798,7 +804,7 @@ export function ModelSelector({
         )}
       <ModelSelectorTrigger
         buttonRef={buttonRef}
-        open={open}
+        open={open && !disabled}
         disabled={disabled}
         isMobile={isMobile}
         label={t('workbench.model_picker_trigger', 'Models')}

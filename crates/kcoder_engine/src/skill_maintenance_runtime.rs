@@ -114,9 +114,10 @@ impl QueryEngine {
 
         let cache_safe = crate::agent::CacheSafeParams {
             fork_context_messages: messages.into(),
-            active_skills: recover_read_lock(&self.active_skills, "active_skills").clone(),
+            active_skills: self.effective_active_skill_names(),
             snapshot_provider: cache_safe.snapshot_provider.clone(),
             snapshot_model: cache_safe.snapshot_model.clone(),
+            context_history_anchor: cache_safe.context_history_anchor.clone(),
             full_context_compatible: cache_safe.full_context_compatible,
         };
 

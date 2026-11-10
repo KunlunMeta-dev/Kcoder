@@ -1,12 +1,10 @@
 //! Experimental list parsing reuse, disabled in production by the component performance gate.
 
-#[cfg(test)]
-use super::canonical_workspace;
-use super::{
-    QueryEngine, Thread, ThreadClientMetadata, decorate_thread_snapshot_with_metadata,
-    read_thread_metadata,
-};
+#[cfg(any(test, feature = "test-oracle"))]
+use crate::canonical_workspace;
+use crate::{ThreadClientMetadata, decorate_thread_snapshot_with_metadata};
 use anyhow::{Result, ensure};
+use kcoder_app_protocol::{THREAD_METADATA_SCHEMA, Thread};
 use kcoder_state::PreparedSessionMetadata;
 use kcoder_state::history_index::{
     CatalogRevision, HistoryCatalog, HistoryListProjection, HistorySourceObservation,
@@ -23,7 +21,7 @@ const MAX_STAGED_BYTES: usize = 1024 * 1024;
 const MAX_ROW_BYTES: usize = 64 * 1024;
 
 #[derive(Default)]
-pub(super) struct ListCatalog {
+pub struct ListCatalog {
     cache: Option<Cache>,
 }
 
@@ -36,15 +34,12 @@ struct Cache {
 }
 
 impl ListCatalog {
-    #[cfg(test)]
-    pub(super) fn open(engine: &QueryEngine) -> Self {
+    #[cfg(any(test, feature = "test-oracle"))]
+    pub fn open(storage_root: &Path, workspace: &Path) -> Self {
         let open = || -> Result<Option<Cache>> {
             // open_existing in HistoryCatalog must not materialize an unknown client root.
-            let Some(catalog) = HistoryCatalog::open(
-                &engine.client_storage_root(),
-                &canonical_workspace(engine)?,
-                true,
-            )?
+            let Some(catalog) =
+                HistoryCatalog::open(storage_root, &canonical_workspace(workspace)?, true)?
             else {
                 return Ok(None);
             };
@@ -66,18 +61,16 @@ impl ListCatalog {
     }
 
     /// Called only after current source enumeration, sidecar preparation and workspace validation.
-    pub(super) fn snapshot(
+    pub fn snapshot(
         &mut self,
-        engine: &QueryEngine,
         id: &str,
         path: &Path,
         prepared: &PreparedSessionMetadata,
         running: bool,
+        stored: Option<&ThreadClientMetadata>,
     ) -> Result<Value> {
-        // Read and validate once; decoration must use these same actual inputs even on fallback.
-        let stored = read_thread_metadata(engine, id)?;
         if let Some(cache) = self.cache.as_mut() {
-            match cache.snapshot(id, path, prepared, stored.as_ref()) {
+            match cache.snapshot(id, path, prepared, stored) {
                 Ok(Some(mut snapshot)) => {
                     snapshot["status"] = json!(if running { "running" } else { "idle" });
                     return Ok(snapshot);
@@ -92,11 +85,11 @@ impl ListCatalog {
         let (created, updated) = prepared.timestamps_ms()?;
         let mut snapshot = base_snapshot(id, prepared, prepared.first_prompt(80), created, updated);
         snapshot["status"] = json!(if running { "running" } else { "idle" });
-        decorate_thread_snapshot_with_metadata(&mut snapshot, stored.as_ref(), true)?;
+        decorate_thread_snapshot_with_metadata(&mut snapshot, stored, true)?;
         Ok(snapshot)
     }
 
-    pub(super) fn publish(self) {
+    pub fn publish(self) {
         if let Some(mut cache) = self.cache
             && !cache.staged.is_empty()
         {
@@ -197,7 +190,9 @@ fn base_snapshot(
         .base_cwd()
         .map(|base| dunce::simplified(base).to_string_lossy().into_owned());
     json!({
-        "id": id, "cwd": cwd, "sessionMode": prepared.session_mode(), "workflowDefinitionId": prepared.workflow_definition_id(),
+        "id": id, "cwd": cwd, "sessionMode": prepared.session_mode(), "studioWorkMode": prepared.studio_work_mode(), "workflowDefinitionId": prepared.workflow_definition_id(), "agentDefinition": prepared.agent_definition(),
+        "channelTaskSource": prepared.channel_task_source(),
+        "modelSelectionMode": prepared.model_selection_mode(), "selectedModel": prepared.selected_model(),
         "title": title, "status": "idle", "createdAt": created.to_string(),
         "updatedAt": updated.to_string(),
     })
@@ -225,6 +220,12 @@ fn validated_snapshot(
                 key.as_str(),
                 "id" | "cwd"
                     | "sessionMode"
+                    | "studioWorkMode"
+                    | "modelSelectionMode"
+                    | "selectedModel"
+                    | "workflowDefinitionId"
+                    | "agentDefinition"
+                    | "channelTaskSource"
                     | "title"
                     | "status"
                     | "createdAt"
@@ -245,12 +246,15 @@ fn validated_snapshot(
     ensure!(
         payload.snapshot["cwd"] == json!(prepared.base_cwd())
             && payload.snapshot["sessionMode"] == json!(prepared.session_mode())
-            && payload.snapshot["workflowDefinitionId"] == json!(prepared.workflow_definition_id()),
+            && payload.snapshot["studioWorkMode"] == json!(prepared.studio_work_mode())
+            && payload.snapshot["workflowDefinitionId"] == json!(prepared.workflow_definition_id())
+            && payload.snapshot["agentDefinition"] == json!(prepared.agent_definition())
+            && payload.snapshot["channelTaskSource"] == json!(prepared.channel_task_source()),
         "list catalog input mismatch"
     );
     ensure!(
         payload.snapshot.get("metadata").is_some()
-            && thread.metadata.schema == super::THREAD_METADATA_SCHEMA
+            && thread.metadata.schema == THREAD_METADATA_SCHEMA
             && thread.metadata.version == 1
             && thread.metadata.revision == stored.map_or(0, |value| value.revision)
             && thread.metadata.title == thread.title
@@ -265,5 +269,10 @@ fn validated_snapshot(
             && thread.archived_at.is_some() == entry.archived,
         "invalid list catalog timestamp or archive state"
     );
-    Ok(payload.snapshot)
+    // Older catalog rows omit these fields. Project the already prepared authoritative
+    // metadata without rewriting a cache or rescanning history on this read path.
+    let mut snapshot = payload.snapshot;
+    snapshot["modelSelectionMode"] = json!(prepared.model_selection_mode());
+    snapshot["selectedModel"] = json!(prepared.selected_model());
+    Ok(snapshot)
 }

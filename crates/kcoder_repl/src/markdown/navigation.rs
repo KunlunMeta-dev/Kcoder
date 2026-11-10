@@ -2,7 +2,7 @@
 
 use super::*;
 
-pub(crate) fn navigation_headings(
+pub fn navigation_headings(
     source: &str,
     agent_markdown: bool,
     budget: &mut NavigationBudget<'_>,
@@ -65,11 +65,11 @@ pub(crate) fn navigation_headings(
     Ok(headings)
 }
 
-pub(super) fn navigation_parser_options() -> Options {
+pub fn navigation_parser_options() -> Options {
     Options::ENABLE_TABLES | Options::ENABLE_STRIKETHROUGH | Options::ENABLE_TASKLISTS
 }
 
-pub(crate) fn stream_navigation_markdown(
+pub fn stream_navigation_markdown(
     source: &str,
     code_theme: &str,
     width: Option<usize>,
@@ -215,7 +215,7 @@ pub(crate) fn stream_navigation_markdown(
     Ok(())
 }
 
-pub(super) fn drain_navigation_markdown(
+pub fn drain_navigation_markdown(
     renderer: &mut MarkdownRenderer<'_>,
     wrapper: &mut MarkdownLineWrapper,
     target_line: Option<usize>,

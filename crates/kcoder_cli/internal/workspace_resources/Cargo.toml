@@ -1,0 +1,46 @@
+[package]
+name = "kcoder_workspace_resources"
+description = "Bounded workspace file I/O, Git execution and owned terminal sessions."
+version = { workspace = true }
+publish = false
+edition = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+rust-version = { workspace = true }
+
+[dependencies]
+anyhow = { workspace = true }
+base64 = "0.22"
+dirs = { workspace = true }
+dunce = { workspace = true }
+kcoder_app_protocol = { path = "../../../kcoder_app_protocol" }
+kcoder_app_rpc_codec = { path = "../../../kcoder_app_protocol/internal/app_rpc_codec" }
+kcoder_config = { path = "../../../kcoder_config" }
+kcoder_host_transport = { path = "../host_transport" }
+kcoder_process_supervisor = { path = "../../../kcoder_process_supervisor", features = ["async-process"] }
+portable-pty = "0.9"
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+serde = { workspace = true }
+fs2 = "0.4"
+tempfile = { workspace = true }
+walkdir = { workspace = true }
+
+[dev-dependencies]
+futures = { workspace = true }
+tempfile = { workspace = true }
+
+[target."cfg(unix)".dependencies]
+libc = { workspace = true }
+
+[target."cfg(windows)".dependencies]
+which = { workspace = true }
+windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Storage_FileSystem", "Win32_System_IO", "Win32_System_Ioctl"] }
+
+[lib]
+path = "../../src/internal/workspace_resources/lib.rs"

@@ -12,7 +12,7 @@ const { useVirtualizerMock } = vi.hoisted(() => ({
 }))
 
 vi.mock('@/lib/runtime-environment', () => ({
-  isTauriRuntime: () => true,
+  isGatewayRuntime: () => true,
 }))
 
 vi.mock('@tanstack/react-virtual', () => ({
@@ -55,7 +55,7 @@ vi.mock('@tanstack/react-virtual', () => ({
   },
 }))
 
-describe('MessageList Tauri virtualization', () => {
+describe('MessageList Gateway virtualization', () => {
   afterEach(() => {
     clearRuntimeConversationCacheForTests()
     useVirtualizerMock.mockClear()
@@ -100,6 +100,20 @@ describe('MessageList Tauri virtualization', () => {
     expect(screen.getByText('long message 98')).toBeInTheDocument()
     expect(screen.queryByText('long message 0')).not.toBeInTheDocument()
     expect(screen.getAllByTestId('message-user')).toHaveLength(2)
+  })
+
+  test('cannot independently follow a clamped bottom after the conversation owner pauses', () => {
+    render(
+      <MessageList
+        messages={buildMessages(5, 'paused')}
+        scrollElementRef={{ current: createScrollElement(1000) }}
+        followBottom={false}
+      />
+    )
+    expect(useVirtualizerMock).toHaveBeenCalledWith(expect.objectContaining({
+      anchorTo: 'start',
+      enabled: true,
+    }))
   })
 
   test('keeps a forced navigation target in the virtual range', () => {

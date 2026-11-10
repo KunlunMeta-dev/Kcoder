@@ -1,3 +1,11 @@
+import { SettingsSelect } from '@/components/settings/SettingsSelect'
+import { useConversationFontStatus } from './conversationFonts'
+import {
+  conversationLineSpacings,
+  conversationSpacings,
+  conversationFontFamilies,
+  type ConversationLineSpacing,
+} from '../../../../shared/conversationReading'
 import { FontFamilySelect } from './FontFamilySelect'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Image, Monitor, Moon, RotateCcw, Sun, Trash2 } from 'lucide-react'
@@ -8,6 +16,13 @@ import {
   SettingsRow,
   SettingsSwitch,
 } from '@/components/settings/settings-ui'
+import {
+  hydrateConversationPreferences,
+  retryConversationPreferencesSave,
+  saveConversationPreferences,
+  useConversationPreferences,
+  type ConversationPreferencesPatch,
+} from './useConversationPreferences'
 import { useTranslation } from '@/hooks/useTranslation'
 import { useAppearance } from './useAppearance'
 import type { AppearanceMode, WorkbenchBackgroundConfig } from './types'
@@ -93,8 +108,13 @@ export function AppearanceSettingsPage() {
   const { t } = useTranslation('common')
   const { appearance, resolvedMode, setAppearance, resetAppearance, persistenceError } =
     useAppearance()
+  const conversationPreferences = useConversationPreferences()
+  const conversationFontStatus = useConversationFontStatus(
+    conversationPreferences.conversationFontFamily !== 'system'
+  )
   const [backgroundBusy, setBackgroundBusy] = useState(false)
   const [backgroundError, setBackgroundError] = useState<string | null>(null)
+  const [conversationBusy, setConversationBusy] = useState(false)
   const commonBackground: WorkbenchBackgroundConfig = {
     imagePath: appearance.backgroundImagePath,
     visibility: appearance.backgroundVisibility,
@@ -128,6 +148,17 @@ export function AppearanceSettingsPage() {
     appearance.lightBackground.imagePath ||
     appearance.darkBackground.imagePath
   )
+
+  const updateConversationPreferences = async (patch: ConversationPreferencesPatch) => {
+    setConversationBusy(true)
+    try {
+      await saveConversationPreferences(patch)
+    } catch {
+      // The preference store exposes the failure so the page can offer retry.
+    } finally {
+      setConversationBusy(false)
+    }
+  }
 
   const updateBackground = (
     slot: WorkbenchBackgroundSlot,
@@ -240,7 +271,7 @@ export function AppearanceSettingsPage() {
         }
       />
 
-      <section className="overflow-hidden rounded-lg border border-border bg-background">
+      <section className="studio-card overflow-hidden rounded-lg border border-border bg-background">
         <div className="border-b border-border px-4 py-3">
           <h2 className="text-sm font-semibold text-text-primary">
             {t('workbench.appearance_theme', '主题')}
@@ -271,7 +302,7 @@ export function AppearanceSettingsPage() {
           })}
         </div>
         <div className="grid gap-3 border-t border-border p-4 md:grid-cols-2">
-          <div className="overflow-hidden rounded-lg border border-border bg-background">
+          <div className="studio-card overflow-hidden rounded-lg border border-border bg-background">
             <div className="flex items-center justify-between border-b border-border px-3 py-2">
               <span className="text-xs font-medium text-text-secondary">
                 {t('workbench.appearance_preview', '预览')}
@@ -299,7 +330,7 @@ export function AppearanceSettingsPage() {
               </div>
             </div>
           </div>
-          <div className="overflow-hidden rounded-lg border border-border bg-background">
+          <div className="studio-card overflow-hidden rounded-lg border border-border bg-background">
             <SettingsRow
               label={t('workbench.appearance_accent', '强调色')}
               control={
@@ -329,17 +360,6 @@ export function AppearanceSettingsPage() {
               }
             />
             <SettingsRow
-              label={t('workbench.appearance_reduce_motion', '减少动态效果')}
-              control={
-                <SettingsSwitch
-                  data-testid="appearance-reduce-motion-toggle"
-                  checked={appearance.reduceMotion}
-                  onCheckedChange={reduceMotion => setAppearance({ reduceMotion })}
-                  aria-label={t('workbench.appearance_reduce_motion', '减少动态效果')}
-                />
-              }
-            />
-            <SettingsRow
               label={t('workbench.appearance_contrast', '对比度')}
               control={
                 <div className="flex items-center gap-3">
@@ -362,7 +382,7 @@ export function AppearanceSettingsPage() {
         </div>
       </section>
 
-      <section className="mt-4 overflow-hidden rounded-lg border border-border bg-background">
+      <section className="studio-card mt-4 overflow-hidden rounded-lg border border-border bg-background">
         <div className="border-b border-border px-4 py-3">
           <h2 className="text-sm font-semibold text-text-primary">
             {t('workbench.appearance_background', '工作台背景')}
@@ -400,7 +420,7 @@ export function AppearanceSettingsPage() {
               <div
                 key={editor.slot}
                 data-testid={`appearance-background-editor-${editor.slot}`}
-                className="grid gap-4 rounded-lg border border-border p-3 md:grid-cols-[minmax(0,1fr)_minmax(16rem,1fr)]"
+                className="studio-card-spacing grid gap-4 rounded-lg border border-border md:grid-cols-[minmax(0,1fr)_minmax(16rem,1fr)]"
               >
                 <div className="grid content-start gap-2">
                   <span className="text-sm font-medium text-text-primary">{editor.label}</span>
@@ -550,7 +570,7 @@ export function AppearanceSettingsPage() {
         </div>
       </section>
 
-      <section className="mt-4 overflow-hidden rounded-lg border border-border bg-background">
+      <section className="studio-card mt-4 overflow-hidden rounded-lg border border-border bg-background">
         <div className="border-b border-border px-4 py-3">
           <h2 className="text-sm font-semibold text-text-primary">
             {t('workbench.appearance_fonts', '字体')}
@@ -614,7 +634,209 @@ export function AppearanceSettingsPage() {
           }
         />
       </section>
-      <section className="mt-4 overflow-hidden rounded-lg border border-border bg-background">
+      <section
+        data-testid="appearance-conversation-preferences"
+        aria-busy={conversationBusy}
+        className="studio-card mt-4 overflow-hidden rounded-lg border border-border bg-background"
+      >
+        <div className="border-b border-border px-4 py-3">
+          <h2 className="text-sm font-semibold text-text-primary">
+            {t('workbench.appearance_conversation_reading_title')}
+          </h2>
+        </div>
+        <SettingsRow
+          label={t('workbench.appearance_reply_text_size')}
+          description={t('workbench.appearance_reply_text_size_description')}
+          control={
+            <SettingsSelect
+              data-testid="appearance-reply-font-scale-select"
+              aria-label={t('workbench.appearance_reply_text_size')}
+              value={conversationPreferences.conversationFontScale}
+              disabled={conversationBusy}
+              onChange={event =>
+                void updateConversationPreferences({
+                  conversationFontScale: event.currentTarget.value as 'small' | 'normal' | 'large',
+                })
+              }
+              className="h-9 min-w-36 rounded-lg border border-border bg-background px-2 text-sm text-text-primary outline-none focus:border-focus disabled:opacity-60"
+            >
+              <option value="small">{t('workbench.appearance_reply_size_small')}</option>
+              <option value="normal">{t('workbench.appearance_reply_size_normal')}</option>
+              <option value="large">{t('workbench.appearance_reply_size_large')}</option>
+            </SettingsSelect>
+          }
+        />
+        <SettingsRow
+          label={t('workbench.appearance_reply_line_spacing')}
+          control={
+            <SettingsSelect
+              data-testid="appearance-reply-line-spacing-select"
+              aria-label={t('workbench.appearance_reply_line_spacing')}
+              value={conversationPreferences.conversationLineSpacing}
+              disabled={conversationBusy}
+              onChange={event =>
+                void updateConversationPreferences({
+                  conversationLineSpacing: event.currentTarget.value as ConversationLineSpacing,
+                })
+              }
+              className="h-9 min-w-36 rounded-lg border border-border bg-background px-2 text-sm text-text-primary outline-none focus:border-focus disabled:opacity-60"
+            >
+              {conversationLineSpacings.map(value => (
+                <option key={value} value={value}>
+                  {t(`workbench.appearance_reply_line_spacing_${value}`)}
+                </option>
+              ))}
+            </SettingsSelect>
+          }
+        />
+        <SettingsRow
+          label={t('workbench.appearance_reply_block_spacing')}
+          control={
+            <SettingsSelect
+              data-testid="appearance-reply-block-spacing-select"
+              aria-label={t('workbench.appearance_reply_block_spacing')}
+              value={conversationPreferences.conversationBlockSpacing}
+              disabled={conversationBusy}
+              onChange={event => {
+                const value = conversationSpacings.find(
+                  value => value === event.currentTarget.value
+                )
+                if (value) void updateConversationPreferences({ conversationBlockSpacing: value })
+              }}
+              className="h-9 min-w-36 rounded-lg border border-border bg-background px-2 text-sm text-text-primary outline-none focus:border-focus disabled:opacity-60"
+            >
+              {conversationSpacings.map(value => (
+                <option key={value} value={value}>
+                  {t(`workbench.appearance_reply_block_spacing_${value}`)}
+                </option>
+              ))}
+            </SettingsSelect>
+          }
+        />
+        <SettingsRow
+          label={t('workbench.appearance_reply_letter_spacing')}
+          control={
+            <SettingsSelect
+              data-testid="appearance-reply-letter-spacing-select"
+              aria-label={t('workbench.appearance_reply_letter_spacing')}
+              value={conversationPreferences.conversationLetterSpacing}
+              disabled={conversationBusy}
+              onChange={event => {
+                const value = conversationSpacings.find(
+                  value => value === event.currentTarget.value
+                )
+                if (value) void updateConversationPreferences({ conversationLetterSpacing: value })
+              }}
+              className="h-9 min-w-36 rounded-lg border border-border bg-background px-2 text-sm text-text-primary outline-none focus:border-focus disabled:opacity-60"
+            >
+              {conversationSpacings.map(value => (
+                <option key={value} value={value}>
+                  {t(`workbench.appearance_reply_letter_spacing_${value}`)}
+                </option>
+              ))}
+            </SettingsSelect>
+          }
+        />
+        <SettingsRow
+          label={t('workbench.appearance_reply_font_family')}
+          control={
+            <SettingsSelect
+              data-testid="appearance-reply-font-family-select"
+              aria-label={t('workbench.appearance_reply_font_family')}
+              value={conversationPreferences.conversationFontFamily}
+              disabled={conversationBusy}
+              onChange={event => {
+                const value = conversationFontFamilies.find(
+                  value => value === event.currentTarget.value
+                )
+                if (value) void updateConversationPreferences({ conversationFontFamily: value })
+              }}
+              className="h-9 min-w-36 rounded-lg border border-border bg-background px-2 text-sm text-text-primary outline-none focus:border-focus disabled:opacity-60"
+            >
+              {conversationFontFamilies.map(value => (
+                <option key={value} value={value}>
+                  {t(`workbench.appearance_reply_font_family_${value}`)}
+                </option>
+              ))}
+            </SettingsSelect>
+          }
+        />
+        <SettingsRow
+          label={t('workbench.appearance_thinking_collapsed')}
+          description={t('workbench.appearance_thinking_collapsed_description')}
+          control={
+            <SettingsSwitch
+              data-testid="appearance-thinking-default-collapsed"
+              aria-label={t('workbench.appearance_thinking_collapsed')}
+              checked={conversationPreferences.thinkingCollapsedByDefault}
+              disabled={conversationBusy}
+              onCheckedChange={thinkingCollapsedByDefault =>
+                void updateConversationPreferences({ thinkingCollapsedByDefault })
+              }
+            />
+          }
+        />
+        <SettingsRow
+          label={t('workbench.appearance_tools_collapsed')}
+          description={t('workbench.appearance_tools_collapsed_description')}
+          control={
+            <SettingsSwitch
+              data-testid="appearance-tools-default-collapsed"
+              aria-label={t('workbench.appearance_tools_collapsed')}
+              checked={conversationPreferences.toolsCollapsedByDefault}
+              disabled={conversationBusy}
+              onCheckedChange={toolsCollapsedByDefault =>
+                void updateConversationPreferences({ toolsCollapsedByDefault })
+              }
+            />
+          }
+        />
+        {conversationPreferences.conversationFontFamily === 'noto-sans-sc' &&
+        conversationFontStatus === 'error' ? (
+          <p
+            data-testid="appearance-conversation-font-fallback"
+            role="alert"
+            className="px-4 py-3 text-sm text-text-secondary"
+          >
+            {t('workbench.appearance_reply_font_load_failed')}
+          </p>
+        ) : null}
+        {conversationPreferences.hydration === 'error' ? (
+          <div
+            data-testid="appearance-conversation-load-error"
+            role="alert"
+            className="flex items-center justify-between gap-3 border-t border-border px-4 py-3 text-sm text-red-500"
+          >
+            <span>{t('workbench.appearance_conversation_load_error')}</span>
+            <button
+              type="button"
+              data-testid="appearance-conversation-retry-load"
+              onClick={() => void hydrateConversationPreferences(true)}
+              className="shrink-0 underline"
+            >
+              {t('workbench.appearance_conversation_retry')}
+            </button>
+          </div>
+        ) : null}
+        {conversationPreferences.saveError ? (
+          <div
+            data-testid="appearance-conversation-save-error"
+            role="alert"
+            className="flex items-center justify-between gap-3 border-t border-border px-4 py-3 text-sm text-red-500"
+          >
+            <span>{t('workbench.appearance_conversation_save_error')}</span>
+            <button
+              type="button"
+              data-testid="appearance-conversation-retry-save"
+              onClick={() => void retryConversationPreferencesSave().catch(() => {})}
+              className="shrink-0 underline"
+            >
+              {t('workbench.appearance_conversation_retry')}
+            </button>
+          </div>
+        ) : null}
+      </section>
+      <section className="studio-card mt-4 overflow-hidden rounded-lg border border-border bg-background">
         <div className="border-b border-border px-4 py-3">
           <h2 className="text-sm font-semibold text-text-primary">
             {t('workbench.appearance_terminal_colors')}

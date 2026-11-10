@@ -2,7 +2,7 @@
 
 use super::*;
 
-pub(crate) async fn run_cli_config_change_hook(
+pub async fn run_cli_config_change_hook(
     cwd: &Path,
     query: impl Into<String>,
     data: serde_json::Value,
@@ -35,13 +35,25 @@ pub(crate) async fn run_cli_config_change_hook(
     }
 }
 
-pub(crate) fn is_read_only_doctor_invocation(args: &[std::ffi::OsString]) -> bool {
+pub fn is_read_only_doctor_invocation(args: &[std::ffi::OsString]) -> bool {
     Cli::try_parse_from(args)
         .ok()
         .is_some_and(|cli| matches!(cli.command, Some(Commands::Doctor)))
 }
 
-pub(crate) fn provider_template_output(action: &ConfigAction) -> Result<Option<Value>> {
+/// Internal workers are dispatched before ordinary prompt parsing.
+pub fn reject_unknown_internal_entry(args: &[std::ffi::OsString]) -> Result<()> {
+    ensure!(
+        args.get(1).is_none_or(|argument| {
+            !argument.to_string_lossy().starts_with("--internal-")
+                || argument == "--internal-acp-backend"
+        }),
+        "UNKNOWN_INTERNAL_ENTRY"
+    );
+    Ok(())
+}
+
+pub fn provider_template_output(action: &ConfigAction) -> Result<Option<Value>> {
     let templates = kcoder_config::provider_templates::provider_templates();
     match action {
         ConfigAction::Templates => Ok(Some(serde_json::json!({ "templates": templates }))),
@@ -60,7 +72,7 @@ pub(crate) fn provider_template_output(action: &ConfigAction) -> Result<Option<V
     }
 }
 
-pub(crate) async fn run_config(
+pub async fn run_config(
     action: ConfigAction,
     loader: &SettingsLoader,
     cli: &Cli,
@@ -296,7 +308,7 @@ pub(crate) async fn run_config(
     Ok(())
 }
 
-pub(crate) fn initial_config_scope_document(scope: ConfigScope) -> Value {
+pub fn initial_config_scope_document(scope: ConfigScope) -> Value {
     if scope == ConfigScope::User {
         serde_json::json!({
             "$schema": "./settings.schema.jsonc",
@@ -308,7 +320,7 @@ pub(crate) fn initial_config_scope_document(scope: ConfigScope) -> Value {
     }
 }
 
-pub(crate) fn reject_secret_config_key(key: &str) -> Result<()> {
+pub fn reject_secret_config_key(key: &str) -> Result<()> {
     let normalized = key.trim().to_ascii_lowercase().replace(['.', '-'], "_");
     if normalized == "api_key" || normalized.ends_with("_api_key") {
         bail!("'{key}' is a secret; use `kcoder auth login --provider <provider>` instead");
@@ -316,7 +328,7 @@ pub(crate) fn reject_secret_config_key(key: &str) -> Result<()> {
     Ok(())
 }
 
-pub(crate) fn reject_secret_settings_document(value: &Value, prefix: &str) -> Result<()> {
+pub fn reject_secret_settings_document(value: &Value, prefix: &str) -> Result<()> {
     let Value::Object(object) = value else {
         return Ok(());
     };
@@ -332,21 +344,23 @@ pub(crate) fn reject_secret_settings_document(value: &Value, prefix: &str) -> Re
     Ok(())
 }
 
-pub(crate) fn run_doctor(
-    provider_kind: &ApiProviderKind,
+pub fn run_doctor(
+    print_build_identity: fn(),
+    provider_kind: Option<ApiProviderKind>,
     cli: &Cli,
     settings: &Settings,
     cwd: &std::path::Path,
     loaded: &LoadedSettings,
 ) -> Result<()> {
     let explicit_key = match provider_kind {
-        ApiProviderKind::Openai => cli.openai_api_key.clone(),
-        ApiProviderKind::Local => {
+        Some(ApiProviderKind::Openai) => cli.openai_api_key.clone(),
+        Some(ApiProviderKind::Local) => {
             first_non_empty([cli.local_api_key.clone(), cli.openai_api_key.clone()])
         }
-        ApiProviderKind::Gemini => cli.gemini_api_key.clone(),
-        ApiProviderKind::Grok => cli.grok_api_key.clone(),
-        _ => cli.api_key.clone(),
+        Some(ApiProviderKind::Gemini) => cli.gemini_api_key.clone(),
+        Some(ApiProviderKind::Grok) => cli.grok_api_key.clone(),
+        Some(_) => cli.api_key.clone(),
+        None => None,
     };
     let active_credential = settings.provider_credential(None);
     let active_key = settings.resolve_provider_api_key(None, explicit_key);
@@ -354,16 +368,7 @@ pub(crate) fn run_doctor(
 
     println!("kcoder doctor");
     println!("=================");
-    println!("version: {}", env!("CARGO_PKG_VERSION"));
-    println!("build commit: {}", env!("KCODER_BUILD_COMMIT"));
-    println!("build dirty: {}", env!("KCODER_BUILD_DIRTY"));
-    println!("build time (unix): {}", env!("KCODER_BUILD_TIME_UNIX"));
-    println!(
-        "executable sha256: {}",
-        build_identity::executable_sha256()
-            .as_deref()
-            .unwrap_or("unavailable")
-    );
+    print_build_identity();
     println!("cwd: {}", cwd.display());
     println!("user settings: {}", loaded.paths.user_settings.display());
     println!(
@@ -371,6 +376,28 @@ pub(crate) fn run_doctor(
         loaded.paths.project_settings.display()
     );
     println!("local settings: {}", loaded.paths.local_settings.display());
+    println!(
+        "MCP: {} configured; live connectivity not tested",
+        settings.mcp_servers.len()
+    );
+    for server in &settings.mcp_servers {
+        println!(
+            "  MCP {:?} [{}]: {}{}",
+            server.name,
+            server.transport,
+            if settings.mcp_server_enabled(&server.name) {
+                "enabled"
+            } else {
+                "disabled"
+            },
+            if server.transport == "searxng" && server.url.is_empty() {
+                "; bundled runtime (random loopback port)"
+            } else {
+                ""
+            }
+        );
+    }
+    println!("MCP session registration: inspect /mcp verbose in the affected session");
     println!("credentials: {}", loaded.paths.credentials.display());
     let credentials_path = loaded.paths.credentials.clone();
     match kcoder_config::is_user_only_file(&credentials_path) {
@@ -494,7 +521,7 @@ pub(crate) fn run_doctor(
     );
     println!(
         "endpoint: {}",
-        settings.base_url.as_deref().unwrap_or("provider default")
+        settings.base_url.as_deref().unwrap_or("(not configured)")
     );
     println!(
         "context window tokens: {}",
@@ -529,9 +556,12 @@ pub(crate) fn run_doctor(
             settings.openai_base_url.clone(),
             settings.base_url.clone(),
         ])
-        .unwrap_or_else(|| "(default)".to_string())
+        .unwrap_or_else(|| "(not configured)".to_string())
     );
-    println!("local base URL: {}", local_base_url);
+    println!(
+        "local base URL: {}",
+        local_base_url.as_deref().unwrap_or("(not configured)")
+    );
     println!("permission mode: {:?}", settings.permission_mode);
     println!(
         "tool profile: {:?} (effective: {:?})",
@@ -548,7 +578,7 @@ pub(crate) fn run_doctor(
     Ok(())
 }
 
-pub(crate) fn print_skill_store_doctor(label: &str, root: &Path) -> Result<()> {
+pub fn print_skill_store_doctor(label: &str, root: &Path) -> Result<()> {
     let report = kcoder_skills::SkillStore::open(root)
         .with_context(|| format!("failed to open {label} skill store"))?
         .inspect()
@@ -592,24 +622,29 @@ pub(crate) fn print_skill_store_doctor(label: &str, root: &Path) -> Result<()> {
     Ok(())
 }
 
-pub(crate) async fn run_mcp(action: McpAction, cwd: &Path) -> Result<()> {
+pub async fn run_mcp(action: McpAction, cwd: &Path, settings: &Settings) -> Result<()> {
     match action {
         McpAction::List => {
-            let settings = Settings::load().unwrap_or_default();
             if settings.mcp_servers.is_empty() {
                 println!("No MCP servers configured.");
             } else {
                 println!("Configured MCP servers:");
                 for server in &settings.mcp_servers {
                     println!(
-                        "  {} [{}] {}",
+                        "  {} [{}] {} — {}",
                         server.name,
                         server.transport,
-                        if server.transport == "sse" {
-                            server.url.clone()
+                        if settings.mcp_server_enabled(&server.name) {
+                            "enabled"
                         } else {
-                            format!("{} {}", server.command, server.args.join(" "))
-                        }
+                            "disabled"
+                        },
+                        match (server.transport.as_str(), server.url.is_empty()) {
+                            ("searxng", true) => "bundled service; random loopback port",
+                            ("searxng", false) => "external search instance",
+                            ("http" | "sse", _) => "external MCP endpoint",
+                            _ => "managed stdio process",
+                        },
                     );
                 }
             }
@@ -629,6 +664,7 @@ pub(crate) async fn run_mcp(action: McpAction, cwd: &Path) -> Result<()> {
                 url: String::new(),
                 env: env_map,
                 headers: std::collections::HashMap::new(),
+                policy: Default::default(),
             };
             let paths = ConfigPaths::discover(cwd)?;
             update_scope(&paths, ConfigScope::User, |document| {
@@ -691,16 +727,49 @@ pub(crate) async fn run_mcp(action: McpAction, cwd: &Path) -> Result<()> {
             println!("Removed MCP server '{}'.", name);
         }
         McpAction::Test { name } => {
-            let settings = Settings::load().unwrap_or_default();
             let config = settings
                 .mcp_servers
                 .iter()
                 .find(|s| s.name == name)
                 .ok_or_else(|| anyhow::anyhow!("MCP server '{}' not found", name))?;
+            ensure!(
+                settings.mcp_server_enabled(&name),
+                "MCP server '{}' is disabled; enable it before testing",
+                name
+            );
+            ensure!(
+                cli_folder_trusted(cwd) || !project_mcp_server_names(cwd).contains(&name),
+                "Project MCP server '{}' requires a trusted directory before testing",
+                name
+            );
+            let started = std::time::Instant::now();
             println!("Connecting to '{}'...", name);
-            match mcp_connection::connect(config).await {
-                Ok((_, tools)) => {
-                    println!("Connected. Tools exposed by '{}':", name);
+            match mcp_connection::connect(
+                config,
+                &kcoder_config::user_config_dir()?,
+                settings.credential_store,
+            )
+            .await
+            {
+                Ok((handle, tools)) => {
+                    println!(
+                        "Initialized '{}': {} tools discovered in {} ms",
+                        name,
+                        tools.len(),
+                        started.elapsed().as_millis()
+                    );
+                    if config.transport == "searxng" {
+                        if config.url.is_empty() {
+                            println!(
+                                "SearXNG bundled adapter registered; the local service is verified and started on the first search, not during tool discovery."
+                            );
+                        } else {
+                            println!("SearXNG external instance adapter initialized.");
+                        }
+                        println!(
+                            "The JSON Search API and upstream search results were not exercised."
+                        );
+                    }
                     if tools.is_empty() {
                         println!("  (none)");
                     } else {
@@ -708,9 +777,16 @@ pub(crate) async fn run_mcp(action: McpAction, cwd: &Path) -> Result<()> {
                             println!("  - {}", tool.name);
                         }
                     }
+                    drop(handle);
+                    println!("MCP test completed (initialization and tool discovery only).");
                 }
                 Err(e) => {
-                    bail!("Failed to connect to '{}': {}", name, e);
+                    bail!(
+                        "Failed to connect to '{}' after {} ms: {}",
+                        name,
+                        started.elapsed().as_millis(),
+                        e
+                    );
                 }
             }
         }
@@ -718,7 +794,7 @@ pub(crate) async fn run_mcp(action: McpAction, cwd: &Path) -> Result<()> {
     Ok(())
 }
 
-pub(crate) fn run_plugin(
+pub fn run_plugin(
     action: PluginAction,
     cwd: &std::path::Path,
     settings: &kcoder_config::PluginsSettings,
@@ -907,7 +983,7 @@ pub(crate) fn run_plugin(
     Ok(())
 }
 
-pub(crate) fn run_marketplace(
+pub fn run_marketplace(
     action: MarketplaceAction,
     cwd: &Path,
     settings: &kcoder_config::PluginsSettings,
@@ -948,7 +1024,7 @@ pub(crate) fn run_marketplace(
     Ok(())
 }
 
-pub(crate) fn print_marketplace_result(
+pub fn print_marketplace_result(
     result: &kcoder_plugins::MarketplaceListResult,
     json: bool,
 ) -> Result<()> {
@@ -986,7 +1062,7 @@ pub(crate) fn print_marketplace_result(
     Ok(())
 }
 
-pub(crate) fn cli_folder_trusted(cwd: &Path) -> bool {
+pub fn cli_folder_trusted(cwd: &Path) -> bool {
     if kcoder_config::FolderTrustStore::trust_all_from_environment() {
         return true;
     }
@@ -995,7 +1071,7 @@ pub(crate) fn cli_folder_trusted(cwd: &Path) -> bool {
         .is_ok_and(|store| store.check(cwd) == kcoder_config::FolderTrust::Trusted)
 }
 
-pub(crate) fn parse_key_value_pairs(pairs: &[String]) -> Result<HashMap<String, String>> {
+pub fn parse_key_value_pairs(pairs: &[String]) -> Result<HashMap<String, String>> {
     let mut map = HashMap::new();
     for pair in pairs {
         let (key, value) = pair
@@ -1006,10 +1082,30 @@ pub(crate) fn parse_key_value_pairs(pairs: &[String]) -> Result<HashMap<String, 
     Ok(map)
 }
 
-pub(crate) fn mask_secret(secret: Option<&str>) -> String {
+pub fn mask_secret(secret: Option<&str>) -> String {
     if secret.is_some() {
         "configured".to_string()
     } else {
         "not set".to_string()
     }
+}
+
+/// Names of MCP servers declared by project-layer settings files; these are
+/// stripped when the folder is untrusted (user-level MCP config is kept).
+pub fn project_mcp_server_names(cwd: &Path) -> std::collections::BTreeSet<String> {
+    let mut names = std::collections::BTreeSet::new();
+    for file in ["settings.json", "settings.local.json"] {
+        let path = cwd.join(".kcoder").join(file);
+        let Ok(Some(json)) = kcoder_config::read_settings_file_if_present(&path) else {
+            continue;
+        };
+        if let Some(servers) = json.get("mcp_servers").and_then(|value| value.as_array()) {
+            for server in servers {
+                if let Some(name) = server.get("name").and_then(|value| value.as_str()) {
+                    names.insert(name.to_string());
+                }
+            }
+        }
+    }
+    names
 }

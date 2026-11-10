@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import { resolve } from "node:path";
-import { chromium, expect } from "../../../renderer/node_modules/@playwright/test/index.mjs";
+import { expect } from "../../../renderer/node_modules/@playwright/test/index.mjs";
 import { assertRendererBuildFresh } from "../../harness/renderer-build.mjs";
 import { appRoot, repoRoot, requireExecutable, runE2E, waitFor } from "../../harness/run-context.mjs";
 import { materializeWorkspace } from "../../harness/workspace-fixture.mjs";
 import { startFixtureSite } from "../../harness/fixture-site.mjs";
 import { openRpc } from "../../harness/rpc.mjs";
+import { startSourceDesktop } from "../../harness/source-desktop.mjs";
 
 await assertRendererBuildFresh();
 await runE2E(import.meta.url, {
@@ -15,11 +16,7 @@ await runE2E(import.meta.url, {
 }, async context => {
   // Linux exercises the real Electron bridge with the source-only Windows menu flag.
   // This is not evidence of native Windows painting or Windows browser startup.
-  if (process.platform !== "linux") throw new Error("UNMET_PREREQUISITE: this Xvfb desktop check requires Linux");
-  if (process.env.KCODER_E2E_CHROMIUM_NO_SANDBOX !== "1") throw new Error("UNMET_PREREQUISITE: explicit isolated VM no-sandbox opt-in required");
-  const xvfb = await requireExecutable("/usr/bin/xvfb-run", "Xvfb runner");
-  const electron = await requireExecutable(process.env.KCODER_E2E_ELECTRON_BIN || resolve(appRoot, "node_modules/electron/dist/electron"), "Electron");
-  const binary = await requireExecutable(process.env.KCODER_E2E_KCODER_BIN || resolve(repoRoot, "target/debug/kcoder"), "KCoder");
+  const binary = process.env.KCODER_E2E_KCODER_BIN || resolve(repoRoot, "target/debug/kcoder");
   const workspace = await materializeWorkspace(context, "minimal", { instanceId: "desktop-menu" });
   const externalSite = await startFixtureSite(context, { title: "Untrusted Menu Frame" });
   const profile = context.pathInState("profile");
@@ -28,33 +25,10 @@ await runE2E(import.meta.url, {
   const serversFile = await context.writeStateJson("servers.json", [
     { id: "local", label: "Menu Layout Fixture", transport: "local", command: binary, workspace: workspace.path },
   ]);
-  let output = "";
-  const child = context.spawnOwned("electron-menu-branding", xvfb,
-    ["-a", "-s", "-screen 0 1440x900x24 -nolisten tcp", electron, "--no-sandbox",
-      // Match the owned Chromium harness when exercising multiple windows without a window manager.
-      "--disable-background-timer-throttling", "--disable-backgrounding-occluded-windows", "--disable-renderer-backgrounding", "--inspect=127.0.0.1:0",
-      "--remote-debugging-address=127.0.0.1", "--remote-debugging-port=0", resolve(appRoot, "desktop/main.mjs")],
-    { cwd: appRoot, env: context.isolatedEnvironment({
-      KCODER_CONFIG_DIR: profile,
-      KCODER_STUDIO_SERVERS_FILE: serversFile,
-      KCODER_STUDIO_WORKSPACE: workspace.path,
-      KCODER_STUDIO_KCODER_BIN: binary,
-      KCODER_STUDIO_DESKTOP_USER_DATA_DIR: context.pathInState("electron-profile"),
-      KCODER_STUDIO_WEB_ROOT: process.env.KCODER_E2E_RENDERER_ROOT || resolve(appRoot, "renderer/dist"),
-      KCODER_STUDIO_TEST_WINDOWS_MENU: "1",
-    }) });
-  const capture = chunk => { output = `${output}${chunk}`.slice(-16000); };
-  child.stderr.on("data", capture);
-  child.stdout.on("data", capture);
-  const cdpUrl = await waitFor(() => {
-    if (child.exitCode !== null) throw new Error(`Electron exited (${child.exitCode})`);
-    return output.match(/DevTools listening on (ws:\/\/127\.0\.0\.1:[^\s]+)/)?.[1];
-  }, 30000, "Electron CDP", 100, context.abortSignal);
-  context.registerPort("electron-cdp", Number(new URL(cdpUrl).port));
-  const browser = await chromium.connectOverCDP(cdpUrl);
-  context.addCleanup("close Electron CDP", () => browser.close());
-  const page = await waitFor(() => browser.contexts().flatMap(item => item.pages())
-    .find(item => item.url().startsWith("http://127.0.0.1:")), 30000, "desktop window", 100, context.abortSignal);
+  const desktop = await startSourceDesktop(context, {
+    label: 'electron-menu-branding', profile, servers: serversFile, workspace: workspace.path, kcoderBin: binary,
+  });
+  const { child, page, browser } = desktop;
   const checks = {};
 
   checks.rendererErrors = [];
@@ -66,6 +40,25 @@ await runE2E(import.meta.url, {
     await sidebar.waitFor({ timeout: 60000 });
     await menu.waitFor({ timeout: 30000 });
     await logo.waitFor({ timeout: 30000 });
+    const chrome = page.getByTestId('desktop-brand-chrome');
+    const overlayBottom = () => chrome.evaluate(element => {
+      const overlay = navigator.windowControlsOverlay;
+      if (!overlay?.visible) return null;
+      const { bottom } = overlay.getTitlebarAreaRect();
+      return Math.abs(element.getBoundingClientRect().bottom - bottom - 1);
+    });
+    const runViewCommand = id => page.evaluate(async command => {
+      const bridge = window.kcoderDesktopMenu;
+      const view = (await bridge.list()).find(item => item.id === 'view');
+      await bridge.invoke(view.index, view.entries.find(entry => entry.id === command).position);
+    }, id);
+    await expect.poll(overlayBottom).toEqual(expect.closeTo(0, 1));
+    const originalScale = await page.evaluate(() => devicePixelRatio);
+    await runViewCommand('zoomOut');
+    await expect.poll(() => page.evaluate(() => devicePixelRatio)).toBeLessThan(originalScale);
+    await expect.poll(overlayBottom).toEqual(expect.closeTo(0, 1));
+    await runViewCommand('resetZoom');
+    await expect.poll(() => page.evaluate(() => devicePixelRatio)).toBe(originalScale);
     checks.menuGeometry = await menu.evaluate(element => ({
       clientHeight: element.clientHeight, scrollHeight: element.scrollHeight,
       clientWidth: element.clientWidth, scrollWidth: element.scrollWidth,
@@ -76,6 +69,21 @@ await runE2E(import.meta.url, {
     assert.ok(checks.menuGeometry.scrollWidth <= checks.menuGeometry.clientWidth, 'normal-width menubar must fit its triggers');
     const labels = ["文件", "编辑", "视图"];
     assert.deepEqual(await menu.getByRole("menuitem").allTextContents(), labels);
+    const sidebarShortcut = page.getByTestId('desktop-titlebar-sidebar-toggle');
+    const workbenchActions = page.getByTestId('titlebar-actions');
+    await sidebarShortcut.waitFor();
+    await workbenchActions.getByTestId('collapse-sidebar-button').waitFor();
+    const toggleBox = await sidebarShortcut.boundingBox();
+    const fileBox = await page.getByTestId('desktop-menu-0').boundingBox();
+    assert.ok(toggleBox.x + toggleBox.width <= fileBox.x, 'sidebar toggle precedes File in the top title strip');
+    assert.ok(Math.abs(toggleBox.y + toggleBox.height / 2 - fileBox.y - fileBox.height / 2) <= 1, 'sidebar toggle and File share a vertical center');
+    assert.equal(await page.getByTestId('desktop-app-switcher').count(), 0, 'task dropdown is removed from the workbench');
+    await sidebarShortcut.click();
+    await workbenchActions.getByTestId('expand-sidebar-button').waitFor();
+    await page.getByTestId('desktop-sidebar-hover-edge').hover();
+    assert.equal(await page.getByTestId('desktop-window-controls').count(), 2, 'hover preview does not add sidebar controls');
+    await workbenchActions.getByTestId('expand-sidebar-button').click();
+    await workbenchActions.getByTestId('collapse-sidebar-button').waitFor();
     checks.hostItems = await page.evaluate(() => window.kcoderDesktopMenu.list());
     assert.deepEqual(checks.hostItems.map(({ index, label }) => ({ index, label })), labels.map((label, index) => ({ index, label })));
     assert.deepEqual(await page.evaluate(() => Object.keys(window.kcoderDesktopMenu).sort()), ["invoke", "list", "open", "setTheme", "setVisible"]);
@@ -232,6 +240,8 @@ await runE2E(import.meta.url, {
     await expect(page.getByTestId('app-update-status')).toHaveCount(0);
     const origin = new URL(page.url()).origin;
     await page.goto(`${origin}/settings/about`, { waitUntil: 'domcontentloaded' });
+    await expect(page.getByTestId('studio-settings-page')).toBeVisible();
+    await expect(page.getByTestId('settings-nav-target-extensions')).toHaveCount(0);
     await expect(page.getByTestId('about-check-update-button')).toBeDisabled();
     await expect(page.getByTestId('about-update-status')).toHaveCount(0);
     await page.reload({ waitUntil: 'domcontentloaded' });
@@ -242,7 +252,7 @@ await runE2E(import.meta.url, {
     await page.goto(origin, { waitUntil: 'domcontentloaded' });
     await sidebar.waitFor({ timeout: 30000 });
 
-    const inspectorUrl = output.match(/Debugger listening on (ws:\/\/127\.0\.0\.1:[^\s]+)/)?.[1];
+    const inspectorUrl = desktop.output().match(/Debugger listening on (ws:\/\/127\.0\.0\.1:[^\s]+)/)?.[1];
     assert.ok(inspectorUrl, "Electron main-process inspector must be available for native window closure");
     context.registerPort("electron-main-inspector", Number(new URL(inspectorUrl).port));
     const inspector = await openRpc(inspectorUrl);

@@ -10,6 +10,9 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, warn};
 
+mod apps;
+mod native_resources;
+pub use native_resources::NativeResourceSnapshot;
 mod request;
 
 const REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
@@ -18,14 +21,35 @@ const REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
 /// tools/call over any [`McpTransport`].
 pub struct McpClient {
     transport: Box<dyn McpTransport>,
+    native_origin: Option<std::sync::Arc<crate::native_origin::NativeMcpConnectionOrigin>>,
     next_id: AtomicU64,
     initialized: bool,
+    server_capabilities: Value,
+    apps_support: bool,
+    app_connection_id: Option<String>,
     private_context: bool,
     failed: Option<McpFailureReason>,
     active_request: bool,
+    server_policy: kcoder_types::McpServerPolicy,
+    policy_private_values: std::sync::Arc<crate::tool::PrivateValues>,
 }
 
 impl McpClient {
+    /// Revoke a private connection even while cloned tool handles still exist.
+    pub fn close(&mut self) {
+        if let Some(origin) = &self.native_origin {
+            origin.revoke();
+        }
+        self.transport = Box::new(ClosedTransport);
+        self.failed = Some(McpFailureReason::ConnectionFailed);
+        self.initialized = false;
+        self.active_request = false;
+    }
+    pub fn resources_supported(&self) -> bool {
+        self.server_capabilities
+            .get("resources")
+            .is_some_and(Value::is_object)
+    }
     pub async fn new(
         command: &str,
         args: &[String],
@@ -38,12 +62,44 @@ impl McpClient {
     pub fn with_transport(transport: Box<dyn McpTransport>) -> Self {
         Self {
             transport,
+            native_origin: None,
             next_id: AtomicU64::new(1),
             initialized: false,
+            server_capabilities: Value::Null,
+            apps_support: false,
+            app_connection_id: new_app_connection_id(),
             private_context: false,
             failed: None,
             active_request: false,
+            server_policy: Default::default(),
+            policy_private_values: std::sync::Arc::new(crate::tool::PrivateValues::default()),
         }
+    }
+
+    pub fn native_origin(
+        &self,
+    ) -> Option<std::sync::Arc<crate::native_origin::NativeMcpConnectionOrigin>> {
+        self.native_origin.clone()
+    }
+    pub(crate) fn set_native_origin(
+        &mut self,
+        origin: std::sync::Arc<crate::native_origin::NativeMcpConnectionOrigin>,
+    ) {
+        if let Some(old) = &self.native_origin {
+            old.revoke();
+        }
+        self.native_origin = Some(origin);
+    }
+
+    /// Enable only for a dedicated connection owned by a validated MCP Apps host.
+    /// Negotiation cannot be upgraded on a connection shared with a terminal client.
+    pub fn with_apps_support(mut self, enabled: bool) -> Result<Self> {
+        anyhow::ensure!(
+            !self.initialized,
+            "MCP Apps support must be selected before initialize"
+        );
+        self.apps_support = enabled;
+        Ok(self)
     }
 
     pub(crate) fn with_private_context(mut self, private: bool) -> Self {
@@ -51,8 +107,30 @@ impl McpClient {
         self
     }
 
+    pub(crate) fn with_server_policy(
+        mut self,
+        policy: kcoder_types::McpServerPolicy,
+        values: std::sync::Arc<crate::tool::PrivateValues>,
+    ) -> Self {
+        self.server_policy = policy;
+        self.policy_private_values = values;
+        self
+    }
+
+    pub(crate) fn workspace_allows(&self, cwd: &std::path::Path) -> bool {
+        crate::server_policy::check_workspace(&self.server_policy, cwd).is_ok()
+    }
+
     fn next_id(&self) -> u64 {
         self.next_id.fetch_add(1, Ordering::SeqCst)
+    }
+
+    pub fn apps_support_enabled(&self) -> bool {
+        self.apps_support
+    }
+
+    pub fn app_connection_id(&self) -> Option<&str> {
+        self.app_connection_id.as_deref()
     }
 
     /// Run the initialize handshake and return the server info.
@@ -64,7 +142,11 @@ impl McpClient {
         let id = self.next_id();
         let params = InitializeParams {
             protocol_version: self.transport.supported_protocol_versions()[0].to_string(),
-            capabilities: Value::Object(serde_json::Map::new()),
+            capabilities: if self.apps_support {
+                serde_json::json!({"extensions":{"io.modelcontextprotocol/ui":{"mimeTypes":[kcoder_types::mcp_apps::MCP_APP_MIME_TYPE]}}})
+            } else {
+                Value::Object(serde_json::Map::new())
+            },
             client_info: Implementation {
                 name: "kcoder".to_string(),
                 version: env!("CARGO_PKG_VERSION").to_string(),
@@ -116,6 +198,7 @@ impl McpClient {
                 )
             })??;
 
+        self.server_capabilities = result.capabilities.clone();
         self.initialized = true;
         if self.private_context {
             debug!(code = "mcp_private_initialized", "Private MCP initialized");
@@ -130,13 +213,33 @@ impl McpClient {
 
     /// List tools exposed by the server.
     pub async fn list_tools(&mut self) -> Result<Vec<crate::model::McpToolDefinition>> {
-        self.ensure_initialized()?;
-        tokio::time::timeout(REQUEST_TIMEOUT, self.list_tools_pages())
-            .await
-            .map_err(|_| crate::failure::timeout("MCP tools/list discovery timed out after 60s"))?
+        self.list_tools_with_cancellation(None).await
     }
 
-    async fn list_tools_pages(&mut self) -> Result<Vec<crate::model::McpToolDefinition>> {
+    pub async fn list_tools_with_cancellation(
+        &mut self,
+        cancellation: Option<&CancellationToken>,
+    ) -> Result<Vec<crate::model::McpToolDefinition>> {
+        self.ensure_initialized()?;
+        anyhow::ensure!(
+            !cancellation.is_some_and(CancellationToken::is_cancelled),
+            "MCP tools/list was cancelled before dispatch"
+        );
+        tokio::time::timeout(
+            self.server_policy
+                .startup_timeout_secs
+                .map(std::time::Duration::from_secs)
+                .unwrap_or(REQUEST_TIMEOUT),
+            self.list_tools_pages(cancellation),
+        )
+        .await
+        .map_err(|_| crate::failure::timeout("MCP tools/list discovery timed out after 60s"))?
+    }
+
+    async fn list_tools_pages(
+        &mut self,
+        cancellation: Option<&CancellationToken>,
+    ) -> Result<Vec<crate::model::McpToolDefinition>> {
         const MAX_PAGES: usize = 128;
         const MAX_TOOLS: usize = 4096;
         const MAX_BYTES: usize = 16 * 1024 * 1024;
@@ -156,7 +259,10 @@ impl McpClient {
                 || serde_json::json!({}),
                 |cursor| serde_json::json!({ "cursor": cursor }),
             );
-            let raw: Value = self.request("tools/list", params).await?;
+            let id = self.next_id();
+            let raw: Value = self
+                .request_raw_with_cancellation(id, "tools/list", params, cancellation)
+                .await?;
             bytes = bytes.saturating_add(serde_json::to_vec(&raw)?.len());
             if bytes > MAX_BYTES {
                 return Err(crate::failure::protocol(
@@ -165,7 +271,7 @@ impl McpClient {
             }
             let page: Page = serde_json::from_value(raw)
                 .map_err(|_| crate::failure::protocol("invalid MCP tools/list page"))?;
-            if tools.len().saturating_add(page.tools.len()) > MAX_TOOLS {
+            if names.len().saturating_add(page.tools.len()) > MAX_TOOLS {
                 return Err(crate::failure::protocol(
                     "MCP tools/list exceeds 4096 tool discovery limit",
                 ));
@@ -176,7 +282,9 @@ impl McpClient {
                         "MCP tools/list contains duplicate tool name",
                     ));
                 }
-                tools.push(tool);
+                if self.server_policy.allows(&tool.name) {
+                    tools.push(tool);
+                }
             }
             match page.next_cursor {
                 None => return Ok(tools),
@@ -208,6 +316,13 @@ impl McpClient {
         arguments: Value,
         cancellation: Option<&CancellationToken>,
     ) -> Result<CallToolResult> {
+        if self.server_policy.workspace.is_some() {
+            crate::server_policy::check_workspace(&self.server_policy, &std::env::current_dir()?)?;
+        }
+        anyhow::ensure!(
+            self.server_policy.allows(name),
+            "MCP tool is disabled by server policy"
+        );
         if cancellation.is_some_and(CancellationToken::is_cancelled) {
             return Err(crate::failure::interrupted(
                 None,
@@ -250,6 +365,26 @@ impl McpClient {
             Err(anyhow!("MCP client is not initialized"))
         }
     }
+}
+
+struct ClosedTransport;
+#[async_trait::async_trait]
+impl McpTransport for ClosedTransport {
+    async fn send(&mut self, _: &str) -> Result<()> {
+        Err(anyhow!("MCP connection is closed"))
+    }
+    async fn recv(&mut self) -> Result<Option<String>> {
+        Err(anyhow!("MCP connection is closed"))
+    }
+    fn is_healthy(&mut self) -> bool {
+        false
+    }
+}
+
+fn new_app_connection_id() -> Option<String> {
+    let mut bytes = [0u8; 16];
+    getrandom::fill(&mut bytes).ok()?;
+    Some(bytes.iter().map(|byte| format!("{byte:02x}")).collect())
 }
 
 #[cfg(test)]
@@ -438,6 +573,7 @@ mod tests {
             let mut client = McpClient::with_transport(Box::new(transport));
             client.initialize().await.unwrap();
             let definition = crate::model::McpToolDefinition {
+                meta: None,
                 name: "private_tool".to_string(),
                 description: String::new(),
                 input_schema: serde_json::json!({}),
@@ -571,6 +707,68 @@ mod tests {
             DefaultVersions.supported_protocol_versions(),
             &["2024-11-05"]
         );
+    }
+
+    #[tokio::test]
+    async fn server_tool_restrictions_are_enforced_on_discovery_and_direct_calls() {
+        let secret = "synthetic-policy-private-value";
+        let list=serde_json::json!({"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"read","description":secret},{"name":"write"}]}}).to_string();
+        let called=serde_json::json!({"jsonrpc":"2.0","id":3,"result":{"content":[{"type":"text","text":secret}]}}).to_string();
+        let (transport, handles) = FakeTransport::legacy(VecDeque::from([
+            initialize_result_line("2024-11-05"),
+            list,
+            called,
+        ]));
+        let policy = kcoder_types::McpServerPolicy {
+            enabled_tools: Some(vec!["read".into(), "write".into()]),
+            disabled_tools: vec!["write".into()],
+            ..Default::default()
+        };
+        let mut client = McpClient::with_transport(Box::new(transport))
+            .with_private_context(true)
+            .with_server_policy(
+                policy,
+                crate::tool::PrivateValues::new([secret.into()]).unwrap(),
+            );
+        client.initialize().await.unwrap();
+        let tools = client.list_tools().await.unwrap();
+        assert_eq!(tools.len(), 1);
+        assert_eq!(tools[0].name, "read");
+        assert!(!tools[0].description.contains(secret));
+        let before = handles.sent.lock().unwrap().len();
+        assert!(
+            client
+                .call_tool("write", serde_json::json!({}))
+                .await
+                .is_err()
+        );
+        assert_eq!(handles.sent.lock().unwrap().len(), before);
+        let result = client
+            .call_tool("read", serde_json::json!({}))
+            .await
+            .unwrap();
+        assert!(!result.content[0].text.as_ref().unwrap().contains(secret));
+    }
+
+    #[tokio::test]
+    async fn private_short_values_do_not_rewrite_protocol_versions_or_result_envelopes() {
+        let (transport,_)=FakeTransport::legacy(VecDeque::from([initialize_result_line("2024-11-05"),serde_json::json!({"jsonrpc":"2.0","id":2,"result":{"content":[{"type":"text","text":"1"}]}}).to_string()]));
+        let mut client = McpClient::with_transport(Box::new(transport))
+            .with_private_context(true)
+            .with_server_policy(
+                Default::default(),
+                crate::tool::PrivateValues::new(["1".into()]).unwrap(),
+            );
+        assert_eq!(
+            client.initialize().await.unwrap().protocol_version,
+            "2024-11-05"
+        );
+        let result = client
+            .call_tool("read", serde_json::json!({}))
+            .await
+            .unwrap();
+        assert_eq!(result.content[0].kind, "text");
+        assert_eq!(result.content[0].text.as_deref(), Some("[private]"));
     }
 }
 
@@ -783,5 +981,13 @@ mod pagination_tests {
             .to_string()
             .contains("16 MiB")
         );
+    }
+}
+
+impl Drop for McpClient {
+    fn drop(&mut self) {
+        if let Some(origin) = &self.native_origin {
+            origin.revoke();
+        }
     }
 }

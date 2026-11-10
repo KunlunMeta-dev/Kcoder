@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/*", "tests/harness", "tests/runner", "tests/suites"]
+members = ["crates/*", "crates/*/internal/*", "tests/harness", "tests/runner", "tests/suites"]
 resolver = "3"
 exclude = ["third_party/genai"]
 
@@ -70,9 +70,7 @@ uuid = { version = "1.23", features = ["v4", "serde"] }
 debug = 1
 
 [profile.test]
-# `cargo test` is the main source of target bloat in this workspace: every
-# hashed test binary gets full debug info plus incremental state. Prefer
-# smaller, reproducible test artifacts over keeping many old incremental caches.
+# Temporary test profile requested for the current development iteration.
 debug = 1
 incremental = false
 

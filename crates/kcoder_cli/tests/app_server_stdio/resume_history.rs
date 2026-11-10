@@ -187,6 +187,7 @@ fn thread_resume_history_is_additive_for_resident_cold_and_legacy_requests() {
     let thread_id = resume_history_start_thread(&mut owner, 2);
     resume_history_complete_turn(&mut owner, 3, &thread_id, "resume history fixture");
     let baseline = resume_history_read_page(&mut owner, 4, "thread/read", &thread_id, 50, None);
+    assert!(baseline.get("transcriptSnapshotV1").is_none());
 
     let resident = resume_history_request(&mut owner, 5, &thread_id, 50, false);
     let resident_page = resume_history_ready_page(&resident, &thread_id);
@@ -254,7 +255,17 @@ fn indexed_inline_resume_page_and_opaque_cursor_match_real_stdio_pages() {
     let mut server = TestAppServer::builder(temp.path(), &settings)
         .without_scenario()
         .spawn();
-    resume_history_initialize(&mut server, 1);
+    server.send(json!({
+        "jsonrpc":"2.0","id":1,"method":"initialize",
+        "params":{"protocolVersion":"2026-07-27","clientInfo":{"name":"snapshot-integration","version":"1"},
+            "capabilities":{"experimental":{"threadTranscriptSnapshotV1":true}}}
+    }));
+    let initialized = server.response(1);
+    assert!(initialized.get("error").is_none(), "{initialized}");
+    assert_eq!(
+        initialized["result"]["capabilities"]["experimental"]["threadTranscriptSnapshotV1"],
+        true
+    );
     let refreshed = resume_history_refresh_index(&mut server, 10);
     assert_eq!(refreshed["result"]["status"], "ready", "{refreshed}");
 
@@ -294,6 +305,16 @@ fn indexed_inline_resume_page_and_opaque_cursor_match_real_stdio_pages() {
         "{inline}"
     );
     assert_eq!(first_page["hasMoreBefore"], true, "{inline}");
+    assert_eq!(
+        first_page["transcriptSnapshotV1"]["status"], "available",
+        "{inline}"
+    );
+    let typed_snapshot: kcoder_app_protocol::ThreadTranscriptSnapshotV1 =
+        serde_json::from_value(first_page["transcriptSnapshotV1"].clone()).unwrap();
+    assert!(matches!(
+        typed_snapshot,
+        kcoder_app_protocol::ThreadTranscriptSnapshotV1::Available { .. }
+    ));
     let cursor = first_page["beforeCursor"]
         .as_str()
         .expect("indexed first page returns an opaque cursor")
@@ -313,6 +334,10 @@ fn indexed_inline_resume_page_and_opaque_cursor_match_real_stdio_pages() {
         None,
     );
     resume_history_assert_same_page(&first_page, &indexed_first);
+    assert_eq!(
+        first_page["transcriptSnapshotV1"],
+        indexed_first["transcriptSnapshotV1"]
+    );
     let older = resume_history_read_page(
         &mut server,
         103,
@@ -320,6 +345,10 @@ fn indexed_inline_resume_page_and_opaque_cursor_match_real_stdio_pages() {
         &thread_id,
         50,
         Some(&cursor),
+    );
+    assert_eq!(
+        older["transcriptSnapshotV1"],
+        first_page["transcriptSnapshotV1"]
     );
     assert_eq!(older["rangeEnd"], first_page["rangeStart"], "{older}");
     assert!(older["rangeStart"].as_u64().unwrap() < older["rangeEnd"].as_u64().unwrap());
@@ -334,6 +363,11 @@ fn indexed_inline_resume_page_and_opaque_cursor_match_real_stdio_pages() {
         ids.len(),
         combined_len,
         "adjacent actual cursor pages must not overlap"
+    );
+    let legacy = resume_history_read_page(&mut server, 104, "thread/read", &thread_id, 50, None);
+    assert_eq!(
+        legacy["transcriptSnapshotV1"],
+        json!({"status":"unavailable","code":"legacyReader"})
     );
     server.shutdown_successfully();
 }
@@ -688,4 +722,141 @@ fn resident_capacity_error_is_not_recast_as_unavailable_inline_history() {
         "capacity errors do not return an Unavailable history result: {rejected}"
     );
     full.shutdown_successfully();
+}
+
+#[test]
+fn history_attempt_provenance_real_turn_survives_cold_resume_with_original_uuids() {
+    let temp = tempfile::tempdir().unwrap();
+    let settings = temp.path().join("settings.json");
+    write_test_settings(&settings);
+    let mut owner =
+        TestAppServer::start_scenario(temp.path(), &settings, "full-turn", "0", "0", "0");
+    resume_history_initialize(&mut owner, 1);
+    let thread = resume_history_start_thread(&mut owner, 2);
+    owner.send(
+        json!({"jsonrpc":"2.0", "id":3, "method":"turn/start", "params":{
+        "threadId":thread, "input":[{"type":"text", "text":"provenance full turn"}] }}),
+    );
+    let started = owner.response(3);
+    assert!(started.get("error").is_none(), "{started}");
+    let turn = started["result"]["turn"]["id"].as_str().unwrap().to_owned();
+    let attempt = started["result"]["turn"]["attemptId"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let completed = owner.wait_for_method("turn/completed");
+    assert_eq!(
+        completed["params"]["turn"]["status"], "completed",
+        "{completed}"
+    );
+    let page = resume_history_read_page(&mut owner, 4, "thread/read", &thread, 100, None);
+    let rows = page["messages"].as_array().unwrap();
+    assert!(rows.iter().any(|row| row["role"] == "user"));
+    assert!(rows.iter().any(|row| row["role"] == "assistant"));
+    let path = find_named_file(temp.path(), &format!("{thread}.jsonl")).unwrap();
+    let raw = kcoder_state::load_history(&path).unwrap();
+    for row in rows {
+        assert_eq!(row["turnId"], turn, "{row}");
+        assert_eq!(row["attemptId"], attempt, "{row}");
+        let original = raw
+            .iter()
+            .find(|entry| entry.uuid.as_deref() == row["id"].as_str())
+            .unwrap();
+        let identity = original
+            .history_attempt
+            .as_ref()
+            .expect("original row has durable producer identity");
+        assert_eq!(
+            (&identity.thread_id, &identity.turn_id, &identity.attempt_id),
+            (&thread, &turn, &attempt)
+        );
+    }
+    owner.shutdown_successfully();
+    let mut cold = TestAppServer::builder(temp.path(), &settings)
+        .without_scenario()
+        .spawn();
+    resume_history_initialize(&mut cold, 1);
+    let restored = resume_history_request(&mut cold, 2, &thread, 100, false);
+    let restored_page = resume_history_ready_page(&restored, &thread);
+    assert_eq!(
+        resume_history_message_ids(restored_page),
+        resume_history_message_ids(&page)
+    );
+    assert!(
+        restored_page["messages"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|row| row["attemptId"] == attempt)
+    );
+    cold.shutdown_successfully();
+}
+
+#[test]
+fn history_attempt_provenance_failed_retry_does_not_recolor_original_user() {
+    let temp = tempfile::tempdir().unwrap();
+    let (endpoint, calls, fixture) = serving_fixture_with(partial_stream_first_call);
+    let settings = temp.path().join("settings.json");
+    write_fixture_provider_settings(&settings, &endpoint);
+    let (mut owner, thread, turn) = start_failed_turn(temp.path(), &settings);
+    let before = resume_history_read_page(&mut owner, 4, "thread/read", &thread, 100, None);
+    let user = before["messages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["role"] == "user")
+        .unwrap();
+    let user_id = user["id"].as_str().unwrap().to_owned();
+    assert_eq!(user["attemptId"], turn);
+    owner.send(continuation_request(&thread, &turn, 5));
+    let accepted = owner.response(5);
+    assert!(accepted.get("error").is_none(), "{accepted}");
+    let retry = accepted["result"]["turn"]["attemptId"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    assert_ne!(retry, turn);
+    let completed = owner.wait_for_method("turn/completed");
+    assert_eq!(
+        completed["params"]["turn"]["status"], "completed",
+        "{completed}"
+    );
+    let page = resume_history_read_page(&mut owner, 6, "thread/read", &thread, 100, None);
+    let rows = page["messages"].as_array().unwrap();
+    assert_eq!(
+        rows.iter().find(|row| row["id"] == user_id).unwrap()["attemptId"],
+        turn
+    );
+    assert!(
+        rows.iter()
+            .any(|row| row["content"] == "ok" && row["attemptId"] == retry)
+    );
+    assert!(
+        rows.iter()
+            .any(|row| row["status"] == "failed" && row["attemptId"] == turn)
+    );
+    owner.shutdown_successfully();
+    fixture.join().unwrap();
+    assert_eq!(
+        calls.lock().unwrap().len(),
+        2,
+        "retry does not replay prior model requests"
+    );
+    let mut cold = TestAppServer::builder(temp.path(), &settings)
+        .without_scenario()
+        .spawn();
+    resume_history_initialize(&mut cold, 1);
+    let response = resume_history_request(&mut cold, 2, &thread, 100, false);
+    let rows = resume_history_ready_page(&response, &thread)["messages"]
+        .as_array()
+        .unwrap();
+    assert_eq!(
+        rows.iter().find(|row| row["id"] == user_id).unwrap()["attemptId"],
+        turn
+    );
+    assert!(
+        rows.iter()
+            .any(|row| row["content"] == "ok" && row["attemptId"] == retry)
+    );
+    cold.shutdown_successfully();
 }

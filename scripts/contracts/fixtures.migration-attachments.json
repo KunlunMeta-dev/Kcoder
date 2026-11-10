@@ -1,0 +1,964 @@
+{
+  "MigrationHistoryAttachmentParams": {
+    "valid": [
+      {
+        "name": "native history coordinates",
+        "value": {
+          "selection": {
+            "jobId": "11111111-1111-4111-8111-111111111111",
+            "position": 0,
+            "blockIndex": 1
+          }
+        }
+      },
+      {
+        "name": "selected branch",
+        "value": {
+          "selection": {
+            "jobId": "11111111-1111-4111-8111-111111111111",
+            "position": 0,
+            "blockIndex": 1,
+            "viewId": "view-dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+          }
+        }
+      },
+      {
+        "name": "tool item selector",
+        "value": {
+          "selection": {
+            "jobId": "11111111-1111-4111-8111-111111111111",
+            "position": 0,
+            "blockIndex": 0,
+            "toolItemIndex": 1
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "source path is not authority",
+        "value": {
+          "selection": {
+            "jobId": "11111111-1111-4111-8111-111111111111",
+            "position": 0,
+            "blockIndex": 1
+          },
+          "path": "/outside"
+        }
+      },
+      {
+        "name": "raw replacement not accepted",
+        "value": {
+          "selection": {
+            "jobId": "11111111-1111-4111-8111-111111111111",
+            "position": 0,
+            "blockIndex": 1,
+            "replacementIndex": 0
+          }
+        }
+      }
+    ]
+  },
+  "MigrationHistoryAttachmentResumeParams": {
+    "valid": [
+      {
+        "name": "native history coordinates",
+        "value": {
+          "selection": {
+            "jobId": "11111111-1111-4111-8111-111111111111",
+            "position": 0,
+            "blockIndex": 1
+          },
+          "expectedSequence": 3
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "source path is not authority",
+        "value": {
+          "selection": {
+            "jobId": "11111111-1111-4111-8111-111111111111",
+            "position": 0,
+            "blockIndex": 1
+          },
+          "expectedSequence": 3,
+          "path": "/outside"
+        }
+      }
+    ]
+  },
+  "MigrationHistoryAttachmentStateResult": {
+    "valid": [
+      {
+        "name": "native history coordinates",
+        "value": {
+          "job": null,
+          "workerRunning": false,
+          "workerError": null
+        }
+      },
+      {
+        "name": "saved receipt",
+        "value": {
+          "job": {
+            "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "sequence": 4,
+            "stage": "ready",
+            "processedBytes": 3,
+            "info": {
+              "kind": "embedded_base64",
+              "mediaType": "image/png",
+              "displayName": null,
+              "receipt": {
+                "attachmentId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "bytes": 3,
+                "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "chunkBytes": 262144
+              },
+              "issue": null
+            },
+            "failureCode": null,
+            "cancelRequested": false
+          },
+          "workerRunning": false,
+          "workerError": null
+        }
+      },
+      {
+        "name": "catalogue is not payload completion",
+        "value": {
+          "job": {
+            "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "sequence": 5,
+            "stage": "catalogued",
+            "processedBytes": 10,
+            "info": null,
+            "catalog": {
+              "structured": true,
+              "attachments": 12,
+              "sourceItems": 15,
+              "unknownItems": 1,
+              "opaqueItems": 1
+            },
+            "failureCode": null,
+            "cancelRequested": false
+          },
+          "workerRunning": false,
+          "workerError": null
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "source path is not authority",
+        "value": {
+          "job": null,
+          "workerRunning": false,
+          "workerError": null,
+          "path": "/outside"
+        }
+      }
+    ]
+  },
+  "MigrationHistoryAttachmentChunkParams": {
+    "valid": [
+      {
+        "name": "native history coordinates",
+        "value": {
+          "selection": {
+            "jobId": "11111111-1111-4111-8111-111111111111",
+            "position": 0,
+            "blockIndex": 1
+          },
+          "offset": 0,
+          "limit": 262144
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "source path is not authority",
+        "value": {
+          "selection": {
+            "jobId": "11111111-1111-4111-8111-111111111111",
+            "position": 0,
+            "blockIndex": 1
+          },
+          "offset": 0,
+          "limit": 262144,
+          "path": "/outside"
+        }
+      }
+    ]
+  },
+  "MigrationHistoryAttachmentChunkResult": {
+    "valid": [
+      {
+        "name": "native history coordinates",
+        "value": {
+          "receipt": {
+            "attachmentId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "bytes": 3,
+            "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "chunkBytes": 262144
+          },
+          "offset": 0,
+          "nextOffset": null,
+          "dataBase64": "AAEC",
+          "dataSha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "source path is not authority",
+        "value": {
+          "receipt": {
+            "attachmentId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "bytes": 3,
+            "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "chunkBytes": 262144
+          },
+          "offset": 0,
+          "nextOffset": null,
+          "dataBase64": "AAEC",
+          "dataSha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "path": "/outside"
+        }
+      }
+    ]
+  },
+  "MigrationHistoryToolAttachmentItemsParams": {
+    "valid": [
+      {
+        "name": "native collection cursor",
+        "value": {
+          "selection": {
+            "jobId": "11111111-1111-4111-8111-111111111111",
+            "position": 0,
+            "blockIndex": 0
+          },
+          "cursor": 10
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "source ranges are not caller authority",
+        "value": {
+          "selection": {
+            "jobId": "11111111-1111-4111-8111-111111111111",
+            "position": 0,
+            "blockIndex": 0
+          },
+          "offset": 1
+        }
+      }
+    ]
+  },
+  "MigrationHistoryToolAttachmentItemsResult": {
+    "valid": [
+      {
+        "name": "bounded metadata",
+        "value": {
+          "items": [
+            {
+              "index": 0,
+              "sourceArrayIndex": 1,
+              "sourceType": "image"
+            }
+          ],
+          "nextCursor": 1,
+          "summary": {
+            "structured": true,
+            "attachments": 12,
+            "sourceItems": 15,
+            "unknownItems": 1,
+            "opaqueItems": 1
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "no payloads in catalogue",
+        "value": {
+          "items": [],
+          "summary": {
+            "structured": true,
+            "attachments": 12,
+            "sourceItems": 15,
+            "unknownItems": 1,
+            "opaqueItems": 1
+          },
+          "widgetCode": "<svg/>"
+        }
+      }
+    ]
+  },
+  "MigrationLocalAttachmentPrepareParams": {
+    "valid": [
+      {
+        "name": "owned bounded request or observation",
+        "value": {
+          "requestId": "5dbd1f42-a3aa-4330-971a-5cd3f056ed40",
+          "selection": {
+            "jobId": "history",
+            "viewId": "branch",
+            "position": 0,
+            "blockIndex": 1
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "no arbitrary server source path",
+        "value": {
+          "requestId": "5dbd1f42-a3aa-4330-971a-5cd3f056ed40",
+          "selection": {
+            "jobId": "history",
+            "viewId": "branch",
+            "position": 0,
+            "blockIndex": 1
+          },
+          "sourcePath": "/unapproved/file"
+        }
+      }
+    ]
+  },
+  "MigrationLocalAttachmentReadParams": {
+    "valid": [
+      {
+        "name": "owned bounded request or observation",
+        "value": {
+          "operationId": "5dbd1f42-a3aa-4330-971a-5cd3f056ed40"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "no arbitrary server source path",
+        "value": {
+          "operationId": "5dbd1f42-a3aa-4330-971a-5cd3f056ed40",
+          "sourcePath": "/unapproved/file"
+        }
+      }
+    ]
+  },
+  "MigrationLocalAttachmentBeginParams": {
+    "valid": [
+      {
+        "name": "owned bounded request or observation",
+        "value": {
+          "operationId": "5dbd1f42-a3aa-4330-971a-5cd3f056ed40",
+          "expectedSequence": 0,
+          "filename": "notes.txt",
+          "bytes": 3,
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "no arbitrary server source path",
+        "value": {
+          "operationId": "5dbd1f42-a3aa-4330-971a-5cd3f056ed40",
+          "expectedSequence": 0,
+          "filename": "notes.txt",
+          "bytes": 3,
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "sourcePath": "/unapproved/file"
+        }
+      }
+    ]
+  },
+  "MigrationLocalAttachmentPartParams": {
+    "valid": [
+      {
+        "name": "owned bounded request or observation",
+        "value": {
+          "operationId": "5dbd1f42-a3aa-4330-971a-5cd3f056ed40",
+          "expectedSequence": 1,
+          "index": 0,
+          "contentBase64": "YWJj"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "no arbitrary server source path",
+        "value": {
+          "operationId": "5dbd1f42-a3aa-4330-971a-5cd3f056ed40",
+          "expectedSequence": 1,
+          "index": 0,
+          "contentBase64": "YWJj",
+          "sourcePath": "/unapproved/file"
+        }
+      }
+    ]
+  },
+  "MigrationLocalAttachmentRunParams": {
+    "valid": [
+      {
+        "name": "owned bounded request or observation",
+        "value": {
+          "operationId": "5dbd1f42-a3aa-4330-971a-5cd3f056ed40",
+          "expectedSequence": 2
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "no arbitrary server source path",
+        "value": {
+          "operationId": "5dbd1f42-a3aa-4330-971a-5cd3f056ed40",
+          "expectedSequence": 2,
+          "sourcePath": "/unapproved/file"
+        }
+      }
+    ]
+  },
+  "MigrationLocalAttachmentListParams": {
+    "valid": [
+      {
+        "name": "owned bounded request or observation",
+        "value": {
+          "selection": {
+            "jobId": "history",
+            "viewId": "branch",
+            "position": 0,
+            "blockIndex": 1
+          },
+          "cursor": null
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "no arbitrary server source path",
+        "value": {
+          "selection": {
+            "jobId": "history",
+            "viewId": "branch",
+            "position": 0,
+            "blockIndex": 1
+          },
+          "cursor": null,
+          "sourcePath": "/unapproved/file"
+        }
+      }
+    ]
+  },
+  "MigrationLocalAttachmentStateResult": {
+    "valid": [
+      {
+        "name": "owned bounded request or observation",
+        "value": {
+          "upload": {
+            "operationId": "5dbd1f42-a3aa-4330-971a-5cd3f056ed40",
+            "selection": {
+              "jobId": "history",
+              "viewId": "branch",
+              "position": 0,
+              "blockIndex": 1
+            },
+            "sequence": 0,
+            "stage": "prepared",
+            "filename": null,
+            "bytes": null,
+            "sha256": null,
+            "receivedBytes": 0,
+            "receivedParts": 0,
+            "partBytes": 196608,
+            "cancelRequested": false,
+            "cancelRevision": 0,
+            "failureCode": null,
+            "localJob": null
+          },
+          "workerRunning": false,
+          "workerError": null
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "no arbitrary server source path",
+        "value": {
+          "upload": {
+            "operationId": "5dbd1f42-a3aa-4330-971a-5cd3f056ed40",
+            "selection": {
+              "jobId": "history",
+              "viewId": "branch",
+              "position": 0,
+              "blockIndex": 1
+            },
+            "sequence": 0,
+            "stage": "prepared",
+            "filename": null,
+            "bytes": null,
+            "sha256": null,
+            "receivedBytes": 0,
+            "receivedParts": 0,
+            "partBytes": 196608,
+            "cancelRequested": false,
+            "cancelRevision": 0,
+            "failureCode": null,
+            "localJob": null
+          },
+          "workerRunning": false,
+          "workerError": null,
+          "sourcePath": "/unapproved/file"
+        }
+      }
+    ]
+  },
+  "MigrationLocalAttachmentListResult": {
+    "valid": [
+      {
+        "name": "owned bounded request or observation",
+        "value": {
+          "items": [
+            {
+              "operationId": "5dbd1f42-a3aa-4330-971a-5cd3f056ed40",
+              "selection": {
+                "jobId": "history",
+                "viewId": "branch",
+                "position": 0,
+                "blockIndex": 1
+              },
+              "sequence": 0,
+              "stage": "prepared",
+              "filename": null,
+              "bytes": null,
+              "sha256": null,
+              "receivedBytes": 0,
+              "receivedParts": 0,
+              "partBytes": 196608,
+              "cancelRequested": false,
+              "cancelRevision": 0,
+              "failureCode": null,
+              "localJob": null
+            }
+          ],
+          "nextCursor": null
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "no arbitrary server source path",
+        "value": {
+          "items": [
+            {
+              "operationId": "5dbd1f42-a3aa-4330-971a-5cd3f056ed40",
+              "selection": {
+                "jobId": "history",
+                "viewId": "branch",
+                "position": 0,
+                "blockIndex": 1
+              },
+              "sequence": 0,
+              "stage": "prepared",
+              "filename": null,
+              "bytes": null,
+              "sha256": null,
+              "receivedBytes": 0,
+              "receivedParts": 0,
+              "partBytes": 196608,
+              "cancelRequested": false,
+              "cancelRevision": 0,
+              "failureCode": null,
+              "localJob": null
+            }
+          ],
+          "nextCursor": null,
+          "sourcePath": "/unapproved/file"
+        }
+      }
+    ]
+  },
+  "MigrationLocalAttachmentChunkParams": {
+    "valid": [
+      {
+        "name": "owned bounded request or observation",
+        "value": {
+          "operationId": "5dbd1f42-a3aa-4330-971a-5cd3f056ed40",
+          "selection": {
+            "jobId": "history",
+            "viewId": "branch",
+            "position": 0,
+            "blockIndex": 1
+          },
+          "expectedReceipt": {
+            "attachmentId": "owned",
+            "bytes": 3,
+            "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "chunkBytes": 262144
+          },
+          "offset": 0,
+          "limit": 262144
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "no arbitrary server source path",
+        "value": {
+          "operationId": "5dbd1f42-a3aa-4330-971a-5cd3f056ed40",
+          "selection": {
+            "jobId": "history",
+            "viewId": "branch",
+            "position": 0,
+            "blockIndex": 1
+          },
+          "expectedReceipt": {
+            "attachmentId": "owned",
+            "bytes": 3,
+            "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "chunkBytes": 262144
+          },
+          "offset": 0,
+          "limit": 262144,
+          "sourcePath": "/unapproved/file"
+        }
+      }
+    ]
+  },
+  "MigrationUploadCollectionPrepareParams": {
+    "valid": [
+      {
+        "name": "owned_metadata_only",
+        "value": {
+          "operationId": "123e4567-e89b-42d3-a456-426614174001",
+          "selection": {
+            "jobId": "123e4567-e89b-42d3-a456-426614174000",
+            "viewId": null,
+            "position": 0,
+            "blockIndex": 0,
+            "toolItemIndex": null
+          },
+          "expectedUploadSequence": 1
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown_authority",
+        "value": {
+          "operationId": "123e4567-e89b-42d3-a456-426614174001",
+          "selection": {
+            "jobId": "123e4567-e89b-42d3-a456-426614174000",
+            "viewId": null,
+            "position": 0,
+            "blockIndex": 0,
+            "toolItemIndex": null
+          },
+          "expectedUploadSequence": 1,
+          "sourcePath": "/never-authorized"
+        }
+      }
+    ]
+  },
+  "MigrationUploadCollectionReadParams": {
+    "valid": [
+      {
+        "name": "owned_metadata_only",
+        "value": {
+          "operationId": "123e4567-e89b-42d3-a456-426614174001",
+          "selection": {
+            "jobId": "123e4567-e89b-42d3-a456-426614174000",
+            "viewId": null,
+            "position": 0,
+            "blockIndex": 0,
+            "toolItemIndex": null
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown_authority",
+        "value": {
+          "operationId": "123e4567-e89b-42d3-a456-426614174001",
+          "selection": {
+            "jobId": "123e4567-e89b-42d3-a456-426614174000",
+            "viewId": null,
+            "position": 0,
+            "blockIndex": 0,
+            "toolItemIndex": null
+          },
+          "sourcePath": "/never-authorized"
+        }
+      }
+    ]
+  },
+  "MigrationUploadCollectionListParams": {
+    "valid": [
+      {
+        "name": "owned_metadata_only",
+        "value": {
+          "selection": {
+            "jobId": "123e4567-e89b-42d3-a456-426614174000",
+            "viewId": null,
+            "position": 0,
+            "blockIndex": 0,
+            "toolItemIndex": null
+          },
+          "cursor": null
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown_authority",
+        "value": {
+          "selection": {
+            "jobId": "123e4567-e89b-42d3-a456-426614174000",
+            "viewId": null,
+            "position": 0,
+            "blockIndex": 0,
+            "toolItemIndex": null
+          },
+          "cursor": null,
+          "sourcePath": "/never-authorized"
+        }
+      }
+    ]
+  },
+  "MigrationUploadCollectionRunParams": {
+    "valid": [
+      {
+        "name": "owned_metadata_only",
+        "value": {
+          "operationId": "123e4567-e89b-42d3-a456-426614174001",
+          "selection": {
+            "jobId": "123e4567-e89b-42d3-a456-426614174000",
+            "viewId": null,
+            "position": 0,
+            "blockIndex": 0,
+            "toolItemIndex": null
+          },
+          "collectionId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "expectedSequence": 1
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown_authority",
+        "value": {
+          "operationId": "123e4567-e89b-42d3-a456-426614174001",
+          "selection": {
+            "jobId": "123e4567-e89b-42d3-a456-426614174000",
+            "viewId": null,
+            "position": 0,
+            "blockIndex": 0,
+            "toolItemIndex": null
+          },
+          "collectionId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "expectedSequence": 1,
+          "sourcePath": "/never-authorized"
+        }
+      }
+    ]
+  },
+  "MigrationUploadCollectionCancelParams": {
+    "valid": [
+      {
+        "name": "owned_metadata_only",
+        "value": {
+          "operationId": "123e4567-e89b-42d3-a456-426614174001",
+          "selection": {
+            "jobId": "123e4567-e89b-42d3-a456-426614174000",
+            "viewId": null,
+            "position": 0,
+            "blockIndex": 0,
+            "toolItemIndex": null
+          },
+          "collectionId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown_authority",
+        "value": {
+          "operationId": "123e4567-e89b-42d3-a456-426614174001",
+          "selection": {
+            "jobId": "123e4567-e89b-42d3-a456-426614174000",
+            "viewId": null,
+            "position": 0,
+            "blockIndex": 0,
+            "toolItemIndex": null
+          },
+          "collectionId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "sourcePath": "/never-authorized"
+        }
+      }
+    ]
+  },
+  "MigrationUploadCollectionResumeParams": {
+    "valid": [
+      {
+        "name": "owned_metadata_only",
+        "value": {
+          "operationId": "123e4567-e89b-42d3-a456-426614174001",
+          "selection": {
+            "jobId": "123e4567-e89b-42d3-a456-426614174000",
+            "viewId": null,
+            "position": 0,
+            "blockIndex": 0,
+            "toolItemIndex": null
+          },
+          "collectionId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "expectedSequence": 1,
+          "expectedUploadSequence": 1
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown_authority",
+        "value": {
+          "operationId": "123e4567-e89b-42d3-a456-426614174001",
+          "selection": {
+            "jobId": "123e4567-e89b-42d3-a456-426614174000",
+            "viewId": null,
+            "position": 0,
+            "blockIndex": 0,
+            "toolItemIndex": null
+          },
+          "collectionId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "expectedSequence": 1,
+          "expectedUploadSequence": 1,
+          "sourcePath": "/never-authorized"
+        }
+      }
+    ]
+  },
+  "MigrationUploadCollectionStateResult": {
+    "valid": [
+      {
+        "name": "owned_metadata_only",
+        "value": {
+          "collection": null,
+          "workerRunning": false,
+          "workerScheduled": false,
+          "workerError": null
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown_authority",
+        "value": {
+          "collection": null,
+          "workerRunning": false,
+          "workerScheduled": false,
+          "workerError": null,
+          "sourcePath": "/never-authorized"
+        }
+      }
+    ]
+  },
+  "MigrationUploadCollectionListResult": {
+    "valid": [
+      {
+        "name": "owned_metadata_only",
+        "value": {
+          "items": [],
+          "nextCursor": null
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown_authority",
+        "value": {
+          "items": [],
+          "nextCursor": null,
+          "sourcePath": "/never-authorized"
+        }
+      }
+    ]
+  },
+  "MigrationUploadCollectionAttachmentResult": {
+    "valid": [
+      {
+        "name": "original_final_attachment",
+        "value": {
+          "job": {
+            "selection": {
+              "jobId": "123e4567-e89b-42d3-a456-426614174000",
+              "position": 0,
+              "blockIndex": 0
+            },
+            "state": {
+              "operationId": "123e4567-e89b-42d3-a456-426614174001",
+              "sequence": 1,
+              "stage": "ready",
+              "processedBytes": 3,
+              "receipt": {
+                "attachmentId": "owned-final",
+                "bytes": 3,
+                "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "chunkBytes": 262144
+              },
+              "failureCode": null,
+              "cancelRequested": false,
+              "cancelRevision": 0
+            },
+            "info": {
+              "kind": "local_reference",
+              "mediaType": "text/plain",
+              "displayName": "owned.txt",
+              "receipt": null,
+              "issue": null
+            },
+            "historicalContentVerified": false
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "no_path_authority",
+        "value": {
+          "job": {
+            "selection": {
+              "jobId": "123e4567-e89b-42d3-a456-426614174000",
+              "position": 0,
+              "blockIndex": 0
+            },
+            "state": {
+              "operationId": "123e4567-e89b-42d3-a456-426614174001",
+              "sequence": 1,
+              "stage": "ready",
+              "processedBytes": 3,
+              "receipt": {
+                "attachmentId": "owned-final",
+                "bytes": 3,
+                "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "chunkBytes": 262144
+              },
+              "failureCode": null,
+              "cancelRequested": false,
+              "cancelRevision": 0
+            },
+            "info": {
+              "kind": "local_reference",
+              "mediaType": "text/plain",
+              "displayName": "owned.txt",
+              "receipt": null,
+              "issue": null
+            },
+            "historicalContentVerified": false
+          },
+          "path": "/untrusted"
+        }
+      }
+    ]
+  }
+}

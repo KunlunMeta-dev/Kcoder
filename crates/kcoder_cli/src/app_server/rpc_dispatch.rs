@@ -1,12 +1,89 @@
 //! Route initialized requests into domain handlers without owning connection resources.
 
 use super::*;
+use crate::app_server::task_spawn::JoinSetExt as _;
+use futures::FutureExt;
+use kcoder_app_rpc_codec as rpc_codec;
 
 #[expect(
     clippy::too_many_arguments,
     reason = "Keep separately borrowed connection and resource owners explicit at the extracted dispatch boundary"
 )]
-pub(super) async fn dispatch(
+pub(super) fn dispatch<'a>(
+    method: &'a str,
+    id: Value,
+    params: Value,
+    engine: &'a mut QueryEngine,
+    workspace_engine: &'a QueryEngine,
+    outbound_tx: &'a mpsc::Sender<Value>,
+    thread_manager: &'a mut ThreadManager,
+    terminals: &'a TerminalRegistry,
+    history_refresh: &'a mut history_refresh_processor::HistoryRefreshProcessor,
+    browsers: &'a mut BrowserRegistry,
+    plugin_tasks: &'a tokio::task::JoinSet<()>,
+    migration_activity: usize,
+    provider_tasks: &'a mut tokio::task::JoinSet<()>,
+    indexed_read_tasks: &'a tokio::task::JoinSet<()>,
+    automations: &'a mut project_automations::ProjectAutomations,
+    automation_requested: &'a mut bool,
+    idle_shutdown_requested: &'a mut bool,
+    engine_factory: &'a AppServerEngineFactory,
+    storage_scans: &'a storage_scans::StorageScans,
+    provider_settings_state: &'a Result<provider_settings::ProviderSettingsState>,
+    attachment_directories: &'a mut AttachmentDirectories,
+    next_terminal_id: &'a AtomicU64,
+    permission_mode: kcoder_config::PermissionMode,
+    next_interaction_id: &'a Arc<AtomicU64>,
+    connection_receipts: &'a Arc<StdMutex<InteractionReceipts>>,
+    server_id: &'a str,
+    sequence: &'a Arc<AtomicU64>,
+    automation_fire: &'a Option<kcoder_tools::cron::CronFire>,
+    state: &'a mut ConnectionState,
+    thread_list_snapshots: &'a mut thread_list_snapshots::ThreadListSnapshots,
+    retained_authority: Option<retained_turn::Authority<'a>>,
+    retention_parent: Option<&'a retention_context::VerifiedRetentionAuthority>,
+) -> futures::future::LocalBoxFuture<'a, Result<DispatchControl>> {
+    futures::FutureExt::boxed_local(dispatch_inner(
+        method,
+        id,
+        params,
+        engine,
+        workspace_engine,
+        outbound_tx,
+        thread_manager,
+        terminals,
+        history_refresh,
+        browsers,
+        plugin_tasks,
+        migration_activity,
+        provider_tasks,
+        indexed_read_tasks,
+        automations,
+        automation_requested,
+        idle_shutdown_requested,
+        engine_factory,
+        storage_scans,
+        provider_settings_state,
+        attachment_directories,
+        next_terminal_id,
+        permission_mode,
+        next_interaction_id,
+        connection_receipts,
+        server_id,
+        sequence,
+        automation_fire,
+        state,
+        thread_list_snapshots,
+        retained_authority,
+        retention_parent,
+    ))
+}
+
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Preserve the original separately borrowed owners behind the erased request future"
+)]
+async fn dispatch_inner(
     method: &str,
     id: Value,
     params: Value,
@@ -18,6 +95,7 @@ pub(super) async fn dispatch(
     history_refresh: &mut history_refresh_processor::HistoryRefreshProcessor,
     browsers: &mut BrowserRegistry,
     plugin_tasks: &tokio::task::JoinSet<()>,
+    migration_activity: usize,
     provider_tasks: &mut tokio::task::JoinSet<()>,
     indexed_read_tasks: &tokio::task::JoinSet<()>,
     automations: &mut project_automations::ProjectAutomations,
@@ -29,23 +107,486 @@ pub(super) async fn dispatch(
     attachment_directories: &mut AttachmentDirectories,
     next_terminal_id: &AtomicU64,
     permission_mode: kcoder_config::PermissionMode,
-    next_question_id: &Arc<AtomicU64>,
-    next_approval_id: &Arc<AtomicU64>,
+    next_interaction_id: &Arc<AtomicU64>,
     connection_receipts: &Arc<StdMutex<InteractionReceipts>>,
     server_id: &str,
     sequence: &Arc<AtomicU64>,
     automation_fire: &Option<kcoder_tools::cron::CronFire>,
     state: &mut ConnectionState,
     thread_list_snapshots: &mut thread_list_snapshots::ThreadListSnapshots,
+    retained_authority: Option<retained_turn::Authority<'_>>,
+    retention_parent: Option<&retention_context::VerifiedRetentionAuthority>,
 ) -> Result<DispatchControl> {
+    if matches!(
+        method,
+        kcoder_app_protocol::METHOD_THREAD_ATTACH
+            | kcoder_app_protocol::METHOD_THREAD_DETACH
+            | kcoder_app_protocol::METHOD_THREAD_LIFETIME_READ
+            | kcoder_app_protocol::METHOD_THREAD_LIFETIME_SET
+    ) {
+        return session_lifetime::dispatch(
+            method,
+            id,
+            params,
+            state,
+            workspace_engine,
+            thread_manager,
+            outbound_tx,
+        )
+        .await;
+    }
+    #[cfg(target_os = "linux")]
+    if state.native_acp_receiver_binding.is_some()
+        && !matches!(
+            method,
+            "kcoder/nativeRemote/controlV1"
+                | "thread/start"
+                | "thread/read"
+                | "thread/unsubscribe"
+                | "turn/start"
+                | "turn/interrupt"
+        )
+    {
+        send(
+            outbound_tx,
+            error_response(id, -32086, "REMOTE_RECEIVER_CONNECTION_METHOD_DENIED"),
+        )
+        .await?;
+        return Ok(DispatchControl::Continue);
+    }
+    #[cfg(target_os = "linux")]
+    if integrations::core::remote_delegations::receiver_acp_binding::dispatch(
+        method,
+        &id,
+        &params,
+        workspace_engine,
+        engine_factory.is_native_acp_backend(),
+        thread_manager.resident_engines().is_empty(),
+        outbound_tx,
+        state,
+    )
+    .await?
+    {
+        return Ok(DispatchControl::Continue);
+    }
+    if async_question_requests::supports(method) {
+        return async_question_requests::dispatch(
+            method,
+            id,
+            params,
+            engine,
+            engine_factory,
+            outbound_tx,
+            thread_manager,
+            server_id,
+            sequence,
+            state,
+            attachment_directories,
+            next_interaction_id,
+            retained_authority,
+        )
+        .await;
+    }
+    if method == kcoder_app_protocol::METHOD_THREAD_EXPERT {
+        task_expert_requests::dispatch(
+            id,
+            params,
+            workspace_engine,
+            thread_manager,
+            state,
+            outbound_tx,
+        )
+        .await?;
+        return Ok(DispatchControl::Continue);
+    }
+    // `work/*` (continuous work) and the original-host task commands
+    // (`thread/*` goal, compact, rollback, ...) are disjoint method sets.
+    if continuous_work_read::dispatch(
+        method,
+        &id,
+        &params,
+        workspace_engine,
+        outbound_tx,
+        continuous_work_read::ReadAccess {
+            enabled: state.continuous_work_read_v1,
+            partial_list: state.continuous_work_partial_list_v1,
+            tasks: &mut state.continuous_work_read_tasks,
+        },
+    )
+    .await?
+    {
+        return Ok(DispatchControl::Continue);
+    }
+    if continuous_work_mutation::dispatch(
+        method,
+        &id,
+        &params,
+        workspace_engine,
+        &|thread_id| thread_manager.is_turn_running(thread_id),
+        outbound_tx,
+        continuous_work_mutation::MutationAccess {
+            input: state.continuous_work_input_v1,
+            control: state.continuous_work_control_v1,
+            tasks: &mut state.continuous_work_mutation_tasks,
+        },
+    )
+    .await?
+    {
+        return Ok(DispatchControl::Continue);
+    }
+    if web_search::dispatch(
+        method,
+        &id,
+        &params,
+        workspace_engine,
+        engine_factory,
+        thread_manager,
+        server_id,
+        state,
+        outbound_tx,
+    )
+    .await?
+    {
+        return Ok(DispatchControl::Continue);
+    }
+    if integrations::core::browser_profiles::dispatch(
+        method,
+        &id,
+        &params,
+        workspace_engine,
+        outbound_tx,
+        state,
+    )
+    .await?
+    {
+        return Ok(DispatchControl::Continue);
+    }
+    if integrations::core::remote_delegations::rpc::dispatch(
+        method,
+        &id,
+        &params,
+        workspace_engine,
+        outbound_tx,
+        state,
+    )
+    .await?
+    {
+        return Ok(DispatchControl::Continue);
+    }
+    if integrations::core::model_policy::dispatch::dispatch(
+        method,
+        &id,
+        &params,
+        workspace_engine,
+        outbound_tx,
+        state,
+    )
+    .await?
+    {
+        return Ok(DispatchControl::Continue);
+    }
+    if integrations::connectivity::main_rpc::dispatch(
+        method,
+        &id,
+        &params,
+        engine_factory,
+        workspace_engine.clone(),
+        outbound_tx,
+        state,
+    )
+    .await?
+    {
+        return Ok(DispatchControl::Continue);
+    }
+    if integrations::connectivity::task_capability_source_choices_rpc::dispatch(
+        method,
+        &id,
+        &params,
+        thread_manager,
+        engine_factory,
+        outbound_tx,
+        state,
+    )
+    .await?
+    {
+        return Ok(DispatchControl::Continue);
+    }
+    if integrations::connectivity::task_capability_scope_control_rpc::dispatch(
+        method,
+        &id,
+        &params,
+        thread_manager,
+        engine_factory,
+        outbound_tx,
+        state,
+    )
+    .await?
+    {
+        return Ok(DispatchControl::Continue);
+    }
+    if integrations::connectivity::task_capability_scope_directory_rpc::dispatch(
+        method,
+        &id,
+        &params,
+        outbound_tx,
+        state,
+    )
+    .await?
+    {
+        return Ok(DispatchControl::Continue);
+    }
+    if integrations::core::task_workspace::rpc::dispatch(
+        method,
+        &id,
+        &params,
+        (workspace_engine, engine_factory),
+        thread_manager,
+        outbound_tx,
+        state,
+    )
+    .await?
+    {
+        return Ok(DispatchControl::Continue);
+    }
+    if integrations::connectivity_settings::dispatch(
+        method,
+        &id,
+        &params,
+        workspace_engine,
+        engine_factory,
+        outbound_tx,
+        state,
+    )
+    .await?
+    {
+        return Ok(DispatchControl::Continue);
+    }
+    if integrations::knowledge_settings::dispatch(
+        method,
+        &id,
+        &params,
+        workspace_engine,
+        engine_factory,
+        outbound_tx,
+        state,
+    )
+    .await?
+    {
+        return Ok(DispatchControl::Continue);
+    }
+    if integrations::office::rpc::dispatch_settings(
+        method,
+        &id,
+        &params,
+        workspace_engine,
+        engine_factory,
+        outbound_tx,
+        state,
+    )
+    .await?
+    {
+        return Ok(DispatchControl::Continue);
+    }
+    if integrations::office::rpc::dispatch_upload_finish(
+        method,
+        &id,
+        &params,
+        workspace_engine,
+        outbound_tx,
+        state,
+        attachment_directories,
+    )
+    .await?
+    {
+        return Ok(DispatchControl::Continue);
+    }
+    if integrations::office::rpc::dispatch_export_read(
+        method,
+        &id,
+        &params,
+        workspace_engine,
+        outbound_tx,
+        state,
+    )
+    .await?
+    {
+        return Ok(DispatchControl::Continue);
+    }
+    if integrations::office::rpc::dispatch_public(
+        method,
+        &id,
+        &params,
+        integrations::office::rpc::OfficePublicEngines {
+            workspace: workspace_engine,
+            threads: thread_manager,
+            factory: engine_factory,
+        },
+        outbound_tx,
+        state,
+    )
+    .await?
+    {
+        return Ok(DispatchControl::Continue);
+    }
+    if integration_requests::dispatch_memory_snapshot(
+        method,
+        &id,
+        &params,
+        engine,
+        thread_manager,
+        outbound_tx,
+        state,
+    )
+    .await?
+    {
+        return Ok(DispatchControl::Continue);
+    }
+    if integration_requests::dispatch_task_state(method, &id, &params, outbound_tx, state).await? {
+        return Ok(DispatchControl::Continue);
+    }
+    if integrations::core::service_leases::native_code::rpc::dispatch(
+        method,
+        &id,
+        &params,
+        workspace_engine,
+        outbound_tx,
+        state,
+    )
+    .await?
+    {
+        return Ok(DispatchControl::Continue);
+    }
+    if integrations::knowledge::application_selection_rpc::dispatch(
+        method,
+        &id,
+        &params,
+        workspace_engine,
+        engine_factory,
+        outbound_tx,
+        state,
+    )
+    .await?
+    {
+        return Ok(DispatchControl::Continue);
+    }
+    if integration_requests::dispatch_knowledge(
+        method,
+        &id,
+        &params,
+        workspace_engine,
+        outbound_tx,
+        state,
+    )
+    .await?
+    {
+        return Ok(DispatchControl::Continue);
+    }
+    if task_delivery_requests::supports(method) {
+        let result = task_delivery_requests::request(method, params, thread_manager).await;
+        let response = match result {
+            Ok(value) => success_response(id, value),
+            Err(error) => error_response(id, -32602, &error.to_string()),
+        };
+        send(outbound_tx, response).await?;
+        return Ok(DispatchControl::Continue);
+    }
+    if method == kcoder_app_protocol::integrations::host::INTEGRATION_OPERATION_READ {
+        let result = (|| -> Result<Value> {
+            anyhow::ensure!(
+                state.integration_operations_v1,
+                "INTEGRATION_OPERATIONS_UNAVAILABLE"
+            );
+            let context = state
+                .integration_context
+                .as_mut()
+                .context("INTEGRATION_SCOPE_UNAVAILABLE")?;
+            serde_json::to_value(integrations::core::read_operation(
+                params,
+                workspace_engine,
+                context,
+                &mut state.integration_operations,
+                &mut state.integration_memory,
+            )?)
+            .map_err(Into::into)
+        })();
+        send(
+            outbound_tx,
+            match result {
+                Ok(value) => success_response(id, value),
+                Err(_) => error_response(id, -32072, "INTEGRATION_OPERATIONS_UNAVAILABLE"),
+            },
+        )
+        .await?;
+        return Ok(DispatchControl::Continue);
+    }
+    if integrations::core::memory_method(method).is_some() {
+        let result = (|| -> Result<Value> {
+            anyhow::ensure!(
+                state.integration_memory_v1,
+                "INTEGRATION_MEMORY_UNAVAILABLE"
+            );
+            let context = state
+                .integration_context
+                .as_mut()
+                .context("INTEGRATION_SCOPE_UNAVAILABLE")?;
+            serde_json::to_value(integrations::core::request_memory(
+                method,
+                params,
+                workspace_engine,
+                context,
+                &mut state.integration_memory,
+                &mut state.integration_operations,
+            )?)
+            .map_err(Into::into)
+        })();
+        let response = match result {
+            Ok(value) => success_response(id, value),
+            Err(_) => error_response(id, -32071, "INTEGRATION_MEMORY_UNAVAILABLE"),
+        };
+        send(outbound_tx, response).await?;
+        return Ok(DispatchControl::Continue);
+    }
+    if method == kcoder_app_protocol::integrations::host::INTEGRATION_SCOPE_READ {
+        let result = integrations::core::read_scope(
+            workspace_engine,
+            state.integration_context.as_mut(),
+            params,
+        );
+        let response = match result {
+            Ok(value) => success_response(id, value),
+            Err(_) => error_response(id, -32070, "INTEGRATION_SCOPE_UNAVAILABLE"),
+        };
+        send(outbound_tx, response).await?;
+        return Ok(DispatchControl::Continue);
+    }
+    if mcp_apps_rpc::supports(method) {
+        mcp_apps_rpc::dispatch(
+            method,
+            id,
+            params,
+            thread_manager,
+            state,
+            outbound_tx,
+            server_id,
+        )
+        .await?;
+        return Ok(DispatchControl::Continue);
+    }
+    if widgets_dispatch::supports(method) {
+        let response = match widgets_dispatch::request(method, params, thread_manager, state) {
+            Ok(value) => success_response(id, value),
+            Err(error) => error_response(id, -32602, &error.to_string()),
+        };
+        send(outbound_tx, response).await?;
+        return Ok(DispatchControl::Continue);
+    }
     if matches!(
         method,
         kcoder_app_protocol::knowledge_method::DIRECTORY_STAGE
             | kcoder_app_protocol::knowledge_method::DIRECTORY_PREVIEW
     ) {
         let result = (|| -> Result<Value> {
-            let input: kcoder_app_protocol::KnowledgeDirectoryParams =
-                serde_json::from_value(params)?;
+            let input: kcoder_app_protocol::KnowledgeDirectoryParams = rpc_codec::decode(params)?;
             let settings = workspace_engine
                 .settings_persistence_path()
                 .context("Wiki profile unavailable")?;
@@ -92,24 +633,28 @@ pub(super) async fn dispatch(
     }
     if method == kcoder_app_protocol::knowledge_method::IMAGE_IMPORT_RESUME {
         let prepared = (|| -> Result<_> {
-            anyhow::ensure!(
-                state.knowledge_rpc_tasks.len() < 16,
-                "knowledge service is busy"
-            );
-            let input: kcoder_app_protocol::KnowledgeImageImportParams =
-                serde_json::from_value(params)?;
+            anyhow::ensure!(state.wiki_rpc_tasks.len() < 16, "knowledge service is busy");
+            let input: kcoder_app_protocol::KnowledgeImageImportParams = rpc_codec::decode(params)?;
             let settings = workspace_engine
                 .settings_persistence_path()
                 .context("knowledge profile unavailable")?;
             let context = kcoder_tools::ToolContext::new(workspace_engine.state.clone());
-            Ok((input, settings, context))
+            let native =
+                if integrations::core::NativeIntegrationContext::organization_launch_required()? {
+                    Some(integrations::core::capture_scope(workspace_engine)?)
+                } else {
+                    None
+                };
+            Ok((input, settings, context, native))
         })();
         match prepared {
-            Ok((input, settings, context)) => {
+            Ok((input, settings, context, native)) => {
                 let outbound = outbound_tx.clone();
-                state.knowledge_rpc_tasks.spawn(async move {
+                state.wiki_rpc_tasks.spawn_shared(async move {
                     let response =
-                        match knowledge_image_imports::resume(&settings, input, context).await {
+                        match knowledge_image_imports::resume(&settings, input, context, native)
+                            .await
+                        {
                             Ok(value) => success_response(id, value),
                             Err(error) => error_response(id, -32602, &error.to_string()),
                         };
@@ -122,25 +667,30 @@ pub(super) async fn dispatch(
     }
     if method == kcoder_app_protocol::knowledge_method::IMPORT_ATTACHMENT {
         let prepared = (|| -> Result<_> {
-            anyhow::ensure!(
-                state.knowledge_rpc_tasks.len() < 16,
-                "knowledge service is busy"
-            );
+            anyhow::ensure!(state.wiki_rpc_tasks.len() < 16, "knowledge service is busy");
             let input: kcoder_app_protocol::KnowledgeImportAttachmentParams =
-                serde_json::from_value(params)?;
+                rpc_codec::decode(params)?;
             let path = knowledge_documents::authorize(&input, attachment_directories)?;
             let settings = workspace_engine
                 .settings_persistence_path()
                 .context("knowledge profile unavailable")?;
             let context = kcoder_tools::ToolContext::new(workspace_engine.state.clone());
-            Ok((input, path, settings, context))
+            let native =
+                if integrations::core::NativeIntegrationContext::organization_launch_required()? {
+                    Some(integrations::core::capture_scope(workspace_engine)?)
+                } else {
+                    None
+                };
+            Ok((input, path, settings, context, native))
         })();
         match prepared {
-            Ok((input, path, settings, context)) => {
+            Ok((input, path, settings, context, native)) => {
                 let outbound = outbound_tx.clone();
-                state.knowledge_rpc_tasks.spawn(async move {
+                state.wiki_rpc_tasks.spawn_shared(async move {
                     let response =
-                        match knowledge_documents::import(&settings, input, path, context).await {
+                        match knowledge_documents::import(&settings, input, path, context, native)
+                            .await
+                        {
                             Ok(value) => success_response(id, value),
                             Err(error) => error_response(id, -32602, &error.to_string()),
                         };
@@ -168,13 +718,15 @@ pub(super) async fn dispatch(
                 knowledge_requests::organization_enabled(&path)?,
                 "Wiki organization is disabled"
             );
+            knowledge_worker_authority::authorize_enqueue(|| {
+                integrations::core::capture_scope(workspace_engine)
+            })?;
             let (settings, model) = engine_factory.knowledge_model()?;
             let (mut store, scope) = knowledge_requests::open_catalog(&path)?;
             let input = if method == kcoder_app_protocol::knowledge_method::JOB_START {
-                serde_json::from_value::<kcoder_app_protocol::KnowledgeJobStartParams>(params)?
+                rpc_codec::decode::<kcoder_app_protocol::KnowledgeJobStartParams>(params)?
             } else {
-                let request: kcoder_app_protocol::KnowledgeJobParams =
-                    serde_json::from_value(params)?;
+                let request: kcoder_app_protocol::KnowledgeJobParams = rpc_codec::decode(params)?;
                 let job = store.read_job(&scope, &request.library_id, &request.job_id)?;
                 let purpose = store.read(&scope, &request.library_id)?.purpose;
                 if knowledge_worker::is_remote()
@@ -193,6 +745,11 @@ pub(super) async fn dispatch(
                 }
                 store.resume_job(&scope, &request.library_id, &request.job_id)?;
                 let job = store.read_job(&scope, &request.library_id, &request.job_id)?;
+                knowledge_worker_authority::bind_enqueued(
+                    || integrations::core::capture_scope(workspace_engine),
+                    &request.library_id,
+                    &job,
+                )?;
                 return Ok((
                     path,
                     request.library_id,
@@ -211,6 +768,11 @@ pub(super) async fn dispatch(
                 &input.revision_id,
                 &recipe,
                 &input.language,
+            )?;
+            knowledge_worker_authority::bind_enqueued(
+                || integrations::core::capture_scope(workspace_engine),
+                &input.library_id,
+                &job,
             )?;
             Ok((
                 path,
@@ -234,7 +796,7 @@ pub(super) async fn dispatch(
                     return Ok(DispatchControl::Continue);
                 }
                 send(outbound_tx, success_response(id, json!(&job))).await?;
-                state.knowledge_tasks.spawn(async move {
+                state.knowledge_tasks.spawn_shared(async move {
                     let Ok(_slot) = knowledge_job_runner::slots().acquire_owned().await else {
                         return;
                     };
@@ -260,7 +822,7 @@ pub(super) async fn dispatch(
         return Ok(DispatchControl::Continue);
     }
     if knowledge_requests::supports(method) {
-        if state.knowledge_rpc_tasks.len() >= 16 {
+        if state.wiki_rpc_tasks.len() >= 16 {
             send(
                 outbound_tx,
                 error_response(id, -32000, "knowledge service is busy"),
@@ -277,10 +839,11 @@ pub(super) async fn dispatch(
             return Ok(DispatchControl::Continue);
         };
         let method = method.to_owned();
+        let knowledge_cwd = workspace_engine.state.cwd();
         let outbound = outbound_tx.clone();
-        state.knowledge_rpc_tasks.spawn(async move {
+        state.wiki_rpc_tasks.spawn_shared(async move {
             let result = tokio::task::spawn_blocking(move || {
-                knowledge_requests::request(&path, &method, params)
+                knowledge_catalog_dispatch::request_owned(&path, &knowledge_cwd, &method, params)
             })
             .await;
             let response = match result {
@@ -320,25 +883,54 @@ pub(super) async fn dispatch(
                 history_refresh,
                 browsers,
                 plugin_tasks,
+                migration_activity,
                 provider_tasks,
-                !state.knowledge_tasks.is_empty() || !state.knowledge_rpc_tasks.is_empty(),
+                background_tasks_active(state),
+                (
+                    state.mcp_app_tasks.len(),
+                    state
+                        .mcp_app_pending_approvals
+                        .try_lock()
+                        .ok()
+                        .map(|pending| pending.len()),
+                ),
                 indexed_read_tasks,
                 automations,
                 automation_requested,
                 idle_shutdown_requested,
+                !state.client_transport_only && state.native_scope_host.is_none(),
             )
             .await
         }
         method::AGENT_LIST
         | method::AGENT_ARTIFACT_READ
         | method::AGENT_STEER
+        | method::AGENT_CONTINUE
         | method::AGENT_MESSAGE_READ
         | method::AGENT_MESSAGES_LIST
         | method::AGENT_MESSAGES_ARCHIVE => {
-            agent_requests::dispatch(method, id, params, outbound_tx, thread_manager).await
+            agent_requests::dispatch(
+                method,
+                id,
+                params,
+                outbound_tx,
+                thread_manager,
+                state.agent_exact_control_v1,
+                state.agent_exact_continuation_v1,
+            )
+            .await
         }
         method::AGENT_STOP | method::AGENT_LIVE_READ => {
-            agent_requests::dispatch(method, id, params, outbound_tx, thread_manager).await
+            agent_requests::dispatch(
+                method,
+                id,
+                params,
+                outbound_tx,
+                thread_manager,
+                state.agent_exact_control_v1,
+                state.agent_exact_continuation_v1,
+            )
+            .await
         }
         method::COMPUTER_USE_STATUS
         | method::DIAGNOSTICS_STORAGE_READ
@@ -346,6 +938,8 @@ pub(super) async fn dispatch(
         | method::DIAGNOSTICS_STORAGE_CLEAN
         | method::DIAGNOSTICS_DEBUG_LOG_DISABLE
         | method::WORKFLOW_UPDATE
+        | kcoder_app_protocol::WORKFLOW_COLLABORATION_CATALOG
+        | kcoder_app_protocol::WORKFLOW_COLLABORATION_APPLY
         | method::WORKFLOW_VERSIONS
         | method::WORKFLOW_CLONE
         | method::WORKFLOW_EXPORT
@@ -375,6 +969,8 @@ pub(super) async fn dispatch(
         | method::WORKFLOW_RESPOND
         | method::WORKFLOW_UPSERT_NODE
         | method::WORKFLOW_REMOVE_NODE
+        | method::SETTINGS_TOOL_SELECTIONS_READ
+        | method::SETTINGS_TOOL_SELECTIONS_SAVE
         | method::SETTINGS_TOOLS_READ
         | method::SETTINGS_TOOLS_SAVE
         | method::SETTINGS_TURN_FILE_CHANGES_READ
@@ -383,13 +979,16 @@ pub(super) async fn dispatch(
         | method::SETTINGS_TEMPLATES_READ
         | method::SETTINGS_TEMPLATES_SAVE
         | method::SETTINGS_TEMPLATES_DELETE
-        | method::SETTINGS_TEMPLATES_DEFAULT => {
+        | method::SETTINGS_TEMPLATES_DEFAULT
+        | method::SETTINGS_EXECUTION_DEFAULTS_READ
+        | method::SETTINGS_EXECUTION_DEFAULTS_SAVE => {
             settings_requests::dispatch(
                 method,
                 id,
                 params,
                 workspace_engine,
                 engine_factory,
+                thread_manager,
                 outbound_tx,
                 provider_tasks,
                 storage_scans,
@@ -397,6 +996,7 @@ pub(super) async fn dispatch(
             .await
         }
         method::DEVICE_EXECUTE
+        | kcoder_app_protocol::method::THREAD_MODEL_SELECT
         | "runtime.models.list"
         | kcoder_app_protocol::method::PROVIDERS_TEMPLATES
         | "runtime.providers.list"
@@ -477,6 +1077,9 @@ pub(super) async fn dispatch(
         | method::BROWSER_SCREENSHOT
         | method::BROWSER_ACTION
         | method::BROWSER_EVALUATE
+        | kcoder_app_protocol::browser_profiles::BROWSER_PROFILE_HANDOFF
+        | kcoder_app_protocol::browser_profiles::BROWSER_PROFILE_CONTROL_READ
+        | kcoder_app_protocol::browser_profiles::BROWSER_PROFILE_HUMAN_ACTION
         | method::BROWSER_CLOSE => {
             resource_requests::dispatch(
                 method,
@@ -487,6 +1090,10 @@ pub(super) async fn dispatch(
                 next_terminal_id,
                 terminals,
                 browsers,
+                state
+                    .integration_context
+                    .as_mut()
+                    .filter(|_| state.browser_profile_sessions_v1),
             )
             .await
         }
@@ -511,15 +1118,16 @@ pub(super) async fn dispatch(
                 engine_factory,
                 permission_mode,
                 outbound_tx,
-                next_question_id,
-                next_approval_id,
+                next_interaction_id,
                 connection_receipts,
                 thread_manager,
                 server_id,
                 sequence,
                 automations,
                 automation_fire,
+                state,
             )
+            .boxed_local()
             .await
         }
         method::THREAD_LIST
@@ -552,14 +1160,14 @@ pub(super) async fn dispatch(
                 engine_factory,
                 permission_mode,
                 outbound_tx,
-                next_question_id,
-                next_approval_id,
+                next_interaction_id,
                 connection_receipts,
                 thread_manager,
                 server_id,
                 sequence,
                 state,
             )
+            .boxed_local()
             .await
         }
         method::THREAD_COMPACT | method::THREAD_ROLLBACK => {
@@ -576,6 +1184,21 @@ pub(super) async fn dispatch(
                 workspace_engine,
                 outbound_tx,
                 thread_manager,
+                Some(state),
+            )
+            .await
+        }
+        kcoder_app_protocol::METHOD_THREAD_RUNTIME_HANDOFF_READ
+        | kcoder_app_protocol::METHOD_THREAD_RUNTIME_HANDOFF_RELEASE => {
+            thread_runtime_handoff_requests::dispatch(
+                method,
+                id,
+                params,
+                (engine, workspace_engine),
+                outbound_tx,
+                thread_manager,
+                server_id,
+                state,
             )
             .await
         }
@@ -589,10 +1212,11 @@ pub(super) async fn dispatch(
                 method,
                 id,
                 params,
-                engine,
-                workspace_engine,
+                (engine, workspace_engine),
                 outbound_tx,
                 thread_manager,
+                retention_parent,
+                state,
             )
             .await
         }
@@ -605,18 +1229,27 @@ pub(super) async fn dispatch(
                 .await?;
                 return Ok(DispatchControl::Continue);
             }
-            let result = match serde_json::from_value::<kcoder_app_protocol::ComputerUseRevokeParams>(
-                params,
-            ) {
-                Ok(params) => desktop_recovery::revoke(thread_manager, params, server_id).await,
-                Err(error) => Err(error.into()),
-            };
+            let result =
+                match rpc_codec::decode::<kcoder_app_protocol::ComputerUseRevokeParams>(params) {
+                    Ok(params) => desktop_recovery::revoke(thread_manager, params, server_id).await,
+                    Err(error) => Err(error.into()),
+                };
             let response = match result {
                 Ok(result) => success_response(id, result),
                 Err(error) => error_response(id, -32602, &error.to_string()),
             };
             send(outbound_tx, response).await?;
             Ok(DispatchControl::Continue)
+        }
+        method::TURN_STEER => {
+            turn_steer_requests::dispatch(
+                id,
+                params,
+                outbound_tx,
+                thread_manager,
+                next_interaction_id,
+            )
+            .await
         }
         "turn/start" | "turn/shorten_wait" | "turn/interrupt" | method::COMPUTER_USE_RECOVER => {
             turn_requests::dispatch(
@@ -631,7 +1264,9 @@ pub(super) async fn dispatch(
                 sequence,
                 state,
                 attachment_directories,
+                retained_authority,
             )
+            .boxed_local()
             .await
         }
         _ => {
@@ -640,3 +1275,17 @@ pub(super) async fn dispatch(
         }
     }
 }
+
+/// Idle shutdown and resource reports must see every connection-owned task set,
+/// including a bounded continuous-work mutation that is still writing.
+fn background_tasks_active(state: &ConnectionState) -> bool {
+    !state.knowledge_tasks.is_empty()
+        || !state.knowledge_rpc_tasks.is_empty()
+        || !state.continuous_work_read_tasks.is_empty()
+        || !state.continuous_work_mutation_tasks.is_empty()
+        || !state.wiki_rpc_tasks.is_empty()
+}
+
+#[cfg(test)]
+#[path = "rpc_dispatch.test.rs"]
+mod tests;

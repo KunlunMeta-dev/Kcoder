@@ -1,3 +1,5 @@
+import { TaskChannelBindingDialog } from '@/features/connectivity/TaskChannelBindingDialog'
+import { TaskChannelIndicator } from '@/features/connectivity/TaskChannelIndicator'
 import { ActionMenu } from '@/components/common/ActionMenu'
 import { TextInputDialog } from '@/components/common/TextInputDialog'
 import { useExperimentalFeaturesEnabled } from '@/features/experimental-features/useExperimentalFeaturesEnabled'
@@ -7,6 +9,7 @@ import type {
   ArchiveRuntimeTaskResult,
 } from '@/features/workbench/workbenchContextTypes'
 import { useTranslation } from '@/hooks/useTranslation'
+import { sessionHistoryErrorMessage } from '@/kcoder/sessionHistoryError'
 import { isFailedRuntimeDraft } from '@/lib/failed-runtime-draft'
 import { cn } from '@/lib/utils'
 import type {
@@ -16,7 +19,7 @@ import type {
   RuntimeTaskPinRequest,
   RuntimeTaskSummary,
 } from '@/types/api'
-import { Archive, Bell, BellOff, Edit3, GitCompareArrows, Pin, RotateCw, X } from 'lucide-react'
+import { Archive, Bell, BellOff, Edit3, GitCompareArrows, Network, Pin, RotateCw, X } from 'lucide-react'
 import type { MouseEvent as ReactMouseEvent } from 'react'
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
@@ -90,6 +93,8 @@ export function RuntimeTaskRow({
   ) => Promise<void> | void
 }) {
   const { t } = useTranslation('common')
+  const { t: ct } = useTranslation('connectivity')
+  const [channelBindingOpen, setChannelBindingOpen] = useState(false)
   const experimentalFeaturesEnabled = useExperimentalFeaturesEnabled()
   const [optimisticMarked, setOptimisticMarked] = useState<{
     base: boolean
@@ -298,12 +303,6 @@ export function RuntimeTaskRow({
             event.stopPropagation()
             setTaskMenuPosition({ left: event.clientX, top: event.clientY })
           }}
-          onDoubleClick={event => {
-            event.stopPropagation()
-            if (!disabled && onRenameRuntimeTask) {
-              setRenameOpen(true)
-            }
-          }}
           onKeyDown={event => handleSidebarRowKeyDown(event, handleOpen)}
           className={cn(
             'group/task relative flex h-[30px] min-w-0 items-center rounded-[10px] pr-2 text-base leading-5',
@@ -315,7 +314,18 @@ export function RuntimeTaskRow({
             (archivePending || archiving) && 'hidden'
           )}
         >
-          <span className="min-w-0 flex-1 truncate">{task.title}</span>
+          <span className="flex min-w-0 flex-1 items-center truncate">
+            <TaskChannelIndicator
+              address={taskAddress}
+              enabled={workspace.available && task.runtime === 'kcoder' && !failedDraft}
+            />
+            <span className="min-w-0 flex-1 truncate">{task.title}</span>
+          </span>
+          {task.runtimeHandle?.studioWorkMode === 'kworker' && (
+            <span className="ml-1 shrink-0 rounded bg-muted px-1 text-xs text-text-muted">
+              KWorker
+            </span>
+          )}
           <span
             data-testid={`runtime-local-task-trailing-${task.taskId}`}
             className={cn(
@@ -475,7 +485,7 @@ export function RuntimeTaskRow({
           data-testid={`runtime-task-creation-error-${task.taskId}`}
           className={cn('break-words py-1 pr-2 text-sm text-red-500', indentClassName)}
         >
-          {task.error}
+          {sessionHistoryErrorMessage(task.error)}
         </p>
       )}
       {archiveError && (
@@ -494,6 +504,12 @@ export function RuntimeTaskRow({
         onContextMenuClose={() => setTaskMenuPosition(null)}
         triggerClassName="hidden"
         items={[
+          {
+            label: ct('chatTasks.bindTask'), icon: Network,
+            testId: `runtime-local-task-menu-bind-channel-${task.taskId}`,
+            disabled: !workspace.available || !threadId || failedDraft || !taskWorkspacePath,
+            onSelect: () => setChannelBindingOpen(true),
+          },
           {
             label: marked ? t('workbench.unmark_runtime_task') : t('workbench.mark_runtime_task'),
             icon: Pin,
@@ -531,6 +547,7 @@ export function RuntimeTaskRow({
           },
         ]}
       />
+      {channelBindingOpen && <TaskChannelBindingDialog address={taskAddress} onClose={() => setChannelBindingOpen(false)} />}
       <TextInputDialog
         open={renameOpen}
         title={t('workbench.rename_chat', '重命名会话')}

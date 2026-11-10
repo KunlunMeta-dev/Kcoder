@@ -99,25 +99,38 @@ try:
         result = request("tools/call", {"name":name,"arguments":args})
         if result.get("isError"): raise RuntimeError("desktop tool reported failure: " + name)
         return result
-    screenshot = call("Screenshot", {"region":ready["region"],"use_annotation":False})
-    images = [item for item in screenshot.get("content",[]) if item.get("type")=="image"]
-    assert images, "Screenshot returned no image"
-    image = base64.b64decode(images[0]["data"], validate=True)
-    assert 0 < len(image) <= 4 * 1024 * 1024
-    extension = {"image/png":"png","image/jpeg":"jpg","image/webp":"webp"}[images[0]["mimeType"]]
-    (output / ("fixture-screenshot." + extension)).write_bytes(image)
-    report["steps"].append({"name":"cropped_screenshot","passed":True,"bytes":len(image),"mimeType":images[0]["mimeType"]})
     snapshot = call("Snapshot", {"region":ready["region"],"use_vision":False,"use_annotation":False})
     text = "\n".join(item.get("text","") for item in snapshot.get("content",[]))
     assert "KCoderInput" in text or "Verify test input" in text, "fixture controls missing from UIA snapshot"
     report["steps"].append({"name":"fixture_uia","passed":True})
+    screenshot = call("Screenshot", {"region":ready["region"],"use_annotation":False})
+    images = [item for item in screenshot.get("content",[]) if item.get("type")=="image"]
+    assert images, "Screenshot returned no image"
+    image = base64.b64decode(images[0]["data"], validate=True)
+    assert image and len(images[0]["data"]) <= 1024 * 1024
+    extension = {"image/png":"png","image/jpeg":"jpg","image/webp":"webp"}[images[0]["mimeType"]]
+    (output / ("fixture-screenshot." + extension)).write_bytes(image)
+    report["steps"].append({"name":"cropped_screenshot","passed":True,"bytes":len(image),"mimeType":images[0]["mimeType"]})
+    metadata = dict(line.split(": ", 1) for item in screenshot["content"] if item["type"] == "text"
+                    for line in item["text"].splitlines() if line.startswith("Screenshot ") and ": " in line)
+    left, top, right, bottom = ready["region"]
+    assert metadata["Screenshot Desktop Origin"] == str((left, top))
+    assert metadata["Screenshot Desktop Size"] == f"{right-left}x{bottom-top} pixels"
+    image_width, image_height = map(int, metadata["Screenshot Image Size"].split()[0].split("x"))
+    screenshot_id = metadata["Screenshot ID"]
+
+    def image_loc(native):
+        x, y = native
+        assert left <= x < right and top <= y < bottom
+        return [(x-left)*image_width//(right-left), (y-top)*image_height//(bottom-top)]
+
     expected = "KCoder \u4e2d\u6587\u8f93\u5165 123"
-    call("Click", {"loc":ready["inputLoc"]})
+    call("Click", {"loc":image_loc(ready["inputLoc"]), "screenshot_id":screenshot_id})
     call("Type", {"loc":ready["inputLoc"],"text":expected,"clear":True})
-    call("Click", {"loc":ready["buttonLoc"]})
+    call("Click", {"loc":image_loc(ready["buttonLoc"]), "screenshot_id":screenshot_id})
     observed = wait_file(output / "input-result.json", 5)
     assert observed == {"text":expected,"clicked":True}, "fixture did not receive exact test input"
-    report["steps"].append({"name":"click_type_verify","passed":True,"chinese":True})
+    report["steps"].append({"name":"screenshot_coordinate_click_type_verify","passed":True,"chinese":True})
     report["status"] = "passed"
 except Exception as error:
     report["error"] = str(error)[:300] or type(error).__name__

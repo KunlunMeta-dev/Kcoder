@@ -7,6 +7,38 @@ impl QueryEngine {
     /// Agent calls inside the workflow still use the normal engine runner,
     /// permissions, role filtering, cancellation, and artifact paths.
     pub async fn start_workflow(&self, input: serde_json::Value) -> Result<ToolOutput, ToolError> {
+        self.start_workflow_native(input, None, None).await
+    }
+
+    /// Register an exact persisted run with its native owner before dispatch.
+    /// The observer is supplied by the host, never accepted from model or RPC JSON.
+    pub async fn start_workflow_with_native_observer(
+        &self,
+        input: serde_json::Value,
+        observer: Arc<dyn kcoder_tools::workflow::WorkflowNativeLaunchObserver>,
+    ) -> Result<ToolOutput, ToolError> {
+        self.start_workflow_native(input, Some(observer), None)
+            .await
+    }
+
+    /// Consume one host-pinned graph through the original workflow runtime.
+    /// Source authorization and immutable intent preparation remain host-owned.
+    pub async fn start_workflow_with_native_definition(
+        &self,
+        input: serde_json::Value,
+        definition: Arc<kcoder_tools::workflow::WorkflowNativeDefinition>,
+        observer: Arc<dyn kcoder_tools::workflow::WorkflowNativeLaunchObserver>,
+    ) -> Result<ToolOutput, ToolError> {
+        self.start_workflow_native(input, Some(observer), Some(definition))
+            .await
+    }
+
+    async fn start_workflow_native(
+        &self,
+        input: serde_json::Value,
+        observer: Option<Arc<dyn kcoder_tools::workflow::WorkflowNativeLaunchObserver>>,
+        definition: Option<Arc<kcoder_tools::workflow::WorkflowNativeDefinition>>,
+    ) -> Result<ToolOutput, ToolError> {
         if self.state.session_mode() == kcoder_state::SessionMode::WorkflowDraft {
             return Err(ToolError::Execution("Workflow generation sessions cannot execute workflows; start a separate run conversation".into()));
         }
@@ -24,7 +56,13 @@ impl QueryEngine {
             .tools
             .get("Workflow")
             .ok_or_else(|| ToolError::Execution("Workflow tool is not registered".to_string()))?;
-        let context = self.base_tool_context(max_out, head_out, tail_out, max_subagents);
+        let mut context = self.base_tool_context(max_out, head_out, tail_out, max_subagents);
+        if let Some(observer) = observer {
+            context = context.with_workflow_native_launch_observer(observer);
+        }
+        if let Some(definition) = definition {
+            context = context.with_workflow_native_definition(definition);
+        }
         tool.call(input, &context).await
     }
 
@@ -47,6 +85,52 @@ impl QueryEngine {
         message: &str,
         client_message_id: Option<&str>,
     ) -> Result<kcoder_tools::SubagentSteerReceipt, ToolError> {
+        self.steer_subagent_with_run_constraint(agent_id, message, client_message_id, None, false)
+            .await
+    }
+
+    /// An exact live-run command cannot resume or retarget a replacement worker.
+    pub async fn steer_subagent_run_with_client_id(
+        &self,
+        run: &kcoder_types::BackgroundRunKey,
+        message: &str,
+        client_message_id: &str,
+    ) -> Result<kcoder_tools::SubagentSteerReceipt, ToolError> {
+        self.steer_subagent_with_run_constraint(
+            &run.agent_id,
+            message,
+            Some(client_message_id),
+            Some(run),
+            false,
+        )
+        .await
+    }
+
+    /// Explicit continuation retains the original role, transcript, queue and receipt identity.
+    pub async fn continue_subagent_run_with_client_id(
+        &self,
+        run: &kcoder_types::BackgroundRunKey,
+        message: &str,
+        client_message_id: &str,
+    ) -> Result<kcoder_tools::SubagentSteerReceipt, ToolError> {
+        self.steer_subagent_with_run_constraint(
+            &run.agent_id,
+            message,
+            Some(client_message_id),
+            Some(run),
+            true,
+        )
+        .await
+    }
+
+    async fn steer_subagent_with_run_constraint(
+        &self,
+        agent_id: &str,
+        message: &str,
+        client_message_id: Option<&str>,
+        expected_run: Option<&kcoder_types::BackgroundRunKey>,
+        continuation: bool,
+    ) -> Result<kcoder_tools::SubagentSteerReceipt, ToolError> {
         let (max_out, head_out, tail_out, max_subagents) = {
             let settings = recover_read_lock(&self.settings, "settings");
             (
@@ -56,7 +140,7 @@ impl QueryEngine {
                 Some(settings.max_concurrent_subagents),
             )
         };
-        let context = self.base_tool_context(max_out, head_out, tail_out, max_subagents);
+        let mut context = self.base_tool_context(max_out, head_out, tail_out, max_subagents);
         let task = self
             .state
             .task(agent_id)
@@ -65,6 +149,40 @@ impl QueryEngine {
                     && task.parent_session_id.as_deref() == Some(self.session_id().as_str())
             })
             .ok_or_else(|| ToolError::Execution("agent_not_found_or_not_owned".into()))?;
+        if let Some(expected) = expected_run {
+            let replay = if continuation {
+                client_message_id
+                    .map(|id| self.state.subagent_command_receipt(agent_id, id))
+                    .transpose()
+                    .map_err(|error| ToolError::Execution(error.to_string()))?
+                    .flatten()
+                    .is_some_and(|receipt| receipt.background_run.as_ref() == Some(expected))
+            } else {
+                false
+            };
+            if expected.parent_session_id != self.session_id()
+                || (!replay && task.background_run.as_ref() != Some(expected))
+            {
+                return Err(ToolError::Execution("subagent_run_changed".into()));
+            }
+            if !replay
+                && if continuation {
+                    !matches!(task.status, TaskStatus::Completed | TaskStatus::Failed)
+                } else {
+                    !matches!(
+                        task.status,
+                        TaskStatus::Pending | TaskStatus::Running | TaskStatus::Paused
+                    )
+                }
+            {
+                return Err(ToolError::Execution("subagent_run_not_active".into()));
+            }
+            context = if continuation {
+                context.with_subagent_continuation(expected.clone())
+            } else {
+                context.with_subagent_run_constraint(expected.clone())
+            };
+        }
         let message = message.trim();
         if message.is_empty() {
             return Err(ToolError::InvalidInput("message must not be empty".into()));
@@ -157,11 +275,13 @@ impl QueryEngine {
         let (fork_context_messages, _) = message_repair::prepare_shared_request_messages(
             self.state.shared_messages_with_revision().0,
         );
+        let context_history_anchor = self.state.context_history_anchor(&fork_context_messages);
         let params = crate::agent::CacheSafeParams {
             fork_context_messages,
-            active_skills: recover_read_lock(&self.active_skills, "active_skills").clone(),
+            active_skills: self.effective_active_skill_names(),
             snapshot_provider: self.provider_name(),
             snapshot_model: self.model_name(),
+            context_history_anchor,
             full_context_compatible: true,
         };
         let mut slot = recover_write_lock(&self.last_cache_safe_params, "last_cache_safe_params");

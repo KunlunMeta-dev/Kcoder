@@ -1,8 +1,26 @@
 //! Device requests: extracted from the app-server connection boundary.
 
-use super::*;
+use crate::git::{
+    git_branch_diff, git_branch_diff_shortstat, git_last_commit_diff, git_working_diff,
+    run_git_command, run_git_command_with_auth, run_git_command_with_stdin,
+};
+use crate::workspace_fs::{
+    MAX_WORKSPACE_TEXT_BYTES, create_directory as workspace_create_directory,
+    create_text_file as workspace_create_text_file,
+    create_workspace_directory as workspace_create_workspace_directory,
+    delete_entry as workspace_delete_entry, list_directories as workspace_list_directories,
+    path as workspace_path, read_file_chunk as workspace_read_file_chunk,
+    read_text_file as workspace_read_text_file, rename_entry as workspace_rename_entry,
+    tree as workspace_tree, write_text_file as workspace_write_text_file,
+};
+use anyhow::{Context, Result};
+use kcoder_app_protocol::{DeviceExecuteParams, DeviceExecuteResult};
+use serde_json::{Value, json};
+use std::{path::Path, time::Duration};
 
-pub(super) async fn device_execute(
+const MAX_GIT_OUTPUT_BYTES: usize = 5 * 1024 * 1024;
+
+pub async fn device_execute(
     workspace_root: &Path,
     params: &DeviceExecuteParams,
 ) -> Result<DeviceExecuteResult> {
@@ -200,7 +218,7 @@ pub(super) async fn device_execute(
     })
 }
 
-pub(super) async fn git_device_execute(
+pub async fn git_device_execute(
     workspace_root: &Path,
     params: &DeviceExecuteParams,
 ) -> Result<DeviceExecuteResult> {
@@ -531,3 +549,7 @@ pub(super) async fn git_device_execute(
         command => anyhow::bail!("unsupported git command: {command}"),
     }
 }
+
+#[cfg(test)]
+#[path = "../internal/workspace_resources/device_requests_tests.rs"]
+mod tests;

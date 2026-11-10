@@ -4,15 +4,21 @@ import { startPackagedDesktop } from '../../harness/packaged-desktop.mjs';
 import { runE2E, requireExecutable, waitFor } from '../../harness/run-context.mjs';
 import { materializeWorkspace } from '../../harness/workspace-fixture.mjs';
 import { startApprovalModelFixture } from '../../harness/approval-model.mjs';
+import { verifyPackagedWidgetLifecycle } from '../../harness/packaged-widget-lifecycle.mjs';
 
 // Uses the actual packaged Electron, Gateway, renderer and CLI. The fixture only
 // removes model-quality variance from configuration, focus and restart assertions.
-await runE2E(import.meta.url, { testId: 'packaged-desktop-model-save-focus-and-restart', tier: 'manual-live',
+const nativeLifecycle = process.env.KCODER_E2E_PACKAGED_WIDGET_LIFECYCLE === '1';
+await runE2E(import.meta.url, { testId: nativeLifecycle ? 'packaged-native-widget-lifecycle' : 'packaged-desktop-model-save-focus-and-restart', tier: 'manual-live',
   modelPolicy: 'model-independent packaged transport and lifecycle; owned HTTP fixture' }, async context => {
   if (!process.env.KCODER_E2E_PACKAGED_DIR) throw new Error('UNMET_PREREQUISITE: KCODER_E2E_PACKAGED_DIR is required');
   const root = resolve(process.env.KCODER_E2E_PACKAGED_DIR);
+  if (nativeLifecycle) return verifyPackagedWidgetLifecycle(context, root);
   const windows = process.platform === 'win32';
-  const cli = await requireExecutable(join(root, 'resources/bin', windows ? 'kcoder.exe' : 'kcoder'), 'packaged CLI');
+  const mac = process.platform === 'darwin';
+  const executableRoot = mac ? join(root, 'Contents/MacOS') : root;
+  const resources = join(root, mac ? 'Contents/Resources' : 'resources');
+  const cli = await requireExecutable(join(resources, 'bin', windows ? 'kcoder.exe' : 'kcoder'), 'packaged CLI');
   const workspace = await materializeWorkspace(context, 'minimal', { instanceId: 'packaged-model' });
   const fixture = await startApprovalModelFixture(context, { textOnly: true, textOnlyResponse: ({ userText }) => {
     const round = /packaged-round-(\d+)/.exec(userText)?.[1];
@@ -21,25 +27,34 @@ await runE2E(import.meta.url, { testId: 'packaged-desktop-model-save-focus-and-r
   const servers = await context.writeStateJson('servers.json', [{ id: 'local', label: 'Package fixture', transport: 'local', command: cli, workspace: workspace.path }]);
   await context.writeStateJson('home/settings.json', { providers: {} });
   await context.writeStateJson('home/credentials.json', {});
+  context.registerSecret('synthetic-package-key');
   for (let round = 0; round < 2; round++) {
     const label = `packaged-desktop-${round}`;
     const { page, stop } = await startPackagedDesktop(context, {
-      root, label, servers, workspace: workspace.path,
+      root: executableRoot, label, servers, workspace: workspace.path,
     });
     const origin = new URL(page.url()).origin;
     await page.goto(origin + '/settings/personal/models', { waitUntil: 'domcontentloaded' });
     await page.getByTestId('provider-new').waitFor();
     if (round === 0) {
       await page.getByTestId('provider-new').click();
-      for (const [field, value] of Object.entries({ id: 'packaged-fixture', endpoint: fixture.baseUrl, model: 'packaged-model', apiKey: 'synthetic-package-key', 'extra-body': '{"temperature":0.2}' })) {
+      for (const [field, value] of Object.entries({ id: 'packaged-fixture', endpoint: fixture.baseUrl, model: 'packaged-model', apiKey: 'synthetic-package-key' })) {
         await page.getByTestId(`provider-${field}`).fill(value);
       }
+      await page.getByTestId('provider-default').check();
+      await page.getByTestId('provider-advanced-settings').locator('summary').click();
+      await page.getByTestId('provider-contextWindowTokens').fill('128000');
+      await page.getByTestId('provider-maxOutputTokens').fill('8192');
+      await page.getByTestId('provider-extra-body').fill('{"temperature":0.2}');
       await page.getByTestId('provider-save').click();
     }
     await page.locator('[data-testid^="provider-edit-packaged-fixture"]').waitFor({ timeout: 45000 });
     await page.locator('[data-testid^="provider-edit-packaged-fixture"]').click();
     assert.deepEqual(JSON.parse(await page.getByTestId('provider-extra-body').inputValue()), { temperature: 0.2 });
-    await page.getByTestId('settings-back-button').click();
+    for (const path of ['/settings/personal', '/settings', '/']) {
+      await page.getByTestId('settings-back-button').click();
+      await page.waitForURL(origin + path);
+    }
     const editor = page.getByTestId('chat-message-input');
     const marker = `packaged-round-${round}`;
     await editor.click(); await page.keyboard.insertText(`Reply briefly: ${marker}`);

@@ -23,7 +23,6 @@ export function createSettingsDeviceApi(connection: CloudSettingsConnection) {
     createHttpClient({
       baseUrl: connection.apiBaseUrl,
       getToken: () => connection.token,
-      redirectOnUnauthorized: false,
     })
   )
 }
@@ -45,7 +44,6 @@ export function createSettingsModelApi(connection: CloudSettingsConnection) {
     createHttpClient({
       baseUrl: connection.apiBaseUrl,
       getToken: () => connection.token,
-      redirectOnUnauthorized: false,
     })
   )
 }

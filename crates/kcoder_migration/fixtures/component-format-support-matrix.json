@@ -1,0 +1,738 @@
+{
+  "schemaVersion": 1,
+  "reviewedOn": "2026-10-18",
+  "scope": "Component signature/fixture/source-witness roster, not full vendor-version or native-platform certification",
+  "nativeVendorAcceptance": false,
+  "historyMatrix": "fixtures/versioned-history-support-matrix.json",
+  "versionPolicy": "Current means the fixed reviewed source/document snapshot. Null productVersion is explicit unknown. Lower schema numbers, package semver, SQL migration identifiers and KCoder parser revisions are not vendor releases. Original two-vendor current/verified-old/unknown minimum is carried by the separate history matrix.",
+  "witnesses": [
+    {
+      "id": "codex-advanced",
+      "url": "https://learn.chatgpt.com/docs/config-file/config-advanced",
+      "finalUrl": "https://learn.chatgpt.com/docs/config-file/config-advanced",
+      "capturedAtUtc": "2026-10-18T14:00:27.699560+00:00",
+      "bytes": 549201,
+      "sha256": "c757509255ae0a5a84c7c4e3ab5df73c13e7d6771e04cfdc886bc36cafd83c67",
+      "kind": "reviewed-primary-document-snapshot-not-vendor-release-certification"
+    },
+    {
+      "id": "codex-skills",
+      "url": "https://learn.chatgpt.com/docs/build-skills",
+      "finalUrl": "https://learn.chatgpt.com/docs/build-skills",
+      "capturedAtUtc": "2026-10-18T14:00:27.447273+00:00",
+      "bytes": 413226,
+      "sha256": "9b91a29285a00bdd81b9abb1f5a1415f42024fa0d5e7cd74b36fff36909b22db",
+      "kind": "reviewed-primary-document-snapshot-not-vendor-release-certification"
+    },
+    {
+      "id": "codex-agents",
+      "url": "https://learn.chatgpt.com/docs/agent-configuration/agents-md",
+      "finalUrl": "https://learn.chatgpt.com/docs/agent-configuration/agents-md",
+      "capturedAtUtc": "2026-10-18T14:00:27.625808+00:00",
+      "bytes": 404658,
+      "sha256": "d139bb6906ddf2ac5b2b2429ae010c8bc04bae13e17d620866d6385cba7b5621",
+      "kind": "reviewed-primary-document-snapshot-not-vendor-release-certification"
+    },
+    {
+      "id": "codex-mcp",
+      "url": "https://learn.chatgpt.com/docs/extend/mcp?surface=cli",
+      "finalUrl": "https://learn.chatgpt.com/docs/extend/mcp?surface=cli",
+      "capturedAtUtc": "2026-10-18T14:00:27.454272+00:00",
+      "bytes": 548903,
+      "sha256": "817ef4c56fc4efbe1b0d57873f4ff9335c8e89f63f005908ecb86b772cee0e5b",
+      "kind": "reviewed-primary-document-snapshot-not-vendor-release-certification"
+    },
+    {
+      "id": "claude-settings",
+      "url": "https://code.claude.com/docs/en/settings",
+      "finalUrl": "https://code.claude.com/docs/en/settings",
+      "capturedAtUtc": "2026-10-18T14:00:29.248417+00:00",
+      "bytes": 702244,
+      "sha256": "5a12d3910abc750b74861cb455e8a167aef7baf660a423f9dc14192553e0a034",
+      "kind": "reviewed-primary-document-snapshot-not-vendor-release-certification"
+    },
+    {
+      "id": "claude-skills",
+      "url": "https://code.claude.com/docs/en/skills",
+      "finalUrl": "https://code.claude.com/docs/en/skills",
+      "capturedAtUtc": "2026-10-18T14:00:29.510214+00:00",
+      "bytes": 1217933,
+      "sha256": "5451c7e2cc4c800470f2229dc78f12fdab07e07a833d1e4439fee813c8792e10",
+      "kind": "reviewed-primary-document-snapshot-not-vendor-release-certification"
+    },
+    {
+      "id": "claude-memory",
+      "url": "https://code.claude.com/docs/en/memory",
+      "finalUrl": "https://code.claude.com/docs/en/memory",
+      "capturedAtUtc": "2026-10-18T14:00:29.177459+00:00",
+      "bytes": 801645,
+      "sha256": "6e4a52e54fa65b9d3fa0527accab059f41224b432d7e2f73ca815a6ef46a7558",
+      "kind": "reviewed-primary-document-snapshot-not-vendor-release-certification"
+    },
+    {
+      "id": "claude-mcp",
+      "url": "https://code.claude.com/docs/en/mcp",
+      "finalUrl": "https://code.claude.com/docs/en/mcp",
+      "capturedAtUtc": "2026-10-18T14:00:30.039343+00:00",
+      "bytes": 1548921,
+      "sha256": "a33f779c1af02f8d295a30c163d96d06e6e624dd44d724b52e34b49ec4141779",
+      "kind": "reviewed-primary-document-snapshot-not-vendor-release-certification"
+    },
+    {
+      "id": "claude-plugins",
+      "url": "https://code.claude.com/docs/en/plugins-reference",
+      "finalUrl": "https://code.claude.com/docs/en/plugins-reference",
+      "capturedAtUtc": "2026-10-18T14:00:30.761569+00:00",
+      "bytes": 826181,
+      "sha256": "8c06f6204981e901becb17f9745522635e8e4f0f3a618ac8a41706b6d4c12e50",
+      "kind": "reviewed-primary-document-snapshot-not-vendor-release-certification"
+    },
+    {
+      "id": "codex-old-config",
+      "url": "https://raw.githubusercontent.com/openai/codex/74d1f7b2b3af383bd3605344f3c842b194fd1d70/codex-rs/core/src/config/mod.rs",
+      "finalUrl": "https://raw.githubusercontent.com/openai/codex/74d1f7b2b3af383bd3605344f3c842b194fd1d70/codex-rs/core/src/config/mod.rs",
+      "capturedAtUtc": "2026-10-18T14:00:30.242494+00:00",
+      "bytes": 194362,
+      "sha256": "975e3775d0d26ea412ec4e8f9bf7b93ca8b1498ef9b6d557b3017559b5c0d54e",
+      "kind": "immutable-primary-source",
+      "commit": "74d1f7b2b3af383bd3605344f3c842b194fd1d70"
+    },
+    {
+      "id": "codex-projects-0049",
+      "url": "https://raw.githubusercontent.com/openai/codex/8c076942cb70fba8e5c4732c23f1faabc4aed484/codex-rs/state/migrations/0049_projects.sql",
+      "finalUrl": "https://raw.githubusercontent.com/openai/codex/8c076942cb70fba8e5c4732c23f1faabc4aed484/codex-rs/state/migrations/0049_projects.sql",
+      "capturedAtUtc": "2026-10-18T14:00:30.387707+00:00",
+      "bytes": 860,
+      "sha256": "f07d68d3feeefd599c80ee2f1206a69a34ce882777de5f82a03c6ac997c1dcad",
+      "kind": "immutable-primary-source",
+      "commit": "8c076942cb70fba8e5c4732c23f1faabc4aed484"
+    },
+    {
+      "id": "codex-projects-0052",
+      "url": "https://raw.githubusercontent.com/openai/codex/8c076942cb70fba8e5c4732c23f1faabc4aed484/codex-rs/state/migrations/0052_projects_recency.sql",
+      "finalUrl": "https://raw.githubusercontent.com/openai/codex/8c076942cb70fba8e5c4732c23f1faabc4aed484/codex-rs/state/migrations/0052_projects_recency.sql",
+      "capturedAtUtc": "2026-10-18T14:00:30.922800+00:00",
+      "bytes": 139,
+      "sha256": "f0355ab2e1ee4eef8ebd521f252bb0755339bf45c47aae2fd692f763d94cf6da",
+      "kind": "immutable-primary-source",
+      "commit": "8c076942cb70fba8e5c4732c23f1faabc4aed484"
+    },
+    {
+      "id": "codex-old-skills",
+      "url": "https://raw.githubusercontent.com/openai/codex/74d1f7b2b3af383bd3605344f3c842b194fd1d70/codex-rs/core/src/skills/loader.rs",
+      "capturedAtUtc": "2026-10-18T14:03:29.637041+00:00",
+      "bytes": 85412,
+      "sha256": "7e1c1bc293a3ad4f9835a3ae73579174865c5d11fb543f1b9b504ce972e83689",
+      "kind": "immutable-primary-source",
+      "commit": "74d1f7b2b3af383bd3605344f3c842b194fd1d70",
+      "releaseTag": "rust-v0.104.0"
+    },
+    {
+      "id": "codex-old-instructions",
+      "url": "https://raw.githubusercontent.com/openai/codex/74d1f7b2b3af383bd3605344f3c842b194fd1d70/codex-rs/core/src/project_doc.rs",
+      "capturedAtUtc": "2026-10-18T14:03:30.927605+00:00",
+      "bytes": 31716,
+      "sha256": "881253b706a787df34549f65c7d4ec3b9a8b3b2449d7e7a3f8259245ad3275e0",
+      "kind": "immutable-primary-source",
+      "commit": "74d1f7b2b3af383bd3605344f3c842b194fd1d70",
+      "releaseTag": "rust-v0.104.0"
+    },
+    {
+      "id": "codex-plugin-0",
+      "url": "https://raw.githubusercontent.com/openai/codex/ce0323f2f2d3b25e82806cd555237da3db4e1897/codex-rs/core-plugin-common/src/installed.rs",
+      "sha256": "c82fba4fe5d96d4f54b7e9b068f410559d8b8478421dfe3c33cf76278f6991c0",
+      "bytes": 3223,
+      "capturedAtUtc": "2026-10-17T04:16:23.551640+00:00",
+      "kind": "existing-immutable-primary-source",
+      "commit": "ce0323f2f2d3b25e82806cd555237da3db4e1897"
+    },
+    {
+      "id": "codex-plugin-1",
+      "url": "https://raw.githubusercontent.com/openai/codex/ce0323f2f2d3b25e82806cd555237da3db4e1897/codex-rs/core-plugins/src/store.rs",
+      "sha256": "ee77430b5dfcf3aa4dea129c423e29a5685b975cad8eea6f54abcddd5ef4e609",
+      "bytes": 27942,
+      "capturedAtUtc": "2026-10-17T04:16:23.551640+00:00",
+      "kind": "existing-immutable-primary-source",
+      "commit": "ce0323f2f2d3b25e82806cd555237da3db4e1897"
+    },
+    {
+      "id": "codex-plugin-2",
+      "url": "https://raw.githubusercontent.com/openai/codex/ce0323f2f2d3b25e82806cd555237da3db4e1897/codex-rs/config/src/types.rs",
+      "sha256": "fa4079d7d864ad987b734843fa10b05825587bf61c38d9a5e304dc8c2edb4637",
+      "bytes": 48131,
+      "capturedAtUtc": "2026-10-17T04:16:23.551640+00:00",
+      "kind": "existing-immutable-primary-source",
+      "commit": "ce0323f2f2d3b25e82806cd555237da3db4e1897"
+    }
+  ],
+  "entries": [
+    {
+      "id": "claude-settings-object",
+      "component": "configuration",
+      "vendor": "claude-code",
+      "shape": "reviewed-current",
+      "productVersion": null,
+      "fixture": "tests/fixtures/claude-settings.json",
+      "sha256": "00facfa4e66d0c9033e0b92d6f8f4d640e196f0f352405ebe85d3696c9ea782c",
+      "fixtureKind": "synthetic-file",
+      "consumerSource": "src/adapters.rs",
+      "consumer": "claude_candidates_never_serialize_embedded_credentials_or_guess_model_limits",
+      "references": [
+        "claude-settings"
+      ],
+      "expected": "known fields; secrets redacted; unsupported semantics pending",
+      "boundary": "Recognized JSON/JSONC structure; no installed vendor version probe or runtime managed/env precedence claim.",
+      "adapterRevisions": [
+        "claude-settings/v1"
+      ]
+    },
+    {
+      "id": "codex-config-known",
+      "component": "configuration",
+      "vendor": "codex",
+      "shape": "current-and-pinned-older-component",
+      "productVersion": null,
+      "fixture": "tests/fixtures/codex-config.toml",
+      "sha256": "29f0eee877a4b6171b5fcdcc45f5400b40dbac10e156619fcfcf189328a1fb46",
+      "fixtureKind": "synthetic-file",
+      "consumerSource": "src/adapters.rs",
+      "consumer": "codex_preserves_case_and_protocol_but_not_compression_as_output_budget",
+      "references": [
+        "codex-advanced",
+        "codex-old-config"
+      ],
+      "expected": "case-preserving providers, explicit Responses, known MCP restrictions",
+      "boundary": "The 0.104 source confirms the selected field shapes, not full configuration equivalence or current approval authority.",
+      "adapterRevisions": [
+        "codex-config/v1"
+      ]
+    },
+    {
+      "id": "configuration-unknown-fields",
+      "component": "configuration",
+      "vendor": "both",
+      "shape": "unknown-semantics",
+      "productVersion": null,
+      "fixture": "src/adapters.rs",
+      "sha256": "3820eaea3982432fa6ed09783e5d43954328c3b479621ea19b265c575a87067d",
+      "fixtureKind": "versioned-owned-fixture-construction-in-test-source",
+      "consumerSource": "src/adapters.rs",
+      "consumer": "unsupported_protocol_and_conflicting_model_sources_stay_blocked",
+      "references": [
+        "codex-advanced",
+        "claude-settings"
+      ],
+      "expected": "unsupported protocol/conflicting model fields remain blocked",
+      "boundary": "No invented future product release; this row binds the actual inline negative fixture.",
+      "adapterRevisions": [
+        "claude-settings/v1",
+        "codex-config/v1"
+      ]
+    },
+    {
+      "id": "claude-layers-user",
+      "component": "configuration-layers",
+      "vendor": "claude-code",
+      "shape": "reviewed-current",
+      "productVersion": "2.1.301",
+      "fixture": "tests/fixtures/configuration-layers/user/settings.json",
+      "sha256": "6443fb3b81d03be9817391e4578fcb705695efdecbe987252674ee7aa81d6f46",
+      "fixtureKind": "synthetic-file",
+      "consumerSource": "tests/configuration_layers.rs",
+      "consumer": "effective_provider_and_original_winning_api_key_publish_reopen_reconcile_and_undo",
+      "references": [
+        "claude-settings"
+      ],
+      "expected": "selected files merge with field provenance and original private winner",
+      "boundary": "Only selected static files; managed, environment, CLI and separate MCP namespaces unobserved. Existing declared comparison baseline2.1.301 is structural only.",
+      "adapterRevisions": [
+        "claude-settings-layers/v1"
+      ]
+    },
+    {
+      "id": "claude-layers-project",
+      "component": "configuration-layers",
+      "vendor": "claude-code",
+      "shape": "reviewed-current",
+      "productVersion": "2.1.301",
+      "fixture": "tests/fixtures/configuration-layers/project/settings.json",
+      "sha256": "b96aed415685779a2e2f3e739414c1fcf9e5d6caacbc3c9ea938745ccb741be7",
+      "fixtureKind": "synthetic-file",
+      "consumerSource": "tests/configuration_layers.rs",
+      "consumer": "effective_provider_and_original_winning_api_key_publish_reopen_reconcile_and_undo",
+      "references": [
+        "claude-settings"
+      ],
+      "expected": "selected files merge with field provenance and original private winner",
+      "boundary": "Only selected static files; managed, environment, CLI and separate MCP namespaces unobserved. Existing declared comparison baseline2.1.301 is structural only.",
+      "adapterRevisions": [
+        "claude-settings-layers/v1"
+      ]
+    },
+    {
+      "id": "claude-layers-local",
+      "component": "configuration-layers",
+      "vendor": "claude-code",
+      "shape": "reviewed-current",
+      "productVersion": "2.1.301",
+      "fixture": "tests/fixtures/configuration-layers/local/settings.local.json",
+      "sha256": "dcb0cb27937045b8f32863ca374d02801dc87f8a2667a047f934101fef45053a",
+      "fixtureKind": "synthetic-file",
+      "consumerSource": "tests/configuration_layers.rs",
+      "consumer": "effective_provider_and_original_winning_api_key_publish_reopen_reconcile_and_undo",
+      "references": [
+        "claude-settings"
+      ],
+      "expected": "selected files merge with field provenance and original private winner",
+      "boundary": "Only selected static files; managed, environment, CLI and separate MCP namespaces unobserved. Existing declared comparison baseline2.1.301 is structural only.",
+      "adapterRevisions": [
+        "claude-settings-layers/v1"
+      ]
+    },
+    {
+      "id": "profile-base",
+      "component": "profiles",
+      "vendor": "codex",
+      "shape": "base",
+      "productVersion": null,
+      "fixture": "tests/fixtures/component-formats/codex-profile-base.toml",
+      "sha256": "e548e33213c37fd4ac126ba84b2d2bbf0d9c728f54435557fe85aec31a5ba06a",
+      "fixtureKind": "synthetic-file",
+      "consumerSource": "tests/component_format_support.rs",
+      "consumer": "fixed_current_and_legacy_profile_shapes_remain_distinct_and_unknown_table_is_not_a_profile",
+      "references": [
+        "codex-advanced",
+        "codex-old-config"
+      ],
+      "expected": "distinct file/table identities; malformed legacy table is not a selected profile",
+      "boundary": "Official reviewed docs identify the0.134 transition; old source is pinned0.104. No inferred installed release, no automatic legacy selector.",
+      "adapterRevisions": [
+        "codex-profile-file/v1",
+        "codex-profile-table/v1"
+      ]
+    },
+    {
+      "id": "profile-current-file",
+      "component": "profiles",
+      "vendor": "codex",
+      "shape": "current-file",
+      "productVersion": null,
+      "fixture": "tests/fixtures/component-formats/review.config.toml",
+      "sha256": "49fb6c26aa4894c311f05a3bd981d1c4666878b0f75f620234cee271beffcf0b",
+      "fixtureKind": "synthetic-file",
+      "consumerSource": "tests/component_format_support.rs",
+      "consumer": "fixed_current_and_legacy_profile_shapes_remain_distinct_and_unknown_table_is_not_a_profile",
+      "references": [
+        "codex-advanced",
+        "codex-old-config"
+      ],
+      "expected": "distinct file/table identities; malformed legacy table is not a selected profile",
+      "boundary": "Official reviewed docs identify the0.134 transition; old source is pinned0.104. No inferred installed release, no automatic legacy selector.",
+      "adapterRevisions": [
+        "codex-profile-file/v1",
+        "codex-profile-table/v1"
+      ]
+    },
+    {
+      "id": "profile-legacy-table",
+      "component": "profiles",
+      "vendor": "codex",
+      "shape": "legacy-table",
+      "productVersion": null,
+      "fixture": "tests/fixtures/component-formats/codex-profile-legacy.toml",
+      "sha256": "186b0b948d1f528c4330bd4231a26e2b34157f74624a1ea50fdf2699c74a6506",
+      "fixtureKind": "synthetic-file",
+      "consumerSource": "tests/component_format_support.rs",
+      "consumer": "fixed_current_and_legacy_profile_shapes_remain_distinct_and_unknown_table_is_not_a_profile",
+      "references": [
+        "codex-advanced",
+        "codex-old-config"
+      ],
+      "expected": "distinct file/table identities; malformed legacy table is not a selected profile",
+      "boundary": "Official reviewed docs identify the0.134 transition; old source is pinned0.104. No inferred installed release, no automatic legacy selector.",
+      "adapterRevisions": [
+        "codex-profile-file/v1",
+        "codex-profile-table/v1"
+      ]
+    },
+    {
+      "id": "profile-unknown-table",
+      "component": "profiles",
+      "vendor": "codex",
+      "shape": "unknown-table",
+      "productVersion": null,
+      "fixture": "tests/fixtures/component-formats/codex-profile-unknown.toml",
+      "sha256": "7534f9d788fbf81643708f4d925059793fb57d4c615ca9fd84fd143350cd3947",
+      "fixtureKind": "synthetic-file",
+      "consumerSource": "tests/component_format_support.rs",
+      "consumer": "fixed_current_and_legacy_profile_shapes_remain_distinct_and_unknown_table_is_not_a_profile",
+      "references": [
+        "codex-advanced",
+        "codex-old-config"
+      ],
+      "expected": "distinct file/table identities; malformed legacy table is not a selected profile",
+      "boundary": "Official reviewed docs identify the0.134 transition; old source is pinned0.104. No inferred installed release, no automatic legacy selector.",
+      "adapterRevisions": [
+        "codex-profile-file/v1",
+        "codex-profile-table/v1"
+      ]
+    },
+    {
+      "id": "mcp-known-and-unsupported",
+      "component": "mcp",
+      "vendor": "both",
+      "shape": "reviewed-component-subset",
+      "productVersion": null,
+      "fixture": "tests/mcp.rs",
+      "sha256": "1c90173af5240bc5bb7d603cd3a4c0bc35da9e6578b46aa7625822a528f2f94f",
+      "fixtureKind": "versioned-owned-fixture-construction-in-test-source",
+      "consumerSource": "tests/mcp.rs",
+      "consumer": "permissions_and_authentication_helpers_cannot_be_silently_dropped",
+      "references": [
+        "claude-mcp",
+        "codex-mcp",
+        "codex-old-config"
+      ],
+      "expected": "stdio/HTTP fields bounded; unknown helper/restrictions never dropped",
+      "boundary": "Transport names are not vendor releases; source commands, auth helpers and MCP are never executed.",
+      "adapterRevisions": [
+        "claude-settings/v1",
+        "codex-config/v1"
+      ]
+    },
+    {
+      "id": "skills-modern-legacy-layouts",
+      "component": "skills",
+      "vendor": "both",
+      "shape": "current-and-legacy-layouts",
+      "productVersion": "0.104.0",
+      "fixture": "tests/assets.rs",
+      "sha256": "509ac2dddedd0020744bf7a3113597126c3af74887161415425a49ea7e5150f7",
+      "fixtureKind": "versioned-owned-fixture-construction-in-test-source",
+      "consumerSource": "tests/assets.rs",
+      "consumer": "discovery_covers_modern_legacy_skills_and_scoped_instructions_without_auth_reads",
+      "references": [
+        "claude-skills",
+        "codex-skills",
+        "codex-old-skills"
+      ],
+      "expected": "modern .agents and deprecated CODEX_HOME skills discovered independently",
+      "boundary": "Pinned0.104 loader explicitly contains both layouts. Native permission/link rules remain KCoder rules, not imported vendor authority.",
+      "adapterRevisions": [
+        "asset-bundle/v1"
+      ]
+    },
+    {
+      "id": "commands-conservative",
+      "component": "commands",
+      "vendor": "claude-code",
+      "shape": "reviewed-static-subset",
+      "productVersion": null,
+      "fixture": "tests/assets.rs",
+      "sha256": "509ac2dddedd0020744bf7a3113597126c3af74887161415425a49ea7e5150f7",
+      "fixtureKind": "versioned-owned-fixture-construction-in-test-source",
+      "consumerSource": "tests/assets.rs",
+      "consumer": "recursive_commands_preserve_arguments_without_executing_dynamic_templates",
+      "references": [
+        "claude-skills"
+      ],
+      "expected": "static parameter substitution; dynamic templates remain inert/pending",
+      "boundary": "Reviewed current documentation, product version unknown; no vendor shell substitution execution.",
+      "adapterRevisions": [
+        "asset-bundle/v1"
+      ]
+    },
+    {
+      "id": "claude-instruction-static-v2",
+      "component": "instructions",
+      "vendor": "claude-code",
+      "shape": "reviewed-static-subset",
+      "productVersion": null,
+      "fixture": "tests/instruction_format_v2.rs",
+      "sha256": "31ae2ff978b85f512da900b4c5482b7fb10e8e4381d8c716af33172d7d15a4d0",
+      "fixtureKind": "versioned-owned-fixture-construction-in-test-source",
+      "consumerSource": "tests/instruction_format_v2.rs",
+      "consumer": "claude_actual_dependencies_and_comments_flow_through_normal_batch_preview_publish_and_owned_undo",
+      "references": [
+        "claude-memory"
+      ],
+      "expected": "explicit static imports/comments compile with normal batch/Undo",
+      "boundary": "Only authorized bounded static interpretation. Dynamic/outside/conditional inputs do not gain access.",
+      "adapterRevisions": [
+        "asset-bundle/v1",
+        "scoped-instructions/v1",
+        "scoped-instructions/v2"
+      ]
+    },
+    {
+      "id": "codex-instruction-markdown",
+      "component": "instructions",
+      "vendor": "codex",
+      "shape": "current-and-older-documented-component",
+      "productVersion": null,
+      "fixture": "tests/instruction_format_v2.rs",
+      "sha256": "31ae2ff978b85f512da900b4c5482b7fb10e8e4381d8c716af33172d7d15a4d0",
+      "fixtureKind": "versioned-owned-fixture-construction-in-test-source",
+      "consumerSource": "tests/instruction_format_v2.rs",
+      "consumer": "codex_plain_markdown_has_no_skill_metadata_or_import_dsl_and_old_v1_stays_unchanged",
+      "references": [
+        "codex-agents",
+        "codex-old-instructions"
+      ],
+      "expected": "AGENTS remains ordinary Markdown; sealed old recipe unchanged",
+      "boundary": "KCoder parser v1/v2 are not vendor release numbers. Pinned0.104 project-doc source is an older component witness, not full CLI certification.",
+      "adapterRevisions": [
+        "asset-bundle/v1",
+        "scoped-instructions/v1",
+        "scoped-instructions/v2"
+      ]
+    },
+    {
+      "id": "instruction-unsupported",
+      "component": "instructions",
+      "vendor": "both",
+      "shape": "unknown-semantics",
+      "productVersion": null,
+      "fixture": "tests/instruction_format_v2.rs",
+      "sha256": "31ae2ff978b85f512da900b4c5482b7fb10e8e4381d8c716af33172d7d15a4d0",
+      "fixtureKind": "versioned-owned-fixture-construction-in-test-source",
+      "consumerSource": "tests/instruction_format_v2.rs",
+      "consumer": "missing_external_private_and_recursive_imports_remain_pending_without_reading_unauthorized_paths",
+      "references": [
+        "codex-agents",
+        "claude-memory"
+      ],
+      "expected": "unreadable/unauthorized dependencies remain pending without implicit reads",
+      "boundary": "Unknown shapes remain data; archive permission never grants target or source filesystem authority.",
+      "adapterRevisions": [
+        "asset-bundle/v1",
+        "scoped-instructions/v1",
+        "scoped-instructions/v2"
+      ]
+    },
+    {
+      "id": "plugin-observed-current",
+      "component": "plugins",
+      "vendor": "both",
+      "shape": "reviewed-index2-and-cache-shape",
+      "productVersion": null,
+      "fixture": "tests/plugin_migration.rs",
+      "sha256": "f4dc1f34dd1fbef842e726b042eca284786b178e638cce03374d9420e4cc3e73",
+      "fixtureKind": "versioned-owned-fixture-construction-in-test-source",
+      "consumerSource": "tests/plugin_migration.rs",
+      "consumer": "both_sources_migrate_actual_packages_disabled_and_reopen_undo_without_source",
+      "references": [
+        "claude-plugins",
+        "codex-plugin-0",
+        "codex-plugin-1",
+        "codex-plugin-2"
+      ],
+      "expected": "disabled ordinary install/reopen/sourcegone/Undo",
+      "boundary": "Claude index2 is an observed private-index signature, not all vendor releases. Package semver is independent of index schema/vendor version.",
+      "adapterRevisions": []
+    },
+    {
+      "id": "plugin-lower-index-number-unverified-as-vendor-release",
+      "component": "plugins",
+      "vendor": "claude-code",
+      "shape": "lower-index-number-unverified-as-vendor-release",
+      "productVersion": null,
+      "fixture": "tests/fixtures/component-formats/claude-plugin-index-lower-number.json",
+      "sha256": "6f025276f4d49fa459f25d93ca5c41e94626fb0372284301530eb7755bf1a47b",
+      "fixtureKind": "synthetic-file",
+      "consumerSource": "tests/component_format_support.rs",
+      "consumer": "lower_and_future_plugin_index_numbers_are_explicitly_unsupported_without_installing_anything",
+      "references": [
+        "claude-plugins"
+      ],
+      "expected": "plugin_migration_unsupported_index before candidate installation",
+      "boundary": "Version1 is deliberately a lower-number refusal probe, not a claim of verified old vendor index semantics.",
+      "adapterRevisions": []
+    },
+    {
+      "id": "plugin-unknown-index-number",
+      "component": "plugins",
+      "vendor": "claude-code",
+      "shape": "unknown-index-number",
+      "productVersion": null,
+      "fixture": "tests/fixtures/component-formats/claude-plugin-index-unknown.json",
+      "sha256": "5ff0b85550544e9b9da06761153f72cd63cae47be4a0d7396dfd4d83581a425a",
+      "fixtureKind": "synthetic-file",
+      "consumerSource": "tests/component_format_support.rs",
+      "consumer": "lower_and_future_plugin_index_numbers_are_explicitly_unsupported_without_installing_anything",
+      "references": [
+        "claude-plugins"
+      ],
+      "expected": "plugin_migration_unsupported_index before candidate installation",
+      "boundary": "Version1 is deliberately a lower-number refusal probe, not a claim of verified old vendor index semantics.",
+      "adapterRevisions": []
+    },
+    {
+      "id": "project-observed0049-project-tables",
+      "component": "projects",
+      "vendor": "codex",
+      "shape": "observed0049-project-tables",
+      "productVersion": null,
+      "fixture": "tests/fixtures/component-formats/codex-project-tables.sql",
+      "sha256": "3cb17687f4622fbde73a827af9b67c809dbfc467d65c5aadfdc538efdcba578f",
+      "fixtureKind": "synthetic-file",
+      "consumerSource": "tests/component_format_support.rs",
+      "consumer": "observed_project_tables_before_and_after_recency_index_preserve_projection_and_unknown_schema_fails",
+      "references": [
+        "codex-projects-0049",
+        "codex-projects-0052"
+      ],
+      "expected": "same projection across index-only evolution; unknown table type explicitly unsupported",
+      "boundary": "0049/0052 are upstream SQL migration identifiers at one fixed commit, not vendor semver. Tests execute only owned synthetic schema construction; no source database or worktree is copied.",
+      "adapterRevisions": [
+        "codex-project-registry/sqlite/1"
+      ]
+    },
+    {
+      "id": "project-observed0052-index-only-addition",
+      "component": "projects",
+      "vendor": "codex",
+      "shape": "observed0052-index-only-addition",
+      "productVersion": null,
+      "fixture": "tests/fixtures/component-formats/codex-project-recency.sql",
+      "sha256": "e9ed80fbcc2657a4192e5a74772c9a3a6c2d240af13e1da6f952991b75569100",
+      "fixtureKind": "synthetic-file",
+      "consumerSource": "tests/component_format_support.rs",
+      "consumer": "observed_project_tables_before_and_after_recency_index_preserve_projection_and_unknown_schema_fails",
+      "references": [
+        "codex-projects-0049",
+        "codex-projects-0052"
+      ],
+      "expected": "same projection across index-only evolution; unknown table type explicitly unsupported",
+      "boundary": "0049/0052 are upstream SQL migration identifiers at one fixed commit, not vendor semver. Tests execute only owned synthetic schema construction; no source database or worktree is copied.",
+      "adapterRevisions": [
+        "codex-project-registry/sqlite/1"
+      ]
+    },
+    {
+      "id": "project-unknown-required-column-type",
+      "component": "projects",
+      "vendor": "codex",
+      "shape": "unknown-required-column-type",
+      "productVersion": null,
+      "fixture": "tests/fixtures/component-formats/codex-project-unknown.sql",
+      "sha256": "9d7db2e22e80a00cb3f1d916d1f43e49b184e3bb6d6d4c1a49c385e7a65dea65",
+      "fixtureKind": "synthetic-file",
+      "consumerSource": "tests/component_format_support.rs",
+      "consumer": "observed_project_tables_before_and_after_recency_index_preserve_projection_and_unknown_schema_fails",
+      "references": [
+        "codex-projects-0049",
+        "codex-projects-0052"
+      ],
+      "expected": "same projection across index-only evolution; unknown table type explicitly unsupported",
+      "boundary": "0049/0052 are upstream SQL migration identifiers at one fixed commit, not vendor semver. Tests execute only owned synthetic schema construction; no source database or worktree is copied.",
+      "adapterRevisions": [
+        "codex-project-registry/sqlite/1"
+      ]
+    },
+    {
+      "id": "claude-project-known-unknown",
+      "component": "projects",
+      "vendor": "claude-code",
+      "shape": "reviewed-projects-subtree",
+      "productVersion": null,
+      "fixture": "src/project_migration/claude.rs",
+      "sha256": "1403e8f52b435f5aff31274b1358a40f039efb44ba00a38b965bb8b930c141ec",
+      "fixtureKind": "versioned-owned-fixture-construction-in-test-source",
+      "consumerSource": "src/project_migration/claude.rs",
+      "consumer": "duplicate_paths_duplicate_projects_and_excessive_or_malformed_documents_are_rejected",
+      "references": [
+        "claude-settings"
+      ],
+      "expected": "known project-path subtree; duplicate/malformed structures rejected",
+      "boundary": "Product version unknown; paths are source metadata, never target mappings/trust or permission to read the worktree.",
+      "adapterRevisions": [
+        "claude-project-registry/json/1"
+      ]
+    },
+    {
+      "id": "codex-layer-user",
+      "component": "configuration-layers",
+      "vendor": "codex",
+      "shape": "reviewed-selected-hierarchy",
+      "productVersion": null,
+      "fixture": "fixtures/codex-layers/user/config.toml",
+      "sha256": "46f3dfc820b86394b61bdb9a80b82450a29ee69bb5c5dfbd060b6d0041b56e28",
+      "fixtureKind": "synthetic-file",
+      "consumerSource": "tests/codex_layers.rs",
+      "consumer": "native_layered_provider_publish_reopen_retry_and_undo_keep_original_sources",
+      "references": [
+        "codex-advanced",
+        "codex-old-config"
+      ],
+      "expected": "explicit user/profile/root-to-cwd supported scalars and original private winner; unauthorized project provider/auth keys not promoted",
+      "boundary": "Existing declared0.163.0 structural comparison plus captured official layering documentation. No managed/env/CLI runtime final-config or installed-version claim.",
+      "adapterRevisions": [
+        "codex-selected-layers/v1"
+      ]
+    },
+    {
+      "id": "codex-layer-profile",
+      "component": "configuration-layers",
+      "vendor": "codex",
+      "shape": "reviewed-selected-hierarchy",
+      "productVersion": null,
+      "fixture": "fixtures/codex-layers/user/review.config.toml",
+      "sha256": "0123111a73b276b2e71ef30a37b242bbd9be17a5f30267ca05b93acf6d84157b",
+      "fixtureKind": "synthetic-file",
+      "consumerSource": "tests/codex_layers.rs",
+      "consumer": "native_layered_provider_publish_reopen_retry_and_undo_keep_original_sources",
+      "references": [
+        "codex-advanced",
+        "codex-old-config"
+      ],
+      "expected": "explicit user/profile/root-to-cwd supported scalars and original private winner; unauthorized project provider/auth keys not promoted",
+      "boundary": "Existing declared0.163.0 structural comparison plus captured official layering documentation. No managed/env/CLI runtime final-config or installed-version claim.",
+      "adapterRevisions": [
+        "codex-selected-layers/v1"
+      ]
+    },
+    {
+      "id": "codex-layer-project",
+      "component": "configuration-layers",
+      "vendor": "codex",
+      "shape": "reviewed-selected-hierarchy",
+      "productVersion": null,
+      "fixture": "fixtures/codex-layers/repo-root/config.toml",
+      "sha256": "6a796c3a2cb2dff4f0a668d8fde79c99c9e42b1225d05734d1fd340b7cdd24d3",
+      "fixtureKind": "synthetic-file",
+      "consumerSource": "tests/codex_layers.rs",
+      "consumer": "native_layered_provider_publish_reopen_retry_and_undo_keep_original_sources",
+      "references": [
+        "codex-advanced",
+        "codex-old-config"
+      ],
+      "expected": "explicit user/profile/root-to-cwd supported scalars and original private winner; unauthorized project provider/auth keys not promoted",
+      "boundary": "Existing declared0.163.0 structural comparison plus captured official layering documentation. No managed/env/CLI runtime final-config or installed-version claim.",
+      "adapterRevisions": [
+        "codex-selected-layers/v1"
+      ]
+    },
+    {
+      "id": "codex-layer-cwd",
+      "component": "configuration-layers",
+      "vendor": "codex",
+      "shape": "reviewed-selected-hierarchy",
+      "productVersion": null,
+      "fixture": "fixtures/codex-layers/cwd/config.toml",
+      "sha256": "436950c74ae2154b86fd199db8b8781dc2c5f50440b41fec8f691b5f37cf42cf",
+      "fixtureKind": "synthetic-file",
+      "consumerSource": "tests/codex_layers.rs",
+      "consumer": "native_layered_provider_publish_reopen_retry_and_undo_keep_original_sources",
+      "references": [
+        "codex-advanced",
+        "codex-old-config"
+      ],
+      "expected": "explicit user/profile/root-to-cwd supported scalars and original private winner; unauthorized project provider/auth keys not promoted",
+      "boundary": "Existing declared0.163.0 structural comparison plus captured official layering documentation. No managed/env/CLI runtime final-config or installed-version claim.",
+      "adapterRevisions": [
+        "codex-selected-layers/v1"
+      ]
+    }
+  ]
+}

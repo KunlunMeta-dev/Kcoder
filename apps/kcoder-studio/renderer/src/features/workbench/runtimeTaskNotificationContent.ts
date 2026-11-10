@@ -1,6 +1,6 @@
 import { safeErrorDiagnostic } from '@/lib/error-diagnostics'
 import i18n from '@/i18n'
-import { requestLocalExecutor } from '@/tauri/localExecutor'
+import { requestLocalExecutor } from '@/host/localExecutor'
 import type { NormalizedRuntimeMessage, RuntimeTranscriptResponse } from '@/types/api'
 import type { RuntimeTaskReminderItem } from './runtimeTaskReminders'
 

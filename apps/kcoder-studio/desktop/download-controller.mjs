@@ -21,12 +21,16 @@ export function registerDownloads({
         isTrustedGatewayUrl(value, getGatewayOrigin()));
   ipcMain.handle("kcoder:download", async (event, params) => {
     const window = getWindow(event.sender);
+    const ticket = Object.freeze({ window, contents: event.sender, frame: event.senderFrame, session });
     const authorize = () =>
       window &&
+      getWindow(ticket.contents) === ticket.window &&
       !window.isDestroyed() &&
       !event.sender.isDestroyed() &&
-      event.senderFrame === event.sender.mainFrame &&
-      isTrustedGatewayUrl(event.senderFrame?.url, getGatewayOrigin());
+      ticket.contents.session === ticket.session &&
+      event.senderFrame === ticket.frame &&
+      ticket.frame === event.sender.mainFrame &&
+      isTrustedGatewayUrl(ticket.frame?.url, getGatewayOrigin());
     if (!authorize())
       throw new Error("Download is restricted to the main application frame");
     if (
@@ -48,6 +52,7 @@ export function registerDownloads({
         authorize,
         resolve,
         reject,
+        ticket,
         item: null,
       };
       const finish = (result) => {
@@ -57,6 +62,13 @@ export function registerDownloads({
         resolve(result);
       };
       entry.finish = finish;
+      entry.rejectMatched = (contents, item) => {
+        if (pending.get(contents) !== entry || entry.ticket.contents !== contents
+            || entry.ticket.session !== session || entry.item || item.getURL() !== entry.url) return;
+        clearTimeout(entry.timer);
+        pending.delete(contents);
+        reject(new Error("Application download was rejected"));
+      };
       entry.timer = setTimeout(() => {
         entry.item?.cancel();
         finish({ status: "interrupted", filename: entry.filename });
@@ -82,6 +94,9 @@ export function registerDownloads({
       !item.getURLChain().every(allowedUrl)
     ) {
       event.preventDefault();
+      // Only this still-unclaimed request's exact URL can reject its promise.
+      // Unrelated or duplicate downloads cannot settle an active/peer item.
+      entry?.rejectMatched(contents, item);
       return;
     }
     entry.item = item;

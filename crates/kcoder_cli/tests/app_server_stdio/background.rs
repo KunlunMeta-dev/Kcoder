@@ -150,7 +150,7 @@ fn background_subagent_lifecycle_is_forwarded_and_thread_rotation_remains_usable
     assert!(
         !transcript
             .to_string()
-            .contains("[system] All tracked background sub-agents have finished."),
+            .contains("[system] All tracked background work has finished."),
         "内部聚合提示不得暴露到 thread/read"
     );
 

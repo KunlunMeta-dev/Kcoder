@@ -15,6 +15,7 @@ import type {
 } from '@/types/workbench'
 import type { RuntimeTaskLifecycleStoreSnapshot } from '@/features/workbench/runtimeTaskLifecycle'
 import { getRuntimeTaskLifecycleKey } from '@/features/workbench/runtimeTaskLifecycle'
+import { isDiagnosticEnabled } from './diagnosticPreferences'
 
 type ConsoleDebug = (...args: unknown[]) => void
 
@@ -239,8 +240,7 @@ const DEBUG_LOG_ARGUMENT_LIMIT = 2000
 const DEBUG_LOG_ENTRY_LIMIT = 8000
 const MEMORY_ESTIMATE_NODE_LIMIT = 20_000
 const TOP_TOOL_OUTPUT_LIMIT = 8
-const DEBUG_PANEL_ID = 'wework-debug-panel'
-const RUNTIME_MEMORY_DIAGNOSTICS_STORAGE_KEY = 'wework:debug-runtime-memory'
+const DEBUG_PANEL_ID = 'kcoder-debug-panel'
 
 let installed = false
 let debugLogSequence = 0
@@ -451,7 +451,7 @@ function isRuntimePaneMemoryDiagnosticsEnabled(): boolean {
   if (typeof document !== 'undefined' && document.getElementById(DEBUG_PANEL_ID)) {
     return true
   }
-  return globalThis.localStorage?.getItem(RUNTIME_MEMORY_DIAGNOSTICS_STORAGE_KEY) === '1'
+  return isDiagnosticEnabled('debug-runtime-memory')
 }
 
 function emptyRuntimePaneMemoryDiagnostics(): RuntimePaneMemoryDiagnostics {

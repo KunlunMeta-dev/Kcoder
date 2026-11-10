@@ -213,93 +213,68 @@ fn child_stop_fixture_question(socket: &mut std::net::TcpStream) {
 }
 
 #[test]
-fn child_stop_stdio_confirms_cleanup_of_actual_pending_source_question() {
+fn subagent_stdio_refuses_forced_user_questions_without_leaving_interactions() {
     let temp = tempfile::tempdir().unwrap();
     let settings = temp.path().join("settings.json");
-    let (endpoint, _calls, provider) = serving_fixture_decided(|_, request| {
+    // Two parent and two worker calls. A worker may start seconds after the parent
+    // under load, so the fixture stops on the call count rather than a short idle gap.
+    let (endpoint, calls, provider) = serving_fixture_decided_bounded(|_, request| {
         let messages = request["messages"].as_array().unwrap();
         let worker = messages.iter().any(|message| {
-            message["role"] == "user"
-                && message["content"]
-                    .to_string()
-                    .contains("STOP_SUBAGENT_QUESTION")
+            message["role"] == "user" && message["content"].to_string().contains("STOP_SUBAGENT_QUESTION")
         });
         if worker {
-            FixtureAnswer::Custom(child_stop_fixture_question)
+            if messages.iter().any(|message| message["role"] == "tool") {
+                FixtureAnswer::Text("Question tool unavailable; report the issue to the parent.".into())
+            } else {
+                // Deliberately force a tool absent from the worker's offered registry.
+                FixtureAnswer::Custom(child_stop_fixture_question)
+            }
         } else if messages.iter().any(|message| message["role"] == "tool") {
             FixtureAnswer::Text("parent done".into())
         } else {
             FixtureAnswer::Custom(child_stop_fixture_spawn)
         }
-    });
+    }, Some(4), Duration::from_secs(30));
     write_fixture_provider_settings(&settings, &endpoint);
     let mut config: Value = serde_json::from_slice(&std::fs::read(&settings).unwrap()).unwrap();
     config["permission_mode"] = json!("bypass");
     config["tools"] = json!({"profile":"full"});
     std::fs::write(&settings, serde_json::to_vec(&config).unwrap()).unwrap();
-    let mut server = TestAppServer::builder(temp.path(), &settings)
-        .without_scenario()
-        .spawn();
-    let stderr = server.child.stderr.take().unwrap();
-    let log = std::thread::spawn(move || {
-        for line in BufReader::new(stderr).lines().map_while(Result::ok) {
-            eprintln!("[stop fixture] {line}");
-        }
-    });
+    let mut server = TestAppServer::builder(temp.path(), &settings).without_scenario().spawn();
     server.initialize(1);
     server.send(json!({"jsonrpc":"2.0","id":2,"method":"thread/start","params":{}}));
-    let thread_id = server.response(2)["result"]["thread"]["id"]
-        .as_str()
-        .unwrap()
-        .to_owned();
+    let thread_id = server.response(2)["result"]["thread"]["id"].as_str().unwrap().to_owned();
     server.send(json!({"jsonrpc":"2.0","id":3,"method":"turn/start","params":{"threadId":thread_id,"input":[{"type":"text","text":"start a background worker with a pending question"}]}}));
     assert_eq!(server.response(3)["result"]["turn"]["status"], "running");
     let deadline = Instant::now() + Duration::from_secs(30);
-    let mut parent_completed = false;
-    let source = loop {
-        let frame = server.next_value(deadline);
-        if frame["method"] == "turn/completed" {
-            parent_completed = true;
-        }
-        if frame["method"] == "question/request"
-            && frame["params"]["questions"]
-                .to_string()
-                .contains("STOP_PENDING_CHILD_QUESTION")
-        {
-            break frame["params"]["sourceAgent"].clone();
-        }
-    };
-    while !parent_completed {
-        let frame = server.next_value(deadline);
-        parent_completed = frame["method"] == "turn/completed";
+    let mut id = 10;
+    loop {
+        server.send(json!({"jsonrpc":"2.0","id":id,"method":"agent/list","params":{"threadId":thread_id}}));
+        let listed = server.response(id);
+        let agents = listed["result"]["agents"].as_array().unwrap();
+        if !agents.is_empty() && agents.iter().all(|agent| matches!(agent["status"].as_str(), Some("completed" | "failed" | "cancelled"))) {break;}
+        assert!(Instant::now() < deadline, "forced worker question did not settle; agents: {}; tool outcomes: {:?}",
+            listed["result"]["agents"],calls.lock().unwrap().iter().flat_map(|request| request["messages"].as_array().unwrap().iter())
+                .filter(|message| message["role"]=="tool").map(|message| message["content"].to_string().chars().take(500).collect::<String>()).collect::<Vec<_>>());
+        id += 1;
+        std::thread::sleep(Duration::from_millis(10));
     }
-    let agent_id = source["agentId"].as_str().unwrap().to_owned();
-    let run = source["backgroundRun"].clone();
-    assert_eq!(run["parentSessionId"], thread_id);
-    server.send(json!({"jsonrpc":"2.0","id":4,"method":"agent/stream/subscribe","params":{"threadId":thread_id,"agentId":agent_id,"subscriptionId":"stop-view"}}));
-    assert_eq!(server.response(4)["result"]["active"], true);
-    server.send(json!({"jsonrpc":"2.0","id":5,"method":"agent/stop","params":{"threadId":thread_id,"agentId":agent_id,"expectedBackgroundRun":run}}));
-    let stopped = server.response(5);
-    server.send(
-        json!({"jsonrpc":"2.0","id":6,"method":"agent/list","params":{"threadId":thread_id}}),
-    );
-    let listed = server.response(6);
-    let agent = listed["result"]["agents"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|agent| agent["agentId"] == agent_id)
-        .unwrap()
-        .clone();
-    assert_eq!(
-        agent["status"], "cancelled",
-        "stop: {stopped}, task: {agent}"
-    );
-    assert_eq!(agent["acceptingMessages"], false);
-    assert_eq!(agent["queueDepth"], 0);
-    assert_eq!(stopped["result"]["status"], "stopped", "{stopped}");
-    assert_eq!(stopped["result"]["stopped"], true);
+    let observed = Arc::clone(&server.observed);
     server.shutdown();
-    log.join().unwrap();
     provider.join().unwrap();
+    let requests = calls.lock().unwrap();
+    let workers = requests.iter().filter(|request| request["messages"].as_array().unwrap().iter().any(|message| {
+        message["role"] == "user" && message["content"].to_string().contains("STOP_SUBAGENT_QUESTION")
+    })).collect::<Vec<_>>();
+    assert!(!workers.is_empty(), "fixture must exercise an actual child model call");
+    assert!(workers.iter().any(|request| request["messages"].as_array().unwrap().iter().any(|message|
+        message["role"]=="tool" && message["content"].to_string().contains("Unknown tool `AskUserQuestion`"))),
+        "the forced call must be denied by the actual execution boundary");
+    for request in workers {
+        assert!(!request["tools"].as_array().unwrap().iter().any(|tool| tool["function"]["name"] == "AskUserQuestion"));
+    }
+    let observed = observed.lock().unwrap();
+    assert!(!observed.iter().any(|line| serde_json::from_str::<Value>(line).unwrap()["method"] == "question/request"),
+        "a forced child call must never reach the user's question channel");
 }

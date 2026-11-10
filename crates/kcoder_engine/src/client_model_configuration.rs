@@ -2,80 +2,9 @@
 use super::*;
 use kcoder_types::{ModelSelectionMode, ReasoningEffort};
 mod continuation;
+mod next_turn;
 pub use continuation::ClientModelContinuationOptions;
-
-/// A session owns this source. Hosts preserve its template/CLI overlay identity.
-pub trait ClientModelConfiguration: Send + Sync {
-    fn settings(&self, selection: &str) -> Result<Settings>;
-    fn provider(&self, settings: &Settings) -> Result<Arc<dyn Provider>>;
-    /// Resolve values and provenance from one host configuration read. Older hosts
-    /// report no provenance rather than joining labels from a later file version.
-    fn settings_with_sources(
-        &self,
-        selection: &str,
-    ) -> Result<(
-        Settings,
-        std::collections::BTreeMap<String, std::collections::BTreeSet<String>>,
-    )> {
-        Ok((self.settings(selection)?, Default::default()))
-    }
-    /// Resolve the current target default with this session's pinned overlays.
-    /// None means the host does not support an explicit follow-default selection.
-    fn default_settings(&self) -> Result<Option<Settings>> {
-        Ok(None)
-    }
-    /// Capability declaration must not perform configuration IO during initialize.
-    fn supports_default_selection(&self) -> bool {
-        false
-    }
-    /// Read the session-bound catalog without changing its running model snapshot.
-    fn catalog_settings(&self) -> Result<Option<Settings>> {
-        Ok(None)
-    }
-    /// File-layer provenance without configuration values; None is an older host.
-    fn configuration_file_sources(
-        &self,
-    ) -> Result<Option<Vec<kcoder_config::ModelConfigurationFieldSources>>> {
-        Ok(None)
-    }
-
-    /// Authority labels for already-resolved model fields; no environment values.
-    fn configuration_runtime_sources(
-        &self,
-        _settings: &Settings,
-    ) -> Result<std::collections::BTreeMap<String, std::collections::BTreeSet<String>>> {
-        Ok(Default::default())
-    }
-
-    /// Host-defined credential-free model semantics; None denotes unsupported providers.
-    fn snapshot_api_format(&self, _snapshot: &[u8]) -> Result<Option<kcoder_config::ApiFormat>> {
-        Ok(None)
-    }
-    fn freeze_model(
-        &self,
-        _settings: &Settings,
-        _provider: &dyn Provider,
-    ) -> Result<Option<Vec<u8>>> {
-        Ok(None)
-    }
-    fn thaw_model(
-        &self,
-        _snapshot: &[u8],
-        _proxy_credentials: Option<String>,
-    ) -> Result<(Settings, Arc<dyn Provider>)> {
-        anyhow::bail!("This model source cannot restore durable snapshots")
-    }
-    fn refreeze_model(&self, _snapshot: &[u8], _settings: &Settings) -> Result<Vec<u8>> {
-        anyhow::bail!("This model source cannot update a durable snapshot")
-    }
-    fn thaw_model_with_proxy_override(
-        &self,
-        _snapshot: &[u8],
-        _proxy_url: &str,
-    ) -> Result<(Settings, Arc<dyn Provider>)> {
-        anyhow::bail!("This model source cannot override a snapshot proxy")
-    }
-}
+pub use kcoder_api::ClientModelConfiguration;
 
 #[derive(serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -107,6 +36,7 @@ fn decode_client_model(bytes: &[u8]) -> Result<DurableClientModel> {
 #[derive(Clone, Default)]
 pub(crate) struct ClientModelOptions {
     pub model_selection_mode: ModelSelectionMode,
+    pub pending_model_selection: Option<String>,
     pub reasoning: Option<ReasoningEffort>,
     pub default_reasoning: Option<ReasoningEffort>,
     pub selection: Option<(Option<String>, String)>,
@@ -135,6 +65,42 @@ impl ClientModelOptions {
 }
 
 impl QueryEngine {
+    /// Validate and queue an explicit model selection for the next provider
+    /// boundary. The in-flight provider request keeps its captured snapshot.
+    pub fn queue_client_model_selection_for_boundary(&self, requested: &str) -> Result<()> {
+        let requested = requested.trim();
+        anyhow::ensure!(
+            requested
+                .split_once("::")
+                .is_some_and(|(provider, model)| !provider.is_empty() && !model.is_empty()),
+            "A qualified Provider::model selection is required"
+        );
+        let (next, _) = self.resolve_client_model_configuration(requested)?;
+        let previous = recover_read_lock(&self.settings, "settings").clone();
+        validate_client_selection(&previous, &next)?;
+        let selection = canonical_selection(&next, Some(requested))?;
+        recover_write_lock(&self.client_model_options, "client model options")
+            .pending_model_selection = Some(selection);
+        Ok(())
+    }
+
+    /// Apply a queued explicit model at a provider boundary, if one is pending.
+    pub fn apply_pending_client_model_selection(&self) -> Result<Option<String>> {
+        let requested = recover_write_lock(&self.client_model_options, "client model options")
+            .pending_model_selection
+            .take();
+        let Some(requested) = requested else {
+            return Ok(None);
+        };
+        self.refresh_client_model_configuration(Some(&requested))?;
+        Ok(Some(self.client_model_selector()))
+    }
+
+    pub fn clear_pending_client_model_selection(&self) {
+        recover_write_lock(&self.client_model_options, "client model options")
+            .pending_model_selection = None;
+    }
+
     /// Resolve a prospective request without activating it or changing the
     /// accepted session snapshot. Settings and credentials stay inside the host.
     pub fn resolve_client_model_configuration(
@@ -321,6 +287,7 @@ impl QueryEngine {
         );
         let options = ClientModelOptions {
             model_selection_mode: mode.unwrap_or(snapshot.mode),
+            pending_model_selection: None,
             reasoning: snapshot.reasoning,
             default_reasoning: snapshot.default_reasoning,
             selection: Some((next.active_provider.clone(), next.model.clone())),
@@ -364,6 +331,9 @@ impl QueryEngine {
         requested: Option<&str>,
         continuing: bool,
     ) -> Result<()> {
+        if requested.is_some() {
+            self.clear_pending_client_model_selection();
+        }
         if continuing {
             let settings = recover_read_lock(&self.settings, "settings");
             if canonical_selection(&settings, requested)? == canonical_selection(&settings, None)? {
@@ -389,6 +359,12 @@ impl QueryEngine {
                 .client_model_configuration
                 .as_ref()
                 .is_some_and(|source| source.supports_default_selection())
+    }
+
+    pub fn supports_in_turn_model_switch(&self) -> bool {
+        self.current_provider()
+            .supports_client_runtime_reconfiguration()
+            && self.client_model_configuration.is_some()
     }
 
     pub fn follows_target_default_model(&self) -> bool {
@@ -458,24 +434,11 @@ impl QueryEngine {
         &self,
         source: &dyn ClientModelConfiguration,
         previous: Settings,
-        mut next: Settings,
+        next: Settings,
         mode: Option<ModelSelectionMode>,
     ) -> Result<()> {
         validate_client_selection(&previous, &next)?;
-        let mut options =
-            recover_read_lock(&self.client_model_options, "client model options").clone();
-        options.bind_model(&next);
-        options.default_reasoning = next.model_reasoning_effort.clone();
-        if let Some(reasoning) = &options.reasoning {
-            next.model_reasoning_effort = Some(reasoning.clone());
-        }
-        if let Some(proxy) = &options.proxy {
-            next.provider_proxy_url = proxy.clone();
-        }
-        if let Some(tier) = &options.service_tier {
-            next.provider_extra_body
-                .insert("service_tier".into(), serde_json::json!(tier));
-        }
+        let (next, mut options) = self.resolve_client_model_option_overrides(next)?;
         let provider = source.provider(&next)?;
         options.frozen_host = None;
         if let Some(mode) = mode {
@@ -520,7 +483,7 @@ fn validate_client_selection(previous: &Settings, next: &Settings) -> Result<()>
     Ok(())
 }
 
-fn retained_model_fields(previous: Settings, next: &Settings) -> Settings {
+pub(crate) fn retained_model_fields(previous: Settings, next: &Settings) -> Settings {
     let mut retained = previous;
     // Only model/transport/context fields cross this boundary. In particular,
     // tools, extension registries, permissions, goals and memory stay pinned.
@@ -683,7 +646,7 @@ mod tests {
         let reject = Arc::new(std::sync::atomic::AtomicBool::new(false));
         let engine = TestEngineBuilder::new(directory.path())
             .settings(original)
-            .build()
+            .build_with_profile_directory()
             .with_client_model_configuration(Arc::new(DurableSource {
                 live: live.clone(),
                 reject: reject.clone(),
@@ -813,7 +776,7 @@ mod tests {
         let reject = Arc::new(std::sync::atomic::AtomicBool::new(false));
         let engine = TestEngineBuilder::new(directory.path())
             .settings(initial)
-            .build()
+            .build_with_profile_directory()
             .with_client_model_configuration(Arc::new(DurableSource {
                 live: live.clone(),
                 reject,
@@ -898,7 +861,7 @@ mod tests {
         let latest = Arc::new(RwLock::new(initial.clone()));
         let engine = TestEngineBuilder::new(directory.path())
             .settings(initial.clone())
-            .build()
+            .build_with_profile_directory()
             .with_client_model_configuration(Arc::new(Source(latest.clone())));
         // Explicitly selecting the old default must remain explicit after refresh.
         assert!(
@@ -1004,7 +967,7 @@ mod tests {
         let calls = Arc::new(AtomicUsize::new(0));
         let engine = TestEngineBuilder::new(directory.path())
             .settings(settings)
-            .build()
+            .build_with_profile_directory()
             .with_client_model_configuration(Arc::new(CountedSource(calls.clone())));
         engine.switch_provider_profile("fixture").unwrap();
         engine
@@ -1014,6 +977,120 @@ mod tests {
             .set_client_runtime_options(Some("http://127.0.0.1:9"), None)
             .unwrap();
         assert_eq!(calls.load(Ordering::SeqCst), 3);
+    }
+
+    #[test]
+    fn switching_models_persists_the_session_selection_for_the_next_turn() {
+        let directory = tempfile::tempdir().unwrap();
+        let mut settings = Settings::default();
+        let mut profile = kcoder_config::default_active_provider_config();
+        profile.default_model = "original-model".into();
+        profile.models.clear();
+        profile.discover_models = Some(true);
+        settings.providers.insert("fixture".into(), profile);
+        settings.apply_provider(Some("fixture")).unwrap();
+
+        let engine = TestEngineBuilder::new(directory.path())
+            .settings(settings.clone())
+            .build_with_profile_directory()
+            .with_client_model_configuration(Arc::new(Source(Arc::new(RwLock::new(settings)))));
+        engine
+            .state
+            .set_model_selection(
+                ModelSelectionMode::Explicit,
+                Some("fixture::original-model".into()),
+            )
+            .unwrap();
+
+        engine
+            .switch_discovered_model("fixture", "next-model")
+            .unwrap();
+        assert_eq!(
+            engine.state.selected_model().as_deref(),
+            Some("fixture::next-model")
+        );
+        engine.prepare_client_model_for_turn(None, false).unwrap();
+
+        assert_eq!(engine.model_name(), "next-model");
+        assert_eq!(
+            engine.state.selected_model().as_deref(),
+            Some("fixture::next-model")
+        );
+        assert_eq!(
+            engine.state.model_selection_mode(),
+            ModelSelectionMode::Explicit
+        );
+    }
+
+    #[test]
+    fn queued_mid_turn_model_selection_applies_only_at_the_next_boundary() {
+        let directory = tempfile::tempdir().unwrap();
+        let mut settings = Settings::default();
+        let mut profile = kcoder_config::default_active_provider_config();
+        profile.default_model = "original-model".into();
+        profile.models.clear();
+        profile.discover_models = Some(true);
+        settings.providers.insert("fixture".into(), profile);
+        settings.apply_provider(Some("fixture")).unwrap();
+        let engine = TestEngineBuilder::new(directory.path())
+            .settings(settings.clone())
+            .build_with_profile_directory()
+            .with_client_model_configuration(Arc::new(Source(Arc::new(RwLock::new(settings)))));
+        engine
+            .state
+            .set_model_selection(
+                ModelSelectionMode::Explicit,
+                Some("fixture::original-model".into()),
+            )
+            .unwrap();
+
+        engine
+            .queue_client_model_selection_for_boundary("fixture::next-model")
+            .unwrap();
+        assert_eq!(engine.model_name(), "original-model");
+        assert_eq!(
+            engine.state.selected_model().as_deref(),
+            Some("fixture::original-model")
+        );
+
+        assert_eq!(
+            engine
+                .apply_pending_client_model_selection()
+                .unwrap()
+                .as_deref(),
+            Some("fixture::next-model")
+        );
+        assert_eq!(engine.model_name(), "next-model");
+        assert_eq!(
+            engine.state.selected_model().as_deref(),
+            Some("fixture::next-model")
+        );
+    }
+
+    #[test]
+    fn explicit_next_turn_selection_supersedes_a_queued_live_selection() {
+        let directory = tempfile::tempdir().unwrap();
+        let mut settings = Settings::default();
+        let mut profile = kcoder_config::default_active_provider_config();
+        profile.default_model = "original-model".into();
+        profile.models.clear();
+        profile.discover_models = Some(true);
+        settings.providers.insert("fixture".into(), profile);
+        settings.apply_provider(Some("fixture")).unwrap();
+        let engine = TestEngineBuilder::new(directory.path())
+            .settings(settings.clone())
+            .build_with_profile_directory()
+            .with_client_model_configuration(Arc::new(Source(Arc::new(RwLock::new(settings)))));
+
+        engine
+            .queue_client_model_selection_for_boundary("fixture::queued-model")
+            .unwrap();
+        engine
+            .prepare_client_model_for_turn(Some("fixture::new-turn-model"), false)
+            .unwrap();
+
+        assert_eq!(engine.model_name(), "new-turn-model");
+        assert_eq!(engine.apply_pending_client_model_selection().unwrap(), None);
     }
 
     #[tokio::test]
@@ -1043,7 +1120,7 @@ mod tests {
         let calls = Arc::new(std::sync::Mutex::new(Vec::new()));
         let engine = TestEngineBuilder::new(directory.path())
             .settings(settings)
-            .build()
+            .build_with_profile_directory()
             .with_client_model_configuration(Arc::new(RejectingSource(calls.clone())));
         let groups = engine.discover_provider_models().await;
         assert_eq!(groups.len(), 2);
@@ -1067,7 +1144,7 @@ mod tests {
         }
         let temp = tempfile::tempdir().unwrap();
         let engine = TestEngineBuilder::new(temp.path())
-            .build()
+            .build_with_profile_directory()
             .with_client_model_configuration(Arc::new(RejectedSource));
         let before = engine.state.messages().len();
         let events = engine
@@ -1108,7 +1185,7 @@ mod tests {
         let latest = Arc::new(RwLock::new(initial.clone()));
         let engine = TestEngineBuilder::new(temp.path())
             .settings(initial)
-            .build()
+            .build_with_profile_directory()
             .with_client_model_configuration(Arc::new(CatalogSource(latest.clone())));
         assert!(
             engine
@@ -1171,7 +1248,7 @@ mod tests {
         let failure = Arc::new(std::sync::atomic::AtomicBool::new(true));
         let engine = TestEngineBuilder::new(temp.path())
             .settings(initial)
-            .build()
+            .build_with_profile_directory()
             .with_client_model_configuration(Arc::new(Defaults(latest.clone(), failure.clone())));
         assert!(engine.refresh_client_default_model_configuration().is_err());
         assert_eq!(engine.model_name(), "model-a");
@@ -1213,7 +1290,7 @@ mod tests {
         let latest = Arc::new(RwLock::new(initial.clone()));
         let engine = TestEngineBuilder::new(temp.path())
             .settings(initial)
-            .build()
+            .build_with_profile_directory()
             .with_client_model_configuration(Arc::new(Source(latest.clone())));
         engine.follow_target_default_model().unwrap();
         assert_eq!(
@@ -1269,7 +1346,7 @@ mod tests {
         next.apply_provider(Some("replacement")).unwrap();
         let engine = TestEngineBuilder::new(temp.path())
             .settings(initial)
-            .build()
+            .build_with_profile_directory()
             .with_client_model_configuration(Arc::new(Source(next)));
         let original_model = engine.model_name();
         let original_provider = engine.current_provider();
@@ -1291,7 +1368,7 @@ mod tests {
     #[test]
     fn restored_follow_intent_is_read_when_the_host_source_is_attached() {
         let temp = tempfile::tempdir().unwrap();
-        let engine = TestEngineBuilder::new(temp.path()).build();
+        let engine = TestEngineBuilder::new(temp.path()).build_with_profile_directory();
         engine
             .state
             .set_model_selection_mode(ModelSelectionMode::FollowTargetDefault)
@@ -1315,7 +1392,7 @@ mod tests {
         let latest = Arc::new(RwLock::new(settings.clone()));
         let engine = TestEngineBuilder::new(temp.path())
             .settings(settings)
-            .build();
+            .build_with_profile_directory();
         engine
             .state
             .set_model_selection(
@@ -1334,5 +1411,54 @@ mod tests {
             Some("vendor-a::shared-model")
         );
         assert!(!engine.follows_target_default_model());
+    }
+    #[test]
+    fn native_input_bounds_survive_live_same_model_refresh_without_changing_public_defaults() {
+        let directory = tempfile::tempdir().unwrap();
+        let settings = Settings {
+            active_provider: None,
+            model: "owned-native-bounded-model".into(),
+            max_tokens: Some(4096),
+            max_retries: 3,
+            ..crate::test_support::engine_builder::fixture_settings()
+        };
+        let live = Arc::new(RwLock::new(settings.clone()));
+        let make = || {
+            TestEngineBuilder::new(directory.path())
+                .settings(settings.clone())
+                .build_with_profile_directory()
+                .with_client_model_configuration(Arc::new(DurableSource {
+                    live: live.clone(),
+                    reject: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+                }))
+        };
+        let native = make()
+            .with_native_input_only_context("Owned native input".into(), 1024)
+            .unwrap();
+        let original = native.active_model_configuration_summary().unwrap();
+        native
+            .refresh_client_model_configuration(Some("owned-native-bounded-model"))
+            .unwrap();
+        assert_eq!(native.settings.read().unwrap().max_tokens, Some(1024));
+        assert_eq!(native.settings.read().unwrap().max_retries, 0);
+        assert_eq!(
+            native
+                .active_model_configuration_summary()
+                .unwrap()
+                .revision,
+            original.revision
+        );
+        let public = make();
+        public
+            .refresh_client_model_configuration(Some("owned-native-bounded-model"))
+            .unwrap();
+        assert_eq!(public.settings.read().unwrap().max_tokens, Some(4096));
+        assert_eq!(public.settings.read().unwrap().max_retries, 3);
+        live.write().unwrap().max_tokens = Some(512);
+        native
+            .refresh_client_model_configuration(Some("owned-native-bounded-model"))
+            .unwrap();
+        assert_eq!(native.settings.read().unwrap().max_tokens, Some(512));
+        assert_eq!(live.read().unwrap().max_retries, 3);
     }
 }

@@ -2,6 +2,10 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, test, vi } from 'vitest'
 import { BufferedChatInput } from './BufferedChatInput'
+import {
+  captureAccountContextRevision,
+  notifyAccountContextChange,
+} from '@/kcoder/accountContextEvents'
 
 describe('BufferedChatInput', () => {
   test('syncs external value changes into the draft', async () => {
@@ -69,6 +73,82 @@ describe('BufferedChatInput', () => {
     await userEvent.type(screen.getByTestId('chat-message-input'), 'unfinished draft')
 
     expect(onChange).toHaveBeenLastCalledWith('unfinished draft')
+  })
+
+  test('does not insert a late review reference into a different conversation draft', async () => {
+    const onChange = vi.fn()
+    const onSubmit = vi.fn()
+    const insertion = { id: 1, text: 'Reference for task A', scopeKey: 'task-A' }
+    const view = render(
+      <BufferedChatInput
+        value="Task B draft"
+        onChange={onChange}
+        onSubmit={onSubmit}
+        insertionScopeKey="task-B"
+        insertion={insertion}
+      />
+    )
+    expect(screen.getByTestId('chat-message-input')).toHaveValue('Task B draft')
+    expect(onSubmit).not.toHaveBeenCalled()
+    expect(onChange).not.toHaveBeenCalledWith(expect.stringContaining('Reference for task A'))
+    view.rerender(
+      <BufferedChatInput
+        value="Task A draft"
+        onChange={onChange}
+        onSubmit={onSubmit}
+        insertionScopeKey="task-A"
+        insertion={insertion}
+      />
+    )
+    await waitFor(() =>
+      expect(screen.getByTestId('chat-message-input')).toHaveValue(
+        'Task A draft\nReference for task A'
+      )
+    )
+    expect(onSubmit).not.toHaveBeenCalled()
+  })
+
+  test('applies an owned review insertion once and preserves subsequent edits', async () => {
+    const props = {
+      onChange: vi.fn(),
+      onSubmit: vi.fn(),
+      insertionScopeKey: 'task-A',
+      insertion: { id: 4, text: 'Review reference', scopeKey: 'task-A' },
+    }
+    const view = render(<BufferedChatInput {...props} value="Original draft" />)
+    await waitFor(() =>
+      expect(screen.getByTestId('chat-message-input')).toHaveValue(
+        'Original draft\nReview reference'
+      )
+    )
+    view.rerender(<BufferedChatInput {...props} value="Newer user draft" />)
+    expect(screen.getByTestId('chat-message-input')).toHaveValue('Newer user draft')
+    expect(props.onSubmit).not.toHaveBeenCalled()
+  })
+
+  test('rejects an invalidated account reference even when the conversation key is unchanged', () => {
+    const onChange = vi.fn()
+    const onSubmit = vi.fn()
+    const target = 'buffered-review-account'
+    const accountCurrent = captureAccountContextRevision()
+    notifyAccountContextChange(target)
+    render(
+      <BufferedChatInput
+        value="Current account draft"
+        onChange={onChange}
+        onSubmit={onSubmit}
+        insertionScopeKey="same-task"
+        insertion={{
+          id: 7,
+          text: 'Previous account reference',
+          scopeKey: 'same-task',
+          isCurrent: () => accountCurrent(target),
+        }}
+      />
+    )
+    expect(screen.getByTestId('chat-message-input')).toHaveValue('Current account draft')
+    expect(onChange).not.toHaveBeenCalledWith(expect.stringContaining('Previous account'))
+    expect(onSubmit).not.toHaveBeenCalled()
   })
 
   test('restores a buffered draft after switching chat scopes', async () => {

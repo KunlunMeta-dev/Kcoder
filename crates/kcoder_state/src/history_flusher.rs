@@ -1,4 +1,56 @@
 use super::*;
+mod confirmation;
+mod flush_request;
+mod live_row_receipt;
+mod owned_slots;
+mod worker_pool;
+pub(super) use confirmation::{MessageCommitConfirmation, MessageCommitOutcome};
+pub(super) use flush_request::flush_history;
+pub use live_row_receipt::NativeHistoryRowReceipt;
+pub(super) use owned_slots::{
+    OwnedSlot, SlotError, take_reclaimable as take_reclaimable_owned_slots,
+    try_insert as try_insert_owned_slot,
+};
+#[cfg(test)]
+pub(super) use owned_slots::{inspect_poisoned_for_test, poison_for_test};
+
+pub(super) fn spawn_input_owner(
+    future: impl std::future::Future<Output = ()> + Send + 'static,
+) -> Result<tokio::task::Id, SlotError> {
+    let handle = tokio::runtime::Handle::try_current().map_err(|_| SlotError::Unavailable)?;
+    worker_pool::spawn_supervisor(&handle, future)
+}
+
+pub(super) async fn inspect_identified_history(
+    source: HistorySource,
+    queue: Option<Arc<HistoryFlusherQueue>>,
+    uuid: String,
+    session_id: String,
+    message: kcoder_types::Message,
+) -> anyhow::Result<bool> {
+    let queue = queue.unwrap_or_else(|| Arc::new(HistoryFlusherQueue::new(source.clone())));
+    anyhow::ensure!(
+        !queue.worker_is_unknown() && !queue.worker_is_stopped(),
+        "identified input history writer is unknown"
+    );
+    let (done, mut reply) = oneshot::channel();
+    worker_pool::run(queue, move || {
+        let _ = done.send(source.inspect_identified(&uuid, &session_id, &message));
+    })
+    .await?;
+    reply
+        .try_recv()
+        .context("identified history inspection stopped before reporting a result")?
+}
+
+#[cfg(test)]
+pub(super) fn abort_input_owner(id: tokio::task::Id) -> bool {
+    worker_pool::abort_supervisor(id)
+}
+
+#[cfg(test)]
+#[path = "history_flusher/worker_tests.rs"]
+mod worker_tests;
 
 #[derive(Debug, Clone)]
 pub(super) struct HistoryFlusher {
@@ -10,6 +62,12 @@ pub(super) struct HistoryFlusher {
 pub(super) struct HistoryFlusherQueue {
     pub(super) source: HistorySource,
     epoch: AtomicU64,
+    worker_unknown: std::sync::atomic::AtomicBool,
+    worker_stopped: std::sync::atomic::AtomicBool,
+    ever_submitted: std::sync::atomic::AtomicBool,
+    start_failure: std::sync::atomic::AtomicU8,
+    #[cfg(test)]
+    jobs_started: AtomicU64,
     batch: Mutex<HistoryBatch>,
 }
 
@@ -23,7 +81,7 @@ struct HistoryBatch {
 #[derive(Debug)]
 pub(super) struct QueuedHistoryCommand {
     pub(super) command: HistoryFlusherCommand,
-    epoch: u64,
+    pub(super) epoch: u64,
 }
 
 impl HistoryFlusher {
@@ -41,13 +99,29 @@ impl HistoryFlusher {
         &self,
         command: HistoryFlusherCommand,
     ) -> Result<(), Box<HistoryFlusherCommand>> {
+        self.send_queued(command)
+            .map(|_| ())
+            .map_err(|queued| Box::new(queued.command))
+    }
+
+    pub(super) fn is_closed(&self) -> bool {
+        self.tx.is_closed()
+    }
+
+    pub(super) fn send_queued(
+        &self,
+        command: HistoryFlusherCommand,
+    ) -> Result<u64, Box<QueuedHistoryCommand>> {
         // The caller holds AppState's inner lock; enqueue never waits for disk I/O.
+        let epoch = self.queue.epoch.load(Ordering::Acquire);
+        if self.queue.worker_is_unknown() || self.queue.worker_is_stopped() {
+            return Err(Box::new(QueuedHistoryCommand { command, epoch }));
+        }
+        self.queue.ever_submitted.store(true, Ordering::Release);
         self.tx
-            .send(QueuedHistoryCommand {
-                command,
-                epoch: self.queue.epoch.load(Ordering::Acquire),
-            })
-            .map_err(|error| Box::new(error.0.command))
+            .send(QueuedHistoryCommand { command, epoch })
+            .map(|()| epoch)
+            .map_err(|error| Box::new(error.0))
     }
 
     pub(super) fn process_direct(&self, path: &Path, command: HistoryFlusherCommand) {
@@ -91,9 +165,103 @@ impl HistoryBatch {
         }
         result
     }
+
+    fn flush_original_input(
+        &mut self,
+        source: &HistorySource,
+        uuid: &str,
+    ) -> anyhow::Result<MessageCommitConfirmation> {
+        self.check_fault()?;
+        let count = self
+            .entries
+            .iter()
+            .filter(|entry| entry.uuid.as_deref() == Some(uuid))
+            .count();
+        if count != 1 {
+            self.fault =
+                Some("original input identity is missing or ambiguous in its writer batch".into());
+            anyhow::bail!("original input identity is missing or ambiguous in its writer batch");
+        }
+        let existing = match source.has_existing_body() {
+            Ok(existing) => existing,
+            Err(error) => {
+                self.fault
+                    .get_or_insert_with(|| format!("input source cannot be confirmed: {error:#}"));
+                return Err(error);
+            }
+        };
+        if !existing {
+            let result = self.flush(source);
+            if let Err(error) = &result {
+                self.fault.get_or_insert_with(|| {
+                    format!("original input batch commit was not confirmed: {error:#}")
+                });
+            }
+            result?;
+            return Ok(MessageCommitConfirmation::committed(None));
+        }
+        let result = live_row_receipt::flush_with_live_row_receipt(source, &mut self.entries, uuid);
+        if let Err(error) = &result {
+            // An uncertain append may already contain the row. Do not retry it.
+            self.fault
+                .get_or_insert_with(|| format!("input row commit was not confirmed: {error:#}"));
+        }
+        result.map(|receipt| MessageCommitConfirmation::committed(Some(receipt)))
+    }
+
+    fn flush_identified_original_input(
+        &mut self,
+        source: &HistorySource,
+        uuid: &str,
+        expected_message: &kcoder_types::Message,
+    ) -> anyhow::Result<()> {
+        self.check_fault()?;
+        let matching = self
+            .entries
+            .iter()
+            .filter(|entry| entry.uuid.as_deref() == Some(uuid))
+            .count();
+        anyhow::ensure!(
+            matching == 1,
+            "identified input identity is missing or ambiguous in its writer batch"
+        );
+        let entry = self
+            .entries
+            .last()
+            .context("identified input is missing from its writer batch")?
+            .clone();
+        anyhow::ensure!(
+            entry.uuid.as_deref() == Some(uuid) && &entry.message == expected_message,
+            "identified input differs from its original writer ticket"
+        );
+
+        // Earlier queued history keeps its order and is committed before the
+        // identified row. The source operation then atomically appends or
+        // verifies that one row without replaying it.
+        let mut preceding = self.entries[..self.entries.len() - 1].to_vec();
+        let preceding_result = flush_bound_history_batch(source, &mut preceding);
+        self.record_result(&preceding_result);
+        if preceding_result.is_err()
+            && let Err(error) = source.check()
+        {
+            self.fault = Some(format!("{error:#}"));
+        }
+        preceding_result?;
+        self.entries.clear();
+        let result = source.append_identified_or_verify(&entry).map(|_| ());
+        if let Err(error) = &result {
+            self.fault.get_or_insert_with(|| {
+                format!("identified input commit was not confirmed: {error:#}")
+            });
+        }
+        result
+    }
 }
 
 impl HistoryFlusherQueue {
+    pub(super) fn current_epoch(&self) -> u64 {
+        self.epoch.load(Ordering::Acquire)
+    }
     pub(super) fn execute_rewind(
         &self,
         epoch: u64,
@@ -120,24 +288,87 @@ impl HistoryFlusherQueue {
         Self {
             source,
             epoch: AtomicU64::new(0),
+            worker_unknown: std::sync::atomic::AtomicBool::new(false),
+            worker_stopped: std::sync::atomic::AtomicBool::new(false),
+            ever_submitted: std::sync::atomic::AtomicBool::new(false),
+            start_failure: std::sync::atomic::AtomicU8::new(0),
+            #[cfg(test)]
+            jobs_started: AtomicU64::new(0),
             batch: Mutex::default(),
         }
     }
     fn lock_batch(&self) -> MutexGuard<'_, HistoryBatch> {
-        self.batch.lock().unwrap_or_else(|error| {
+        let mut batch = self.batch.lock().unwrap_or_else(|error| {
             let mut batch = error.into_inner();
             batch.fault.get_or_insert_with(|| {
                 "history writer panicked while holding its mutation lock".to_string()
             });
             batch
-        })
+        });
+        self.record_worker_unknown(&mut batch);
+        batch
+    }
+
+    fn try_lock_batch(&self) -> Option<MutexGuard<'_, HistoryBatch>> {
+        let mut batch = match self.batch.try_lock() {
+            Ok(batch) => batch,
+            Err(std::sync::TryLockError::WouldBlock) => return None,
+            Err(std::sync::TryLockError::Poisoned(error)) => {
+                let mut batch = error.into_inner();
+                batch.fault.get_or_insert_with(|| {
+                    "history writer panicked while holding its mutation lock".to_string()
+                });
+                batch
+            }
+        };
+        self.record_worker_unknown(&mut batch);
+        Some(batch)
+    }
+
+    fn mark_worker_unknown(&self) {
+        self.worker_unknown.store(true, Ordering::Release);
+    }
+
+    pub(super) fn worker_is_unknown(&self) -> bool {
+        self.worker_unknown.load(Ordering::Acquire)
+    }
+
+    pub(super) fn worker_is_stopped(&self) -> bool {
+        self.worker_stopped.load(Ordering::Acquire)
+    }
+
+    pub(super) fn initial_start_failure(&self) -> Option<SlotError> {
+        if self.ever_submitted.load(Ordering::Acquire) {
+            return None;
+        }
+        match self.start_failure.load(Ordering::Acquire) {
+            1 => Some(SlotError::Busy),
+            2 => Some(SlotError::Full),
+            3 => Some(SlotError::Unavailable),
+            _ => None,
+        }
+    }
+
+    fn record_worker_unknown(&self, batch: &mut HistoryBatch) {
+        if self.worker_is_unknown() || self.worker_is_stopped() {
+            batch.fault.get_or_insert_with(|| {
+                "history worker stopped before confirming its accepted writes".to_string()
+            });
+        }
     }
 
     pub(super) fn write_fault(&self) -> Option<String> {
+        if self.worker_is_unknown() || self.worker_is_stopped() {
+            return Some("history worker stopped before confirming its accepted writes".into());
+        }
         self.lock_batch().fault.clone()
     }
 
     pub(super) fn flush(&self, _path: &Path) -> anyhow::Result<()> {
+        anyhow::ensure!(
+            !self.worker_is_unknown() && !self.worker_is_stopped(),
+            "history worker stopped before confirming its accepted writes"
+        );
         self.lock_batch().flush(&self.source)
     }
 
@@ -165,6 +396,7 @@ impl HistoryFlusherQueue {
             batch.record_result(&result);
             if result.is_ok() {
                 self.batch.clear_poison();
+                self.worker_unknown.store(false, Ordering::Release);
             }
         }
         result
@@ -179,18 +411,25 @@ struct HistoryWorkerGuard {
 
 impl Drop for HistoryWorkerGuard {
     fn drop(&mut self) {
-        if !self.drained {
-            // Publish the fault before dropping rx, so closed-channel fallback cannot race it.
-            self.queue.lock_batch().fault.get_or_insert_with(|| {
-                "history worker stopped before confirming its accepted writes".to_string()
-            });
+        if !self.drained && self.queue.ever_submitted.load(Ordering::Acquire) {
+            // Publish without waiting on a worker holding batch during I/O.
+            self.queue.mark_worker_unknown();
         }
+        self.queue.worker_stopped.store(true, Ordering::Release);
     }
 }
 
 #[derive(Debug)]
 pub(super) enum HistoryFlusherCommand {
     Entry(HistoryEntry),
+    EntryWithCommit {
+        entry: HistoryEntry,
+        done: oneshot::Sender<anyhow::Result<MessageCommitConfirmation>>,
+    },
+    EntryWithIdentifiedCommit {
+        entry: HistoryEntry,
+        done: oneshot::Sender<anyhow::Result<MessageCommitConfirmation>>,
+    },
     Flush(oneshot::Sender<anyhow::Result<()>>),
     AppendCompaction {
         session_id: String,
@@ -216,7 +455,17 @@ pub(super) fn start_history_flusher(
     let (tx, rx) = mpsc::unbounded_channel();
     let flusher = HistoryFlusher::new(tx, source);
     let queue = flusher.queue.clone();
-    handle.spawn(history_flusher_task(path, rx, queue));
+    let future = history_flusher_task(path, rx, queue);
+    if let Err(error) = worker_pool::spawn_supervisor(&handle, future) {
+        flusher.queue.start_failure.store(
+            match error {
+                SlotError::Busy => 1,
+                SlotError::Full => 2,
+                SlotError::Unavailable => 3,
+            },
+            Ordering::Release,
+        );
+    }
     flusher
 }
 
@@ -247,32 +496,66 @@ pub(super) fn history_flusher_task(
                     let Some(command) = command else {
                         break;
                     };
-                    process_history_flusher_command(&path, &queue, command);
-                    // Pull as many pending commands as possible without awaiting,
-                    // preserving barriers and compaction records in channel order.
-                    while let Ok(command) = guard.rx.try_recv() {
-                        process_history_flusher_command(&path, &queue, command);
+                    // One bounded job at a time preserves this session's FIFO
+                    // order while keeping locks and disk I/O off the runtime.
+                    let mut commands = vec![command];
+                    while commands.len() < BATCH_SIZE {
+                        match guard.rx.try_recv() {
+                            Ok(command) => commands.push(command),
+                            Err(_) => break,
+                        }
                     }
-                    let mut batch = queue.lock_batch();
-                    if batch.entries.len() >= BATCH_SIZE && batch.fault.is_none() {
-                        warn_history_flush_error(batch.flush(&queue.source));
+                    let job_queue = Arc::clone(&queue);
+                    let job_path = path.clone();
+                    let result = worker_pool::run(Arc::clone(&queue), move || {
+                        for command in commands {
+                            process_history_flusher_command(&job_path, &job_queue, command);
+                        }
+                        if let Some(mut batch) = job_queue.try_lock_batch()
+                            && batch.entries.len() >= BATCH_SIZE
+                            && batch.fault.is_none()
+                        {
+                            warn_history_flush_error(batch.flush(&job_queue.source));
+                        }
+                    }).await;
+                    if let Err(error) = result {
+                        warn_history_flush_error(Err(error));
+                        return;
                     }
                 }
                 _ = interval.tick() => {
-                    let mut batch = queue.lock_batch();
-                    if !batch.entries.is_empty() && batch.fault.is_none() {
-                        warn_history_flush_error(batch.flush(&queue.source));
+                    let job_queue = Arc::clone(&queue);
+                    let result = worker_pool::run(Arc::clone(&queue), move || {
+                        if let Some(mut batch) = job_queue.try_lock_batch()
+                            && !batch.entries.is_empty()
+                            && batch.fault.is_none()
+                        {
+                            warn_history_flush_error(batch.flush(&job_queue.source));
+                        }
+                    }).await;
+                    if let Err(error) = result {
+                        warn_history_flush_error(Err(error));
+                        return;
                     }
                 }
                 else => break,
             }
         }
 
-        // Drain any remaining entries before the task ends.
-        while let Ok(command) = guard.rx.try_recv() {
-            process_history_flusher_command(&path, &queue, command);
-        }
-        let result = queue.flush(&path);
+        // recv() reports channel closure only after all queued commands have
+        // been received and each of their jobs has finished.
+        let job_queue = Arc::clone(&queue);
+        let job_path = path.clone();
+        let (done, mut finished) = oneshot::channel();
+        let result = worker_pool::run(Arc::clone(&queue), move || {
+            let _ = done.send(job_queue.flush(&job_path));
+        })
+        .await
+        .and_then(|()| {
+            finished
+                .try_recv()
+                .context("history final flush did not report its result")?
+        });
         guard.drained = result.is_ok();
         warn_history_flush_error(result);
     }
@@ -283,6 +566,10 @@ pub(super) fn process_history_flusher_command(
     queue: &HistoryFlusherQueue,
     queued: QueuedHistoryCommand,
 ) {
+    if queue.worker_is_unknown() || queue.worker_is_stopped() {
+        reject_unconfirmed_command(queued.command);
+        return;
+    }
     let command = match queued.command {
         HistoryFlusherCommand::RewindTransaction { operation, done } => {
             // This path owns the state/persistence locks before acquiring batch.
@@ -297,27 +584,46 @@ pub(super) fn process_history_flusher_command(
     if queued.epoch != queue.epoch.load(Ordering::Acquire) {
         match command {
             HistoryFlusherCommand::Entry(_) => {}
+            HistoryFlusherCommand::EntryWithCommit { done, .. } => {
+                let _ = done.send(Err(anyhow::anyhow!(
+                    "original input was superseded before its writer batch committed"
+                )));
+            }
+            HistoryFlusherCommand::EntryWithIdentifiedCommit { done, .. } => {
+                let _ = done.send(Err(anyhow::anyhow!(
+                    "identified input was superseded before its writer batch committed"
+                )));
+            }
             HistoryFlusherCommand::Flush(done)
             | HistoryFlusherCommand::AppendCompaction { done, .. } => {
-                let _ = done.send(batch.check_fault().and_then(|()| queue.source.check()));
+                let _ = done.send(Err(anyhow::anyhow!(
+                    "history barrier was superseded before its writer batch committed"
+                )));
             }
             HistoryFlusherCommand::RewindTransaction { .. } => unreachable!(),
         }
         return;
     }
     match command {
-        HistoryFlusherCommand::Entry(mut entry) => {
-            if let Some(parent) = batch.next_rewind_parent.as_ref() {
-                if entry.session_id == parent.owner
-                    && entry.uuid.as_deref() == Some(parent.first_entry.as_str())
-                {
-                    entry.parent_uuid = Some(parent.boundary.clone());
-                    batch.next_rewind_parent = None;
-                } else {
-                    batch.fault.get_or_insert_with(|| "rewind tail enqueue order changed; explicit snapshot recovery is required".into());
-                }
-            }
-            batch.entries.push(entry);
+        HistoryFlusherCommand::Entry(entry) => queue_history_entry(&mut batch, entry),
+        HistoryFlusherCommand::EntryWithCommit { entry, done } => {
+            let Some(uuid) = entry.uuid.clone() else {
+                let _ = done.send(Err(anyhow::anyhow!("original input identity is missing")));
+                return;
+            };
+            queue_history_entry(&mut batch, entry);
+            let _ = done.send(batch.flush_original_input(&queue.source, &uuid));
+        }
+        HistoryFlusherCommand::EntryWithIdentifiedCommit { entry, done } => {
+            let Some(uuid) = entry.uuid.clone() else {
+                let _ = done.send(Err(anyhow::anyhow!("identified input identity is missing")));
+                return;
+            };
+            let expected_message = entry.message.clone();
+            queue_history_entry(&mut batch, entry);
+            let result =
+                batch.flush_identified_original_input(&queue.source, &uuid, &expected_message);
+            let _ = done.send(result.map(|()| MessageCommitConfirmation::committed(None)));
         }
         HistoryFlusherCommand::Flush(done) => {
             let _ = done.send(batch.flush(&queue.source));
@@ -342,6 +648,42 @@ pub(super) fn process_history_flusher_command(
         }
         HistoryFlusherCommand::RewindTransaction { .. } => unreachable!(),
     }
+}
+
+fn reject_unconfirmed_command(command: HistoryFlusherCommand) {
+    let error = || anyhow::anyhow!("history worker stopped before confirming its accepted writes");
+    match command {
+        HistoryFlusherCommand::Entry(_) => {}
+        HistoryFlusherCommand::EntryWithCommit { done, .. } => {
+            let _ = done.send(Err(error()));
+        }
+        HistoryFlusherCommand::EntryWithIdentifiedCommit { done, .. } => {
+            let _ = done.send(Err(error()));
+        }
+        HistoryFlusherCommand::Flush(done)
+        | HistoryFlusherCommand::AppendCompaction { done, .. } => {
+            let _ = done.send(Err(error()));
+        }
+        HistoryFlusherCommand::RewindTransaction { done, .. } => {
+            let _ = done.send(Err(error()));
+        }
+    }
+}
+
+fn queue_history_entry(batch: &mut HistoryBatch, mut entry: HistoryEntry) {
+    if let Some(parent) = batch.next_rewind_parent.as_ref() {
+        if entry.session_id == parent.owner
+            && entry.uuid.as_deref() == Some(parent.first_entry.as_str())
+        {
+            entry.parent_uuid = Some(parent.boundary.clone());
+            batch.next_rewind_parent = None;
+        } else {
+            batch.fault.get_or_insert_with(|| {
+                "rewind tail enqueue order changed; explicit snapshot recovery is required".into()
+            });
+        }
+    }
+    batch.entries.push(entry);
 }
 
 fn warn_history_flush_error(result: anyhow::Result<()>) {
@@ -465,6 +807,7 @@ pub(super) fn append_compaction_transcript_records(
             "preTokens": event.pre_tokens,
             "postTokens": event.post_tokens,
             "preservedSegment": preserved_segment,
+            "contextSource": metadata.context_source,
         },
     });
     let summary = serde_json::json!({
@@ -542,12 +885,34 @@ pub(super) fn build_compaction_transcript_metadata(
         compacted_messages,
     );
     let preserved_segment = preserved_segment_from_ids(&preserved_ids);
+    let retained = preserved_ids
+        .iter()
+        .flatten()
+        .collect::<std::collections::HashSet<_>>();
+    let removed = inner
+        .message_history_ids
+        .iter()
+        .zip(inner.messages.iter())
+        .filter(|(id, _)| id.as_ref().is_none_or(|id| !retained.contains(id)))
+        .collect::<Vec<_>>();
+    let context_source = kcoder_types::context_archive::ContextBlockSource {
+        schema_version: 1,
+        message_ids: removed
+            .iter()
+            .filter_map(|(id, _)| id.as_ref().cloned())
+            .collect(),
+        complete: inner.message_history_ids.len() == inner.messages.len()
+            && removed.iter().all(|(id, message)| {
+                id.is_some() || kcoder_types::public_conversation_message(message).is_none()
+            }),
+    };
     CompactionTranscriptMetadata {
         boundary_uuid,
         summary_uuid,
         parent_uuid,
         preserved_ids,
         preserved_segment,
+        context_source,
     }
 }
 
@@ -666,6 +1031,58 @@ fn append_line(path: &Path, line: &str) -> anyhow::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::{Duration, Instant};
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn idle_tick_does_not_block_the_runtime_when_snapshot_holds_batch() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("busy-batch.jsonl");
+        let queue = Arc::new(HistoryFlusherQueue::new(
+            HistorySource::bind(&path).unwrap(),
+        ));
+        let (tx, rx) = mpsc::unbounded_channel();
+        let worker = tokio::spawn(history_flusher_task(path, rx, queue.clone()));
+        // The first interval tick is immediate. Hold the batch for the next one.
+        tokio::time::sleep(Duration::from_millis(25)).await;
+        let (ready_tx, ready_rx) = oneshot::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        let holder = std::thread::spawn(move || {
+            let _guard = queue.lock_batch();
+            let _ = ready_tx.send(());
+            let _ = release_rx.recv_timeout(Duration::from_secs(3));
+        });
+        ready_rx.await.unwrap();
+        let start = Instant::now();
+        tokio::time::sleep(Duration::from_millis(700)).await;
+        let elapsed = start.elapsed();
+        let _ = release_tx.send(());
+        holder.join().unwrap();
+        drop(tx);
+        tokio::time::timeout(Duration::from_secs(3), worker)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(
+            elapsed < Duration::from_secs(2),
+            "idle frame timer was blocked for {elapsed:?}"
+        );
+    }
+
+    #[test]
+    fn idle_tick_observes_poisoned_batch_as_faulted() {
+        let temp = tempfile::tempdir().unwrap();
+        let queue = HistoryFlusherQueue::new(
+            HistorySource::bind(&temp.path().join("poison.jsonl")).unwrap(),
+        );
+        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _guard = queue.batch.lock().unwrap();
+            panic!("injected batch panic");
+        }));
+        let batch = queue
+            .try_lock_batch()
+            .expect("poisoned batch must be observed");
+        assert!(batch.fault.is_some());
+    }
 
     #[test]
     fn bound_history_validation_display_includes_missing_record_reason() {

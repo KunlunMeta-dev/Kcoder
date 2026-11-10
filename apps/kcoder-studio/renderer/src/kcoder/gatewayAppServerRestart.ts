@@ -1,55 +1,52 @@
-import type { GatewayServer } from './gatewayRpc'
-import type { GatewayClient } from './gatewayRuntimeTypes'
-
-export interface OwnedRuntimeClient {
-  client: GatewayClient
-  server: GatewayServer
-  workspacePath?: string
-  ready: Promise<void>
-}
+import { GatewayRpcError, type GatewayServer } from './gatewayRpc'
+import type { GatewayClient, OwnedGatewayConnection } from './gatewayRuntimeTypes'
+import { workspacePathKey } from '@/lib/workspace-path-identity'
 
 export async function restartOwnedAppServers(
-  targets: OwnedRuntimeClient[],
+  targets: OwnedGatewayConnection[],
   force: boolean,
-  release: (client: GatewayClient) => Promise<void>,
+  release: (client: GatewayClient) => void,
   reconnect: (server: GatewayServer, workspacePath?: string) => Promise<GatewayClient>
-): Promise<boolean> {
-  if (targets.length === 0) return false
+): Promise<{ restarted: boolean; requiresConfirmation: boolean }> {
+  if (targets.length === 0) return { restarted: false, requiresConfirmation: false }
   await Promise.all(targets.map(target => target.ready))
-  const workspaces = new Map<string, OwnedRuntimeClient[]>()
+  const workspaces = new Map<string, OwnedGatewayConnection[]>()
   for (const target of targets) {
-    const key = `${target.server.id}\0${target.workspacePath ?? ''}`
+    const key = `${target.serverId}\0${workspacePathKey(target.workspacePath)}`
     const clients = workspaces.get(key) ?? []
     clients.push(target)
     workspaces.set(key, clients)
   }
-  for (const [requester, ...extras] of workspaces.values()) {
-    for (const extra of extras) {
+  let restarted = false
+  for (const clients of workspaces.values()) {
+    const requester = clients.find(target => !target.nativeManagementOnly)
+    for (const extra of clients) {
+      if (extra === requester) continue
       // Socket close is not a broker ownership barrier. Await the self-only detach ACK.
       const result = await extra.client.request<{ detached?: boolean }>('gateway/client/detach', {
         confirm: true,
         force,
       })
       if (result.detached !== true) throw new Error('KCoder client detach was not acknowledged')
-      await release(extra.client)
-      extra.client.close()
+      release(extra.client)
     }
-    const result = await requester.client.request<{
-      stopped?: boolean
-      reconnectRequired?: boolean
-    }>('gateway/app-server/restart', { confirm: true, force })
+    if (!requester) continue
+    let result: { stopped?: boolean; reconnectRequired?: boolean }
+    try {
+      result = await requester.client.request('gateway/app-server/restart', { confirm: true, force })
+    } catch (error) {
+      if (error instanceof GatewayRpcError && error.code === -32043)
+        return { restarted, requiresConfirmation: true }
+      throw error
+    }
     if (result.stopped !== true || result.reconnectRequired !== true) {
       throw new Error('KCoder app-server stop was not acknowledged')
     }
-    await release(requester.client)
-    requester.client.close()
+    release(requester.client)
     // connectClient resolves only after the new initialize handshake, not on WebSocket open.
     const probe = await reconnect(requester.server, requester.workspacePath)
-    try {
-      await release(probe)
-    } finally {
-      probe.close()
-    }
+    release(probe)
+    restarted = true
   }
-  return true
+  return { restarted, requiresConfirmation: false }
 }

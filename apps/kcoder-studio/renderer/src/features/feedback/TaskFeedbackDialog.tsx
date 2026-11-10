@@ -1,5 +1,9 @@
+import { WebSearchDetails } from '@/components/settings/WebSearchDetails'
+import { usePluginTargetScope } from '@/kcoder/usePluginTargetScope'
+import { useTaskBackgroundIssues, type BackgroundIssueTarget } from '@/kcoder/backgroundIssues'
+import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
-import { invoke } from '@tauri-apps/api/core'
+import { invoke } from '@/lib/runtime-commands'
 import { Check, FileArchive, Loader2, X } from 'lucide-react'
 import { useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
@@ -21,6 +25,7 @@ interface FeedbackExportResult {
 
 interface TaskFeedbackDialogProps {
   open: boolean
+  target?: BackgroundIssueTarget
   getTaskContext: () => Promise<Record<string, unknown>>
   onClose: () => void
 }
@@ -32,16 +37,19 @@ const initialSelection: FeedbackSelection = {
   systemInfo: true,
 }
 
-export function TaskFeedbackDialog({ open, getTaskContext, onClose }: TaskFeedbackDialogProps) {
+export function TaskFeedbackDialog({ open, target, getTaskContext, onClose }: TaskFeedbackDialogProps) {
   if (!open) return null
-  return <TaskFeedbackDialogContent getTaskContext={getTaskContext} onClose={onClose} />
+  return <TaskFeedbackDialogContent target={target} getTaskContext={getTaskContext} onClose={onClose} />
 }
 
 function TaskFeedbackDialogContent({
+  target,
   getTaskContext,
   onClose,
 }: Omit<TaskFeedbackDialogProps, 'open'>) {
   const { t } = useTranslation('common')
+  const issues = useTaskBackgroundIssues(target)
+  const searchScope = usePluginTargetScope(target?.deviceId ?? "")
   const [selection, setSelection] = useState(initialSelection)
   const [note, setNote] = useState('')
   const [exporting, setExporting] = useState(false)
@@ -57,7 +65,8 @@ function TaskFeedbackDialogContent({
     setExporting(true)
     setError(null)
     try {
-      const taskContext = selection.taskInfo ? await getTaskContext() : null
+      const context = selection.taskInfo ? await getTaskContext() : null
+      const taskContext = context && issues.length ? { ...context, backgroundIssues: issues.filter(issue => issue.isCurrent()).map(({ kind, code }) => ({ kind, code })) } : context
       let screenshotDataUrl: string | null = null
       if (selection.screenshot) {
         const overlay = overlayRef.current
@@ -133,6 +142,21 @@ function TaskFeedbackDialogContent({
             <X className="h-4 w-4" />
           </button>
         </div>
+
+        {target?.deviceId && <WebSearchDetails key={`${searchScope.key}:${target.taskId ?? ''}`} serverId={target.deviceId} mode="kcoder" threadId={target.threadId ?? undefined} taskId={target.taskId} isCurrent={searchScope.isCurrent} />}
+
+        {issues.length > 0 && (
+          <section className="mt-4 space-y-3" aria-label={t('workbench.feedback_background_issues')}>
+            <h3 className="text-sm font-medium">{t('workbench.feedback_background_issues')}</h3>
+            {issues.map((issue, index) => <div key={index} data-testid="feedback-background-issue" className="studio-card-spacing rounded-lg border border-border p-3 text-sm">
+              <p>{t('workbench.imported_history_read_failed')}</p>
+              <div className="mt-2 flex gap-2">
+                <Button variant="outline" onClick={issue.retry}>{t('workbench.imported_history_retry')}</Button>
+                <Button variant="ghost" onClick={issue.dismiss}>{t('workbench.feedback_dismiss_issue')}</Button>
+              </div>
+            </div>)}
+          </section>
+        )}
 
         {result ? (
           <div className="mt-6">

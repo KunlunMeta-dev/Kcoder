@@ -9,37 +9,30 @@ import {
   APP_UPDATE_TIMER_INTERVAL_MS,
 } from './app-update-context'
 import { AppUpdateProvider } from './AppUpdateProvider'
-import { checkForWeworkUpdate, installPendingWeworkUpdate } from '@/lib/app-updater'
+import { checkForStudioUpdate, installPendingStudioUpdate, isAppUpdateSupported } from '@/lib/app-updater'
 
 vi.mock('@/lib/app-updater', () => ({
-  checkForWeworkUpdate: vi.fn(),
-  installPendingWeworkUpdate: vi.fn(),
+  isAppUpdateSupported: vi.fn(),
+  checkForStudioUpdate: vi.fn(),
+  installPendingStudioUpdate: vi.fn(),
 }))
 
-function enableTauri() {
-  Object.defineProperty(window, '__TAURI_INTERNALS__', {
-    configurable: true,
-    value: {},
-  })
-}
-
-function disableTauri() {
-  delete (window as Window & { __TAURI_INTERNALS__?: object }).__TAURI_INTERNALS__
-}
+function enableUpdates() { vi.mocked(isAppUpdateSupported).mockReturnValue(true) }
+function disableUpdates() { vi.mocked(isAppUpdateSupported).mockReturnValue(false) }
 
 describe('AppUpdateProvider', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-06-16T00:00:00Z'))
     localStorage.clear()
-    enableTauri()
-    vi.mocked(checkForWeworkUpdate).mockResolvedValue(null)
+    enableUpdates()
+    vi.mocked(checkForStudioUpdate).mockResolvedValue(null)
   })
 
   afterEach(() => {
     delete (window as Window & { __KCODER_GATEWAY_WEB_SHIM__?: boolean })
       .__KCODER_GATEWAY_WEB_SHIM__
-    disableTauri()
+    disableUpdates()
     vi.useRealTimers()
     vi.clearAllMocks()
   })
@@ -53,12 +46,12 @@ describe('AppUpdateProvider', () => {
 
     await vi.advanceTimersByTimeAsync(APP_UPDATE_INITIAL_CHECK_DELAY_MS)
 
-    expect(checkForWeworkUpdate).toHaveBeenCalledTimes(1)
+    expect(checkForStudioUpdate).toHaveBeenCalledTimes(1)
     expect(localStorage.getItem(APP_UPDATE_LAST_AUTO_CHECK_KEY)).toBe(String(Date.now()))
   })
 
   test('never invokes native updater through the KCoder gateway shim', async () => {
-    Object.assign(window, { __KCODER_GATEWAY_WEB_SHIM__: true })
+    disableUpdates()
     let update: AppUpdateContextValue | undefined
     function Probe() {
       update = useAppUpdate()
@@ -75,13 +68,13 @@ describe('AppUpdateProvider', () => {
       await update?.installUpdate()
     })
     expect(update?.supported).toBe(false)
-    expect(checkForWeworkUpdate).not.toHaveBeenCalled()
-    expect(installPendingWeworkUpdate).not.toHaveBeenCalled()
+    expect(checkForStudioUpdate).not.toHaveBeenCalled()
+    expect(installPendingStudioUpdate).not.toHaveBeenCalled()
     expect(update?.error).toBeNull()
   })
 
   test('unsupported hosts cannot enter simulated native update progress', async () => {
-    Object.assign(window, { __KCODER_GATEWAY_WEB_SHIM__: true })
+    disableUpdates()
     let update: AppUpdateContextValue | undefined
     function Probe() {
       update = useAppUpdate()
@@ -97,11 +90,11 @@ describe('AppUpdateProvider', () => {
     expect(update?.status).toBe('idle')
     expect(update?.availableUpdate).toBeNull()
     expect(update?.downloadProgress).toBeNull()
-    expect(checkForWeworkUpdate).not.toHaveBeenCalled()
+    expect(checkForStudioUpdate).not.toHaveBeenCalled()
   })
 
   test('dismisses a native updater error without restarting the application', async () => {
-    vi.mocked(checkForWeworkUpdate).mockRejectedValue(new Error('Fixture update failure'))
+    vi.mocked(checkForStudioUpdate).mockRejectedValue(new Error('Fixture update failure'))
     let update: AppUpdateContextValue | undefined
     function Probe() {
       update = useAppUpdate()
@@ -122,7 +115,8 @@ describe('AppUpdateProvider', () => {
   })
 
   test('wakes hourly but only checks the update source after 24 hours', async () => {
-    localStorage.setItem(APP_UPDATE_LAST_AUTO_CHECK_KEY, String(Date.now()))
+    const lastCheckAt = Date.now()
+    localStorage.setItem('wework:lastAutoUpdateCheckAt', String(lastCheckAt))
 
     render(
       <AppUpdateProvider>
@@ -132,21 +126,24 @@ describe('AppUpdateProvider', () => {
 
     await vi.advanceTimersByTimeAsync(APP_UPDATE_INITIAL_CHECK_DELAY_MS)
     await vi.advanceTimersByTimeAsync(APP_UPDATE_TIMER_INTERVAL_MS)
-    expect(checkForWeworkUpdate).not.toHaveBeenCalled()
+    expect(checkForStudioUpdate).not.toHaveBeenCalled()
 
     vi.setSystemTime(new Date(Date.now() + APP_UPDATE_AUTO_CHECK_MIN_AGE_MS))
     await vi.advanceTimersByTimeAsync(APP_UPDATE_TIMER_INTERVAL_MS)
 
-    expect(checkForWeworkUpdate).toHaveBeenCalledTimes(1)
+    expect(checkForStudioUpdate).toHaveBeenCalledTimes(1)
+    expect(Number(localStorage.getItem(APP_UPDATE_LAST_AUTO_CHECK_KEY))).toBeGreaterThanOrEqual(
+      lastCheckAt + APP_UPDATE_AUTO_CHECK_MIN_AGE_MS
+    )
   })
 
   test('exposes download progress while installing an available update', async () => {
     let appUpdate: AppUpdateContextValue | null = null
-    vi.mocked(checkForWeworkUpdate).mockResolvedValue({
+    vi.mocked(checkForStudioUpdate).mockResolvedValue({
       currentVersion: '0.0.8',
       version: '0.0.9',
     })
-    vi.mocked(installPendingWeworkUpdate).mockImplementation(async onProgress => {
+    vi.mocked(installPendingStudioUpdate).mockImplementation(async onProgress => {
       onProgress({ downloadedBytes: 50, totalBytes: 100 })
     })
 
@@ -178,8 +175,8 @@ describe('AppUpdateProvider', () => {
       currentVersion: '0.0.18',
       version: '0.0.19',
     }
-    vi.mocked(checkForWeworkUpdate).mockResolvedValue(update)
-    vi.mocked(installPendingWeworkUpdate)
+    vi.mocked(checkForStudioUpdate).mockResolvedValue(update)
+    vi.mocked(installPendingStudioUpdate)
       .mockRejectedValueOnce(new Error('The signature verification failed'))
       .mockResolvedValueOnce()
 
@@ -201,7 +198,7 @@ describe('AppUpdateProvider', () => {
       await appUpdate?.installUpdate()
     })
 
-    expect(checkForWeworkUpdate).toHaveBeenCalledTimes(2)
+    expect(checkForStudioUpdate).toHaveBeenCalledTimes(2)
     expect(appUpdate?.status).toBe('available')
     expect(appUpdate?.error).toBe('The signature verification failed')
 
@@ -209,7 +206,7 @@ describe('AppUpdateProvider', () => {
       await appUpdate?.installUpdate()
     })
 
-    expect(installPendingWeworkUpdate).toHaveBeenCalledTimes(2)
+    expect(installPendingStudioUpdate).toHaveBeenCalledTimes(2)
   })
 
   test('simulates an update download from the developer command menu', async () => {

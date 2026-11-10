@@ -7,6 +7,37 @@ import {
 } from './index'
 
 describe('reduceWorkbenchMessages', () => {
+  test('keeps a hydrated screenshot when a compact terminal receipt is replayed', () => {
+    const output = {
+      output: 'Screen state',
+      images: [{ mimeType: 'image/png', data: 'YWJj' }],
+      imagesOmitted: false,
+    }
+    const history = reduceWorkbenchMessages([], {
+      type: 'block_created',
+      subtaskId: 'history',
+      block: {
+        id: 'screenshot',
+        subtaskId: 'history',
+        type: 'tool',
+        toolName: 'mcp__kcoder_computer_use__Screenshot',
+        status: 'done',
+        toolOutput: output,
+        createdAt: 1,
+      },
+    })
+    const replayed = reduceWorkbenchMessages(history, {
+      type: 'block_updated',
+      subtaskId: 'resumed-stream',
+      blockId: 'screenshot',
+      updates: {
+        status: 'done',
+        toolOutput: { output: 'Screen state', images: [], imagesOmitted: true },
+      },
+    })
+    expect(replayed[0].blocks?.[0]).toMatchObject({ status: 'done', toolOutput: output })
+  })
+
   test('keeps only a preview window for very long assistant content', () => {
     const longPrefix = 'a'.repeat(200_010)
     const state = reduceWorkbenchMessages([], {
@@ -205,6 +236,64 @@ describe('reduceWorkbenchMessages', () => {
       status: 'streaming',
       shellType: 'ClaudeCode',
     })
+  })
+
+  test('retains started turn and attempt identity to reject another attempt tool update', () => {
+    const started = reduceWorkbenchMessages([], {
+      type: 'assistant_started',
+      messageId: 'message-1',
+      taskId: 'task-1',
+      subtaskId: 'attempt-1',
+      turnId: 'turn-1',
+      attemptId: 'attempt-1',
+    })
+    expect(started[0]).toMatchObject({ turnId: 'turn-1', attemptId: 'attempt-1' })
+    const withBlock = reduceWorkbenchMessages(started, {
+      type: 'block_created',
+      messageId: 'message-1',
+      subtaskId: 'attempt-1',
+      block: {
+        id: 'call-1',
+        subtaskId: 'attempt-1',
+        type: 'tool',
+        toolName: 'read',
+        status: 'pending',
+        createdAt: 1,
+      },
+    })
+    const late = reduceWorkbenchMessages(withBlock, {
+      type: 'block_updated',
+      messageId: 'message-1',
+      subtaskId: 'attempt-1',
+      turnId: 'turn-1',
+      attemptId: 'attempt-2',
+      blockId: 'call-1',
+      updates: { status: 'done' },
+    })
+    expect(late[0]).toEqual(withBlock[0])
+    expect(late[0].blocks?.[0].status).toBe('pending')
+  })
+
+  test('fills started identity on an existing row and retains it on a legacy duplicate', () => {
+    const initial = reduceWorkbenchMessages([], {
+      type: 'assistant_started',
+      messageId: 'message-1',
+      subtaskId: 'attempt-1',
+    })
+    const identified = reduceWorkbenchMessages(initial, {
+      type: 'assistant_started',
+      messageId: 'message-1',
+      subtaskId: 'attempt-1',
+      turnId: 'turn-1',
+      attemptId: 'attempt-1',
+    })
+    const duplicate = reduceWorkbenchMessages(identified, {
+      type: 'assistant_started',
+      messageId: 'message-1',
+      subtaskId: 'attempt-1',
+    })
+    expect(duplicate).toHaveLength(1)
+    expect(duplicate[0]).toMatchObject({ turnId: 'turn-1', attemptId: 'attempt-1' })
   })
 
   test('merges a late live completion into the persisted message for the same turn', () => {

@@ -166,6 +166,28 @@ pub(super) async fn prepare_background_followup(
     Ok(Some((keys, turn_id)))
 }
 
+fn queued_session_reset_ready(app: &ReplApp) -> bool {
+    let queued_reset = app
+        .rejected_turn_steers
+        .front()
+        .or_else(|| app.user_message_queue.front())
+        .is_some_and(|queued| {
+            queued.action == QueuedInputAction::Slash
+                && matches!(
+                    parse_slash_input(&queued.restore_text)
+                        .0
+                        .to_ascii_lowercase()
+                        .as_str(),
+                    "/new" | "/clear" | "/luna"
+                )
+        });
+    queued_reset
+        && !app.has_current_input_uncertainty()
+        && app.input_admission.as_ref().is_some_and(|admission| {
+            admission.cancelled && admission.observer.is_none() && admission.witness.is_some()
+        })
+}
+
 pub(super) async fn try_start_next_turn(
     engine: &QueryEngine,
     app: &mut ReplApp,
@@ -175,14 +197,89 @@ pub(super) async fn try_start_next_turn(
     if app.turn_lifecycle_in_progress() {
         return Ok(StartTurnOutcome::Idle);
     }
+    if app.input_admission.as_ref().is_some_and(|admission| {
+        app.input_session_owner
+            .as_ref()
+            .is_some_and(|owner| !admission.owner.same_lifecycle(owner))
+    }) && !app.retire_stale_input_admission()
+    {
+        return Ok(StartTurnOutcome::Idle);
+    }
+    if app.has_current_input_uncertainty() && !queued_session_reset_ready(app) {
+        return Ok(StartTurnOutcome::Idle);
+    }
+    if app.has_running_side_questions() {
+        if !app.user_message_queue.is_empty()
+            || !app.rejected_turn_steers.is_empty()
+            || !app.pending_background_followups.is_empty()
+        {
+            app.input_start_retry_at = Some(Instant::now() + Duration::from_millis(80));
+            app.sync_input_preparation_indicator();
+        }
+        return Ok(StartTurnOutcome::Idle);
+    }
 
     loop {
+        let reset_ready = queued_session_reset_ready(app);
         let next = app
             .rejected_turn_steers
             .front()
             .or_else(|| app.user_message_queue.front());
-        if next.is_some_and(|queued| queued.action == QueuedInputAction::Plain)
-            && let Err(error) = engine.prepare_client_model_for_turn(None, false)
+        let next_action = next.map(|queued| queued.action);
+        if let Some(admission) = app.input_admission.as_ref()
+            && !matches!(next_action, Some(QueuedInputAction::Admitted(id)) if id == admission.id && !admission.cancelled)
+            && !reset_ready
+        {
+            return Ok(StartTurnOutcome::Idle);
+        }
+        if next.is_some_and(|queued| {
+            matches!(
+                queued.action,
+                QueuedInputAction::Preparing(_)
+                    | QueuedInputAction::Admitting(_)
+                    | QueuedInputAction::Uncertain
+                    | QueuedInputAction::Held
+            )
+        }) {
+            return Ok(StartTurnOutcome::Idle);
+        }
+        if let Some(owner) = next.and_then(|queued| queued.owner.as_ref()) {
+            match engine.state.try_check_lifecycle_identity(owner) {
+                Ok(None) => {
+                    app.input_start_retry_at = Some(Instant::now() + Duration::from_millis(80));
+                    app.sync_input_preparation_indicator();
+                    return Ok(StartTurnOutcome::Idle);
+                }
+                Ok(Some(false)) | Err(_) => {
+                    if matches!(next_action, Some(QueuedInputAction::Admitted(_))) {
+                        let original_owner = owner.clone();
+                        if let Some(front) = app
+                            .rejected_turn_steers
+                            .front_mut()
+                            .or_else(|| app.user_message_queue.front_mut())
+                        {
+                            front.action = QueuedInputAction::Uncertain;
+                        }
+                        if let Some(admission) = app.input_admission.as_mut() {
+                            admission.cancel_dispatch();
+                        }
+                        app.mark_input_uncertain_for(Some(original_owner));
+                        app.push_message(MessageRole::System, "The save result for this input is not yet confirmed. Check the conversation before submitting it again.".to_string());
+                        app.sync_input_preparation_indicator();
+                    } else {
+                        app.hold_next_user_input(
+                            "The session changed; the input remains queued for editing or clearing.",
+                        );
+                    }
+                    return Ok(StartTurnOutcome::Idle);
+                }
+                Ok(Some(true)) => {}
+            }
+        }
+        if matches!(
+            next_action,
+            Some(QueuedInputAction::Plain | QueuedInputAction::Admitted(_))
+        ) && let Err(error) = engine.prepare_client_model_for_turn(None, false)
         {
             let message = format!("Cannot prepare selected model; queued input was kept: {error}");
             if app.queued_model_error.as_deref() != Some(&message) {
@@ -192,6 +289,246 @@ pub(super) async fn try_start_next_turn(
             return Ok(StartTurnOutcome::Idle);
         }
         app.queued_model_error = None;
+        let already_appended = if let Some(queued) = app
+            .rejected_turn_steers
+            .front()
+            .or_else(|| app.user_message_queue.front())
+            && queued.action == QueuedInputAction::Plain
+            && let Some(owner) = queued.owner.as_ref()
+        {
+            if app.input_admission.is_some() {
+                return Ok(StartTurnOutcome::Idle);
+            }
+            let input_owner = owner.clone();
+            match engine
+                .state
+                .try_begin_user_input(owner, queued.model_message.clone())
+            {
+                kcoder_state::UserInputStart::Busy(_) => {
+                    app.input_start_retry_at = Some(Instant::now() + Duration::from_millis(80));
+                    app.sync_input_preparation_indicator();
+                    return Ok(StartTurnOutcome::Idle);
+                }
+                kcoder_state::UserInputStart::Rejected { .. } => {
+                    app.hold_next_user_input("The input could not be saved. Check the conversation or edit the input before trying again.");
+                    return Ok(StartTurnOutcome::Idle);
+                }
+                kcoder_state::UserInputStart::Unknown {
+                    uuid,
+                    error,
+                    pending,
+                    ..
+                } => {
+                    app.input_unknown_diagnostic = Some((uuid, error));
+                    app.mark_input_uncertain_for(Some(input_owner.clone()));
+                    if let Some(pending) = pending {
+                        app.next_input_admission_id = app.next_input_admission_id.saturating_add(1);
+                        app.input_admission =
+                            Some(crate::input_admission::PendingInputAdmission::new(
+                                app.next_input_admission_id,
+                                pending,
+                                true,
+                                input_owner.clone(),
+                            ));
+                    }
+                    if let Some(front) = app
+                        .rejected_turn_steers
+                        .front_mut()
+                        .or_else(|| app.user_message_queue.front_mut())
+                    {
+                        front.action = QueuedInputAction::Uncertain;
+                    }
+                    app.push_message(MessageRole::System, "The save result for this input is not yet confirmed. Check the conversation before submitting it again.".to_string());
+                    app.sync_input_preparation_indicator();
+                    return Ok(StartTurnOutcome::Idle);
+                }
+                kcoder_state::UserInputStart::Accepted(pending) => {
+                    if !pending.ticket_is_retained() {
+                        app.input_unknown_diagnostic = Some((
+                            pending.uuid().to_owned(),
+                            "original ticket owner was unavailable".into(),
+                        ));
+                        app.mark_input_uncertain_for(Some(input_owner.clone()));
+                        app.next_input_admission_id = app.next_input_admission_id.saturating_add(1);
+                        app.input_admission =
+                            Some(crate::input_admission::PendingInputAdmission::new(
+                                app.next_input_admission_id,
+                                pending,
+                                true,
+                                input_owner.clone(),
+                            ));
+                        if let Some(front) = app
+                            .rejected_turn_steers
+                            .front_mut()
+                            .or_else(|| app.user_message_queue.front_mut())
+                        {
+                            front.action = QueuedInputAction::Uncertain;
+                        }
+                        app.push_message(MessageRole::System, "The save result for this input is not yet confirmed. Check the conversation before submitting it again.".to_string());
+                        return Ok(StartTurnOutcome::Idle);
+                    }
+                    let Some(id) = app.next_input_admission_id.checked_add(1) else {
+                        app.input_unknown_diagnostic = Some((
+                            pending.uuid().to_owned(),
+                            "input identity space was exhausted".into(),
+                        ));
+                        app.mark_input_uncertain_for(Some(input_owner.clone()));
+                        app.input_admission =
+                            Some(crate::input_admission::PendingInputAdmission::new(
+                                app.next_input_admission_id,
+                                pending,
+                                true,
+                                input_owner.clone(),
+                            ));
+                        if let Some(front) = app
+                            .rejected_turn_steers
+                            .front_mut()
+                            .or_else(|| app.user_message_queue.front_mut())
+                        {
+                            front.action = QueuedInputAction::Uncertain;
+                        }
+                        return Ok(StartTurnOutcome::Idle);
+                    };
+                    app.next_input_admission_id = id;
+                    if let Some(front) = app
+                        .rejected_turn_steers
+                        .front_mut()
+                        .or_else(|| app.user_message_queue.front_mut())
+                    {
+                        front.action = QueuedInputAction::Admitting(id);
+                    }
+                    app.input_admission = Some(crate::input_admission::PendingInputAdmission::new(
+                        id,
+                        pending,
+                        false,
+                        input_owner,
+                    ));
+                    app.input_start_retry_at = None;
+                    app.sync_input_preparation_indicator();
+                    return Ok(StartTurnOutcome::Idle);
+                }
+            }
+        } else if let Some(QueuedInputAction::Admitted(id)) = next_action {
+            let Some(admission) = app
+                .input_admission
+                .as_ref()
+                .filter(|admission| admission.id == id && !admission.cancelled)
+            else {
+                let owner = app
+                    .rejected_turn_steers
+                    .front()
+                    .or_else(|| app.user_message_queue.front())
+                    .and_then(|queued| queued.owner.clone());
+                if let Some(front) = app
+                    .rejected_turn_steers
+                    .front_mut()
+                    .or_else(|| app.user_message_queue.front_mut())
+                {
+                    front.action = QueuedInputAction::Uncertain;
+                }
+                app.mark_input_uncertain_for(owner);
+                app.push_message(MessageRole::System, "The save result for this input is not yet confirmed. Check the conversation before submitting it again.".to_string());
+                return Ok(StartTurnOutcome::Idle);
+            };
+            let Some(witness) = admission.witness.as_ref() else {
+                return Ok(StartTurnOutcome::Idle);
+            };
+            match witness.try_is_current() {
+                Ok(true) => true,
+                Ok(false) => {
+                    app.input_start_retry_at = Some(Instant::now() + Duration::from_millis(80));
+                    return Ok(StartTurnOutcome::Idle);
+                }
+                Err(error) => {
+                    let owner = admission.owner.clone();
+                    app.input_unknown_diagnostic =
+                        Some((admission.uuid.clone(), error.to_string()));
+                    app.mark_input_uncertain_for(Some(owner));
+                    if let Some(front) = app
+                        .rejected_turn_steers
+                        .front_mut()
+                        .or_else(|| app.user_message_queue.front_mut())
+                    {
+                        front.action = QueuedInputAction::Uncertain;
+                    }
+                    if let Some(admission) = app.input_admission.as_mut() {
+                        admission.cancel_dispatch();
+                    }
+                    app.push_message(MessageRole::System, "The save result for this input is not yet confirmed. Check the conversation before submitting it again.".to_string());
+                    app.sync_input_preparation_indicator();
+                    return Ok(StartTurnOutcome::Idle);
+                }
+            }
+        } else {
+            false
+        };
+        if matches!(
+            next_action,
+            Some(QueuedInputAction::Plain | QueuedInputAction::Admitted(_))
+        ) && let Err(error) = engine.acknowledge_orchestrate_user_input()
+        {
+            let _ = tx.send(AppEvent::SystemNotice(format!(
+                "Orchestrate work could not acknowledge user input: {error:#}"
+            )));
+            return Ok(StartTurnOutcome::Idle);
+        }
+        if already_appended {
+            let current = app
+                .input_admission
+                .as_ref()
+                .and_then(|admission| admission.witness.as_ref())
+                .map(|witness| witness.try_is_current());
+            match current {
+                Some(Ok(true)) => {}
+                Some(Ok(false)) => {
+                    app.input_start_retry_at = Some(Instant::now() + Duration::from_millis(80));
+                    return Ok(StartTurnOutcome::Idle);
+                }
+                Some(Err(error)) => {
+                    let owner = app
+                        .input_admission
+                        .as_ref()
+                        .map(|admission| admission.owner.clone());
+                    app.input_unknown_diagnostic = Some((
+                        app.input_admission
+                            .as_ref()
+                            .map(|admission| admission.uuid.clone())
+                            .unwrap_or_default(),
+                        error.to_string(),
+                    ));
+                    app.mark_input_uncertain_for(owner);
+                    if let Some(front) = app
+                        .rejected_turn_steers
+                        .front_mut()
+                        .or_else(|| app.user_message_queue.front_mut())
+                    {
+                        front.action = QueuedInputAction::Uncertain;
+                    }
+                    if let Some(admission) = app.input_admission.as_mut() {
+                        admission.cancel_dispatch();
+                    }
+                    app.push_message(MessageRole::System, "The save result for this input is not yet confirmed. Check the conversation before submitting it again.".to_string());
+                    app.sync_input_preparation_indicator();
+                    return Ok(StartTurnOutcome::Idle);
+                }
+                None => {
+                    let owner = app
+                        .input_admission
+                        .as_ref()
+                        .map(|admission| admission.owner.clone());
+                    app.mark_input_uncertain_for(owner);
+                    if let Some(front) = app
+                        .rejected_turn_steers
+                        .front_mut()
+                        .or_else(|| app.user_message_queue.front_mut())
+                    {
+                        front.action = QueuedInputAction::Uncertain;
+                    }
+                    return Ok(StartTurnOutcome::Idle);
+                }
+            }
+        }
+        app.input_start_retry_at = None;
         let Some(queued_input) = app.pop_user_message_for_turn() else {
             break;
         };
@@ -200,14 +537,16 @@ pub(super) async fn try_start_next_turn(
                 model_message,
                 display_message,
             } => {
-                if let Err(error) = engine.acknowledge_orchestrate_user_input() {
-                    let _ = tx.send(AppEvent::SystemNotice(format!(
-                        "Orchestrate work could not acknowledge user input: {error:#}"
-                    )));
-                    return Ok(StartTurnOutcome::Idle);
+                if already_appended {
+                    // The original witness was just rechecked. It does not by
+                    // itself linearize the subsequent Provider transport.
+                    app.input_admission = None;
+                    app.sync_input_preparation_indicator();
                 }
                 let transcript_start = app.push_scheduled_user_message(&display_message);
-                engine.state.add_message(model_message);
+                if !already_appended {
+                    engine.state.add_message(model_message);
+                }
                 app.frame_rate_limiter.reset();
                 start_turn_with_transcript_start(engine, app, tx, prompt, Some(transcript_start));
                 return Ok(StartTurnOutcome::Started);
@@ -292,10 +631,11 @@ pub(super) async fn try_start_next_turn(
             }
 
             let nudge = format!(
-                "[system] All tracked background sub-agents have finished. Aggregate \
-             their results now using the available `<subagent_notification .../>` \
-             entries and output files. Events: {}. Continue the original task, \
-             do not repeat work already delegated to a sub-agent, and do not give \
+                "[system] All tracked background work has finished. Aggregate the \
+             results now using the available `<subagent_notification .../>`, \
+             `<workflow_notification .../>` and `<task_notification .../>` entries \
+             and output files. Events: {}. Continue the original task, do not \
+             repeat work already delegated to background work, and do not give \
              a final conclusion until the relevant results have been inspected.",
                 summary
             );

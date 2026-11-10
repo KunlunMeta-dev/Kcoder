@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
-  checkForWeworkUpdate,
-  installPendingWeworkUpdate,
-  type WeworkUpdateDownloadProgress,
-  type WeworkUpdateInfo,
+  checkForStudioUpdate,
+  installPendingStudioUpdate,
+  type StudioUpdateDownloadProgress,
+  type StudioUpdateInfo,
 } from '@/lib/app-updater'
-import { isNativeTauriHost } from '@/lib/runtime-environment'
+import { isAppUpdateSupported } from '@/lib/app-updater'
 import {
   APP_UPDATE_AUTO_CHECK_MIN_AGE_MS,
   APP_UPDATE_INITIAL_CHECK_DELAY_MS,
@@ -22,8 +22,12 @@ const SIMULATED_DOWNLOAD_TOTAL_BYTES = 10_000_000
 const SIMULATED_DOWNLOAD_STEP_BYTES = 1_000_000
 const SIMULATED_DOWNLOAD_INTERVAL_MS = 250
 
+const LEGACY_APP_UPDATE_LAST_AUTO_CHECK_KEY = 'wework:lastAutoUpdateCheckAt'
+
 function readLastAutoCheckAt(): number {
-  const raw = window.localStorage.getItem(APP_UPDATE_LAST_AUTO_CHECK_KEY)
+  const raw =
+    window.localStorage.getItem(APP_UPDATE_LAST_AUTO_CHECK_KEY) ??
+    window.localStorage.getItem(LEGACY_APP_UPDATE_LAST_AUTO_CHECK_KEY)
   const value = Number(raw)
   return Number.isFinite(value) ? value : 0
 }
@@ -43,10 +47,10 @@ function messageFor(error: unknown): string {
 }
 
 export function AppUpdateProvider({ children }: { children: ReactNode }) {
-  const supported = isNativeTauriHost()
-  const [availableUpdate, setAvailableUpdate] = useState<WeworkUpdateInfo | null>(null)
+  const supported = isAppUpdateSupported()
+  const [availableUpdate, setAvailableUpdate] = useState<StudioUpdateInfo | null>(null)
   const [status, setStatus] = useState<AppUpdateStatus>('idle')
-  const [downloadProgress, setDownloadProgress] = useState<WeworkUpdateDownloadProgress | null>(
+  const [downloadProgress, setDownloadProgress] = useState<StudioUpdateDownloadProgress | null>(
     null
   )
   const [message, setMessage] = useState<string | null>(null)
@@ -61,7 +65,7 @@ export function AppUpdateProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const runCheck = useCallback(
-    async ({ silent }: { silent: boolean }): Promise<WeworkUpdateInfo | null> => {
+    async ({ silent }: { silent: boolean }): Promise<StudioUpdateInfo | null> => {
       if (!supported) return null
       if (checkInFlightRef.current || status === 'installing') {
         return availableUpdate
@@ -75,7 +79,7 @@ export function AppUpdateProvider({ children }: { children: ReactNode }) {
       }
 
       try {
-        const update = await checkForWeworkUpdate()
+        const update = await checkForStudioUpdate()
         setAvailableUpdate(update)
 
         if (update) {
@@ -114,14 +118,14 @@ export function AppUpdateProvider({ children }: { children: ReactNode }) {
     setError(null)
 
     try {
-      await installPendingWeworkUpdate(setDownloadProgress)
+      await installPendingStudioUpdate(setDownloadProgress)
     } catch (caughtError) {
       const installError = messageFor(caughtError)
       setDownloadProgress(null)
       setError(installError)
 
       try {
-        const refreshedUpdate = await checkForWeworkUpdate()
+        const refreshedUpdate = await checkForStudioUpdate()
         setAvailableUpdate(refreshedUpdate)
         setStatus(refreshedUpdate ? 'available' : 'error')
       } catch {

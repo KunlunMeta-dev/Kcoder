@@ -1,4 +1,7 @@
+import { normalizeWebSources } from '../../../../shared/webSources'
+import { normalizeReviewEvidence } from '../../../../shared/reviewEvidence'
 import { decodeTurnMessageStatus } from '../../../../shared/turnMessageStatus'
+import { normalizeTurnFileCapture } from '../../../../shared/turnFileCapture'
 import { decodeProviderFailure } from '@wegent/chat-core'
 import type { ChatStreamHandlers, RuntimeTransportReplacedPayload } from '@/stream/chatStream'
 import type {
@@ -56,18 +59,19 @@ export function createRuntimeTaskStreamHandlers(
   handlers: RuntimeTaskStreamHandlers
 ): ChatStreamHandlers {
   const streamedFileChanges = new Map<string, Map<string, TurnFileChangesSummary>>()
-  const reconnectMessages = new Set<string>()
-  const settleReconnectMessage = (subtaskId: string, status: string | undefined) => {
-    if (!reconnectMessages.has(subtaskId) || (status !== 'done' && status !== 'error')) return
-    reconnectMessages.delete(subtaskId)
-    // This is a transport-status message, not a terminal event for the task's real turn.
-    handlers.onMessageAction({ type: 'assistant_done', subtaskId, content: '' })
-  }
+  const appInteractionMessages = new Set<string>()
 
   return {
     scope: {
       deviceId: address.deviceId,
       taskId: address.taskId,
+    },
+    onUserMessage: payload => {
+      if (!isRuntimeTaskStreamPayload(address, payload)) return
+      handlers.onMessageAction({
+        type: 'user_added',
+        message: { ...runtimeMessageToWorkbenchMessage(payload.message), taskId: address.taskId },
+      })
     },
     onChatStart: payload => {
       if (!isRuntimeTaskStreamPayload(address, payload)) return
@@ -83,6 +87,8 @@ export function createRuntimeTaskStreamHandlers(
         taskId: payload.taskId,
         subtaskId: identity.subtaskId,
         shellType: payload.shellType,
+        turnId: payload.turnId,
+        attemptId: payload.attemptId,
       })
     },
     onChatChunk: payload => {
@@ -142,6 +148,9 @@ export function createRuntimeTaskStreamHandlers(
         return
       }
       const blocks = getResultBlocks(identity.subtaskId, payload.result)
+      const fileCapture = normalizeTurnFileCapture(payload.result.fileChangesCapture, {
+        attemptId: identity.subtaskId,
+      })
       const fileChanges =
         normalizeTurnFileChanges(payload.result.fileChanges) ??
         fileChangesFromBlocks(blocks) ??
@@ -171,6 +180,8 @@ export function createRuntimeTaskStreamHandlers(
         content: doneContent(payload.result),
         blocks,
         fileChanges,
+        ...(fileCapture && { fileChangesCapture: fileCapture }),
+        reviewEvidence: normalizeReviewEvidence(payload.result.reviewEvidence, { attemptId: identity.subtaskId }),
       })
       handlers.onRefreshWorkLists?.()
     },
@@ -208,7 +219,18 @@ export function createRuntimeTaskStreamHandlers(
           providerFailure: decodeProviderFailure(payload.providerFailure),
         })
       }
+      const review = normalizeReviewEvidence(payload.reviewEvidence, { attemptId: identity.subtaskId })
+      if (review) handlers.onMessageAction({ type: 'review_evidence_updated', subtaskId: identity.subtaskId, evidence: review })
       streamedFileChanges.delete(identity.subtaskId)
+      const fileCapture = normalizeTurnFileCapture(payload.fileChangesCapture, {
+        attemptId: identity.subtaskId,
+      })
+      if (fileCapture)
+        handlers.onMessageAction({
+          type: 'file_capture_updated',
+          subtaskId: identity.subtaskId,
+          capture: fileCapture,
+        })
       handlers.onRefreshWorkLists?.()
     },
     onBlockCreated: payload => {
@@ -248,13 +270,11 @@ export function createRuntimeTaskStreamHandlers(
       })
       if (
         block.type === 'tool' &&
-        block.toolName === 'runtime_reconnecting' &&
-        block.id === identity.subtaskId &&
-        block.id.startsWith('runtime-reconnecting-')
-      ) {
-        reconnectMessages.add(block.id)
-        settleReconnectMessage(block.id, block.status)
-      }
+        block.toolName === 'request_user_input' &&
+        isRecord(block.renderPayload) &&
+        block.renderPayload.operationOrigin === 'mcp_app'
+      )
+        appInteractionMessages.add(identity.subtaskId)
       if (isStandaloneCompletedContextCompaction(identity.subtaskId, block)) {
         handlers.onMessageAction({
           type: 'assistant_done',
@@ -275,6 +295,7 @@ export function createRuntimeTaskStreamHandlers(
         })
         return
       }
+      if (isLegacyReconnectBlockId(identity.subtaskId, payload.blockId)) return
       debugRuntimeStreamEvent('block:updated', address, payload, true, {
         blockId: payload.blockId,
         status: payload.status ?? null,
@@ -298,13 +319,17 @@ export function createRuntimeTaskStreamHandlers(
       handlers.onMessageAction({
         type: 'block_updated',
         taskId: payload.taskId,
-        turnId: identity.subtaskId,
+        turnId: payload.turnId,
+        attemptId: payload.attemptId,
         subtaskId: identity.subtaskId,
         blockId: payload.blockId,
         updates: {
           ...(payload.content !== undefined && { content: payload.content }),
           ...(payload.toolInput !== undefined && { toolInput: payload.toolInput }),
           ...(payload.toolOutput !== undefined && { toolOutput: payload.toolOutput }),
+          ...(payload.webSources !== undefined && {
+            webSources: normalizeWebSources(payload.webSources, { toolCallId: payload.blockId }),
+          }),
           ...(payload.toolOutputDelta !== undefined && {
             toolOutputDelta: payload.toolOutputDelta,
           }),
@@ -327,8 +352,18 @@ export function createRuntimeTaskStreamHandlers(
       ) {
         handlers.onRefreshWorkLists?.()
       }
-      if (payload.blockId === identity.subtaskId) {
-        settleReconnectMessage(identity.subtaskId, payload.status)
+      if (
+        appInteractionMessages.has(identity.subtaskId) &&
+        (payload.status === 'done' || payload.status === 'error')
+      ) {
+        appInteractionMessages.delete(identity.subtaskId)
+        // Approval is complete; the independent App action has its own receipt.
+        // Do not settle the task's main model turn or change its busy state.
+        handlers.onMessageAction({
+          type: 'assistant_done',
+          subtaskId: identity.subtaskId,
+          content: '',
+        })
       }
     },
     onSubagentActivity: payload => {
@@ -610,6 +645,11 @@ function runtimeMessageToWorkbenchMessage(message: NormalizedRuntimeMessage): Wo
     fileChanges:
       normalizeTurnFileChanges(message.fileChanges ?? message.file_changes) ??
       fileChangesFromBlocks(blocks),
+    reviewEvidence: normalizeReviewEvidence(message.reviewEvidence, { turnId: message.turnId ?? message.turn_id ?? undefined, attemptId: message.attemptId ?? undefined }),
+    fileChangesCapture: normalizeTurnFileCapture(message.fileChangesCapture, {
+      turnId: message.turnId ?? message.turn_id ?? undefined,
+      attemptId: message.attemptId ?? undefined,
+    }),
     references: normalizeRuntimeReferences(message.references),
     memoryCitations: normalizeRuntimeMemoryCitations(message),
     createdAt,
@@ -789,6 +829,11 @@ function isCancelledRuntimeError(payload: ChatErrorPayload): boolean {
   return cancellationValues.has(error) || (typeof type === 'string' && cancellationValues.has(type))
 }
 
+function isLegacyReconnectBlockId(subtaskId: string, blockId: unknown): boolean {
+  return subtaskId === blockId &&
+    /^runtime-reconnecting-.+-[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(subtaskId)
+}
+
 function normalizeChatBlock(subtaskId: string, block: ChatBlock): ProcessingBlock | null {
   return normalizeProcessingBlock(subtaskId, block, 0)
 }
@@ -820,6 +865,15 @@ function normalizeProcessingBlock(
     typeof block.status === 'string' ? block.status : undefined
   )
 
+  // Drop connection notices from renderers that encoded them as transcript blocks.
+  if (
+    isLegacyReconnectBlockId(subtaskId, block.id) &&
+    (block.type === 'runtime_connection' ||
+      (block.type === 'tool' && (block.toolName ?? block.tool_name) === 'runtime_reconnecting'))
+  ) {
+    return null
+  }
+
   if (block.type === 'tool') {
     const generatedLineProgress = isActiveToolCallStatus(decodedStatus.status)
       ? normalizeGeneratedLineProgress(block.generatedLineProgress)
@@ -850,6 +904,7 @@ function normalizeProcessingBlock(
           ? block.tool_input
           : undefined,
       toolOutput: block.toolOutput ?? block.tool_output,
+      webSources: normalizeWebSources(block.webSources, { toolCallId: id }),
       toolOutputTruncated:
         typeof block.toolOutputTruncated === 'boolean'
           ? block.toolOutputTruncated

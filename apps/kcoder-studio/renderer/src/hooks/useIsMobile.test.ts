@@ -1,3 +1,4 @@
+import { installTestDesktopHost, installTestTransport } from '@/test/runtime-transport'
 import { renderHook } from '@testing-library/react'
 import { afterEach, describe, expect, test, vi } from 'vitest'
 import { useIsMobile } from './useIsMobile'
@@ -10,7 +11,6 @@ describe('useIsMobile', () => {
       configurable: true,
       value: originalInnerWidth,
     })
-    delete (window as typeof window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__
     delete (window as typeof window & { __KCODER_GATEWAY_WEB_SHIM__?: unknown })
       .__KCODER_GATEWAY_WEB_SHIM__
     vi.unstubAllGlobals()
@@ -27,30 +27,24 @@ describe('useIsMobile', () => {
     expect(result.current).toBe(true)
   })
 
-  test('keeps narrow Tauri desktop windows in desktop mode', () => {
+  test('uses responsive layout in a narrow Electron host', () => {
     Object.defineProperty(window, 'innerWidth', {
       configurable: true,
       value: 500,
     })
-    Object.defineProperty(window, '__TAURI_INTERNALS__', {
-      configurable: true,
-      value: {},
-    })
+    installTestDesktopHost()
 
     const { result } = renderHook(() => useIsMobile())
 
-    expect(result.current).toBe(false)
+    expect(result.current).toBe(true)
   })
 
-  test('keeps a narrow Gateway Web viewport in mobile mode despite the Tauri API shim', () => {
+  test('keeps a narrow Gateway Web viewport in mobile mode with an active Gateway transport', () => {
     Object.defineProperty(window, 'innerWidth', {
       configurable: true,
       value: 500,
     })
-    Object.defineProperty(window, '__TAURI_INTERNALS__', {
-      configurable: true,
-      value: {},
-    })
+    installTestTransport(() => null)
     Object.defineProperty(window, '__KCODER_GATEWAY_WEB_SHIM__', {
       configurable: true,
       value: true,

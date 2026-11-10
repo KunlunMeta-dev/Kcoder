@@ -1,0 +1,261 @@
+{
+  "McpConnectionAttempt": [
+    {
+      "decoded": {
+        "status": "unavailable"
+      },
+      "name": "legacy_missing_reason",
+      "value": {
+        "status": "unavailable"
+      }
+    },
+    {
+      "decoded": {
+        "status": "timedOut"
+      },
+      "name": "explicit_null_reason",
+      "value": {
+        "failureReason": null,
+        "status": "timedOut"
+      }
+    },
+    {
+      "decoded": {
+        "failureReason": "connectionFailed",
+        "status": "unavailable"
+      },
+      "name": "connectionFailed",
+      "value": {
+        "failureReason": "connectionFailed",
+        "status": "unavailable"
+      }
+    },
+    {
+      "decoded": {
+        "failureReason": "protocolFailed",
+        "status": "unavailable"
+      },
+      "name": "protocolFailed",
+      "value": {
+        "failureReason": "protocolFailed",
+        "status": "unavailable"
+      }
+    },
+    {
+      "decoded": {
+        "failureReason": "authorizationRequired",
+        "status": "unavailable"
+      },
+      "name": "authorizationRequired",
+      "value": {
+        "failureReason": "authorizationRequired",
+        "status": "unavailable"
+      }
+    },
+    {
+      "decoded": {
+        "failureReason": "timedOut",
+        "status": "unavailable"
+      },
+      "name": "timedOut",
+      "value": {
+        "failureReason": "timedOut",
+        "status": "unavailable"
+      }
+    },
+    {
+      "decoded": {
+        "failureReason": "unavailable",
+        "status": "unavailable"
+      },
+      "name": "unavailable",
+      "value": {
+        "failureReason": "unavailable",
+        "status": "unavailable"
+      }
+    }
+  ],
+  "McpFailureReason": [
+    {
+      "decoded": "connectionFailed",
+      "name": "connectionFailed",
+      "value": "connectionFailed"
+    },
+    {
+      "decoded": "protocolFailed",
+      "name": "protocolFailed",
+      "value": "protocolFailed"
+    },
+    {
+      "decoded": "authorizationRequired",
+      "name": "authorizationRequired",
+      "value": "authorizationRequired"
+    },
+    {
+      "decoded": "timedOut",
+      "name": "timedOut",
+      "value": "timedOut"
+    },
+    {
+      "decoded": "unavailable",
+      "name": "unavailable",
+      "value": "unavailable"
+    }
+  ],
+  "McpServerParams": [
+    {
+      "decoded": {
+        "name": "owned-original",
+        "pluginId": null
+      },
+      "name": "original_selector",
+      "value": {
+        "name": "owned-original",
+        "pluginId": null
+      }
+    }
+  ],
+  "McpServerSummary": [
+    {
+      "decoded": {
+        "authorization": "notApplicable",
+        "name": "fixture",
+        "transport": "stdio"
+      },
+      "name": "legacy_without_failure_fields",
+      "value": {
+        "authorization": "notApplicable",
+        "name": "fixture",
+        "transport": "stdio"
+      }
+    },
+    {
+      "decoded": {
+        "authorization": "notApplicable",
+        "name": "fixture",
+        "transport": "stdio"
+      },
+      "name": "explicit_null_failure",
+      "value": {
+        "authorization": "notApplicable",
+        "lastConnectionAttempt": null,
+        "lastConnectionFailure": null,
+        "name": "fixture",
+        "transport": "stdio"
+      }
+    },
+    {
+      "decoded": {
+        "authorization": "notApplicable",
+        "lastConnectionAttempt": "unavailable",
+        "lastConnectionFailure": "protocolFailed",
+        "name": "fixture",
+        "transport": "stdio"
+      },
+      "name": "protocol_failure",
+      "value": {
+        "authorization": "notApplicable",
+        "lastConnectionAttempt": "unavailable",
+        "lastConnectionFailure": "protocolFailed",
+        "name": "fixture",
+        "transport": "stdio"
+      }
+    },
+    {
+      "decoded": {
+        "authorization": "reauthorizationRequired",
+        "lastConnectionAttempt": "unavailable",
+        "lastConnectionFailure": "authorizationRequired",
+        "name": "fixture",
+        "transport": "stdio"
+      },
+      "name": "authorization_required",
+      "value": {
+        "authorization": "reauthorizationRequired",
+        "lastConnectionAttempt": "unavailable",
+        "lastConnectionFailure": "authorizationRequired",
+        "name": "fixture",
+        "transport": "stdio"
+      }
+    }
+  ],
+  "McpSetEnabledParams": [
+    {
+      "decoded": {
+        "enabled": false,
+        "name": "search"
+      },
+      "name": "standalone_disable",
+      "value": {
+        "enabled": false,
+        "name": "search"
+      }
+    },
+    {
+      "decoded": {
+        "enabled": true,
+        "name": "plugin.demo.search",
+        "pluginId": "demo"
+      },
+      "name": "plugin_enable",
+      "value": {
+        "enabled": true,
+        "name": "plugin.demo.search",
+        "pluginId": "demo"
+      }
+    }
+  ],
+  "McpSetEnabledResult": [
+    {
+      "decoded": {
+        "appliesToNewConversations": true,
+        "enabled": false,
+        "name": "search"
+      },
+      "name": "disabled",
+      "value": {
+        "appliesToNewConversations": true,
+        "enabled": false,
+        "name": "search"
+      }
+    }
+  ],
+  "ThreadMcpServerV1": [
+    {
+      "decoded": {
+        "args": [],
+        "command": "/usr/bin/node",
+        "env": {},
+        "name": "editor"
+      },
+      "name": "minimal_stdio",
+      "value": {
+        "command": "/usr/bin/node",
+        "name": "editor"
+      }
+    },
+    {
+      "decoded": {
+        "args": [
+          "D:\\Test App\\tool.js"
+        ],
+        "command": "D:\\Test App\\node.exe",
+        "env": {
+          "TEST_TOKEN": "fixture-private-value"
+        },
+        "name": "origincut"
+      },
+      "name": "private_windows_launch",
+      "value": {
+        "args": [
+          "D:\\Test App\\tool.js"
+        ],
+        "command": "D:\\Test App\\node.exe",
+        "env": {
+          "TEST_TOKEN": "fixture-private-value"
+        },
+        "name": "origincut"
+      }
+    }
+  ]
+}

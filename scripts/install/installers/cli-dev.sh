@@ -18,14 +18,16 @@ export KCODER_HOME="$profile_home"
 export KCODER_CONFIG_DIR="$profile_home"
 
 echo "Building KCoder debug CLI from $repo_dir..." >&2
-(cd "$repo_dir" && cargo build --locked --bin kcoder)
-[[ -x "$repo_dir/target/debug/kcoder" ]] || {
-  echo "Debug build did not produce $repo_dir/target/debug/kcoder" >&2
+target_dir="$(kcoder_cargo_target_dir "$repo_dir")"
+built_binary="$target_dir/debug/kcoder"
+(cd "$repo_dir" && CARGO_TARGET_DIR="$target_dir" cargo build --locked --bin kcoder)
+[[ -x "$built_binary" ]] || {
+  echo "Debug build did not produce $built_binary" >&2
   exit 1
 }
 
 mkdir -p "$install_dir"
-install -m 0755 "$repo_dir/target/debug/kcoder" "$binary"
+install -m 0755 "$built_binary" "$binary"
 rg_resource_dir="${KCODER_RIPGREP_DIR:-$(cd "$install_dir/.." && pwd)/lib/kcoder}"
 if rg_path="$(kcoder_install_ripgrep "$rg_resource_dir" "${KCODER_RIPGREP_TARGET:-$(rustc -vV | sed -n 's/^host: //p')}")"; then
   echo "Installed bundled ripgrep to $rg_path"

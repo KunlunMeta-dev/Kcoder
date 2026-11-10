@@ -7,7 +7,7 @@ fn training_mode_does_not_disable_non_model_lifecycle_hooks() {
     };
     let engine = TestEngineBuilder::new(tmp.path())
         .settings(settings)
-        .build();
+        .build_with_profile_directory();
 
     assert!(!engine.hook_registry().disabled);
 }
@@ -39,7 +39,7 @@ fn training_mode_discards_plugin_snapshot_and_kcoder_settings_skill() {
     let engine = TestEngineBuilder::new(tmp.path())
         .settings(settings)
         .folder_trusted(Some(true))
-        .build();
+        .build_with_profile_directory();
 
     assert!(engine.plugin_snapshot().plugin_ids.is_empty());
     assert!(engine.plugin_snapshot().skill_roots.is_empty());
@@ -115,7 +115,7 @@ fn query_engine_applies_configured_history_limit_to_state() {
 #[test]
 fn estimated_token_count_uses_legitimate_compacted_model_state() {
     let tmp = tempfile::tempdir().unwrap();
-    let engine = TestEngineBuilder::new(tmp.path()).build();
+    let engine = TestEngineBuilder::new(tmp.path()).build_with_profile_directory();
     engine.state.set_messages(vec![
         Message::user_text("Earlier conversation summary: compacted"),
         Message::user_text("recent visible"),
@@ -131,4 +131,153 @@ fn estimated_token_count_uses_legitimate_compacted_model_state() {
         engine.estimated_token_count(),
         TokenCounter::count(&engine.state.messages())
     );
+}
+
+#[tokio::test]
+async fn stop_hook_failure_waits_for_pending_tool_results() {
+    let tmp = tempfile::tempdir().unwrap();
+    kcoder_config::FolderTrustStore::load(tmp.path())
+        .trust(tmp.path())
+        .unwrap();
+    let config_dir = tmp.path().join(".kcoder");
+    std::fs::create_dir_all(&config_dir).unwrap();
+    std::fs::write(
+        config_dir.join("settings.json"),
+        serde_json::json!({"hooks": {"Stop": [{"hooks": [{
+            "type": "command", "command": "kcoder_missing_stop_hook_runtime_73491"
+        }]}]}})
+        .to_string(),
+    )
+    .unwrap();
+    let (provider, calls) = SequentialEventsProvider::new(vec![
+        named_tool_call_events(
+            "stop-hook-read",
+            "read",
+            serde_json::json!({
+                "file_path": tmp.path().join("missing.txt").to_string_lossy()
+            }),
+        ),
+        simple_text_events("The read finished with an error."),
+    ]);
+    let mut engine = TestEngineBuilder::new(tmp.path())
+        .provider(Arc::new(provider))
+        .folder_trusted(Some(true))
+        .tool_registry(kcoder_tools::default_registry())
+        .build_with_profile_directory()
+        .with_settings_persistence_path(tmp.path().join("settings.json"));
+    // Keep command-hook trust checks in this fixture's private profile.
+    for (_, matcher) in &mut engine.hook_registry.settings_hooks {
+        if let Some(trust) = matcher
+            .source
+            .as_mut()
+            .and_then(|source| source.required_trust.as_mut())
+        {
+            trust.config_dir = Some(tmp.path().to_path_buf());
+        }
+    }
+    engine
+        .state
+        .add_message(Message::user_text("Read missing.txt"));
+    let events = engine
+        .run_turn_stream(&kcoder_permissions::AutoAllowPrompt)
+        .collect::<Vec<_>>()
+        .await;
+    assert_eq!(*calls.lock().unwrap(), 2, "{events:?}");
+    let result_index = events
+        .iter()
+        .position(|event| {
+            matches!(event,
+                EngineEvent::ToolResult { id, .. } if id == "stop-hook-read"
+            )
+        })
+        .expect("requested tool must settle before a failing Stop hook");
+    let hook_index = events
+        .iter()
+        .position(|event| {
+            matches!(event, EngineEvent::HookMessage { is_error: true, text }
+                if text.contains("kcoder_missing_stop_hook_runtime_73491")
+            )
+        })
+        .expect("Stop hook failure must remain visible");
+    assert!(result_index < hook_index);
+    assert!(
+        engine
+            .state
+            .messages()
+            .iter()
+            .any(|message| matches!(message,
+                Message::User { content, .. } if content.iter().any(|block| matches!(block,
+                    ContentBlock::ToolResult { tool_use_id, .. } if tool_use_id == "stop-hook-read"
+                ))
+            ))
+    );
+}
+
+#[tokio::test]
+async fn stop_hook_runs_once_after_tool_loop_finishes() {
+    let tmp = tempfile::tempdir().unwrap();
+    kcoder_config::FolderTrustStore::load(tmp.path())
+        .trust(tmp.path())
+        .unwrap();
+    let config_dir = tmp.path().join(".kcoder");
+    std::fs::create_dir_all(&config_dir).unwrap();
+    std::fs::write(
+        config_dir.join("settings.json"),
+        serde_json::json!({"hooks": {"Stop": [{"hooks": [{
+            "type": "command", "command": "echo stop>>stop-hook-count.txt"
+        }]}]}})
+        .to_string(),
+    )
+    .unwrap();
+    let (provider, calls) = SequentialEventsProvider::new(vec![
+        named_tool_call_events(
+            "stop-hook-first",
+            "read",
+            serde_json::json!({
+                "file_path": tmp.path().join("missing.txt").to_string_lossy()
+            }),
+        ),
+        named_tool_call_events(
+            "stop-hook-second",
+            "read",
+            serde_json::json!({
+                "file_path": tmp.path().join("missing.txt").to_string_lossy()
+            }),
+        ),
+        simple_text_events("Both reads finished."),
+    ]);
+    let mut engine = TestEngineBuilder::new(tmp.path())
+        .provider(Arc::new(provider))
+        .folder_trusted(Some(true))
+        .tool_registry(kcoder_tools::default_registry())
+        .build_with_profile_directory()
+        .with_settings_persistence_path(tmp.path().join("settings.json"));
+    // Keep command-hook trust checks in this fixture's private profile.
+    for (_, matcher) in &mut engine.hook_registry.settings_hooks {
+        if let Some(trust) = matcher
+            .source
+            .as_mut()
+            .and_then(|source| source.required_trust.as_mut())
+        {
+            trust.config_dir = Some(tmp.path().to_path_buf());
+        }
+    }
+    engine
+        .state
+        .add_message(Message::user_text("Read both files"));
+    let events = engine
+        .run_turn_stream(&kcoder_permissions::AutoAllowPrompt)
+        .collect::<Vec<_>>()
+        .await;
+    assert_eq!(*calls.lock().unwrap(), 3, "{events:?}");
+    assert_eq!(
+        events
+            .iter()
+            .filter(|event| matches!(event, EngineEvent::ToolResult { .. }))
+            .count(),
+        2
+    );
+    let log = std::fs::read_to_string(tmp.path().join("stop-hook-count.txt"))
+        .unwrap_or_else(|error| panic!("{error}: {events:?}"));
+    assert_eq!(log.lines().count(), 1);
 }

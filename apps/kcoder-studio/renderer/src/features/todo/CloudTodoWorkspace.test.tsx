@@ -269,7 +269,7 @@ describe('CloudTodoWorkspace', () => {
     expect(screen.queryByTestId('cloud-todo-card-WEG-1')).not.toBeInTheDocument()
     expect(screen.queryByTestId('cloud-todo-card-WEG-3')).not.toBeInTheDocument()
     expect(
-      screen.getByTestId('cloud-project-header').querySelector('[data-tauri-drag-region]')
+      screen.getByTestId('cloud-project-header').querySelector('[data-kcoder-drag-region]')
     ).toBeInTheDocument()
 
     await userEvent.click(screen.getByTestId('cloud-todo-open-children-WEG-2'))
@@ -370,7 +370,7 @@ describe('CloudTodoWorkspace', () => {
     await userEvent.click(screen.getAllByText('Wegent V4')[0])
     const projectHeader = screen.getByTestId('cloud-project-header')
     expect(projectHeader).toHaveClass('h-[52px]', 'shrink-0')
-    expect(projectHeader.querySelector('[data-tauri-drag-region]')).toBeInTheDocument()
+    expect(projectHeader.querySelector('[data-kcoder-drag-region]')).toBeInTheDocument()
     expect(screen.getAllByTestId('macos-titlebar-drag-region')).toHaveLength(2)
     await userEvent.click(await screen.findByTestId('cloud-todo-card-WEG-1'))
 
@@ -851,6 +851,9 @@ describe('CloudTodoWorkspace', () => {
   })
 
   it('defaults new TODOs to the inbox unless another status is selected', async () => {
+    const legacyDraftKey = 'wework-todo-draft:11:inbox'
+    const draftKey = 'kcoder-todo-draft:11:inbox'
+    localStorage.setItem(legacyDraftKey, JSON.stringify({ title: 'Inbox TODO' }))
     const workbenchServices = services()
     workbenchServices.deliveryApi!.createLoopItem = vi.fn(async (_projectId, values) => ({
       ...item,
@@ -869,7 +872,8 @@ describe('CloudTodoWorkspace', () => {
     await userEvent.click((await screen.findAllByText('Wegent V4'))[0])
     await userEvent.click(screen.getByTestId('cloud-todo-add'))
     expect(screen.getByTestId('cloud-todo-create-status')).toHaveValue('inbox')
-    await userEvent.type(screen.getByTestId('cloud-todo-title'), 'Inbox TODO')
+    expect(screen.getByTestId('cloud-todo-title')).toHaveValue('Inbox TODO')
+    expect(JSON.parse(localStorage.getItem(draftKey) ?? '{}')).toMatchObject({ title: 'Inbox TODO' })
     await userEvent.click(screen.getByRole('button', { name: '创建任务' }))
 
     await waitFor(() =>
@@ -881,6 +885,10 @@ describe('CloudTodoWorkspace', () => {
         tags: [],
       })
     )
+    await waitFor(() => {
+      expect(localStorage.getItem(draftKey)).toBeNull()
+      expect(localStorage.getItem(legacyDraftKey)).toBeNull()
+    })
   })
 
   it('prefills a new TODO with its board column status and allows changing it', async () => {
@@ -1002,7 +1010,7 @@ describe('CloudTodoWorkspace', () => {
     await userEvent.click((await screen.findAllByText('Wegent V4'))[0])
     await userEvent.click(screen.getByRole('button', { name: '文件' }))
     expect(
-      screen.getByTestId('cloud-project-header').querySelector('[data-tauri-drag-region]')
+      screen.getByTestId('cloud-project-header').querySelector('[data-kcoder-drag-region]')
     ).toBeInTheDocument()
     await userEvent.click(await screen.findByTestId('cloud-folder-add'))
     await userEvent.type(screen.getByTestId('cloud-folder-name'), 'docs')

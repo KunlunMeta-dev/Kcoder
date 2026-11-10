@@ -1,6 +1,6 @@
 //! Bounded XLSX text extraction. Never evaluate formulas or external links.
 use super::{MAX_EXTRACTED_BYTES, error};
-use crate::ToolError;
+use crate::DocumentParseError;
 #[path = "wiki_xlsx_dates.rs"]
 mod dates;
 use quick_xml::{
@@ -12,7 +12,7 @@ use std::{
     io::{Cursor, Read},
 };
 
-pub(super) fn attr(e: &BytesStart<'_>, key: &[u8]) -> Result<String, ToolError> {
+pub(super) fn attr(e: &BytesStart<'_>, key: &[u8]) -> Result<String, DocumentParseError> {
     for a in e.attributes() {
         let a = a.map_err(|_| error("Invalid Excel XML attribute"))?;
         if a.key.local_name().as_ref() == key {
@@ -27,7 +27,7 @@ pub(super) fn attr(e: &BytesStart<'_>, key: &[u8]) -> Result<String, ToolError> 
 pub(super) fn part(
     zip: &mut zip::ZipArchive<Cursor<&[u8]>>,
     name: &str,
-) -> Result<String, ToolError> {
+) -> Result<String, DocumentParseError> {
     let file = zip
         .by_name(name)
         .map_err(|_| error("Excel workbook part is missing"))?;
@@ -40,7 +40,7 @@ pub(super) fn part(
     }
     super::decode_xml(&bytes)
 }
-fn text_event(event: &Event<'_>) -> Result<Option<String>, ToolError> {
+fn text_event(event: &Event<'_>) -> Result<Option<String>, DocumentParseError> {
     Ok(match event {
         Event::Text(e) => Some(
             e.decode()
@@ -64,7 +64,7 @@ fn text_event(event: &Event<'_>) -> Result<Option<String>, ToolError> {
         _ => None,
     })
 }
-fn shared_strings(xml: &str) -> Result<Vec<String>, ToolError> {
+fn shared_strings(xml: &str) -> Result<Vec<String>, DocumentParseError> {
     let mut reader = Reader::from_str(xml);
     let (mut strings, mut value, mut inside, mut total) = (Vec::new(), String::new(), false, 0);
     let mut phonetic_depth = 0usize;
@@ -103,11 +103,13 @@ fn shared_strings(xml: &str) -> Result<Vec<String>, ToolError> {
     Ok(strings)
 }
 #[cfg(test)]
-pub(super) fn extract(bytes: &[u8]) -> Result<String, ToolError> {
+pub(super) fn extract(bytes: &[u8]) -> Result<String, DocumentParseError> {
     Ok(extract_with_units(bytes)?.0)
 }
 
-pub(super) fn extract_with_units(bytes: &[u8]) -> Result<(String, usize, usize, bool), ToolError> {
+pub fn extract_with_units(
+    bytes: &[u8],
+) -> Result<(String, usize, usize, bool), DocumentParseError> {
     let mut zip = zip::ZipArchive::new(Cursor::new(bytes))
         .map_err(|_| error("Invalid or encrypted Excel file; save as unencrypted .xlsx"))?;
     if zip.len() > 4096 {
@@ -209,7 +211,7 @@ fn worksheet(
     shared: &[String],
     output: &mut String,
     cells: &mut usize,
-) -> Result<(), ToolError> {
+) -> Result<(), DocumentParseError> {
     worksheet_formatted(xml, shared, &[], false, output, cells, &mut false)
 }
 fn worksheet_formatted(
@@ -220,7 +222,7 @@ fn worksheet_formatted(
     output: &mut String,
     cells: &mut usize,
     missing_cache: &mut bool,
-) -> Result<(), ToolError> {
+) -> Result<(), DocumentParseError> {
     let mut reader = Reader::from_str(xml);
     let (mut address, mut kind, mut value, mut formula, mut field) = (
         String::new(),

@@ -1,4 +1,14 @@
 use serde_json::Value;
+#[path = "mcp_diagnostics.rs"]
+mod mcp_diagnostics;
+#[path = "migration/batch_cli.rs"]
+mod migration_batch_cli;
+#[path = "migration/history_cli.rs"]
+mod migration_history_cli;
+#[path = "migration/scan.rs"]
+mod migration_scan;
+#[path = "migration/transfer_cli.rs"]
+mod migration_transfer_cli;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::TcpListener;
 use std::process::{Command, Stdio};
@@ -6,8 +16,228 @@ use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, Instant};
 
+#[cfg(unix)]
+#[path = "acp/permissions.rs"]
+mod acp_permissions;
+#[cfg(target_os = "linux")]
+#[path = "acp/process_client.rs"]
+mod acp_process_client;
+#[cfg(unix)]
+#[path = "acp/session_mcp.rs"]
+mod acp_session_mcp;
+
+/// Fresh profiles configure no Provider. Fixtures that select a built-in
+/// transport directly (`--provider local`) or run the deterministic mock declare
+/// the context limits a configured Provider would otherwise supply; a turn
+/// without them is refused.
+const DIRECT_TRANSPORT_LIMITS: &str =
+    r#"{"context_window_tokens":128000,"context_output_headroom":16000}"#;
+/// Direct-transport limits with the isolated summary provider disabled.
+const DIRECT_TRANSPORT_SETTINGS: &str = r#"{"summary_provider":null,"summary_model":null,"context_window_tokens":128000,"context_output_headroom":16000}"#;
+
+/// Create an isolated profile directory that can run direct-transport turns.
+fn write_direct_transport_settings(config: &std::path::Path) {
+    std::fs::create_dir_all(config).expect("create isolated profile");
+    std::fs::write(config.join("settings.json"), DIRECT_TRANSPORT_LIMITS)
+        .expect("declare direct-transport context limits");
+}
+
 fn kcoder_binary() -> &'static str {
     env!("CARGO_BIN_EXE_kcoder")
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn acp_native_sessions_stream_and_cancel_without_crossing_session_boundaries() {
+    use std::collections::BTreeMap;
+    use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
+    let temp = tempfile::tempdir().unwrap();
+    let workspace = temp.path().join("workspace");
+    std::fs::create_dir(&workspace).unwrap();
+    write_direct_transport_settings(&temp.path().join("config"));
+    let environment: BTreeMap<_, _> = [
+        ("HOME", temp.path().as_os_str().to_owned()),
+        (
+            "KCODER_CONFIG_DIR",
+            temp.path().join("config").into_os_string(),
+        ),
+        ("PATH", std::env::var_os("PATH").unwrap_or_default()),
+        ("KCODER_TUI_LAB_STREAM_DELAY_MS", "10".into()),
+    ]
+    .into_iter()
+    .map(|(key, value)| (key.into(), value))
+    .collect();
+    let info = kcoder_acp::AgentInfo {
+        version: "test".into(),
+        app_server: Some(kcoder_acp::AppServerConfig {
+            executable: kcoder_binary().into(),
+            args: [
+                "app-server",
+                "--scenario",
+                "full-turn",
+                "--training-mode",
+                "--permission-mode",
+                "yolo",
+            ]
+            .into_iter()
+            .map(Into::into)
+            .collect(),
+            environment: Some(environment),
+        }),
+    };
+    let (client, server) = tokio::io::duplex(65536);
+    let (input, output) = tokio::io::split(server);
+    let task = tokio::spawn(kcoder_acp::serve(
+        tokio::io::BufReader::new(input),
+        output,
+        info,
+    ));
+    let (read, mut write) = tokio::io::split(client);
+    let mut lines = tokio::io::BufReader::new(read).lines();
+    async fn send(write: &mut (impl tokio::io::AsyncWrite + Unpin), value: Value) {
+        let mut bytes = serde_json::to_vec(&value).unwrap();
+        bytes.push(b'\n');
+        write.write_all(&bytes).await.unwrap();
+    }
+    async fn receive(lines: &mut tokio::io::Lines<impl tokio::io::AsyncBufRead + Unpin>) -> Value {
+        let line = tokio::time::timeout(Duration::from_secs(30), lines.next_line())
+            .await
+            .unwrap()
+            .unwrap()
+            .expect("ACP EOF");
+        serde_json::from_str(&line).unwrap()
+    }
+    send(&mut write, serde_json::json!({"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":1}})).await;
+    assert_eq!(receive(&mut lines).await["result"]["protocolVersion"], 1);
+    send(&mut write, serde_json::json!({"jsonrpc":"2.0","id":99,"method":"session/new","params":{"cwd":workspace,"mcpServers":[{"name":"private","command":"/not/executed","args":[],"env":[{"name":"TOKEN","value":"do-not-echo-this-value"}]}]}})).await;
+    let rejected = receive(&mut lines).await;
+    assert!(rejected.get("error").is_some());
+    assert!(!rejected.to_string().contains("do-not-echo-this-value"));
+    assert!(!rejected.to_string().contains("/not/executed"));
+    assert!(
+        rejected["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("Temporary MCP"),
+        "{rejected}"
+    );
+    let mut session_ids = Vec::new();
+    for id in [2, 3] {
+        send(&mut write, serde_json::json!({"jsonrpc":"2.0","id":id,"method":"session/new","params":{"cwd":workspace,"mcpServers":[]}})).await;
+        let created = receive(&mut lines).await;
+        assert!(created.get("error").is_none(), "{created}");
+        session_ids.push(created["result"]["sessionId"].as_str().unwrap().to_owned());
+    }
+    assert_ne!(session_ids[0], session_ids[1]);
+    for request_id in [4, 5] {
+        send(&mut write, serde_json::json!({"jsonrpc":"2.0","id":request_id,"method":"session/prompt","params":{"sessionId":session_ids[0],"prompt":[{"type":"text","text":"Run the fixture"}]}})).await;
+        let mut updates = Vec::new();
+        loop {
+            let frame = receive(&mut lines).await;
+            if frame["id"] == request_id {
+                assert_eq!(frame["result"]["stopReason"], "end_turn", "{frame}");
+                break;
+            }
+            assert_eq!(frame["params"]["sessionId"], session_ids[0]);
+            updates.push(frame["params"]["update"].clone());
+        }
+        assert!(
+            updates
+                .iter()
+                .any(|update| update["sessionUpdate"] == "agent_message_chunk")
+        );
+        if request_id == 4 {
+            assert!(
+                updates
+                    .iter()
+                    .any(|update| update["sessionUpdate"] == "tool_call")
+            );
+            assert!(
+                updates
+                    .iter()
+                    .any(|update| update["sessionUpdate"] == "tool_call_update"
+                        && update["status"] == "completed")
+            );
+        }
+    }
+    send(&mut write, serde_json::json!({"jsonrpc":"2.0","id":6,"method":"session/prompt","params":{"sessionId":session_ids[1],"prompt":[{"type":"text","text":"Run the second fixture"}]}})).await;
+    // The next request sees the session reservation, even before native acceptance.
+    send(&mut write, serde_json::json!({"jsonrpc":"2.0","id":7,"method":"session/prompt","params":{"sessionId":session_ids[1],"prompt":[{"type":"text","text":"Must be busy"}]}})).await;
+    let mut busy = false;
+    loop {
+        let frame = receive(&mut lines).await;
+        if frame["id"] == 7 {
+            assert_eq!(frame["error"]["code"], -32061);
+            busy = true;
+        }
+        if frame["params"]["update"]["sessionUpdate"] == "agent_thought_chunk" {
+            send(&mut write, serde_json::json!({"jsonrpc":"2.0","method":"session/cancel","params":{"sessionId":session_ids[1]}})).await;
+        }
+        if frame["id"] == 6 {
+            assert_eq!(frame["result"]["stopReason"], "cancelled", "{frame}");
+            break;
+        }
+    }
+    assert!(busy);
+    // A cancelled peer cannot poison the still-idle first session.
+    send(&mut write, serde_json::json!({"jsonrpc":"2.0","id":8,"method":"session/prompt","params":{"sessionId":session_ids[0],"prompt":[{"type":"text","text":"Still available"}]}})).await;
+    loop {
+        let frame = receive(&mut lines).await;
+        if frame["id"] == 8 {
+            assert_eq!(frame["result"]["stopReason"], "end_turn", "{frame}");
+            break;
+        }
+        assert_eq!(frame["params"]["sessionId"], session_ids[0]);
+    }
+    write.shutdown().await.unwrap();
+    tokio::time::timeout(Duration::from_secs(15), task)
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+}
+
+#[tokio::test]
+async fn acp_probe_initializes_without_configuration_writes_or_human_stdout() {
+    use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
+    let temp = tempfile::tempdir().unwrap();
+    let config = temp.path().join("unused-config");
+    let mut command = tokio::process::Command::new(kcoder_binary());
+    command
+        .args(["--model", "unused-for-probe", "acp"])
+        .env_clear()
+        .env("KCODER_CONFIG_DIR", &config)
+        .current_dir(temp.path())
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .kill_on_drop(true);
+    #[cfg(windows)]
+    if let Some(root) = std::env::var_os("SYSTEMROOT") {
+        command.env("SYSTEMROOT", root);
+    }
+    let mut child = command.spawn().unwrap();
+    let mut stdin = child.stdin.take().unwrap();
+    let mut stdout = tokio::io::BufReader::new(child.stdout.take().unwrap()).lines();
+    stdin.write_all(b"{\"jsonrpc\":\"2.0\",\"id\":\"probe\",\"method\":\"initialize\",\"params\":{\"protocolVersion\":1}}\n").await.unwrap();
+    let line = tokio::time::timeout(Duration::from_secs(10), stdout.next_line())
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    let frame: Value = serde_json::from_str(&line).unwrap();
+    assert_eq!(frame["id"], "probe");
+    assert_eq!(frame["result"]["protocolVersion"], 1);
+    assert_eq!(frame["result"]["agentInfo"]["name"], "kcoder");
+    drop(stdin);
+    let status = tokio::time::timeout(Duration::from_secs(10), child.wait())
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(status.success());
+    assert!(stdout.next_line().await.unwrap().is_none());
+    assert!(!config.exists());
+    assert!(!temp.path().join(".kcoder").exists());
 }
 
 #[test]
@@ -123,11 +353,8 @@ fn json_stdout_is_not_polluted_by_provider_diagnostics() {
     std::fs::create_dir_all(&config_home).expect("create config home");
     std::fs::create_dir_all(&cache_home).expect("create cache home");
     std::fs::create_dir_all(&cwd).expect("create working directory");
-    std::fs::write(
-        config_home.join("settings.json"),
-        r#"{"summary_provider":null,"summary_model":null}"#,
-    )
-    .expect("disable isolated summary provider for the test");
+    std::fs::write(config_home.join("settings.json"), DIRECT_TRANSPORT_SETTINGS)
+        .expect("disable isolated summary provider for the test");
 
     let listener = TcpListener::bind("127.0.0.1:0").expect("reserve loopback port");
     let closed_addr = listener.local_addr().expect("read reserved address");
@@ -218,11 +445,7 @@ fn required_project_skill_preflight_blocks_before_provider_request() {
         "---\nname: ci-triage\ndescription: Triage CI\n---\n\nUse this skill.\n",
     )
     .unwrap();
-    std::fs::write(
-        config_home.join("settings.json"),
-        r#"{"summary_provider":null,"summary_model":null}"#,
-    )
-    .unwrap();
+    std::fs::write(config_home.join("settings.json"), DIRECT_TRANSPORT_SETTINGS).unwrap();
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let closed_addr = listener.local_addr().unwrap();
     drop(listener);
@@ -448,11 +671,7 @@ fn json_stdout_streams_before_the_provider_finishes() {
     std::fs::create_dir_all(&config_home).unwrap();
     std::fs::create_dir_all(&cache_home).unwrap();
     std::fs::create_dir_all(&cwd).unwrap();
-    std::fs::write(
-        config_home.join("settings.json"),
-        r#"{"summary_provider":null,"summary_model":null}"#,
-    )
-    .unwrap();
+    std::fs::write(config_home.join("settings.json"), DIRECT_TRANSPORT_SETTINGS).unwrap();
 
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     listener.set_nonblocking(true).unwrap();
@@ -633,7 +852,7 @@ fn training_mode_records_only_task_loop_requests_across_a_tool_roundtrip() {
     std::fs::create_dir_all(&config_home).unwrap();
     std::fs::create_dir_all(&cache_home).unwrap();
     std::fs::create_dir_all(&cwd).unwrap();
-    std::fs::write(config_home.join("settings.json"), "{}").unwrap();
+    std::fs::write(config_home.join("settings.json"), DIRECT_TRANSPORT_LIMITS).unwrap();
     let plugin_root = config_home.join("plugins/training-probe");
     std::fs::create_dir_all(plugin_root.join(".codex-plugin")).unwrap();
     std::fs::create_dir_all(plugin_root.join("hooks")).unwrap();
@@ -837,11 +1056,7 @@ fn json_stdout_reports_max_duration_as_timed_out_task() {
     std::fs::create_dir_all(&config_home).unwrap();
     std::fs::create_dir_all(&cache_home).unwrap();
     std::fs::create_dir_all(&cwd).unwrap();
-    std::fs::write(
-        config_home.join("settings.json"),
-        r#"{"summary_provider":null,"summary_model":null}"#,
-    )
-    .unwrap();
+    std::fs::write(config_home.join("settings.json"), DIRECT_TRANSPORT_SETTINGS).unwrap();
 
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     listener.set_nonblocking(true).unwrap();

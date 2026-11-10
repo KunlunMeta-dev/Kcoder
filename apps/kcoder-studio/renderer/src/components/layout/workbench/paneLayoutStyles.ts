@@ -1,9 +1,13 @@
 export const DESKTOP_CHAT_CONTENT_BASE_CLASS =
-  'mx-auto min-w-0 px-0 transition-[width,max-width] duration-[300ms] ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none'
+  'mx-auto min-w-0 px-0 transition-[width,max-width] duration-[300ms] ease-[cubic-bezier(0.16,1,0.3,1)]'
 
-export const DESKTOP_CHAT_CONTENT_WIDTH_CLASS = `${DESKTOP_CHAT_CONTENT_BASE_CLASS} w-[min(46rem,calc(100%_-_2rem))] max-w-[calc(100%_-_2rem)]`
+// Desktop reading column: `59.8rem` is the former `46rem` column widened by 30%,
+// still clamped by the pane gutter so narrow panes keep their horizontal inset.
+export const DESKTOP_CHAT_CONTENT_COLUMN_WIDTH_CLASS = 'w-[min(var(--kcoder-chat-column-width,59.8rem),calc(100%_-_2rem))]'
 
-export const DESKTOP_MESSAGE_LIST_WIDTH_CLASS = `${DESKTOP_CHAT_CONTENT_BASE_CLASS} w-[min(46rem,calc(100%_-_6rem))] max-w-[calc(100%_-_6rem)]`
+export const DESKTOP_CHAT_CONTENT_WIDTH_CLASS = `${DESKTOP_CHAT_CONTENT_BASE_CLASS} ${DESKTOP_CHAT_CONTENT_COLUMN_WIDTH_CLASS} max-w-[calc(100%_-_2rem)]`
+
+export const DESKTOP_MESSAGE_LIST_WIDTH_CLASS = DESKTOP_CHAT_CONTENT_WIDTH_CLASS
 
 export const DESKTOP_MESSAGE_LIST_CLASS = `${DESKTOP_MESSAGE_LIST_WIDTH_CLASS} px-0`
 
@@ -17,25 +21,21 @@ export const DESKTOP_STICKY_COMPOSER_BACKDROP_CLASS =
 export const DESKTOP_SCROLL_TO_BOTTOM_BUTTON_CLASS = 'bottom-4 z-popover bg-background/95 shadow-md'
 
 export const RIGHT_PANEL_WIDTH_TRANSITION_CLASS =
-  'transition-[width] duration-[240ms] ease-[cubic-bezier(0.2,0,0,1)] motion-reduce:transition-none will-change-[width]'
+  'transition-[width] duration-[240ms] ease-[cubic-bezier(0.2,0,0,1)] will-change-[width]'
 
 export const RIGHT_PANEL_SHELL_TRANSITION_CLASS =
-  'transition-[width,opacity] duration-[240ms] ease-[cubic-bezier(0.2,0,0,1)] motion-reduce:transition-none will-change-[width,opacity]'
+  'transition-[width,opacity] duration-[240ms] ease-[cubic-bezier(0.2,0,0,1)] will-change-[width,opacity]'
 
 export const RIGHT_PANEL_HANDLE_TRANSITION_CLASS =
-  'transition-[left] duration-[240ms] ease-[cubic-bezier(0.2,0,0,1)] motion-reduce:transition-none will-change-[left]'
+  'transition-[left] duration-[240ms] ease-[cubic-bezier(0.2,0,0,1)] will-change-[left]'
 
 export const DOCKED_ENVIRONMENT_INFO_WIDTH = 320
 
 export const MIN_CHAT_COLUMN_WIDTH_FOR_DOCKED_ENVIRONMENT_INFO = 680
 
-export const COLLAPSED_RIGHT_TITLEBAR_ACTIONS_CLEARANCE = '5rem'
+export const COLLAPSED_RIGHT_TITLEBAR_ACTIONS_CLEARANCE = '7.5rem'
 
 export const TEMPORARY_CHAT_PANEL_DEFAULT_WIDTH = 420
-
-export const MACOS_TRAFFIC_LIGHTS_CLEARANCE_CLASS = 'pl-[92px]'
-
-export const WINDOWS_HEADER_LEFT_PADDING_CLASS = 'pl-2'
 
 export const BLANK_BROWSER_MIGRATION_TTL_MS = 2 * 60 * 1000
 

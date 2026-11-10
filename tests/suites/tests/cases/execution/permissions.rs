@@ -94,5 +94,14 @@ fn real_tools_cover_allow_ask_deny_and_append_audit_jsonl() {
     assert_eq!(records[1].reason, "mode_ask");
     assert_eq!(records[2].tool_name, "bash");
     assert_eq!(records[2].reason, "deny_list");
-    assert_eq!(records[2].input["command"], "rm -rf target");
+    // Audit records keep a bounded projection, never the original input.
+    assert_eq!(records[2].input["projection"], "permission-audit-input/v1");
+    assert_eq!(records[2].input["jsonType"], "object");
+    assert_eq!(records[2].input["topLevelMembers"], 1);
+    assert!(
+        !std::fs::read_to_string(&audit_path)
+            .unwrap()
+            .contains("rm -rf target"),
+        "the audit log must not retain raw tool input"
+    );
 }

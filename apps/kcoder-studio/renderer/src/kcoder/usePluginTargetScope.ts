@@ -37,7 +37,7 @@ export function usePluginTargetScope(deviceId?: string, workspacePath?: string) 
       try {
         const servers = await fetchGatewayServers()
         if (disposed || attempt !== readRevision) return
-        const target = deviceId ? servers.find(item => item.id === deviceId) : servers[0]
+        const target = deviceId ? servers.find(item => item.id === deviceId) : undefined
         const next = target ? hookTargetScope(target) : ''
         if (changed && (fingerprint === undefined || next !== fingerprint)) invalidate()
         fingerprint = next

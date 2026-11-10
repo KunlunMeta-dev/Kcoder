@@ -58,6 +58,12 @@ pub fn worker_environment(
     ] {
         env.insert(key.into(), value.into());
     }
+    env.insert(
+        "KCODER_DESKTOP_SCREENSHOT_BASE64_BYTES".into(),
+        kcoder_types::computer_use::DESKTOP_SCREENSHOT_BASE64_BYTES
+            .to_string()
+            .into(),
+    );
     Ok(env)
 }
 
@@ -92,6 +98,10 @@ mod tests {
                 ("HTTP_PROXY".into(), "http://fixture".into()),
                 ("WINDOWS_MCP_TOOLS".into(), "PowerShell".into()),
                 ("WINDOWS_MCP_WATCHDOG".into(), "true".into()),
+                (
+                    "KCODER_DESKTOP_SCREENSHOT_BASE64_BYTES".into(),
+                    "99999999".into(),
+                ),
             ],
             &std::env::temp_dir(),
         )
@@ -106,6 +116,12 @@ mod tests {
         }
         assert_eq!(env[OsStr::new("ANONYMIZED_TELEMETRY")], "false");
         assert_eq!(env[OsStr::new("WINDOWS_MCP_WATCHDOG")], "false");
+        assert_eq!(
+            env[OsStr::new("KCODER_DESKTOP_SCREENSHOT_BASE64_BYTES")],
+            kcoder_types::computer_use::DESKTOP_SCREENSHOT_BASE64_BYTES
+                .to_string()
+                .as_str(),
+        );
         assert!(
             !env[OsStr::new("PATH")]
                 .to_string_lossy()

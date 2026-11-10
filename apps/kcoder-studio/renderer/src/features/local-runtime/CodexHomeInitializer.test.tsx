@@ -84,7 +84,7 @@ describe('CodexHomeInitializer', () => {
         remoteAppsEnabled: true,
       })
     )
-    expect(window.localStorage.getItem('wework.plugins.codexMigrationDismissed')).toBe('1')
+    expect(window.localStorage.getItem('wework.plugins.codexMigrationDismissed')).toBeNull()
   })
 
   test('migrates native Codex config with apps enabled by default', async () => {

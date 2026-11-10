@@ -1,0 +1,376 @@
+{
+  "ThreadStreamContextV1": {
+    "valid": [
+      {
+        "name": "idle",
+        "value": {
+          "serverId": "server",
+          "throughSequence": 5,
+          "activeTurn": null
+        }
+      },
+      {
+        "name": "running",
+        "value": {
+          "serverId": "server",
+          "throughSequence": 7,
+          "activeTurn": {
+            "id": "turn",
+            "threadId": "thread",
+            "status": "running",
+            "attemptId": "attempt"
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing_active_identity",
+        "value": {
+          "serverId": "server",
+          "throughSequence": 1
+        }
+      },
+      {
+        "name": "negative_watermark",
+        "value": {
+          "serverId": "server",
+          "throughSequence": -1,
+          "activeTurn": null
+        }
+      },
+      {
+        "name": "missing_attempt",
+        "value": {
+          "serverId": "server",
+          "throughSequence": 7,
+          "activeTurn": {
+            "id": "turn",
+            "threadId": "thread",
+            "status": "running"
+          }
+        }
+      }
+    ]
+  },
+  "StudioWorkMode": {
+    "valid": [
+      {
+        "name": "coding",
+        "value": "kcoder"
+      },
+      {
+        "name": "everyday_work",
+        "value": "kworker"
+      }
+    ],
+    "invalid": [
+      {
+        "name": "typo",
+        "value": "kworkr"
+      },
+      {
+        "name": "unknown_mode",
+        "value": "office"
+      }
+    ]
+  },
+  "ClientPresentationV1": {
+    "valid": [
+      {
+        "name": "default_explicit_version",
+        "value": {
+          "version": 1
+        }
+      },
+      {
+        "name": "office_widgets",
+        "value": {
+          "version": 1,
+          "studioWorkMode": "kworker",
+          "inlineWidgets": true
+        }
+      },
+      {
+        "name": "coding_explicit",
+        "value": {
+          "version": 1,
+          "studioWorkMode": "kcoder",
+          "inlineWidgets": false
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing_version",
+        "value": {}
+      },
+      {
+        "name": "unknown_privilege",
+        "value": {
+          "version": 1,
+          "owner": "other-client"
+        }
+      },
+      {
+        "name": "string_boolean",
+        "value": {
+          "version": 1,
+          "inlineWidgets": "true"
+        }
+      },
+      {
+        "name": "unknown_mode",
+        "value": {
+          "version": 1,
+          "studioWorkMode": "kworkr"
+        }
+      }
+    ]
+  },
+  "WidgetRef": {
+    "valid": [
+      {
+        "name": "retained-widget",
+        "value": {
+          "widgetId": "waaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "threadId": "thread-1",
+          "turnId": "turn-1",
+          "attemptId": "attempt-1",
+          "toolCallId": "call-1",
+          "revision": 1,
+          "title": "Sales",
+          "summary": "Quarterly sales",
+          "format": "html",
+          "executionMode": "managed",
+          "libraries": [
+            "chart_js"
+          ],
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "bytes": 128,
+          "createdAtMs": 1
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing-required-fields",
+        "value": {}
+      }
+    ]
+  },
+  "WidgetReadParams": {
+    "valid": [
+      {
+        "name": "retained-widget",
+        "value": {
+          "threadId": "thread-1",
+          "widgetId": "waaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "revision": 1
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing-required-fields",
+        "value": {}
+      }
+    ]
+  },
+  "WidgetReadResult": {
+    "valid": [
+      {
+        "name": "retained-widget",
+        "value": {
+          "widget": {
+            "widgetId": "waaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "threadId": "thread-1",
+            "turnId": "turn-1",
+            "attemptId": "attempt-1",
+            "toolCallId": "call-1",
+            "revision": 1,
+            "title": "Sales",
+            "summary": "Quarterly sales",
+            "format": "html",
+            "executionMode": "managed",
+            "libraries": [
+              "chart_js"
+            ],
+            "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "bytes": 128,
+            "createdAtMs": 1
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing-required-fields",
+        "value": {}
+      }
+    ]
+  },
+  "WidgetListParams": {
+    "valid": [
+      {
+        "name": "retained-widget",
+        "value": {
+          "threadId": "thread-1",
+          "offset": 0,
+          "limit": 50
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing-required-fields",
+        "value": {}
+      }
+    ]
+  },
+  "WidgetListResult": {
+    "valid": [
+      {
+        "name": "retained-widget",
+        "value": {
+          "widgets": [
+            {
+              "widgetId": "waaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "threadId": "thread-1",
+              "turnId": "turn-1",
+              "attemptId": "attempt-1",
+              "toolCallId": "call-1",
+              "revision": 1,
+              "title": "Sales",
+              "summary": "Quarterly sales",
+              "format": "html",
+              "executionMode": "managed",
+              "libraries": [
+                "chart_js"
+              ],
+              "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "bytes": 128,
+              "createdAtMs": 1
+            }
+          ],
+          "nextOffset": null
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing-required-fields",
+        "value": {}
+      }
+    ]
+  },
+  "WidgetContentReadParams": {
+    "valid": [
+      {
+        "name": "retained-widget",
+        "value": {
+          "threadId": "thread-1",
+          "widgetId": "waaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "revision": 1,
+          "offset": 0
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing-required-fields",
+        "value": {}
+      }
+    ]
+  },
+  "WidgetContentReadResult": {
+    "valid": [
+      {
+        "name": "retained-widget",
+        "value": {
+          "widgetId": "waaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "revision": 1,
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "bytes": 3,
+          "offset": 0,
+          "nextOffset": 3,
+          "dataBase64": "YWJj"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing-required-fields",
+        "value": {}
+      }
+    ]
+  },
+  "WidgetRenderReceiptParams": {
+    "valid": [
+      {
+        "name": "retained-widget",
+        "value": {
+          "widget": {
+            "threadId": "thread-1",
+            "widgetId": "waaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "revision": 1
+          },
+          "turnId": "turn-1",
+          "attemptId": "attempt-1",
+          "toolCallId": "call-1",
+          "status": "rendered"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing-required-fields",
+        "value": {}
+      }
+    ]
+  },
+  "WidgetRenderReceiptResult": {
+    "valid": [
+      {
+        "name": "retained-widget",
+        "value": {
+          "accepted": true
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing-required-fields",
+        "value": {}
+      }
+    ]
+  },
+  "WidgetInputPreview": {
+    "valid": [
+      {
+        "name": "bounded-source",
+        "value": {
+          "source": "<svg/>",
+          "title": "Diagram",
+          "format": "svg",
+          "bytes": 6,
+          "truncated": false,
+          "complete": false
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "wrong-source-type",
+        "value": {
+          "source": 3,
+          "title": null,
+          "format": "svg",
+          "bytes": 6,
+          "truncated": false,
+          "complete": false
+        }
+      }
+    ]
+  }
+}

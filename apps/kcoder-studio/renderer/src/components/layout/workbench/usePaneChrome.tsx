@@ -1,26 +1,22 @@
+import { useTaskBackgroundIssues } from '@/kcoder/backgroundIssues'
+import { TaskChannelBindingControl } from '@/features/connectivity/TaskChannelBindingControl'
+import { runtimeThreadId } from '@/lib/runtime-thread-id'
 import { useSubagentWorkspaceHost } from './useSubagentWorkspaceHost'
 import {
   TITLEBAR_ACTIONS_PORTAL_ID,
   TITLEBAR_RIGHT_PANEL_PORTAL_ID,
 } from '@/components/topnav/TitlebarActionsPortal'
-import { navigateTo } from '@/lib/navigation'
-import { isMacOSRuntime } from '@/lib/runtime-environment'
 import { cn } from '@/lib/utils'
-import { ArrowLeftRight, MessageCircle, MessageSquareWarning } from 'lucide-react'
+import { ArrowLeftRight, ClipboardCheck, MessageCircle, MessageSquareWarning } from 'lucide-react'
 import { useLayoutEffect } from 'react'
-import { DesktopAppSwitcher } from '../DesktopAppSwitcher'
 import { DESKTOP_TOP_BAR_BUTTON_CLASS } from '../DesktopTopBar'
 import { DesktopWindowControls } from '../DesktopWindowControls'
 import { MacOSTitleBarDragRegion } from '../MacOSTitleBarDragRegion'
 import { WorkspacePanelActions } from '../workspace-panels/WorkspacePanelActions'
-import {
-  MACOS_TRAFFIC_LIGHTS_CLEARANCE_CLASS,
-  RIGHT_PANEL_WIDTH_TRANSITION_CLASS,
-  WINDOWS_HEADER_LEFT_PADDING_CLASS,
-} from './paneLayoutStyles'
+import { RIGHT_PANEL_WIDTH_TRANSITION_CLASS } from './paneLayoutStyles'
 import type { usePanePanelActions } from './usePanePanelActions'
 
-export function usePaneChrome(context: ReturnType<typeof usePanePanelActions>) {
+export function usePaneChrome(context: ReturnType<typeof usePanePanelActions>, onOpenTaskReview: () => void) {
   const {
     workbenchVisible,
     sidebarCollapsed,
@@ -30,9 +26,9 @@ export function usePaneChrome(context: ReturnType<typeof usePanePanelActions>) {
     experimentalFeaturesEnabled,
     background,
     forkCurrentRuntimeTask,
-    startNewChat,
     services,
     t,
+    tChat,
     currentRuntimeTask,
     currentProject,
     paneSession,
@@ -60,7 +56,7 @@ export function usePaneChrome(context: ReturnType<typeof usePanePanelActions>) {
     setForkDialogOpen,
     setFeedbackDialogOpen,
     setHasPreviousTurnReview,
-    isTauri,
+    isGateway,
     environmentInfoPanelElement,
     continueInIm,
     setReviewState,
@@ -147,11 +143,11 @@ export function usePaneChrome(context: ReturnType<typeof usePanePanelActions>) {
   const panelChromeActions = renderWorkspacePanelActions('panel-toggles')
 
   const paneTaskTitle =
-    runtimeTaskTitle && !isTauri ? (
+    runtimeTaskTitle && !isGateway ? (
       <div
         data-testid="workbench-pane-task-title"
         className={cn(
-          'pointer-events-none absolute left-0 top-0 z-chrome flex h-11 min-w-0 truncate items-center pr-7 text-sm font-medium leading-none text-text-primary',
+          'pointer-events-none absolute left-0 top-0 z-chrome flex h-11 min-w-0 truncate items-center pr-7 text-sm font-medium leading-normal text-text-primary',
           sidebarCollapsed ? 'pl-[14rem]' : 'pl-4',
           rightSplitResizing ? 'transition-none' : RIGHT_PANEL_WIDTH_TRANSITION_CLASS
         )}
@@ -161,24 +157,7 @@ export function usePaneChrome(context: ReturnType<typeof usePanePanelActions>) {
       </div>
     ) : undefined
 
-  const topBarLeftActions = !isTauri ? (
-    sidebarCollapsed ? (
-      <DesktopWindowControls
-        sidebarCollapsed
-        onToggleSidebar={() => onSidebarCollapsedChange(false)}
-        onNewChat={startNewChat}
-      />
-    ) : (
-      <DesktopWindowControls
-        sidebarCollapsed={false}
-        onToggleSidebar={() => onSidebarCollapsedChange(true)}
-      />
-    )
-  ) : undefined
-
-  const topBarLeftContent = topBarLeftActions ? <>{topBarLeftActions}</> : undefined
-
-  const showPageTopBar = !isTauri && (Boolean(topBarLeftContent) || Boolean(paneTaskTitle))
+  const showPageTopBar = !isGateway
 
   const subagentWorkspaceHost = useSubagentWorkspaceHost(
     services?.runtimeWorkApi,
@@ -220,19 +199,44 @@ export function usePaneChrome(context: ReturnType<typeof usePanePanelActions>) {
     </button>
   ) : undefined
 
+  const backgroundIssues = useTaskBackgroundIssues(currentRuntimeTask ?? undefined)
+
   const feedbackButton =
-    currentRuntimeTask && isTauri ? (
+    currentRuntimeTask && isGateway ? (
       <button
         type="button"
         data-testid="task-feedback-button"
-        className={DESKTOP_TOP_BAR_BUTTON_CLASS}
-        aria-label={t('workbench.feedback_button')}
+        className={cn(DESKTOP_TOP_BAR_BUTTON_CLASS, 'relative')}
+        aria-label={backgroundIssues.length ? `${t('workbench.feedback_button')} · ${t('workbench.feedback_pending_issues', { count: backgroundIssues.length })}` : t('workbench.feedback_button')}
         title={t('workbench.feedback_button')}
         onClick={() => setFeedbackDialogOpen(true)}
       >
         <MessageSquareWarning />
+        {backgroundIssues.length > 0 && <span data-testid="task-feedback-issue-count" className="absolute -right-1 -top-1 rounded-full bg-muted px-1 text-xs" aria-label={t('workbench.feedback_pending_issues', { count: backgroundIssues.length })}>{backgroundIssues.length}</span>}
       </button>
     ) : undefined
+
+  const taskReviewButton = currentRuntimeTask ? (
+    <button
+      type="button"
+      data-testid="task-review-toolbar-button"
+      className={DESKTOP_TOP_BAR_BUTTON_CLASS}
+      aria-label={tChat('taskReview.title')}
+      title={tChat('taskReview.title')}
+      onClick={onOpenTaskReview}
+    >
+      <ClipboardCheck />
+    </button>
+  ) : undefined
+
+  const channelBindingButton = currentRuntimeTask && paneActive && workbenchVisible ? (
+    <TaskChannelBindingControl
+      key={JSON.stringify([currentRuntimeTask.deviceId, currentRuntimeTask.workspacePath, currentRuntimeTask.taskId, runtimeThreadId(currentRuntimeTask)])}
+      address={currentRuntimeTask}
+      compact
+      className={DESKTOP_TOP_BAR_BUTTON_CLASS}
+    />
+  ) : undefined
 
   const mainHeaderActions = (
     <>
@@ -240,59 +244,38 @@ export function usePaneChrome(context: ReturnType<typeof usePanePanelActions>) {
       {continueInImButton}
       {feedbackButton}
       {mainHeaderProjectAction}
+      {taskReviewButton}
+      {channelBindingButton}
       {mainHeaderEnvironmentAction}
     </>
   )
 
-  const topRightActions = isTauri ? (
-    <>{panelChromeActions}</>
-  ) : (
+  const sidebarToggle = (
+    <DesktopWindowControls
+      sidebarCollapsed={sidebarCollapsed}
+      onToggleSidebar={() => onSidebarCollapsedChange(!sidebarCollapsed)}
+      className="gap-1"
+    />
+  )
+  const topRightActions = (
     <>
+      {sidebarToggle}
       {forkTaskButton}
       {continueInImButton}
+      {taskReviewButton}
+      {channelBindingButton}
       {workspacePanelActions}
     </>
   )
 
-  const tauriMainHeaderContent = isTauri ? (
+  const gatewayMainHeaderContent = isGateway ? (
     <div className="relative flex h-full min-w-0 flex-1 items-center overflow-hidden">
       <MacOSTitleBarDragRegion className="absolute inset-0 z-0 h-full w-full" />
-      {sidebarCollapsed && (
-        <div
-          data-testid="workbench-main-header-left-controls"
-          className={cn(
-            'relative z-0 flex h-full shrink-0 items-center gap-1 pr-1',
-            isMacOSRuntime()
-              ? MACOS_TRAFFIC_LIGHTS_CLEARANCE_CLASS
-              : WINDOWS_HEADER_LEFT_PADDING_CLASS
-          )}
-        >
-          <DesktopWindowControls
-            sidebarCollapsed
-            onToggleSidebar={() => onSidebarCollapsedChange(false)}
-            className="gap-1"
-          />
-          <DesktopAppSwitcher
-            activeApp="studio"
-            onNavigate={app =>
-              navigateTo(
-                app === 'studio'
-                  ? '/'
-                  : app === 'todo'
-                    ? '/todo'
-                    : app === 'wegent'
-                      ? '/app/wegent'
-                      : '/apps'
-              )
-            }
-          />
-        </div>
-      )}
       {runtimeTaskTitle ? (
         <div
           data-testid="workbench-pane-task-title"
           className={cn(
-            'pointer-events-none relative z-0 flex h-full min-w-0 flex-1 items-center truncate pl-4 text-sm font-medium leading-none text-text-primary',
+            'pointer-events-none relative z-0 flex h-full min-w-0 flex-1 items-center truncate pl-4 text-sm font-medium leading-normal text-text-primary',
             rightSplitResizing ? 'transition-none' : RIGHT_PANEL_WIDTH_TRANSITION_CLASS
           )}
         >
@@ -333,9 +316,10 @@ export function usePaneChrome(context: ReturnType<typeof usePanePanelActions>) {
         <div
           id={TITLEBAR_ACTIONS_PORTAL_ID}
           data-testid="titlebar-actions"
-          className="pointer-events-auto flex h-full min-w-[5rem] shrink-0 items-center justify-end gap-1 pr-2"
+          className="pointer-events-auto flex h-full min-w-[7.5rem] shrink-0 items-center justify-end gap-1 pr-2"
         >
-          {topRightActions}
+          {sidebarToggle}
+          {panelChromeActions}
         </div>
       </div>
     </div>
@@ -383,8 +367,6 @@ export function usePaneChrome(context: ReturnType<typeof usePanePanelActions>) {
     mainHeaderEnvironmentAction,
     panelChromeActions,
     paneTaskTitle,
-    topBarLeftActions,
-    topBarLeftContent,
     showPageTopBar,
     hasSubagentStatuses,
     subagentWorkspaceHost,
@@ -395,6 +377,6 @@ export function usePaneChrome(context: ReturnType<typeof usePanePanelActions>) {
     feedbackButton,
     mainHeaderActions,
     topRightActions,
-    tauriMainHeaderContent,
+    gatewayMainHeaderContent,
   }
 }

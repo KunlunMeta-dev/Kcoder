@@ -8,6 +8,7 @@ import {
   type SelectHTMLAttributes,
 } from 'react'
 import { createPortal } from 'react-dom'
+import { cn } from '@/lib/utils'
 
 // Keep the real select as the form/accessibility boundary. The desktop popup is
 // a presentation layer, so labels, validation and existing change handlers survive.
@@ -15,11 +16,13 @@ export function SettingsSelect({
   icon,
   density = 'standard',
   className = '',
+  surfaceClassName,
   children,
   ...props
 }: SelectHTMLAttributes<HTMLSelectElement> & {
-  icon: ReactNode
+  icon?: ReactNode
   density?: 'standard' | 'compact'
+  surfaceClassName?: string
 }) {
   const select = useRef<HTMLSelectElement>(null)
   const popup = useRef<HTMLDivElement>(null)
@@ -112,7 +115,7 @@ export function SettingsSelect({
       className={
         density === 'compact'
           ? 'relative inline-block min-w-0 max-w-56 align-middle'
-          : 'relative mt-1 block'
+          : 'relative mt-1 block min-w-0 w-full'
       }
     >
       <select
@@ -146,12 +149,23 @@ export function SettingsSelect({
       </select>
       <span
         aria-hidden="true"
-        className={`flex items-center text-sm text-text-primary transition-all duration-150 peer-focus-visible:ring-2 peer-focus-visible:ring-focus/30 peer-disabled:opacity-40 max-md:min-h-11 ${density === 'compact' ? 'h-7 gap-2 rounded-lg border border-transparent px-2 peer-hover:bg-text-primary/5' : 'min-h-10 gap-3 rounded-xl border px-3 shadow-sm peer-hover:border-text-muted/30'} ${menu ? 'border-blue-500/60 bg-background ring-2 ring-focus/10' : density === 'compact' ? 'border-transparent bg-transparent' : 'border-border bg-background'}`}
+        className={cn(
+          'flex items-center text-sm text-text-primary transition-all duration-150 peer-focus-visible:ring-2 peer-focus-visible:ring-focus/30 peer-disabled:opacity-40 max-md:min-h-11',
+          density === 'compact'
+            ? 'h-7 gap-2 rounded-lg border border-transparent px-2 peer-hover:bg-text-primary/5'
+            : 'min-h-10 gap-3 rounded-xl border px-3 shadow-sm peer-hover:border-text-muted/30',
+          menu
+            ? 'border-blue-500/60 bg-background ring-2 ring-focus/10'
+            : density === 'compact'
+              ? 'border-transparent bg-transparent'
+              : 'border-border bg-background',
+          surfaceClassName
+        )}
       >
-        <span className="flex shrink-0 text-text-muted [&>svg]:h-4 [&>svg]:w-4">{icon}</span>
+        <span className="flex shrink-0 text-text-muted empty:hidden [&>svg]:h-4 [&>svg]:w-4">{icon}</span>
         <span className="min-w-0 flex-1 truncate">{selectedLabel || '\u00a0'}</span>
         <ChevronDown
-          className={`h-4 w-4 shrink-0 text-text-muted transition-transform motion-reduce:transition-none ${menu ? 'rotate-180' : ''}`}
+          className={`h-4 w-4 shrink-0 text-text-muted transition-transform ${menu ? 'rotate-180' : ''}`}
         />
       </span>
       {menu &&

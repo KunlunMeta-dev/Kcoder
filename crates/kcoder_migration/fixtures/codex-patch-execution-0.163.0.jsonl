@@ -1,0 +1,4 @@
+{"type":"session_meta","payload":{"id":"48484848-4848-4484-8484-484848484848","cli_version":"0.163.0"}}
+{"type":"response_item","payload":{"type":"custom_tool_call","call_id":"patch-known","name":"apply_patch","input":"*** Begin Patch\n*** End Patch","turn_id":"turn-patch"}}
+{"type":"event_msg","payload":{"type":"patch_apply_end","call_id":"patch-known","turn_id":"turn-patch","stdout":"Source-recorded patch result","stderr":"","success":true,"changes":{},"status":"completed"}}
+{"type":"response_item","payload":{"type":"custom_tool_call_output","call_id":"patch-known","output":"A response was received","turn_id":"turn-patch"}}

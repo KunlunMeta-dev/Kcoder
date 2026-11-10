@@ -8,6 +8,8 @@ import {
 import { constants as fsConstants } from 'node:fs';
 import { delimiter, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { loadAndroidBuildEnvironment } from './android-signing-config.mjs';
+import { checkClientVersion } from './client-version.mjs';
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(SCRIPT_DIR, '../..');
@@ -17,14 +19,14 @@ const KEY_PASSWORD_ENV = 'KCODER_ANDROID_KEY_PASSWORD';
 const HERMES_MAGIC = Buffer.from('c61fbc03c103191f', 'hex');
 
 export const HELP = `Usage:
-  node scripts/release/package_mobile_android.mjs --version-code N --keystore FILE --key-alias ALIAS [options]
+  node scripts/release/package_mobile_android.mjs --version-code N [options]
 
 Required:
   --version-code N    Android versionCode (positive 32-bit integer)
-  --keystore FILE     Private release keystore file
-  --key-alias ALIAS   Release key alias
 
 Options:
+  --keystore FILE     Private release keystore (or KCODER_ANDROID_KEYSTORE_PATH)
+  --key-alias ALIAS   Release key alias (or KCODER_ANDROID_KEY_ALIAS)
   --sdk DIR           Android SDK root (defaults to ANDROID_HOME, then ANDROID_SDK_ROOT)
   --java-home DIR     JDK root (defaults to JAVA_HOME or java/jar/keytool on PATH)
   --gradle FILE       Use a cached Gradle executable instead of the generated wrapper
@@ -32,7 +34,11 @@ Options:
   --dry-run           Check prerequisites and print the build plan without copying or building
   --help              Show this help
 
-Signing passwords are read only from ${STORE_PASSWORD_ENV} and optional ${KEY_PASSWORD_ENV}.
+Signing settings use CLI > process environment > repository .env; --version-code is always explicit.
+The APK versionName comes from the shared Studio product version.
+Passwords use ${STORE_PASSWORD_ENV} and optional ${KEY_PASSWORD_ENV} from the process environment,
+or KCODER_ANDROID_SIGNING_ENV_FILE (an owner-only file outside the repository).
+Repository .env password values are ignored. Missing keystores are never generated automatically.
 The build requires Node.js, a JDK (java, jar, keytool), and Android SDK build-tools (aapt and apksigner).
 Dependencies must already exist in apps/kcoder-studio/mobile/node_modules; this script never runs npm install.
 The release APK, SHA-256, and provenance are written under target/packages/kcoder-studio-mobile/<unique-run>/.
@@ -45,7 +51,7 @@ const inside = (parent, child) => {
   return rel === '' || (!rel.startsWith(`..${sep}`) && rel !== '..' && !isAbsolute(rel));
 };
 
-export function parseArgs(argv) {
+export function parseArgs(argv, defaults = {}) {
   const result = { offline: false, dryRun: false, help: false };
   const values = new Map([
     ['--version-code', 'versionCode'], ['--keystore', 'keystore'], ['--key-alias', 'keyAlias'],
@@ -70,6 +76,8 @@ export function parseArgs(argv) {
     fail('--version-code must be a positive 32-bit integer');
   }
   result.versionCode = Number(result.versionCode);
+  result.keystore ??= defaults.keystore;
+  result.keyAlias ??= defaults.keyAlias;
   if (!result.keystore) fail('--keystore is required');
   if (result.keyAlias === undefined) fail('--key-alias is required');
   if (!result.keyAlias.trim() || result.keyAlias.startsWith('-') || /[\0\r\n]/.test(result.keyAlias)) fail('--key-alias must be a non-empty alias');
@@ -219,6 +227,7 @@ export async function preflight(args, env = process.env, root = REPO_ROOT) {
   const dependencyRoot = await lstat(dependencies).catch(() => null);
   if (!dependencyRoot?.isDirectory() || dependencyRoot.isSymbolicLink()) fail('Mobile node_modules must be an installed real directory, not a symbolic link');
   if (!(await isRegularFile(join(mobile, 'package.json')))) fail('Mobile package.json is missing');
+  const appVersion = await checkClientVersion(root);
   try { if (!(await stat(shared)).isDirectory()) fail('Shared source directory is missing'); }
   catch { fail('Shared source directory is missing'); }
   if (!(await isRegularFile(join(dependencies, 'expo/bin/cli')))) fail('Mobile dependencies are missing; install them before packaging (the script never runs npm install)');
@@ -242,13 +251,12 @@ export async function preflight(args, env = process.env, root = REPO_ROOT) {
     if (!(await isRegularFile(gradle))) fail('--gradle must name an existing Gradle executable');
   }
   const mobileConfig = JSON.parse(await readFile(join(mobile, 'app.json'), 'utf8'));
-  const packageJson = JSON.parse(await readFile(join(mobile, 'package.json'), 'utf8'));
   const appId = mobileConfig.expo?.android?.package;
   if (!appId) fail('Mobile app.json is missing expo.android.package');
   return {
     root, mobile, shared, dependencies, keystore, sdk, ...sdkTools, ...java,
     gradle, keyAlias: args.keyAlias, versionCode: args.versionCode,
-    appId, appVersion: packageJson.version, offline: args.offline,
+    appId, appVersion, offline: args.offline,
     passwordsConfigured: true,
   };
 }
@@ -480,7 +488,7 @@ async function gitProvenance(root, env, privateDir, secrets) {
   let commit = null, dirty = null;
   try {
     commit = (await runCommand({ label: 'source-commit', command: 'git', args: ['rev-parse', '--verify', 'HEAD'], cwd: root, env, privateDir, secrets, capture: true })).trim();
-    const status = await runCommand({ label: 'source-status', command: 'git', args: ['status', '--porcelain', '--', 'apps/kcoder-studio/mobile', 'apps/kcoder-studio/shared'], cwd: root, env, privateDir, secrets, capture: true });
+    const status = await runCommand({ label: 'source-status', command: 'git', args: ['status', '--porcelain', '--', 'apps/kcoder-studio/mobile', 'apps/kcoder-studio/shared'], cwd: root, env: { ...env, GIT_OPTIONAL_LOCKS: '0' }, privateDir, secrets, capture: true });
     dirty = status.trim().length > 0;
   } catch { /* provenance explicitly records unavailable Git identity */ }
   return { commit, mobileAndSharedDirty: dirty };
@@ -536,9 +544,10 @@ export function parseBadging(badging) {
   };
 }
 
-export function validateApkMetadata({ badging, manifest, entries, hermesHeader, expectedVersionCode, expectedPackage }) {
+export function validateApkMetadata({ badging, manifest, entries, hermesHeader, expectedVersion, expectedVersionCode, expectedPackage }) {
   const metadata = parseBadging(badging);
   if (metadata.packageName !== expectedPackage) fail('APK application ID does not match the source app configuration');
+  if (metadata.versionName !== expectedVersion) fail('APK versionName does not match the Studio product version');
   if (metadata.versionCode !== expectedVersionCode) fail('APK versionCode does not match --version-code');
   if (metadata.debuggable || /android:debuggable[^\n]*(?:true|0xffffffff|0x1)\b/i.test(manifest)) fail('APK manifest is debuggable');
   if (/android:usesCleartextTraffic[^\n]*(?:true|0xffffffff|0x1)\b/i.test(manifest)) fail('APK manifest permits cleartext traffic');
@@ -549,6 +558,12 @@ export function validateApkMetadata({ badging, manifest, entries, hermesHeader, 
   if (!entries.split(/\r?\n/).some(line => line.trim() === 'assets/index.android.bundle')) fail('APK has no Android JS bundle');
   if (!Buffer.from(hermesHeader).subarray(0, HERMES_MAGIC.length).equals(HERMES_MAGIC)) fail('Android JS bundle is not Hermes bytecode');
   return metadata;
+}
+
+export function parseSignerCertificate(signature) {
+  const digest = /^(?:Signer #1|V[234](?:\.\d+)? Signer):? certificate SHA-256 digest:\s*([a-f0-9:]+)/im.exec(signature)?.[1]?.replaceAll(':', '').toLowerCase();
+  if (!digest || !/^[a-f0-9]{64}$/.test(digest)) fail('apksigner did not report a valid signer SHA-256 fingerprint');
+  return digest;
 }
 
 export async function inspectApk({ apk, config, env, privateDir, secrets, jar, aapt, apksigner, verifyDir }) {
@@ -563,17 +578,16 @@ export async function inspectApk({ apk, config, env, privateDir, secrets, jar, a
   const hermes = await open(join(verifyDir, 'assets/index.android.bundle'), 'r');
   const header = Buffer.alloc(8);
   try { await hermes.read(header, 0, header.length, 0); } finally { await hermes.close(); }
-  const metadata = validateApkMetadata({ badging, manifest, entries, hermesHeader: header, expectedVersionCode: config.versionCode, expectedPackage: config.appId });
-  const certDigest = /Signer #1 certificate SHA-256 digest:\s*([a-f0-9:]+)/i.exec(signature)?.[1]?.replaceAll(':', '').toLowerCase();
-  if (!certDigest || !/^[a-f0-9]{64}$/.test(certDigest)) fail('apksigner did not report a valid signer SHA-256 fingerprint');
+  const metadata = validateApkMetadata({ badging, manifest, entries, hermesHeader: header, expectedVersion: config.appVersion, expectedVersionCode: config.versionCode, expectedPackage: config.appId });
+  const certDigest = parseSignerCertificate(signature);
   return { metadata, certificateSha256: certDigest, hermesBundle: 'assets/index.android.bundle' };
 }
 
-async function build(args) {
-  const config = await preflight(args);
-  const password = process.env[STORE_PASSWORD_ENV];
-  const keyPassword = process.env[KEY_PASSWORD_ENV] || password;
-  const secrets = [password, keyPassword, ...proxyLogSecrets(process.env)];
+async function build(args, sourceEnvironment) {
+  const config = await preflight(args, sourceEnvironment);
+  const password = sourceEnvironment[STORE_PASSWORD_ENV];
+  const keyPassword = sourceEnvironment[KEY_PASSWORD_ENV] || password;
+  const secrets = [password, keyPassword, ...proxyLogSecrets(sourceEnvironment)];
   if (args.dryRun) {
     process.stdout.write(`Preflight passed. No files copied and no build tools started.\n`);
     process.stdout.write(`Plan: copy Mobile/shared and installed dependencies into a private workspace; build terminal WebView; Expo prebuild; assemble Release for arm64-v8a${args.offline ? ' offline' : ''}; verify APK signature, manifest, versionCode, ABI, and Hermes bundle.\n`);
@@ -593,7 +607,7 @@ async function build(args) {
     await chmod(privateDir, 0o700);
     const workspace = join(privateDir, 'workspace');
     await mkdir(workspace, { mode: 0o700 });
-    const baseEnv = createBuildEnvironment(config, process.env, { privateDir, offline: args.offline });
+    const baseEnv = createBuildEnvironment(config, sourceEnvironment, { privateDir, offline: args.offline });
     await writeFile(baseEnv.NPM_CONFIG_USERCONFIG, '', { mode: 0o600, flag: 'wx' });
     await writeFile(baseEnv.NPM_CONFIG_GLOBALCONFIG, '', { mode: 0o600, flag: 'wx' });
     const source = {
@@ -608,6 +622,7 @@ async function build(args) {
     }
     assertNotInterrupted();
     const stagedConfig = JSON.parse(await readFile(join(staged.mobile, 'app.json'), 'utf8'));
+    if (stagedConfig.expo.version !== config.appVersion) fail('Mobile product version changed after preflight');
     stagedConfig.expo.android.versionCode = config.versionCode;
     await writeFile(join(staged.mobile, 'app.json'), `${JSON.stringify(stagedConfig, null, 2)}\n`, { mode: 0o600 });
 
@@ -644,7 +659,7 @@ async function build(args) {
     const wrapper = join(android, process.platform === 'win32' ? 'gradlew.bat' : 'gradlew');
     const gradle = directGradle ?? wrapper;
     if (!(await isRegularFile(gradle))) fail(directGradle ? 'Configured Gradle executable disappeared' : 'Expo prebuild did not generate the Gradle wrapper');
-    const gradleEnv = createGradleEnvironment(env, config);
+    const gradleEnv = createGradleEnvironment(env, config, sourceEnvironment);
     const gradleArgs = createGradleArguments(android, { offline: args.offline });
     process.stdout.write(`Assembling signed Android Release for arm64-v8a${args.offline ? ' offline' : ''}…\n`);
     await runCommand({ label: 'gradle-assemble-release', command: gradle, args: gradleArgs, cwd: staged.mobile, env: gradleEnv, privateDir, secrets });
@@ -698,14 +713,21 @@ async function build(args) {
 
 export async function main(argv = process.argv.slice(2)) {
   const uninstallSignals = installSignalHandlers();
+  let environment = process.env;
   try {
-    const args = parseArgs(argv);
-    if (args.help) { process.stdout.write(HELP); return 0; }
-    await build(args);
+    if (argv.includes('--help') || argv.includes('-h')) {
+      parseArgs(argv);
+      process.stdout.write(HELP);
+      return 0;
+    }
+    const loaded = await loadAndroidBuildEnvironment(REPO_ROOT);
+    environment = loaded.environment;
+    const args = parseArgs(argv, loaded.defaults);
+    await build(args, environment);
     assertNotInterrupted();
     return 0;
   } catch (error) {
-    const safe = redact(error instanceof Error ? error.message : String(error), [process.env[STORE_PASSWORD_ENV], process.env[KEY_PASSWORD_ENV]]);
+    const safe = redact(error instanceof Error ? error.message : String(error), [environment[STORE_PASSWORD_ENV], environment[KEY_PASSWORD_ENV]]);
     process.stderr.write(`Android release packaging failed: ${safe}\n`);
     return 1;
   } finally {

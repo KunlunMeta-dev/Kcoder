@@ -1,3 +1,9 @@
+import { useTaskViewAttachment } from '@/kcoder/useTaskViewAttachment'
+import { useTaskReviewContext } from '@/features/task-comparison/useTaskReviewContext'
+import { EnvironmentTaskReview } from '@/features/task-comparison/EnvironmentTaskReview'
+import { composerInputHistoryScope } from '@/components/chat/composer/composerInputHistory'
+import { ComposerLayoutTransition } from '@/components/chat/composer/ComposerLayoutTransition'
+import { ConversationWidgetsProvider } from '@/components/chat/widgets/ConversationWidgetsProvider'
 import { PANE_RESIZE_HANDLE } from '../useHorizontalPaneResize'
 import { ScrollableMessageArea } from '@/components/chat/ScrollableMessageArea'
 import { WorkspaceMarkdownImageLoaderContext } from '@/components/chat/workspaceMarkdownImageLoaderContext'
@@ -6,11 +12,13 @@ import { WorkflowConversationCanvas } from '@/features/workflows/WorkflowConvers
 import { WorkflowExecutionCanvas } from '@/features/workflows/WorkflowExecutionCanvas'
 import { runtimeProjectLabel } from '@/kcoder/gatewayServerLabel'
 import { cn } from '@/lib/utils'
-import { memo } from 'react'
+import { memo, useEffect, useState } from 'react'
 import { BufferedChatInput } from '../BufferedChatInput'
 import { DesktopEmptyTaskLauncher } from '../DesktopEmptyTaskLauncher'
+import { TaskExpertControl } from '@/features/experts/TaskExpertControl'
 import { DesktopTopBar } from '../DesktopTopBar'
 import { DeviceStatusPrompt } from '../DeviceStatusPrompt'
+import { MigrationFirstUseLauncher } from '@/features/migration-first-use/MigrationFirstUseLauncher'
 import { SubagentStatusIndicator } from '../SubagentStatusIndicator'
 import { requestOpenCloudDeviceSettings } from '../workbenchShellEvents'
 import { RightWorkspacePanel } from '../workspace-panels/RightWorkspacePanel'
@@ -41,7 +49,22 @@ export const DesktopWorkbenchPane = memo(function DesktopWorkbenchPane(
   const workspacePanels = usePaneWorkspacePanels(cloudBindings)
   const workspaceResources = usePaneWorkspaceResources(workspacePanels)
   const panelActions = usePanePanelActions(workspaceResources)
-  const chrome = usePaneChrome(panelActions)
+  const taskReviewOperations = useTaskReviewContext(
+    panelActions.currentRuntimeTask,
+    panelActions.paneSession.sessionTemplateBinding?.id
+  )
+  const reviewScope = JSON.stringify([
+    panelActions.currentRuntimeTask?.deviceId,
+    panelActions.currentRuntimeTask?.taskId,
+    taskReviewOperations?.owner.scope,
+  ])
+  const [reviewOpenScope, setReviewOpenScope] = useState<string | null>(null)
+  useEffect(
+    () => setReviewOpenScope(null),
+    [reviewScope, panelActions.paneActive, panelActions.workbenchVisible]
+  )
+  useTaskViewAttachment(panelActions.currentRuntimeTask, panelActions.workbenchVisible)
+  const chrome = usePaneChrome(panelActions, () => setReviewOpenScope(reviewScope))
   const model = chrome
   const {
     subagentWorkspaceHost,
@@ -91,10 +114,12 @@ export const DesktopWorkbenchPane = memo(function DesktopWorkbenchPane(
     bottomPanelOpenByKey,
     openFileRequest,
     fileNavigationScope,
+    fileCommentController,
+    fileEditorNavigation,
     commitFileOpenRequest,
     cancelFileOpenRequest,
     setHasPreviousTurnReview,
-    isTauri,
+    isGateway,
     workbenchMainRef,
     workbenchScrollRef,
     workbenchContentWidth,
@@ -179,30 +204,37 @@ export const DesktopWorkbenchPane = memo(function DesktopWorkbenchPane(
     closeBottomPanelContext,
     handleTerminalTabsEmpty,
     paneTaskTitle,
-    topBarLeftContent,
     showPageTopBar,
     hasSubagentStatuses,
     topRightActions,
-    tauriMainHeaderContent,
+    gatewayMainHeaderContent,
   } = model
+  const composerWork = hasConversation ? model.paneProjectWork : emptyProjectWork
   return (
     <main
       ref={workbenchMainRef}
       className={cn(
         'absolute inset-x-0 bottom-0 flex min-w-0 flex-1 flex-col overflow-hidden',
         hasMainBackground ? 'bg-background/20' : 'bg-background',
-        'transition-[margin] duration-[300ms] ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none',
+        'transition-[margin] duration-[300ms] ease-[cubic-bezier(0.16,1,0.3,1)]',
         sidebarResizing && 'transition-none',
         'top-0',
-        !isTauri && 'mt-1.5 rounded-xl border border-border/60 shadow-[0_3px_16px_rgba(0,0,0,0.04)]'
+        !isGateway && 'mt-1.5 rounded-xl border border-border/60 shadow-[0_3px_16px_rgba(0,0,0,0.04)]'
       )}
     >
+      <ComposerLayoutTransition
+        active={paneActive && workbenchVisible && !chatContentResizing}
+        scopeKey={JSON.stringify([activeDeviceId, effectiveWorkspaceTarget?.path])}
+        chromeKey={JSON.stringify([hasConversation, composerWork?.isGitProject,
+          composerWork?.branchLoading, composerWork?.executionModeLocked,
+          projectChatWithModelSelectorSignal.isModelSelectionReady])}
+      >
       {/* Portals escape the hidden cached pane, so only the visible active pane may own the header. */}
-      {tauriMainHeaderContent && paneActive && workbenchVisible ? (
-        <WorkbenchMainHeaderPortal>{tauriMainHeaderContent}</WorkbenchMainHeaderPortal>
+      {gatewayMainHeaderContent && paneActive && workbenchVisible ? (
+        <WorkbenchMainHeaderPortal>{gatewayMainHeaderContent}</WorkbenchMainHeaderPortal>
       ) : null}
       <>
-        {!isTauri && (
+        {!isGateway && (
           <div
             data-testid="workspace-panel-floating-actions"
             className="pointer-events-auto absolute right-8 top-1.5 z-popover flex shrink-0 items-center gap-1"
@@ -216,14 +248,12 @@ export const DesktopWorkbenchPane = memo(function DesktopWorkbenchPane(
             className={cn(
               'absolute left-0 top-0 z-chrome h-11 overflow-visible border-b border-border/50 pr-7',
               background.imagePath && background.inTopBar ? 'bg-background/20' : 'bg-background/95',
-              isTauri && sidebarCollapsed ? 'pl-[14rem]' : 'pl-4',
+              isGateway && sidebarCollapsed ? 'pl-[14rem]' : 'pl-4',
               rightSplitResizing || workflowSplit.resizing
                 ? 'transition-none'
                 : RIGHT_PANEL_WIDTH_TRANSITION_CLASS
             )}
             style={{ width: chatColumnWidth }}
-            left={topBarLeftContent}
-            leftClassName={cn('min-w-0 gap-2', isTauri ? 'contents' : 'max-w-[calc(100%-12rem)]')}
           />
         )}
         {paneTaskTitle}
@@ -257,111 +287,132 @@ export const DesktopWorkbenchPane = memo(function DesktopWorkbenchPane(
             <div className="flex min-w-0 flex-1" data-testid="desktop-workbench-loading" />
           ) : hasConversation ? (
             <div className="relative min-h-0 min-w-0 flex-1">
-              <WorkspaceMarkdownImageLoaderContext.Provider value={loadWorkspaceMarkdownImage}>
-                <ScrollableMessageArea
-                  messages={paneMessages}
-                  loading={paneSession.transcriptLoading}
-                  isWaitingForAssistant={paneSession.status.isWaitingForAssistantIndicator}
-                  hasMoreBefore={paneSession.transcriptHasMoreBefore}
-                  loadingMoreBefore={paneSession.transcriptLoadingMoreBefore}
-                  turnNavigation={paneSession.turnNavigation}
-                  loadedTranscriptRanges={paneSession.loadedTranscriptRanges}
-                  onLoadMoreBefore={paneSession.loadMoreTranscriptBefore}
-                  onLoadFullTranscript={paneSession.loadFullTranscript}
-                  loadingFullTranscript={paneSession.transcriptLoadingFullContent}
-                  onLoadTurnNavigationItem={paneSession.loadTranscriptTurnNavigationItem}
-                  onLoadTranscriptGap={paneSession.loadTranscriptGap}
-                  toolsCatalogTaskId={currentRuntimeTask?.taskId}
-                  toolsCatalogServerId={currentRuntimeTask?.deviceId}
-                  conversationKey={
-                    currentRuntimeTask
-                      ? `${currentRuntimeTask.deviceId}:${currentRuntimeTask.taskId}`
-                      : null
-                  }
-                  className="h-full"
-                  scrollTestId="desktop-chat-scroll"
-                  externalScrollRef={workbenchScrollRef}
-                  turnNavigationPortalTarget={turnNavigationPortalTarget}
-                  scrollerClassName="overflow-visible scrollbar-none"
-                  messageListClassName={cn(
-                    DESKTOP_MESSAGE_LIST_CLASS,
-                    chatContentResizing && 'transition-none'
-                  )}
-                  stickyFooterClassName={cn(
-                    DESKTOP_STICKY_COMPOSER_FOOTER_CLASS,
-                    hasMainBackground
-                      ? 'from-transparent via-transparent'
-                      : 'from-background via-background',
-                    chatContentResizing && 'transition-none'
-                  )}
-                  stickyFooter={<PaneComposer model={model} />}
-                  scrollButtonClassName={DESKTOP_SCROLL_TO_BOTTOM_BUTTON_CLASS}
-                  devices={devices}
-                  onRetryFailedMessage={message => {
-                    void paneSession.retryFailedMessage(message)
-                  }}
-                  onSwitchModelForFailedMessage={message => {
-                    pendingModelRetryRef.current = message
-                    setModelSelectorOpenSignal(signal => signal + 1)
-                  }}
-                  onLoadFileChangesDiff={(subtaskId, fileChanges) =>
-                    loadTurnFileChangesDiff(
-                      subtaskId,
-                      paneMessages,
-                      fileChanges,
-                      currentRuntimeTask
-                    )
-                  }
-                  onRevertFileChanges={(subtaskId, fileChanges) =>
-                    revertTurnFileChanges(subtaskId, paneMessages, fileChanges, currentRuntimeTask)
-                  }
-                  onOpenFileChangesReview={({
-                    subtaskId,
-                    loadDiff,
-                    reviewTitle,
-                    defaultFileTreeVisible,
-                    focusFilePath,
-                  }) => {
-                    previousTurnReviewRef.current = {
-                      loadDiff,
-                      defaultFileTreeVisible,
-                      sourceSubtaskId: subtaskId,
+              <ConversationWidgetsProvider
+                address={currentRuntimeTask}
+                messages={paneMessages}
+                onSendPrompt={text =>
+                  paneSession.setInput(
+                    paneSession.input.trim() ? `${paneSession.input}\n\n${text}` : text
+                  )
+                }
+              >
+                <WorkspaceMarkdownImageLoaderContext.Provider value={loadWorkspaceMarkdownImage}>
+                  <ScrollableMessageArea
+                    messages={paneMessages}
+                    loading={paneSession.transcriptLoading}
+                    isWaitingForAssistant={paneSession.status.isWaitingForAssistantIndicator}
+                    hasMoreBefore={paneSession.transcriptHasMoreBefore}
+                    loadingMoreBefore={paneSession.transcriptLoadingMoreBefore}
+                    turnNavigation={paneSession.turnNavigation}
+                    loadedTranscriptRanges={paneSession.loadedTranscriptRanges}
+                    onLoadMoreBefore={paneSession.loadMoreTranscriptBefore}
+                    onLoadFullTranscript={paneSession.loadFullTranscript}
+                    loadingFullTranscript={paneSession.transcriptLoadingFullContent}
+                    onLoadTurnNavigationItem={paneSession.loadTranscriptTurnNavigationItem}
+                    onLoadTranscriptGap={paneSession.loadTranscriptGap}
+                    importedHistoryTaskId={currentRuntimeTask?.taskId}
+                    historyWorkspacePath={
+                      currentRuntimeTask?.workspacePath || runtimeTaskWorkspacePath || undefined
                     }
-                    setHasPreviousTurnReview(true)
-                    void openReviewFromDiffLoader(loadDiff, {
+                    toolsCatalogTaskId={currentRuntimeTask?.taskId}
+                    toolsCatalogServerId={currentRuntimeTask?.deviceId}
+                    conversationKey={
+                      currentRuntimeTask
+                        ? `${currentRuntimeTask.deviceId}:${currentRuntimeTask.taskId}`
+                        : null
+                    }
+                    className="h-full"
+                    scrollTestId="desktop-chat-scroll"
+                    externalScrollRef={workbenchScrollRef}
+                    turnNavigationPortalTarget={turnNavigationPortalTarget}
+                    scrollerClassName="overflow-visible scrollbar-none"
+                    messageListClassName={cn(
+                      DESKTOP_MESSAGE_LIST_CLASS,
+                      chatContentResizing && 'transition-none'
+                    )}
+                    stickyFooterClassName={cn(
+                      DESKTOP_STICKY_COMPOSER_FOOTER_CLASS,
+                      hasMainBackground
+                        ? 'from-transparent via-transparent'
+                        : 'from-background via-background',
+                      chatContentResizing && 'transition-none'
+                    )}
+                    stickyFooter={<PaneComposer model={model} />}
+                    scrollButtonClassName={DESKTOP_SCROLL_TO_BOTTOM_BUTTON_CLASS}
+                    devices={devices}
+                    onRetryFailedMessage={message => {
+                      void paneSession.retryFailedMessage(message)
+                    }}
+                    onSwitchModelForFailedMessage={message => {
+                      pendingModelRetryRef.current = message
+                      setModelSelectorOpenSignal(signal => signal + 1)
+                    }}
+                    onLoadFileChangesDiff={(subtaskId, fileChanges) =>
+                      loadTurnFileChangesDiff(
+                        subtaskId,
+                        paneMessages,
+                        fileChanges,
+                        currentRuntimeTask
+                      )
+                    }
+                    onRevertFileChanges={(subtaskId, fileChanges) =>
+                      revertTurnFileChanges(
+                        subtaskId,
+                        paneMessages,
+                        fileChanges,
+                        currentRuntimeTask
+                      )
+                    }
+                    onOpenFileChangesReview={({
+                      subtaskId,
+                      loadDiff,
                       reviewTitle,
-                      reviewMode: 'previous-turn',
                       defaultFileTreeVisible,
                       focusFilePath,
-                      sourceSubtaskId: subtaskId,
-                    })
-                  }}
-                  fileChangesDiffPreviewDisabledSubtaskId={fileChangesDiffPreviewDisabledSubtaskId}
-                  onOpenWorkspaceFile={openWorkspaceFileFromMessage}
-                  onOpenLocalSkillFile={openLocalSkillFile}
-                  onRequestUserInputSubmit={paneSession.sendRequestUserInputResponse}
-                  onRequestUserInputIgnore={paneSession.ignoreRequestUserInput}
-                  onOpenAssistantPlan={openAssistantPlan}
-                  onEditLastUserMessage={paneSession.editLastUserMessage}
-                  canEditLastUserMessage={canEditLastUserMessage}
-                  onForkMessage={message => {
-                    const workspacePath =
-                      currentRuntimeTask?.workspacePath || runtimeTaskWorkspacePath
-                    if (!currentRuntimeTask || !message.turnId || !workspacePath) return
-                    return forkCurrentRuntimeTask(
-                      {
-                        deviceId: currentRuntimeTask.deviceId,
-                        workspacePath,
-                      },
-                      { lastTurnId: message.turnId }
-                    )
-                  }}
-                  hideRequestUserInputBlocks={Boolean(pendingRequestUserInput)}
-                  hiddenRequestUserInputIds={paneSession.answeredRequestUserInputIds}
-                  onAddSelectionToConversation={addSelectionToConversation}
-                  onAskSelectionInSidebar={askSelectionInSidebar}
-                />
-              </WorkspaceMarkdownImageLoaderContext.Provider>
+                    }) => {
+                      previousTurnReviewRef.current = {
+                        loadDiff,
+                        defaultFileTreeVisible,
+                        sourceSubtaskId: subtaskId,
+                      }
+                      setHasPreviousTurnReview(true)
+                      void openReviewFromDiffLoader(loadDiff, {
+                        reviewTitle,
+                        reviewMode: 'previous-turn',
+                        defaultFileTreeVisible,
+                        focusFilePath,
+                        sourceSubtaskId: subtaskId,
+                      })
+                    }}
+                    fileChangesDiffPreviewDisabledSubtaskId={
+                      fileChangesDiffPreviewDisabledSubtaskId
+                    }
+                    onOpenWorkspaceFile={openWorkspaceFileFromMessage}
+                    onOpenLocalSkillFile={openLocalSkillFile}
+                    onRequestUserInputSubmit={paneSession.sendRequestUserInputResponse}
+                    onRequestUserInputIgnore={paneSession.ignoreRequestUserInput}
+                    onOpenAssistantPlan={openAssistantPlan}
+                    onEditLastUserMessage={paneSession.editLastUserMessage}
+                    canEditLastUserMessage={canEditLastUserMessage}
+                    onForkMessage={message => {
+                      const workspacePath =
+                        currentRuntimeTask?.workspacePath || runtimeTaskWorkspacePath
+                      if (!currentRuntimeTask || !message.turnId || !workspacePath) return
+                      return forkCurrentRuntimeTask(
+                        {
+                          deviceId: currentRuntimeTask.deviceId,
+                          workspacePath,
+                        },
+                        { lastTurnId: message.turnId }
+                      )
+                    }}
+                    hideRequestUserInputBlocks={Boolean(pendingRequestUserInput)}
+                    hiddenRequestUserInputIds={paneSession.answeredRequestUserInputIds}
+                    onAddSelectionToConversation={addSelectionToConversation}
+                    onAskSelectionInSidebar={askSelectionInSidebar}
+                  />
+                </WorkspaceMarkdownImageLoaderContext.Provider>
+              </ConversationWidgetsProvider>
             </div>
           ) : (
             <DesktopEmptyTaskLauncher
@@ -373,6 +424,11 @@ export const DesktopWorkbenchPane = memo(function DesktopWorkbenchPane(
               onSelectSuggestion={selectTaskSuggestion}
               composer={
                 <>
+                  <MigrationFirstUseLauncher
+                    enabled={paneActive && workbenchVisible && !isBootstrapping}
+                    targetId={activeDeviceId}
+                    workspacePath={effectiveWorkspaceTarget?.path}
+                  />
                   <DeviceStatusPrompt
                     devices={devices}
                     upgradingDevices={upgradingDevices}
@@ -384,6 +440,11 @@ export const DesktopWorkbenchPane = memo(function DesktopWorkbenchPane(
                     className="mb-3"
                   />
                   <BufferedChatInput
+                    historyMessages={paneSession.messages}
+                    inputHistoryScope={composerInputHistoryScope(
+                      currentRuntimeTask,
+                      projectChatWithModelSelectorSignal.scopeKey
+                    )}
                     value={paneSession.input}
                     onChange={paneSession.setInput}
                     onSubmit={submitPaneInput}
@@ -393,6 +454,15 @@ export const DesktopWorkbenchPane = memo(function DesktopWorkbenchPane(
                     disabledReason={inlineComposerDisabledReason}
                     placeholder={t('workbench.input_placeholder', '随心输入')}
                     variant="desktop"
+                    toolbarLeadingContext={
+                      !currentRuntimeTask && paneActive && !workflowComposerIntent?.active ? (
+                        <TaskExpertControl
+                          address={currentRuntimeTask}
+                          deviceId={activeDeviceId}
+                          workspacePath={effectiveWorkspaceTarget?.path}
+                        />
+                      ) : undefined
+                    }
                     projectChat={projectChatWithModelSelectorSignal}
                     projectWork={emptyProjectWork}
                     queuedMessages={paneQueuedMessages}
@@ -455,7 +525,7 @@ export const DesktopWorkbenchPane = memo(function DesktopWorkbenchPane(
               'sticky top-0 z-popover flex h-full w-0 shrink-0 self-start flex-col overflow-hidden has-[[data-environment-info-popover]]:w-[320px] has-[[data-environment-info-popover]]:overflow-visible',
               hasSubagentStatuses && 'overflow-visible',
               environmentInfoTransitionEnabled
-                ? 'transition-[width] duration-[300ms] ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none'
+                ? 'transition-[width] duration-[300ms] ease-[cubic-bezier(0.16,1,0.3,1)]'
                 : 'transition-none'
             )}
           >
@@ -590,6 +660,8 @@ export const DesktopWorkbenchPane = memo(function DesktopWorkbenchPane(
               workspaceFileApi={workspaceFileApi}
               openFileRequest={openFileRequest}
               fileNavigationScope={fileNavigationScope}
+              fileCommentController={fileCommentController}
+              fileEditorNavigation={fileEditorNavigation}
               onCommitFileOpenRequest={commitFileOpenRequest}
               onCancelFileOpenRequest={cancelFileOpenRequest}
               workspaceTargetError={fileWorkspaceTargetError}
@@ -633,7 +705,33 @@ export const DesktopWorkbenchPane = memo(function DesktopWorkbenchPane(
           />
         )
       })}
+      <EnvironmentTaskReview
+        ownerScope={reviewScope}
+        open={
+          reviewOpenScope === reviewScope &&
+          Boolean(currentRuntimeTask) &&
+          paneActive &&
+          workbenchVisible
+        }
+        onClose={() => setReviewOpenScope(null)}
+        messages={paneMessages}
+        taskOperations={taskReviewOperations}
+        onAddToDraft={text => {
+          setReviewOpenScope(null)
+          addSelectionToConversation(text)
+        }}
+        onOpenFile={(path, options) => {
+          setReviewOpenScope(null)
+          void openWorkspaceFileFromMessage(path, options)
+        }}
+        onLoadFullTranscript={paneSession.loadFullTranscript}
+        loadingFullTranscript={paneSession.transcriptLoadingFullContent}
+        hasMoreBefore={paneSession.transcriptHasMoreBefore}
+        onLoadMoreBefore={paneSession.loadMoreTranscriptBefore}
+        loadingMoreBefore={paneSession.transcriptLoadingMoreBefore}
+      />
       <PaneOverlays model={model} />
+      </ComposerLayoutTransition>
     </main>
   )
 })

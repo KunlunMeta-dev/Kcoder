@@ -1,5 +1,6 @@
 use super::{
-    TEMPORARY_FILE_SEQUENCE, UnixFailurePoint, unix_test_failure_point, validate_single_name,
+    TEMPORARY_FILE_SEQUENCE, UnixFailurePoint, finish_private_append, unix_test_failure_point,
+    validate_single_name, verify_reader_links,
 };
 use anyhow::{Context, Result};
 use cap_primitives::ambient_authority;
@@ -9,7 +10,6 @@ use cap_primitives::fs::{
 };
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
-use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering;
 
@@ -26,6 +26,13 @@ pub(super) fn open_private_artifact_directory(path: &Path, create_missing: bool)
             anchor.display()
         )
     })?;
+    #[cfg(target_os = "linux")]
+    if !create_missing && !components.is_empty() {
+        let relative = path.strip_prefix(&anchor)?;
+        if let Some(directory) = open_existing_directory_linux(&current, relative)? {
+            return Ok(directory);
+        }
+    }
     for (index, component) in components.iter().enumerate() {
         let relative = Path::new(component);
         let mut created = false;
@@ -67,6 +74,45 @@ pub(super) fn open_private_artifact_directory(path: &Path, create_missing: bool)
     }
     Ok(current)
 }
+
+#[cfg(target_os = "linux")]
+fn open_existing_directory_linux(root: &File, relative: &Path) -> Result<Option<File>> {
+    use std::ffi::CString;
+    use std::os::{
+        fd::{AsRawFd, FromRawFd},
+        unix::ffi::OsStrExt,
+    };
+
+    let relative = CString::new(relative.as_os_str().as_bytes())?;
+    // open_how is a C ABI structure containing only integers.
+    let mut how: libc::open_how = unsafe { std::mem::zeroed() };
+    how.flags = (libc::O_PATH | libc::O_DIRECTORY | libc::O_CLOEXEC) as u64;
+    how.resolve = libc::RESOLVE_BENEATH | libc::RESOLVE_NO_SYMLINKS;
+    // The validated relative path cannot escape the held root or follow any link.
+    let result = unsafe {
+        libc::syscall(
+            libc::SYS_openat2,
+            root.as_raw_fd(),
+            relative.as_ptr(),
+            &how,
+            std::mem::size_of_val(&how),
+        )
+    };
+    if result >= 0 {
+        // A successful openat2 returns a new owned descriptor.
+        return Ok(Some(unsafe { File::from_raw_fd(result as libc::c_int) }));
+    }
+    let error = std::io::Error::last_os_error();
+    match error.raw_os_error() {
+        // Keep the same no-follow component walk for older or restricted kernels,
+        // path-length limits and lookup races.
+        Some(libc::ENOSYS | libc::EPERM | libc::ENAMETOOLONG | libc::EAGAIN) => Ok(None),
+        _ => Err(error).context(
+            "artifact directory path must contain only ordinary directories, without symlinks",
+        ),
+    }
+}
+
 #[cfg(unix)]
 fn absolute_path_components(path: &Path) -> Result<(PathBuf, Vec<OsString>)> {
     use std::path::Component;
@@ -115,15 +161,15 @@ pub(super) fn open_child_directory(
 }
 
 #[cfg(unix)]
-pub(super) fn append_private_file(parent: &File, name: &OsStr, bytes: &[u8]) -> Result<()> {
+pub(super) fn append_private_file(parent: &File, name: &OsStr, bytes: &[u8]) -> Result<File> {
     use cap_primitives::fs::OpenOptionsExt;
 
     let mut options = CapOpenOptions::new();
     options.write(true).append(true).create(true);
     options
         .mode(0o600)
-        .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC);
-    let mut file = open(parent, Path::new(name), &options).with_context(|| {
+        .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC | libc::O_NONBLOCK);
+    let file = open(parent, Path::new(name), &options).with_context(|| {
         format!(
             "private append target must be an ordinary file: {}",
             name.to_string_lossy()
@@ -133,11 +179,9 @@ pub(super) fn append_private_file(parent: &File, name: &OsStr, bytes: &[u8]) -> 
         file.metadata()?.is_file(),
         "private append target is not a regular file"
     );
+    verify_reader_links(&file, false)?;
     secure_private_handle(&file, false)?;
-    file.write_all(bytes)?;
-    file.sync_all()?;
-    sync_private_directory(parent)?;
-    Ok(())
+    finish_private_append(parent, file, bytes)
 }
 
 #[cfg(unix)]
@@ -284,7 +328,7 @@ pub(super) fn create_unique_temporary_file(
             sequence
         ));
         let mut options = CapOpenOptions::new();
-        options.write(true).create_new(true);
+        options.read(true).write(true).create_new(true);
         use cap_primitives::fs::OpenOptionsExt;
         options
             .mode(0o600)

@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
-import type { AppPreferences } from '@/tauri/appPreferences'
+import type { AppPreferences } from '@/host/appPreferences'
 import { AppshotsSettingsPage } from './AppshotsSettingsPage'
 
 const getAppshotsStatusMock = vi.hoisted(() => vi.fn())
@@ -12,7 +12,6 @@ const openAppshotsPermissionSettingsMock = vi.hoisted(() => vi.fn())
 const defaultPreferences: AppPreferences = {
   closeToTrayEnabled: true,
   showMainWindowOnLaunch: true,
-  systemDragEnabled: true,
   preventSleepWhileTasksRunning: true,
   closeToTrayHintSeen: false,
   language: 'zh-CN',
@@ -33,16 +32,15 @@ vi.mock('@/hooks/useTranslation', () => ({
   useTranslation: () => ({ t: (_key: string, fallback?: string) => fallback ?? _key }),
 }))
 
-vi.mock('@/tauri/appshots', () => ({
+vi.mock('@/host/appshots', () => ({
   getAppshotsStatus: getAppshotsStatusMock,
   openAppshotsPermissionSettings: openAppshotsPermissionSettingsMock,
 }))
 
-vi.mock('@/tauri/appPreferences', () => ({
+vi.mock('@/host/appPreferences', () => ({
   defaultAppPreferences: {
     closeToTrayEnabled: true,
     showMainWindowOnLaunch: true,
-    systemDragEnabled: true,
     preventSleepWhileTasksRunning: true,
     closeToTrayHintSeen: false,
     language: 'zh-CN',
@@ -148,7 +146,7 @@ describe('AppshotsSettingsPage', () => {
     render(<AppshotsSettingsPage />)
 
     expect(
-      await screen.findByText('快捷键已被其他应用占用，请退出冲突的应用后重启 Wework。')
+      await screen.findByText('快捷键已被其他应用占用，请退出冲突的应用后重启 KCoder。')
     ).toBeInTheDocument()
   })
 })

@@ -1,8 +1,9 @@
+import { taskConnectionStatus } from './taskConnectionStatus'
 import { beforeEach, describe, expect, test, vi } from 'vitest'
 import { createTestGatewayRuntime, FakeGatewayClient } from './gatewayRuntime.test-support'
 
 const emitMock = vi.hoisted(() => vi.fn())
-vi.mock('@tauri-apps/api/event', () => ({
+vi.mock('@/lib/runtime-events', () => ({
   emit: emitMock,
   listen: vi.fn(async () => () => undefined),
 }))
@@ -42,6 +43,8 @@ describe('KCoder gateway runtime asynchronous teardown', () => {
       payload: {
         taskId: 'thread',
         subtaskId: 'turn',
+        turnId: 'turn',
+        attemptId: 'turn',
         deviceId: 'local',
         data: {},
       },
@@ -95,22 +98,8 @@ describe('KCoder gateway runtime asynchronous teardown', () => {
         params: { threadId: 'thread-reconnect-drain' },
       })
     )
-    expect(emitMock.mock.calls.map(([, payload]) => payload.event)).toEqual([
-      'response.failed',
-      'response.block.created',
-    ])
-    const reconnectSubtaskId = emitMock.mock.calls[1]?.[1].payload.subtaskId
-    expect(reconnectSubtaskId).toMatch(/^runtime-reconnecting-thread-reconnect-drain-/)
-    expect(emitMock.mock.calls[1]?.[1]).toMatchObject({
-      payload: {
-        taskId: 'kcoder:local:thread-reconnect-drain',
-        subtaskId: reconnectSubtaskId,
-        deviceId: 'local',
-        data: {
-          block: { id: reconnectSubtaskId, toolName: 'runtime_reconnecting', status: 'pending' },
-        },
-      },
-    })
+    expect(emitMock).not.toHaveBeenCalled()
+    expect(taskConnectionStatus.read('local', 'kcoder:local:thread-reconnect-drain')).toBe('reconnecting')
     await new Promise(resolve => setTimeout(resolve, 0))
 
     let drained = false
@@ -120,6 +109,45 @@ describe('KCoder gateway runtime asynchronous teardown', () => {
     await Promise.resolve()
     expect(drained).toBe(false)
     await disposing
+    expect(taskConnectionStatus.read('local', 'kcoder:local:thread-reconnect-drain')).toBeNull()
+  })
+
+  test('reports exhausted recovery separately from an actual app-server exit', async () => {
+    const first = new FakeGatewayClient('thread-reconnect-exit')
+    let issued = 0
+    const runtime = createTestGatewayRuntime('token', {
+      loadServers: async () => [
+        { id: 'local', label: '本机', description: '本机', transport: 'local', workspacePath: '/workspace' },
+      ],
+      createClient: () => {
+        if (issued++ === 0) return first
+        const next = new FakeGatewayClient('thread-reconnect-exit')
+        if (issued <= 5) next.resumeFailure = new Error('resume failed')
+        return next
+      },
+    })
+    try {
+      const { taskId } = await runtime.request('runtime.tasks.create', {
+        taskId: 'reconnect-exit',
+        executionRequest: { prompt: 'start' },
+      }) as { taskId: string }
+      first.emitNotification('server/disconnected', { code: 1 })
+      first.close()
+      expect(taskConnectionStatus.read('local', taskId)).toBe('reconnecting')
+      await expect.poll(() => taskConnectionStatus.read('local', taskId), { timeout: 4000 })
+        .toBe('failed')
+      expect(emitMock.mock.calls.map(([, payload]) => payload.event)).toEqual(['response.failed'])
+      expect(console.warn).toHaveBeenCalledExactlyOnceWith(
+        '[KCoder] 无法自动恢复任务连接 当前任务',
+        expect.any(Object)
+      )
+      vi.mocked(console.warn).mockClear()
+
+      await runtime.readyTaskClient(runtime.tasks.get(taskId)!)
+      expect(taskConnectionStatus.read('local', taskId)).toBeNull()
+    } finally {
+      await runtime.disposeAsync()
+    }
   })
 
   test('waits for a client that is still connecting and closes it after disposal', async () => {

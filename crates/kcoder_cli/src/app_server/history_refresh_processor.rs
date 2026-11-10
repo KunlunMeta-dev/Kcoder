@@ -1,5 +1,6 @@
-use super::QueryEngine;
-use super::tracked_history_list::{BuildPhase, BuildProgress, StepBudget, TrackedHistoryList};
+use crate::tracked_history_list::{
+    BuildPhase, BuildProgress, StepBudget, TrackedHistoryHost, TrackedHistoryList,
+};
 use anyhow::{Result, ensure};
 use kcoder_app_protocol::{
     ThreadHistoryRefreshParams, ThreadHistoryRefreshResult, ThreadHistoryRefreshStatus,
@@ -7,20 +8,20 @@ use kcoder_app_protocol::{
 
 /// One connection-owned rebuild. Disconnect/cancel drops the builder's file lock.
 #[derive(Default)]
-pub(super) struct HistoryRefreshProcessor {
+pub struct HistoryRefreshProcessor {
     builder: TrackedHistoryList,
     cursor: Option<String>,
     last_response: Option<ThreadHistoryRefreshResult>,
 }
 
 impl HistoryRefreshProcessor {
-    pub(super) fn is_active(&self) -> bool {
+    pub fn is_active(&self) -> bool {
         self.cursor.is_some()
     }
 
-    pub(super) fn process(
+    pub fn process(
         &mut self,
-        engine: &QueryEngine,
+        host: &dyn TrackedHistoryHost,
         params: ThreadHistoryRefreshParams,
     ) -> Result<ThreadHistoryRefreshResult> {
         ensure!(
@@ -43,7 +44,7 @@ impl HistoryRefreshProcessor {
                 response.next_cursor = None;
                 return Ok(response);
             }
-            self.builder.step(engine, StepBudget::default())
+            self.builder.step(host, StepBudget::default())
         } else {
             ensure!(
                 params.acknowledge_external_writers,
@@ -52,7 +53,7 @@ impl HistoryRefreshProcessor {
             self.builder.cancel();
             self.cursor = None;
             self.last_response = None;
-            self.builder.begin(engine, true)
+            self.builder.begin(host, true)
         };
         match progress {
             Ok(progress) => Ok(self.response(progress)),
@@ -97,134 +98,5 @@ impl HistoryRefreshProcessor {
         };
         self.last_response = Some(response.clone());
         response
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn refresh_processor_requires_consent_and_rejects_foreign_cursor_without_mutation() {
-        let temp = tempfile::tempdir().unwrap();
-        let engine = super::super::tests::catalog_list_test_engine(temp.path());
-        let mut processor = HistoryRefreshProcessor::default();
-        assert!(
-            processor
-                .process(&engine, ThreadHistoryRefreshParams::default())
-                .is_err()
-        );
-        assert!(
-            processor
-                .process(
-                    &engine,
-                    ThreadHistoryRefreshParams {
-                        cursor: Some("foreign".into()),
-                        acknowledge_external_writers: true,
-                        cancel: false,
-                    }
-                )
-                .is_err()
-        );
-        assert!(processor.cursor.is_none());
-        assert!(
-            !engine
-                .client_storage_root()
-                .join("history-list-index")
-                .exists()
-        );
-    }
-
-    #[test]
-    fn refresh_processor_cursor_is_owned_one_shot_and_cancel_releases_builder() {
-        let workspace = tempfile::tempdir().unwrap();
-        let history = tempfile::tempdir().unwrap();
-        let engine = super::super::tests::catalog_list_test_engine(workspace.path());
-        engine.state.with_history_path(
-            history
-                .path()
-                .join(format!("{}.jsonl", engine.session_id())),
-        );
-        engine
-            .state
-            .add_message(kcoder_types::Message::user_text("indexed prompt"));
-        engine.state.save_history().unwrap();
-        let start = || ThreadHistoryRefreshParams {
-            acknowledge_external_writers: true,
-            ..Default::default()
-        };
-        let mut owner = HistoryRefreshProcessor::default();
-        let first = owner.process(&engine, start()).unwrap();
-        assert_eq!(first.status, ThreadHistoryRefreshStatus::Building);
-        let cursor = first.next_cursor.unwrap();
-        let mut foreign = HistoryRefreshProcessor::default();
-        assert!(
-            foreign
-                .process(
-                    &engine,
-                    ThreadHistoryRefreshParams {
-                        cursor: Some(cursor.clone()),
-                        ..Default::default()
-                    }
-                )
-                .is_err()
-        );
-        assert!(
-            owner
-                .process(&engine, ThreadHistoryRefreshParams::default())
-                .is_err()
-        );
-        let cancelled = owner
-            .process(
-                &engine,
-                ThreadHistoryRefreshParams {
-                    cursor: Some(cursor.clone()),
-                    cancel: true,
-                    ..Default::default()
-                },
-            )
-            .unwrap();
-        assert_eq!(cancelled.status, ThreadHistoryRefreshStatus::Cancelled);
-        assert!(cancelled.next_cursor.is_none());
-        assert!(
-            owner
-                .process(
-                    &engine,
-                    ThreadHistoryRefreshParams {
-                        cursor: Some(cursor),
-                        ..Default::default()
-                    }
-                )
-                .is_err()
-        );
-        let mut response = owner.process(&engine, start()).unwrap();
-        for _ in 0..32 {
-            let Some(cursor) = response.next_cursor.clone() else {
-                break;
-            };
-            response = owner
-                .process(
-                    &engine,
-                    ThreadHistoryRefreshParams {
-                        cursor: Some(cursor.clone()),
-                        ..Default::default()
-                    },
-                )
-                .unwrap();
-            assert!(
-                owner
-                    .process(
-                        &engine,
-                        ThreadHistoryRefreshParams {
-                            cursor: Some(cursor),
-                            ..Default::default()
-                        }
-                    )
-                    .is_err()
-            );
-        }
-        assert_eq!(response.status, ThreadHistoryRefreshStatus::Ready);
-        assert_eq!(response.indexed_sessions, 1);
-        assert_eq!(response.issue_count, 0);
     }
 }

@@ -20,6 +20,8 @@ test('scheduled task cleanup uses its independent transport after RunContext clo
     directory:'C:\\owned',node:'C:\\node.exe',installation:'C:\\studio',flags:['--model-scope','--native-input']});
   assert.equal(result.result.passed,true);closed=true;
   for(const cleanup of cleanups)await cleanup();
-  assert.equal(calls.length,1);assert.match(calls[0],/Unregister-ScheduledTask/);
-  assert.match(calls[0],/CommandLine.Contains/);
+  assert.equal(calls.length,2);assert.match(calls[0],/Execute.TrimStart.*StartsWith/);
+  assert.match(calls[0],/KCoder-Channel-/);
+  assert.match(calls[1],/Unregister-ScheduledTask/);
+  assert.match(calls[1],/CommandLine.Contains/);
 });

@@ -15,6 +15,7 @@ import { runExternalEditorScenario } from "../lib/scenarios/external-editor.mjs"
 import { runSlashAfterHistoryScenario } from "../lib/scenarios/slash-after-history.mjs";
 import { runGoalCommandScenario } from "../lib/scenarios/goal-command.mjs";
 import { runStreamingScrollbarScenario } from "../lib/scenarios/streaming-scrollbar.mjs";
+import { runNativeWebSourcesScenario } from "../lib/scenarios/native-web-sources.mjs";
 import { runHistoryScrollbarScenario } from "../lib/scenarios/history-scrollbar.mjs";
 import { runWheelPrecisionScenario } from "../lib/wheel-precision-scenario.mjs";
 import { runSessionMemoryCompactScenario } from "../lib/scenarios/session-memory-compact.mjs";
@@ -29,6 +30,9 @@ import { runResponseBudgetScenario } from "../lib/response-budget-scenario.mjs";
 import { runMarkdownRenderingScenario } from "../lib/markdown-rendering-scenario.mjs";
 import { runCopyViewScenario } from "../lib/copy-view-scenario.mjs";
 import { runModelRefreshScenario } from "../lib/model-refresh-scenario.mjs";
+import { runQuestionFreeformScenario } from "../lib/question-freeform-scenario.mjs";
+import { runToolLivenessScenario } from "../lib/tool-liveness-scenario.mjs";
+import { runWorkObservationScenario } from "../lib/work-observation-scenario.mjs";
 import { runTailMenuScenario } from "../lib/tail-menu-scenario.mjs";
 import { tmuxStartup } from "../lib/scenarios/tmux-startup.mjs";
 import { tmuxSmoke } from "../lib/scenarios/tmux-smoke.mjs";
@@ -91,6 +95,9 @@ async function main() {
       break;
     case "streaming-scrollbar":
       await runStreamingScrollbarScenario(options);
+      break;
+    case "native-web-sources":
+      await runNativeWebSourcesScenario(options);
       break;
     case "history-scrollbar":
       await runHistoryScrollbarScenario(options);
@@ -175,6 +182,15 @@ async function main() {
         writeStartMeta,
         repoRoot,
       });
+      break;
+    case "question-freeform":
+      await runQuestionFreeformScenario(options, { startSession, runContextRuntime, writeStartMeta, repoRoot });
+      break;
+    case "tool-liveness":
+      await runToolLivenessScenario(options, { startSession, runContextRuntime, writeStartMeta, repoRoot });
+      break;
+    case "work-observation":
+      await runWorkObservationScenario(options);
       break;
     case "tail-menu":
       await runTailMenuScenario(options, {

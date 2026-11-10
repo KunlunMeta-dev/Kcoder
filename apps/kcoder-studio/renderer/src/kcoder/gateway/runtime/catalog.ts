@@ -1,3 +1,23 @@
+import { sessionLifetime, taskView } from './sessionLifetime'
+import { webSearchCapability, validWebSearchParams, validWebSearchResult } from '../../../../../shared/webSearchMethods.mjs'
+import { isContract } from '../../../../../shared/generated/validator.mjs'
+import { requestToolsCatalog } from '../../gatewayToolsCatalog'
+import { isTaskComparisonRequest, requestTaskComparison } from '../../gatewayTaskComparison'
+import { requestTaskDelivery } from '../../gatewayTaskDelivery'
+import { requestTaskExpert } from '../../gatewayTaskExpert'
+import { requestAsyncQuestion, supportsAsyncQuestions } from './asyncQuestions'
+import { readTaskInteractions, respondTaskInteraction } from './taskInteractions'
+import {
+  readContinuousWork,
+  readContinuousWorkCapabilities,
+  readContinuousWorks,
+  submitContinuousWorkControl,
+} from './continuousWorks'
+import { readRemoteCatalog } from '../../remotes/catalog'
+import { readStudioWorkMode } from '@/features/workbench/studioWorkMode'
+import { requestWidgets } from './widgets'
+import { requestNativeMigration } from '../../gatewayMigration'
+import { studioPresentationParams } from '../../studioPresentation'
 import {
   agentRequest,
   listSubagents,
@@ -8,6 +28,13 @@ import { requestComputerUseRecovery, type ComputerUseRecoverResult } from '../..
 import { computerUseStates } from '../../computerUseState'
 import { computerUseConsent } from '../../computerUseConsent'
 import { requestKnowledge } from '../../gatewayKnowledge'
+import { isKnowledgeSettingsMethod, requestKnowledgeSettings } from '../../gatewayKnowledgeSettings'
+import {
+  isConnectivitySettingsMethod,
+  requestConnectivitySettings,
+} from '../../gatewayConnectivitySettings'
+import { isOfficeSettingsMethod, requestOfficeSettings } from '../../gatewayOfficeSettings'
+import { requestNativeIntegration } from '../../gatewayIntegrations'
 import { requestWorkspaceFiles } from '../../gatewayWorkspaceFiles'
 import i18n from '@/i18n'
 import { sameWorkspacePath } from '@/lib/workspace-path-identity'
@@ -21,6 +48,7 @@ import {
   hookTargetScope,
 } from '../../gatewayHookConfiguration'
 import { scopedModelCatalog } from '../../gatewayModelCatalog'
+import { TURN_MODEL_SWITCH_CAPABILITY } from '../../modelSelectionMode'
 import { GatewayRpcError } from '../../gatewayRpc'
 import {
   clearLegacyKCoderContext,
@@ -41,6 +69,7 @@ import type { GatewayRuntimeCore } from './core'
 
 // Cancellation releases a read caller; mutations still require their actual receipt.
 const cancellableWorkflowReads = new Set([
+  'workflow/collaboration/catalog',
   'workflow/capabilities/read',
   'workflow/verification/read',
   'workflow/storage/read',
@@ -66,6 +95,28 @@ export async function request(
   options?: { signal?: AbortSignal }
 ): Promise<unknown> {
   const params = record(rawParams)
+  if (method === 'runtime.asyncQuestion.supports')
+    return supportsAsyncQuestions.call(this, params)
+  if (method === 'runtime.asyncQuestion.request')
+    return requestAsyncQuestion.call(this, params)
+  if (method === 'runtime.taskExpert.request') return requestTaskExpert.call(this, params, options)
+  if (method === 'runtime.continuousWork.list') return readContinuousWorks(this, params, options)
+  if (method === 'runtime.continuousWork.capabilities')
+    return readContinuousWorkCapabilities(this, params, options)
+  if (method === 'runtime.continuousWork.control')
+    return submitContinuousWorkControl(this, params, options)
+  if (method === 'runtime.continuousWork.read') return readContinuousWork(this, params, options)
+  if (method === 'runtime.taskDelivery.request')
+    return requestTaskDelivery.call(this, params, options)
+  if (isTaskComparisonRequest(method, params))
+    return requestTaskComparison.call(this, method, params)
+  if (method === 'runtime.remotes.readCatalog') return readRemoteCatalog.call(this, params, options)
+  if (method === 'runtime.integrations.request')
+    return requestNativeIntegration.call(this, params, options)
+  if (method === 'runtime.migration.request')
+    return requestNativeMigration.call(this, params, options)
+  if (method === 'runtime.widgets.request') return requestWidgets.call(this, params, options)
+  if (method === 'runtime.mcpApps.request') return requestWidgets.call(this, params, options, true)
   const uploadAccountValid =
     method === 'runtime.workspaceFiles.request' ? captureAccountContextRevision() : null
   const knowledgeAccountValid =
@@ -76,6 +127,11 @@ export async function request(
     method === 'runtime.workflows.request' ? captureAccountContextRevision() : null
   const createAccountValid =
     method === 'runtime.tasks.create' ? captureAccountContextRevision() : null
+  const searchAccountValid = method === 'runtime.webSearch.request' ? captureAccountContextRevision() : null
+  const providerAccountValid =
+    method === 'runtime.providers.request' || method === 'runtime.providers.restart'
+      ? captureAccountContextRevision()
+      : null
   const requestGeneration = this.workspaceScanGeneration
   if (this.restartingAppServers) await this.assertRequestTargetAvailable(params)
   const server = await this.server()
@@ -155,32 +211,7 @@ export async function request(
       throw new Error('请升级目标 KCoder 以查看最近 30 天用量')
     return client.request('usage/stats', {})
   }
-  if (method === 'runtime.tools.catalog') {
-    const taskId = text(params.taskId)
-    const descriptor = taskId ? await this.taskDescriptor({ taskId }) : null
-    if (!descriptor && !text(params.serverId)) throw new Error('A tools catalog target is required')
-    if (descriptor && text(params.serverId) && params.serverId !== descriptor.server.id)
-      throw new Error('Tools catalog target does not match the task')
-    const inspect = async (client: GatewayClient) => {
-      if (client.supportsExperimental?.('toolsCatalog') !== true) return null
-      return client.request(
-        'tools/catalog',
-        descriptor ? { threadId: descriptor.task.threadId } : {}
-      )
-    }
-    if (descriptor) {
-      const client = this.clientByTask.get(descriptor.task.taskId)
-      if (!client || this.disconnectRecoveryByTask.has(descriptor.task.taskId))
-        throw new Error('Tools catalog task is not resident')
-      return inspect(client)
-    }
-    const target = await this.serverForParams({ deviceId: params.serverId })
-    return this.withTransientClient(
-      target,
-      inspect,
-      text(params.workspacePath) ?? target.workspacePath
-    )
-  }
+  if (method === 'runtime.tools.catalog') return requestToolsCatalog.call(this, params)
   if (method === 'runtime.diagnostics.request') {
     const operation = text(params.method)
     if (
@@ -221,6 +252,8 @@ export async function request(
         'workflow/list',
         'workflow/read',
         'workflow/create',
+        'workflow/collaboration/catalog',
+        'workflow/collaboration/apply',
         'workflow/upsertNode',
         'workflow/moveNode',
         'workflow/removeNode',
@@ -251,13 +284,18 @@ export async function request(
         throw new Error(i18n.t('common:workflowCanvas.scopeChanged'))
     }
     assertScope()
-    const client = await this.commandClient(target)
+    const client = await this.commandClient(target, text(params.workspacePath) ?? undefined)
     assertScope()
     if (hookTargetScope(await this.serverForParams({ deviceId: params.serverId })) !== targetScope)
       throw new Error(i18n.t('common:workflowCanvas.scopeChanged'))
     assertScope()
     readOptions?.signal?.throwIfAborted()
     if (client.supportsExperimental?.('workflowCanvasV1') !== true)
+      throw new Error(i18n.t('common:workflowCanvas.unsupported'))
+    if (
+      operation?.startsWith('workflow/collaboration/') &&
+      client.supportsExperimental?.('workflowCollaborationV1') !== true
+    )
       throw new Error(i18n.t('common:workflowCanvas.unsupported'))
     if (
       operation === 'workflow/moveNode' &&
@@ -422,6 +460,38 @@ export async function request(
     readOptions?.signal?.throwIfAborted()
     return result
   }
+  if (method === 'runtime.webSearch.request') {
+    const operation = text(params.method) ?? ''
+    const capability = webSearchCapability(operation)
+    const fields = record(params.params)
+    if (!capability || !validWebSearchParams(operation, fields)) throw new Error('SEARCH_DIAGNOSTIC_INVALID_REQUEST')
+    if (!text(params.serverId)) throw new Error('SEARCH_TARGET_REQUIRED')
+    const target = await this.serverForParams({ deviceId: params.serverId })
+    const scope = hookTargetScope(target)
+    const current = async () => {
+      if (this.disposed || !searchAccountValid?.(target.id)) throw new Error('SEARCH_TARGET_CHANGED')
+      if (hookTargetScope(await this.serverForParams({ deviceId: target.id })) !== scope || !searchAccountValid(target.id))
+        throw new Error('SEARCH_TARGET_CHANGED')
+    }
+    const taskId = text(params.taskId)
+    const taskScope = taskId ? await this.taskConnection({ taskId, deviceId: target.id }) : null
+    if (taskScope && (hookTargetScope(taskScope.server) !== scope || (fields.threadId && fields.threadId !== taskScope.task.threadId)))
+      throw new Error('SEARCH_THREAD_TARGET_CHANGED')
+    if (fields.threadId && !taskScope) throw new Error('SEARCH_THREAD_OWNER_REQUIRED')
+    const client = taskScope?.client ?? await this.commandClient(target)
+    await current()
+    if (client.supportsExperimental?.(capability) !== true) throw new Error('SEARCH_DIAGNOSTIC_UNSUPPORTED')
+    const result = await client.request(operation, fields)
+    await current()
+    if (!validWebSearchResult(operation, result)) throw new Error('SEARCH_DIAGNOSTIC_INVALID_RESULT')
+    return result
+  }
+  if (method === 'runtime.settings.request' && isKnowledgeSettingsMethod(params.method))
+    return requestKnowledgeSettings.call(this, params, options)
+  if (method === 'runtime.settings.request' && isConnectivitySettingsMethod(params.method))
+    return requestConnectivitySettings.call(this, params, options)
+  if (method === 'runtime.settings.request' && isOfficeSettingsMethod(params.method))
+    return requestOfficeSettings.call(this, params, options)
   if (method === 'runtime.settings.request') {
     const operation = text(params.method)
     if (
@@ -432,14 +502,33 @@ export async function request(
       operation !== 'settings/templates/default' &&
       operation !== 'settings/turn-file-changes/read' &&
       operation !== 'settings/turn-file-changes/save' &&
+      operation !== 'settings/tools/selection/read' &&
+      operation !== 'settings/tools/selection/save' &&
       operation !== 'settings/tools/read' &&
-      operation !== 'settings/tools/save'
+      operation !== 'settings/tools/save' &&
+      operation !== 'settings/execution-defaults/read' &&
+      operation !== 'settings/execution-defaults/save'
     )
       throw new Error('Unsupported settings operation')
     if (!text(params.serverId)) throw new Error('A settings target is required')
     const target = await this.serverForParams({ deviceId: params.serverId })
-    const client = await this.commandClient(target)
-    if (operation === 'settings/tools/read' || operation === 'settings/tools/save') {
+    const client = await this.commandClient(target, text(params.workspacePath) ?? undefined)
+    if (
+      operation === 'settings/execution-defaults/read' ||
+      operation === 'settings/execution-defaults/save'
+    ) {
+      if (client.supportsExperimental?.('executionDefaultsV1') !== true)
+        throw new GatewayRpcError('Target requires execution default settings support', -32000, {
+          kind: 'execution_defaults_unsupported',
+          capability: 'executionDefaultsV1',
+        })
+    } else if (
+      operation === 'settings/tools/selection/read' ||
+      operation === 'settings/tools/selection/save'
+    ) {
+      if (client.supportsExperimental?.('toolSelectionsV1') !== true)
+        throw new Error('TOOL_SELECTION_UNSUPPORTED')
+    } else if (operation === 'settings/tools/read' || operation === 'settings/tools/save') {
       if (client.supportsExperimental?.('toolProfilesV1') !== true)
         throw new Error(i18n.t('common:toolProfile.unsupported'))
     } else if (client.supportsExperimental?.('settingsTemplatesV1') !== true) {
@@ -447,6 +536,26 @@ export async function request(
     }
     const fields = { ...record(params.params) }
     if (operation === 'settings/templates/default' && !('id' in fields)) fields.id = null
+    if (
+      operation === 'settings/tools/selection/read' &&
+      client.supportsExperimental?.('lunaToolSelectionsV1') !== true
+    ) {
+      // Older strict targets must receive their original request and response shape.
+      delete fields.includeLunaBaseline
+    }
+    if (
+      operation === 'settings/tools/selection/read' &&
+      client.supportsExperimental?.('toolSelectionResolutionV1') !== true
+    ) {
+      delete fields.includeResolution
+      delete fields.previewExpert
+    }
+    if (
+      operation === 'settings/tools/selection/read' &&
+      client.supportsExperimental?.('expertToolSelectionV1') !== true
+    ) {
+      delete fields.includeExpertToolSelection
+    }
     return client.request(operation, fields)
   }
   if (method === 'runtime.providers.request') {
@@ -456,18 +565,35 @@ export async function request(
       operation !== 'runtime.providers.templates' &&
       operation !== 'runtime.providers.upsert' &&
       operation !== 'runtime.providers.probe' &&
+      operation !== 'runtime.providers.discoverModels' &&
       operation !== 'runtime.providers.clearUserOverride' &&
       operation !== 'runtime.providers.delete'
     )
       throw new Error('Unsupported provider configuration operation')
     if (!text(params.serverId)) throw new Error('A provider configuration target is required')
     const target = await this.serverForParams({ deviceId: params.serverId })
-    const taskScope = text(params.taskId)
-      ? await this.taskConnection({ taskId: params.taskId, deviceId: params.serverId })
+    const targetScope = hookTargetScope(target)
+    const assertProviderScope = () => {
+      if (this.disposed || !providerAccountValid?.(target.id))
+        throw new Error('Provider configuration target changed')
+    }
+    const assertProviderTarget = async () => {
+      assertProviderScope()
+      if (hookTargetScope(await this.serverForParams({ deviceId: target.id })) !== targetScope)
+        throw new Error('Provider configuration target changed')
+      assertProviderScope()
+    }
+    await assertProviderTarget()
+    const taskId = text(params.taskId)
+    const taskScope = taskId
+      ? await this.taskConnection({ taskId, deviceId: params.serverId })
       : null
-    if (taskScope && taskScope.server.id !== target.id)
+    if (taskId && !taskScope) throw new Error('Provider configuration task is unavailable')
+    if (taskScope && hookTargetScope(taskScope.server) !== targetScope)
       throw new Error('Provider configuration task belongs to another target')
+    await assertProviderTarget()
     const client = taskScope?.client ?? (await this.commandClient(target))
+    await assertProviderTarget()
     if (client.supportsExperimental?.('providerConfiguration') !== true)
       throw new Error('请升级目标 KCoder 以使用 API 配置')
     const supportsAuthenticationPolicy =
@@ -484,6 +610,7 @@ export async function request(
         client.supportsExperimental?.('providerTemplates') === true
           ? record(await client.request(operation, record(params.params)))
           : { templates: [] }
+      await assertProviderTarget()
       return { ...result, supportsAuthenticationPolicy }
     }
     if (
@@ -500,6 +627,11 @@ export async function request(
       throw new Error('请升级目标 KCoder 以删除 API 配置')
     const fields = { ...record(params.params) }
     if (
+      operation === 'runtime.providers.discoverModels' &&
+      client.supportsExperimental?.('providerModelDiscoveryV1') !== true
+    )
+      throw new Error('[provider_discovery_unsupported] Upgrade the target to list models')
+    if (
       operation === 'runtime.providers.probe' &&
       client.supportsExperimental?.('providerIndependentProbeV1') !== true
     )
@@ -511,7 +643,11 @@ export async function request(
       throw new Error('The target does not support clearing user overrides')
     if (client.supportsExperimental?.('providerIndependentProbeV1') !== true)
       delete fields.validateConnection
-    if (taskScope && client.supportsExperimental?.('providerRuntimeScopeV1') === true)
+    if (
+      operation !== 'runtime.providers.discoverModels' &&
+      taskScope &&
+      client.supportsExperimental?.('providerRuntimeScopeV1') === true
+    )
       fields.threadId = taskScope.task.threadId
     else delete fields.threadId
     if (operation === 'runtime.providers.upsert' && !supportsAuthenticationPolicy) {
@@ -519,15 +655,38 @@ export async function request(
         throw new Error('[provider_probe_unsupported] 请升级目标 KCoder 以使用此认证策略')
       delete fields.authentication
     }
-    return client.request(operation, fields)
+    await assertProviderTarget()
+    const result = await client.request(
+      operation,
+      fields,
+      operation === 'runtime.providers.discoverModels' ? options : undefined
+    )
+    await assertProviderTarget()
+    return result
   }
   if (method === 'runtime.providers.restart') {
     if (!text(params.serverId)) throw new Error('A provider configuration target is required')
     const target = await this.serverForParams({ deviceId: params.serverId })
+    const targetScope = hookTargetScope(target)
+    const assertProviderScope = () => {
+      if (this.disposed || !providerAccountValid?.(target.id))
+        throw new Error('Provider configuration target changed')
+    }
+    const assertProviderTarget = async () => {
+      assertProviderScope()
+      if (hookTargetScope(await this.serverForParams({ deviceId: target.id })) !== targetScope)
+        throw new Error('Provider configuration target changed')
+      assertProviderScope()
+    }
+    await assertProviderTarget()
     const client = await this.commandClient(target)
+    await assertProviderTarget()
     const validation = await client.request<{ valid?: boolean }>('runtime.providers.validate', {})
+    await assertProviderTarget()
     if (validation.valid !== true) throw new Error('Provider configuration validation failed')
-    return this.restartAppServers({ serverId: target.id, ifIdle: true })
+    const result = await this.restartAppServers({ serverId: target.id, ifIdle: true })
+    await assertProviderTarget()
+    return result
   }
   if (method === 'runtime.automations.request') {
     const operation = text(params.method)
@@ -582,6 +741,11 @@ export async function request(
     if (!pluginMethod || !PLUGIN_RPC_METHODS.has(pluginMethod)) {
       throw new Error('Unsupported KCoder plugin operation')
     }
+    if (
+      pluginMethod === 'mcp/providerRevocation' &&
+      !isContract('McpProviderRevocationParams', params.params)
+    )
+      throw new GatewayRpcError('MCP provider revocation parameters are invalid', -32602)
     const pluginTarget = await this.serverForParams(params)
     const pluginTargetScope = hookTargetScope(pluginTarget)
     const assertPluginScope = () => {
@@ -817,7 +981,8 @@ export async function request(
     return scopedModelCatalog(
       catalog,
       target,
-      client.supportsExperimental?.('modelSelectionModeV1') === true
+      client.supportsExperimental?.('modelSelectionModeV1') === true,
+      client.supportsExperimental?.(TURN_MODEL_SWITCH_CAPABILITY) === true
     )
   }
   if (this.compatibility.matchesMethod(method, 'homeMigrationStatus')) {
@@ -870,6 +1035,36 @@ export async function request(
     const target = (await this.servers()).find(item => item.id === task?.serverId) ?? server
     return this.sendTask(params, target, method === 'runtime.tasks.interrupt_and_send')
   }
+  if (method === 'runtime.tasks.model_switch') {
+    const address = record(params.address)
+    const taskId = this.resolveTaskId(text(params.taskId) ?? text(address.taskId))
+    const task = taskId ? this.tasks.get(taskId) : undefined
+    if (!task || !task.threadId || task.runtime !== KCODER_RUNTIME_NAME) {
+      throw new GatewayRpcError('Model selection requires an active KCoder conversation', -32000, {
+        kind: 'model_switch_unsupported_runtime',
+      })
+    }
+    const requestedDeviceId =
+      text(params.deviceId) ?? text(params.device_id) ?? text(address.deviceId)
+    if (requestedDeviceId && requestedDeviceId !== task.serverId) {
+      throw new GatewayRpcError('Model selection target does not match the conversation', -32049, {
+        kind: 'model_switch_scope_changed',
+      })
+    }
+    const target = await this.serverForParams({ deviceId: task.serverId })
+    const client =
+      this.clientByTask.get(task.taskId) ??
+      (await this.commandClient(target, task.workspacePath || undefined))
+    if (client.supportsExperimental?.(TURN_MODEL_SWITCH_CAPABILITY) !== true) {
+      return { accepted: false, model: text(params.model) ?? '', appliesAt: 'next_turn' }
+    }
+    const model = text(params.model)
+    if (!model) throw new Error('Model selection requires a qualified model id')
+    return client.request('thread/model/select', {
+      threadId: task.threadId,
+      model,
+    })
+  }
   if (method === 'runtime.tasks.compact') return this.compactTask(params)
   if (method === 'runtime.tasks.rollback') return this.rollbackTask(params)
   if (method === 'runtime.tasks.revert_file_changes') return this.revertTaskFileChanges(params)
@@ -900,22 +1095,31 @@ export async function request(
       if (client.supportsExperimental?.('sessionModes') !== true) {
         throw new Error('目标 KCoder 不支持执行模式查询，请升级后重试')
       }
-      return client.request(
-        'session/modes',
-        descriptor ? { threadId: descriptor.task.threadId } : {}
-      )
+      return client.request('session/modes', {
+        ...(descriptor ? { threadId: descriptor.task.threadId } : {}),
+        ...studioPresentationParams(
+          descriptor?.task.studioWorkMode ?? readStudioWorkMode(),
+          client
+        ),
+      })
     }
     return descriptor
       ? inspect(await this.readyTaskClient(descriptor.task))
       : this.withTransientClient(server, inspect, workspace)
   }
-  if (method === 'runtime.tasks.goal.get') return this.getTaskGoal(params)
+  if (method === 'runtime.tasks.interactions.read')
+    return readTaskInteractions(this, params, options)
+  if (method === 'runtime.tasks.interactions.respond')
+    return respondTaskInteraction(this, params, options)
+  if (method === 'runtime.tasks.goal.get') return this.getTaskGoal(params, options)
   if (method === 'runtime.tasks.goal.set') return this.setTaskGoal(params)
   if (method === 'runtime.tasks.goal.clear') return this.clearTaskGoal(params)
   if (method === 'runtime.tasks.cancel') return this.cancelTask(params)
   if (method === 'runtime.tasks.shorten_wait') return this.shortenWaitTask(params)
   if (method === 'runtime.tasks.rename') return this.renameTask(params)
   if (method === 'runtime.tasks.archive') return this.archiveTask(params)
+  if (['runtime.tasks.lifetime.read', 'runtime.tasks.lifetime.set'].includes(method)) return sessionLifetime(this, method, params)
+  if (['runtime.tasks.view.attach', 'runtime.tasks.view.release'].includes(method)) return taskView(this, method, params)
   if (method === 'runtime.tasks.transcript') return this.loadTaskTranscript(params)
   if (method === 'runtime.tasks.search') return this.searchTasks(params)
   if (method === 'runtime.workspace.search') {
@@ -1012,6 +1216,12 @@ export async function request(
   ) {
     const target = await this.serverForParams(params)
     const client = await this.commandClient(target)
+    if (
+      method === 'runtime.projects.upsert_local' &&
+      params.preserveExisting === true &&
+      !client.supportsExperimental?.('migrationProjectsV1')
+    )
+      throw new Error('migration_projects_update_required')
     return client.request(method, params)
   }
   if (method === 'runtime.sidebar.projects.pin') {
@@ -1023,6 +1233,38 @@ export async function request(
     if (synthetic && client.supportsExperimental?.('sidebarRootPinning') !== true) {
       throw new Error('Upgrade the target KCoder to change root project pinning')
     }
+    if (synthetic) {
+      const registry = await client.request<unknown>(
+        'runtime.workspaces.list',
+        { deviceId: target.id }
+      )
+      const registryItems =
+        registry &&
+        typeof registry === 'object' &&
+        !Array.isArray(registry) &&
+        Array.isArray((registry as Record<string, unknown>).items)
+          ? ((registry as { items: unknown[] }).items)
+          : null
+      if (
+        !registryItems ||
+        registryItems.some(item => !item || typeof item !== 'object' || Array.isArray(item))
+      ) {
+        throw new Error('Could not verify project pin target: workspace registry is invalid')
+      }
+      const requestedKey = text(params.projectKey)
+      const hasRegisteredKeyCollision = registryItems.some(item => {
+        const registeredItem = record(item)
+        return (
+          text(registeredItem.projectKey) === requestedKey ||
+          text(registeredItem.workspacePath) === requestedKey
+        )
+      })
+      if (hasRegisteredKeyCollision) {
+        throw new Error(
+          'Project pin target is ambiguous: a registered project uses the synthetic root key'
+        )
+      }
+    }
     return client.request(
       method,
       synthetic ? { ...params, projectKey: target.workspacePath, rootProject: true } : params
@@ -1031,7 +1273,7 @@ export async function request(
   if (method === 'runtime_tasks.context') return {}
   if (method === 'projects.list') return []
   if (method === 'runtime.sidebar.projects.activate') {
-    // Wework stores remote-project sidebar state on the local state device, so activation may
+    // Studio stores remote-project sidebar state on the local state device, so activation may
     // carry deviceId=local even when its workspace belongs to another gateway target. Resolve
     // the concrete workspace/project first and only fall back to that state-owner device id.
     const target = await this.serverForParams(

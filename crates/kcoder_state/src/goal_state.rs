@@ -1,6 +1,96 @@
 use super::*;
 
+const MAX_GOAL_OBSERVATION_ID_BYTES: usize = 1024;
+// Windows supports long paths; OsStr length counts platform-encoded bytes.
+const MAX_GOAL_OBSERVATION_PATH_BYTES: usize = 128 * 1024;
+
+/// A point-in-time resident view, not a persistence receipt or authorization.
+#[derive(Clone)]
+pub struct ResidentGoalObservation {
+    pub session_id: String,
+    pub artifact_session_id: String,
+    pub cwd: PathBuf,
+    pub history_path: Option<PathBuf>,
+    pub goal: Option<(String, u64, GoalStatus)>,
+    pub goal_created_at_ms: Option<u64>,
+    pub lifecycle: AppStateLifecycleIdentity,
+}
+
+/// A weak, non-authorizing view that does not retain the original State.
+#[derive(Clone)]
+pub struct WeakGoalObservation {
+    inner: std::sync::Weak<PrivateStateLock<AppStateInner>>,
+    persistence: std::sync::Weak<Mutex<()>>,
+}
+
+impl WeakGoalObservation {
+    /// Briefly upgrades the original State for in-memory try-locks only.
+    /// Busy, poison, a closed owner or oversized metadata is unavailable.
+    pub fn try_snapshot(&self) -> Option<ResidentGoalObservation> {
+        let state = self.inner.upgrade()?;
+        let persistence = self.persistence.upgrade()?;
+        let _persist = persistence.try_lock().ok()?;
+        let inner = state.try_read().ok()?;
+        let oversized_path = |path: &Path| path.as_os_str().len() > MAX_GOAL_OBSERVATION_PATH_BYTES;
+        if inner.history_write_fault.is_some()
+            || inner.session_id.len() > MAX_GOAL_OBSERVATION_ID_BYTES
+            || oversized_path(&inner.cwd)
+            || inner.history_path.as_deref().is_some_and(oversized_path)
+            || inner
+                .history_path
+                .as_deref()
+                .and_then(Path::file_stem)
+                .is_some_and(|name| name.len() > MAX_GOAL_OBSERVATION_ID_BYTES)
+            || (inner.history_path.is_none()
+                && inner
+                    .session_artifact_override
+                    .as_ref()
+                    .is_some_and(|location| {
+                        location.session_id.len() > MAX_GOAL_OBSERVATION_ID_BYTES
+                            || oversized_path(&location.project_dir)
+                    }))
+            || inner
+                .goal
+                .as_ref()
+                .is_some_and(|goal| goal.goal_id.len() > MAX_GOAL_OBSERVATION_ID_BYTES)
+        {
+            return None;
+        }
+        Some(ResidentGoalObservation {
+            session_id: inner.session_id.clone(),
+            artifact_session_id: AppState::session_artifact_project_dir_and_id(&inner)
+                .map(|(_, session_id)| session_id)
+                .unwrap_or_else(|| inner.session_id.clone()),
+            cwd: inner.cwd.clone(),
+            history_path: inner.history_path.clone(),
+            goal: inner
+                .goal
+                .as_ref()
+                .map(|goal| (goal.goal_id.clone(), goal.revision, goal.status)),
+            goal_created_at_ms: inner.goal.as_ref().map(|goal| goal.created_at_ms),
+            lifecycle: crate::history_append_context::lifecycle_identity_from_identity_locked(
+                AppStateIdentity(self.inner.clone()),
+                &inner,
+            ),
+        })
+    }
+}
+
 impl AppState {
+    /// Construct a weak observer without locking or retaining this State.
+    pub fn weak_goal_observation(&self) -> WeakGoalObservation {
+        WeakGoalObservation {
+            inner: Arc::downgrade(&self.inner),
+            persistence: Arc::downgrade(&self.session_state_persist_lock),
+        }
+    }
+
+    /// Observe the original lifecycle and goal without waiting for either lock.
+    /// This is an in-memory observation, not a persistence receipt.
+    pub fn try_goal_observation_snapshot(&self) -> Option<ResidentGoalObservation> {
+        self.weak_goal_observation().try_snapshot()
+    }
+
     /// Get the current `/goal`, if any.
     pub fn goal(&self) -> Option<Goal> {
         self.read_inner().goal.clone()
@@ -262,6 +352,7 @@ impl AppState {
         let goal = {
             let mut inner = self.write_inner();
             let goal = inner.goal.as_mut()?;
+            crate::goal_remote_budget::note_explicit_goal_change(goal)?;
             goal.objective = objective.into();
             goal.objective_file = objective_file;
             if let Some(token_budget) = token_budget {
@@ -309,6 +400,7 @@ impl AppState {
             {
                 return None;
             }
+            crate::goal_remote_budget::note_explicit_goal_change(goal)?;
             let now = now_millis();
             refresh_goal_wall_elapsed(goal, now);
             if status == GoalStatus::Active && goal.status != GoalStatus::Active {
@@ -369,6 +461,7 @@ impl AppState {
         let goal = {
             let mut inner = self.write_inner();
             let goal = inner.goal.as_mut()?;
+            crate::goal_remote_budget::note_explicit_goal_change(goal)?;
             goal.token_budget = token_budget;
             goal.touch();
             goal.clone()
@@ -388,6 +481,11 @@ impl AppState {
             }
             let now = now_millis();
             refresh_goal_wall_elapsed(goal, now);
+            goal.native_hold_budget_limit_cause = if status == GoalStatus::BudgetLimited {
+                crate::goal_remote_budget::budget_limit_cause(goal)
+            } else {
+                None
+            };
             goal.status = status;
             goal.touch_at(now);
             let goal = goal.clone();
@@ -751,6 +849,182 @@ fn refresh_goal_wall_elapsed(goal: &mut Goal, now_ms: u64) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn weak_goal_observer_does_not_keep_a_closed_state_alive() {
+        let state = AppState::new("/owned-workspace");
+        let observer = state.weak_goal_observation();
+        let identity = state.inspection_identity();
+        assert!(observer.try_snapshot().is_some());
+        drop(state);
+        assert!(!identity.is_alive());
+        assert!(observer.try_snapshot().is_none());
+    }
+
+    #[test]
+    fn goal_observation_captures_one_lifecycle_and_goal_identity() {
+        let state = AppState::new("/owned-workspace");
+        state.with_session_artifact_project_dir("/owned-artifacts", "artifact-session");
+        let empty = state.try_goal_observation_snapshot().unwrap();
+        assert_eq!(empty.session_id, state.session_id());
+        assert_eq!(empty.artifact_session_id, "artifact-session");
+        assert_eq!(empty.cwd, PathBuf::from("/owned-workspace"));
+        assert!(empty.history_path.is_none());
+        assert!(empty.goal.is_none());
+        let goal = state.set_goal("observe", None);
+        let observed = state.try_goal_observation_snapshot().unwrap();
+        assert_eq!(
+            observed.goal,
+            Some((goal.goal_id, goal.revision, GoalStatus::Active))
+        );
+        assert!(observed.lifecycle.same_lifecycle(&empty.lifecycle));
+        state.start_new_session().unwrap();
+        let next = state.try_goal_observation_snapshot().unwrap();
+        assert!(!observed.lifecycle.same_lifecycle(&next.lifecycle));
+        assert!(next.goal.is_none());
+    }
+
+    #[test]
+    fn goal_observation_does_not_wait_for_locks_and_rejects_faults() {
+        let state = AppState::new("/owned-workspace");
+        let held = state.inner.write().unwrap();
+        assert!(state.try_goal_observation_snapshot().is_none());
+        drop(held);
+        let held = state.session_state_persist_lock.lock().unwrap();
+        assert!(state.try_goal_observation_snapshot().is_none());
+        drop(held);
+        state.write_inner().history_write_fault = Some("uncertain".to_owned());
+        assert!(state.try_goal_observation_snapshot().is_none());
+    }
+
+    #[test]
+    fn goal_observation_rejects_oversized_metadata_before_cloning() {
+        let state = AppState::new("/owned-workspace");
+        state.set_goal("goal", None);
+        let original_goal_id = state.goal().unwrap().goal_id;
+        {
+            let mut inner = state.write_inner();
+            inner.goal.as_mut().unwrap().goal_id = "g".repeat(MAX_GOAL_OBSERVATION_ID_BYTES + 1);
+        }
+        assert!(state.try_goal_observation_snapshot().is_none());
+        {
+            let mut inner = state.write_inner();
+            inner.goal.as_mut().unwrap().goal_id = original_goal_id;
+            inner.cwd = PathBuf::from("p".repeat(MAX_GOAL_OBSERVATION_PATH_BYTES + 1));
+        }
+        assert!(state.try_goal_observation_snapshot().is_none());
+        {
+            let mut inner = state.write_inner();
+            inner.cwd = PathBuf::from("/owned-workspace");
+            inner.session_id = "s".repeat(MAX_GOAL_OBSERVATION_ID_BYTES + 1);
+        }
+        assert!(state.try_goal_observation_snapshot().is_none());
+        {
+            let mut inner = state.write_inner();
+            inner.session_id = "session".into();
+            inner.history_path = Some(PathBuf::from(format!(
+                "/history/{}.jsonl",
+                "a".repeat(MAX_GOAL_OBSERVATION_ID_BYTES + 1)
+            )));
+        }
+        assert!(state.try_goal_observation_snapshot().is_none());
+        {
+            let mut inner = state.write_inner();
+            inner.history_path = None;
+            inner.session_artifact_override = Some(SessionArtifactLocation {
+                prefer_over_history: false,
+                project_dir: PathBuf::from("/artifacts"),
+                session_id: "a".repeat(MAX_GOAL_OBSERVATION_ID_BYTES + 1),
+            });
+        }
+        assert!(state.try_goal_observation_snapshot().is_none());
+    }
+
+    #[test]
+    fn goal_observation_rejects_poisoned_state_and_persistence_gates() {
+        let state = AppState::new("/owned-workspace");
+        let owned = state.clone();
+        assert!(
+            std::thread::spawn(move || {
+                let _guard = owned.inner.write().unwrap();
+                panic!("poison State fixture");
+            })
+            .join()
+            .is_err()
+        );
+        assert!(state.try_goal_observation_snapshot().is_none());
+
+        let state = AppState::new("/owned-workspace");
+        let owned = state.clone();
+        assert!(
+            std::thread::spawn(move || {
+                let _guard = owned.session_state_persist_lock.lock().unwrap();
+                panic!("poison persistence fixture");
+            })
+            .join()
+            .is_err()
+        );
+        assert!(state.try_goal_observation_snapshot().is_none());
+    }
+
+    #[test]
+    fn goal_observation_does_not_publish_complete_during_actual_source_lock_wait() {
+        #[cfg(unix)]
+        let temp = {
+            use std::os::unix::fs::PermissionsExt;
+            tempfile::Builder::new()
+                .permissions(std::fs::Permissions::from_mode(0o700))
+                .tempdir()
+                .unwrap()
+        };
+        #[cfg(not(unix))]
+        let temp = tempfile::tempdir().unwrap();
+        let state = AppState::new(temp.path());
+        let history = temp.path().join("session.jsonl");
+        state.with_history_path(&history);
+        state.add_message(kcoder_types::Message::user_text("original"));
+        state.save_history().unwrap();
+        state.set_goal("observe", None);
+        let lock = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(temp.path().join(".kcoder-history.lock"))
+            .unwrap();
+        fs2::FileExt::lock_exclusive(&lock).unwrap();
+        let owned = state.clone();
+        let writer = std::thread::spawn(move || owned.update_goal_status(GoalStatus::Complete));
+        let until = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        let reached_uncommitted = loop {
+            if state
+                .goal()
+                .is_some_and(|goal| goal.status == GoalStatus::Complete)
+            {
+                break true;
+            }
+            if std::time::Instant::now() >= until {
+                break false;
+            }
+            std::thread::yield_now();
+        };
+        let observed = state.try_goal_observation_snapshot();
+        fs2::FileExt::unlock(&lock).unwrap();
+        let committed = writer.join().unwrap();
+        assert!(reached_uncommitted, "writer did not reach the source lock");
+        assert!(
+            observed.is_none(),
+            "uncommitted Complete must not be observed"
+        );
+        assert!(committed.is_some());
+        assert_eq!(
+            state
+                .try_goal_observation_snapshot()
+                .unwrap()
+                .goal
+                .unwrap()
+                .2,
+            GoalStatus::Complete
+        );
+    }
 
     fn set_strict_goal_with_rejection_limit(state: &AppState, limit: usize) -> Goal {
         let selection = GoalVerifierSelection {

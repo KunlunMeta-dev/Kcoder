@@ -43,6 +43,7 @@ impl RetentionService {
         owner: &mut Owner,
         params: &RetentionUploadParamsV1,
     ) -> Result<Entry> {
+        self.require_live_scope(tx, scope)?;
         let epoch = generation(&params.client_upload_id, "u1", self.namespace())?;
         let size = params.size.context("upload size missing")?;
         let sha = params

@@ -1,0 +1,510 @@
+{
+  "MigrationDefinitionBodyParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "itemId": {
+        "type": "string"
+      },
+      "jobId": {
+        "type": "string"
+      },
+      "offset": {
+        "default": 0,
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "itemId",
+      "jobId"
+    ],
+    "title": "MigrationDefinitionBodyParams",
+    "type": "object"
+  },
+  "MigrationDefinitionBodyResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "MigrationDefinitionBodyEncoding": {
+        "enum": [
+          "utf8",
+          "binary"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "bytesBase64": {
+        "type": "string"
+      },
+      "encoding": {
+        "$ref": "#/definitions/MigrationDefinitionBodyEncoding"
+      },
+      "itemId": {
+        "type": "string"
+      },
+      "jobId": {
+        "type": "string"
+      },
+      "nextOffset": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "offset": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "sha256": {
+        "type": "string"
+      },
+      "text": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "totalBytes": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "bytesBase64",
+      "encoding",
+      "itemId",
+      "jobId",
+      "offset",
+      "sha256",
+      "totalBytes"
+    ],
+    "title": "MigrationDefinitionBodyResult",
+    "type": "object"
+  },
+  "MigrationDefinitionReportParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "itemId": {
+        "type": "string"
+      },
+      "jobId": {
+        "type": "string"
+      },
+      "pageIndex": {
+        "default": 0,
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "itemId",
+      "jobId"
+    ],
+    "title": "MigrationDefinitionReportParams",
+    "type": "object"
+  },
+  "MigrationDefinitionReportResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "MigrationDefinitionField": {
+        "description": "Only reviewed schema labels are public; arbitrary source keys remain anonymous ordinals.",
+        "enum": [
+          "name",
+          "description",
+          "instructions",
+          "model",
+          "reasoning_effort",
+          "reasoning_summary",
+          "verbosity",
+          "tools",
+          "disallowed_tools",
+          "permission_mode",
+          "skills",
+          "mcp_servers",
+          "hooks",
+          "memory",
+          "background",
+          "isolation",
+          "effort",
+          "color",
+          "max_turns",
+          "features",
+          "hook_event",
+          "hook_matcher",
+          "hook_type",
+          "hook_command",
+          "hook_prompt",
+          "hook_timeout",
+          "hook_async",
+          "hook_status_message",
+          "hook_once",
+          "hook_model",
+          "hook_args",
+          "hook_description"
+        ],
+        "type": "string"
+      },
+      "MigrationDefinitionFieldReport": {
+        "additionalProperties": false,
+        "properties": {
+          "element": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "event": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/MigrationDefinitionHookEvent"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "field": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/MigrationDefinitionField"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "ordinal": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "element",
+          "ordinal"
+        ],
+        "type": "object"
+      },
+      "MigrationDefinitionFormat": {
+        "enum": [
+          "claude_agent_markdown",
+          "codex_agent_toml",
+          "claude_hooks_json",
+          "codex_hooks_json"
+        ],
+        "type": "string"
+      },
+      "MigrationDefinitionHookEvent": {
+        "enum": [
+          "preToolUse",
+          "permissionRequest",
+          "postToolUse",
+          "postToolUseFailure",
+          "notification",
+          "userPromptSubmit",
+          "stop",
+          "stopFailure",
+          "subagentStart",
+          "subagentStop",
+          "preCompact",
+          "postCompact",
+          "sessionStart",
+          "sessionEnd",
+          "interrupt",
+          "teammateIdle",
+          "taskCompleted",
+          "instructionsLoaded",
+          "configChange",
+          "worktreeCreate",
+          "worktreeRemove"
+        ],
+        "type": "string"
+      },
+      "MigrationDefinitionKind": {
+        "enum": [
+          "agent",
+          "hook"
+        ],
+        "type": "string"
+      },
+      "MigrationDefinitionParseStatus": {
+        "enum": [
+          "parsed",
+          "malformed",
+          "opaque",
+          "budget_exceeded"
+        ],
+        "type": "string"
+      },
+      "MigrationDefinitionReport": {
+        "additionalProperties": false,
+        "properties": {
+          "elements": {
+            "description": "Unknown totals stay unknown when the bounded parser could not inspect the input.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "executionAllowed": {
+            "description": "Storage is a pending asset; these fields never claim runtime compatibility.",
+            "type": "boolean"
+          },
+          "fields": {
+            "items": {
+              "$ref": "#/definitions/MigrationDefinitionFieldReport"
+            },
+            "type": "array"
+          },
+          "format": {
+            "$ref": "#/definitions/MigrationDefinitionFormat"
+          },
+          "kind": {
+            "$ref": "#/definitions/MigrationDefinitionKind"
+          },
+          "parseStatus": {
+            "$ref": "#/definitions/MigrationDefinitionParseStatus"
+          },
+          "requiresReview": {
+            "type": "boolean"
+          },
+          "unknownFields": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "executionAllowed",
+          "fields",
+          "format",
+          "kind",
+          "parseStatus",
+          "requiresReview"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "itemId": {
+        "type": "string"
+      },
+      "jobId": {
+        "type": "string"
+      },
+      "nextPage": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "pageIndex": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "report": {
+        "$ref": "#/definitions/MigrationDefinitionReport"
+      },
+      "totalBytes": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "totalFields": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "itemId",
+      "jobId",
+      "pageIndex",
+      "report",
+      "totalBytes",
+      "totalFields"
+    ],
+    "title": "MigrationDefinitionReportResult",
+    "type": "object"
+  },
+  "MigrationDefinitionsDiscoverParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "MigrationSourceKind": {
+        "enum": [
+          "claude-code",
+          "codex"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "catalogId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "includeProject": {
+        "default": false,
+        "type": "boolean"
+      },
+      "pageIndex": {
+        "default": 0,
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "sources": {
+        "default": [],
+        "items": {
+          "$ref": "#/definitions/MigrationSourceKind"
+        },
+        "type": "array"
+      }
+    },
+    "title": "MigrationDefinitionsDiscoverParams",
+    "type": "object"
+  },
+  "MigrationDefinitionsDiscoverResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "MigrationCategory": {
+        "enum": [
+          "provider",
+          "mcp",
+          "skill",
+          "command",
+          "instructions",
+          "memory",
+          "plugin",
+          "project",
+          "history",
+          "agent",
+          "hook",
+          "workflow"
+        ],
+        "type": "string"
+      },
+      "MigrationDiscoveryProblem": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/definitions/MigrationSourceKind"
+          },
+          "scope": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "kind",
+          "scope"
+        ],
+        "type": "object"
+      },
+      "MigrationSourceKind": {
+        "enum": [
+          "claude-code",
+          "codex"
+        ],
+        "type": "string"
+      },
+      "MigrationSourceSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "availableCategories": {
+            "items": {
+              "$ref": "#/definitions/MigrationCategory"
+            },
+            "type": "array"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "formatRevision": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/definitions/MigrationSourceKind"
+          },
+          "scope": {
+            "type": "string"
+          },
+          "sourceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "availableCategories",
+          "displayName",
+          "formatRevision",
+          "kind",
+          "scope",
+          "sourceId"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "catalogId": {
+        "type": "string"
+      },
+      "nextPage": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "problems": {
+        "items": {
+          "$ref": "#/definitions/MigrationDiscoveryProblem"
+        },
+        "type": "array"
+      },
+      "sources": {
+        "items": {
+          "$ref": "#/definitions/MigrationSourceSummary"
+        },
+        "type": "array"
+      },
+      "totalSources": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "catalogId",
+      "problems",
+      "sources",
+      "totalSources"
+    ],
+    "title": "MigrationDefinitionsDiscoverResult",
+    "type": "object"
+  }
+}

@@ -11,7 +11,7 @@ pub(super) async fn dispatch(
 ) -> Result<DispatchControl> {
     match method {
         method::THREAD_COMPACT => {
-            let result = match serde_json::from_value::<ThreadCompactParams>(params) {
+            let result = match kcoder_app_rpc_codec::decode::<ThreadCompactParams>(params) {
                 Ok(params) => {
                     if thread_manager.is_turn_running(&params.thread_id) {
                         Err(anyhow::anyhow!("cannot compact while a turn is running"))
@@ -73,7 +73,7 @@ pub(super) async fn dispatch(
             }
         }
         method::THREAD_ROLLBACK => {
-            let result = serde_json::from_value::<ThreadRollbackParams>(params)
+            let result = kcoder_app_rpc_codec::decode::<ThreadRollbackParams>(params)
                 .context("invalid thread/rollback params")
                 .and_then(|params| {
                     if thread_manager.is_turn_running(&params.thread_id) {

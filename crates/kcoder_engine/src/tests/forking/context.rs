@@ -1,5 +1,183 @@
 use super::*;
 
+#[derive(Debug)]
+struct InheritedHistoryProvider {
+    requests: Arc<Mutex<Vec<MessagesRequest>>>,
+}
+
+impl Provider for InheritedHistoryProvider {
+    fn name(&self) -> &'static str {
+        "inherited-history-fixture"
+    }
+
+    fn stream_messages(
+        &self,
+        request: MessagesRequest,
+    ) -> Result<ProviderStream, kcoder_api::ApiErrorKind> {
+        let mut requests = self.requests.lock().unwrap();
+        let stage = requests.len();
+        requests.push(request);
+        drop(requests);
+        let mut events = crate::test_support::events::simple_text_events(match stage {
+            0 => "<analysis>checked</analysis><summary>earlier work completed</summary>",
+            1 => "parent ready",
+            2 | 4 => "",
+            3 => "inherited evidence found",
+            5 => "child checkpoint continued",
+            _ => panic!("unexpected inherited-history provider request {stage}"),
+        });
+        if stage == 2 || stage == 4 {
+            events[1] = StreamEvent::ContentBlockStart {
+                index: 0,
+                content_block: ContentBlock::ToolUse {
+                    id: format!("inherited-history-search-{stage}"),
+                    name: "ContextHistory".into(),
+                    input: serde_json::json!({"query":"OLD_SECRET_FACT", "full":true}),
+                },
+            };
+            events.remove(2);
+            if let StreamEvent::MessageDelta { delta, .. } = &mut events[3] {
+                delta.stop_reason = Some("tool_use".into());
+            }
+        }
+        Ok(Box::pin(futures::stream::iter(events.into_iter().map(Ok))))
+    }
+}
+
+#[tokio::test]
+async fn normal_fork_tool_loop_restores_inherited_originals() {
+    use futures::StreamExt;
+    let root = tempfile::tempdir().unwrap();
+    let requests = Arc::new(Mutex::new(Vec::new()));
+    let mut settings = crate::test_support::engine_builder::settings_using_main_summary_runtime(
+        Settings::default(),
+    );
+    settings.session_memory.enabled = false;
+    settings.permission_mode = kcoder_config::PermissionMode::Auto;
+    let engine = TestEngineBuilder::new(root.path())
+        .provider(Arc::new(InheritedHistoryProvider {
+            requests: requests.clone(),
+        }))
+        .settings(settings)
+        .tool_registry(kcoder_tools::default_registry())
+        .build_with_profile_directory();
+    engine
+        .state
+        .with_history_path(root.path().join("parent.jsonl"));
+    for index in 0..5 {
+        engine.state.add_message(Message::user_text(format!(
+            "OLD_SECRET_FACT_{index} {}",
+            "source detail ".repeat(100)
+        )));
+        engine
+            .state
+            .add_message(Message::assistant_text("original work result"));
+    }
+    engine.state.flush_history().await.unwrap();
+    assert!(engine.compact_conversation().await.unwrap().did_compact);
+    let _ = engine
+        .run_turn_stream(&kcoder_permissions::AutoAllowPrompt)
+        .collect::<Vec<_>>()
+        .await;
+    assert!(
+        engine
+            .last_cache_safe_params()
+            .unwrap()
+            .context_history_anchor
+            .is_some()
+    );
+    let mut snapshot = engine.last_cache_safe_params().unwrap();
+    snapshot.fork_context_messages.insert(
+        0,
+        Message::runtime_text("parent request-only runtime overlay"),
+    );
+    *engine.last_cache_safe_params.write().unwrap() = Some(Arc::new(snapshot));
+    let result = engine
+        .run_forked_agent(
+            vec![Message::user_text(
+                "Find the precise earlier fact through ContextHistory",
+            )],
+            crate::agent::SubagentContextOverrides::default(),
+            3,
+        )
+        .await
+        .unwrap();
+    assert_eq!(result.output_text, "inherited evidence found");
+    let recorded = requests.clone();
+    let requests = requests.lock().unwrap();
+    assert_eq!(requests.len(), 4);
+    assert!(
+        requests[2]
+            .tools
+            .iter()
+            .any(|tool| tool.name == "ContextHistory")
+    );
+    let restored = requests[3]
+        .messages
+        .iter()
+        .filter_map(|message| {
+            let Message::User { content, .. } = message else {
+                return None;
+            };
+            content.iter().find_map(|block| match block {
+                ContentBlock::ToolResult {
+                    tool_use_id,
+                    content,
+                    is_error,
+                } if tool_use_id == "inherited-history-search-2" => {
+                    assert_ne!(*is_error, Some(true), "{content:?}");
+                    Some(
+                        content
+                            .iter()
+                            .filter_map(|block| match block {
+                                ContentBlock::Text { text } => Some(text.as_str()),
+                                _ => None,
+                            })
+                            .collect::<String>(),
+                    )
+                }
+                _ => None,
+            })
+        })
+        .collect::<String>();
+    assert!(restored.contains("OLD_SECRET_FACT_0"), "{restored}");
+    drop(requests);
+    let checkpoint = engine.state.subagent_transcript_path(&result.agent_id);
+    let value: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&checkpoint).unwrap()).unwrap();
+    assert!(value[0].get("kcoderContextHistory").is_some());
+    let mut messages: Vec<Message> = serde_json::from_value(value).unwrap();
+    messages.push(Message::user_text("continue this checkpoint"));
+    let mut parent_snapshot = engine.last_cache_safe_params().unwrap();
+    parent_snapshot.context_history_anchor = None;
+    parent_snapshot.fork_context_messages =
+        vec![Message::user_text("different current parent context")].into();
+    *engine.last_cache_safe_params.write().unwrap() = Some(Arc::new(parent_snapshot));
+    let continued = crate::agent::continue_forked_agent_with_tools(
+        &engine,
+        &engine.last_cache_safe_params().unwrap(),
+        crate::agent::ForkedAgentRequest {
+            agent_id: Some(result.agent_id),
+            messages,
+            prompt_message_count: 1,
+            initial_delivery: None,
+            overrides: Default::default(),
+            max_turns: 2,
+            tools: engine.tools.clone(),
+            runtime: None,
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(continued.output_text, "child checkpoint continued");
+    let requests = recorded.lock().unwrap();
+    assert_eq!(requests.len(), 6);
+    assert!(requests[5].messages.iter().any(|message| matches!(message,
+        Message::User { content, .. } if content.iter().any(|block| matches!(block,
+            ContentBlock::ToolResult { tool_use_id, is_error, content } if tool_use_id == "inherited-history-search-4"
+                && *is_error != Some(true) && content.iter().any(|block| matches!(block, ContentBlock::Text { text } if text.contains("OLD_SECRET_FACT_0"))))))));
+}
+
 #[tokio::test]
 async fn role_runner_starts_each_verifier_in_a_fresh_session() {
     let tmp = tempfile::tempdir().unwrap();
@@ -27,6 +205,7 @@ async fn role_runner_starts_each_verifier_in_a_fresh_session() {
             active_skills: Vec::new(),
             snapshot_provider: engine.provider_name(),
             snapshot_model: engine.model_name(),
+            context_history_anchor: None,
             full_context_compatible: true,
         }
         .into(),
@@ -118,6 +297,7 @@ async fn forked_agent_uses_parent_current_model() {
             active_skills: snapshot_skills.clone(),
             snapshot_provider: engine.provider_name(),
             snapshot_model: snapshot_model.clone(),
+            context_history_anchor: None,
             full_context_compatible: true,
         }
         .into(),
@@ -171,6 +351,7 @@ async fn training_mode_preserves_forked_agents_with_distinct_session_ids() {
             active_skills: Vec::new(),
             snapshot_provider: engine.provider_name(),
             snapshot_model: engine.model_name(),
+            context_history_anchor: None,
             full_context_compatible: true,
         }
         .into(),
@@ -213,6 +394,7 @@ async fn full_context_rejects_provider_or_model_switch_since_snapshot() {
             active_skills: Vec::new(),
             snapshot_provider: engine.provider_name(),
             snapshot_model: "snapshot-model".to_string(),
+            context_history_anchor: None,
             full_context_compatible: true,
         }
         .into(),
@@ -269,6 +451,7 @@ async fn moa_turn_marks_snapshot_incompatible_with_full_inheritance() {
         },
     )]);
     let engine = test_engine_with_settings(provider, tmp.path(), settings);
+    crate::test_support::engine_builder::initialize_owned_native_profile(&engine).unwrap();
     engine
         .state
         .add_message(Message::user_text("answer through MoA"));
@@ -336,6 +519,7 @@ async fn forked_agent_does_not_refresh_session_memory() {
             active_skills: Vec::new(),
             snapshot_provider: engine.provider_name(),
             snapshot_model: engine.model_name(),
+            context_history_anchor: None,
             full_context_compatible: true,
         }
         .into(),
@@ -379,6 +563,7 @@ async fn arrangement_implementer_fork_keeps_worker_tool_registry() {
         active_skills: Vec::new(),
         snapshot_provider: engine.provider_name(),
         snapshot_model: engine.model_name(),
+        context_history_anchor: None,
         full_context_compatible: true,
     };
     let tools = crate::agent::filter_tools_for_agent_kind_in_mode(
@@ -463,6 +648,7 @@ async fn arrangement_agent_runner_starts_with_worker_prompt_not_parent_goal_cont
         active_skills: Vec::new(),
         snapshot_provider: engine.provider_name(),
         snapshot_model: engine.model_name(),
+        context_history_anchor: None,
         full_context_compatible: true,
     }.into());
 
@@ -583,6 +769,7 @@ async fn forked_agent_ignores_parent_unmatched_tool_use() {
             active_skills: vec![],
             snapshot_provider: engine.provider_name(),
             snapshot_model: engine.model_name(),
+            context_history_anchor: None,
             full_context_compatible: true,
         }
         .into(),

@@ -673,7 +673,7 @@ await runE2E(import.meta.url, {
     const authorized = await identityModule.readRegisteredClientIdentity({
       identityFile: identityPath,
       relayUrl: relayOrigin,
-      pairingToken: relayInputs.fixtures[name].pairingToken,
+      gatewaySecret: relayInputs.fixtures[name].pairingToken,
     });
     assert.equal(authorized.id, relayInputs.fixtures[name].id, `${name} identity must match its private pairing fixture`);
     assert.equal(authorized.secret, relayInputs.registeredRecords[name].secret, `${name} identity must match its private registration record`);
@@ -728,7 +728,7 @@ await runE2E(import.meta.url, {
     clients[name] = await clientModule.startRegisteredClient({
       url: relayOrigin,
       identityFile: identities[name].path,
-      pairingToken: relayInputs.fixtures[name].pairingToken,
+      gatewaySecret: relayInputs.fixtures[name].pairingToken,
       gateway: gateways[name].baseUrl,
       allowInsecure: true,
       retryMs: 250,

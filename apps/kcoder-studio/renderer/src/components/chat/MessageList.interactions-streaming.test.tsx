@@ -2,20 +2,29 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, test, vi } from 'vitest'
 import type { ProcessingBlock } from '@/types/workbench'
+import { updateAppPreferences } from '@/host/appPreferences'
+import { hydrateConversationPreferences } from '@/features/appearance/useConversationPreferences'
 import { MessageList } from './MessageList'
 import { clearPersistentProcessingExpansions } from './blocks/processingExpansionState'
 import { ToolPathPreviewConsumer } from '@/kcoder/toolPathPreview'
 import '@/i18n'
 
-const tauriCoreMock = vi.hoisted(() => ({
-  convertFileSrc: vi.fn((path: string) => `asset://localhost/${path.replace(/^\/+/, '')}`),
+const runtimeCommandMock = vi.hoisted(() => ({
+  clientResourceUrl: vi.fn((path: string) => `asset://localhost/${path.replace(/^\/+/, '')}`),
   invoke: vi.fn(),
-  isTauri: vi.fn(() => false),
+  isGateway: vi.fn(() => false),
 }))
 const openExternalUrlMock = vi.hoisted(() => vi.fn().mockResolvedValue(true))
 const requestEmbeddedBrowserOpenMock = vi.hoisted(() => vi.fn(() => true))
 
-vi.mock('@tauri-apps/api/core', () => tauriCoreMock)
+vi.mock('@/lib/client-resource-url', () => runtimeCommandMock)
+vi.mock('@/lib/runtime-environment', async original => ({
+  ...(await original<typeof import('@/lib/runtime-environment')>()),
+  isGatewayRuntime: runtimeCommandMock.isGateway,
+}))
+
+vi.mock('@/lib/runtime-commands', () => ({ invoke: runtimeCommandMock.invoke }))
+
 vi.mock('@/lib/external-links', async importOriginal => ({
   ...(await importOriginal<typeof import('@/lib/external-links')>()),
   openExternalUrl: openExternalUrlMock,
@@ -43,11 +52,11 @@ describe('MessageList', () => {
     clearPersistentProcessingExpansions()
     vi.unstubAllGlobals()
     vi.restoreAllMocks()
-    tauriCoreMock.convertFileSrc
+    runtimeCommandMock.clientResourceUrl
       .mockReset()
       .mockImplementation((path: string) => `asset://localhost/${path.replace(/^\/+/, '')}`)
-    tauriCoreMock.invoke.mockReset()
-    tauriCoreMock.isTauri.mockReset().mockReturnValue(false)
+    runtimeCommandMock.invoke.mockReset()
+    runtimeCommandMock.isGateway.mockReset().mockReturnValue(false)
     openExternalUrlMock.mockClear()
     requestEmbeddedBrowserOpenMock.mockClear()
     localStorage.clear()
@@ -131,7 +140,7 @@ describe('MessageList', () => {
     unmount()
   })
   test('renders retry feedback for an empty virtualized transcript and reserves its tail space', () => {
-    tauriCoreMock.isTauri.mockReturnValue(true)
+    runtimeCommandMock.isGateway.mockReturnValue(true)
     const consumer = new ToolPathPreviewConsumer()
     retryConsumers.push(consumer)
     const client = {}
@@ -887,6 +896,100 @@ describe('MessageList', () => {
     expect(screen.queryByTestId('tool-block-thinking')).not.toBeInTheDocument()
     expect(screen.queryByTestId('processing-live-preview')).not.toBeInTheDocument()
     expect(screen.getByTestId('final-processing-toggle')).toHaveAttribute('aria-expanded', 'false')
+  })
+
+  test('applies disclosure defaults when the first streaming processing nodes arrive and preserves manual choice', async () => {
+    const toolMessage = {
+      id: 'streamed-tool-default',
+      role: 'assistant' as const,
+      content: '',
+      status: 'streaming' as const,
+      createdAt: '2026-05-25T18:46:00.000+08:00',
+      blocks: [] as ProcessingBlock[],
+    }
+    const thinkingMessage = {
+      id: 'streamed-thinking-default',
+      role: 'assistant' as const,
+      content: '',
+      status: 'streaming' as const,
+      createdAt: '2026-05-25T18:47:00.000+08:00',
+      blocks: [] as ProcessingBlock[],
+    }
+    const { rerender } = render(<MessageList messages={[toolMessage, thinkingMessage]} />)
+
+    await act(async () => {
+      await hydrateConversationPreferences()
+      await updateAppPreferences({
+        thinkingCollapsedByDefault: false,
+        toolsCollapsedByDefault: false,
+      })
+    })
+    expect(screen.queryAllByTestId('final-processing-toggle')).toHaveLength(0)
+
+    const firstTool: ProcessingBlock = {
+      id: 'first-streamed-tool',
+      subtaskId: 1,
+      type: 'tool',
+      toolName: 'Bash',
+      toolInput: { command: 'pwd' },
+      status: 'done',
+      createdAt: 1770000000000,
+    }
+    const firstThinking: ProcessingBlock = {
+      id: 'first-streamed-thinking',
+      subtaskId: 1,
+      type: 'thinking',
+      content: 'Let me inspect the result.',
+      status: 'done',
+      createdAt: 1770000000001,
+    }
+    rerender(
+      <MessageList
+        messages={[
+          { ...toolMessage, content: 'Tool answer', blocks: [firstTool] },
+          { ...thinkingMessage, content: 'Thinking answer', blocks: [firstThinking] },
+        ]}
+      />
+    )
+
+    const toggles = screen.getAllByTestId('final-processing-toggle')
+    expect(toggles).toHaveLength(2)
+    expect(toggles[0]).toHaveAttribute('aria-expanded', 'true')
+    expect(toggles[1]).toHaveAttribute('aria-expanded', 'true')
+    fireEvent.click(toggles[0]!)
+
+    const laterTool: ProcessingBlock = {
+      ...firstTool,
+      id: 'later-streamed-tool',
+      createdAt: 1770000000002,
+    }
+    const laterThinking: ProcessingBlock = {
+      ...firstThinking,
+      id: 'later-streamed-thinking',
+      content: 'One more streamed chunk.',
+      createdAt: 1770000000003,
+    }
+    rerender(
+      <MessageList
+        messages={[
+          { ...toolMessage, content: 'Tool answer extended', blocks: [firstTool, laterTool] },
+          { ...thinkingMessage, content: 'Thinking answer extended', blocks: [firstThinking, laterThinking] },
+        ]}
+      />
+    )
+
+    const updatedToggles = screen.getAllByTestId('final-processing-toggle')
+    expect(updatedToggles[0]).toHaveAttribute('aria-expanded', 'false')
+    expect(updatedToggles[1]).toHaveAttribute('aria-expanded', 'true')
+    await act(async () => {
+      await updateAppPreferences({
+        thinkingCollapsedByDefault: true,
+        toolsCollapsedByDefault: true,
+      })
+    })
+    const afterPreferenceChange = screen.getAllByTestId('final-processing-toggle')
+    expect(afterPreferenceChange[0]).toHaveAttribute('aria-expanded', 'false')
+    expect(afterPreferenceChange[1]).toHaveAttribute('aria-expanded', 'true')
   })
 
   test('renders process text inside the processing timeline before the following tool', () => {

@@ -6,13 +6,13 @@ import {
   defaultAppPreferences,
   getAppPreferences,
   updateAppPreferences,
-} from '@/tauri/appPreferences'
+} from '@/host/appPreferences'
 import {
   getAppshotsStatus,
   openAppshotsPermissionSettings,
   type AppshotPermission,
   type AppshotsStatus,
-} from '@/tauri/appshots'
+} from '@/host/appshots'
 import {
   SettingsGroup,
   SettingsPage,
@@ -97,16 +97,16 @@ export function AppshotsSettingsPage() {
     )
 
   return (
-    <SettingsPage width="narrow" data-testid="appshots-settings-page">
+    <SettingsPage data-testid="appshots-settings-page">
       <SettingsPageHeader
         title={t('workbench.appshots_title', '应用快照')}
         description={t(
           'workbench.appshots_subtitle',
-          '捕捉最前面的应用窗口，并直接添加到 Wework 输入框'
+          '捕捉最前面的应用窗口，并直接添加到 KCoder 输入框'
         )}
       />
 
-      <div className="mb-4 flex items-start gap-3 rounded-2xl border border-border bg-surface/70 px-4 py-3">
+      <div className="studio-card-spacing flex items-start gap-3 rounded-2xl border border-border bg-surface/70">
         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
           <ScanLine className="h-4 w-4" />
         </div>
@@ -117,7 +117,7 @@ export function AppshotsSettingsPage() {
           <div className="mt-0.5 text-xs leading-4 text-text-secondary">
             {t(
               'workbench.appshots_callout_description',
-              '按下快捷键后，Wework 会截取最前面的窗口、回到工作台并附加图片。'
+              '按下快捷键后，KCoder 会截取最前面的窗口、回到工作台并附加图片。'
             )}
           </div>
         </div>
@@ -140,7 +140,7 @@ export function AppshotsSettingsPage() {
                 : status?.supported
                   ? t(
                       'workbench.appshots_shortcut_unavailable',
-                      '快捷键已被其他应用占用，请退出冲突的应用后重启 Wework。'
+                      '快捷键已被其他应用占用，请退出冲突的应用后重启 KCoder。'
                     )
                   : t('workbench.appshots_macos_only', '应用快照目前仅支持 macOS。')
           }
@@ -183,7 +183,7 @@ export function AppshotsSettingsPage() {
           label={t('workbench.appshots_target', 'Appshot 目标位置')}
           description={t(
             'workbench.appshots_target_description',
-            '快照会自动添加到当前 Wework 输入框'
+            '快照会自动添加到当前 KCoder 输入框'
           )}
           control={
             <span className="rounded-md border border-border bg-background px-2.5 py-1 text-xs font-medium text-text-secondary">

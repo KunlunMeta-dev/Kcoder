@@ -18,6 +18,7 @@ fn ephemeral_fork_inherits_history_without_listing_or_persisting_as_a_normal_thr
     server.send(json!({"jsonrpc":"2.0","id":4,"method":"thread/fork","params":{
         "threadId":source,"ephemeral":true
     }}));
+    let source_history = find_named_file(temp.path(), &format!("{source}.jsonl")).unwrap();
     let forked = server.response(4);
     assert_eq!(forked["result"]["ephemeral"], true, "{forked}");
     let child = forked["result"]["thread"]["id"].as_str().unwrap().to_owned();
@@ -36,7 +37,10 @@ fn ephemeral_fork_inherits_history_without_listing_or_persisting_as_a_normal_thr
     let listed = server.response(6)["result"].to_string();
     assert!(listed.contains(&source));
     assert!(!listed.contains(&child));
-    assert!(find_named_file(temp.path(), &format!("{child}.jsonl")).is_none());
+    assert!(!source_history.parent().unwrap().join(format!("{child}.jsonl")).exists(),
+        "the ephemeral thread must not be written beside ordinary session history");
+    let ephemeral_history = find_named_file(&workspace.join("config/tmp"), &format!("{child}.jsonl"))
+        .expect("ephemeral history must belong to application-managed private temporary storage");
     server.send(json!({"jsonrpc":"2.0","id":7,"method":"turn/start","params":{
         "threadId":child,"input":[{"type":"text","text":"temporary-only-marker"}]
     }}));
@@ -52,6 +56,7 @@ fn ephemeral_fork_inherits_history_without_listing_or_persisting_as_a_normal_thr
     assert!(server.response(9)["error"].is_object());
     server.send(json!({"jsonrpc":"2.0","id":10,"method":"thread/dispose","params":{"threadId":child}}));
     assert_eq!(server.response(10)["result"]["disposed"], true);
+    assert!(!ephemeral_history.exists(), "disposing the owner must release its temporary history");
     server.send(json!({"jsonrpc":"2.0","id":11,"method":"thread/resume","params":{"threadId":child}}));
     assert!(server.response(11)["error"].is_object());
     server.shutdown();

@@ -338,6 +338,9 @@ async function startFrozenGateway(context, runtime, options) {
     KCODER_STUDIO_KCODER_BIN: runtime.kcoderBinaryPath,
     KCODER_STUDIO_WORKSPACE: options.workspace,
     KCODER_STUDIO_WEB_ROOT: options.webRoot,
+    ...(typeof options.mobileWebRoot === "string" && options.mobileWebRoot.length > 0
+      ? { KCODER_STUDIO_MOBILE_WEB_ROOT: options.mobileWebRoot }
+      : {}),
     KCODER_STUDIO_SERVERS_FILE: options.serversFile,
     KCODER_STUDIO_AUTH_TOKEN: authToken,
     KCODER_STUDIO_ALLOWED_HOSTS: "127.0.0.1,localhost,::1",
@@ -366,6 +369,7 @@ async function startFrozenGateway(context, runtime, options) {
     cwd: runtime.root,
     script: runtime.script,
     nodeExecutable: runtime.nodeExecutable,
+    mobileWebRoot: options.mobileWebRoot ?? null,
   };
 }
 

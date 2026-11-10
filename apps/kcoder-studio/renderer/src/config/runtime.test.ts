@@ -30,6 +30,38 @@ describe('getRuntimeConfig', () => {
     meta.remove()
   })
 
+  test('keeps Gateway requests on its own origin when legacy backend settings are present', () => {
+    vi.stubEnv('VITE_WEGENT_BACKEND_URL', 'https://cloud.example.com/api')
+    vi.stubEnv('VITE_WEGENT_SOCKET_URL', 'wss://cloud.example.com')
+    window.__KCODER_STUDIO_RUNTIME_CONFIG__ = {
+      appBasePath: '/legacy',
+      apiBaseUrl: 'https://legacy.example.com/api',
+      socketBaseUrl: 'https://legacy.example.com',
+      socketPath: '/legacy/socket.io',
+      runtimeMode: 'backend',
+    }
+    const marker = document.createElement('meta')
+    marker.name = 'kcoder-rpc-token'
+    marker.content = 'cookie'
+    const prefix = document.createElement('meta')
+    prefix.name = 'kcoder-app-base-path'
+    prefix.content = '/g/gateway-one'
+    document.head.append(marker, prefix)
+
+    try {
+      expect(getRuntimeConfig()).toMatchObject({
+        apiBaseUrl: '/g/gateway-one/api',
+        socketBaseUrl: window.location.origin,
+        socketPath: '/g/gateway-one/socket.io',
+        wegentBackendUrl: '',
+        runtimeMode: 'local-first',
+      })
+    } finally {
+      marker.remove()
+      prefix.remove()
+    }
+  })
+
   test('reads the default Wegent Backend URL from build-time config', () => {
     delete window.__KCODER_STUDIO_RUNTIME_CONFIG__
     vi.stubEnv('VITE_WEGENT_BACKEND_URL', 'https://cloud.example.com/api')
@@ -58,13 +90,11 @@ describe('getRuntimeConfig', () => {
 
   test('prefers runtime config over the configured backend URL', () => {
     vi.stubEnv('VITE_WEGENT_BACKEND_URL', 'http://build.example.com')
-    vi.stubEnv('VITE_LOGIN_MODE', 'password')
     window.__KCODER_STUDIO_RUNTIME_CONFIG__ = {
       apiBaseUrl: 'http://runtime.example.com/api',
       socketBaseUrl: 'http://runtime.example.com',
       socketPath: '/socket.io',
       runtimeMode: 'backend',
-      loginMode: 'oidc',
     }
 
     const config = getRuntimeConfig()
@@ -73,16 +103,6 @@ describe('getRuntimeConfig', () => {
     expect(config.socketBaseUrl).toBe('http://runtime.example.com')
     expect(config.socketPath).toBe('/socket.io')
     expect(config.runtimeMode).toBe('backend')
-    expect(config.loginMode).toBe('oidc')
-  })
-
-  test('ignores invalid runtime and build-time login modes', () => {
-    vi.stubEnv('VITE_LOGIN_MODE', 'invalid-env-mode')
-    window.__KCODER_STUDIO_RUNTIME_CONFIG__ = {
-      loginMode: 'invalid-runtime-mode' as never,
-    }
-
-    expect(getRuntimeConfig().loginMode).toBe('all')
   })
 
   test('defaults to local-first mode without explicit runtime config', () => {

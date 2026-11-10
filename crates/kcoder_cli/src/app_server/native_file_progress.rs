@@ -1,8 +1,11 @@
 //! Git-independent, bounded text baselines for live workspace progress.
-use super::*;
+use crate::private_files::hex_sha256;
+use anyhow::Result;
 use kcoder_types::tool_ui::WorkspaceFileProgress;
+use kcoder_workspace_resources::{workspace_io, workspace_revision};
 use similar::{ChangeTag, TextDiff};
 use std::collections::{BTreeSet, HashMap, HashSet};
+use std::{path::Path, sync::Arc, time::Duration};
 
 const MAX_ENTRIES: usize = 10_000;
 const MAX_BYTES: u64 = 16 * 1024 * 1024;

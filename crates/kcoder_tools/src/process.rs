@@ -2,7 +2,7 @@ use crate::{ToolContext, ToolError, ToolOutput, truncate_text};
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
-use tokio::io::{AsyncRead, AsyncReadExt};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
 use tokio::task::JoinHandle;
 use tokio::time::{Duration, Instant};
 
@@ -108,6 +108,9 @@ struct LiveOutputState {
     published_revision: u64,
     failed_revision: Option<u64>,
     last_attempt: Option<Instant>,
+    total_bytes: u64,
+    progress: Option<(std::sync::Weak<dyn crate::BackgroundJobSpawner>, String)>,
+    publisher_running: bool,
     #[cfg(test)]
     snapshot_writes: usize,
     #[cfg(test)]
@@ -125,6 +128,9 @@ impl LiveOutputCapture {
                 published_revision: 0,
                 failed_revision: None,
                 last_attempt: None,
+                total_bytes: 0,
+                progress: None,
+                publisher_running: false,
                 #[cfg(test)]
                 snapshot_writes: 0,
                 #[cfg(test)]
@@ -134,6 +140,17 @@ impl LiveOutputCapture {
             limits,
             flush_interval: Duration::from_millis(250),
         }
+    }
+
+    pub(crate) fn report_progress_to(
+        &self,
+        manager: &Arc<dyn crate::BackgroundJobSpawner>,
+        id: &str,
+    ) {
+        self.inner
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .progress = Some((Arc::downgrade(manager), id.to_string()));
     }
 
     pub(crate) async fn attach(&self, path: impl Into<PathBuf>) {
@@ -167,9 +184,10 @@ impl LiveOutputCapture {
         self.flush().await;
     }
 
-    async fn push(&self, stream: OutputStream, chunk: &[u8]) {
+    fn record_output(&self, stream: OutputStream, chunk: &[u8]) {
         {
             let mut inner = self.inner.lock().unwrap_or_else(|p| p.into_inner());
+            inner.total_bytes = inner.total_bytes.saturating_add(chunk.len() as u64);
             let target = match stream {
                 OutputStream::Stdout => &mut inner.stdout,
                 OutputStream::Stderr => &mut inner.stderr,
@@ -177,11 +195,48 @@ impl LiveOutputCapture {
             append_live_bytes(target, chunk, self.limits.max_bytes);
             inner.revision = inner.revision.wrapping_add(1);
         }
+    }
+
+    #[cfg(test)]
+    async fn push(&self, stream: OutputStream, chunk: &[u8]) {
+        self.record_output(stream, chunk);
         self.write_latest_snapshot(false).await;
     }
 
+    fn push_stream(&self, stream: OutputStream, chunk: &[u8]) {
+        self.record_output(stream, chunk);
+        {
+            let mut inner = self.inner.lock().unwrap_or_else(|p| p.into_inner());
+            if inner.publisher_running || inner.path.is_none() {
+                return;
+            }
+            inner.publisher_running = true;
+        }
+        let capture = self.clone();
+        tokio::spawn(async move {
+            while let Some(deadline) = capture.publisher_deadline() {
+                tokio::time::sleep_until(deadline).await;
+                capture.write_latest_snapshot(false).await;
+            }
+        });
+    }
+
+    fn publisher_deadline(&self) -> Option<Instant> {
+        let mut inner = self.inner.lock().unwrap_or_else(|p| p.into_inner());
+        let deadline = Self::pending_deadline(&inner, self.flush_interval);
+        if deadline.is_none() {
+            inner.publisher_running = false;
+        }
+        deadline
+    }
+
+    #[cfg(test)]
     fn flush_deadline(&self) -> Option<Instant> {
         let inner = self.inner.lock().unwrap_or_else(|p| p.into_inner());
+        Self::pending_deadline(&inner, self.flush_interval)
+    }
+
+    fn pending_deadline(inner: &LiveOutputState, interval: Duration) -> Option<Instant> {
         (inner.path.is_some()
             && inner.revision != inner.published_revision
             && inner.failed_revision != Some(inner.revision)
@@ -189,12 +244,12 @@ impl LiveOutputCapture {
         .then(|| {
             inner
                 .last_attempt
-                .map_or_else(Instant::now, |last| last + self.flush_interval)
+                .map_or_else(Instant::now, |last| last + interval)
         })
     }
 
-    /// Final reads and attachment changes bypass coalescing. Pipe readers own
-    /// quiet timers; in-flight blocking writes retain their gate after cancellation.
+    /// Final reads and attachment changes bypass the independent publisher's
+    /// coalescing; in-flight blocking writes retain their gate after cancellation.
     pub(crate) async fn flush(&self) {
         self.write_latest_snapshot(true).await;
     }
@@ -256,6 +311,15 @@ impl LiveOutputCapture {
                 {
                     inner.snapshot_writes += 1;
                 }
+                let progress = inner.progress.clone();
+                let total_bytes = inner.total_bytes;
+                drop(inner);
+                if let Some((manager, id)) = progress
+                    && let Some(manager) = manager.upgrade()
+                    && total_bytes > 0
+                {
+                    manager.report_tool_progress(&id, &format!("REPL · {total_bytes} B"));
+                }
             } else {
                 if inner.path.as_ref() == Some(&path) {
                     inner.failed_revision = Some(revision);
@@ -272,28 +336,13 @@ async fn read_live_chunk(
     chunk: &mut [u8],
     live: &Option<(LiveOutputCapture, OutputStream)>,
 ) -> std::io::Result<usize> {
-    loop {
-        let deadline = live
-            .as_ref()
-            .and_then(|(capture, _)| capture.flush_deadline());
-        tokio::select! {
-            result = pipe.read(chunk) => {
-                if matches!(&result, Ok(0) | Err(_))
-                    && let Some((capture, _)) = live {
-                    capture.flush().await;
-                }
-                return result;
-            }
-            _ = async {
-                match deadline {
-                    Some(deadline) => tokio::time::sleep_until(deadline).await,
-                    None => std::future::pending::<()>().await,
-                }
-            } => {
-                if let Some((capture, _)) = live { capture.flush().await; }
-            }
-        }
+    let result = pipe.read(chunk).await;
+    if matches!(&result, Ok(0) | Err(_))
+        && let Some((capture, _)) = live
+    {
+        capture.flush().await;
     }
+    result
 }
 
 fn append_live_bytes(target: &mut Vec<u8>, chunk: &[u8], max_bytes: usize) {
@@ -303,11 +352,53 @@ fn append_live_bytes(target: &mut Vec<u8>, chunk: &[u8], max_bytes: usize) {
     }
 }
 
+pub(crate) struct CapturedOutput {
+    pub bytes: Vec<u8>,
+    pub truncated: bool,
+    pub spool_complete: bool,
+    pub full_output_path: Option<PathBuf>,
+    preview_bounds: Option<(usize, usize)>,
+}
+
+impl CapturedOutput {
+    pub(crate) fn utf8_preview(&self) -> String {
+        let Some((head_end, tail_start)) = self.preview_bounds else {
+            return String::from_utf8_lossy(&self.bytes).into_owned();
+        };
+        let head = &self.bytes[..head_end];
+        let head = match std::str::from_utf8(head) {
+            Err(error) if error.error_len().is_none() => &head[..error.valid_up_to()],
+            _ => head,
+        };
+        let mut tail = &self.bytes[tail_start..];
+        while tail.first().is_some_and(|byte| byte & 0xc0 == 0x80) {
+            tail = &tail[1..];
+        }
+        format!(
+            "{}{}{}",
+            String::from_utf8_lossy(head),
+            String::from_utf8_lossy(&self.bytes[head_end..tail_start]),
+            String::from_utf8_lossy(tail)
+        )
+    }
+}
+
 pub(crate) async fn read_output_pipe(
-    mut pipe: impl AsyncRead + Unpin,
+    pipe: impl AsyncRead + Unpin,
     limits: OutputLimits,
     live: Option<(LiveOutputCapture, OutputStream)>,
 ) -> std::io::Result<Vec<u8>> {
+    read_output_pipe_bounded(pipe, limits, live, None)
+        .await
+        .map(|output| output.bytes)
+}
+
+pub(crate) async fn read_output_pipe_bounded(
+    mut pipe: impl AsyncRead + Unpin,
+    limits: OutputLimits,
+    live: Option<(LiveOutputCapture, OutputStream)>,
+    mut spool: Option<tokio::io::BufWriter<tokio::fs::File>>,
+) -> std::io::Result<CapturedOutput> {
     let (max_bytes, head_limit, tail_limit) = limits.pipe_capture_limits();
     if max_bytes == 0 {
         let mut bytes = Vec::new();
@@ -318,11 +409,18 @@ pub(crate) async fn read_output_pipe(
                 break;
             }
             if let Some((capture, stream)) = &live {
-                capture.push(*stream, &chunk[..read]).await;
+                capture.push_stream(*stream, &chunk[..read]);
             }
+            spool_output(&mut spool, &chunk[..read]).await;
             bytes.extend_from_slice(&chunk[..read]);
         }
-        return Ok(bytes);
+        return Ok(CapturedOutput {
+            bytes,
+            truncated: false,
+            spool_complete: finish_spool(spool).await,
+            full_output_path: None,
+            preview_bounds: None,
+        });
     }
 
     let mut head = Vec::with_capacity(head_limit);
@@ -335,8 +433,9 @@ pub(crate) async fn read_output_pipe(
             break;
         }
         if let Some((capture, stream)) = &live {
-            capture.push(*stream, &chunk[..read]).await;
+            capture.push_stream(*stream, &chunk[..read]);
         }
+        spool_output(&mut spool, &chunk[..read]).await;
         total = total.saturating_add(read);
         let mut unread = &chunk[..read];
         if head.len() < head_limit {
@@ -363,12 +462,42 @@ pub(crate) async fn read_output_pipe(
 
     if total <= head.len().saturating_add(tail.len()) {
         head.extend_from_slice(&tail);
-        return Ok(head);
+        return Ok(CapturedOutput {
+            bytes: head,
+            truncated: false,
+            spool_complete: finish_spool(spool).await,
+            full_output_path: None,
+            preview_bounds: None,
+        });
     }
     let omitted = total.saturating_sub(head.len()).saturating_sub(tail.len());
+    let head_end = head.len();
     head.extend_from_slice(format!("\n...[truncated {omitted} bytes]...\n").as_bytes());
+    let tail_start = head.len();
     head.extend_from_slice(&tail);
-    Ok(head)
+    Ok(CapturedOutput {
+        bytes: head,
+        truncated: true,
+        spool_complete: finish_spool(spool).await,
+        full_output_path: None,
+        preview_bounds: Some((head_end, tail_start)),
+    })
+}
+
+async fn spool_output(spool: &mut Option<tokio::io::BufWriter<tokio::fs::File>>, bytes: &[u8]) {
+    if let Some(file) = spool
+        && file.write_all(bytes).await.is_err()
+    {
+        *spool = None;
+        tracing::warn!("full tool output spool unavailable; bounded capture remains available");
+    }
+}
+
+async fn finish_spool(spool: Option<tokio::io::BufWriter<tokio::fs::File>>) -> bool {
+    match spool {
+        Some(mut file) => file.flush().await.is_ok(),
+        None => false,
+    }
 }
 
 pub(crate) async fn join_output_pipe(
@@ -947,6 +1076,65 @@ mod tests {
             std::fs::read_to_string(path)
                 .unwrap()
                 .contains("newer chunk")
+        );
+    }
+
+    #[tokio::test]
+    async fn live_output_slow_publisher_does_not_block_pipe_drain() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("output.txt");
+        let limits = live_limits(4096);
+        let capture = LiveOutputCapture::new(limits.clone());
+        capture.attach(&path).await;
+        let barrier = Arc::new((Mutex::new((false, false)), std::sync::Condvar::new()));
+        let hook = barrier.clone();
+        capture.inner.lock().unwrap().before_publish = Some(Arc::new(move || {
+            let (lock, changed) = &*hook;
+            let mut state = lock.lock().unwrap();
+            state.0 = true;
+            while !state.1 {
+                state = changed.wait(state).unwrap();
+            }
+        }));
+        let (mut producer, consumer) = tokio::io::duplex(64);
+        let reader = tokio::spawn(read_output_pipe(
+            consumer,
+            limits,
+            Some((capture, OutputStream::Stdout)),
+        ));
+        producer.write_all(b"first\n").await.unwrap();
+        let entered = tokio::time::timeout(Duration::from_secs(2), async {
+            while !barrier.0.lock().unwrap().0 {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await;
+        let drain = if entered.is_ok() {
+            tokio::time::timeout(
+                Duration::from_secs(2),
+                producer.write_all(&vec![b'x'; 128 * 1024]),
+            )
+            .await
+            .is_ok()
+        } else {
+            false
+        };
+        // Release the owned blocked writer before assertions or runtime shutdown.
+        barrier.0.lock().unwrap().1 = true;
+        barrier.1.notify_all();
+        producer.write_all(b"LAST_MARKER\n").await.unwrap();
+        drop(producer);
+        let output = reader.await.unwrap().unwrap();
+        assert!(entered.is_ok());
+        assert!(
+            drain,
+            "slow snapshot I/O must not block the producing command"
+        );
+        assert!(String::from_utf8_lossy(&output).contains("LAST_MARKER"));
+        assert!(
+            std::fs::read_to_string(path)
+                .unwrap()
+                .contains("LAST_MARKER")
         );
     }
 

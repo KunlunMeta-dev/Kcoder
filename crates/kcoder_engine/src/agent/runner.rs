@@ -9,7 +9,11 @@ impl QueryEngineAgentRunner {
         if let Some(host) = engine.effective_user_questioner().snapshot_agent_host() {
             engine.user_questioner = host;
         }
-        Self { engine }
+        let source_parent = Arc::new(engine.native_tool_execution_witness());
+        Self {
+            engine,
+            source_parent,
+        }
     }
 
     pub(super) fn transcript_path(&self, agent_id: &str) -> PathBuf {
@@ -127,6 +131,38 @@ impl QueryEngineAgentRunner {
                 "agent {agent_id} predates provider/model transcript tracking; spawn a fresh sub-agent"
             ))
         })?;
+        if let Some(execution) = task
+            .plugin_prompt_policy
+            .as_ref()
+            .and_then(|policy| policy.imported_agent.as_ref())
+        {
+            if !execution.is_supported() {
+                return Err(AgentError::Execution(
+                    "Unsupported imported Agent execution metadata".into(),
+                ));
+            }
+            if let kcoder_types::migration_agent::ImportedAgentModel::Target { provider, model } =
+                &execution.model
+            {
+                let selection = kcoder_tools::AgentRuntimeSelection {
+                    profile: None,
+                    provider: Some(provider.clone()),
+                    model: Some(model.clone()),
+                };
+                let runtime = self.build_agent_runtime(&selection).map_err(|_| {
+                    AgentError::Execution("Imported Agent native deployment unavailable".into())
+                })?;
+                if saved_provider == runtime.provider.name()
+                    && saved_model == runtime.settings.model
+                {
+                    return Ok(());
+                }
+                return Err(AgentError::Execution(
+                    "Imported Agent transcript differs from its persisted native model mapping"
+                        .into(),
+                ));
+            }
+        }
         let live_provider = self.engine.provider_name();
         let live_model = self.engine.model_name();
         if saved_provider == live_provider && saved_model == live_model {
@@ -207,21 +243,21 @@ impl QueryEngineAgentRunner {
         let tools = if verifier_guard.is_some() {
             verifier_session_tools(&base_tools)
         } else {
-            tool_policy::filter_tools_for_agent_kind_with_bound_questions(
+            tool_policy::filter_tools_for_agent_kind_in_mode(
                 &base_tools,
                 agent_kind,
                 true,
                 arrangement_mode,
-                context::bound_questions_available(&self.engine).await,
             )
         };
         let role_system_prompt = verifier_guard
             .as_ref()
             .map(|guard| guard.role_system_prompt(agent_kind.system_prompt()))
             .unwrap_or_else(|| agent_kind.system_prompt().to_string());
-        let result = continue_forked_agent_with_tools(
+        let result = super::execution::run_forked_agent_with_native_source(
             &self.engine,
             &cache_safe,
+            self.source_parent.as_ref(),
             ForkedAgentRequest {
                 agent_id: Some(agent_id.clone()),
                 messages: initial_agent_messages(
@@ -289,8 +325,224 @@ impl QueryEngineAgentRunner {
     }
 }
 
+impl QueryEngineAgentRunner {
+    pub(super) async fn run_owned_agent_session_with_options(
+        &self,
+        agent_id: String,
+        prompt: String,
+        max_turns: usize,
+        agent_kind: AgentKind,
+        mut options: AgentRunOptions,
+    ) -> Result<String, AgentError> {
+        if !self
+            .engine
+            .background_jobs
+            .current_work_owns_subagent(&agent_id)
+        {
+            return Err(AgentError::Execution(
+                "agent managed execution owner unavailable".into(),
+            ));
+        }
+        kcoder_state::validate_artifact_requirements(&options.artifact_requirements)
+            .map_err(AgentError::Execution)?;
+        if let Some(task) = self.engine.state.task(&agent_id) {
+            options.restore_artifact_requirements(&task)?;
+            super::imported_profile::restore(
+                &task,
+                &mut options,
+                &crate::recover_read_lock(&self.engine.settings, "settings"),
+            )?;
+        }
+        let cache_safe = self.engine.cache_safe_snapshot().ok_or_else(|| {
+            AgentError::Execution("no cache-safe params available; run a turn first".to_string())
+        })?;
+        // The spawning tool latches the child's capability profile into the
+        // options. Do not OR it with mutable parent UI state: doing so can
+        // silently upgrade a normal child when Arrangement is entered later.
+        let arrangement_mode = options.arrangement_mode;
+        let runtime = options
+            .runtime_selection
+            .as_ref()
+            .filter(|selection| {
+                selection.profile.is_some()
+                    || selection.provider.is_some()
+                    || selection.model.is_some()
+            })
+            .map(|selection| self.build_agent_runtime(selection))
+            .transpose()
+            .map_err(|error| {
+                AgentError::Execution(format!("failed to build persona runtime: {error:#}"))
+            })?;
+        let base_tools = self.engine.active_subagent_tools_for_mode(arrangement_mode);
+        let mut tools = tool_policy::filter_tools_for_agent_kind_in_mode(
+            &base_tools,
+            agent_kind,
+            true,
+            arrangement_mode,
+        );
+        tools = self.engine.inherit_resource_tools_for_general_child(
+            tools,
+            agent_kind,
+            arrangement_mode,
+        );
+        if let Some(allowlist) = options.tool_allowlist.as_ref() {
+            tools = filter_tools_by_owned_names(
+                &tools,
+                &allowlist.iter().cloned().collect::<HashSet<_>>(),
+            );
+        }
+        if options.review_vote_channel.is_some() {
+            tools = tools.register(kcoder_tools::ReviewVoteTool);
+        }
+        let context_mode = match options.context_mode {
+            SubagentContextMode::Auto => agent_kind.default_context_mode(arrangement_mode),
+            mode => mode,
+        };
+        validate_full_context_compatibility(&self.engine, &cache_safe, context_mode)?;
+        if !options.artifact_requirements.is_empty() {
+            self.engine
+                .state
+                .bind_subagent_artifact_requirements(&agent_id, &options.artifact_requirements)
+                .map_err(|error| {
+                    AgentError::Execution(format!(
+                        "failed to bind artifact declarations: {error:#}"
+                    ))
+                })?;
+        }
+        let role_system_prompt =
+            if self.engine.state.session_mode() == kcoder_state::SessionMode::Orchestrate {
+                orchestrate_role_prompt(agent_kind, options.persona_name.as_deref())
+            } else {
+                agent_kind.system_prompt().to_string()
+            };
+        self.record_agent_runtime_identity(&agent_id, runtime.as_ref());
+        if let Some(persona) = options.persona_name.as_deref() {
+            let runtime_provider = runtime
+                .as_ref()
+                .map(|runtime| runtime.provider.name().to_string())
+                .unwrap_or_else(|| self.engine.provider_name());
+            let runtime_model = runtime
+                .as_ref()
+                .map(|runtime| runtime.settings.model.clone())
+                .unwrap_or_else(|| self.engine.model_name());
+            let work_id = options.orchestrate_work_id.clone();
+            let parent_session_id = self.engine.state.session_id();
+            let fingerprint = resolved_profile_fingerprint(ProfileFingerprintInput {
+                persona,
+                agent_kind,
+                role_prompt: &role_system_prompt,
+                tools: &tools,
+                runtime_provider: &runtime_provider,
+                runtime_model: &runtime_model,
+                runtime_selection: options.runtime_selection.as_ref(),
+                context_mode,
+                context_turns: options.context_turns,
+                work_id: work_id.as_deref(),
+                parent_session_id: &parent_session_id,
+            });
+            self.engine.state.update_task(&agent_id, |task| {
+                task.resolved_profile_fingerprint = Some(fingerprint.clone());
+            });
+            if let Some(work_id) = work_id.as_deref() {
+                let store =
+                    kcoder_state::orchestrate_store::PlanStore::for_workspace(&self.engine.cwd);
+                let snapshot = store.read_work(work_id).map_err(|error| {
+                    AgentError::Execution(format!(
+                        "failed to bind persona session to Orchestrate work: {error:#}"
+                    ))
+                })?;
+                store
+                    .append_task_session(
+                        work_id,
+                        kcoder_state::orchestrate_store::TaskSessionRecord {
+                            agent_id: agent_id.clone(),
+                            parent_session_id: self.engine.state.session_id(),
+                            plan_revision: snapshot.work.revision,
+                            status: "spawned".to_string(),
+                            profile_fingerprint: fingerprint,
+                            recorded_at: chrono::Utc::now(),
+                        },
+                    )
+                    .map_err(|error| {
+                        AgentError::Execution(format!(
+                            "failed to persist persona session audit: {error:#}"
+                        ))
+                    })?;
+            }
+        }
+        let result = super::execution::run_forked_agent_with_native_source(
+            &self.engine,
+            &cache_safe,
+            self.source_parent.as_ref(),
+            ForkedAgentRequest {
+                agent_id: Some(agent_id.clone()),
+                messages: initial_agent_messages(
+                    &cache_safe,
+                    prompt,
+                    context_mode,
+                    options.context_turns,
+                ),
+                prompt_message_count: 1,
+                initial_delivery: None,
+                overrides: SubagentContextOverrides {
+                    configuration_observer: options.configuration_observer,
+                    share_abort_controller: options.abort_token.is_none(),
+                    abort_token: options.abort_token,
+                    allowed_write_paths: options.allowed_write_paths,
+                    scoped_allowed_shell_prefixes: options.allowed_shell_prefixes.clone(),
+                    block_shell_file_mutation: options.block_shell_file_mutation,
+                    arrangement_mode: Some(arrangement_mode),
+                    role_system_prompt: Some(role_system_prompt),
+                    permission_mode_if_parent_asks: Some(subagent_permission_mode(agent_kind)),
+                    session_allowed_tools: subagent_session_allowed_tools(agent_kind),
+                    session_allowed_shell_prefixes: subagent_session_allowed_shell_prefixes(
+                        agent_kind,
+                    )
+                    .into_iter()
+                    .chain(options.allowed_shell_prefixes)
+                    .collect(),
+                    cwd_override: options.worktree_path,
+                    review_vote_channel: options.review_vote_channel,
+                    ..SubagentContextOverrides::default()
+                },
+                max_turns,
+                tools,
+                runtime,
+            },
+        )
+        .await
+        .map_err(map_forked_agent_error)?;
+        self.write_transcript(&agent_id, &result.messages).await?;
+        Ok(result.output_text)
+    }
+}
+
 #[async_trait::async_trait]
 impl AgentRunner for QueryEngineAgentRunner {
+    fn observe_subagent_spawned(
+        &self,
+        run: Option<&kcoder_types::BackgroundRunKey>,
+    ) -> Result<(), AgentError> {
+        let Some(binding) = self
+            .engine
+            .model_request_binding
+            .as_ref()
+            .filter(|binding| binding.has_mandatory_guard())
+        else {
+            return Ok(());
+        };
+        let run =
+            run.ok_or_else(|| AgentError::Execution("NATIVE_SCHEDULED_RUN_REQUIRED".into()))?;
+        let request = crate::integrations::core::NativeScheduledChildRequest::capture(
+            &self.engine,
+            &self.source_parent,
+            run,
+        )
+        .map_err(|_| AgentError::Execution("NATIVE_SCHEDULED_RUN_CHANGED".into()))?;
+        binding
+            .observe_child_scheduled(&request)
+            .map_err(|_| AgentError::Execution("NATIVE_SCHEDULED_CHILD_DENIED".into()))
+    }
     fn workflow_model_configuration(
         &self,
     ) -> Result<Option<kcoder_types::ModelConfigurationSummary>, AgentError> {
@@ -353,11 +605,22 @@ impl AgentRunner for QueryEngineAgentRunner {
         {
             fields.insert("fresh".into(), serde_json::Value::Bool(true));
         }
-        let (output, decision, _, _events) = self
-            .engine
-            .execute_tool(id, name, input, &AutoDenyPrompt)
-            .await
-            .map_err(|error| AgentError::Execution(error.to_string()))?;
+        let execution = self.engine.execute_tool(id, name, input, &AutoDenyPrompt);
+        // Background graph nodes run outside the parent's task-local turn scope.
+        // Restore the captured origin; ordinary native admission still checks every call.
+        let result = match self.source_parent.attempt() {
+            Some(identity) => {
+                self.engine
+                    .state
+                    .history_attempt_scope(identity.clone())
+                    .map_err(|error| AgentError::Execution(error.to_string()))?
+                    .run(execution)
+                    .await
+            }
+            None => execution.await,
+        };
+        let (output, decision, _, _events) =
+            result.map_err(|error| AgentError::Execution(error.to_string()))?;
         Ok((
             output,
             decision != kcoder_permissions::PermissionDecision::Deny,
@@ -470,13 +733,12 @@ impl AgentRunner for QueryEngineAgentRunner {
             let agent_id = generate_agent_id(&self.engine).map_err(map_forked_agent_error)?;
             let vote_channel = kcoder_tools::VerifierVoteChannel::default();
             let forked_result = self
-                .run_agent_session_result_with_kind_and_runtime(
+                .run_managed_verifier_session(
                     agent_id.clone(),
                     prompt,
                     max_turns,
-                    AgentKind::Verifier,
                     runtime,
-                    Some(VerifierRuntimeGuard {
+                    VerifierRuntimeGuard {
                         block_dependency_mutation: options.block_dependency_mutation,
                         minimum_test_scope: options.minimum_test_scope,
                         require_raw_exit_code: options.require_raw_exit_code,
@@ -492,7 +754,7 @@ impl AgentRunner for QueryEngineAgentRunner {
                             .as_ref()
                             .map(|isolation| isolation.baseline_root.clone()),
                         vote_channel: vote_channel.clone(),
-                    }),
+                    },
                 )
                 .await?;
             let candidate_unchanged = if let Some(before) = workspace_before.as_deref() {
@@ -597,177 +859,10 @@ impl AgentRunner for QueryEngineAgentRunner {
         prompt: String,
         max_turns: usize,
         agent_kind: AgentKind,
-        mut options: AgentRunOptions,
+        options: AgentRunOptions,
     ) -> Result<String, AgentError> {
-        kcoder_state::validate_artifact_requirements(&options.artifact_requirements)
-            .map_err(AgentError::Execution)?;
-        if let Some(task) = self.engine.state.task(&agent_id) {
-            options.restore_artifact_requirements(&task)?;
-        }
-        let cache_safe = self.engine.cache_safe_snapshot().ok_or_else(|| {
-            AgentError::Execution("no cache-safe params available; run a turn first".to_string())
-        })?;
-        // The spawning tool latches the child's capability profile into the
-        // options. Do not OR it with mutable parent UI state: doing so can
-        // silently upgrade a normal child when Arrangement is entered later.
-        let arrangement_mode = options.arrangement_mode;
-        let runtime = options
-            .runtime_selection
-            .as_ref()
-            .filter(|selection| {
-                selection.profile.is_some()
-                    || selection.provider.is_some()
-                    || selection.model.is_some()
-            })
-            .map(|selection| self.build_agent_runtime(selection))
-            .transpose()
-            .map_err(|error| {
-                AgentError::Execution(format!("failed to build persona runtime: {error:#}"))
-            })?;
-        let base_tools = self.engine.active_subagent_tools_for_mode(arrangement_mode);
-        let mut tools = tool_policy::filter_tools_for_agent_kind_with_bound_questions(
-            &base_tools,
-            agent_kind,
-            true,
-            arrangement_mode,
-            context::bound_questions_available(&self.engine).await,
-        );
-        if let Some(allowlist) = options.tool_allowlist.as_ref() {
-            tools = filter_tools_by_owned_names(
-                &tools,
-                &allowlist.iter().cloned().collect::<HashSet<_>>(),
-            );
-        }
-        if options.review_vote_channel.is_some() {
-            tools = tools.register(kcoder_tools::ReviewVoteTool);
-        }
-        let context_mode = match options.context_mode {
-            SubagentContextMode::Auto => agent_kind.default_context_mode(arrangement_mode),
-            mode => mode,
-        };
-        validate_full_context_compatibility(&self.engine, &cache_safe, context_mode)?;
-        if self.engine.state.task(&agent_id).is_none() && !options.artifact_requirements.is_empty()
-        {
-            let mut task = kcoder_state::Task::new(&agent_id, &prompt);
-            task.kind = kcoder_state::TaskKind::Subagent;
-            task.allowed_write_paths = options.allowed_write_paths.clone();
-            task.worktree_path = options.worktree_path.clone();
-            self.engine.state.upsert_task(task);
-        }
-        if !options.artifact_requirements.is_empty() {
-            self.engine
-                .state
-                .bind_subagent_artifact_requirements(&agent_id, &options.artifact_requirements)
-                .map_err(|error| {
-                    AgentError::Execution(format!(
-                        "failed to bind artifact declarations: {error:#}"
-                    ))
-                })?;
-        }
-        let role_system_prompt =
-            if self.engine.state.session_mode() == kcoder_state::SessionMode::Orchestrate {
-                orchestrate_role_prompt(agent_kind, options.persona_name.as_deref())
-            } else {
-                agent_kind.system_prompt().to_string()
-            };
-        self.record_agent_runtime_identity(&agent_id, runtime.as_ref());
-        if let Some(persona) = options.persona_name.as_deref() {
-            let runtime_provider = runtime
-                .as_ref()
-                .map(|runtime| runtime.provider.name().to_string())
-                .unwrap_or_else(|| self.engine.provider_name());
-            let runtime_model = runtime
-                .as_ref()
-                .map(|runtime| runtime.settings.model.clone())
-                .unwrap_or_else(|| self.engine.model_name());
-            let work_id = options.orchestrate_work_id.clone();
-            let parent_session_id = self.engine.state.session_id();
-            let fingerprint = resolved_profile_fingerprint(ProfileFingerprintInput {
-                persona,
-                agent_kind,
-                role_prompt: &role_system_prompt,
-                tools: &tools,
-                runtime_provider: &runtime_provider,
-                runtime_model: &runtime_model,
-                runtime_selection: options.runtime_selection.as_ref(),
-                context_mode,
-                context_turns: options.context_turns,
-                work_id: work_id.as_deref(),
-                parent_session_id: &parent_session_id,
-            });
-            self.engine.state.update_task(&agent_id, |task| {
-                task.resolved_profile_fingerprint = Some(fingerprint.clone());
-            });
-            if let Some(work_id) = work_id.as_deref() {
-                let store =
-                    kcoder_state::orchestrate_store::PlanStore::for_workspace(&self.engine.cwd);
-                let snapshot = store.read_work(work_id).map_err(|error| {
-                    AgentError::Execution(format!(
-                        "failed to bind persona session to Orchestrate work: {error:#}"
-                    ))
-                })?;
-                store
-                    .append_task_session(
-                        work_id,
-                        kcoder_state::orchestrate_store::TaskSessionRecord {
-                            agent_id: agent_id.clone(),
-                            parent_session_id: self.engine.state.session_id(),
-                            plan_revision: snapshot.work.revision,
-                            status: "spawned".to_string(),
-                            profile_fingerprint: fingerprint,
-                            recorded_at: chrono::Utc::now(),
-                        },
-                    )
-                    .map_err(|error| {
-                        AgentError::Execution(format!(
-                            "failed to persist persona session audit: {error:#}"
-                        ))
-                    })?;
-            }
-        }
-        let result = continue_forked_agent_with_tools(
-            &self.engine,
-            &cache_safe,
-            ForkedAgentRequest {
-                agent_id: Some(agent_id.clone()),
-                messages: initial_agent_messages(
-                    &cache_safe,
-                    prompt,
-                    context_mode,
-                    options.context_turns,
-                ),
-                prompt_message_count: 1,
-                initial_delivery: None,
-                overrides: SubagentContextOverrides {
-                    configuration_observer: options.configuration_observer,
-                    share_abort_controller: options.abort_token.is_none(),
-                    abort_token: options.abort_token,
-                    allowed_write_paths: options.allowed_write_paths,
-                    scoped_allowed_shell_prefixes: options.allowed_shell_prefixes.clone(),
-                    block_shell_file_mutation: options.block_shell_file_mutation,
-                    arrangement_mode: Some(arrangement_mode),
-                    role_system_prompt: Some(role_system_prompt),
-                    permission_mode_if_parent_asks: Some(subagent_permission_mode(agent_kind)),
-                    session_allowed_tools: subagent_session_allowed_tools(agent_kind),
-                    session_allowed_shell_prefixes: subagent_session_allowed_shell_prefixes(
-                        agent_kind,
-                    )
-                    .into_iter()
-                    .chain(options.allowed_shell_prefixes)
-                    .collect(),
-                    cwd_override: options.worktree_path,
-                    review_vote_channel: options.review_vote_channel,
-                    ..SubagentContextOverrides::default()
-                },
-                max_turns,
-                tools,
-                runtime,
-            },
-        )
-        .await
-        .map_err(map_forked_agent_error)?;
-        self.write_transcript(&agent_id, &result.messages).await?;
-        Ok(result.output_text)
+        self.run_managed_agent_session(agent_id, prompt, max_turns, agent_kind, options)
+            .await
     }
 
     async fn send_message_to_agent_with_kind(
@@ -815,6 +910,11 @@ impl AgentRunner for QueryEngineAgentRunner {
             ))
         })?;
         options.restore_artifact_requirements(&task)?;
+        super::imported_profile::restore(
+            &task,
+            &mut options,
+            &crate::recover_read_lock(&self.engine.settings, "settings"),
+        )?;
         if options.persona_name.is_none() {
             self.validate_continuation_runtime_identity(&agent_id)?;
         }
@@ -930,12 +1030,16 @@ impl AgentRunner for QueryEngineAgentRunner {
                 AgentError::Execution(format!("failed to rebuild persona runtime: {error:#}"))
             })?;
         let base_tools = self.engine.active_subagent_tools_for_mode(arrangement_mode);
-        let mut tools = tool_policy::filter_tools_for_agent_kind_with_bound_questions(
+        let mut tools = tool_policy::filter_tools_for_agent_kind_in_mode(
             &base_tools,
             agent_kind,
             true,
             arrangement_mode,
-            context::bound_questions_available(&self.engine).await,
+        );
+        tools = self.engine.inherit_resource_tools_for_general_child(
+            tools,
+            agent_kind,
+            arrangement_mode,
         );
         if let Some(allowlist) = options.tool_allowlist.as_ref() {
             tools = filter_tools_by_owned_names(
@@ -1024,9 +1128,10 @@ impl AgentRunner for QueryEngineAgentRunner {
             .state
             .task(&agent_id)
             .and_then(|task| task.worktree_path);
-        let result = continue_forked_agent_with_tools(
+        let result = super::execution::continue_forked_agent_with_native_source(
             &self.engine,
             &cache_safe,
+            self.source_parent.as_ref(),
             ForkedAgentRequest {
                 agent_id: Some(agent_id.clone()),
                 messages,

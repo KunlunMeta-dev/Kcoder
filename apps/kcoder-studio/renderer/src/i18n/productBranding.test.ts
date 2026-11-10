@@ -20,15 +20,31 @@ const compatibilityKeys = new Set([
   'workbench.codex_home_init_title',
   'workbench.codex_home_init_description',
   'workbench.local_codex_model_description',
+  'workbench.execution_defaults_gateway_required',
 ])
+
+const migrationCompatibilityKeys: Record<string, ReadonlySet<string>> = {
+  // The provider settings migration entry names the import sources it reads from.
+  common: new Set(['providerSettings.migrationDescription', 'providerSettings.migrationAction']),
+  migration: new Set([
+    'row_title', 'description', 'branch.related_boundary', 'conversation_history.sources.codex',
+    'codex_layers.title', 'codex_layers.scope', 'codex-project-layers',
+    'transferBrowser.description', 'sourceDirectory.boundary', 'firstUse.description',
+    'firstUse.import', 'historyFamilies.discover', 'quickHistory.dialogDescription',
+  ]),
+  migrationMemory: new Set(['layouts.codex_memory_files_v1']),
+  migrationUpload: new Set(['boundary', 'directoryHelp']),
+}
 
 describe('localized product branding', () => {
   it.each(Object.entries(catalogs))(
     '%s does not identify Studio as an upstream product',
-    (_file, catalog) => {
+    (file, catalog) => {
+      const namespace = file.split('/').at(-1)?.replace(/\.json$/, '') ?? ''
       const violations = strings(catalog).filter(
         ([key, value]) =>
-          /wework|wegent/i.test(value) || (/codex/i.test(value) && !compatibilityKeys.has(key))
+          /wework/i.test(key) || /wework|wegent/i.test(value) || (/codex/i.test(value)
+            && !compatibilityKeys.has(key) && !migrationCompatibilityKeys[namespace]?.has(key))
       )
       expect(violations).toEqual([])
     }

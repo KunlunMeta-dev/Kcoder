@@ -57,26 +57,11 @@ pub(crate) async fn read_pdf(
                 .check_path(&resolved, false)
                 .map_err(ToolError::Execution)?;
         }
-        let mut options = tokio::fs::OpenOptions::new();
-        options.read(true);
-        #[cfg(unix)]
-        options.custom_flags(libc::O_NONBLOCK | libc::O_NOFOLLOW);
-        let file = options
-            .open(&resolved)
+        crate::file::read_access::read_actual(&resolved, MAX_PDF_BYTES)
             .await
-            .map_err(|_| ToolError::Execution("Cannot open PDF file".into()))?;
-        let metadata = file
-            .metadata()
-            .await
-            .map_err(|_| ToolError::Execution("Cannot inspect PDF file".into()))?;
-        if !metadata.is_file() || metadata.len() > MAX_PDF_BYTES {
-            return Err(ToolError::Execution(
-                "PDF must be a regular file of at most 32 MiB".into(),
-            ));
-        }
-        bounded_read(file, MAX_PDF_BYTES as usize).await
+            .map_err(|_| ToolError::Execution("Cannot read bounded PDF file".into()))
     };
-    let bytes = tokio::select! {
+    let (bytes, access) = tokio::select! {
         _ = ctx.cancelled() => return Err(ToolError::Aborted),
         result = tokio::time::timeout(Duration::from_secs(20), source) => match result {
             Ok(Ok(bytes)) => bytes,
@@ -96,7 +81,7 @@ pub(crate) async fn read_pdf(
         }
         Err(error) => return Ok(ToolOutput::error(error)),
     };
-    extract_configured(
+    let output = extract_configured(
         &runtime.executable,
         bytes,
         range,
@@ -104,7 +89,8 @@ pub(crate) async fn read_pdf(
         Duration::from_secs(20),
         runtime.configuration_dir.as_deref(),
     )
-    .await
+    .await?;
+    Ok(crate::file::read_access::attach(output, access))
 }
 
 struct PdfRuntime {

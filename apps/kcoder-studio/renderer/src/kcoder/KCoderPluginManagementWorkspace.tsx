@@ -1,21 +1,36 @@
+import { WorkspacePageHeader } from '@/components/layout/WorkspacePageHeader'
 import { PluginInstallTarget } from '@/components/plugins/PluginInstallTarget'
 import { usePluginTargetScope } from './usePluginTargetScope'
 import { SkillImportForm } from './SkillImportForm'
-import { requestLocalExecutor } from '@/tauri/localExecutor'
+import { requestLocalExecutor } from '@/host/localExecutor'
 import { KCoderMcpManagement } from './KCoderMcpManagement'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { createLocalCodexPluginApi } from '@/api/local/codexPlugins'
 import type { LocalCodexPluginsState } from '@/api/local/codexPlugins'
 import type { InstalledPlugin, LocalDeviceSkill } from '@/types/api'
-import { DesktopTopBar } from '@/components/layout/DesktopTopBar'
+import { Button } from '@/components/ui/button'
+import { IconSelect } from '@/components/settings/settings-ui'
+import { useRuntimeSettingsTargets } from '@/features/runtime-target/useRuntimeSettingsTargets'
+import type { RuntimeSettingsTargetsState } from '@/features/runtime-target/useRuntimeSettingsTargets'
+import type { GatewayServer } from './gatewayRpc'
+import { runtimeNameForCurrentHost } from './legacyRuntimeAbi'
 import { useTranslation } from '@/hooks/useTranslation'
 import { navigateTo } from '@/lib/navigation'
 import { workspacePathKey } from '@/lib/workspace-path-identity'
-import { Boxes, Box, Webhook, RefreshCw, Search, Sparkles, Trash2 } from 'lucide-react'
+import {
+  Box,
+  Webhook,
+  RefreshCw,
+  Search,
+  Sparkles,
+  Trash2,
+  Loader2,
+  RotateCcw,
+  Server,
+} from 'lucide-react'
 import { Switch } from '@/components/ui/switch'
 import { PageContent } from '@/components/ui/page-content'
-import { PluginNavigationRail } from '@/components/plugins/PluginNavigationRail'
 import { KCoderInstalledPluginCard } from '@/components/plugins/KCoderInstalledPluginCard'
 import { installedPluginTags } from '@/components/plugins/installed-plugin-metadata'
 
@@ -46,6 +61,13 @@ interface ManagementProps {
 }
 
 export function KCoderPluginManagementWorkspace(props: ManagementProps) {
+  if (runtimeNameForCurrentHost() === 'kcoder') {
+    return <GatewayPluginManagementWorkspace {...props} />
+  }
+  return <NativePluginManagementWorkspace {...props} />
+}
+
+function NativePluginManagementWorkspace(props: ManagementProps) {
   const [tab, setTab] = useState<Tab>('plugins')
   const scope = usePluginTargetScope(props.targetDeviceId, props.targetWorkspacePath)
   return (
@@ -59,15 +81,171 @@ export function KCoderPluginManagementWorkspace(props: ManagementProps) {
   )
 }
 
+function GatewayPluginManagementWorkspace(props: ManagementProps) {
+  const [tab, setTab] = useState<Tab>('plugins')
+  const targets = useRuntimeSettingsTargets()
+  const target = targets.selectedTarget
+  // A workspace from the active task belongs to that target only. When the
+  // settings target differs, use its configured workspace instead.
+  const targetWorkspacePath = target
+    ? target.id === props.targetDeviceId
+      ? (props.targetWorkspacePath ?? target.workspacePath)
+      : target.workspacePath
+    : undefined
+  const scope = usePluginTargetScope(target?.id, targetWorkspacePath)
+
+  if (!target) {
+    return (
+      <GatewayPluginTargetSelectionPage
+        targets={targets}
+        sidebarCollapsed={props.sidebarCollapsed}
+        topBarLeftActions={props.topBarLeftActions}
+      />
+    )
+  }
+  return (
+    <PluginManagerContents
+      key={scope.key}
+      isScopeCurrent={scope.isCurrent}
+      targetDeviceId={target.id}
+      targetWorkspacePath={targetWorkspacePath}
+      sidebarCollapsed={props.sidebarCollapsed}
+      topBarLeftActions={props.topBarLeftActions}
+      targetSelection={targets}
+      tab={tab}
+      setTab={setTab}
+    />
+  )
+}
+
+function pluginTargetLabel(target: GatewayServer): string {
+  return target.label ? `${target.label} (${target.id})` : target.id
+}
+
+function PluginTargetPicker({ targets }: { targets: RuntimeSettingsTargetsState }) {
+  const { t } = useTranslation('common')
+  return (
+    <section className="studio-card-spacing rounded-xl border border-border bg-background">
+      <label
+        htmlFor="kcoder-plugin-target-select"
+        className="block text-sm font-semibold text-text-primary"
+      >
+        {t('workbench.execution_defaults_target')}
+      </label>
+      <p className="mt-1 text-xs leading-5 text-text-secondary">
+        {t('workbench.execution_defaults_target_scope')}
+      </p>
+      <IconSelect
+        id="kcoder-plugin-target-select"
+        data-testid="kcoder-plugin-target-select"
+        aria-label={t('workbench.execution_defaults_target')}
+        icon={<Server className="h-4 w-4" />}
+        value={targets.selectedServerId}
+        disabled={targets.loading || targets.targets.length <= 1}
+        onChange={event => targets.selectTarget(event.target.value)}
+      >
+        {targets.targets.length !== 1 && (
+          <option value="">{t('workbench.execution_defaults_select_target')}</option>
+        )}
+        {targets.targets.map(target => (
+          <option key={target.id} value={target.id}>
+            {pluginTargetLabel(target)}
+          </option>
+        ))}
+      </IconSelect>
+      {targets.currentRuntimeTarget && (
+        <p data-testid="kcoder-plugin-current-target" className="mt-2 text-xs text-text-secondary">
+          {t('workbench.execution_defaults_current_target')}:{' '}
+          {pluginTargetLabel(targets.currentRuntimeTarget)}
+        </p>
+      )}
+      {targets.loading && (
+        <p role="status" className="mt-2 flex items-center gap-2 text-xs text-text-secondary">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+          {t('workbench.execution_defaults_targets_loading')}
+        </p>
+      )}
+    </section>
+  )
+}
+
+function GatewayPluginTargetSelectionPage({
+  targets,
+  topBarLeftActions,
+}: {
+  targets: RuntimeSettingsTargetsState
+  sidebarCollapsed?: boolean
+  topBarLeftActions?: ReactNode
+}) {
+  const { t } = useTranslation('common')
+  return (
+    <main
+      data-testid="kcoder-plugin-target-selection"
+      className="min-w-0 flex-1 overflow-y-auto bg-background text-text-primary"
+    >
+      <WorkspacePageHeader
+        title={t('workbench.plugins_tab')}
+        beforeBack={topBarLeftActions}
+        actions={
+          targets.error ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              disabled={targets.loading}
+              onClick={() => void targets.refresh()}
+            >
+              <RotateCcw className="h-4 w-4" aria-hidden="true" />
+              {t('workbench.execution_defaults_retry')}
+            </Button>
+          ) : undefined
+        }
+      />
+      <section className="mx-auto flex w-full max-w-[940px] flex-col gap-5 px-5 py-8">
+        <h1 className="text-xl font-normal">{t('workbench.plugins_manage', '管理')}</h1>
+        <PluginTargetPicker targets={targets} />
+        {!targets.loading && targets.error && (
+          <p role="alert" className="text-sm text-text-secondary">
+            {t('workbench.execution_defaults_targets_load_failed')}
+          </p>
+        )}
+        {!targets.loading && !targets.error && targets.targets.length === 0 && (
+          <div className="flex flex-wrap items-center gap-3 text-sm text-text-secondary">
+            <span>{t('workbench.execution_defaults_no_targets')}</span>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => navigateTo('/settings/kcoder-servers')}
+            >
+              {t('workbench.execution_defaults_manage_targets')}
+            </Button>
+          </div>
+        )}
+        {!targets.loading && !targets.error && targets.targets.length > 1 && (
+          <p className="text-sm text-text-secondary">
+            {t('workbench.execution_defaults_choose_target')}
+          </p>
+        )}
+      </section>
+    </main>
+  )
+}
+
 function PluginManagerContents({
   isScopeCurrent,
   targetDeviceId,
   targetWorkspacePath,
-  sidebarCollapsed = false,
   topBarLeftActions,
+  targetSelection,
   tab,
   setTab,
-}: ManagementProps & { tab: Tab; setTab: (tab: Tab) => void; isScopeCurrent: () => boolean }) {
+}: ManagementProps & {
+  tab: Tab
+  setTab: (tab: Tab) => void
+  isScopeCurrent: () => boolean
+  targetSelection?: RuntimeSettingsTargetsState
+}) {
   const { t } = useTranslation('common')
   const api = useMemo(
     () =>
@@ -87,9 +265,6 @@ function PluginManagerContents({
   const [error, setError] = useState('')
   const [confirmation, setConfirmation] = useState<string | null>(null)
   const [query, setQuery] = useState('')
-  const [navigation, setNavigation] = useState<'manage' | 'installed'>(() =>
-    new URLSearchParams(window.location.search).get('view') === 'installed' ? 'installed' : 'manage'
-  )
   const [mcpCount, setMcpCount] = useState<number | null>(null)
   const [pendingSkill, setPendingSkill] = useState<string | null>(null)
   const reload = useCallback(() => {
@@ -232,39 +407,11 @@ function PluginManagerContents({
       data-testid="kcoder-plugin-management"
       className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background text-text-primary"
     >
-      <DesktopTopBar
-        className={`h-10 shrink-0 border-b border-border bg-background px-6 ${sidebarCollapsed ? '' : 'max-md:pl-20'}`}
-        left={
-          <>
-            {topBarLeftActions}
-            <button
-              className="inline-flex min-h-10 items-center gap-4 text-base"
-              title={t('workbench.plugins_back_to_workbench')}
-              onClick={() => navigateTo('/')}
-            >
-              <Boxes className="size-5 text-focus" aria-hidden="true" />
-              {t('workbench.plugins_tab')}
-            </button>
-          </>
-        }
-      />
-      <div className="flex min-h-0 flex-1 flex-col md:flex-row">
-        <PluginNavigationRail
-          active={navigation}
-          onManage={() => {
-            setNavigation('manage')
-            setQuery('')
-            navigateTo('/plugins/manage')
-          }}
-          onInstalled={() => {
-            setNavigation('installed')
-            setTab('plugins')
-            setQuery('')
-          }}
-        />
+      <WorkspacePageHeader title={t('workbench.plugins_tab')} beforeBack={topBarLeftActions} />
+      <div className="flex min-h-0 flex-1 flex-col">
         <main
           data-testid="kcoder-plugin-scroll"
-          className="min-w-0 flex-1 overflow-y-auto px-8 max-md:px-4"
+          className="min-w-0 flex-1 studio-page-gutter overflow-y-auto"
         >
           <PageContent
             as="section"
@@ -291,6 +438,7 @@ function PluginManagerContents({
                 {t('workbench.kcoder_plugins_refresh')}
               </button>
             </header>
+            {targetSelection && <PluginTargetPicker targets={targetSelection} />}
             <div className="flex flex-wrap items-start justify-between gap-3">
               <PluginInstallTarget
                 deviceId={targetDeviceId ?? 'local'}
@@ -444,14 +592,14 @@ function PluginManagerContents({
                 filteredSkills.map(skill => (
                   <article
                     key={skill.name}
-                    className="flex flex-wrap items-center gap-5 rounded-xl border border-border/60 bg-background px-4 py-4"
+                    className="studio-card-spacing flex flex-wrap items-center gap-5 rounded-xl border border-border/60 bg-background"
                     data-testid="kcoder-skill-row"
                     data-skill-name={skill.name}
                   >
                     <span className="flex size-[60px] shrink-0 items-center justify-center rounded-xl bg-surface text-focus">
                       <Sparkles className="size-7" aria-hidden="true" />
                     </span>
-                    <div className="min-w-0 flex-1">
+                    <div className="min-w-0 flex-1" data-testid="kcoder-skill-content">
                       <h2 className="break-words text-lg font-semibold">{skill.name}</h2>
                       <p className="text-sm text-text-secondary">{skill.description}</p>
                       <p className="break-all text-xs text-text-muted">{skill.path}</p>
@@ -461,8 +609,11 @@ function PluginManagerContents({
                         </p>
                       )}
                     </div>
-                    <div className="flex flex-wrap items-center gap-4">
-                      <label className="inline-flex items-center gap-3 text-base">
+                    <div
+                      className="flex basis-full flex-col items-start gap-2 sm:w-36 sm:basis-auto sm:shrink-0 sm:items-end"
+                      data-testid="kcoder-skill-actions"
+                    >
+                      <label className="inline-flex items-center gap-3 whitespace-nowrap text-base">
                         <Switch
                           checked={skill.enabled !== false}
                           aria-label={t('workbench.skill_activation_label', { name: skill.name })}
@@ -482,11 +633,14 @@ function PluginManagerContents({
                             : 'workbench.skill_enabled'
                         )}
                       </label>
-                      {pendingSkill === skill.name && (
-                        <span role="status" className="text-xs text-text-muted">
-                          {t('workbench.skill_activation_saving')}
-                        </span>
-                      )}
+                      <span
+                        role="status"
+                        aria-hidden={pendingSkill !== skill.name}
+                        className={`w-full text-xs text-text-muted sm:text-right ${pendingSkill === skill.name ? 'visible' : 'invisible'}`}
+                        data-testid="kcoder-skill-saving-status"
+                      >
+                        {t('workbench.skill_activation_saving')}
+                      </span>
                       {skill.can_set_enabled !== true && (
                         <span className="text-xs text-text-muted">
                           {t('workbench.skill_activation_upgrade')}
@@ -507,7 +661,7 @@ function PluginManagerContents({
                     {confirmation === `skill:${skill.name}` && (
                       <div
                         role="alertdialog"
-                        className="w-full rounded-lg border border-border p-3"
+                        className="studio-card-spacing w-full rounded-lg border border-border"
                         aria-label={t('workbench.skill_remove')}
                       >
                         <p>{t('workbench.skill_remove_prompt', { name: skill.name })}</p>
@@ -550,7 +704,7 @@ function PluginManagerContents({
                 filteredHooks.map(item => (
                   <article
                     key={`${item.id}:${item.name}`}
-                    className="flex items-center gap-7 rounded-xl border border-border/60 bg-background px-4 py-4"
+                    className="studio-card-spacing flex items-center gap-7 rounded-xl border border-border/60 bg-background"
                   >
                     <span className="flex size-[60px] shrink-0 items-center justify-center rounded-xl bg-surface text-focus">
                       <Webhook className="size-7" aria-hidden="true" />

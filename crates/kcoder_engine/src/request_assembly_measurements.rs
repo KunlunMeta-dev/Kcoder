@@ -258,7 +258,8 @@ fn token_estimate_cache_measurement() {
     use crate::context::TokenCounter;
     use crate::context::compact::messages_after_latest_compact_boundary;
     let root = tempfile::tempdir().unwrap();
-    let engine = crate::test_support::engine_builder::TestEngineBuilder::new(root.path()).build();
+    let engine = crate::test_support::engine_builder::TestEngineBuilder::new(root.path())
+        .build_with_profile_directory();
     engine.state.set_messages(fixture_messages(2000, false));
     let old = || {
         TokenCounter::count(&messages_after_latest_compact_boundary(
@@ -298,7 +299,7 @@ fn tool_input_hint_measurement() {
     let root = tempfile::tempdir().unwrap();
     let engine = crate::test_support::engine_builder::TestEngineBuilder::new(root.path())
         .tool_registry(kcoder_tools::default_registry())
-        .build();
+        .build_with_profile_directory();
     let mut fallback = engine.clone();
     fallback.tool_input_hints =
         std::sync::Arc::new(crate::tool_input_hints::ToolInputHints::default());
@@ -455,7 +456,8 @@ fn latest_user_query_projection_measurement() {
 #[ignore = "isolated inactive skill injection allocation check; no provider calls"]
 fn inactive_skill_injection_does_not_snapshot_history() {
     let root = tempfile::tempdir().unwrap();
-    let engine = crate::test_support::engine_builder::TestEngineBuilder::new(root.path()).build();
+    let engine = crate::test_support::engine_builder::TestEngineBuilder::new(root.path())
+        .build_with_profile_directory();
     engine.active_skills.write().unwrap().clear();
     engine.state.set_messages(fixture_messages(20_000, false));
     let revision = engine.state.message_revision();
@@ -518,13 +520,15 @@ fn retained_history_snapshot_cow_append_measurement() {
 #[ignore = "isolated fork snapshot handle measurement; no provider calls"]
 fn fork_snapshot_handle_measurement() {
     let root = tempfile::tempdir().unwrap();
-    let engine = crate::test_support::engine_builder::TestEngineBuilder::new(root.path()).build();
+    let engine = crate::test_support::engine_builder::TestEngineBuilder::new(root.path())
+        .build_with_profile_directory();
     *engine.last_cache_safe_params.write().unwrap() =
         Some(std::sync::Arc::new(crate::agent::CacheSafeParams {
             fork_context_messages: fixture_messages(2000, false).into(),
             active_skills: vec![],
             snapshot_provider: "fixture".into(),
             snapshot_model: "fixture".into(),
+            context_history_anchor: None,
             full_context_compatible: true,
         }));
     for (name, shared) in [
@@ -871,6 +875,7 @@ fn shared_context_production_path_measurement() {
                             active_skills: vec![],
                             snapshot_provider: "fixture".into(),
                             snapshot_model: "fixture".into(),
+                            context_history_anchor: None,
                             full_context_compatible: true,
                         };
                         assert!(std::ptr::eq(
@@ -1028,7 +1033,7 @@ fn request_assembly_stage_measurements() {
             kcoder_memory::MemoryStore::empty(),
         ))
         .tool_registry(kcoder_tools::default_registry())
-        .build();
+        .build_with_profile_directory();
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()

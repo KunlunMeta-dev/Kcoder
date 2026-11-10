@@ -335,10 +335,9 @@ impl QueryEngine {
         (events, should_stop)
     }
 
-    /// Run Stop hooks after the assistant has finished sampling.
+    /// Run Stop hooks at completion, after requested tools and queued continuations.
     ///
-    /// Returns engine events to yield and whether the turn should stop before
-    /// executing any pending tools.
+    /// Returns engine events to yield and whether the turn should stop.
     pub(super) async fn run_stop_hooks(&self) -> (Vec<EngineEvent>, bool) {
         let input = self.hook_input(kcoder_hooks::HookEvent::Stop, "", serde_json::Value::Null);
         let results = kcoder_hooks::execute_hooks(&self.hook_registry, input).await;

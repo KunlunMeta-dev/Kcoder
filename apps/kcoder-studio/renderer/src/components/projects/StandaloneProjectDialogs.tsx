@@ -1,3 +1,4 @@
+import { SettingsSelect } from '@/components/settings/SettingsSelect'
 import { AlertCircle, Check, Copy, Globe2, Loader2, X } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
@@ -607,7 +608,7 @@ export function StandaloneFolderProjectDialog({
             </span>
             <span className="mt-2 flex h-10 items-center gap-2.5 rounded-[10px] border border-border bg-background px-3">
               <Globe2 className="h-4 w-4 text-primary" />
-              <select
+              <SettingsSelect
                 data-testid="standalone-remote-device-select"
                 value={activeDevice?.device_id ?? ''}
                 onChange={event => setActiveDeviceId(event.target.value)}
@@ -618,7 +619,7 @@ export function StandaloneFolderProjectDialog({
                     {getRemoteDeviceLabel(device)}
                   </option>
                 ))}
-              </select>
+              </SettingsSelect>
             </span>
           </label>
         )}

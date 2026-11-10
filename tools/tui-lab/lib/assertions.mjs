@@ -965,6 +965,11 @@ export function runAssertions({
   }
 
   if (mode === "paste") {
+    const history = pasteEvidence?.inputHistory;
+    add('up-arrow-recalls-latest-multiline-user-input', history?.recalledLatest?.includes('paste-small-alpha'));
+    add('up-arrow-recalls-older-user-input', history?.recalledOlder?.includes(message.slice(0, 32)));
+    add('down-arrow-returns-to-newer-user-input', history?.recalledForward?.includes('paste-small-alpha'));
+    add('down-arrow-restores-unsent-composer-draft', history?.restoredDraft?.includes(history?.draftBeforeHistory));
     const pasteEvents = pasteEvidence?.inputEvents || [];
     add(
       "bracketed-paste-sequences-reached-pty-twice",

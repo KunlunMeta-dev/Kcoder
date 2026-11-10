@@ -93,12 +93,13 @@ export async function processTreeAlive(child, identity) {
   }
 }
 
-async function waitForStatus(path, predicate, timeoutMs) {
+export async function waitForStatus(path, predicate, timeoutMs) {
   const deadline = Date.now() + timeoutMs;
   for (;;) {
     try {
       const content = await readFile(path, "utf8");
-      for (const line of content.split(/\r?\n/).filter(Boolean)) {
+      // A receipt is appended in multiple writes. Only complete frames can be parsed.
+      for (const line of content.split(/\r?\n/).slice(0, -1).filter(Boolean)) {
         const matched = predicate(JSON.parse(line));
         if (matched) return matched;
       }

@@ -1,13 +1,14 @@
 use super::apply::apply_chunks;
 use super::parser::{Hunk, parse_patch};
 use crate::edit::{file_modified_time, format_file_diff};
-use crate::text_file::{LineEndings, TextEncoding, read_text_file, resolve_path, write_text_file};
+use crate::text_file::{
+    LineEndings, TextEncoding, read_text_file, resolve_path, write_text_file_with_digest,
+};
 use crate::{Tool, ToolContext, ToolError, ToolExecutionMetadata, ToolOutput, parse_input};
 use async_trait::async_trait;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::Value;
-use sha2::{Digest, Sha256};
 use std::path::PathBuf;
 
 /// Codex-style multi-file patch tool.
@@ -238,6 +239,7 @@ impl Tool for ApplyPatchTool {
                     ToolError::Execution(format!("failed to create parent dir: {error}"))
                 })?;
             }
+            let mut written_sha256 = None;
             if change.kind == ChangeKind::Deleted {
                 tokio::fs::remove_file(&change.path)
                     .await
@@ -248,7 +250,7 @@ impl Tool for ApplyPatchTool {
                         ))
                     })?;
             } else {
-                write_text_file(
+                let sha256 = write_text_file_with_digest(
                     &change.path,
                     &change.new_text,
                     change.encoding,
@@ -261,6 +263,7 @@ impl Tool for ApplyPatchTool {
                         change.path.display()
                     ))
                 })?;
+                written_sha256 = Some(sha256);
                 if let Some(source) = &change.moved_from {
                     let _ = tokio::fs::remove_file(source).await;
                 }
@@ -296,7 +299,7 @@ impl Tool for ApplyPatchTool {
                 }
                 artifacts.push((
                     change.path.clone(),
-                    format!("{:x}", Sha256::digest(change.new_text.as_bytes())),
+                    written_sha256.expect("non-deleted changes have an encoded digest"),
                 ));
             }
         }

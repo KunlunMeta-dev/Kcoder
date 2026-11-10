@@ -1,0 +1,37 @@
+[package]
+name = "kcoder_cli_support"
+description = "Shared CLI event projection, build identity and development scenarios."
+publish = false
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[features]
+test-oracle = []
+
+[dependencies]
+anyhow.workspace = true
+kcoder_cli_commands = { path = "../cli_commands" }
+async-trait.workspace = true
+futures.workspace = true
+kcoder_api = { path = "../../../kcoder_api" }
+kcoder_config = { path = "../../../kcoder_config" }
+kcoder_engine = { path = "../../../kcoder_engine" }
+kcoder_permissions = { path = "../../../kcoder_permissions" }
+kcoder_skills = { path = "../../../kcoder_skills" }
+kcoder_state = { path = "../../../kcoder_state" }
+kcoder_tools = { path = "../../../kcoder_tools" }
+kcoder_types = { path = "../../../kcoder_types" }
+serde_json.workspace = true
+sha2.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lib]
+path = "../../src/internal/cli_support/lib.rs"

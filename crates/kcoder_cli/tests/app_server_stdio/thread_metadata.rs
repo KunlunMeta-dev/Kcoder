@@ -112,7 +112,7 @@ fn thread_metadata_survives_processes_can_unarchive_and_is_deleted_with_thread()
         started["result"]["thread"]["metadata"]["schema"],
         "kcoder.thread-metadata"
     );
-    assert_eq!(started["result"]["thread"]["metadata"]["revision"], 0);
+    assert!(started["result"]["thread"]["metadata"]["revision"].as_u64().is_some());
     assert!(started["result"]["thread"]["metadata"]["archivedAt"].is_null());
     assert!(started["result"]["thread"]["metadata"]["parent"].is_null());
     let source_id = started["result"]["thread"]["id"]
@@ -129,7 +129,10 @@ fn thread_metadata_survives_processes_can_unarchive_and_is_deleted_with_thread()
         "jsonrpc": "2.0", "id": 4, "method": "thread/fork",
         "params": {"threadId": source_id, "lastTurnId": "turn-1", "cwd": temp.path()}
     }));
-    let child_id = creator.response(4)["result"]["thread"]["id"]
+    let forked = creator.response(4);
+    let child_initial_revision = forked["result"]["thread"]["metadata"]["revision"]
+        .as_u64().expect("fork metadata revision");
+    let child_id = forked["result"]["thread"]["id"]
         .as_str()
         .unwrap()
         .to_owned();
@@ -146,7 +149,7 @@ fn thread_metadata_survives_processes_can_unarchive_and_is_deleted_with_thread()
         "params": {"threadId": child_id}
     }));
     let resumed = creator.response(6);
-    assert_eq!(resumed["result"]["thread"]["metadata"]["revision"], 0);
+    assert_eq!(resumed["result"]["thread"]["metadata"]["revision"], child_initial_revision);
     assert!(resumed["result"]["thread"]["metadata"]["parent"].is_null());
     let forged_attachment = temp.path().join("forged.txt");
     std::fs::write(&forged_attachment, "forged").unwrap();
@@ -234,6 +237,8 @@ fn thread_metadata_survives_processes_can_unarchive_and_is_deleted_with_thread()
     {
         let outside = temp.path().join("metadata-symlink-target");
         std::fs::create_dir(&outside).unwrap();
+        let metadata_backup = temp.path().join("raced-child-metadata-backup");
+        std::fs::rename(client_sessions.join(&raced_child_id), &metadata_backup).unwrap();
         std::os::unix::fs::symlink(&outside, client_sessions.join(&raced_child_id)).unwrap();
     }
 
@@ -254,6 +259,7 @@ fn thread_metadata_survives_processes_can_unarchive_and_is_deleted_with_thread()
                 .exists()
         );
         std::fs::remove_file(client_sessions.join(&raced_child_id)).unwrap();
+        std::fs::rename(temp.path().join("raced-child-metadata-backup"), client_sessions.join(&raced_child_id)).unwrap();
     }
     let lifecycle_directory = client_sessions.join(".thread-lifecycle-locks");
     std::fs::create_dir_all(&lifecycle_directory).unwrap();
@@ -311,7 +317,7 @@ fn thread_metadata_survives_processes_can_unarchive_and_is_deleted_with_thread()
         "kcoder.thread-metadata"
     );
     assert_eq!(updated["result"]["thread"]["metadata"]["version"], 1);
-    assert_eq!(updated["result"]["thread"]["metadata"]["revision"], 1);
+    assert_eq!(updated["result"]["thread"]["metadata"]["revision"], child_initial_revision + 1);
     assert_eq!(
         updated["result"]["thread"]["metadata"]["title"],
         "跨进程标题"
@@ -385,7 +391,7 @@ fn thread_metadata_survives_processes_can_unarchive_and_is_deleted_with_thread()
         "params": {"threadId": child_id, "limit": 100}
     }));
     let transcript = reader.response(23);
-    assert_eq!(transcript["result"]["thread"]["metadata"]["revision"], 1);
+    assert_eq!(transcript["result"]["thread"]["metadata"]["revision"], child_initial_revision + 1);
     assert!(
         transcript["result"]["messages"]
             .as_array()
@@ -435,7 +441,7 @@ fn thread_metadata_survives_processes_can_unarchive_and_is_deleted_with_thread()
     let unarchived = reader.response(22);
     assert!(unarchived["result"]["thread"].get("archivedAt").is_none());
     assert!(unarchived["result"]["thread"]["metadata"]["archivedAt"].is_null());
-    assert_eq!(unarchived["result"]["thread"]["metadata"]["revision"], 2);
+    assert_eq!(unarchived["result"]["thread"]["metadata"]["revision"], child_initial_revision + 2);
     reader.shutdown();
 
     let mut final_reader = TestAppServer::start(temp.path(), &settings);
@@ -451,7 +457,7 @@ fn thread_metadata_survives_processes_can_unarchive_and_is_deleted_with_thread()
         .find(|thread| thread["id"] == child_id)
         .expect("unarchived thread must remain visible");
     assert!(child.get("archivedAt").is_none());
-    assert_eq!(child["metadata"]["revision"], 2);
+    assert_eq!(child["metadata"]["revision"], child_initial_revision + 2);
     assert!(child["metadata"]["archivedAt"].is_null());
     final_reader.send(json!({
         "jsonrpc": "2.0", "id": 32, "method": "thread/delete",
@@ -482,7 +488,12 @@ fn thread_metadata_survives_processes_can_unarchive_and_is_deleted_with_thread()
     assert_eq!(final_reader.response(34)["result"]["deleted"], true);
     final_reader.shutdown();
 
-    assert!(find_named_file(temp.path(), "thread-metadata.json").is_none());
+    assert!(!client_sessions.join(&child_id).join("thread-metadata.json").exists());
+    assert!(!client_sessions.join(&attachment_fork_id).join("thread-metadata.json").exists());
+    assert!(client_sessions.join(&source_id).join("thread-metadata.json").is_file(),
+        "deleting child threads must preserve the source's creation permission baseline");
+    assert!(!client_sessions.join(&raced_child_id).exists(),
+        "the explicitly deleted raced peer must not be recreated");
     assert!(!forked_durable_attachment.exists());
 }
 #[test]
@@ -608,7 +619,9 @@ fn partial_thread_list_stdio_opt_in_and_cursor_privacy() {
     assert!(legacy["result"].get("issueCount").is_none());
     server.send(json!({"jsonrpc":"2.0","id":17,"method":"thread/metadata/update","params":{"threadId":ids[0],"title":"metadata failure fixture"}}));
     assert!(server.response(17)["result"]["thread"].is_object());
-    let client_metadata = find_named_file(temp.path(), "thread-metadata.json").unwrap();
+    let client_metadata = path.parent().unwrap().join("client-sessions")
+        .join(&ids[0]).join("thread-metadata.json");
+    assert!(client_metadata.is_file(), "the injected fault must target the exact listed thread");
     std::fs::write(&client_metadata, b"{broken").unwrap();
     server.send(
         json!({"jsonrpc":"2.0","id":18,"method":"thread/list","params":{"allowPartial":true}}),

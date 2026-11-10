@@ -9,6 +9,9 @@ use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender, SyncSender};
 use std::time::Duration;
 use tracing::warn;
 
+#[path = "audit/input_projection.rs"]
+mod input_projection;
+
 const MAX_RECORD_BYTES: usize = 256 * 1024;
 const QUEUE_CAPACITY: usize = 64;
 
@@ -31,6 +34,7 @@ impl Write for SizeBudget {
 pub struct AuditRecord {
     pub timestamp_ms: u64,
     pub tool_name: String,
+    /// New records contain bounded input metadata; historical raw values remain readable.
     pub input: Value,
     pub reason: String,
 }
@@ -68,13 +72,22 @@ impl PermissionAudit {
     }
 
     pub fn record(&self, tool_name: &str, input: &Value, reason: &str) -> anyhow::Result<()> {
-        // Check encoded size without allocating a second full JSON buffer or
-        // cloning large input. Admission failures remain visible at flush.
+        // Hash the complete original input, queue only bounded metadata, and
+        // keep every projection/admission failure visible at flush.
+        let input = match input_projection::validate_labels(tool_name, reason)
+            .and_then(|()| input_projection::project(input))
+        {
+            Ok(input) => input,
+            Err(error) => {
+                self.queue_gap.store(true, Ordering::Release);
+                return Err(error);
+            }
+        };
         let timestamp_ms = now_millis();
         let view = AuditRecordView {
             timestamp_ms,
             tool_name,
-            input,
+            input: &input,
             reason,
         };
         // Include the newline in the on-disk record budget.
@@ -85,7 +98,7 @@ impl PermissionAudit {
         let record = AuditRecord {
             timestamp_ms,
             tool_name: tool_name.to_string(),
-            input: input.clone(),
+            input,
             reason: reason.to_string(),
         };
         if let Err(error) = self.tx.try_send(AuditMessage::Record(record)) {
@@ -220,15 +233,28 @@ mod tests {
     use serde_json::json;
 
     #[test]
-    fn oversized_permission_record_is_rejected_before_it_enters_the_queue() {
+    fn complete_large_input_is_projected_before_it_enters_the_original_queue() {
         let (tx, rx) = mpsc::sync_channel(1);
         let audit = PermissionAudit {
             tx: Arc::new(tx),
             queue_gap: Arc::new(AtomicBool::new(false)),
         };
-        let input = json!({"payload":"x".repeat(256 * 1024)});
-        assert!(audit.record("fixture", &input, "allow").is_err());
-        assert!(rx.try_recv().is_err());
+        let input = json!({"content":"x".repeat(460*1024),"password":"PRIVATE_CREDENTIAL_SENTINEL","path":"/private/member/document.docx"});
+        audit
+            .record("OfficeDocument", &input, "mode_allow")
+            .unwrap();
+        let AuditMessage::Record(record) = rx.try_recv().unwrap() else {
+            panic!("actual audit record missing")
+        };
+        assert_eq!(record.input, input_projection::project(&input).unwrap());
+        assert!(serde_json::to_vec(&record).unwrap().len() < 8 * 1024);
+        assert!(
+            !serde_json::to_string(&record)
+                .unwrap()
+                .contains("PRIVATE_CREDENTIAL_SENTINEL")
+        );
+        assert_eq!(record.tool_name, "OfficeDocument");
+        assert_eq!(record.reason, "mode_allow");
     }
 
     #[test]
@@ -250,15 +276,25 @@ mod tests {
             serde_json::to_vec(&view).unwrap(),
             serde_json::to_vec(&record).unwrap()
         );
+        let raw = json!("x".repeat(MAX_RECORD_BYTES));
+        let raw_view = AuditRecordView {
+            timestamp_ms: 123,
+            tool_name: "read",
+            input: &raw,
+            reason: "allow",
+        };
+        assert!(
+            serde_json::to_writer(SizeBudget(MAX_RECORD_BYTES - 1), &raw_view).is_err(),
+            "the original encoded record ceiling stays unchanged"
+        );
         let (tx, rx) = mpsc::sync_channel(1);
         let audit = PermissionAudit {
             tx: Arc::new(tx),
             queue_gap: Arc::new(AtomicBool::new(false)),
         };
-        // The input tuple fits, but the actual JSON object with its metadata does not.
         assert!(
             audit
-                .record("read", &json!("x".repeat(MAX_RECORD_BYTES - 32)), "allow")
+                .record("read", &input, &"reason".repeat(1000))
                 .is_err()
         );
         assert!(rx.try_recv().is_err());
@@ -292,8 +328,8 @@ mod tests {
             audit
                 .record(
                     "fixture",
-                    &json!({"payload":"x".repeat(MAX_RECORD_BYTES)}),
-                    "allow"
+                    &json!({"payload":"valid original input"}),
+                    &"allow".repeat(MAX_RECORD_BYTES)
                 )
                 .is_err()
         );

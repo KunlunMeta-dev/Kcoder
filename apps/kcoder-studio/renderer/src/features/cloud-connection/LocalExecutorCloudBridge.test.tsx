@@ -21,7 +21,7 @@ vi.mock('@/api/cloud/connectorApps', () => ({
   listWegentInstalledConnectorApps: mocks.listApps,
 }))
 
-vi.mock('@/tauri/localExecutor', () => ({
+vi.mock('@/host/localExecutor', () => ({
   connectLocalExecutorToBackend: mocks.connect,
   disconnectLocalExecutorFromBackend: mocks.disconnect,
   ensureLocalExecutorStarted: mocks.ensure,

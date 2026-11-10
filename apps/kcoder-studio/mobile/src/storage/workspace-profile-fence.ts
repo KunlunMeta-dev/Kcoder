@@ -1,9 +1,9 @@
 import { Platform } from "react-native";
 import type { GatewayProfile } from "@/gateway/types";
 import { PROFILE_INDEX_KEY } from "./profile-store";
-import { getSecureValue } from "./secure";
 import { isProfileStateRemovalPending } from "./profile-state-removal";
-import { withLocalIdentityLock } from "./context-lock";
+import { withLocalIdentityLock, withLocalMetadata } from "./context-lock";
+import { metadataSecure, type MetadataAuthority } from "./metadata-authority";
 
 /** Non-secret, immutable ownership captured before any await. Token rotation is immaterial. */
 export interface WorkspaceProfileIdentity {
@@ -44,19 +44,36 @@ function assertPresent(identity: WorkspaceProfileIdentity): void {
 function assertWebLockAvailable(): void {
   if (typeof navigator === "undefined" || typeof navigator.locks?.request !== "function") throw new WorkspaceProfileFenceError();
 }
-async function assertSharedIdentity(identity: WorkspaceProfileIdentity): Promise<void> {
-  assertPresent(identity);
+async function currentSharedProfile(profileId: string, authority?: MetadataAuthority): Promise<GatewayProfile> {
   let raw: string | null;
-  try { raw = await getSecureValue(PROFILE_INDEX_KEY); } catch { throw new WorkspaceProfileFenceError(); }
-  assertPresent(identity);
+  try { raw = await metadataSecure(authority).getSecureValue(PROFILE_INDEX_KEY); } catch { throw new WorkspaceProfileFenceError(); }
   let index: unknown;
   try { index = raw ? JSON.parse(raw) : null; } catch { throw new WorkspaceProfileFenceError(); }
   if (!index || typeof index !== "object" || !Array.isArray((index as { profiles?: unknown }).profiles)) throw new WorkspaceProfileFenceError();
   const profiles = (index as { profiles: unknown[] }).profiles;
   if (profiles.some((value) => !value || typeof value !== "object" || typeof (value as GatewayProfile).id !== "string" || typeof (value as GatewayProfile).baseUrl !== "string" || ((value as GatewayProfile).deviceId !== undefined && typeof (value as GatewayProfile).deviceId !== "string") || ((value as GatewayProfile).authorizationGeneration !== undefined && typeof (value as GatewayProfile).authorizationGeneration !== "string"))) throw new WorkspaceProfileFenceError();
-  const matches = profiles.filter((value) => (value as GatewayProfile).id === identity.id) as GatewayProfile[];
+  const matches = profiles.filter((value) => (value as GatewayProfile).id === profileId) as GatewayProfile[];
   const current = matches[0];
-  if (matches.length !== 1 || !current || current.baseUrl !== identity.baseUrl || (current.authorizationGeneration ?? `legacy:${current.id}`) !== identity.authorizationGeneration || current.deviceId !== identity.deviceId) throw new WorkspaceProfileFenceError();
+  if (matches.length !== 1 || !current) throw new WorkspaceProfileFenceError();
+  return current;
+}
+/** Capture legacy ownership; the metadata write fence still rechecks the identity. */
+export async function workspaceProfileIdentityForId(profileId: string, authority?: MetadataAuthority): Promise<WorkspaceProfileIdentity> {
+  return captureWorkspaceProfileIdentity(await currentSharedProfile(profileId, authority));
+}
+/** Resolve a scope's profile fields to the current full identity, then let the write fence recheck it under lock. */
+export async function workspaceProfileIdentityForScope(profileId: string, scope: string, authority?: MetadataAuthority): Promise<WorkspaceProfileIdentity> {
+  const requested = workspaceProfileIdentityFromScope(profileId, scope);
+  const current = captureWorkspaceProfileIdentity(await currentSharedProfile(profileId, authority));
+  if (requested.baseUrl !== current.baseUrl || requested.authorizationGeneration !== current.authorizationGeneration)
+    throw new WorkspaceProfileFenceError();
+  return current;
+}
+async function assertSharedIdentity(identity: WorkspaceProfileIdentity, authority?: MetadataAuthority): Promise<void> {
+  assertPresent(identity);
+  const current = await currentSharedProfile(identity.id, authority);
+  assertPresent(identity);
+  if (current.baseUrl !== identity.baseUrl || (current.authorizationGeneration ?? `legacy:${current.id}`) !== identity.authorizationGeneration || current.deviceId !== identity.deviceId) throw new WorkspaceProfileFenceError();
   // An old scope that omits device cannot borrow the device in the current metadata.
   if (current.deviceId !== undefined && !Object.prototype.hasOwnProperty.call(identity, "deviceId")) throw new WorkspaceProfileFenceError();
 }
@@ -70,14 +87,17 @@ export async function withWorkspaceProfileWrite<T>(identity: WorkspaceProfileIde
   assertWebLockAvailable();
   return navigator.locks.request("kcoder-mobile:gateway-profile-index", { mode: "exclusive" }, checked);
 }
+/** New metadata consumers must route every persistent effect through this authority. */
+export async function withWorkspaceProfileMetadata<T>(identity: WorkspaceProfileIdentity, operation: (authority?: MetadataAuthority) => Promise<T>, parent?: MetadataAuthority): Promise<T> {
+  assertPresent(identity);
+  return withLocalMetadata("gateway-profile-index", async authority => {
+    await assertSharedIdentity(identity, authority);
+    return operation(authority);
+  }, parent);
+}
 /** Returning an object deliberately prevents Promise assimilation while the index lock is held. */
 export async function startWorkspaceProfileRpc<T>(identity: WorkspaceProfileIdentity, send: () => Promise<T>): Promise<{ response: Promise<T> }> {
-  assertPresent(identity);
-  const checked = async () => {
-    await assertSharedIdentity(identity);
-    return { response: send() };
-  };
-  if (Platform.OS !== "web") return withLocalIdentityLock("gateway-profile-index", checked);
-  assertWebLockAvailable();
-  return navigator.locks.request("kcoder-mobile:gateway-profile-index", { mode: "exclusive" }, checked);
+  return withWorkspaceProfileMetadata(identity, async authority => authority
+    ? authority.effect(() => ({ response: send() }))
+    : { response: send() });
 }

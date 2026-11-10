@@ -1,3 +1,44 @@
+!define KCODER_INSTALLER_SHELL_DIR "${__FILEDIR__}\windows-shell"
+Var /GLOBAL pid
+
+!macro customCheckAppRunning
+  InitPluginsDir
+  File /oname=$PLUGINSDIR\kcoder-process-preflight.ps1 "${KCODER_INSTALLER_SHELL_DIR}\close-installed-processes.ps1"
+  System::Call 'kernel32::GetCurrentProcessId() i.r9'
+  StrCpy $pid $9
+  StrCpy $R0 "User"
+  ${If} $installMode == "all"
+    StrCpy $R0 "Machine"
+  ${EndIf}
+  nsExec::ExecToStack /TIMEOUT=45000 '"$PowerShellPath" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\kcoder-process-preflight.ps1" -InstallDir "$INSTDIR" -Scope "$R0" -AppGuid "${APP_GUID}" -InstallerPid $pid -Mode Inspect'
+  Pop $0
+  Pop $1
+  DetailPrint "$1"
+  ${If} $0 == 10
+    ${IfNot} ${Silent}
+      ${If} $LANGUAGE == 2052
+        MessageBox MB_OKCANCEL|MB_ICONEXCLAMATION "需要先关闭此安装的 Studio、CLI 和后台进程。继续会中断其中正在执行的任务。是否关闭并继续？" IDCANCEL kcoderPreflightCancelled
+      ${Else}
+        MessageBox MB_OKCANCEL|MB_ICONEXCLAMATION "Studio, CLI and background processes from this installation must close. Continuing will interrupt their active tasks. Close them and continue?" IDCANCEL kcoderPreflightCancelled
+      ${EndIf}
+    ${EndIf}
+    nsExec::ExecToStack /TIMEOUT=90000 '"$PowerShellPath" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\kcoder-process-preflight.ps1" -InstallDir "$INSTDIR" -Scope "$R0" -AppGuid "${APP_GUID}" -InstallerPid $pid -Mode Close'
+    Pop $0
+    Pop $1
+    DetailPrint "$1"
+  ${EndIf}
+  ${If} $0 != 0
+    MessageBox MB_OK|MB_ICONEXCLAMATION "$(appCannotBeClosed)"
+    SetErrorLevel 2
+    Quit
+  ${EndIf}
+  Goto kcoderPreflightComplete
+  kcoderPreflightCancelled:
+    SetErrorLevel 2
+    Quit
+  kcoderPreflightComplete:
+!macroend
+
 !macro customInstall
   StrCpy $R0 "User"
   ${If} $installMode == "all"

@@ -2,13 +2,13 @@ import { desktopHost } from './desktopHost'
 
 // Keep the browser download behavior; Electron uses a main-frame IPC permit and
 // returns the actual DownloadItem outcome, including a cancelled save dialog.
-export function downloadLink(link: HTMLAnchorElement): void {
+export function downloadLink(link: HTMLAnchorElement): void | Promise<void> {
   const host = desktopHost()
   if (!host?.download) {
     link.click()
     return
   }
-  void host
+  return host
     .download({ url: link.href, filename: link.download })
     .then(result => {
       window.dispatchEvent(new CustomEvent('kcoder:download-result', { detail: result }))

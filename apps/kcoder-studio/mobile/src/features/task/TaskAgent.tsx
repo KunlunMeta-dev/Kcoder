@@ -1,23 +1,33 @@
+import { useConversationModelLabel } from "./use-conversation-model-label";
+import { useRememberDraftProject } from "./useLastDraftProject";
+import { useInterfaceVersion } from "@/storage/interface-version";
 import { t } from "@/i18n";
 import { useLocale } from "@/i18n/use-locale";
-import { ApprovalCard, QuestionCard } from "@/components/interaction-cards";
-import { beginProgrammaticFollow } from "@/components/message-follow-state";
+import { useIsFocused } from "expo-router";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode, type RefObject } from "react";
+import { ApprovalCard, AsyncQuestionCard, AsyncQuestionListError, QuestionCard, interactionCardIdentity } from "@/components/interaction-cards";
 import { reasoningEffortLabel } from "@/storage/new-workspace-preferences";
 import { spacing } from "@/theme";
-import { ArchiveRestore, ArrowDown, ChevronDown, X } from "lucide-react-native";
+import { ArchiveRestore, X } from "lucide-react-native";
 import {
   ActivityIndicator,
+  Platform,
   Pressable,
   ScrollView,
   Text,
   View,
 } from "react-native";
-import { StagedAttachmentChip } from "./TaskAttachments";
-import { TaskComposer } from "./TaskComposer";
+import { ComposerMetaRow, TaskComposer } from "./TaskComposer";
+import { TaskGoalControls } from "./TaskGoalControls";
+import { TaskPlanControls } from "./TaskPlanControls";
+import { composerBottomPadding, useKeyboardVisible } from "@/components/use-keyboard-visible";
+import { TaskPermissionSelector } from "./TaskPermissionSelector";
+import { LiveTaskExpertSelector } from "./TaskExpertSelector";
 import { TaskInteractions } from "./TaskInteractions";
 import { useTaskAppearance } from "./taskStyles";
 import { TaskSubagents, taskSubagentViewKey } from "./TaskSubagents";
-import { TaskTranscript } from "./TaskTranscript";
+import { JumpToLatestButton, TaskTranscript, type TranscriptReadAnchor } from "./TaskTranscript";
+import { handleTranscriptLayoutChange } from "./useTaskHistory";
 import { type AgentPanelProps } from "./types";
 import { useTaskAgentState } from "./useTaskAgentState";
 import { useTaskAttachments } from "./useTaskAttachments";
@@ -25,96 +35,198 @@ import { useTaskCommands } from "./useTaskCommands";
 import { useTaskHistory } from "./useTaskHistory";
 import { useTaskModelPreferences } from "./useTaskModelPreferences";
 import { useTaskSending } from "./useTaskSending";
+import { useTranscriptActions } from "./useTranscriptActions";
+import { selectorForInteraction } from "@/runtime/task-runtime/interactions";
+import { ComposerFloatingLayer } from "./ComposerFloatingLayer";
+import { TaskConnectionNotice } from "./TaskConnectionNotice";
+import { useRouter } from "expo-router";
 
-export function AgentPanel(props: AgentPanelProps) {
+export function AgentPanel(props: AgentPanelProps & { draftFlushRef?: RefObject<(() => Promise<void>) | null>; planOpenRequest?: object; permissionOpenRequest?: object; expertOpenRequest?: object; subagentsOpenRequest?: object; quickPhrasesOpenRequest?: object; workspaceReady?: boolean; displayOwner?: object; searchOpen?: boolean; onSearchClose?(): void; initialReadAnchor?: TranscriptReadAnchor; onReadAnchor?(anchor: TranscriptReadAnchor, userDecision?: boolean): void }) {
   useLocale();
-  const { styles, colors } = useTaskAppearance();
-  const step0 = useTaskAgentState(props);
-  const step1 = useTaskCommands(step0);
-  const step2 = useTaskSending(step1);
-  const step3 = useTaskHistory(step2);
-  const step4 = useTaskAttachments(step3);
-  const step5 = useTaskModelPreferences(step4);
-  const model = step5;
-  const {
-    task,
-    bottomInset,
-    snapshot,
-    queuedMessages,
-    attachments,
-    attachmentError,
-    unarchiveError,
-    setUnarchiveError,
-    unarchiving,
-    setUnarchiving,
-    queueError,
-    composerNotice,
-    messageListRef,
-    messageFollowState,
-    webPrependAnchor,
-    showJumpToLatest,
-    setShowJumpToLatest,
-    slashCommands,
-    selectSlashCommand,
-    removeQueuedMessage,
-    handleMessageListLayout,
-    removeAttachment,
-    openModelPicker,
-    selectedModelOption,
-  } = model;
+  const router = useRouter();
+  const { styles } = useTaskAppearance();
+  const workspaceReady = props.workspaceReady !== false;
+  const state = useTaskAgentState(props, workspaceReady);
+  useEffect(() => {
+    const ref = props.draftFlushRef;
+    if (!ref || !workspaceReady) return;
+    const flush = () => Promise.resolve(props.onDraftChange?.(state.latestInputRef.current || undefined));
+    ref.current = flush;
+    return () => { if (ref.current === flush) ref.current = null; };
+  }, [props.draftFlushRef, props.onDraftChange, workspaceReady, state.latestInputRef]);
+  const history = useTaskHistory(state);
+  const { task, snapshot, bottomInset, showJumpToLatest } = history;
+  const v3 = useInterfaceVersion() === "v3";
+  const jumpInComposer = v3 && workspaceReady && !snapshot.archivedAt;
+  const latestAction = showJumpToLatest ? <JumpToLatestButton model={history} onReadAnchor={props.onReadAnchor} inComposer={jumpInComposer} /> : null;
+  const focused = useIsFocused();
+  useRememberDraftProject(props.profile ?? null, props.server, snapshot.cwd,
+    v3 && !props.demo && focused && workspaceReady && snapshot.connected && snapshot.configurationReady !== false);
+  const actions = useTranscriptActions(task, workspaceReady && !props.demo && Boolean(props.profile && props.server));
+  const transcriptOwnerRef = useRef<object | undefined>(props.displayOwner ?? task);
+  transcriptOwnerRef.current = props.displayOwner ?? task;
   return (
-    <View style={styles.panel}>
-      <TaskSubagents
-        key={taskSubagentViewKey(task)}
-        task={task}
-        bottomInset={bottomInset}
-      />
-      <View onLayout={handleMessageListLayout} style={styles.messageListStage}>
-        <TaskTranscript model={model} />
-        {showJumpToLatest ? (
-          <Pressable
-            testID="jump-to-latest"
-            accessibilityRole="button"
-            accessibilityLabel={t("task.jump_to_latest_message")}
-            onPress={() => {
-              // Keep loaded history, but an older prepend must not override
-              // this explicit return-to-latest visual intent.
-              webPrependAnchor.current = null;
-              messageFollowState.current = beginProgrammaticFollow();
-              setShowJumpToLatest(false);
-              messageListRef.current?.scrollToEnd({ animated: true });
-            }}
-            style={styles.jumpToLatest}
-          >
-            <ArrowDown size={16} color={colors.text} />
-            <Text style={styles.jumpToLatestText}>{t("task.latest")}</Text>
-          </Pressable>
-        ) : null}
+    <ComposerFloatingLayer style={styles.panel}>
+      {workspaceReady ? <TaskSubagents key={taskSubagentViewKey(task)} task={task} bottomInset={bottomInset}
+        hideTrigger openRequest={props.subagentsOpenRequest}
+        focusQuestion={snapshot.interaction?.kind === "question" && snapshot.interaction.sourceAgent
+          ? snapshot.interaction : null}
+        sourceAgentRouteFocus={props.interactionRouteSourceAgentFocus ?? null} /> : null}
+      <View key="history" onLayout={(event) => handleTranscriptLayoutChange({
+        ...history,
+        ownerRef: transcriptOwnerRef,
+      }, event)} style={styles.messageListStage}>
+        <TaskTranscript connectionNoticeOwned actions={actions} searchOpen={props.searchOpen} onSearchClose={props.onSearchClose} model={{ ...history, displayOwner: props.displayOwner }} readOnly={!workspaceReady}
+          initialAnchor={props.initialReadAnchor} onReadAnchor={props.onReadAnchor} />
+        {!jumpInComposer ? latestAction : null}
       </View>
-      {!snapshot.connected ? (
-        <View accessibilityRole="alert" style={styles.connectionBanner}>
-          <ActivityIndicator size="small" color={colors.yellow} />
-          <Text style={styles.connectionBannerText}>
-            {t(
-              "task.disconnected_reconnecting_automatically_the_latest_server_state_will",
-            )}
-          </Text>
-        </View>
+      {v3 && workspaceReady ? <TaskPlanControls owner={task} snapshot={snapshot} openRequest={props.planOpenRequest} /> : null}
+      <TaskConnectionNotice key={snapshot.threadId} snapshot={snapshot} onReconnect={() => task.reconnectNow()}
+        onReauthorize={() => router.push("/settings-connections")} />
+      {actions.recovery}
+      {actions.dialog}
+      {workspaceReady ? <TaskWritablePanel state={state} history={history} aboveComposer={jumpInComposer ? latestAction : undefined} quickPhrasesOpenRequest={props.quickPhrasesOpenRequest} permissionOpenRequest={props.permissionOpenRequest} expertOpenRequest={props.expertOpenRequest} /> : null}
+    </ComposerFloatingLayer>
+  );
+}
+
+// Mount the mutation hooks only after the exact owner's local preferences are restored.
+// The parent owns the transcript and follow refs across this transition.
+function TaskWritablePanel({ state, history, quickPhrasesOpenRequest, permissionOpenRequest, expertOpenRequest, aboveComposer }: {
+  aboveComposer?: ReactNode;
+  quickPhrasesOpenRequest?: object;
+  permissionOpenRequest?: object;
+  expertOpenRequest?: object;
+  state: ReturnType<typeof useTaskAgentState>;
+  history: ReturnType<typeof useTaskHistory<ReturnType<typeof useTaskAgentState>>>;
+}) {
+  const v3 = useInterfaceVersion() === "v3";
+  const isFocused = useIsFocused();
+  const keyboardVisible = useKeyboardVisible();
+  const [permissionSheetOpen, setPermissionSheetOpen] = useState(false);
+  const [expertSheetOpen, setExpertSheetOpen] = useState(false);
+  const [composerOverlayPressPending, setComposerOverlayPressPending] = useState(false);
+  const composerOverlayPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const holdComposerForOverlay = () => {
+    if (composerOverlayPressTimer.current) clearTimeout(composerOverlayPressTimer.current);
+    setComposerOverlayPressPending(true);
+    composerOverlayPressTimer.current = setTimeout(() => {
+      composerOverlayPressTimer.current = null;
+      setComposerOverlayPressPending(false);
+    }, 250);
+  };
+  const setPermissionOverlayOpen = (open: boolean) => {
+    setPermissionSheetOpen(open);
+    if (!open) {
+      if (composerOverlayPressTimer.current) {
+        clearTimeout(composerOverlayPressTimer.current);
+        composerOverlayPressTimer.current = null;
+      }
+      setComposerOverlayPressPending(false);
+    }
+  };
+  const setExpertOverlayOpen = useCallback((open: boolean) => {
+    setExpertSheetOpen(open);
+    if (!open) {
+      if (composerOverlayPressTimer.current) {
+        clearTimeout(composerOverlayPressTimer.current);
+        composerOverlayPressTimer.current = null;
+      }
+      setComposerOverlayPressPending(false);
+    }
+  }, []);
+  useEffect(() => () => {
+    if (composerOverlayPressTimer.current) clearTimeout(composerOverlayPressTimer.current);
+  }, []);
+  const { styles, colors } = useTaskAppearance();
+  const commands = useTaskCommands(state);
+  const sending = useTaskSending(commands);
+  const attachmentsModel = useTaskAttachments({ ...sending, ...history });
+  const model = useTaskModelPreferences(attachmentsModel);
+  const { task, bottomInset, snapshot, queuedMessages, attachments, attachmentError,
+    unarchiveError, setUnarchiveError, unarchiving, setUnarchiving, queueError,
+    composerNotice, slashCommands, selectSlashCommand, removeQueuedMessage,
+    removeAttachment, openModelPicker } = model;
+  const expertProfileScope = JSON.stringify([model.profile?.id, model.profile?.baseUrl,
+    model.profile?.authorizationGeneration, model.profile?.deviceId]);
+  const expertServerScope = JSON.stringify([model.server?.id, model.server?.transport,
+    model.server?.workspacePath, model.server?.host, model.server?.user, model.server?.port,
+    model.server?.command, model.server?.settingsFile, model.server?.profile]);
+  const expertOwner = useMemo(() => ({}), [task, task.client, task.clientGeneration,
+    snapshot.threadId, snapshot.cwd, expertProfileScope, expertServerScope]);
+  const expertBusyOwner = useMemo(() => ({}), [task, task.runtimeInstanceNonce,
+    snapshot.threadId, snapshot.cwd, expertProfileScope, expertServerScope]);
+  const expertBusyOwnerRef = useRef(expertBusyOwner);
+  expertBusyOwnerRef.current = expertBusyOwner;
+  const expertBusyRef = useRef<{ owner: object; busy: boolean }>({ owner: expertBusyOwner, busy: false });
+  const [expertBusyState, setExpertBusyState] = useState<{ owner: object; busy: boolean }>({ owner: expertBusyOwner, busy: false });
+  const expertSendLocked = expertBusyState.owner === expertBusyOwner && expertBusyState.busy;
+  const expertSendLockRef = useMemo(() => ({
+    get current() { return expertBusyRef.current.owner === expertBusyOwner && expertBusyRef.current.busy; },
+  }), [expertBusyOwner]);
+  const onExpertBusyChange = useCallback((busy: boolean) => {
+    if (expertBusyOwnerRef.current !== expertBusyOwner) return;
+    const next = { owner: expertBusyOwner, busy };
+    expertBusyRef.current = next;
+    setExpertBusyState(next);
+  }, [expertBusyOwner]);
+  const asyncQuestions = useSyncExternalStore(
+    task.subscribe,
+    task.getAsyncQuestionSnapshot,
+    task.getAsyncQuestionSnapshot,
+  );
+  const modelLabel = useConversationModelLabel(task, snapshot, model.modelOptions, model.profile, model.server, model.demo);
+  return <>
+      {asyncQuestions.supported && asyncQuestions.questions.length > 0 ? (
+        <ScrollView
+          testID="async-question-list"
+          style={{ maxHeight: 260, marginHorizontal: spacing.lg, marginBottom: spacing.md }}
+          contentContainerStyle={{ gap: spacing.md }}
+          nestedScrollEnabled
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator
+        >
+          {asyncQuestions.questions.map((question, index) => (
+            <AsyncQuestionCard
+              key={question.questionId}
+              question={question}
+              ownerKey={JSON.stringify([task.runtimeInstanceNonce, task.clientGeneration])}
+              disabled={!task.canMutateAsyncQuestions()}
+              busy={asyncQuestions.mutatingQuestionIds.includes(question.questionId)}
+              listError={index === 0 ? asyncQuestions.error : undefined}
+              onAnswer={(input) => task.answerAsyncQuestion(input)}
+              onCancel={(input) => task.cancelAsyncQuestion(input)}
+              onRefresh={() => void task.refreshAsyncQuestions()}
+            />
+          ))}
+        </ScrollView>
+      ) : asyncQuestions.supported && asyncQuestions.error ? (
+        <AsyncQuestionListError
+          error={asyncQuestions.error}
+          onRefresh={() => void task.refreshAsyncQuestions()}
+        />
+      ) : null}
+      {snapshot.interactionFocusStatus ? (
+        <Text testID={`interaction-focus-${snapshot.interactionFocusStatus}`} accessibilityRole="alert"
+          style={{ color: colors.textMuted, marginHorizontal: spacing.lg, marginBottom: spacing.sm }}>
+          {snapshot.interactionFocusStatus === "stale" ? t("inbox.stale") : t("inbox.focused_readonly")}
+        </Text>
       ) : null}
       {snapshot.interaction?.kind === "approval" ? (
         <ApprovalCard
+          key={interactionCardIdentity(snapshot.interaction)}
           interaction={snapshot.interaction}
           pendingCount={snapshot.interactionCount}
-          onRespond={(decision) => task.respondApproval(decision)}
+          onRespond={(decision) => task.respondApproval(decision, selectorForInteraction(snapshot.interaction!))}
         />
       ) : null}
-      {snapshot.interaction?.kind === "question" ? (
+      {snapshot.interaction?.kind === "question" && !snapshot.interaction.sourceAgent ? (
         <QuestionCard
-          key={snapshot.interaction.requestId}
+          key={interactionCardIdentity(snapshot.interaction)}
           interaction={snapshot.interaction}
           pendingCount={snapshot.interactionCount}
-          onSubmit={(answers) => task.respondQuestions(answers)}
-          onCancel={() => task.cancelQuestions()}
+          onSubmit={(answers) => task.respondQuestions(answers, selectorForInteraction(snapshot.interaction!))}
+          onCancel={() => task.cancelQuestions(selectorForInteraction(snapshot.interaction!))}
         />
       ) : null}
       {snapshot.archivedAt ? (
@@ -176,9 +288,10 @@ export function AgentPanel(props: AgentPanelProps) {
         <View
           style={[
             styles.composerWrap,
-            { paddingBottom: Math.max(bottomInset, spacing.sm) },
+            { paddingBottom: composerBottomPadding(Platform.OS, keyboardVisible, bottomInset, spacing.sm) },
           ]}
         >
+          <TaskGoalControls task={task} snapshot={snapshot} />
           {attachmentError ? (
             <Text
               accessibilityRole="alert"
@@ -253,22 +366,6 @@ export function AgentPanel(props: AgentPanelProps) {
               ))}
             </ScrollView>
           ) : null}
-          {attachments.length > 0 ? (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.attachmentList}
-            >
-              {attachments.map((attachment) => (
-                <StagedAttachmentChip
-                  key={attachment.path}
-                  attachment={attachment}
-                  task={task}
-                  onRemove={() => void removeAttachment(attachment)}
-                />
-              ))}
-            </ScrollView>
-          ) : null}
           {slashCommands.length > 0 ? (
             <ScrollView
               testID="slash-command-menu"
@@ -297,11 +394,16 @@ export function AgentPanel(props: AgentPanelProps) {
               ))}
             </ScrollView>
           ) : null}
-          <TaskComposer model={model} />
-          <View style={styles.composerMeta}>
-            <Pressable
+          <TaskComposer
+            aboveComposer={aboveComposer}
+            quickPhrasesOpenRequest={quickPhrasesOpenRequest}
+            sendLocked={expertSendLocked}
+            sendLockRef={expertSendLockRef}
+            toolbar={<ComposerMetaRow
+            modelSelector={<Pressable
               testID="conversation-model-selector"
-              accessibilityLabel={t("task.change_model_and_reasoning_effort")}
+              hitSlop={v3 ? 6 : undefined}
+              accessibilityLabel={`${t("task.change_model_and_reasoning_effort")} · ${modelLabel}`}
               disabled={
                 !snapshot.connected ||
                 snapshot.running ||
@@ -314,29 +416,45 @@ export function AgentPanel(props: AgentPanelProps) {
                   Boolean(snapshot.archivedAt),
               }}
               onPress={openModelPicker}
+              onPressIn={holdComposerForOverlay}
               style={styles.modelSelectorMeta}
             >
               <Text numberOfLines={1} style={styles.model}>
-                {selectedModelOption?.displayName ??
-                  (snapshot.pendingTurnPreferences?.model ?? snapshot.model)?.split("::").at(-1) ??
-                  t("task.server_default_model")}
+                {modelLabel}
                 {snapshot.reasoningEffort
                   ? ` · ${reasoningEffortLabel(snapshot.reasoningEffort)}`
                   : ""}
               </Text>
-              <ChevronDown size={12} color={colors.textDim} />
-            </Pressable>
-            <Text style={styles.connection}>
+            </Pressable>}
+            permissionSelector={<TaskPermissionSelector
+              openRequest={permissionOpenRequest}
+              hideTrigger={v3}
+              task={task}
+              snapshot={snapshot}
+              profile={state.profile}
+              server={state.server}
+              demo={state.demo}
+              scopeActive={isFocused}
+              onOpenChange={setPermissionOverlayOpen}
+              onTriggerPressIn={holdComposerForOverlay}
+            />}
+            expertSelector={<LiveTaskExpertSelector owner={expertOwner} busyOwner={expertBusyOwner} task={task} snapshot={snapshot} scopeActive={isFocused}
+              openRequest={expertOpenRequest} hideTrigger
+              onOpenChange={setExpertOverlayOpen} onTriggerPressIn={holdComposerForOverlay} onBusyChange={onExpertBusyChange} />}
+            status={queuedMessages.length > 0 || !snapshot.connected ? <Text numberOfLines={1} style={styles.connection}>
               {queuedMessages.length > 0
                 ? t("task.queued", { p0: queuedMessages.length })
                 : snapshot.connected
                   ? t("task.connected")
                   : t("task.offline")}
-            </Text>
-          </View>
+            </Text> : null}
+          />}
+            model={model}
+            externalOverlayOpen={permissionSheetOpen || expertSheetOpen || composerOverlayPressPending}
+          />
+
         </View>
       )}
       <TaskInteractions model={model} />
-    </View>
-  );
+    </>;
 }

@@ -1,4 +1,4 @@
-// Native Intel macOS pdftotext, rebuilt from the already pinned Xpdf source.
+// Native macOS pdftotext, rebuilt from the already pinned Xpdf source.
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { chmod, copyFile, cp, lstat, mkdir, mkdtemp, readFile, readdir, rename, rm, rmdir, writeFile } from 'node:fs/promises';
@@ -8,12 +8,13 @@ import { promisify } from 'node:util';
 import { PDF_ASSETS, PDF_CONFIGURATION, PDF_VERSION, verifyPdfHash } from './prepare-pdf.mjs';
 import { compilerMetadata } from './build-pdf.mjs';
 import { extractPdfEntries, readPdfTarGz } from './pdf-archive.mjs';
-import { assertMacX64Executable, macExecutableMetadata, validateMacSystemLibraries } from './mac-executable.mjs';
+import { assertMacExecutable, macExecutableMetadata, validateMacSystemLibraries } from './mac-executable.mjs';
+import { macTarget } from './mac-target.mjs';
 
 const run = promisify(execFile), here = dirname(fileURLToPath(import.meta.url));
 const repository = resolve(here, '../..'), marker = '.kcoder-pdf.json';
 const keys = ['source', 'simplified', 'traditional'];
-const recipes = ['prepare-mac-pdf.mjs', 'prepare-pdf.mjs', 'build-pdf.mjs', 'pdf-archive.mjs', 'chrome-archive.mjs', 'mac-chrome-links.mjs', 'mac-executable.mjs'];
+const recipes = ['prepare-mac-pdf.mjs', 'prepare-pdf.mjs', 'build-pdf.mjs', 'pdf-archive.mjs', 'chrome-archive.mjs', 'mac-chrome-links.mjs', 'mac-executable.mjs', 'mac-target.mjs'];
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 const variant = '4.06-kcoder-macos.1';
 async function exists(path) { try { return await lstat(path); } catch (error) { if (error.code === 'ENOENT') return null; throw error; } }
@@ -23,12 +24,12 @@ async function noLinks(path) {
     if (current === dirname(current)) return;
   }
 }
-async function owned(path) {
+async function owned(path, platform) {
   const info = await exists(path);
   if (!info) return null;
   if (!info.isDirectory() || info.isSymbolicLink()) throw new Error('macOS PDF destination must be a directory');
   const tag = JSON.parse(await readFile(join(path, marker), 'utf8'));
-  if (tag.schema !== 'kcoder.pdf-resource.v1' || tag.platform !== 'mac-x64') throw new Error('Refusing to replace unowned macOS PDF resources');
+  if (tag.schema !== 'kcoder.pdf-resource.v1' || tag.platform !== platform) throw new Error('Refusing to replace unowned or different-architecture macOS PDF resources');
   return info;
 }
 async function invoke(command, args, work, log, env) {
@@ -51,14 +52,15 @@ async function permissions(root) {
   }
 }
 export async function prepareMacPdf({ destination, cache = join(repository, 'target/cache/xpdf'), archiveDirectory,
-  env = process.env, offline = false, renamePath = rename } = {}) {
-  if (process.platform !== 'darwin' || process.arch !== 'x64') throw new Error('Native Intel macOS PDF build host required');
+  env = process.env, offline = false, renamePath = rename, arch = process.arch } = {}) {
+  const target = macTarget(arch);
+  if (process.platform !== 'darwin' || process.arch !== arch) throw new Error(`Native ${arch} macOS PDF build host required`);
   if (!destination) throw new Error('Dedicated macOS PDF destination required');
   const output = resolve(destination), cacheRoot = resolve(cache), parent = dirname(output);
   if (basename(output) !== 'pdf' || parent === parse(output).root || output === cacheRoot || output.startsWith(cacheRoot + sep) || cacheRoot.startsWith(output + sep)) throw new Error('Dedicated non-overlapping pdf resource destination required');
   await noLinks(output); await noLinks(cacheRoot); if (archiveDirectory) await noLinks(archiveDirectory);
   await mkdir(parent, { recursive: true }); await mkdir(cacheRoot, { recursive: true });
-  const initial = await owned(output), lock = join(parent, '.kcoder-mac-pdf.lock');
+  const initial = await owned(output, target.platform), lock = join(parent, '.kcoder-mac-pdf.lock');
   try { await mkdir(lock, { mode: 0o700 }); } catch (error) { if (error.code === 'EEXIST') throw new Error('Native macOS PDF preparation already locked'); throw error; }
   let stage, retain = false;
   try {
@@ -86,7 +88,7 @@ export async function prepareMacPdf({ destination, cache = join(repository, 'tar
     const sourceRoot = join(unpack, 'xpdf-4.06'), build = join(stage, 'build'), cmake = env.KCODER_PDF_CMAKE || 'cmake';
     const sdk = (await invoke('/usr/bin/xcrun', ['--sdk', 'macosx', '--show-sdk-path'], stage, 'sdk-path.log', env)).trim();
     if (!sdk.startsWith('/') || /[\"\n\r]/.test(sdk) || !(await lstat(join(sdk, 'usr/include/c++/v1/atomic'))).isFile()) throw new Error('Apple SDK libc++ headers unavailable');
-    const arguments_ = ['-S', sourceRoot, '-B', build, '-DCMAKE_BUILD_TYPE=Release', '-DCMAKE_OSX_ARCHITECTURES=x86_64', '-DCMAKE_OSX_DEPLOYMENT_TARGET=15.7',
+    const arguments_ = ['-S', sourceRoot, '-B', build, '-DCMAKE_BUILD_TYPE=Release', `-DCMAKE_OSX_ARCHITECTURES=${target.architecture}`, '-DCMAKE_OSX_DEPLOYMENT_TARGET=15.7',
       '-DCMAKE_C_COMPILER=/usr/bin/clang', '-DCMAKE_CXX_COMPILER=/usr/bin/clang++', `-DCMAKE_CXX_FLAGS=-isystem "${join(sdk, 'usr/include/c++/v1')}"`, '-DMULTITHREADED=OFF', '-DNO_FONTCONFIG=ON',
       '-DCMAKE_DISABLE_FIND_PACKAGE_Qt6Widgets=ON', '-DCMAKE_DISABLE_FIND_PACKAGE_Qt5Widgets=ON', '-DCMAKE_DISABLE_FIND_PACKAGE_PNG=ON', '-DCMAKE_DISABLE_FIND_PACKAGE_ZLIB=ON',
       '-DFREETYPE_INCLUDE_DIR_ft2build=', '-DFREETYPE_INCLUDE_DIR_freetype=', '-DFREETYPE_INCLUDE_DIR_freetype_freetype=', '-DFREETYPE_LIBRARY=', '-DPAPER_LIBRARY=', '-DLCMS_LIBRARY='];
@@ -98,7 +100,7 @@ export async function prepareMacPdf({ destination, cache = join(repository, 'tar
     if (compiler.id !== 'AppleClang') throw new Error('Native macOS PDF build requires AppleClang');
     const recipeHashes = {};
     for (const name of recipes) recipeHashes[name] = digest(await readFile(join(here, name)));
-    const inputs = { platform: 'mac-x64', variant, archives: Object.fromEntries(keys.map(key => [key, PDF_ASSETS[key].sha256])), cmakeVersion, compiler, sdkVersion, sdkSettingsSha256,
+    const inputs = { platform: target.platform, variant, archives: Object.fromEntries(keys.map(key => [key, PDF_ASSETS[key].sha256])), cmakeVersion, compiler, sdkVersion, sdkSettingsSha256,
       recipes: recipeHashes, options: arguments_.slice(4) };
     const fingerprint = digest(Buffer.from(JSON.stringify(inputs))), cachedBuild = join(cacheRoot, `xpdf-mac-build-${fingerprint}`);
     let built, cacheHit = false;
@@ -108,15 +110,15 @@ export async function prepareMacPdf({ destination, cache = join(repository, 'tar
       cacheHit = true;
     } else {
       await invoke(cmake, ['--build', build, '--target', 'pdftotext', '--parallel', '8'], stage, 'build.log', env);
-      const executable = join(build, 'xpdf/pdftotext'); await assertMacX64Executable(executable);
+      const executable = join(build, 'xpdf/pdftotext'); await assertMacExecutable(executable, arch);
       const libraries = validateMacSystemLibraries(await invoke('/usr/bin/otool', ['-L', executable], stage, 'libraries.log', env));
-      built = { executableMetadata: await macExecutableMetadata(executable), schema: 'kcoder.xpdf-mac-build.v1', fingerprint, inputs, executableSha256: digest(await readFile(executable)), libraries };
+      built = { executableMetadata: await macExecutableMetadata(executable, arch), schema: 'kcoder.xpdf-mac-build.v1', fingerprint, inputs, executableSha256: digest(await readFile(executable)), libraries };
       const temporary = await mkdtemp(join(cacheRoot, '.mac-pdf-build-'));
       try { await copyFile(executable, join(temporary, 'pdftotext')); await writeFile(join(temporary, 'build.json'), JSON.stringify(built, null, 2) + '\n'); await rename(temporary, cachedBuild); }
       catch (error) { await rm(temporary, { recursive: true, force: true }); throw error; }
     }
     const fresh = join(stage, 'fresh'); await mkdir(fresh);
-    await copyFile(join(cachedBuild, 'pdftotext'), join(fresh, 'pdftotext')); await assertMacX64Executable(join(fresh, 'pdftotext'));
+    await copyFile(join(cachedBuild, 'pdftotext'), join(fresh, 'pdftotext')); await assertMacExecutable(join(fresh, 'pdftotext'), arch);
     for (const name of ['README', 'COPYING', 'COPYING3']) await copyFile(join(sourceRoot, name), join(fresh, name));
     await cp(join(sourceRoot, 'doc'), join(fresh, 'doc'), { recursive: true });
     for (const key of ['simplified', 'traditional']) await cp(join(unpack, `xpdf-chinese-${key}`), join(fresh, 'data', `chinese-${key}`), { recursive: true });
@@ -127,12 +129,12 @@ export async function prepareMacPdf({ destination, cache = join(repository, 'tar
     await copyFile(join(here, 'pdf-runtime-licenses/MIT.txt'), join(sources, 'BUILD-RECIPE-LICENSE.txt'));
     await writeFile(join(sources, 'BUILD-INFO.json'), JSON.stringify(built, null, 2) + '\n');
     await writeFile(join(fresh, 'xpdfrc'), PDF_CONFIGURATION);
-    const tag = { schema: 'kcoder.pdf-resource.v1', vendor: 'xpdf', version: PDF_VERSION, variant, platform: 'mac-x64', executableSha256: built.executableSha256,
+    const tag = { schema: 'kcoder.pdf-resource.v1', vendor: 'xpdf', version: PDF_VERSION, variant, platform: target.platform, executableSha256: built.executableSha256,
       buildFingerprint: fingerprint, executableMetadata: built.executableMetadata, upstreamLicense: 'GPL-2.0-only OR GPL-3.0-only', buildRecipeLicense: 'MIT', source: `source/${PDF_ASSETS.source.name}`, configuration: { file: 'xpdfrc', cwd: 'pdf', paths: 'relative-to-process-cwd' } };
     await writeFile(join(fresh, marker), JSON.stringify(tag, null, 2) + '\n');
-    await writeFile(join(fresh, 'KCODER-PDF-NOTICE.txt'), `Xpdf ${PDF_VERSION}, native macOS Intel build by KCoder (${variant}). Only pdftotext is built; upstream source is unmodified.\nXpdf: GPL v2 or GPL v3, retain COPYING and COPYING3; this does not relicense KCoder. Build recipe: MIT.\nComplete original source: ${tag.source}. Build inputs, compiler hash, source hashes, system-only libraries and recipe hashes: source/BUILD-INFO.json.\nRebuild on native Intel macOS with Apple Command Line Tools and CMake: node source/prepare-mac-pdf.mjs --dest /absolute/output/pdf --cache /absolute/cache --archive-dir /directory/with/three/official/source-and-Chinese-data-archives.\nChinese character maps retain their original README and CMap/LICENSE.md. Invoke with this directory as cwd and -cfg xpdfrc -enc UTF-8. No OCR.\n${keys.map(key => `${PDF_ASSETS[key].url}\nSHA256 ${PDF_ASSETS[key].sha256}`).join('\n')}\n`);
+    await writeFile(join(fresh, 'KCODER-PDF-NOTICE.txt'), `Xpdf ${PDF_VERSION}, native macOS ${target.architecture} build by KCoder (${variant}). Only pdftotext is built; upstream source is unmodified.\nXpdf: GPL v2 or GPL v3, retain COPYING and COPYING3; this does not relicense KCoder. Build recipe: MIT.\nComplete original source: ${tag.source}. Build inputs, compiler hash, source hashes, system-only libraries and recipe hashes: source/BUILD-INFO.json.\nRebuild on matching-architecture macOS with Apple Command Line Tools and CMake: node source/prepare-mac-pdf.mjs --dest /absolute/output/pdf --cache /absolute/cache --archive-dir /directory/with/three/official/source-and-Chinese-data-archives.\nChinese character maps retain their original README and CMap/LICENSE.md. Invoke with this directory as cwd and -cfg xpdfrc -enc UTF-8. No OCR.\n${keys.map(key => `${PDF_ASSETS[key].url}\nSHA256 ${PDF_ASSETS[key].sha256}`).join('\n')}\n`);
     await permissions(fresh);
-    const current = await owned(output);
+    const current = await owned(output, target.platform);
     if (Boolean(initial) !== Boolean(current) || initial && (initial.dev !== current.dev || initial.ino !== current.ino)) throw new Error('macOS PDF destination changed during preparation');
     const backup = join(stage, 'previous'); if (current) await renamePath(output, backup);
     try { await renamePath(fresh, output); }
@@ -140,7 +142,7 @@ export async function prepareMacPdf({ destination, cache = join(repository, 'tar
       if (current) try { await renamePath(backup, output); } catch { retain = true; throw new Error(`macOS PDF restore failed; previous resources preserved in ${stage}`); }
       throw error;
     }
-    return { directory: output, executable: join(output, 'pdftotext'), config: join(output, 'xpdfrc'), cwd: output, platform: 'mac-x64', executableSha256: built.executableSha256, buildFingerprint: fingerprint, cacheHit };
+    return { directory: output, executable: join(output, 'pdftotext'), config: join(output, 'xpdfrc'), cwd: output, platform: target.platform, executableSha256: built.executableSha256, buildFingerprint: fingerprint, cacheHit };
   } catch (error) {
     if (stage && !retain) { retain = true; throw new Error(`${error.message}; owned diagnostic work retained at ${stage}`); }
     throw error;

@@ -50,6 +50,10 @@ if ($LASTEXITCODE -ne 0) { throw 'Worker UIA threading patch failed' }
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'patch_snapshot_scope.py') -Destination (Join-Path $root 'patch_snapshot_scope.py')
 & $python -I -B (Join-Path $root 'patch_snapshot_scope.py') $desktop
 if ($LASTEXITCODE -ne 0) { throw 'Worker snapshot scope patch failed' }
+$workerSource = Join-Path $source 'src\windows_mcp'
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'screenshot_frame.py') -Destination (Join-Path $workerSource 'kcoder_screenshot_frame.py')
+& $python -I -B (Join-Path $PSScriptRoot 'patch_screenshot_frame.py') $workerSource
+if ($LASTEXITCODE -ne 0) { throw 'Worker screenshot frame patch failed' }
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'patch_clipboard_paste.py') -Destination (Join-Path $root 'patch_clipboard_paste.py')
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'clipboard_paste.py') -Destination (Join-Path $source 'src\windows_mcp\kcoder_clipboard.py')
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'clipboard_guard.py') -Destination (Join-Path $source 'src\windows_mcp\kcoder_clipboard_guard.py')
@@ -91,7 +95,11 @@ Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'launch.py') -Destination (Join-
 Copy-Item -LiteralPath (Join-Path $source 'LICENSE.md') -Destination (Join-Path $root 'WINDOWS-MCP-LICENSE.md')
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'worker.toml') -Destination (Join-Path $root 'worker.toml')
 $relativePython=$python.Substring($root.Length+1)
-$manifest=@{schemaVersion=1;inputTrackingVersion=1;clipboardRecoveryVersion=1;clearTextVersion=1;status='prototype';upstream=$pin;pythonVersion=$PythonVersion;python=$relativePython;requirementsSha256=(Get-FileHash $requirements -Algorithm SHA256).Hash.ToLowerInvariant()}
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'prepare_python_startup.py') -Destination (Join-Path $root 'prepare_python_startup.py')
+& $python -I -B (Join-Path $root 'prepare_python_startup.py') (Split-Path -Parent $python)
+if ($LASTEXITCODE -ne 0) { throw 'Python immutable startup policy preparation failed' }
+Remove-Item -LiteralPath (Join-Path $root 'prepare_python_startup.py')
+$manifest=@{schemaVersion=1;inputTrackingVersion=1;clipboardRecoveryVersion=1;clearTextVersion=1;bytecodePolicyVersion=1;screenshotFrameVersion=1;status='prototype';upstream=$pin;pythonVersion=$PythonVersion;python=$relativePython;requirementsSha256=(Get-FileHash $requirements -Algorithm SHA256).Hash.ToLowerInvariant()}
 $manifest | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $root 'runtime-manifest.json') -Encoding UTF8
 & $python -I -B (Join-Path $root 'launch.py') --kcoder-runtime-check
 if ($LASTEXITCODE -ne 0) { throw 'Runtime import check failed' }
@@ -120,4 +128,11 @@ if ($LASTEXITCODE -ne 0) { throw 'Version-bound runtime notice staging failed' }
 if ($LASTEXITCODE -ne 0) { throw 'Interpreter/vendor notice inventory failed' }
 & $python -I -B (Join-Path $root 'runtime_inventory.py') seal $root
 if ($LASTEXITCODE -ne 0) { throw 'Runtime integrity inventory failed' }
+# Intentionally omit -B: direct diagnostics must also preserve the sealed tree.
+& $python -I -S -c 'import sys; assert not sys.flags.dont_write_bytecode and sys.dont_write_bytecode'
+if ($LASTEXITCODE -ne 0) { throw 'Python encoding bootstrap policy was not loaded' }
+& $python -I (Join-Path $root 'launch.py') --kcoder-runtime-check
+if ($LASTEXITCODE -ne 0) { throw 'Python startup policy runtime check failed' }
+& $python -I -B (Join-Path $root 'runtime_inventory.py') verify $root
+if ($LASTEXITCODE -ne 0) { throw 'Python diagnostic changed sealed runtime resources' }
 Write-Output "Runtime staged at $root"

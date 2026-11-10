@@ -11,8 +11,8 @@ export function markProfileStateRemoval(
   return next;
 }
 
-export function isProfileStateRemovalPending(profileId: string): boolean {
-  return !profileId.trim() || removalGenerationByProfile.has(profileId);
+export function isProfileStateRemovalPending(profileId: string, generation?: number): boolean {
+  return !profileId.trim() || (generation === undefined ? removalGenerationByProfile.has(profileId) : removalGenerationByProfile.get(profileId) === generation);
 }
 
 export function clearProfileStateRemoval(

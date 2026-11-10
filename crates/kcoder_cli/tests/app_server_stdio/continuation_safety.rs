@@ -19,7 +19,17 @@ fn find_dir(root: &std::path::Path, name: &str) -> Option<std::path::PathBuf> {
 }
 
 fn outage_endpoint() -> (String, FixtureCalls, std::thread::JoinHandle<()>) {
-    serving_fixture()
+    // A restart plus resume in a debug build can exceed the default 3 s idle
+    // window, after which the fixture stops answering and the continuation
+    // would fail at the network rather than at the behaviour under test.
+    serving_fixture_decided_bounded(
+        |index, _| match index {
+            0 => FixtureAnswer::Custom(outage_first_call),
+            _ => FixtureAnswer::Ok,
+        },
+        None,
+        Duration::from_secs(15),
+    )
 }
 
 fn refused(response: &Value) {

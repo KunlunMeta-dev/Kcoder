@@ -12,14 +12,14 @@ async function readSession(path) {
 }
 
 export function assertOwnedControllerRequest(child, stopping, path) {
-  if (child.exitCode !== null || child.signalCode !== null) throw new Error('Owned Tauri controller is closed');
-  if (stopping && path !== '/shutdown') throw new Error('Owned Tauri controller is stopping');
+  if (child.exitCode !== null || child.signalCode !== null) throw new Error('Owned Electron controller is closed');
+  if (stopping && path !== '/shutdown') throw new Error('Owned Electron controller is stopping');
 }
 
 export async function startOwnedAiVerify(context, options) {
   if (options.timezone) new Intl.DateTimeFormat('en', { timeZone: options.timezone }).format(0);
   const gateway = await gatewayVerificationOptions({
-    'tauri-bin': options.tauriBin, 'kcoder-bin': options.kcoderBin, 'renderer-root': options.rendererRoot,
+    'electron-bin': options.electronBin, 'kcoder-bin': options.kcoderBin, 'renderer-root': options.rendererRoot,
     ...(options.delayCancelReply ? { 'delay-cancel-reply': 'true' } : {}),
     ...(options.delayWorkspaceFileReply ? { 'delay-workspace-file-reply': 'true' } : {}),
     ...(options.uiReceiptFault ? { 'ui-receipt-fault': 'true' } : {}),
@@ -31,13 +31,13 @@ export async function startOwnedAiVerify(context, options) {
   context.registerSecret(token);
   const sessionPath = join(run.runRoot, 'session.json');
   let handedOff = false;
-  context.addCleanup('finalize unpublished Tauri run', async () => {
+  context.addCleanup('finalize unpublished Electron run', async () => {
     if (handedOff) return;
     const failure = new Error('Verification controller was not launched');
     await finishUnpublishedGatewaySession(run, sessionPath, failure).catch(error => { if (error !== failure) throw error; });
   });
   await writeFile(sessionPath, JSON.stringify({ version: 1, directory: run.runRoot, gateway, token, status: 'starting' }), { mode: 0o600 });
-  const child = context.spawnOwned('tauri-controller', process.execPath, [
+  const child = context.spawnOwned('electron-controller', process.execPath, [
     resolve(appRoot, 'renderer/scripts/ai-verify.mjs'), 'serve', '--session', sessionPath,
   ], { cwd: repoRoot, env: context.isolatedEnvironment(options.timezone ? { TZ: options.timezone } : {}) });
   let activeSession = null;
@@ -64,7 +64,7 @@ export async function startOwnedAiVerify(context, options) {
       if (activeSession.controlUrl) {
         await request('/shutdown', startupFailed ? { failure: 'startup-timeout' } : failed || context.abortReason ? { failure: 'verification-failed' } : {});
       } else {
-        await context.stopOwned('tauri-controller');
+        await context.stopOwned('electron-controller');
         activeSession = await readSession(sessionPath);
         if (activeSession?.status !== 'stopped' && !activeSession?.controlUrl) {
           await finishUnpublishedGatewaySession(run, sessionPath, new Error('Verification controller stopped before publication')).catch(() => {});
@@ -74,26 +74,26 @@ export async function startOwnedAiVerify(context, options) {
     const stopped = await waitFor(async () => {
       const current = await readSession(sessionPath);
       return current?.status === 'stopped' ? current : null;
-    }, 30_000, 'owned Tauri cleanup');
-    await context.stopOwned('tauri-controller');
+    }, 30_000, 'owned Electron cleanup');
+    await context.stopOwned('electron-controller');
     if (stopped.cleanupError) throw new Error(stopped.cleanupError);
     const result = JSON.parse(await readFile(join(run.artifactsDir, 'result.json'), 'utf8'));
-    if (result.cleanupErrors?.length) throw new Error('Owned Tauri cleanup reported errors');
-    if (await access(run.stateDir).then(() => true, () => false)) throw new Error('Owned Tauri state survived cleanup');
+    if (result.cleanupErrors?.length) throw new Error('Owned Electron cleanup reported errors');
+    if (await access(run.stateDir).then(() => true, () => false)) throw new Error('Owned Electron state survived cleanup');
     return { runRoot: run.runRoot, verificationFailed: Boolean(stopped.verificationError), cleaned: true };
   })();
   // Register before readiness: an aborted or failed startup still owns its controller.
-  context.addCleanup('stop owned Tauri verification', stop);
+  context.addCleanup('stop owned Electron verification', stop);
   handedOff = true;
-  await context.writeArtifactJson('tauri-run.json', { runRoot: run.runRoot });
+  await context.writeArtifactJson('electron-run.json', { runRoot: run.runRoot });
   try { await waitFor(async () => {
     activeSession = await readSession(sessionPath);
-    if (activeSession?.status === 'stopped') throw new Error(activeSession.startupError || activeSession.verificationError || 'Tauri stopped before readiness');
-    if (child.exitCode !== null) throw new Error('Tauri controller exited before readiness');
+    if (activeSession?.status === 'stopped') throw new Error(activeSession.startupError || activeSession.verificationError || 'Electron stopped before readiness');
+    if (child.exitCode !== null) throw new Error('Electron controller exited before readiness');
     if (!activeSession?.controlUrl) return null;
     const status = await request('/status');
     return status.ready ? status : null;
-  }, options.timeoutMs || 45_000, 'real Tauri Gateway readiness', 100, context.abortSignal); }
+  }, options.timeoutMs || 45_000, 'real Electron Gateway readiness', 100, context.abortSignal); }
   catch (error) { startupFailed = true; throw error; }
   return {
     runRoot: run.runRoot,
@@ -104,7 +104,7 @@ export async function startOwnedAiVerify(context, options) {
     capture: async name => {
       const result = await request('/command', { action: 'capture', selector: 'body' });
       const prefix = 'data:image/png;base64,';
-      if (typeof result.value !== 'string' || !result.value.startsWith(prefix)) throw new Error('Invalid Tauri capture');
+      if (typeof result.value !== 'string' || !result.value.startsWith(prefix)) throw new Error('Invalid Electron capture');
       const output = context.pathInArtifacts(name);
       await writeFile(output, Buffer.from(result.value.slice(prefix.length), 'base64'), { mode: 0o600 });
       return output;

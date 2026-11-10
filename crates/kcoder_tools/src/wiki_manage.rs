@@ -9,6 +9,9 @@ use serde_json::{Value, json};
 use std::path::Path;
 
 pub struct WikiManageTool;
+#[cfg(test)]
+#[path = "wiki_manage_directory_tests.rs"]
+mod directory_tests;
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Input {
@@ -62,6 +65,12 @@ impl Tool for WikiManageTool {
         false
     }
     async fn call(&self, input: Value, ctx: &ToolContext) -> Result<ToolOutput, ToolError> {
+        if ctx.native_wiki_read_access.is_some()
+            && !ctx.authorizes_native_tool_invocation(self, &input)
+        {
+            return Err(ToolError::Execution("WIKI_NATIVE_DISPATCH_REQUIRED".into()));
+        }
+        let native_input = input.clone();
         let input: Input =
             serde_json::from_value(input).map_err(|e| ToolError::InvalidInput(e.to_string()))?;
         if matches!(input.action.as_str(), "search" | "read") {
@@ -80,6 +89,23 @@ impl Tool for WikiManageTool {
                 json!({"action":action,"library":input.library,"query":input.query,"page":input.page,"revision":input.revision,"source":input.source,"chunk":input.chunk,"cursor":input.cursor}),
                 ctx,
             );
+        }
+        let native_guard = if let Some(access) = &ctx.native_wiki_read_access {
+            if input.action == "jobs" {
+                return access.read_jobs(native_input, ctx);
+            }
+            Some(access.begin_management(&native_input, ctx)?)
+        } else {
+            None
+        };
+        if let Some(guard) = native_guard {
+            verify_management_target(ctx)
+                .map_err(|error| ToolError::Execution(format!("{error:#}")))?;
+            let result = guard.execute(native_input, ctx);
+            // Check the actual source even after an execution error. A failed
+            // receipt does not prove that a transaction or object did not commit.
+            guard.finish(ctx)?;
+            return Ok(ToolOutput::text(guard.project_result(result?)?.to_string()));
         }
         let result = (|| -> Result<Value> {
             let settings = ctx
@@ -126,6 +152,69 @@ impl Tool for WikiManageTool {
         .map_err(|e| ToolError::Execution(format!("{e:#}")))?;
         Ok(ToolOutput::text(result.to_string()))
     }
+}
+
+fn verify_management_target(ctx: &ToolContext) -> Result<()> {
+    let settings = ctx
+        .settings_persistence_path
+        .as_deref()
+        .context("Wiki target settings unavailable")?;
+    require_enabled(settings)?;
+    let root = settings
+        .parent()
+        .context("Wiki profile unavailable")?
+        .canonicalize()?
+        .join("knowledge");
+    if let Some(sandbox) = ctx.sandbox.as_deref() {
+        for path in [
+            &root,
+            &root.join("state.sqlite"),
+            &root.join("state.objects"),
+        ] {
+            sandbox
+                .check_path(path, true)
+                .map_err(|error| anyhow::anyhow!("Wiki write rejected by sandbox: {error}"))?;
+        }
+    }
+    Ok(())
+}
+
+/// The host supplies an owned native catalog and its authenticated current data
+/// scope. This helper grants no permission and never resolves a filesystem path.
+pub fn execute_native_catalog(
+    input: Value,
+    catalog: &mut KnowledgeCatalog,
+    scope: &KnowledgeScope,
+) -> Result<Value> {
+    execute(catalog, scope, serde_json::from_value(input)?)
+}
+
+/// Rendering on a host-verified existing read-only catalog; this supplies no authority.
+pub fn read_jobs_observed(
+    input: Value,
+    catalog: &mut KnowledgeCatalog,
+    current: &KnowledgeScope,
+    original: &KnowledgeScope,
+) -> Result<ToolOutput> {
+    let input: Input = serde_json::from_value(input)?;
+    ensure!(input.action == "jobs", "Wiki jobs action required");
+    let scope = if let Some(library) = &input.library {
+        match catalog.read(current, library) {
+            Ok(_) => current,
+            Err(error) if error.to_string() == "knowledge library not found" => {
+                catalog.read(original, library)?;
+                original
+            }
+            Err(error) => return Err(error),
+        }
+    } else if catalog.list(current, None, 1)?.is_empty() {
+        original
+    } else {
+        current
+    };
+    Ok(ToolOutput::text(
+        execute(catalog, scope, input)?.to_string(),
+    ))
 }
 fn require_enabled(path: &Path) -> Result<()> {
     let document = kcoder_config::read_settings_file(path)?;

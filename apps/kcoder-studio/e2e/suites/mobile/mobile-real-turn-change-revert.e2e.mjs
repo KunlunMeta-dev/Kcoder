@@ -93,7 +93,8 @@ await runE2E(import.meta.url, {
   await createTask(page, "CREATE_REAL_TURN_ARTIFACT");
   const backendProvenance = await recordBackendProvenance(context, gateway, configuredBackendBefore, mobileWeb, "turn-change-revert");
   await waitFor(() => exists(changedFile), 30_000, "模型工具创建回合文件");
-  await page.getByTestId("workspace-tab-switcher").click();
+  await page.getByTestId("task-more").click();
+  await page.getByTestId("task-menu-workspace").click();
   await page.getByTestId("workspace-tab-changes").click();
   await page.getByTestId("changes-mode-turn").click();
   await page.getByLabel("撤销本回合变更").waitFor({ state: "visible", timeout: 30_000 });
@@ -115,7 +116,8 @@ await runE2E(import.meta.url, {
   assert.ok(deviceCommands.includes("turn_file_changes_revert"), "撤销必须真实调用服务端 artifact revert");
 
   await page.reload({ waitUntil: "domcontentloaded" });
-  await page.locator('[data-testid="workspace-tab-switcher"]:visible').click();
+  await page.getByTestId("task-more").click();
+  await page.getByTestId("task-menu-workspace").click();
   await page.locator('[data-testid="workspace-tab-changes"]:visible').click();
   await page.locator('[data-testid="changes-mode-turn"]:visible').click();
   await page.getByText("已撤销", { exact: true }).waitFor({ state: "visible", timeout: 30_000 });

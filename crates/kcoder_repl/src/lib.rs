@@ -1,8 +1,8 @@
 use anyhow::{Context, Result};
 use kcoder_config::Settings;
 use kcoder_engine::{
-    BackgroundJobEvent, DiscoveredModelGroup, EngineEvent, QueryEngine, TurnSteerError,
-    TurnSteerSession, WriteInputPreview,
+    BackgroundJobEvent, DiscoveredModelGroup, EngineEvent, QueryEngine, TurnSteerSession,
+    WriteInputPreview,
 };
 mod active_turn;
 mod attachments;
@@ -19,18 +19,25 @@ mod external_editor;
 mod frame_rate_limiter;
 mod frame_requester;
 mod history_cell;
+mod input_admission;
 mod input_history;
+mod input_image_pool;
 mod insert_history;
+#[cfg(test)]
+#[path = "../../kcoder_config/src/test_isolated_profile.rs"]
+mod isolated_test_profile;
 mod key_hint;
 mod line_truncation;
 mod markdown;
 mod message_blocks;
 mod message_render;
+mod migration_terminal;
 mod motion;
 mod navigation_render;
 mod overlay_presenter;
 mod overlays;
 mod path_preview;
+#[path = "render.rs"]
 mod render;
 mod render_cache;
 mod repl_layout;
@@ -68,8 +75,12 @@ mod transcript_store;
 mod transcript_viewport;
 mod transcript_window;
 mod turn_completion;
+mod web_sources;
 mod widgets;
 mod windows_compat;
+mod work_control;
+mod work_input;
+mod work_observation;
 mod write_preview;
 use active_turn::{ActiveCell, ActiveEntry, ToolStatus};
 use attachments::{
@@ -162,8 +173,8 @@ use terminal_modes::{
 #[cfg(test)]
 use text_caps::TUI_TRUNCATION_MARKER;
 use text_caps::{
-    ACTIVE_TOOL_INPUT_MAX_CHARS, ACTIVE_TURN_TEXT_MAX_CHARS, append_capped_tui_text,
-    capped_tui_text,
+    ACTIVE_TOOL_INPUT_MAX_CHARS, ACTIVE_TURN_TEXT_MAX_CHARS, TuiTextCapState,
+    append_capped_tui_text, capped_tui_text,
 };
 use theme::KCODER_UI_THEME;
 #[cfg(test)]
@@ -181,9 +192,11 @@ use tool_format::{
 use tool_transcript::*;
 use tracing::{debug, warn};
 use transcript_reflow::TranscriptReflowState;
+#[cfg(test)]
+use transcript_selection::transcript_visible_rows_for_selection;
 use transcript_selection::{
     TranscriptSelection, TranscriptSelectionPoint, render_transcript_selection_highlight,
-    selected_text_from_visible_rows, transcript_visible_rows_for_selection,
+    selected_text_from_visible_rows,
 };
 pub use transcript_store::TranscriptStore;
 #[cfg(test)]
@@ -229,6 +242,7 @@ mod app_lifecycle;
 mod app_modals;
 mod app_overlays;
 mod app_queue;
+mod app_scroll_to_bottom;
 mod app_selection;
 mod app_transcript_render;
 mod app_transcript_window;

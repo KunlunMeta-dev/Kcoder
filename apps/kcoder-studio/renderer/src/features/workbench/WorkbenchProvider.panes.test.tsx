@@ -34,7 +34,7 @@ const localExecutorMocks = vi.hoisted(() => ({
   subscribeLocalExecutorEvents: vi.fn(),
 }))
 
-vi.mock('@/tauri/localExecutor', () => ({
+vi.mock('@/host/localExecutor', () => ({
   connectLocalExecutorToBackend: localExecutorMocks.connectLocalExecutorToBackend,
   disconnectLocalExecutorFromBackend: localExecutorMocks.disconnectLocalExecutorFromBackend,
   ensureLocalExecutorStarted: localExecutorMocks.ensureLocalExecutorStarted,
@@ -65,7 +65,7 @@ import {
   RuntimeTopLevelStreamLifecycleProbe,
   StartSkillChatProbe,
   WorkbenchProbeSessionProvider,
-  clearTauriRuntime,
+  clearGatewayRuntime,
   createDevice,
   createProject,
   createRuntimeGoal,
@@ -78,13 +78,13 @@ import {
   renderStrictWorkbench,
   renderWorkbench,
   renderWorkbenchWithDefaultServices,
-  setTauriRuntime,
+  setGatewayRuntime,
 } from './WorkbenchProvider.test-support'
 describe('WorkbenchProvider runtime tasks', () => {
   beforeEach(() => {
     vi.useRealTimers()
     delete window.__KCODER_STUDIO_RUNTIME_CONFIG__
-    clearTauriRuntime()
+    clearGatewayRuntime()
     window.history.pushState({}, '', '/')
     localStorage.clear()
     sessionStorage.clear()
@@ -133,7 +133,7 @@ describe('WorkbenchProvider runtime tasks', () => {
         },
         createResponseApiStreamState()
       )
-      globalThis.dispatchEvent(new Event('wework-runtime-plan-updated'))
+      globalThis.dispatchEvent(new Event('kcoder-runtime-plan-updated'))
     })
 
     await waitFor(() =>

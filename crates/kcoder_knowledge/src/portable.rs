@@ -655,6 +655,7 @@ mod tests {
     // Model-independent persistence boundary: exact UTF-8 bytes, CAS and history.
     #[test]
     fn large_pages_roundtrip_snapshot_and_markdown_at_the_shared_byte_limit() -> Result<()> {
+        let _fixture = crate::test_support::large_storage_fixture();
         let temp = tempfile::tempdir()?;
         let mut catalog = KnowledgeCatalog::open(&temp.path().join("wiki.sqlite"))?;
         let scope = KnowledgeScope::from_authenticated_host("owner", "local")?;

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { lstat, mkdir, mkdtemp, readFile, readlink, readdir, realpath, rm, stat, symlink, writeFile } from 'node:fs/promises';
-import { join, relative } from 'node:path';
+import { dirname, join, relative } from 'node:path';
 import { tmpdir } from 'node:os';
 import test from 'node:test';
 import {
@@ -11,11 +11,21 @@ import {
   createGradleEnvironment,
   parseArgs,
   parseBadging,
+  parseSignerCertificate,
   preflight,
   runCommand,
   replaceReleaseSigningConfig,
   validateApkMetadata,
 } from './package_mobile_android.mjs';
+
+test('signer fingerprint accepts legacy and Build Tools 37 reports without accepting missing or truncated digests', () => {
+  const digest = '4f8b7708719f0134f0881a61deba8fef0cb22f1be34885924f9b4d9f263c344c';
+  for (const prefix of ['Signer #1', 'V2 Signer:', 'V3 Signer:', 'V3.1 Signer:']) {
+    assert.equal(parseSignerCertificate(`${prefix} certificate SHA-256 digest: ${digest}\n`), digest);
+  }
+  assert.throws(() => parseSignerCertificate('Verifies\n'), /valid signer/);
+  assert.throws(() => parseSignerCertificate('V2 Signer: certificate SHA-256 digest: abcd'), /valid signer/);
+});
 
 async function fixture(t) {
   const root = await mkdtemp(join(tmpdir(), 'kcoder-mobile-package-'));
@@ -33,8 +43,15 @@ async function packageFixture(root) {
   await mkdir(join(dependencies, 'esbuild/bin'), { recursive: true });
   await mkdir(join(dependencies, 'tool/bin'), { recursive: true });
   await mkdir(join(dependencies, '.bin'), { recursive: true });
-  await writeFile(join(mobile, 'package.json'), JSON.stringify({ version: '1.2.3' }));
-  await writeFile(join(mobile, 'app.json'), JSON.stringify({ expo: { android: { package: 'dev.test.mobile' } } }));
+  const studio = join(root, 'apps/kcoder-studio');
+  const version = '1.2.3';
+  for (const file of ['package.json', 'desktop/gateway-package.json', 'renderer/package.json', 'mobile/package.json']) {
+    const path = join(studio, file);
+    await mkdir(dirname(path), { recursive: true });
+    await writeFile(path, JSON.stringify({ version }));
+  }
+  await writeFile(join(mobile, 'package-lock.json'), JSON.stringify({ version, packages: { '': { version } } }));
+  await writeFile(join(mobile, 'app.json'), JSON.stringify({ expo: { version, android: { package: 'dev.test.mobile' } } }));
   await writeFile(join(mobile, 'src/app.ts'), 'export const app = true;');
   await writeFile(join(mobile, '.env.production'), 'MOBILE_SECRET=must-not-copy');
   await mkdir(join(mobile, 'android/app'), { recursive: true });
@@ -140,11 +157,17 @@ test('preflight accepts a shared source tree without a package manifest and only
   const args = parseArgs(['--version-code', '42', '--keystore', keystore, '--key-alias', 'release', '--sdk', sdk, '--java-home', javaHome]);
   const config = await preflight(args, { KCODER_ANDROID_KEYSTORE_PASSWORD: 'never-return-this-value' }, root);
   assert.equal(config.appId, 'dev.test.mobile');
+  assert.equal(config.appVersion, '1.2.3');
   assert.equal(config.versionCode, 42);
   assert.equal(config.shared, sources.shared);
   assert.equal(config.passwordsConfigured, true);
   assert.ok(!Object.values(config).includes('never-return-this-value'));
   assert.equal(await readFile(keystore, 'utf8'), 'opaque-keystore-bytes');
+  const missingKeystore = join(root, 'missing-release.p12');
+  await assert.rejects(preflight({ ...args, keystore: missingKeystore }, {
+    KCODER_ANDROID_KEYSTORE_PASSWORD: 'never-return-this-value',
+  }, root), /existing regular file/);
+  await assert.rejects(stat(missingKeystore), { code: 'ENOENT' });
 });
 
 test('private staging excludes env and old native output while copying dependency links inside the new tree', async t => {
@@ -206,10 +229,12 @@ test('APK contract verifies version, release manifest, arm64-only native code, a
   const manifest = `A: android:debuggable(0x0101000f)=(type 0x12)0x0\nA: android:usesCleartextTraffic(0x010104ec)=(type 0x12)0x0`;
   const entries = 'assets/index.android.bundle\nlib/arm64-v8a/libreactnative.so\n';
   const hermesHeader = Buffer.from('c61fbc03c103191f', 'hex');
-  assert.equal(validateApkMetadata({ badging, manifest, entries, hermesHeader, expectedVersionCode: 42, expectedPackage: 'dev.test.mobile' }).targetSdk, 35);
-  assert.throws(() => validateApkMetadata({ badging, manifest, entries, hermesHeader, expectedVersionCode: 43, expectedPackage: 'dev.test.mobile' }), /versionCode/);
-  assert.throws(() => validateApkMetadata({ badging, manifest: manifest.replace('0x0\n', '0xffffffff\n'), entries, hermesHeader, expectedVersionCode: 42, expectedPackage: 'dev.test.mobile' }), /debuggable/);
-  assert.throws(() => validateApkMetadata({ badging, manifest: manifest.replace('android:usesCleartextTraffic(0x010104ec)=(type 0x12)0x0', 'android:usesCleartextTraffic(0x010104ec)=(type 0x12)0xffffffff'), entries, hermesHeader, expectedVersionCode: 42, expectedPackage: 'dev.test.mobile' }), /cleartext/);
-  assert.throws(() => validateApkMetadata({ badging, manifest, entries: entries + 'lib/x86_64/libreactnative.so\n', hermesHeader, expectedVersionCode: 42, expectedPackage: 'dev.test.mobile' }), /non-arm64/);
-  assert.throws(() => validateApkMetadata({ badging, manifest, entries, hermesHeader: Buffer.alloc(8), expectedVersionCode: 42, expectedPackage: 'dev.test.mobile' }), /Hermes bytecode/);
+  const checks = { badging, manifest, entries, hermesHeader, expectedVersion: '1.2.3', expectedVersionCode: 42, expectedPackage: 'dev.test.mobile' };
+  assert.equal(validateApkMetadata(checks).targetSdk, 35);
+  assert.throws(() => validateApkMetadata({ ...checks, expectedVersion: '1.2.4' }), /versionName/);
+  assert.throws(() => validateApkMetadata({ ...checks, expectedVersionCode: 43 }), /versionCode/);
+  assert.throws(() => validateApkMetadata({ ...checks, manifest: manifest.replace('0x0\n', '0xffffffff\n') }), /debuggable/);
+  assert.throws(() => validateApkMetadata({ ...checks, manifest: manifest.replace('android:usesCleartextTraffic(0x010104ec)=(type 0x12)0x0', 'android:usesCleartextTraffic(0x010104ec)=(type 0x12)0xffffffff') }), /cleartext/);
+  assert.throws(() => validateApkMetadata({ ...checks, entries: entries + 'lib/x86_64/libreactnative.so\n' }), /non-arm64/);
+  assert.throws(() => validateApkMetadata({ ...checks, hermesHeader: Buffer.alloc(8) }), /Hermes bytecode/);
 });

@@ -11,10 +11,9 @@ import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { execFile, spawn } from 'node:child_process'
 import { basename, dirname, extname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { buildAiVerifyEnvironment } from './ai-verify-environment.mjs'
 
 const scriptDir = dirname(fileURLToPath(import.meta.url))
-const weworkDir = resolve(scriptDir, '..')
+const rendererDir = resolve(scriptDir, '..')
 const defaultTimeoutMs = 30_000
 const startupTimeoutMs = 60_000
 const commandResultGraceMs = 5_000
@@ -30,8 +29,8 @@ function usage() {
   pnpm --filter kcoder-studio-renderer ai:verify <capture|snapshot|click|close-to-tray|drag|drop-file|drop-paths|fill|hover|navigate|paste-paths|pointer-move|press|select-text|wait-for|text|status|stop> --session PATH [options]
 
 Options:
-  --gateway true            Verify current Gateway UI in an isolated Linux Tauri/Xvfb session
-  --tauri-bin PATH          Explicit prebuilt debug Tauri binary (Gateway mode)
+  --gateway true            Verify current Gateway UI in an isolated Linux Electron/Xvfb session
+  --electron-bin PATH          Explicit prebuilt Electron binary (Gateway mode)
   --kcoder-bin PATH         Explicit real KCoder binary (Gateway mode)
   --renderer-root PATH      Current built renderer directory (Gateway mode)
   --drop-save-reply true    Drop one committed provider save reply in the owned test Gateway
@@ -491,7 +490,7 @@ async function runServer(sessionPath, token) {
       app = gatewayVerification.app
       app.once('exit', () => {
         if (!gatewayContext.finishing && !gatewayContext.finished) {
-          gatewayFailure ??= new Error('Owned Tauri process exited')
+          gatewayFailure ??= new Error('Owned Electron process exited')
           void finishGatewaySession().finally(() => process.exit(1))
         }
       })
@@ -506,45 +505,7 @@ async function runServer(sessionPath, token) {
     }
     return
   }
-  const log = join(session.directory, 'app.log')
-  const executorHome = join(session.directory, 'executor-home')
-  const codexHome = join(executorHome, 'codex')
-  const nativeCodexHome = session.verifyCodexHomeInitialization
-    ? join(session.directory, 'native-codex')
-    : undefined
-  await mkdir(codexHome, { recursive: true })
-  if (nativeCodexHome) {
-    await mkdir(nativeCodexHome, { recursive: true })
-    await writeFile(join(nativeCodexHome, 'auth.json'), '{"test":"isolated-auth"}\n')
-    await writeFile(join(nativeCodexHome, 'config.toml'), 'model = "gpt-5"\n')
-  }
-  app = spawn('bash', ['scripts/dev-mac-app.sh'], {
-    cwd: weworkDir,
-    detached: true,
-    env: buildAiVerifyEnvironment(process.env, {
-      controlUrl,
-      token,
-      codexHome,
-      nativeCodexHome,
-      verifyCodexHomeInitialization: session.verifyCodexHomeInitialization,
-      deviceId: session.deviceId,
-      appIdentifier: `dev.kcoder.studio.ai-verify.${session.deviceId.replaceAll('-', '')}`,
-      executorHome,
-      sessionDirectory: session.directory,
-    }),
-    stdio: ['ignore', 'pipe', 'pipe'],
-  })
-  await writeFile(sessionPath, `${JSON.stringify({ ...updated, launcherPid: app.pid }, null, 2)}\n`)
-  for (const stream of [app.stdout, app.stderr])
-    stream?.on(
-      'data',
-      chunk => void import('node:fs/promises').then(({ appendFile }) => appendFile(log, chunk))
-    )
-  app.once('exit', code => {
-    for (const waiter of pending.values())
-      waiter.reject(new Error(`KCoder Studio exited with code ${code ?? 'unknown'}`))
-    pending.clear()
-  })
+  throw new Error('Native verification requires --gateway true and explicit Electron, KCoder and renderer inputs')
 }
 
 async function request(session, token, path, method = 'GET', body) {
@@ -578,6 +539,7 @@ async function main() {
     return runServer(options.session, session.token)
   }
   if (command === 'start') {
+    if (options.gateway !== 'true') throw new Error('Native verification requires --gateway true and explicit Electron, KCoder and renderer inputs')
     const startupTimeout = resolveStartupTimeout(options.timeout)
     let gateway
     let gatewayRun
@@ -592,7 +554,7 @@ async function main() {
     const directory =
       gatewayRun?.runRoot ??
       join(
-        weworkDir,
+        rendererDir,
         'test-results',
         'ai-verify',
         `${new Date().toISOString().replace(/[:.]/g, '-')}-${process.pid}`

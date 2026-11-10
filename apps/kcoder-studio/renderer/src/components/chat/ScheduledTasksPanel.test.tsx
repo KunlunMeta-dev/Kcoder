@@ -6,6 +6,29 @@ import { fetchGatewayServers } from '@/kcoder/gatewayRpc'
 import type { RuntimeWorkListResponse } from '@/types/api'
 import '@/i18n'
 
+const workflowViews = vi.hoisted(() => vi.fn())
+vi.mock('./ScheduledWorkflowTasks', async () => {
+  const { useState } = await import('react')
+  return {
+    ScheduledWorkflowTasks: function MockScheduledWorkflow(props: {
+      serverId: string
+      workspacePath: string
+      view: string
+      suspended?: boolean
+    }) {
+      const [draft, setDraft] = useState('')
+      workflowViews(props)
+      return (
+        <input
+          aria-label="workflow draft"
+          disabled={props.suspended}
+          value={draft}
+          onChange={event => setDraft(event.target.value)}
+        />
+      )
+    },
+  }
+})
 vi.mock('@/kcoder/gatewayRpc', () => ({ fetchGatewayServers: vi.fn() }))
 
 vi.mock('@/kcoder/gatewayAutomationApi', async importOriginal => ({
@@ -34,6 +57,7 @@ const work = {
 } as RuntimeWorkListResponse
 
 beforeEach(() => {
+  workflowViews.mockReset()
   vi.mocked(fetchGatewayServers)
     .mockReset()
     .mockResolvedValue([
@@ -53,6 +77,38 @@ function rebuiltWorkMetadata(): RuntimeWorkListResponse {
     })),
   }
 }
+
+test('selects the actual current host with a custom ID without manual target selection', async () => {
+  vi.mocked(fetchGatewayServers).mockResolvedValue([
+    { id: 'peer', label: 'Peer', transport: 'ssh' },
+    { id: 'custom-host', label: 'My workstation', transport: 'local' },
+  ])
+  const customWork: RuntimeWorkListResponse = {
+    ...work,
+    chats: [
+      { ...work.chats[0]!, deviceId: 'peer', workspacePath: '/peer' },
+      { ...work.chats[0]!, deviceId: 'custom-host', label: 'My workstation' },
+    ],
+  }
+  render(<ScheduledTasksPanel runtimeWork={customWork} currentHostId="custom-host" />)
+  await waitFor(() =>
+    expect(requestAutomation).toHaveBeenCalledWith(
+      { deviceId: 'custom-host', workspacePath: '/workspace' },
+      'cron/list'
+    )
+  )
+  expect(screen.getByTestId('automation-target')).toHaveValue('custom-host\0/workspace')
+  expect(screen.getByTestId('scheduled-task-kind')).toBeVisible()
+  fireEvent.change(screen.getByTestId('automation-target'), {
+    target: { value: 'peer\0/peer' },
+  })
+  await waitFor(() =>
+    expect(requestAutomation).toHaveBeenCalledWith(
+      { deviceId: 'peer', workspacePath: '/peer' },
+      'cron/list'
+    )
+  )
+})
 
 test('same execution scope metadata updates do not restart the list poll or issue duplicate requests', async () => {
   const view = render(<ScheduledTasksPanel runtimeWork={work} />)
@@ -304,7 +360,8 @@ test('history shows actual execution receipts and opens their target thread', as
   await waitFor(() => expect(requestAutomation).toHaveBeenCalled())
   fireEvent.click(screen.getByTestId('automation-tab-history'))
   await screen.findByTestId('automation-run')
-  expect(screen.getByRole('alert')).toHaveTextContent('provider unavailable')
+  expect(screen.getByTestId('automation-run')).toHaveTextContent('fixture')
+  expect(screen.queryByText('provider unavailable')).not.toBeInTheDocument()
   fireEvent.click(screen.getByTestId('automation-run-open-thread'))
   await waitFor(() =>
     expect(onOpenTask).toHaveBeenCalledWith(
@@ -315,4 +372,144 @@ test('history shows actual execution receipts and opens their target thread', as
       })
     )
   )
+})
+
+test('workflow creation and inbox share the selected target and preserve draft across same-owner refresh', async () => {
+  render(<ScheduledTasksPanel runtimeWork={work} />)
+  await waitFor(() => expect(requestAutomation).toHaveBeenCalledTimes(1))
+  fireEvent.change(screen.getByTestId('scheduled-task-kind'), { target: { value: 'workflow' } })
+  const draft = await screen.findByLabelText('workflow draft')
+  fireEvent.change(draft, { target: { value: 'Owned unsent workflow arguments' } })
+  expect(workflowViews).toHaveBeenLastCalledWith(
+    expect.objectContaining({ serverId: 'local', workspacePath: '/workspace', view: 'create' })
+  )
+  fireEvent(window, new CustomEvent('kcoder:servers-changed', { detail: { targetId: 'local' } }))
+  expect(screen.getByLabelText('workflow draft')).toHaveValue('Owned unsent workflow arguments')
+  await waitFor(() => expect(screen.getByLabelText('workflow draft')).not.toBeDisabled())
+  expect(screen.getByLabelText('workflow draft')).toHaveValue('Owned unsent workflow arguments')
+  fireEvent.click(screen.getByTestId('automation-tab-inbox'))
+  await waitFor(() =>
+    expect(workflowViews).toHaveBeenLastCalledWith(
+      expect.objectContaining({ serverId: 'local', workspacePath: '/workspace', view: 'inbox' })
+    )
+  )
+  expect(
+    vi.mocked(requestAutomation).mock.calls.some(([, method]) => method === 'cron/create')
+  ).toBe(false)
+})
+
+test('ordinary scheduled task creation does not present budget settings', async () => {
+  render(<ScheduledTasksPanel runtimeWork={work} />)
+  await waitFor(() => expect(requestAutomation).toHaveBeenCalledTimes(1))
+  expect(screen.getByTestId('automation-prompt')).toBeInTheDocument()
+  for (const id of [
+    'subscription-tokens',
+    'subscription-runtime',
+    'period-budget-enabled',
+    'period-budget-calls',
+    'period-budget-observation',
+  ])
+    expect(screen.queryByTestId(id)).not.toBeInTheDocument()
+  expect(
+    vi.mocked(requestAutomation).mock.calls.some(([, method]) => method === 'cron/create')
+  ).toBe(false)
+})
+
+test('defaults to the local gateway workspace even before the work list contains it', async () => {
+  vi.mocked(fetchGatewayServers).mockResolvedValue([
+    { id: 'remote', transport: 'ssh', label: 'Remote', workspacePath: '/remote' },
+    { id: 'host-42', transport: 'local', label: 'Custom local name', workspacePath: '/home/local' },
+  ] as never)
+  const empty: RuntimeWorkListResponse = { projects: [], chats: [], totalTasks: 0 }
+  render(<ScheduledTasksPanel runtimeWork={empty} />)
+  await waitFor(() =>
+    expect(screen.getByTestId('automation-target')).toHaveValue('host-42\0/home/local')
+  )
+  expect(screen.getByTestId('automation-target')).toHaveDisplayValue('当前计算机')
+  await waitFor(() =>
+    expect(requestAutomation).toHaveBeenCalledWith(
+      { deviceId: 'host-42', workspacePath: '/home/local' },
+      'cron/list'
+    )
+  )
+})
+
+test('does not select a remote target when the local host is missing', async () => {
+  vi.mocked(fetchGatewayServers).mockResolvedValue([
+    { id: 'remote', transport: 'ssh', label: 'Remote', workspacePath: '/remote' },
+  ] as never)
+  const remoteOnly: RuntimeWorkListResponse = {
+    projects: [],
+    chats: [{ ...work.chats[0]!, deviceId: 'remote', workspacePath: '/remote' }],
+    totalTasks: 0,
+  }
+  render(<ScheduledTasksPanel runtimeWork={remoteOnly} />)
+  await waitFor(() => expect(fetchGatewayServers).toHaveBeenCalled())
+  expect(screen.getByTestId('automation-target')).toHaveValue('')
+  expect(screen.getByTestId('automation-target')).toHaveDisplayValue('当前计算机暂不可用')
+  expect(requestAutomation).not.toHaveBeenCalled()
+})
+
+test('a delayed local lookup never overrides an explicit remote choice', async () => {
+  let finish!: (value: Awaited<ReturnType<typeof fetchGatewayServers>>) => void
+  const delayed = new Promise<Awaited<ReturnType<typeof fetchGatewayServers>>>(resolve => {
+    finish = resolve
+  })
+  const servers = [
+    { id: 'remote', transport: 'ssh', label: 'Remote', workspacePath: '/remote' },
+    { id: 'host', transport: 'local', label: 'Host', workspacePath: '/local' },
+  ] as never
+  vi.mocked(fetchGatewayServers)
+    .mockReset()
+    .mockImplementationOnce(() => delayed)
+    .mockResolvedValue(servers)
+  const remoteOnly: RuntimeWorkListResponse = {
+    projects: [],
+    chats: [{ ...work.chats[0]!, deviceId: 'remote', workspacePath: '/remote' }],
+    totalTasks: 0,
+  }
+  render(<ScheduledTasksPanel runtimeWork={remoteOnly} />)
+  fireEvent.change(screen.getByTestId('automation-target'), {
+    target: { value: 'remote\0/remote' },
+  })
+  await waitFor(() =>
+    expect(requestAutomation).toHaveBeenCalledWith(
+      { deviceId: 'remote', workspacePath: '/remote' },
+      'cron/list'
+    )
+  )
+  await act(async () => finish(servers))
+  expect(screen.getByTestId('automation-target')).toHaveValue('remote\0/remote')
+})
+
+test('recognizes a custom local host from Gateway metadata even without a configured default workspace', async () => {
+  vi.mocked(fetchGatewayServers).mockResolvedValue([
+    { id: 'peer', transport: 'ssh', label: 'Remote' },
+    { id: 'host-42', transport: 'local', label: 'Custom local name' },
+  ] as never)
+  const localWork: RuntimeWorkListResponse = {
+    projects: [],
+    chats: [{ ...work.chats[0]!, deviceId: 'host-42', workspacePath: '/work' }],
+    totalTasks: 0,
+  }
+  render(<ScheduledTasksPanel runtimeWork={localWork} />)
+  await waitFor(() => expect(screen.getByTestId('automation-target')).toHaveValue('host-42\0/work'))
+  expect(screen.getByTestId('automation-target')).toHaveDisplayValue('当前计算机')
+  await waitFor(() =>
+    expect(requestAutomation).toHaveBeenCalledWith(
+      { deviceId: 'host-42', workspacePath: '/work' },
+      'cron/list'
+    )
+  )
+})
+
+test('an explicitly known current host prevents remote labels from appearing as the local computer', async () => {
+  const { automationTargets } = await import('@/kcoder/gatewayAutomationApi')
+  const mixed = { ...work, chats: [
+    { ...work.chats[0]!, deviceId: 'peer', label: 'Remote', labelKey: 'currentComputer' },
+    { ...work.chats[0]!, deviceId: 'host', label: 'Host', workspacePath: '/host' },
+  ] } as RuntimeWorkListResponse
+  const targets = automationTargets(mixed, '当前计算机', 'host')
+  expect(targets.find(item => item.address.deviceId === 'host')?.label).toBe('当前计算机')
+  expect(targets.find(item => item.address.deviceId === 'peer')?.label).toBe('Remote · peer')
 })

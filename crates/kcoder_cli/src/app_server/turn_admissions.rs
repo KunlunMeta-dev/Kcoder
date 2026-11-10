@@ -1,6 +1,12 @@
 //! Accepted turn identities are distinct from the count of prompts admitted by Hooks.
-use super::{QueryEngine, TurnOutcomeArtifact, hex_sha256, transcript_artifact_journal};
+use crate::receipts::read_records;
 use anyhow::{Context, Result, ensure};
+use kcoder_cli_storage::{
+    private_files::{hex_sha256, write_private_artifact_file},
+    transcript_artifact_journal,
+};
+use kcoder_engine::QueryEngine;
+use kcoder_transcript::{TranscriptToolContexts, TurnOutcomeArtifact};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, io::Read};
 
@@ -10,15 +16,45 @@ struct Sequence {
     thread_id: String,
     high_water: usize,
 }
-#[derive(Serialize, Deserialize)]
-pub(super) struct Binding {
-    pub version: u8,
-    pub thread_id: String,
-    pub turn_id: String,
-    pub user_message_uuid: String,
+use kcoder_transcript_observation::Binding;
+
+/// Project the committed user input through the same visible-history boundary.
+/// This is an observation of the original turn, never another input admission.
+pub fn user_item(
+    engine: &QueryEngine,
+    turn_id: &str,
+    client_message_id: Option<&str>,
+) -> Option<kcoder_app_protocol::Item> {
+    let id = engine
+        .state
+        .latest_message_history_id_matching(kcoder_engine::agent::is_real_user_message)?;
+    let message = engine.state.find_latest_message_map(|message| {
+        kcoder_engine::agent::is_real_user_message(message).then(|| message.clone())
+    })?;
+    let entry = kcoder_state::HistoryEntry {
+        session_id: engine.session_id(),
+        timestamp_ms: chrono::Utc::now().timestamp_millis().max(0) as u64,
+        uuid: Some(id.clone()),
+        parent_uuid: None,
+        history_attempt: None,
+        web_sources: Vec::new(),
+        message,
+    };
+    let mut visible = kcoder_transcript::history_entry_thread_message(
+        0,
+        entry,
+        Some(turn_id.into()),
+        &TranscriptToolContexts::new(),
+    )?;
+    visible.client_message_id = client_message_id.map(str::to_owned);
+    Some(kcoder_app_protocol::Item {
+        id,
+        kind: kcoder_app_protocol::ItemKind::UserMessage,
+        content: serde_json::to_value(visible).ok()?,
+    })
 }
 
-pub(super) fn latest(engine: &QueryEngine, thread_id: &str, legacy_floor: usize) -> Result<usize> {
+pub fn latest(engine: &QueryEngine, thread_id: &str, legacy_floor: usize) -> Result<usize> {
     let root = engine
         .session_storage_dir_for(thread_id)
         .join("turn-admissions");
@@ -40,7 +76,7 @@ pub(super) fn latest(engine: &QueryEngine, thread_id: &str, legacy_floor: usize)
         }
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
             // Migrate old failed Hook turns too: they never contributed a model user message.
-            let records = super::turn_receipts::read_records::<TurnOutcomeArtifact>(
+            let records = read_records::<TurnOutcomeArtifact>(
                 &engine
                     .session_storage_dir_for(thread_id)
                     .join("turn-outcomes"),
@@ -65,7 +101,7 @@ pub(super) fn latest(engine: &QueryEngine, thread_id: &str, legacy_floor: usize)
     }
 }
 
-pub(super) fn accept(engine: &QueryEngine, thread_id: &str, number: usize) -> Result<()> {
+pub fn accept(engine: &QueryEngine, thread_id: &str, number: usize) -> Result<()> {
     let root = engine
         .session_storage_dir_for(thread_id)
         .join("turn-admissions");
@@ -78,16 +114,11 @@ pub(super) fn accept(engine: &QueryEngine, thread_id: &str, number: usize) -> Re
         &root,
         thread_id,
         transcript_artifact_journal::Kind::TurnAdmissions,
-        || {
-            super::write_private_artifact_file(
-                &root.join("sequence"),
-                &serde_json::to_vec(&sequence)?,
-            )
-        },
+        || write_private_artifact_file(&root.join("sequence"), &serde_json::to_vec(&sequence)?),
     )
 }
 
-pub(super) fn bind_user(engine: &QueryEngine, thread_id: &str, turn_id: &str) -> Result<()> {
+pub fn bind_user(engine: &QueryEngine, thread_id: &str, turn_id: &str) -> Result<()> {
     let user_message_uuid = engine
         .state
         .latest_message_history_id_matching(kcoder_engine::agent::is_real_user_message)
@@ -106,7 +137,7 @@ pub(super) fn bind_user(engine: &QueryEngine, thread_id: &str, turn_id: &str) ->
         thread_id,
         transcript_artifact_journal::Kind::TurnAdmissions,
         || {
-            super::write_private_artifact_file(
+            write_private_artifact_file(
                 &root.join(format!("{}.json", hex_sha256(turn_id.as_bytes()))),
                 &serde_json::to_vec(&binding)?,
             )
@@ -114,8 +145,8 @@ pub(super) fn bind_user(engine: &QueryEngine, thread_id: &str, turn_id: &str) ->
     )
 }
 
-pub(super) fn bindings(engine: &QueryEngine, thread_id: &str) -> Result<HashMap<String, String>> {
-    let records = super::turn_receipts::read_records::<Binding>(
+pub fn bindings(engine: &QueryEngine, thread_id: &str) -> Result<HashMap<String, String>> {
+    let records = read_records::<Binding>(
         &engine
             .session_storage_dir_for(thread_id)
             .join("turn-admissions"),
@@ -138,10 +169,33 @@ pub(super) fn bindings(engine: &QueryEngine, thread_id: &str) -> Result<HashMap<
     Ok(result)
 }
 
+pub fn committed_user_uuid(engine: &QueryEngine, thread_id: &str, turn_id: &str) -> Result<String> {
+    let root = engine
+        .session_storage_dir_for(thread_id)
+        .join("turn-admissions");
+    let directory = kcoder_config::PrivateDirectory::open_existing(&root)?;
+    let name = format!("{}.json", hex_sha256(turn_id.as_bytes()));
+    let mut bytes = Vec::new();
+    directory
+        .open_single_link_regular_file(std::ffi::OsStr::new(&name))?
+        .take(8193)
+        .read_to_end(&mut bytes)?;
+    ensure!(bytes.len() <= 8192, "turn admission binding exceeds limit");
+    let record: Binding = serde_json::from_slice(&bytes)?;
+    ensure!(
+        record.version == 1
+            && record.thread_id == thread_id
+            && record.turn_id == turn_id
+            && !record.user_message_uuid.is_empty(),
+        "invalid turn admission binding"
+    );
+    Ok(record.user_message_uuid)
+}
+
 /// Resolve durable admission IDs before truncating at the next real-user boundary.
 /// Only an unbound legacy prefix may use positional IDs. A removed modern UUID
 /// must never fall back to a new prompt now occupying its old position.
-pub(super) fn fork_transcript(
+pub fn fork_transcript(
     entries: &[kcoder_state::HistoryEntry],
     admitted: &HashMap<String, String>,
     turn_id: &str,
@@ -200,6 +254,8 @@ mod fork_tests {
     use super::*;
     fn entry(uuid: &str, message: kcoder_types::Message) -> kcoder_state::HistoryEntry {
         kcoder_state::HistoryEntry {
+            web_sources: Vec::new(),
+            history_attempt: None,
             session_id: "fixture".into(),
             timestamp_ms: 0,
             uuid: Some(uuid.into()),

@@ -16,7 +16,7 @@ async fn task_workspace_must_match_the_app_server_process() {
 }
 
 pub(super) fn catalog_list_test_engine(cwd: &Path) -> QueryEngine {
-    let settings = kcoder_config::Settings::default();
+    let settings = crate::test_fixtures::settings_with_default_provider();
     let owner = Arc::new(kcoder_config::create_private_temp_dir("catalog-list-test").unwrap());
     let services = kcoder_engine::WorkspaceRuntimeServices::new(cwd, "catalog-list-test")
         .with_private_client_storage(owner);
@@ -36,6 +36,42 @@ pub(super) fn catalog_list_test_engine(cwd: &Path) -> QueryEngine {
         services,
     )
     .unwrap()
+}
+
+#[test]
+fn persisted_task_configuration_comes_from_its_own_state_instead_of_the_bootstrap_engine() {
+    let workspace = tempfile::tempdir().unwrap();
+    let history = tempfile::tempdir().unwrap();
+    let engine = catalog_list_test_engine(workspace.path());
+    let task = kcoder_state::AppState::new(workspace.path());
+    let path = history.path().join(format!("{}.jsonl", task.session_id()));
+    task.with_history_path(&path);
+    let expert: kcoder_types::agent_definition::AgentTaskBinding = serde_json::from_value(json!({
+        "owner":{"accountId":"owner","targetId":"target","workspaceId":null,"organizationId":null},
+        "definition":{"id":"original-expert","version":"1","definitionSha256":"a".repeat(64)},
+        "title":"Pinned expert","source":"expert","sourceId":null
+    }))
+    .unwrap();
+    task.bind_agent_definition(expert.clone()).unwrap();
+    task.set_model_selection(
+        kcoder_types::ModelSelectionMode::Explicit,
+        Some("Provider::Flash".into()),
+    )
+    .unwrap();
+    task.materialize_history().unwrap();
+    let before = std::fs::read(&path).unwrap();
+    assert!(engine.state.agent_definition().is_none());
+    assert!(engine.state.selected_model().is_none());
+    let value = persisted_thread_value(&engine, &task.session_id(), &path, false).unwrap();
+    assert_eq!(value["id"], task.session_id());
+    assert_eq!(value["selectedModel"], "Provider::Flash");
+    assert_eq!(value["modelSelectionMode"], "explicit");
+    assert_eq!(
+        value["agentDefinition"],
+        serde_json::to_value(expert).unwrap()
+    );
+    assert!(value["channelTaskSource"].is_null());
+    assert_eq!(std::fs::read(path).unwrap(), before);
 }
 
 #[test]
@@ -809,7 +845,9 @@ fn cold_count_summary_rewind_and_zero_rewind_keep_matching_prefixes() {
         state
             .set_messages_after_compaction(
                 vec![
-                    kcoder_types::Message::compaction_text("Earlier conversation summary: compacted"),
+                    kcoder_types::Message::compaction_text(
+                        "Earlier conversation summary: compacted",
+                    ),
                     tail,
                 ],
                 kcoder_state::CompactionTranscriptEvent {
@@ -950,12 +988,18 @@ fn thread_snapshot_timestamps_change_only_with_session_content() {
     );
 }
 
-#[test]
-fn scheduled_task_rpc_requires_consent_and_preserves_session_ownership() {
+#[tokio::test]
+async fn scheduled_task_rpc_requires_consent_and_preserves_session_ownership() {
+    if crate::app_server::isolated_test_profile::run_or_reexec(concat!(
+            module_path!(),
+            "::scheduled_task_rpc_requires_consent_and_preserves_session_ownership"
+        )) {
+        return;
+    }
     let workspace = tempfile::tempdir().unwrap();
     let engine = runtime_context_test_engine(workspace.path(), None);
     let thread_id = engine.session_id();
-    let request = json!({"threadId": thread_id, "prompt": "review", "schedule": {"kind":"every", "every_seconds":60}, "confirmed":false});
+    let request = json!({"threadId": thread_id, "prompt": "review", "schedule": {"kind":"every", "every_seconds":1}, "confirmed":false, "jitterSeconds":0});
     assert!(super::cron_processor::process(&engine, "cron/create", request.clone()).is_err());
     let mut confirmed = request;
     confirmed["confirmed"] = json!(true);
@@ -971,6 +1015,51 @@ fn scheduled_task_rpc_requires_consent_and_preserves_session_ownership() {
             json!({"threadId":"another", "jobId":created["job"]["id"]})
         )
         .is_err()
+    );
+    let scheduler = engine.cron_scheduler();
+    let mut subscription =
+        scheduler.subscribe_session(kcoder_tools::cron::APP_PROJECT_CRON_OWNER.into());
+    tokio::time::timeout(std::time::Duration::from_secs(5), subscription.recv())
+        .await
+        .unwrap()
+        .unwrap();
+    let history = super::cron_processor::process(&engine, "cron/list", json!({})).unwrap();
+    assert_eq!(
+        history["executionDiagnostics"]["historyDeletionSupported"],
+        true
+    );
+    let trigger = &history["executionDiagnostics"]["runs"][0]["triggerId"];
+    assert!(trigger.is_string());
+    for params in [
+        json!({"jobId":created["job"]["id"],"triggerId":trigger,"confirmed":true}),
+        json!({"jobId":created["job"]["id"],"triggerId":trigger,"receiptsOnly":true}),
+    ] {
+        assert!(super::cron_processor::process(&engine, "cron/delete", params).is_err());
+    }
+    let cleared = super::cron_processor::process(
+        &engine,
+        "cron/delete",
+        json!({
+            "jobId":created["job"]["id"],"triggerId":trigger,"receiptsOnly":true,"confirmed":true,
+        }),
+    )
+    .unwrap();
+    assert_eq!(cleared["historyOnly"], true);
+    assert_eq!(cleared["schedulePreserved"], true);
+    let history = super::cron_processor::process(&engine, "cron/list", json!({})).unwrap();
+    assert_eq!(history["jobs"].as_array().unwrap().len(), 1);
+    assert!(
+        history["executionDiagnostics"]["runs"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+    assert_eq!(
+        history["deliveryDiagnostics"]["receipts"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
     );
     let deleted = super::cron_processor::process(
         &engine,
@@ -1160,7 +1249,7 @@ fn external_artifact_ids_are_portable_across_all_path_helpers() {
     );
     assert!(
         root.path()
-            .join(THREAD_LIFECYCLE_LOCK_DIRECTORY)
+            .join(".thread-lifecycle-locks")
             .join("CONSOLE.lock")
             .is_file()
     );
@@ -1290,6 +1379,8 @@ fn provider_failure_roundtrips_completion_and_disk_history_with_old_artifact_com
 #[test]
 fn interrupted_turn_outcome_marks_an_existing_assistant_message_cancelled() {
     let mut messages = vec![ThreadMessage {
+        file_changes_capture: None,
+        review_evidence: None,
         id: "assistant-1".into(),
         client_message_id: None,
         turn_id: Some("turn-1".into()),
@@ -1299,8 +1390,8 @@ fn interrupted_turn_outcome_marks_an_existing_assistant_message_cancelled() {
         error: None,
         error_type: None,
         provider_failure: None,
-                attempt_id: None,
-                continued_by_attempt_id: None,
+        attempt_id: None,
+        continued_by_attempt_id: None,
         blocks: Vec::new(),
         timestamp_ms: 10,
         content_truncated: false,
@@ -1327,6 +1418,8 @@ fn interrupted_turn_outcome_marks_an_existing_assistant_message_cancelled() {
 #[test]
 fn interrupted_empty_turn_outcome_inserts_a_cancelled_assistant_message() {
     let mut messages = vec![ThreadMessage {
+        file_changes_capture: None,
+        review_evidence: None,
         id: "user-1".into(),
         client_message_id: None,
         turn_id: Some("turn-1".into()),
@@ -1336,8 +1429,8 @@ fn interrupted_empty_turn_outcome_inserts_a_cancelled_assistant_message() {
         error: None,
         error_type: None,
         provider_failure: None,
-                attempt_id: None,
-                continued_by_attempt_id: None,
+        attempt_id: None,
+        continued_by_attempt_id: None,
         blocks: Vec::new(),
         timestamp_ms: 10,
         content_truncated: false,
@@ -1367,6 +1460,8 @@ fn interrupted_empty_turn_outcome_inserts_a_cancelled_assistant_message() {
 #[test]
 fn failed_empty_turn_outcome_inserts_a_retryable_assistant_message() {
     let mut messages = vec![ThreadMessage {
+        file_changes_capture: None,
+        review_evidence: None,
         id: "user-1".into(),
         client_message_id: None,
         turn_id: Some("turn-1".into()),
@@ -1376,8 +1471,8 @@ fn failed_empty_turn_outcome_inserts_a_retryable_assistant_message() {
         error: None,
         error_type: None,
         provider_failure: None,
-                attempt_id: None,
-                continued_by_attempt_id: None,
+        attempt_id: None,
+        continued_by_attempt_id: None,
         blocks: Vec::new(),
         timestamp_ms: 10,
         content_truncated: false,
@@ -1406,6 +1501,8 @@ fn failed_empty_turn_outcome_inserts_a_retryable_assistant_message() {
 fn durable_transcript_turns_drive_fork_identity_after_context_compaction() {
     fn entry(index: usize, message: kcoder_types::Message) -> kcoder_state::HistoryEntry {
         kcoder_state::HistoryEntry {
+            web_sources: Vec::new(),
+            history_attempt: None,
             session_id: "session".into(),
             timestamp_ms: index as u64,
             uuid: Some(format!("message-{index}")),
@@ -1438,6 +1535,8 @@ fn durable_transcript_turns_drive_fork_identity_after_context_compaction() {
 #[test]
 fn strict_goal_continuation_is_hidden_from_projected_transcript() {
     let entry = kcoder_state::HistoryEntry {
+        web_sources: Vec::new(),
+        history_attempt: None,
         session_id: "session".into(),
         timestamp_ms: 1,
         uuid: Some("strict-goal-context".into()),
@@ -1454,6 +1553,8 @@ fn strict_goal_continuation_is_hidden_from_projected_transcript() {
 #[test]
 fn system_reminder_is_hidden_from_projected_transcript() {
     let entry = kcoder_state::HistoryEntry {
+        web_sources: Vec::new(),
+        history_attempt: None,
         session_id: "session".into(),
         timestamp_ms: 1,
         uuid: Some("rewind-reminder".into()),
@@ -1479,6 +1580,8 @@ fn synthetic_skill_context_is_hidden_but_ordinary_skill_discussion_remains() {
             (kcoder_types::Message::user_text(text), true),
         ] {
             let entry = kcoder_state::HistoryEntry {
+                web_sources: Vec::new(),
+                history_attempt: None,
                 session_id: "session".into(),
                 timestamp_ms: 1,
                 uuid: Some("skill-context".into()),
@@ -1501,6 +1604,8 @@ fn runtime_injections_are_hidden_per_block_without_losing_user_or_tool_content()
         history_entry_thread_message(
             0,
             kcoder_state::HistoryEntry {
+                web_sources: Vec::new(),
+                history_attempt: None,
                 session_id: "session".into(),
                 timestamp_ms: 1,
                 uuid: Some("mixed".into()),
@@ -1536,22 +1641,87 @@ fn runtime_injections_are_hidden_per_block_without_losing_user_or_tool_content()
             text
         );
     }
-    let result = project(Message::user_content(vec![
-        ContentBlock::Text {
-            text: "[system] hidden".into(),
-        },
-        ContentBlock::ToolResult {
-            tool_use_id: "orphan".into(),
-            content: vec![ContentBlock::Text {
-                text: "[system] actual tool output".into(),
-            }],
-            is_error: None,
-        },
-    ]).with_origin(kcoder_types::MessageOrigin::Runtime))
+    let result = project(
+        Message::user_content(vec![
+            ContentBlock::Text {
+                text: "[system] hidden".into(),
+            },
+            ContentBlock::ToolResult {
+                tool_use_id: "orphan".into(),
+                content: vec![ContentBlock::Text {
+                    text: "[system] actual tool output".into(),
+                }],
+                is_error: None,
+            },
+        ])
+        .with_origin(kcoder_types::MessageOrigin::Runtime),
+    )
     .unwrap();
     assert_eq!(result.role, "assistant");
     assert_eq!(result.blocks.len(), 1);
     assert!(result.blocks[0].to_string().contains("actual tool output"));
+}
+
+#[test]
+fn runtime_and_compaction_images_stay_hidden_without_losing_live_tool_results() {
+    use kcoder_types::{ContentBlock, ImageSource, Message, MessageOrigin};
+    let project = |message| {
+        history_entry_thread_message(
+            0,
+            kcoder_state::HistoryEntry {
+                web_sources: Vec::new(),
+                history_attempt: None,
+                session_id: "owned-image-projection".into(),
+                timestamp_ms: 1,
+                uuid: Some("image-projection".into()),
+                parent_uuid: None,
+                message,
+            },
+            None,
+            &HashMap::new(),
+        )
+    };
+    let image = ContentBlock::Image {
+        source: ImageSource::base64("image/png", "AA=="),
+    };
+    for origin in [MessageOrigin::Runtime, MessageOrigin::Compaction] {
+        assert!(project(Message::user_content(vec![image.clone()]).with_origin(origin)).is_none());
+        let mixed = project(
+            Message::user_content(vec![
+                ContentBlock::Text {
+                    text: "hidden inherited context".into(),
+                },
+                image.clone(),
+                ContentBlock::ToolResult {
+                    tool_use_id: "live-result".into(),
+                    content: vec![ContentBlock::Text {
+                        text: "visible live result".into(),
+                    }],
+                    is_error: None,
+                },
+            ])
+            .with_origin(origin),
+        )
+        .unwrap();
+        assert_eq!(mixed.role, "assistant");
+        assert!(mixed.content.is_empty());
+        assert_eq!(mixed.blocks.len(), 1);
+        assert!(mixed.blocks[0].to_string().contains("visible live result"));
+    }
+    for origin in [MessageOrigin::User, MessageOrigin::Unknown] {
+        let user = project(
+            Message::user_content(vec![
+                ContentBlock::Text {
+                    text: "[image] is my literal text".into(),
+                },
+                image.clone(),
+            ])
+            .with_origin(origin),
+        )
+        .unwrap();
+        assert_eq!(user.role, "user");
+        assert_eq!(user.content, "[image] is my literal text\n[image]");
+    }
 }
 
 #[test]
@@ -1560,6 +1730,8 @@ fn historical_tool_results_are_projected_as_completed_typed_blocks() {
 
     let entries = vec![
         kcoder_state::HistoryEntry {
+            web_sources: Vec::new(),
+            history_attempt: None,
             session_id: "session".into(),
             timestamp_ms: 1,
             uuid: Some("tool-use-message".into()),
@@ -1574,6 +1746,8 @@ fn historical_tool_results_are_projected_as_completed_typed_blocks() {
             },
         },
         kcoder_state::HistoryEntry {
+            web_sources: Vec::new(),
+            history_attempt: None,
             session_id: "session".into(),
             timestamp_ms: 2,
             uuid: Some("tool-result-message".into()),
@@ -1609,6 +1783,8 @@ fn historical_user_question_answers_are_projected_for_the_web_summary() {
     let question = "Which option should be used?";
     let entries = vec![
         kcoder_state::HistoryEntry {
+            web_sources: Vec::new(),
+            history_attempt: None,
             session_id: "session".into(),
             timestamp_ms: 1,
             uuid: Some("question-tool-use".into()),
@@ -1633,6 +1809,8 @@ fn historical_user_question_answers_are_projected_for_the_web_summary() {
             },
         },
         kcoder_state::HistoryEntry {
+            web_sources: Vec::new(),
+            history_attempt: None,
             session_id: "session".into(),
             timestamp_ms: 2,
             uuid: Some("question-tool-result".into()),
@@ -1680,6 +1858,8 @@ fn historical_reused_call_ids_keep_their_own_results() {
         .into_iter()
         .enumerate()
         .map(|(index, message)| kcoder_state::HistoryEntry {
+            web_sources: Vec::new(),
+            history_attempt: None,
             session_id: "session".into(),
             timestamp_ms: index as u64,
             uuid: Some(format!("reused-{index}")),
@@ -1718,6 +1898,8 @@ fn historical_timeline_preserves_text_reasoning_and_parallel_call_positions() {
         .into_iter()
         .enumerate()
         .map(|(index, message)| kcoder_state::HistoryEntry {
+            web_sources: Vec::new(),
+            history_attempt: None,
             session_id: "session".into(),
             timestamp_ms: index as u64,
             uuid: Some(format!("ordered-{index}")),
@@ -1753,9 +1935,45 @@ fn historical_timeline_preserves_text_reasoning_and_parallel_call_positions() {
 }
 
 #[test]
+fn coalesced_commentary_blocks_keep_each_source_message_identity() {
+    let message = |id: &str, content: &str, blocks: Value| {
+        serde_json::from_value::<ThreadMessage>(json!({
+            "id": id, "role": "assistant", "turnId": "legacy-turn",
+            "content": content, "blocks": blocks, "timestampMs": 1,
+        }))
+        .unwrap()
+    };
+    let mut messages = vec![
+        message("source-a", "same commentary", json!([])),
+        message("call-a", "", json!([{"id":"tool-a", "type":"tool"}])),
+        message("source-b", "same commentary", json!([])),
+        message("call-b", "", json!([{"id":"tool-b", "type":"tool"}])),
+        message("source-c", "final answer", json!([])),
+    ];
+    coalesce_assistant_tool_fragments(&mut messages);
+    assert_eq!(messages.len(), 1);
+    let blocks = &messages[0].blocks;
+    assert_eq!(blocks[0]["id"], "source-a-text");
+    assert_eq!(blocks[2]["id"], "source-b-text");
+    assert_eq!(blocks[0]["content"], "same commentary");
+    assert_eq!(blocks[2]["content"], "same commentary");
+    assert_eq!(messages[0].content, "final answer");
+    let ids: HashSet<_> = blocks
+        .iter()
+        .map(|block| block["id"].as_str().unwrap())
+        .collect();
+    assert_eq!(ids.len(), blocks.len());
+    let once = serde_json::to_value(&messages).unwrap();
+    coalesce_assistant_tool_fragments(&mut messages);
+    assert_eq!(serde_json::to_value(&messages).unwrap(), once);
+}
+
+#[test]
 fn completed_tool_fragment_is_coalesced_with_its_assistant_text() {
     let mut messages = vec![
         ThreadMessage {
+            file_changes_capture: None,
+            review_evidence: None,
             id: "user".into(),
             client_message_id: None,
             turn_id: Some("turn-1".into()),
@@ -1765,14 +1983,16 @@ fn completed_tool_fragment_is_coalesced_with_its_assistant_text() {
             error: None,
             error_type: None,
             provider_failure: None,
-                attempt_id: None,
-                continued_by_attempt_id: None,
+            attempt_id: None,
+            continued_by_attempt_id: None,
             blocks: Vec::new(),
             timestamp_ms: 5,
             content_truncated: false,
             content_original_chars: None,
         },
         ThreadMessage {
+            file_changes_capture: None,
+            review_evidence: None,
             id: "tool-result".into(),
             client_message_id: None,
             turn_id: Some("turn-1".into()),
@@ -1782,14 +2002,16 @@ fn completed_tool_fragment_is_coalesced_with_its_assistant_text() {
             error: None,
             error_type: None,
             provider_failure: None,
-                attempt_id: None,
-                continued_by_attempt_id: None,
+            attempt_id: None,
+            continued_by_attempt_id: None,
             blocks: vec![json!({"id": "tool-1", "type": "tool"})],
             timestamp_ms: 10,
             content_truncated: false,
             content_original_chars: None,
         },
         ThreadMessage {
+            file_changes_capture: None,
+            review_evidence: None,
             id: "assistant-text".into(),
             client_message_id: None,
             turn_id: Some("turn-1".into()),
@@ -1799,8 +2021,8 @@ fn completed_tool_fragment_is_coalesced_with_its_assistant_text() {
             error: None,
             error_type: None,
             provider_failure: None,
-                attempt_id: None,
-                continued_by_attempt_id: None,
+            attempt_id: None,
+            continued_by_attempt_id: None,
             blocks: Vec::new(),
             timestamp_ms: 20,
             content_truncated: false,
@@ -1832,6 +2054,8 @@ fn completed_tool_fragment_is_coalesced_with_its_assistant_text() {
 #[test]
 fn client_message_identity_is_applied_from_turn_metadata() {
     let mut messages = vec![ThreadMessage {
+        file_changes_capture: None,
+        review_evidence: None,
         id: "history-user".into(),
         client_message_id: None,
         turn_id: Some("turn-1".into()),
@@ -1841,8 +2065,8 @@ fn client_message_identity_is_applied_from_turn_metadata() {
         error: None,
         error_type: None,
         provider_failure: None,
-                attempt_id: None,
-                continued_by_attempt_id: None,
+        attempt_id: None,
+        continued_by_attempt_id: None,
         blocks: Vec::new(),
         timestamp_ms: 20,
         content_truncated: false,
@@ -1872,6 +2096,8 @@ fn historical_attachments_are_structured_before_long_content_is_truncated() {
         .unwrap(),
     );
     let entry = kcoder_state::HistoryEntry {
+        web_sources: Vec::new(),
+        history_attempt: None,
         session_id: "session".into(),
         timestamp_ms: 1,
         uuid: Some("attachment-message".into()),

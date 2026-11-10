@@ -1,0 +1,876 @@
+{
+  "MigrationArchiveRetirement": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "MigrationArchiveRetirementPhase": {
+        "enum": [
+          "prepared",
+          "blocked",
+          "retired",
+          "collecting",
+          "collected",
+          "cancelled",
+          "outcome_unknown"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "archiveId": {
+        "type": "string"
+      },
+      "cancelRequested": {
+        "type": "boolean"
+      },
+      "cancelRevision": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "collectedBytes": {
+        "description": "Verified removed logical lengths; this is not a filesystem free-block promise.",
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "failureCode": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "jobId": {
+        "type": "string"
+      },
+      "logicalRetired": {
+        "type": "boolean"
+      },
+      "operationId": {
+        "type": "string"
+      },
+      "ownsArchive": {
+        "type": "boolean"
+      },
+      "phase": {
+        "$ref": "#/definitions/MigrationArchiveRetirementPhase"
+      },
+      "retainedReferences": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "sequence": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "archiveId",
+      "cancelRequested",
+      "cancelRevision",
+      "collectedBytes",
+      "jobId",
+      "logicalRetired",
+      "operationId",
+      "ownsArchive",
+      "phase",
+      "retainedReferences",
+      "sequence"
+    ],
+    "title": "MigrationArchiveRetirement",
+    "type": "object"
+  },
+  "MigrationArchiveRetirementControlParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "expectedSequence": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "jobId": {
+        "type": "string"
+      },
+      "operationId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "expectedSequence",
+      "jobId",
+      "operationId"
+    ],
+    "title": "MigrationArchiveRetirementControlParams",
+    "type": "object"
+  },
+  "MigrationArchiveRetirementListParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "cursor": {
+        "default": null,
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "title": "MigrationArchiveRetirementListParams",
+    "type": "object"
+  },
+  "MigrationArchiveRetirementListResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "MigrationArchiveRetirement": {
+        "additionalProperties": false,
+        "properties": {
+          "archiveId": {
+            "type": "string"
+          },
+          "cancelRequested": {
+            "type": "boolean"
+          },
+          "cancelRevision": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "collectedBytes": {
+            "description": "Verified removed logical lengths; this is not a filesystem free-block promise.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "failureCode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "jobId": {
+            "type": "string"
+          },
+          "logicalRetired": {
+            "type": "boolean"
+          },
+          "operationId": {
+            "type": "string"
+          },
+          "ownsArchive": {
+            "type": "boolean"
+          },
+          "phase": {
+            "$ref": "#/definitions/MigrationArchiveRetirementPhase"
+          },
+          "retainedReferences": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sequence": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "archiveId",
+          "cancelRequested",
+          "cancelRevision",
+          "collectedBytes",
+          "jobId",
+          "logicalRetired",
+          "operationId",
+          "ownsArchive",
+          "phase",
+          "retainedReferences",
+          "sequence"
+        ],
+        "type": "object"
+      },
+      "MigrationArchiveRetirementPhase": {
+        "enum": [
+          "prepared",
+          "blocked",
+          "retired",
+          "collecting",
+          "collected",
+          "cancelled",
+          "outcome_unknown"
+        ],
+        "type": "string"
+      },
+      "MigrationArchiveRetirementStateResult": {
+        "additionalProperties": false,
+        "properties": {
+          "retirement": {
+            "$ref": "#/definitions/MigrationArchiveRetirement"
+          },
+          "workerError": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "workerScheduled": {
+            "type": "boolean"
+          },
+          "workerState": {
+            "$ref": "#/definitions/MigrationArchiveRetirementWorkerState"
+          }
+        },
+        "required": [
+          "retirement",
+          "workerScheduled",
+          "workerState"
+        ],
+        "type": "object"
+      },
+      "MigrationArchiveRetirementWorkerState": {
+        "enum": [
+          "running",
+          "stopped",
+          "unknown"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "items": {
+        "description": "At most ten operations. Audit records remain available after physical collection.",
+        "items": {
+          "$ref": "#/definitions/MigrationArchiveRetirementStateResult"
+        },
+        "type": "array"
+      },
+      "nextCursor": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "items"
+    ],
+    "title": "MigrationArchiveRetirementListResult",
+    "type": "object"
+  },
+  "MigrationArchiveRetirementPrepareParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "expectedJobSequence": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "jobId": {
+        "type": "string"
+      },
+      "operationId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "expectedJobSequence",
+      "jobId",
+      "operationId"
+    ],
+    "title": "MigrationArchiveRetirementPrepareParams",
+    "type": "object"
+  },
+  "MigrationArchiveRetirementPreviewParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "jobId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "jobId"
+    ],
+    "title": "MigrationArchiveRetirementPreviewParams",
+    "type": "object"
+  },
+  "MigrationArchiveRetirementPreviewResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "MigrationArchiveRetirement": {
+        "additionalProperties": false,
+        "properties": {
+          "archiveId": {
+            "type": "string"
+          },
+          "cancelRequested": {
+            "type": "boolean"
+          },
+          "cancelRevision": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "collectedBytes": {
+            "description": "Verified removed logical lengths; this is not a filesystem free-block promise.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "failureCode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "jobId": {
+            "type": "string"
+          },
+          "logicalRetired": {
+            "type": "boolean"
+          },
+          "operationId": {
+            "type": "string"
+          },
+          "ownsArchive": {
+            "type": "boolean"
+          },
+          "phase": {
+            "$ref": "#/definitions/MigrationArchiveRetirementPhase"
+          },
+          "retainedReferences": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sequence": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "archiveId",
+          "cancelRequested",
+          "cancelRevision",
+          "collectedBytes",
+          "jobId",
+          "logicalRetired",
+          "operationId",
+          "ownsArchive",
+          "phase",
+          "retainedReferences",
+          "sequence"
+        ],
+        "type": "object"
+      },
+      "MigrationArchiveRetirementPhase": {
+        "enum": [
+          "prepared",
+          "blocked",
+          "retired",
+          "collecting",
+          "collected",
+          "cancelled",
+          "outcome_unknown"
+        ],
+        "type": "string"
+      },
+      "MigrationArchiveRetirementStateResult": {
+        "additionalProperties": false,
+        "properties": {
+          "retirement": {
+            "$ref": "#/definitions/MigrationArchiveRetirement"
+          },
+          "workerError": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "workerScheduled": {
+            "type": "boolean"
+          },
+          "workerState": {
+            "$ref": "#/definitions/MigrationArchiveRetirementWorkerState"
+          }
+        },
+        "required": [
+          "retirement",
+          "workerScheduled",
+          "workerState"
+        ],
+        "type": "object"
+      },
+      "MigrationArchiveRetirementWorkerState": {
+        "enum": [
+          "running",
+          "stopped",
+          "unknown"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "archiveId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "canPrepare": {
+        "type": "boolean"
+      },
+      "existing": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/MigrationArchiveRetirementStateResult"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "jobId": {
+        "type": "string"
+      },
+      "jobSequence": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "ownsArchive": {
+        "type": "boolean"
+      },
+      "readersIdle": {
+        "type": [
+          "boolean",
+          "null"
+        ]
+      },
+      "reasonCode": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "retainedReferences": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "canPrepare",
+      "jobId",
+      "jobSequence",
+      "ownsArchive",
+      "retainedReferences"
+    ],
+    "title": "MigrationArchiveRetirementPreviewResult",
+    "type": "object"
+  },
+  "MigrationArchiveRetirementReadParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "jobId": {
+        "type": "string"
+      },
+      "operationId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "jobId",
+      "operationId"
+    ],
+    "title": "MigrationArchiveRetirementReadParams",
+    "type": "object"
+  },
+  "MigrationArchiveRetirementStateResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "MigrationArchiveRetirement": {
+        "additionalProperties": false,
+        "properties": {
+          "archiveId": {
+            "type": "string"
+          },
+          "cancelRequested": {
+            "type": "boolean"
+          },
+          "cancelRevision": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "collectedBytes": {
+            "description": "Verified removed logical lengths; this is not a filesystem free-block promise.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "failureCode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "jobId": {
+            "type": "string"
+          },
+          "logicalRetired": {
+            "type": "boolean"
+          },
+          "operationId": {
+            "type": "string"
+          },
+          "ownsArchive": {
+            "type": "boolean"
+          },
+          "phase": {
+            "$ref": "#/definitions/MigrationArchiveRetirementPhase"
+          },
+          "retainedReferences": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sequence": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "archiveId",
+          "cancelRequested",
+          "cancelRevision",
+          "collectedBytes",
+          "jobId",
+          "logicalRetired",
+          "operationId",
+          "ownsArchive",
+          "phase",
+          "retainedReferences",
+          "sequence"
+        ],
+        "type": "object"
+      },
+      "MigrationArchiveRetirementPhase": {
+        "enum": [
+          "prepared",
+          "blocked",
+          "retired",
+          "collecting",
+          "collected",
+          "cancelled",
+          "outcome_unknown"
+        ],
+        "type": "string"
+      },
+      "MigrationArchiveRetirementWorkerState": {
+        "enum": [
+          "running",
+          "stopped",
+          "unknown"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "retirement": {
+        "$ref": "#/definitions/MigrationArchiveRetirement"
+      },
+      "workerError": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "workerScheduled": {
+        "type": "boolean"
+      },
+      "workerState": {
+        "$ref": "#/definitions/MigrationArchiveRetirementWorkerState"
+      }
+    },
+    "required": [
+      "retirement",
+      "workerScheduled",
+      "workerState"
+    ],
+    "title": "MigrationArchiveRetirementStateResult",
+    "type": "object"
+  },
+  "MigrationHistoryViewLease": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "MigrationHistoryViewState": {
+        "enum": [
+          "active",
+          "released",
+          "expired",
+          "invalidated"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "archiveId": {
+        "type": "string"
+      },
+      "jobId": {
+        "type": "string"
+      },
+      "leaseId": {
+        "type": "string"
+      },
+      "legacyArchives": {
+        "description": "Legacy archives stay retained; a successful open does not manufacture a managed birth.",
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "managedArchives": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "normalizationRevision": {
+        "type": "string"
+      },
+      "remainingMs": {
+        "description": "Remaining server monotonic lifetime, not an absolute wall-clock timestamp. Clients subtract full request duration and treat transport loss as unconfirmed.",
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "requestId": {
+        "type": "string"
+      },
+      "sequence": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "state": {
+        "$ref": "#/definitions/MigrationHistoryViewState"
+      },
+      "viewId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "archiveId",
+      "jobId",
+      "leaseId",
+      "legacyArchives",
+      "managedArchives",
+      "normalizationRevision",
+      "remainingMs",
+      "requestId",
+      "sequence",
+      "state"
+    ],
+    "title": "MigrationHistoryViewLease",
+    "type": "object"
+  },
+  "MigrationHistoryViewOpenParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "expectedArchiveId": {
+        "type": "string"
+      },
+      "jobId": {
+        "type": "string"
+      },
+      "requestId": {
+        "description": "Stable nonce chosen before open. An expired/released nonce cannot acquire a new hold.",
+        "type": "string"
+      },
+      "viewId": {
+        "default": null,
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "expectedArchiveId",
+      "jobId",
+      "requestId"
+    ],
+    "title": "MigrationHistoryViewOpenParams",
+    "type": "object"
+  },
+  "MigrationHistoryViewReadParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "leaseId": {
+        "default": null,
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "requestId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "requestId"
+    ],
+    "title": "MigrationHistoryViewReadParams",
+    "type": "object"
+  },
+  "MigrationHistoryViewReleaseParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "leaseId": {
+        "type": "string"
+      },
+      "requestId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "leaseId",
+      "requestId"
+    ],
+    "title": "MigrationHistoryViewReleaseParams",
+    "type": "object"
+  },
+  "MigrationHistoryViewRenewParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "expectedSequence": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "leaseId": {
+        "type": "string"
+      },
+      "requestId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "expectedSequence",
+      "leaseId",
+      "requestId"
+    ],
+    "title": "MigrationHistoryViewRenewParams",
+    "type": "object"
+  },
+  "MigrationHistoryViewResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "MigrationHistoryViewLease": {
+        "additionalProperties": false,
+        "properties": {
+          "archiveId": {
+            "type": "string"
+          },
+          "jobId": {
+            "type": "string"
+          },
+          "leaseId": {
+            "type": "string"
+          },
+          "legacyArchives": {
+            "description": "Legacy archives stay retained; a successful open does not manufacture a managed birth.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "managedArchives": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "normalizationRevision": {
+            "type": "string"
+          },
+          "remainingMs": {
+            "description": "Remaining server monotonic lifetime, not an absolute wall-clock timestamp. Clients subtract full request duration and treat transport loss as unconfirmed.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "sequence": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "state": {
+            "$ref": "#/definitions/MigrationHistoryViewState"
+          },
+          "viewId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "archiveId",
+          "jobId",
+          "leaseId",
+          "legacyArchives",
+          "managedArchives",
+          "normalizationRevision",
+          "remainingMs",
+          "requestId",
+          "sequence",
+          "state"
+        ],
+        "type": "object"
+      },
+      "MigrationHistoryViewState": {
+        "enum": [
+          "active",
+          "released",
+          "expired",
+          "invalidated"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "lease": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/MigrationHistoryViewLease"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      }
+    },
+    "title": "MigrationHistoryViewResult",
+    "type": "object"
+  }
+}

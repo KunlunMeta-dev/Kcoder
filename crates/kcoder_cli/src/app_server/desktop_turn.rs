@@ -3,7 +3,7 @@
 use anyhow::{Context, Result};
 use kcoder_computer_use::session::DesktopSession;
 use kcoder_engine::{DesktopTurnGuard, QueryEngine};
-use kcoder_mcp::{desktop_tool::DesktopTool, model::McpToolDefinition};
+use kcoder_mcp::model::McpToolDefinition;
 use std::sync::Arc;
 
 /// Keep alive for the foreground turn; finish must be awaited before reporting
@@ -143,7 +143,21 @@ impl DesktopTurn {
                         .unwrap_or_else(|error| error.into_inner())
                         .revoke();
                     revoker.revoke();
-                    if let Err(error) = session.stop().await {
+                    // The owned host can release its worker even when the client pipe is broken.
+                    let result = host.stop().await;
+                    grant
+                        .lock()
+                        .unwrap_or_else(|error| error.into_inner())
+                        .confirm_cleanup_for_session(
+                            &session,
+                            if result.is_ok() {
+                                kcoder_app_protocol::ComputerUseCleanupState::Confirmed
+                            } else {
+                                kcoder_app_protocol::ComputerUseCleanupState::Failed
+                            },
+                            true,
+                        );
+                    if let Err(error) = result {
                         tracing::warn!(?error, "desktop plugin revocation cleanup failed");
                     }
                     break;
@@ -200,20 +214,8 @@ impl DesktopTurn {
         session: Arc<DesktopSession>,
         definitions: Vec<McpToolDefinition>,
     ) -> Result<Self> {
-        let mut scoped = engine.clone();
-        // ToolRegistry is copy-on-write. Never mutate the original resident
-        // registry or the shared subagent base registry.
-        let mut tools = scoped.tools.clone();
-        for definition in definitions {
-            let tool = DesktopTool::new(definition, session.clone()).map_err(anyhow::Error::msg)?;
-            tools
-                .try_register(Arc::new(tool))
-                .context("desktop tool registration conflict")?;
-        }
-        let binding = scoped
-            .bind_desktop_turn(session.owner().clone())
-            .map_err(anyhow::Error::msg)?;
-        scoped = scoped.with_turn_tools(tools);
+        let (scoped, binding) =
+            super::desktop_attachment::attach(engine, session.clone(), definitions)?;
         Ok(Self {
             engine: scoped,
             binding: Some(binding),

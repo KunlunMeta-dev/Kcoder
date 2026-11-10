@@ -2,16 +2,16 @@
 //! Shared by the local connection adapter and the independent target Wiki worker.
 //! Leases and checkpoints remain authoritative across process boundaries.
 use super::{knowledge_model::ProviderWikiModel, knowledge_requests};
-use anyhow::{Result, ensure};
+use anyhow::{Context, Result, ensure};
 use kcoder_knowledge::{WikiCheckpoint, WikiIngestRequest};
 use std::path::Path;
 use tokio_util::sync::CancellationToken;
 #[path = "knowledge_job_pipeline.rs"]
 mod pipeline;
 
-pub(super) const MAX_CONCURRENT_JOBS: usize = 2;
+pub const MAX_CONCURRENT_JOBS: usize = 2;
 
-pub(super) async fn run(
+pub async fn run(
     path: &Path,
     library: &str,
     job_id: &str,
@@ -24,7 +24,7 @@ pub(super) async fn run(
 
 /// The scheduler claims before spawning so another process's running lease
 /// cannot repeatedly occupy a worker slot ahead of queued sources.
-pub(super) async fn run_claimed(
+pub async fn run_claimed(
     path: &Path,
     library: &str,
     lease: kcoder_knowledge::WikiJobLease,
@@ -68,7 +68,19 @@ async fn run_inner(
         }) else {
             return Ok(());
         };
-        let budgeted = BudgetedModel::new(path, library, &lease, model)?;
+        let budgeted = match BudgetedModel::new(path, library, &lease, model) {
+            Ok(model) => model,
+            Err(error) => {
+                store.stop_job_with_reason(
+                    &scope,
+                    library,
+                    &lease,
+                    "paused",
+                    "authorization_unavailable",
+                )?;
+                return Err(error);
+            }
+        };
         let mut heartbeat = knowledge_requests::open_catalog(path)?.0;
         let monitor = async {
             loop {
@@ -77,6 +89,7 @@ async fn run_inner(
                     knowledge_requests::organization_enabled(path).unwrap_or(false),
                     "Wiki job disabled"
                 );
+                budgeted.check_resource()?;
                 heartbeat.heartbeat_job(&scope, library, &lease)?;
                 budgeted.heartbeat_merge()?;
             }
@@ -116,6 +129,7 @@ async fn run_inner(
                     checkpoint
                 }
             };
+            budgeted.check_resource()?;
             if !checkpoint.proposal.review_notes.is_empty() {
                 store.stop_job_with_reason(
                     &scope,
@@ -155,6 +169,9 @@ async fn run_inner(
                     return Err(error);
                 }
             };
+            // A committed revision is never rolled back or replayed because
+            // authorization changed while its actual transaction completed.
+            budgeted.check_resource()?;
             if let Some(input) = &commit_stage {
                 store.stage_mark_completed(
                     &scope,
@@ -192,14 +209,29 @@ async fn run_inner(
                 stop_for_review(&mut store, &scope, library, &lease)?;
                 return Ok(());
             }
+            let resource_error = budgeted.check_resource().err();
+            let resource_changed = error.is::<super::knowledge_worker_authority::ResourceAuthorityChanged>()
+                    // Provider admission may notice revocation before the job
+                    // monitor. Recheck the original authority, not error text.
+                    || resource_error.is_some();
+            if let Some(authority) = &budgeted.authority
+                && let Some(cause) = resource_error
+                    .as_ref()
+                    .or_else(|| resource_changed.then_some(&error))
+            {
+                authority.record_diagnostic(cause);
+            }
             let paused = cancel.is_cancelled()
+                || resource_changed
                 || !knowledge_requests::organization_enabled(path).unwrap_or(false);
             store.stop_job_with_reason(
                 &scope,
                 library,
                 &lease,
                 if paused { "paused" } else { "failed" },
-                if paused {
+                if resource_changed {
+                    "authorization_changed"
+                } else if paused {
                     "cancelled"
                 } else {
                     failure_code(&error)
@@ -241,7 +273,7 @@ fn stop_for_review(
     )
 }
 
-pub(super) fn recipe_key(
+pub fn recipe_key(
     settings: &kcoder_config::Settings,
     model: &ProviderWikiModel,
     purpose: &str,
@@ -255,7 +287,7 @@ pub(super) fn recipe_key(
     ))
 }
 
-pub(super) fn slots() -> std::sync::Arc<tokio::sync::Semaphore> {
+pub fn slots() -> std::sync::Arc<tokio::sync::Semaphore> {
     static SLOTS: std::sync::OnceLock<std::sync::Arc<tokio::sync::Semaphore>> =
         std::sync::OnceLock::new();
     SLOTS
@@ -327,11 +359,14 @@ struct BudgetedModel<'a> {
     library: &'a str,
     lease: &'a kcoder_knowledge::WikiJobLease,
     inner: &'a ProviderWikiModel,
+    authority: Option<super::knowledge_worker_authority::WikiJobAuthority<'a>>,
+    organization_budget: Option<super::knowledge_organization_budget::WikiOrganizationBudget>,
     pipeline_enabled: bool,
     purpose_hash: String,
     model_fingerprint: String,
     merge: std::sync::Mutex<Option<kcoder_knowledge::WikiAutomaticMergeLease>>,
 }
+
 #[async_trait::async_trait]
 impl kcoder_knowledge::WikiModel for BudgetedModel<'_> {
     fn supports_staged_topics(&self) -> bool {
@@ -656,10 +691,20 @@ impl kcoder_knowledge::WikiModel for BudgetedModel<'_> {
             store.update_job_progress(&scope, self.library, self.lease, &progress)?;
         }
         let progress = |text, reasoning| self.progress(stage, text, reasoning);
-        let result = self
-            .inner
-            .complete_measured_with_progress(input, limit, &progress)
-            .await;
+        let result = match (&self.authority, &self.organization_budget) {
+            (Some(authority), Some(budget)) => {
+                let admission = budget.admission(authority, &reservation)?;
+                self.inner
+                    .complete_admitted_with_progress(input, limit, &progress, &admission)
+                    .await
+            }
+            (None, None) => {
+                self.inner
+                    .complete_measured_with_progress(input, limit, &progress)
+                    .await
+            }
+            _ => anyhow::bail!("WIKI_ORGANIZATION_BUDGET_BINDING_CHANGED"),
+        };
         let (mut store, scope) = knowledge_requests::open_catalog(self.path)?;
         let usage = match &result {
             Ok((_, usage)) => usage.clone(),
@@ -681,12 +726,28 @@ impl kcoder_knowledge::WikiModel for BudgetedModel<'_> {
 }
 
 impl<'a> BudgetedModel<'a> {
+    pub(super) fn check_resource(&self) -> Result<()> {
+        if let Some(authority) = &self.authority {
+            authority.check_current()?;
+        }
+        Ok(())
+    }
+
     fn new(
         path: &'a Path,
         library: &'a str,
         lease: &'a kcoder_knowledge::WikiJobLease,
         inner: &'a ProviderWikiModel,
     ) -> Result<Self> {
+        let authority = super::knowledge_worker_authority::WikiJobAuthority::bind_original(
+            path.parent().context("Wiki profile unavailable")?,
+            library,
+            lease,
+        )?;
+        let organization_budget = authority
+            .as_ref()
+            .map(super::knowledge_organization_budget::WikiOrganizationBudget::new)
+            .transpose()?;
         let (store, scope) = knowledge_requests::open_catalog(path)?;
         let pipeline_enabled = store.job_pipeline_enabled(&scope, library, &lease.job.id)?;
         let purpose_hash = pipeline::hash(store.read(&scope, library)?.purpose.as_bytes());
@@ -700,6 +761,8 @@ impl<'a> BudgetedModel<'a> {
             library,
             lease,
             inner,
+            authority,
+            organization_budget,
             pipeline_enabled,
             purpose_hash,
             model_fingerprint,
@@ -708,6 +771,7 @@ impl<'a> BudgetedModel<'a> {
     }
 
     fn progress(&self, stage: &str, text: usize, reasoning: usize) -> Result<()> {
+        self.check_resource()?;
         let (mut store, scope) = knowledge_requests::open_catalog(self.path)?;
         let current = store.read_job(&scope, self.library, &self.lease.job.id)?;
         let now: i64 = std::time::SystemTime::now()

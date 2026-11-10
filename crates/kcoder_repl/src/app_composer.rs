@@ -2,6 +2,10 @@
 
 use super::*;
 
+#[cfg(test)]
+#[path = "app_composer.test.rs"]
+mod tests;
+
 impl ReplApp {
     pub(super) fn set_input_history_path(&mut self, path: std::path::PathBuf) {
         if self.input_history_path.as_ref() != Some(&path) {
@@ -402,6 +406,25 @@ impl ReplApp {
             return true;
         }
 
+        if let Some(dialog) = self.pending_question.as_mut() {
+            if !dialog
+                .states
+                .get(dialog.focused)
+                .is_some_and(|state| state.editing_custom)
+            {
+                let question = &dialog.request.questions[dialog.focused];
+                if let Some(index) = (0..question_dialog_option_count(question))
+                    .find(|&index| question_dialog_is_custom_option(question, index))
+                {
+                    let single = !question.multi_select;
+                    set_question_dialog_cursor(dialog, index, self.last_frame_area, single);
+                    question_dialog_begin_custom(dialog);
+                }
+            }
+            question_dialog_insert_custom(dialog, pasted);
+            return true;
+        }
+
         self.has_active_overlay()
     }
 
@@ -593,6 +616,10 @@ impl ReplApp {
         } else {
             None
         };
+        // Read-only observation of target-side continuous work. The tracker bounds
+        // its own read frequency and never creates, repairs or locks the store for
+        // writes; the compact status line only renders this cached snapshot.
+        self.work_observation.refresh(engine);
         self.goal = engine.state.goal();
         self.todos = engine.state.todos();
         self.token_count = engine.estimated_token_count();

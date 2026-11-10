@@ -15,6 +15,29 @@ pub struct ProviderModelCapabilities {
 #[serde(deny_unknown_fields)]
 pub struct ProviderTemplatesParams {}
 
+/// Discover an unsaved deployment without requiring a model or persisting credentials.
+#[derive(Deserialize, Serialize)]
+#[cfg_attr(feature = "json-schema", derive(schemars::JsonSchema))]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ProviderDiscoverModelsParams {
+    #[serde(default)]
+    pub id: Option<String>,
+    pub endpoint: String,
+    pub api_format: String,
+    #[serde(default)]
+    pub api_key: Option<String>,
+    #[serde(default)]
+    pub authentication: kcoder_types::ProviderAuthentication,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[cfg_attr(feature = "json-schema", derive(schemars::JsonSchema))]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ProviderDiscoveredModels {
+    /// Advertised identifiers, not a per-model inference or entitlement probe.
+    pub models: Vec<String>,
+}
+
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProviderTemplateInfo {
@@ -139,6 +162,8 @@ pub struct ProviderSettingsProfile {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProviderSettingsResult {
+    #[serde(default)]
+    pub supports_model_discovery: bool,
     #[serde(default)]
     pub supports_independent_probe: bool,
     #[serde(default)]

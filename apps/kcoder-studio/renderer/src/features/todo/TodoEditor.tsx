@@ -1,3 +1,4 @@
+import { SettingsSelect } from '@/components/settings/SettingsSelect'
 import { useEffect, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import {
   ArrowLeft,
@@ -58,14 +59,25 @@ const todoDraftPriorities: CloudLoopItem['priority'][] = ['none', 'low', 'medium
 // draft. File objects cannot be serialized, so staged attachments live in
 // module memory under the same key.
 const draftAttachmentStore = new Map<string, File[]>()
+const TODO_DRAFT_PREFIX = 'kcoder-todo-draft:'
+const LEGACY_TODO_DRAFT_PREFIX = 'wework-todo-draft:'
 
 function todoDraftKey(projectId: CloudProject['id'], status: CloudLoopItem['status']): string {
-  return `wework-todo-draft:${projectId}:${status}`
+  return `${TODO_DRAFT_PREFIX}${projectId}:${status}`
+}
+
+function legacyTodoDraftKey(key: string): string {
+  return LEGACY_TODO_DRAFT_PREFIX + key.slice(TODO_DRAFT_PREFIX.length)
+}
+
+function clearTodoDraft(key: string) {
+  localStorage.removeItem(legacyTodoDraftKey(key))
+  localStorage.removeItem(key)
 }
 
 function readTodoDraft(key: string): TodoDraft | null {
   try {
-    const raw = localStorage.getItem(key)
+    const raw = localStorage.getItem(key) ?? localStorage.getItem(legacyTodoDraftKey(key))
     if (!raw) return null
     const parsed = JSON.parse(raw) as Partial<TodoDraft>
     return {
@@ -327,7 +339,7 @@ export function TodoEditor(props: TodoEditorProps) {
   useEffect(() => {
     if (!draftKey) return
     if (!title && !description && priority === 'none' && !parentId && !dueDate && !tags.length) {
-      localStorage.removeItem(draftKey)
+      clearTodoDraft(draftKey)
       return
     }
     const snapshot: TodoDraft = { title, markdown: description, priority, parentId, dueDate, tags }
@@ -404,7 +416,7 @@ export function TodoEditor(props: TodoEditorProps) {
         pendingFiles.map(file => api.addLoopItemAttachment(created.id, file))
       )
       if (draftKey) {
-        localStorage.removeItem(draftKey)
+        clearTodoDraft(draftKey)
         draftAttachmentStore.delete(draftKey)
       }
       props.onCreated(created)
@@ -556,7 +568,7 @@ export function TodoEditor(props: TodoEditorProps) {
             {selectedDelivery.markdown || '无交付说明'}
           </article>
           <h3 className="mt-6 text-xs font-semibold text-text-secondary">附件</h3>
-          <div className="mt-2 divide-y divide-border overflow-hidden rounded-lg border border-border">
+          <div className="studio-card mt-2 divide-y divide-border overflow-hidden rounded-lg border border-border">
             {selectedDelivery.assets.map(asset => (
               <div key={asset.id} className="flex h-10 items-center gap-2 px-3 text-sm">
                 <File className="h-4 w-4 text-text-muted" />
@@ -648,7 +660,7 @@ export function TodoEditor(props: TodoEditorProps) {
               <span className={cn('h-2 w-2 rounded-full', columnDotClasses[status])} />
               {statusLabel}
               <ChevronDown className="h-3 w-3 text-text-muted" />
-              <select
+              <SettingsSelect
                 data-testid={isCreate ? 'cloud-todo-create-status' : 'cloud-todo-detail-status'}
                 aria-label="状态"
                 value={status}
@@ -660,7 +672,7 @@ export function TodoEditor(props: TodoEditorProps) {
                     {column.label}
                   </option>
                 ))}
-              </select>
+              </SettingsSelect>
             </span>
             <span className={propChipClass}>
               <Flag className="h-3.5 w-3.5 text-text-muted" />
@@ -674,7 +686,7 @@ export function TodoEditor(props: TodoEditorProps) {
                 {priority === 'none' ? '普通' : priority}
               </span>
               <ChevronDown className="h-3 w-3 text-text-muted" />
-              <select
+              <SettingsSelect
                 data-testid={isCreate ? 'cloud-todo-create-priority' : 'cloud-todo-detail-priority'}
                 aria-label="优先级"
                 value={priority}
@@ -686,14 +698,14 @@ export function TodoEditor(props: TodoEditorProps) {
                 <option value="medium">普通</option>
                 <option value="high">高</option>
                 <option value="urgent">紧急</option>
-              </select>
+              </SettingsSelect>
             </span>
             <span className={cn(propChipClass, !assignee && 'text-text-muted')}>
               <CircleUserRound className="h-3.5 w-3.5 text-text-muted" />
               <span className="text-text-muted">负责人</span>
               {assignee?.user_name ?? '添加'}
               <ChevronDown className="h-3 w-3 text-text-muted" />
-              <select
+              <SettingsSelect
                 data-testid={isCreate ? 'cloud-todo-create-assignee' : 'cloud-todo-detail-assignee'}
                 aria-label="负责人"
                 value={assigneeId}
@@ -706,7 +718,7 @@ export function TodoEditor(props: TodoEditorProps) {
                     {member.user_name}
                   </option>
                 ))}
-              </select>
+              </SettingsSelect>
             </span>
             <span className={propChipClass}>
               <ListTodo className="h-3.5 w-3.5 text-text-muted" />
@@ -719,7 +731,7 @@ export function TodoEditor(props: TodoEditorProps) {
                     : '无父任务'}
               </span>
               <ChevronDown className="h-3 w-3 text-text-muted" />
-              <select
+              <SettingsSelect
                 data-testid={isCreate ? 'cloud-todo-create-parent' : 'cloud-todo-detail-parent'}
                 aria-label="父任务"
                 value={parentId}
@@ -732,7 +744,7 @@ export function TodoEditor(props: TodoEditorProps) {
                     {candidate.id} · {candidate.title}
                   </option>
                 ))}
-              </select>
+              </SettingsSelect>
             </span>
             <span className={cn(propChipClass, !dueDate && 'text-text-muted')}>
               <Calendar className="h-3.5 w-3.5 text-text-muted" />
@@ -849,7 +861,7 @@ export function TodoEditor(props: TodoEditorProps) {
                 </div>
                 {addingCollaborator && (
                   <div className="mt-2 flex items-center gap-2">
-                    <select
+                    <SettingsSelect
                       data-testid="cloud-todo-collaborator-select"
                       value={selectedCollaboratorId ?? ''}
                       onChange={event =>
@@ -863,7 +875,7 @@ export function TodoEditor(props: TodoEditorProps) {
                           {member.user_name}
                         </option>
                       ))}
-                    </select>
+                    </SettingsSelect>
                     <button
                       type="button"
                       data-testid="cloud-todo-confirm-collaborator"

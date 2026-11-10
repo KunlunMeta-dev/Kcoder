@@ -1,6 +1,13 @@
 //! Agent execution; state ownership is retained by the agent facade.
 
 use super::*;
+use anyhow::Context;
+
+#[derive(Clone, Copy)]
+enum ForkHistorySource<'a> {
+    Parent(Option<&'a kcoder_state::context_archive::ContextHistoryAnchor>),
+    Checkpoint,
+}
 
 pub(super) fn subagent_model_detail_due(
     last_emit: std::time::Instant,
@@ -54,12 +61,11 @@ pub async fn run_forked_agent(
         prompt_messages,
         overrides,
         max_turns,
-        tool_policy::filter_tools_for_agent_kind_with_bound_questions(
+        tool_policy::filter_tools_for_agent_kind_in_mode(
             &parent.tools,
             AgentKind::General,
             true,
             parent.is_arrangement_mode_active(),
-            context::bound_questions_available(parent).await,
         ),
     )
     .await
@@ -129,7 +135,14 @@ pub async fn continue_forked_agent_with_tools(
     request: ForkedAgentRequest,
 ) -> anyhow::Result<ForkedAgentResult> {
     debug_assert!(request.agent_id.is_some());
-    run_forked_agent_from_messages(parent, cache_safe, request).await
+    run_forked_agent_from_messages_native(
+        parent,
+        cache_safe,
+        request,
+        None,
+        ForkHistorySource::Checkpoint,
+    )
+    .await
 }
 
 impl fmt::Display for ForkedAgentAborted {
@@ -174,9 +187,85 @@ pub(crate) async fn run_forked_agent_from_messages(
     cache_safe: &CacheSafeParams,
     request: ForkedAgentRequest,
 ) -> anyhow::Result<ForkedAgentResult> {
+    run_forked_agent_from_messages_native(
+        parent,
+        cache_safe,
+        request,
+        None,
+        ForkHistorySource::Parent(cache_safe.context_history_anchor.as_ref()),
+    )
+    .await
+}
+
+pub(super) async fn run_forked_agent_with_native_source(
+    parent: &QueryEngine,
+    cache_safe: &CacheSafeParams,
+    source_parent: &crate::integrations::core::NativeToolExecutionWitness,
+    request: ForkedAgentRequest,
+) -> anyhow::Result<ForkedAgentResult> {
+    run_forked_agent_from_messages_native(
+        parent,
+        cache_safe,
+        request,
+        Some(source_parent),
+        ForkHistorySource::Parent(cache_safe.context_history_anchor.as_ref()),
+    )
+    .await
+}
+
+pub(super) async fn continue_forked_agent_with_native_source(
+    parent: &QueryEngine,
+    cache_safe: &CacheSafeParams,
+    source_parent: &crate::integrations::core::NativeToolExecutionWitness,
+    request: ForkedAgentRequest,
+) -> anyhow::Result<ForkedAgentResult> {
+    run_forked_agent_from_messages_native(
+        parent,
+        cache_safe,
+        request,
+        Some(source_parent),
+        ForkHistorySource::Checkpoint,
+    )
+    .await
+}
+
+async fn run_forked_agent_from_messages_native(
+    parent: &QueryEngine,
+    cache_safe: &CacheSafeParams,
+    request: ForkedAgentRequest,
+    source_parent: Option<&crate::integrations::core::NativeToolExecutionWitness>,
+    history_source: ForkHistorySource<'_>,
+) -> anyhow::Result<ForkedAgentResult> {
+    let workflow_parent = if parent.native_tool_authorization.is_some() {
+        let original = source_parent.ok_or_else(|| {
+            anyhow::anyhow!(
+                "forked agent native admission rejected: NATIVE_CHILD_ORIGINAL_PARENT_REQUIRED"
+            )
+        })?;
+        anyhow::ensure!(
+            original.matches_state(&parent.state) && original.session_id() == parent.session_id(),
+            "forked agent native admission rejected: NATIVE_CHILD_ORIGINAL_PARENT_CHANGED"
+        );
+        if original.attempt().is_some() {
+            None
+        } else {
+            Some(
+                parent
+                    .capture_native_workflow_parent(
+                        original,
+                        request.agent_id.as_deref().ok_or_else(|| {
+                            anyhow::anyhow!("NATIVE_WORKFLOW_NATIVE_RUN_REQUIRED")
+                        })?,
+                    )
+                    .await?,
+            )
+        }
+    } else {
+        None
+    };
     let ForkedAgentRequest {
         agent_id: agent_id_override,
-        messages: initial_messages,
+        messages: mut initial_messages,
         prompt_message_count,
         initial_delivery,
         overrides,
@@ -184,6 +273,15 @@ pub(crate) async fn run_forked_agent_from_messages(
         tools,
         runtime,
     } = request;
+    let history_anchor = match history_source {
+        ForkHistorySource::Parent(anchor) => anchor,
+        ForkHistorySource::Checkpoint => None,
+    };
+    if let Some(anchor) = history_anchor
+        && let Some(prefix) = anchor.canonical_prefix_len(&initial_messages)?
+    {
+        initial_messages.drain(..prefix);
+    }
     let verifier_terminal_verdict = overrides.verifier_terminal_verdict;
     let artifact_replay_output = overrides.artifact_replay_output.clone();
     let verifier_vote_channel = overrides.verifier_vote_channel.clone();
@@ -201,6 +299,15 @@ pub(crate) async fn run_forked_agent_from_messages(
         .cwd_override
         .clone()
         .unwrap_or_else(|| parent.cwd.clone());
+    let agent_id = match agent_id_override {
+        Some(id) => id,
+        None => generate_agent_id(parent)?,
+    };
+    let transcript_path = parent
+        .state
+        .task(&agent_id)
+        .and_then(|task| task.transcript_path)
+        .unwrap_or_else(|| parent.state.subagent_transcript_path(&agent_id));
     let fork_state = if let Some(registry) = parent.state.short_id_registry() {
         let state = AppState::new_with_short_id(fork_cwd.clone(), &registry)?;
         state.set_messages(initial_messages);
@@ -213,34 +320,69 @@ pub(crate) async fn run_forked_agent_from_messages(
         fork_state
             .with_session_artifact_project_dir(project_dir, parent.state.artifact_session_id());
     }
+    if history_anchor.is_some() {
+        parent.state.flush_history().await?;
+    }
+    let source = parent.clone();
+    let child = fork_state.clone();
+    let anchor = history_anchor.cloned();
+    let path = transcript_path.clone();
+    let restore_checkpoint = matches!(history_source, ForkHistorySource::Checkpoint);
+    let cancel = parent.cancel_token().child_token();
+    {
+        let _copy_scope = cancel.clone().drop_guard();
+        tokio::task::spawn_blocking(move || {
+            anyhow::ensure!(
+                !cancel.is_cancelled(),
+                "context history initialization cancelled"
+            );
+            child.with_subagent_context_history(&path)?;
+            let inherited = if let Some(anchor) = anchor {
+                child.inherit_compacted_history_from(&source.state, &anchor, || {
+                    cancel.is_cancelled()
+                })?
+            } else if restore_checkpoint {
+                if let Some((messages, reference)) = checkpoint::read_checkpoint_context(&path)? {
+                    child.inherit_checkpoint_context_history(
+                        &path,
+                        &reference,
+                        &messages,
+                        || cancel.is_cancelled(),
+                    )?
+                } else {
+                    false
+                }
+            } else {
+                false
+            };
+            if !inherited {
+                child.save_history()?;
+            }
+            Ok::<(), anyhow::Error>(())
+        })
+        .await
+        .context("subagent context history worker stopped")??;
+    }
     let allowed_write_paths = overrides.allowed_write_paths.clone();
     let allowed_shell_prefixes = overrides.scoped_allowed_shell_prefixes.clone();
     let block_shell_file_mutation = overrides.block_shell_file_mutation;
     let arrangement_mode = overrides
         .arrangement_mode
         .unwrap_or_else(|| parent.is_arrangement_mode_active());
-    let subagent = if let Some(agent_id) = agent_id_override {
-        SubagentContext::from_parent_with_agent_id(parent, fork_state, overrides, agent_id)
-    } else {
-        SubagentContext::from_parent(parent, fork_state, overrides)?
-    };
-    let agent_id = subagent.agent_id.clone();
-    let transcript_path = parent
-        .state
-        .task(&agent_id)
-        .and_then(|task| task.transcript_path)
-        .unwrap_or_else(|| parent.state.subagent_transcript_path(&agent_id));
+    let subagent =
+        SubagentContext::from_parent_with_agent_id(parent, fork_state, overrides, agent_id.clone());
     subagent.state.with_llm_request_history_dir(
         parent.state.subagent_llm_request_history_dir(&agent_id),
         parent.state.artifact_session_id(),
     );
     let tool_names = tools.names();
     let unbound_question_projection = initial_delivery.is_some()
-        && !context::bound_questions_available(parent).await
         && parent.state.task(&agent_id).is_some_and(|task| {
             tool_policy::is_unbound_question_projection(&task.resolved_tool_allowlist, &tool_names)
         });
-    if !unbound_question_projection {
+    let deferred_native_office_tools =
+        workflow_parent.is_some() && parent.native_office_projection.is_some();
+    if !unbound_question_projection && !deferred_native_office_tools {
         parent
             .state
             .record_agent_resolved_tool_allowlist(&agent_id, tool_names.clone())?;
@@ -285,11 +427,7 @@ pub(crate) async fn run_forked_agent_from_messages(
         fork_settings,
         parent.memory_manager.as_ref().clone(),
         crate::recover_read_lock(&parent.skill_registry, "skill_registry").clone(),
-        context::bound_agent_questioner(
-            parent,
-            &agent_id,
-            subagent.tool_context.abort_token.clone(),
-        ),
+        Arc::new(kcoder_tools::DenyAllUserQuestioner),
         fork_cwd.clone(),
         None,
         Some(parent.plugin_snapshot.as_ref().clone()),
@@ -298,7 +436,9 @@ pub(crate) async fn run_forked_agent_from_messages(
         Some(parent.workspace_runtime_services()),
         true,
     )?
-    .with_project_user_context_from(parent)
+    .with_owned_command_program(parent.owned_command_program.clone())
+    .with_inherited_native_tool_ceiling(parent)
+    .with_project_user_context_from(parent)?
     .with_subagent_system_prompt(subagent.overrides.role_system_prompt.clone())
     .with_subagent_runtime_control(
         parent.state.clone(),
@@ -337,6 +477,7 @@ pub(crate) async fn run_forked_agent_from_messages(
             .clone()
             .unwrap_or_default(),
     );
+    forked_engine = forked_engine.inherit_native_model_requests_from(parent)?;
     forked_engine.request_class = parent.request_class;
     if subagent.overrides.isolate_shell_writes {
         let shell_write_root = subagent
@@ -401,424 +542,553 @@ pub(crate) async fn run_forked_agent_from_messages(
             message_count = initial_messages.len(),
             "repaired legacy or interrupted ToolUse/ToolResult sequence before a forked provider request"
         );
-        forked_engine.state.set_messages(initial_messages.clone());
+        forked_engine
+            .state
+            .set_messages_preserving_history_ids(initial_messages.clone());
     }
     debug_assert!(unmatched_tool_use_ids(&initial_messages).is_empty());
 
-    let auto_prompt = AutoDenyPrompt;
-    let artifact_run = artifact_validation::begin(
-        parent,
-        &forked_engine,
-        &agent_id,
-        initial_delivery.as_ref(),
-        artifact_replay_output.is_some(),
-    )
-    .await?;
-    if let Some(output_text) = artifact_replay_output {
-        artifact_validation::finish(parent, &forked_engine, &agent_id, artifact_run).await?;
-        return Ok(ForkedAgentResult {
-            agent_id,
-            messages: forked_engine.state.messages(),
-            output_text,
-            trusted_tool_results: HashMap::new(),
-        });
-    }
-    write_transcript_checkpoint(&transcript_path, &forked_engine.state.messages()).await?;
-    let initial_delivery_index = initial_delivery.as_ref().and_then(|delivery| {
-        parent
-            .state
-            .task(&agent_id)
-            .and_then(|task| {
-                task.message_queue
-                    .into_iter()
-                    .find(|queued| queued.message_id == delivery.message_id)
-            })
-            .and_then(|queued| {
-                queued
-                    .transcript_anchor
-                    .map(|anchor| anchor.baseline_message_count)
-            })
-    });
-    if let Some(delivery) = initial_delivery.as_ref() {
-        let expected = forked_engine
-            .subagent_runtime_control
-            .as_ref()
-            .as_ref()
-            .and_then(|control| control.expected_background_run.as_ref());
-        let acknowledged = if let Some(run) = expected {
-            parent.state.ack_subagent_delivery_for_run(
-                &agent_id,
-                &delivery.message_id,
-                &delivery.lease_id,
-                run,
-            )?
+    let admission = forked_engine
+        .admit_native_child(parent, source_parent, workflow_parent.as_ref())
+        .await?;
+    let admitted_workflow_child = admission.is_some() && workflow_parent.is_some();
+    let execution = async {
+        if admitted_workflow_child {
+            // This future runs inside the real child Accepted history scope.
+            // Only the parent's opaque native authority can expose this child.
+            forked_engine = forked_engine.with_native_core_workflow_office_child_from(parent)?;
+        }
+        if deferred_native_office_tools && !unbound_question_projection {
+            parent
+                .state
+                .record_agent_resolved_tool_allowlist(&agent_id, forked_engine.tools.names())?;
+        }
+        let protected_stream = forked_engine.native_tool_authorization.is_some();
+        if protected_stream {
+            forked_engine = forked_engine.with_private_native_child_checkpoints();
+            // Cached artifact output and public checkpoints are output paths too.
+            // A real child Accepted/TI must exist before any of them can publish.
+            forked_engine
+                .authorize_native_provider()
+                .await
+                .map_err(|error| {
+                    anyhow::anyhow!("forked agent native admission rejected: {error}")
+                })?;
+        }
+        let auto_prompt = AutoDenyPrompt;
+        let artifact_run = artifact_validation::begin(
+            parent,
+            &forked_engine,
+            &agent_id,
+            initial_delivery.as_ref(),
+            artifact_replay_output.is_some(),
+        )
+        .await?;
+        if let Some(output_text) = artifact_replay_output {
+            artifact_validation::finish(parent, &forked_engine, &agent_id, artifact_run).await?;
+            return Ok(ForkedAgentResult {
+                agent_id,
+                messages: forked_engine.state.messages(),
+                output_text,
+                trusted_tool_results: HashMap::new(),
+            });
+        }
+        if protected_stream {
+            forked_engine
+                .write_context_checkpoint(&transcript_path, &forked_engine.state.messages(), false)
+                .await?;
         } else {
-            parent.state.ack_subagent_delivery(
+            forked_engine
+                .write_context_checkpoint(&transcript_path, &forked_engine.state.messages(), true)
+                .await?;
+        }
+        let initial_delivery_index = initial_delivery.as_ref().and_then(|delivery| {
+            parent
+                .state
+                .task(&agent_id)
+                .and_then(|task| {
+                    task.message_queue
+                        .into_iter()
+                        .find(|queued| queued.message_id == delivery.message_id)
+                })
+                .and_then(|queued| {
+                    queued
+                        .transcript_anchor
+                        .map(|anchor| anchor.baseline_message_count)
+                })
+        });
+        if let Some(delivery) = initial_delivery.as_ref() {
+            let expected = forked_engine
+                .subagent_runtime_control
+                .as_ref()
+                .as_ref()
+                .and_then(|control| control.expected_background_run.as_ref());
+            let acknowledged = if let Some(run) = expected {
+                parent.state.ack_subagent_delivery_for_run(
+                    &agent_id,
+                    &delivery.message_id,
+                    &delivery.lease_id,
+                    run,
+                )?
+            } else {
+                parent.state.ack_subagent_delivery(
+                    &agent_id,
+                    &delivery.message_id,
+                    &delivery.lease_id,
+                )?
+            };
+            if !acknowledged {
+                anyhow::bail!(
+                    "initial delivery {} disappeared before its transcript checkpoint could be acknowledged",
+                    delivery.message_id
+                );
+            }
+        }
+        if let Some(delivery) = initial_delivery.as_ref() {
+            let queue_depth = parent
+                .state
+                .task(&agent_id)
+                .map(|task| task.message_queue.len())
+                .unwrap_or_default();
+            parent.background_jobs.report_subagent_steer_applied(
                 &agent_id,
                 &delivery.message_id,
-                &delivery.lease_id,
-            )?
-        };
-        if !acknowledged {
-            anyhow::bail!(
-                "initial delivery {} disappeared before its transcript checkpoint could be acknowledged",
-                delivery.message_id
+                queue_depth,
             );
         }
-    }
-    if let Some(delivery) = initial_delivery.as_ref() {
-        let queue_depth = parent
-            .state
-            .task(&agent_id)
-            .map(|task| task.message_queue.len())
-            .unwrap_or_default();
-        parent.background_jobs.report_subagent_steer_applied(
-            &agent_id,
-            &delivery.message_id,
-            queue_depth,
+        let mut stream = forked_engine.run_native_turn_stream_with_subagent_finish_reminders(
+            &auto_prompt,
+            max_turns,
+            agent_id.clone(),
         );
-    }
-    let mut stream = forked_engine.run_turn_stream_with_subagent_finish_reminders(
-        &auto_prompt,
-        max_turns,
-        agent_id.clone(),
-    );
-    let mut streamed_output_text = String::new();
-    let mut live_view = parent.background_jobs.live_views.register_with_run(
-        &agent_id,
-        forked_engine.state.messages(),
-        parent
-            .state
-            .task(&agent_id)
-            .and_then(|task| task.background_run)
-            .map(|run| run.run_id)
-            .unwrap_or_else(|| format!("agent-{}", uuid::Uuid::new_v4())),
-    );
-    if let (Some(delivery), Some(index)) = (initial_delivery.as_ref(), initial_delivery_index) {
-        let client_message_id = parent.state.task(&agent_id).and_then(|task| {
-            task.command_receipts
-                .into_iter()
-                .find(|receipt| receipt.message_id == delivery.message_id)
-                .map(|receipt| receipt.client_message_id)
-        });
-        live_view.bind_source_message(index, &delivery.message_id, client_message_id);
-    }
-    let mut trusted_tool_results = HashMap::new();
-    let mut trusted_tool_result_bytes = 0usize;
-    let mut pending_abort: Option<(String, bool)> = None;
-    let mut forced_terminal_output: Option<String> = None;
-    let mut current_turn = 1usize;
-    let mut advance_turn_on_next_message = false;
-    let mut last_progress = Some((1usize, "Waiting for model".to_string()));
-    let mut latest_model_text = String::new();
-    let mut last_model_detail_emit = std::time::Instant::now()
-        .checked_sub(SUBAGENT_MODEL_DETAIL_INTERVAL)
-        .unwrap_or_else(std::time::Instant::now);
-    parent.report_background_job_progress(&agent_id, "Waiting for model", Some(1), Some(max_turns));
+        let mut streamed_output_text = String::new();
+        let mut live_view: Option<crate::agent_live_view::AgentLiveWriter> = None;
+        let mut native_event_rejection = None;
+        let mut trusted_tool_results = HashMap::new();
+        let mut trusted_tool_result_bytes = 0usize;
+        let mut pending_abort: Option<(String, bool)> = None;
+        let mut forced_terminal_output: Option<String> = None;
+        let mut current_turn = 1usize;
+        let mut advance_turn_on_next_message = false;
+        let mut last_progress = Some((1usize, "Waiting for model".to_string()));
+        let mut latest_model_text = String::new();
+        let mut last_model_detail_emit = std::time::Instant::now()
+            .checked_sub(SUBAGENT_MODEL_DETAIL_INTERVAL)
+            .unwrap_or_else(std::time::Instant::now);
+        parent.report_background_job_progress(
+            &agent_id,
+            "Waiting for model",
+            Some(1),
+            Some(max_turns),
+        );
 
-    while let Some(event) = stream.next().await {
-        live_view.update(&event, || forked_engine.state.messages());
-        record_agent_breaker_event(parent, &agent_id, &event);
-        if let EngineEvent::SubagentSteerApplied {
-            agent_id: applied_agent_id,
-            message_id,
-            queue_depth,
-        } = &event
-        {
-            if applied_agent_id == &agent_id {
-                parent.background_jobs.report_subagent_steer_applied(
-                    applied_agent_id,
-                    message_id,
-                    *queue_depth,
-                );
-            } else {
-                warn!(
-                    expected_agent_id = %agent_id,
-                    actual_agent_id = %applied_agent_id,
-                    %message_id,
-                    "ignored a cross-agent steer-applied event from a forked child"
-                );
+        while let Some(frame) = stream.next().await {
+            if native_event_rejection.is_none()
+                && let Err(error) = forked_engine
+                    .authorize_native_child_event(parent, &frame)
+                    .await
+            {
+                native_event_rejection = Some(error);
+                // Drain the same owned stream after cancelling so it can commit the
+                // original interrupted tool results. Rejected payloads never reach
+                // presentation, progress, trusted results, Hooks or parent output.
+                forked_engine.cancel_token().cancel();
+                streamed_output_text.clear();
+                latest_model_text.clear();
+                trusted_tool_results.clear();
             }
-        }
-        if matches!(&event, EngineEvent::AssistantMessageStarted) && advance_turn_on_next_message {
-            current_turn = current_turn.saturating_add(1);
-            advance_turn_on_next_message = false;
-        }
-        let progress_message = match &event {
-            EngineEvent::AssistantMessageStarted => Some("Receiving model response".to_string()),
-            EngineEvent::AssistantThinkingDelta(_) => Some("Thinking".to_string()),
-            EngineEvent::AssistantTextDelta(_) => Some("Writing response".to_string()),
-            EngineEvent::ToolInputProgress { name, .. } => Some(format!("Preparing {name}")),
-            EngineEvent::ToolUseStarted { name, .. } => Some(format!("Running {name}")),
-            EngineEvent::ToolResult { name, .. } => Some(format!("Finished {name}")),
-            EngineEvent::ToolDenied { name, .. } => Some(format!("Denied {name}")),
-            EngineEvent::AssistantMessageDone => Some("Planning next step".to_string()),
-            _ => None,
-        };
-        if let Some(message) = progress_message {
-            let turn = current_turn;
-            if last_progress.as_ref() != Some(&(turn, message.clone())) {
-                parent.report_background_job_progress(
+            if native_event_rejection.is_some() {
+                continue;
+            }
+            let event = frame.into_event();
+            let writer = live_view.get_or_insert_with(|| {
+                let writer = parent.background_jobs.live_views.register_with_run(
                     &agent_id,
-                    &message,
-                    Some(turn),
-                    Some(max_turns),
+                    forked_engine.state.messages(),
+                    parent
+                        .state
+                        .task(&agent_id)
+                        .and_then(|task| task.background_run)
+                        .map(|run| run.run_id)
+                        .unwrap_or_else(|| format!("agent-{}", uuid::Uuid::new_v4())),
                 );
-                last_progress = Some((turn, message));
+                if let (Some(delivery), Some(index)) =
+                    (initial_delivery.as_ref(), initial_delivery_index)
+                {
+                    let client_message_id = parent.state.task(&agent_id).and_then(|task| {
+                        task.command_receipts
+                            .into_iter()
+                            .find(|receipt| receipt.message_id == delivery.message_id)
+                            .map(|receipt| receipt.client_message_id)
+                    });
+                    writer.bind_source_message(index, &delivery.message_id, client_message_id);
+                }
+                writer
+            });
+            writer.update(&event, || forked_engine.state.messages());
+            record_agent_breaker_event(parent, &agent_id, &event);
+            if let EngineEvent::SubagentSteerApplied {
+                agent_id: applied_agent_id,
+                message_id,
+                queue_depth,
+            } = &event
+            {
+                if applied_agent_id == &agent_id {
+                    parent.background_jobs.report_subagent_steer_applied(
+                        applied_agent_id,
+                        message_id,
+                        *queue_depth,
+                    );
+                } else {
+                    warn!(
+                        expected_agent_id = %agent_id,
+                        actual_agent_id = %applied_agent_id,
+                        %message_id,
+                        "ignored a cross-agent steer-applied event from a forked child"
+                    );
+                }
             }
-        }
-        if let EngineEvent::AssistantTextDelta(delta) = &event {
-            latest_model_text.push_str(delta);
-            const MAX_LATEST_MODEL_CHARS: usize = 2_000;
-            let char_count = latest_model_text.chars().count();
-            if char_count > MAX_LATEST_MODEL_CHARS {
-                latest_model_text = latest_model_text
-                    .chars()
-                    .skip(char_count - MAX_LATEST_MODEL_CHARS)
-                    .collect();
+            if matches!(&event, EngineEvent::AssistantMessageStarted)
+                && advance_turn_on_next_message
+            {
+                current_turn = current_turn.saturating_add(1);
+                advance_turn_on_next_message = false;
             }
-            let now = std::time::Instant::now();
-            if subagent_model_detail_due(last_model_detail_emit, now) {
-                parent.report_background_job_progress_detail(
-                    &agent_id,
-                    "Writing response",
-                    &latest_model_text,
-                    Some(current_turn),
-                    Some(max_turns),
-                );
-                last_model_detail_emit = now;
+            let progress_message = match &event {
+                EngineEvent::AssistantMessageStarted => {
+                    Some("Receiving model response".to_string())
+                }
+                EngineEvent::AssistantThinkingDelta(_) => Some("Thinking".to_string()),
+                EngineEvent::AssistantTextDelta(_) => Some("Writing response".to_string()),
+                EngineEvent::ToolInputProgress { name, .. } => Some(format!("Preparing {name}")),
+                EngineEvent::ToolUseStarted { name, .. } => Some(format!("Running {name}")),
+                EngineEvent::ToolResult { name, .. } => Some(format!("Finished {name}")),
+                EngineEvent::ToolDenied { name, .. } => Some(format!("Denied {name}")),
+                EngineEvent::AssistantMessageDone => Some("Planning next step".to_string()),
+                _ => None,
+            };
+            if let Some(message) = progress_message {
+                let turn = current_turn;
+                if last_progress.as_ref() != Some(&(turn, message.clone())) {
+                    parent.report_background_job_progress(
+                        &agent_id,
+                        &message,
+                        Some(turn),
+                        Some(max_turns),
+                    );
+                    last_progress = Some((turn, message));
+                }
             }
-        }
-        if matches!(&event, EngineEvent::AssistantMessageDone) {
-            if !latest_model_text.is_empty() {
-                parent.report_background_job_progress_detail(
-                    &agent_id,
-                    "Writing response",
-                    &latest_model_text,
-                    Some(current_turn),
-                    Some(max_turns),
-                );
-                last_model_detail_emit = std::time::Instant::now();
-            }
-            // AssistantMessageDone closes one provider response but precedes
-            // that response's tool execution. Advance only when the next
-            // assistant message actually starts, after any tools complete.
-            advance_turn_on_next_message = true;
-        }
-        if matches!(
-            &event,
-            EngineEvent::AssistantMessageStarted | EngineEvent::AssistantMessageDone
-        ) {
-            let checkpoint_messages = forked_engine.state.messages();
-            // AssistantMessageDone precedes tool execution, while the next
-            // AssistantMessageStarted follows the completed ToolResults from
-            // the preceding response. Persist both protocol-complete
-            // boundaries so a later hard-abort fallback retains every fully
-            // completed tool cycle instead of falling back to the initial user
-            // message.
-            if unmatched_tool_use_ids(&checkpoint_messages).is_empty() {
-                write_transcript_checkpoint(&transcript_path, &checkpoint_messages).await?;
+            if let EngineEvent::AssistantTextDelta(delta) = &event {
+                latest_model_text.push_str(delta);
+                const MAX_LATEST_MODEL_CHARS: usize = 2_000;
+                let char_count = latest_model_text.chars().count();
+                if char_count > MAX_LATEST_MODEL_CHARS {
+                    latest_model_text = latest_model_text
+                        .chars()
+                        .skip(char_count - MAX_LATEST_MODEL_CHARS)
+                        .collect();
+                }
+                let now = std::time::Instant::now();
+                if subagent_model_detail_due(last_model_detail_emit, now) {
+                    parent.report_background_job_progress_detail(
+                        &agent_id,
+                        "Writing response",
+                        &latest_model_text,
+                        Some(current_turn),
+                        Some(max_turns),
+                    );
+                    last_model_detail_emit = now;
+                }
             }
             if matches!(&event, EngineEvent::AssistantMessageDone) {
-                checkpoint_agent_usage(parent, &agent_id, &checkpoint_messages);
+                if !latest_model_text.is_empty() {
+                    parent.report_background_job_progress_detail(
+                        &agent_id,
+                        "Writing response",
+                        &latest_model_text,
+                        Some(current_turn),
+                        Some(max_turns),
+                    );
+                    last_model_detail_emit = std::time::Instant::now();
+                }
+                // AssistantMessageDone closes one provider response but precedes
+                // that response's tool execution. Advance only when the next
+                // assistant message actually starts, after any tools complete.
+                advance_turn_on_next_message = true;
             }
-        }
-        match event {
-            EngineEvent::AssistantTextDelta(text) => streamed_output_text.push_str(&text),
-            EngineEvent::ToolResult { id, name, output } => {
-                // Authenticated IDs and trusted results share one source: both are captured by
-                // the engine before transcript persistence and cross-checked against
-                // VerifierVote verified_tool_use_ids.
-                if verifier_terminal_verdict && let Some(channel) = verifier_vote_channel.as_ref() {
-                    channel.record_authenticated_tool_use(&id);
-                }
-                if !trusted_tool_results.contains_key(&id)
-                    && trusted_tool_results.len() < MAX_VERIFIER_TRUSTED_TOOL_RESULTS
-                    && let Some((output, bytes)) = bounded_verifier_tool_result(&name, output)
-                    && trusted_tool_result_bytes.saturating_add(bytes)
-                        <= MAX_VERIFIER_TRUSTED_TOOL_RESULTS_BYTES
-                {
-                    trusted_tool_result_bytes += bytes;
-                    trusted_tool_results.insert(id, output);
-                }
-            }
-            EngineEvent::Error(err) | EngineEvent::ProviderFailed { message: err, .. } => {
-                if pending_abort.is_some() {
-                    // Cancellation can surface an additional provider/tool
-                    // error while the engine is still committing interrupted
-                    // ToolResults. Keep draining so the protocol is repaired.
-                    continue;
-                }
-                let messages = forked_engine.state.messages();
-                if unmatched_tool_use_ids(&messages).is_empty() {
-                    write_transcript_checkpoint(&transcript_path, &messages).await?;
-                }
-                let stop_result = run_subagent_hook(
-                    parent,
-                    kcoder_hooks::HookEvent::SubagentStop,
-                    &agent_id,
-                    serde_json::json!({
-                        "agent_id": agent_id.clone(),
-                        "status": "failed",
-                        "error": err.clone(),
-                        "output_text": streamed_output_text.clone(),
-                    }),
-                )
-                .await;
-                if let Err(hook_error) = stop_result {
-                    return Err(anyhow::anyhow!(
-                        "forked agent error: {}; additionally {}",
-                        err,
-                        hook_error
-                    ));
-                }
-                return Err(anyhow::anyhow!("forked agent error: {}", err));
-            }
-            EngineEvent::MaxTurnsReached { max_turns, .. } => {
-                if pending_abort.is_some() {
-                    continue;
-                }
-                if terminal_verdict {
-                    let output = if verifier_terminal_verdict {
-                        "FLAKY\nThe verifier reached its final decision boundary without an explicit verdict from the evidence already collected, so PASS or FAIL cannot be accepted safely."
-                            .to_string()
-                    } else {
-                        "REVIEW_UNAVAILABLE\nThe critic reached its turn boundary without a valid ReviewVote; runtime will count this as an infrastructure retry, not a semantic reject."
-                            .to_string()
-                    };
+            if matches!(
+                &event,
+                EngineEvent::AssistantMessageStarted | EngineEvent::AssistantMessageDone
+            ) {
+                let checkpoint_messages = forked_engine.state.messages();
+                // AssistantMessageDone precedes tool execution, while the next
+                // AssistantMessageStarted follows the completed ToolResults from
+                // the preceding response. Persist both protocol-complete
+                // boundaries so a later hard-abort fallback retains every fully
+                // completed tool cycle instead of falling back to the initial user
+                // message.
+                if unmatched_tool_use_ids(&checkpoint_messages).is_empty() {
                     forked_engine
-                        .state
-                        .add_message(Message::assistant_text(output.clone()));
-                    forced_terminal_output = Some(output);
+                        .write_context_checkpoint(&transcript_path, &checkpoint_messages, true)
+                        .await?;
+                }
+                if matches!(&event, EngineEvent::AssistantMessageDone) {
+                    checkpoint_agent_usage(parent, &agent_id, &checkpoint_messages);
+                }
+            }
+            match event {
+                EngineEvent::AssistantTextDelta(text) => streamed_output_text.push_str(&text),
+                EngineEvent::ToolResult { id, name, output } => {
+                    // Authenticated IDs and trusted results share one source: both are captured by
+                    // the engine before transcript persistence and cross-checked against
+                    // VerifierVote verified_tool_use_ids.
+                    if verifier_terminal_verdict
+                        && let Some(channel) = verifier_vote_channel.as_ref()
+                    {
+                        channel.record_authenticated_tool_use(&id);
+                    }
+                    if !trusted_tool_results.contains_key(&id)
+                        && trusted_tool_results.len() < MAX_VERIFIER_TRUSTED_TOOL_RESULTS
+                        && let Some((output, bytes)) = bounded_verifier_tool_result(&name, output)
+                        && trusted_tool_result_bytes.saturating_add(bytes)
+                            <= MAX_VERIFIER_TRUSTED_TOOL_RESULTS_BYTES
+                    {
+                        trusted_tool_result_bytes += bytes;
+                        trusted_tool_results.insert(id, output);
+                    }
+                }
+                EngineEvent::Error(err) | EngineEvent::ProviderFailed { message: err, .. } => {
+                    if pending_abort.is_some() {
+                        // Cancellation can surface an additional provider/tool
+                        // error while the engine is still committing interrupted
+                        // ToolResults. Keep draining so the protocol is repaired.
+                        continue;
+                    }
                     let messages = forked_engine.state.messages();
-                    write_transcript_checkpoint(&transcript_path, &messages).await?;
-                    break;
+                    if unmatched_tool_use_ids(&messages).is_empty() {
+                        forked_engine
+                            .write_context_checkpoint(&transcript_path, &messages, true)
+                            .await?;
+                    }
+                    let stop_result = run_subagent_hook(
+                        parent,
+                        kcoder_hooks::HookEvent::SubagentStop,
+                        &agent_id,
+                        serde_json::json!({
+                            "agent_id": agent_id.clone(),
+                            "status": "failed",
+                            "error": err.clone(),
+                            "output_text": streamed_output_text.clone(),
+                        }),
+                    )
+                    .await;
+                    if let Err(hook_error) = stop_result {
+                        return Err(anyhow::anyhow!(
+                            "forked agent error: {}; additionally {}",
+                            err,
+                            hook_error
+                        ));
+                    }
+                    return Err(anyhow::anyhow!("forked agent error: {}", err));
                 }
-                let messages = forked_engine.state.messages();
-                if unmatched_tool_use_ids(&messages).is_empty() {
-                    write_transcript_checkpoint(&transcript_path, &messages).await?;
+                EngineEvent::MaxTurnsReached { max_turns, .. } => {
+                    if pending_abort.is_some() {
+                        continue;
+                    }
+                    if terminal_verdict {
+                        let output = if verifier_terminal_verdict {
+                            "FLAKY\nThe verifier reached its final decision boundary without an explicit verdict from the evidence already collected, so PASS or FAIL cannot be accepted safely."
+                            .to_string()
+                        } else {
+                            "REVIEW_UNAVAILABLE\nThe critic reached its turn boundary without a valid ReviewVote; runtime will count this as an infrastructure retry, not a semantic reject."
+                            .to_string()
+                        };
+                        forked_engine
+                            .state
+                            .add_message(Message::assistant_text(output.clone()));
+                        forced_terminal_output = Some(output);
+                        let messages = forked_engine.state.messages();
+                        forked_engine
+                            .write_context_checkpoint(&transcript_path, &messages, true)
+                            .await?;
+                        break;
+                    }
+                    let messages = forked_engine.state.messages();
+                    if unmatched_tool_use_ids(&messages).is_empty() {
+                        forked_engine
+                            .write_context_checkpoint(&transcript_path, &messages, true)
+                            .await?;
+                    }
+                    let stop_result = run_subagent_hook(
+                        parent,
+                        kcoder_hooks::HookEvent::SubagentStop,
+                        &agent_id,
+                        serde_json::json!({
+                            "agent_id": agent_id.clone(),
+                            "status": "max_turns_reached",
+                            "max_turns": max_turns,
+                            "output_text": streamed_output_text.clone(),
+                        }),
+                    )
+                    .await;
+                    if let Err(hook_error) = stop_result {
+                        return Err(anyhow::anyhow!(
+                            "forked agent reached maximum turns ({}); additionally {}",
+                            max_turns,
+                            hook_error
+                        ));
+                    }
+                    return Err(anyhow::Error::new(ForkedAgentMaxTurnsReached { max_turns }));
                 }
-                let stop_result = run_subagent_hook(
-                    parent,
-                    kcoder_hooks::HookEvent::SubagentStop,
-                    &agent_id,
-                    serde_json::json!({
-                        "agent_id": agent_id.clone(),
-                        "status": "max_turns_reached",
-                        "max_turns": max_turns,
-                        "output_text": streamed_output_text.clone(),
-                    }),
-                )
-                .await;
-                if let Err(hook_error) = stop_result {
-                    return Err(anyhow::anyhow!(
-                        "forked agent reached maximum turns ({}); additionally {}",
-                        max_turns,
-                        hook_error
-                    ));
+                EngineEvent::StreamAborted { reason } => {
+                    let cancelled = reason == "cancelled by user"
+                        || forked_engine.cancel_token().is_cancelled();
+                    // Do not return here. During tool cancellation the engine emits
+                    // StreamAborted before it writes the synthetic interrupted
+                    // ToolResults. Dropping the stream now would persist an invalid
+                    // ToolUse-without-ToolResult transcript.
+                    pending_abort = Some((reason, cancelled));
+                    if unmatched_tool_use_ids(&forked_engine.state.messages()).is_empty() {
+                        // Provider/idle cancellation has no pending tool protocol
+                        // to repair, so there is nothing useful to drain.
+                        break;
+                    }
                 }
-                return Err(anyhow::Error::new(ForkedAgentMaxTurnsReached { max_turns }));
+                _ => {}
             }
-            EngineEvent::StreamAborted { reason } => {
-                let cancelled =
-                    reason == "cancelled by user" || forked_engine.cancel_token().is_cancelled();
-                // Do not return here. During tool cancellation the engine emits
-                // StreamAborted before it writes the synthetic interrupted
-                // ToolResults. Dropping the stream now would persist an invalid
-                // ToolUse-without-ToolResult transcript.
-                pending_abort = Some((reason, cancelled));
-                if unmatched_tool_use_ids(&forked_engine.state.messages()).is_empty() {
-                    // Provider/idle cancellation has no pending tool protocol
-                    // to repair, so there is nothing useful to drain.
-                    break;
-                }
-            }
-            _ => {}
         }
-    }
 
-    let messages = forked_engine.state.messages();
-    write_transcript_checkpoint(&transcript_path, &messages).await?;
-    acknowledge_persisted_breaker_steer(parent, &agent_id, &messages)?;
-    // A control request may arrive while the final tool-free model response streams.
-    // The turn loop may not reach another provider boundary, so claim once more after
-    // the final protocol-complete checkpoint; otherwise a later Completed commit could
-    // overwrite pause/halt.
-    if pending_abort.is_none()
-        && let Some(mode) = forked_engine.prepare_subagent_safe_boundary()?
-    {
-        pending_abort = Some((format!("agent_control:{mode}"), false));
-    }
-    if let Some((reason, cancelled)) = pending_abort {
-        let status = if cancelled { "cancelled" } else { "aborted" };
-        let stop_result = run_subagent_hook(
+        let messages = forked_engine.state.messages();
+        if let Some(error) = native_event_rejection {
+            forked_engine
+                .write_context_checkpoint(&transcript_path, &messages, false)
+                .await?;
+            let native_stop = forked_engine
+                .subagent_runtime_control
+                .as_ref()
+                .as_ref()
+                .and_then(|control| {
+                    control
+                        .parent_state
+                        .task(&control.agent_id)
+                        .filter(|task| {
+                            task.background_run.as_ref() == control.expected_background_run.as_ref()
+                        })
+                        .and_then(|task| match task.status {
+                            kcoder_types::TaskStatus::Paused => Some(("paused", false)),
+                            kcoder_types::TaskStatus::Halted => Some(("halted", false)),
+                            kcoder_types::TaskStatus::Cancelled => Some(("cancelled", true)),
+                            _ => None,
+                        })
+                });
+            if let Some(writer) = live_view.as_mut() {
+                writer.finish_native_denial(native_stop.map_or("failed", |(status, _)| status));
+            }
+            if let Some((status, cancelled)) = native_stop {
+                return Err(anyhow::Error::new(ForkedAgentAborted {
+                    reason: if cancelled {
+                        "cancelled by parent".into()
+                    } else {
+                        format!("agent_control:{status}")
+                    },
+                    cancelled,
+                }));
+            }
+            return Err(anyhow::anyhow!(
+                "forked agent native event rejected: {error}"
+            ));
+        }
+        forked_engine
+            .write_context_checkpoint(&transcript_path, &messages, true)
+            .await?;
+        acknowledge_persisted_breaker_steer(parent, &agent_id, &messages)?;
+        // A control request may arrive while the final tool-free model response streams.
+        // The turn loop may not reach another provider boundary, so claim once more after
+        // the final protocol-complete checkpoint; otherwise a later Completed commit could
+        // overwrite pause/halt.
+        if pending_abort.is_none()
+            && let Some(mode) = forked_engine.prepare_subagent_safe_boundary()?
+        {
+            pending_abort = Some((format!("agent_control:{mode}"), false));
+        }
+        if let Some((reason, cancelled)) = pending_abort {
+            let status = if cancelled { "cancelled" } else { "aborted" };
+            let stop_result = run_subagent_hook(
+                parent,
+                kcoder_hooks::HookEvent::SubagentStop,
+                &agent_id,
+                serde_json::json!({
+                    "agent_id": agent_id.clone(),
+                    "status": status,
+                    "reason": reason.clone(),
+                    "messages": messages.len(),
+                    "output_text": streamed_output_text.clone(),
+                }),
+            )
+            .await;
+            if let Err(hook_error) = stop_result {
+                return Err(anyhow::Error::new(ForkedAgentAborted {
+                    reason: format!("{reason}; SubagentStop hook failed: {hook_error}"),
+                    cancelled,
+                }));
+            }
+            return Err(anyhow::Error::new(ForkedAgentAborted { reason, cancelled }));
+        }
+        let output_text = verifier_vote_channel
+            .as_ref()
+            .and_then(|channel| channel.recorded_vote())
+            .map(|vote| vote.input.summary.clone())
+            .or_else(|| {
+                review_vote_channel
+                    .as_ref()
+                    .and_then(|channel| channel.recorded_vote())
+                    .map(|vote| vote.input.summary.clone())
+            })
+            .or(forced_terminal_output)
+            .or_else(|| latest_assistant_response_text(&messages))
+            .unwrap_or_else(|| streamed_output_text.clone());
+        run_subagent_hook(
             parent,
             kcoder_hooks::HookEvent::SubagentStop,
             &agent_id,
             serde_json::json!({
                 "agent_id": agent_id.clone(),
-                "status": status,
-                "reason": reason.clone(),
+                "status": "completed",
                 "messages": messages.len(),
-                "output_text": streamed_output_text.clone(),
+                "output_text": output_text.clone(),
             }),
         )
-        .await;
-        if let Err(hook_error) = stop_result {
-            return Err(anyhow::Error::new(ForkedAgentAborted {
-                reason: format!("{reason}; SubagentStop hook failed: {hook_error}"),
-                cancelled,
-            }));
+        .await?;
+
+        persist_orchestrate_agent_evidence(
+            parent,
+            &agent_id,
+            &messages,
+            &trusted_tool_results,
+            &fork_cwd,
+            &output_text,
+        )
+        .await?;
+
+        artifact_validation::finish(parent, &forked_engine, &agent_id, artifact_run).await?;
+        let managed = parent
+            .state
+            .task(&agent_id)
+            .and_then(|task| task.background_run)
+            .is_some();
+        if let Some(writer) = live_view.as_mut() {
+            writer.finish(managed);
         }
-        return Err(anyhow::Error::new(ForkedAgentAborted { reason, cancelled }));
-    }
-    let output_text = verifier_vote_channel
-        .as_ref()
-        .and_then(|channel| channel.recorded_vote())
-        .map(|vote| vote.input.summary.clone())
-        .or_else(|| {
-            review_vote_channel
-                .as_ref()
-                .and_then(|channel| channel.recorded_vote())
-                .map(|vote| vote.input.summary.clone())
+        Ok(ForkedAgentResult {
+            agent_id,
+            messages,
+            output_text,
+            trusted_tool_results,
         })
-        .or(forced_terminal_output)
-        .or_else(|| latest_assistant_response_text(&messages))
-        .unwrap_or_else(|| streamed_output_text.clone());
-    run_subagent_hook(
-        parent,
-        kcoder_hooks::HookEvent::SubagentStop,
-        &agent_id,
-        serde_json::json!({
-            "agent_id": agent_id.clone(),
-            "status": "completed",
-            "messages": messages.len(),
-            "output_text": output_text.clone(),
-        }),
-    )
-    .await?;
-
-    persist_orchestrate_agent_evidence(
-        parent,
-        &agent_id,
-        &messages,
-        &trusted_tool_results,
-        &fork_cwd,
-        &output_text,
-    )
-    .await?;
-
-    artifact_validation::finish(parent, &forked_engine, &agent_id, artifact_run).await?;
-    let managed = parent
-        .state
-        .task(&agent_id)
-        .and_then(|task| task.background_run)
-        .is_some();
-    live_view.finish(managed);
-    Ok(ForkedAgentResult {
-        agent_id,
-        messages,
-        output_text,
-        trusted_tool_results,
-    })
+    };
+    match admission {
+        Some(admission) => admission.run(execution).await,
+        None => execution.await,
+    }
 }

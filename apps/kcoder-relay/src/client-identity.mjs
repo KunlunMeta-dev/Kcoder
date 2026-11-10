@@ -1,14 +1,15 @@
 import { constants } from 'node:fs';
-import { chmod, link, mkdir, open, rename, unlink } from 'node:fs/promises';
+import { chmod, link, lstat, mkdir, open, rename, unlink } from 'node:fs/promises';
 import { createHash, randomBytes } from 'node:crypto';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isDeepStrictEqual } from 'node:util';
 
 const MAX_IDENTITY_BYTES = 4096;
 const CREDENTIAL = /^[A-Za-z0-9._~-]{32,512}$/;
 const GATEWAY_ID = /^[A-Za-z0-9_-]{1,64}$/;
 const IDENTITY_KEYS = new Set([
-  'version', 'relayOrigin', 'pairingTokenHash', 'enrollmentToken', 'id', 'secret',
+  'version', 'relayOrigin', 'gatewaySecretHash', 'enrollmentToken', 'id', 'secret',
 ]);
 
 export const DEFAULT_IDENTITY_FILE = resolve(
@@ -16,9 +17,42 @@ export const DEFAULT_IDENTITY_FILE = resolve(
   '../../../target/kcoder-relay/client-identity.json',
 );
 
-export function resolveIdentityFile(env = process.env) {
+export function resolveIdentityFile(env = process.env, stateDirectory) {
   const configured = env.KCODER_RELAY_IDENTITY_FILE;
-  return resolve(configured || DEFAULT_IDENTITY_FILE);
+  return resolve(configured || (stateDirectory ? resolve(stateDirectory, 'relay', 'client-identity.json') : DEFAULT_IDENTITY_FILE));
+}
+
+/** Adopt the old path only at startup, after the instance's previous owner has stopped. */
+export async function prepareInstanceIdentityFile({ stateDirectory, legacyIdentityFile, relayUrl, gatewaySecret }) {
+  const identityFile = resolveIdentityFile({}, stateDirectory);
+  const directory = dirname(identityFile);
+  const directoryStat = await lstat(directory).catch(error => { if (error.code !== 'ENOENT') throw error; });
+  if (directoryStat && (!directoryStat.isDirectory() || directoryStat.isSymbolicLink() ||
+      (process.platform !== 'win32' && ((directoryStat.mode & 0o077) || directoryStat.uid !== process.getuid()))))
+    throw new Error('Relay identity directory must be private and owner-owned');
+  const origin = normalizeRelayOrigin(relayUrl);
+  const tokenHash = pairingHash(gatewaySecret);
+  const [previous, current] = await Promise.all([readRecord(legacyIdentityFile), readRecord(identityFile)]);
+  if (current) validateBinding(current, origin, tokenHash);
+  if (!previous) return identityFile;
+  validateBinding(previous, origin, tokenHash);
+  if (current && !isDeepStrictEqual(previous, current)) throw new Error('Conflicting legacy and current Relay identities; stop the instance and reconcile them before starting');
+
+  await mkdir(directory, { recursive: true, mode: 0o700 });
+  if (!current) {
+    try {
+      // Publish without replacing a competing identity; retain the original bytes and inode.
+      await link(legacyIdentityFile, identityFile);
+    } catch (error) {
+      if (!['EEXIST', 'ENOENT'].includes(error.code) ||
+          !isDeepStrictEqual(previous, await readRecord(identityFile))) throw error;
+    }
+  }
+  // A crash between publication and unlink leaves two matching files and can resume safely.
+  await syncDirectory(dirname(identityFile));
+  await unlink(legacyIdentityFile).catch(error => { if (error.code !== 'ENOENT') throw error; });
+  await syncDirectory(dirname(legacyIdentityFile));
+  return identityFile;
 }
 
 export function normalizeRelayOrigin(relayUrl) {
@@ -36,9 +70,9 @@ function validCredential(value) {
   return typeof value === 'string' && CREDENTIAL.test(value);
 }
 
-function pairingHash(pairingToken) {
-  if (!validCredential(pairingToken)) throw new Error('Gateway pairing token must be 32 to 512 URL-safe characters');
-  return createHash('sha256').update(pairingToken, 'utf8').digest('hex');
+function pairingHash(gatewaySecret) {
+  if (!validCredential(gatewaySecret)) throw new Error('Gateway internal secret must be 32 to 512 URL-safe characters');
+  return createHash('sha256').update(gatewaySecret, 'utf8').digest('hex');
 }
 
 function exactKeys(value, expected, label) {
@@ -56,15 +90,15 @@ function validateRecord(value) {
   const hasSecret = Object.hasOwn(value, 'secret');
   if (hasId !== hasSecret || hasEnrollment === hasId) throw new Error('Client identity has an invalid state');
   const expected = hasEnrollment
-    ? new Set(['version', 'relayOrigin', 'pairingTokenHash', 'enrollmentToken'])
-    : new Set(['version', 'relayOrigin', 'pairingTokenHash', 'id', 'secret']);
+    ? new Set(['version', 'relayOrigin', 'gatewaySecretHash', 'enrollmentToken'])
+    : new Set(['version', 'relayOrigin', 'gatewaySecretHash', 'id', 'secret']);
   exactKeys(value, expected, 'client identity');
   if (value.version !== 1) throw new Error('Unsupported client identity version');
   if (typeof value.relayOrigin !== 'string' || normalizeRelayOrigin(value.relayOrigin) !== value.relayOrigin) {
     throw new Error('Invalid client identity relay origin');
   }
-  if (typeof value.pairingTokenHash !== 'string' || !/^[a-f0-9]{64}$/.test(value.pairingTokenHash)) {
-    throw new Error('Invalid client identity pairing token hash');
+  if (typeof value.gatewaySecretHash !== 'string' || !/^[a-f0-9]{64}$/.test(value.gatewaySecretHash)) {
+    throw new Error('Invalid client identity internal secret hash');
   }
   if (hasEnrollment) {
     if (!validCredential(value.enrollmentToken)) throw new Error('Invalid client identity enrollment token');
@@ -76,7 +110,7 @@ function validateRecord(value) {
   return { status: 'registered', ...value };
 }
 
-async function readRecord(identityFile) {
+async function readRecord(identityFile, requireSingleLink = false) {
   const path = resolve(identityFile || DEFAULT_IDENTITY_FILE);
   let handle;
   try {
@@ -84,6 +118,7 @@ async function readRecord(identityFile) {
     handle = await open(path, constants.O_RDONLY | noFollow);
     const stat = await handle.stat();
     if (!stat.isFile()) throw new Error('Client identity must be a regular file');
+    if (requireSingleLink && stat.nlink !== 1) throw new Error('Client identity must not have multiple hard links');
     if (process.platform !== 'win32' && (stat.mode & 0o077) !== 0) throw new Error('Client identity file must be private (mode 0600 or stricter)');
     if (typeof process.getuid === 'function' && stat.uid !== process.getuid()) throw new Error('Client identity file must be owned by the current user');
     if (stat.size > MAX_IDENTITY_BYTES) throw new Error(`Client identity exceeds ${MAX_IDENTITY_BYTES} bytes`);
@@ -147,46 +182,47 @@ async function writeAtomic(identityFile, record, { exclusive = false } = {}) {
 
 function validateBinding(record, origin, configuredPairingHash) {
   if (record.relayOrigin !== origin) throw new Error('Client identity belongs to a different relay origin');
-  if (configuredPairingHash && record.pairingTokenHash !== configuredPairingHash) {
-    throw new Error('Client identity belongs to a different Gateway pairing token');
+  if (configuredPairingHash && record.gatewaySecretHash !== configuredPairingHash) {
+    throw new Error('Client identity belongs to a different Gateway internal secret');
   }
 }
 
-/** Load a registered identity, requiring an exact relay and optional pairing-token match. */
-export async function readRegisteredClientIdentity({ identityFile = DEFAULT_IDENTITY_FILE, relayUrl, pairingToken } = {}) {
-  const record = await readRecord(identityFile);
+/** Load a registered identity, requiring an exact relay and optional internal-secret match. */
+export async function readRegisteredClientIdentity({ identityFile = DEFAULT_IDENTITY_FILE, relayUrl, gatewaySecret, requireSingleLink = false, allowUnregistered = false } = {}) {
+  const record = await readRecord(identityFile, requireSingleLink);
+  if (allowUnregistered && (!record || record.status === 'pending')) return null;
   if (!record) throw new Error('Client identity file does not exist');
   if (record.status !== 'registered') throw new Error('Client identity is not registered; connect the relay client first');
   const origin = normalizeRelayOrigin(relayUrl);
-  const tokenHash = pairingToken === undefined ? undefined : pairingHash(pairingToken);
+  const tokenHash = gatewaySecret === undefined ? undefined : pairingHash(gatewaySecret);
   validateBinding(record, origin, tokenHash);
   return { id: record.id, secret: record.secret };
 }
 
 /** Read only the assigned Gateway ID for routing and QR generation. */
 export async function readRegisteredClientId(options = {}) {
-  return (await readRegisteredClientIdentity(options)).id;
+  return (await readRegisteredClientIdentity(options))?.id ?? null;
 }
 
 /** Load the cached identity or atomically create a durable enrollment proof. */
-export async function prepareClientIdentity({ identityFile = DEFAULT_IDENTITY_FILE, relayUrl, pairingToken } = {}) {
+export async function prepareClientIdentity({ identityFile = DEFAULT_IDENTITY_FILE, relayUrl, gatewaySecret } = {}) {
   const path = resolve(identityFile);
   const origin = normalizeRelayOrigin(relayUrl);
   let tokenHash;
-  if (pairingToken !== undefined) tokenHash = pairingHash(pairingToken);
+  if (gatewaySecret !== undefined) tokenHash = pairingHash(gatewaySecret);
   const existing = await readRecord(path);
   if (existing) {
     validateBinding(existing, origin, tokenHash);
     if (existing.status === 'registered') return { status: 'registered', id: existing.id, secret: existing.secret };
-    if (!tokenHash) throw new Error('Configure KCODER_RELAY_GATEWAY_TOKEN to resume client registration');
+    if (!tokenHash) throw new Error('Configure KCODER_RELAY_GATEWAY_SECRET to resume client registration');
     return { status: 'pending', enrollmentToken: existing.enrollmentToken };
   }
-  if (!tokenHash) throw new Error('Configure KCODER_RELAY_GATEWAY_TOKEN before client registration');
+  if (!tokenHash) throw new Error('Configure KCODER_RELAY_GATEWAY_SECRET before client registration');
   const enrollmentToken = randomBytes(32).toString('base64url');
   const pending = {
     version: 1,
     relayOrigin: origin,
-    pairingTokenHash: tokenHash,
+    gatewaySecretHash: tokenHash,
     enrollmentToken,
   };
   try {
@@ -203,11 +239,11 @@ export async function prepareClientIdentity({ identityFile = DEFAULT_IDENTITY_FI
 }
 
 /** Replace a pending proof with the assigned identity after successful registration. */
-export async function saveRegisteredClientIdentity({ identityFile = DEFAULT_IDENTITY_FILE, relayUrl, pairingToken, enrollmentToken, id, secret } = {}) {
+export async function saveRegisteredClientIdentity({ identityFile = DEFAULT_IDENTITY_FILE, relayUrl, gatewaySecret, enrollmentToken, id, secret } = {}) {
   if (!validCredential(enrollmentToken)) throw new Error('Invalid client enrollment token');
   if (typeof id !== 'string' || !GATEWAY_ID.test(id) || !validCredential(secret)) throw new Error('Invalid registered client credentials');
   const origin = normalizeRelayOrigin(relayUrl);
-  const tokenHash = pairingHash(pairingToken);
+  const tokenHash = pairingHash(gatewaySecret);
   const existing = await readRecord(identityFile);
   if (!existing) throw new Error('Pending client identity disappeared during registration');
   validateBinding(existing, origin, tokenHash);
@@ -219,7 +255,7 @@ export async function saveRegisteredClientIdentity({ identityFile = DEFAULT_IDEN
   await writeAtomic(identityFile, {
     version: 1,
     relayOrigin: origin,
-    pairingTokenHash: tokenHash,
+    gatewaySecretHash: tokenHash,
     id,
     secret,
   });

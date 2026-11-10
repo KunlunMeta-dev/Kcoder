@@ -1,0 +1,35 @@
+[package]
+name = "kcoder_skill_support"
+description = "Skill package input and local usage/provenance services."
+version = { workspace = true }
+publish = false
+edition = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+rust-version = { workspace = true }
+
+[dependencies]
+kcoder_tool_error = { path = "../tool_error" }
+anyhow = { workspace = true }
+chrono = { workspace = true }
+dirs = { workspace = true }
+flate2 = "1.1"
+kcoder_config = { path = "../../../kcoder_config" }
+kcoder_memory = { path = "../../../kcoder_memory" }
+kcoder_shell_isolation = { path = "../shell_isolation" }
+kcoder_skills = { path = "../../../kcoder_skills" }
+reqwest = { workspace = true }
+schemars = "0.8"
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+walkdir = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[lib]
+path = "../../src/internal/skill_support/lib.rs"

@@ -49,6 +49,33 @@ test('keeps strict-mode scope active, preserves rename, and invalidates only cha
   view.unmount()
   expect(third.isCurrent()).toBe(false)
 })
+
+test('does not bind an unselected scope to the first Gateway target', async () => {
+  let firstTarget = {
+    id: 'alpha',
+    label: 'A',
+    transport: 'local',
+    command: 'kcoder',
+    workspace: '/alpha',
+  }
+  servers.mockImplementation(async () => [firstTarget, { ...firstTarget, id: 'beta' }])
+  const view = renderHook(() => usePluginTargetScope())
+  await waitFor(() => expect(servers).toHaveBeenCalled())
+  const unselected = view.result.current
+  expect(unselected.isCurrent()).toBe(true)
+
+  firstTarget = { ...firstTarget, command: 'changed-kcoder' }
+  await act(async () => {
+    window.dispatchEvent(
+      new CustomEvent('kcoder:servers-changed', { detail: { targetId: 'alpha' } })
+    )
+    await Promise.resolve()
+  })
+
+  expect(view.result.current.key).toBe(unselected.key)
+  expect(unselected.isCurrent()).toBe(true)
+})
+
 test('captured account revision rejects its owner change and preserves another target', () => {
   const valid = captureAccountContextRevision()
   notifyAccountContextChange('alpha')

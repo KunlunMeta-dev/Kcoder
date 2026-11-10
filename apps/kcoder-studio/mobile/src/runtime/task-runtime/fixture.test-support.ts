@@ -22,9 +22,19 @@ export const server: KCoderServer = {
   workspacePath: "/workspace",
 };
 
+export const appServerId = "server-engine-test";
+
 export class FakeClient {
   listeners = new Set<(message: RpcMessage) => void>();
   closed = false;
+
+  getAppServerId(): string {
+    return appServerId;
+  }
+
+  isTransportOpen(): boolean {
+    return !this.closed;
+  }
 
   constructor(
     private readonly history: ThreadMessage[],
@@ -40,6 +50,12 @@ export class FakeClient {
   subscribe(listener: (message: RpcMessage) => void): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
+  }
+
+  // This generic fixture has no authenticated runtime owner. Tests for scoped
+  // controls must explicitly provide an owner-bound client implementation.
+  matchesRuntimeOwner(): boolean {
+    return false;
   }
 
   supportsExperimental(capability: string): boolean {

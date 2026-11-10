@@ -1,9 +1,9 @@
 import { useEffect } from 'react'
 import type { ProjectCreateMode } from '@/components/chat/ChatInput'
 
-const OPEN_PROJECT_CREATE_EVENT = 'wework:open-project-create'
-const BIND_PROJECT_WORKSPACE_EVENT = 'wework:bind-project-workspace'
-const OPEN_CLOUD_DEVICE_SETTINGS_EVENT = 'wework:open-cloud-device-settings'
+const OPEN_PROJECT_CREATE_EVENT = 'kcoder:open-project-create'
+const BIND_PROJECT_WORKSPACE_EVENT = 'kcoder:bind-project-workspace'
+const OPEN_CLOUD_DEVICE_SETTINGS_EVENT = 'kcoder:open-cloud-device-settings'
 
 export function requestProjectCreateMode(mode: ProjectCreateMode) {
   window.dispatchEvent(new CustomEvent(OPEN_PROJECT_CREATE_EVENT, { detail: { mode } }))

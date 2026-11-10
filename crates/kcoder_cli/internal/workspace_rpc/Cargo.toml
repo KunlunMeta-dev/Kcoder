@@ -1,0 +1,31 @@
+[package]
+name = "kcoder_workspace_rpc"
+description = "Workspace and project registry requests with authorized file search."
+version = { workspace = true }
+edition = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+rust-version = { workspace = true }
+publish = false
+
+[lib]
+path = "../../src/app_server/workspace_requests.rs"
+
+[features]
+test-oracle = []
+
+[dependencies]
+anyhow = { workspace = true }
+kcoder_app_protocol = { path = "../../../kcoder_app_protocol" }
+kcoder_attachment_retention = { path = "../attachment_retention" }
+dunce = { workspace = true }
+fs2 = "0.4"
+kcoder_cli_storage = { path = "../cli_storage" }
+kcoder_config = { path = "../../../kcoder_config" }
+kcoder_workspace_resources = { path = "../workspace_resources" }
+kcoder_state = { path = "../../../kcoder_state" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+tokio = { workspace = true }

@@ -1,3 +1,4 @@
+import { installTestTransport, clearTestTransports } from '@/test/runtime-transport'
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useEffect } from 'react'
@@ -9,7 +10,8 @@ import {
   disconnectLocalExecutorFromBackend,
   ensureLocalExecutorStarted,
   readLocalExecutorLog,
-} from '@/tauri/localExecutor'
+  type LocalExecutorLog,
+} from '@/host/localExecutor'
 import { LocalRuntimeInitializer } from './LocalRuntimeInitializer'
 
 const startDragging = vi.fn().mockResolvedValue(undefined)
@@ -21,7 +23,7 @@ vi.mock('@/kcoder/KCoderAccountStartup', () => ({
   ),
 }))
 
-vi.mock('@/tauri/localExecutor', () => ({
+vi.mock('@/host/localExecutor', () => ({
   connectLocalExecutorToBackend: vi.fn(),
   copyLocalExecutorDebugInfo: vi.fn(),
   disconnectLocalExecutorFromBackend: vi.fn(),
@@ -29,9 +31,6 @@ vi.mock('@/tauri/localExecutor', () => ({
   readLocalExecutorLog: vi.fn(),
 }))
 
-vi.mock('@tauri-apps/api/window', () => ({
-  getCurrentWindow: () => ({ startDragging }),
-}))
 
 const copyDebugMock = vi.mocked(copyLocalExecutorDebugInfo)
 const connectMock = vi.mocked(connectLocalExecutorToBackend)
@@ -40,11 +39,8 @@ const ensureMock = vi.mocked(ensureLocalExecutorStarted)
 const readLogMock = vi.mocked(readLocalExecutorLog)
 const SLOW_STARTUP_WARNING_MS = 10000
 
-function enableTauri() {
-  Object.defineProperty(window, '__TAURI_INTERNALS__', {
-    configurable: true,
-    value: {},
-  })
+function enableGateway() {
+  installTestTransport(() => null)
 }
 
 function MountProbe({ onMount }: { onMount: () => void }) {
@@ -55,9 +51,18 @@ function MountProbe({ onMount }: { onMount: () => void }) {
   return <div data-testid="main-app">Main app</div>
 }
 
+function diagnosticLog(path: string): LocalExecutorLog {
+  return {
+    path, content: 'DIAGNOSTIC_BODY_NOT_FOR_ERROR_SCREEN', truncated: false, lineCount: 1,
+    transport: 'stdio', transportConnected: false, processPids: [], processPaths: [],
+    sidecarSource: '', sidecarPath: '', currentDir: '', executorHome: '', backendUrl: null,
+    hasBackendAuthToken: false, pendingRequestCount: 0, status: { running: false, ready: false },
+  }
+}
+
 describe('LocalRuntimeInitializer', () => {
   beforeEach(() => {
-    enableTauri()
+    enableGateway()
     vi.stubEnv('DEV', false)
     connectMock.mockReset()
     copyDebugMock.mockReset()
@@ -214,20 +219,19 @@ describe('LocalRuntimeInitializer', () => {
     expect(screen.queryByTestId('local-runtime-initializer')).not.toBeInTheDocument()
   })
 
-  test('shows slow startup help and copies diagnostic details with executor log', async () => {
+  test('shows a quiet slow startup hint and offers diagnostics after failure', async () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-06-28T10:30:00Z'))
-    let resolveEnsure: ((value: { running: true; ready: true; deviceId: string }) => void) | null =
-      null
+    let rejectEnsure: ((error: Error) => void) | null = null
     ensureMock.mockImplementation(
       () =>
-        new Promise(resolve => {
-          resolveEnsure = resolve
+        new Promise((_resolve, reject) => {
+          rejectEnsure = reject
         })
     )
     readLogMock.mockResolvedValue({
       path: '~/.wegent-executor/logs/executor.log',
-      content: 'executor waiting for stdio via Tauri runtime detail',
+      content: 'executor waiting for stdio via Gateway runtime detail',
       truncated: true,
       lineCount: 20,
       transport: 'stdio',
@@ -250,7 +254,7 @@ describe('LocalRuntimeInitializer', () => {
     })
     Object.defineProperty(navigator, 'userAgent', {
       configurable: true,
-      value: 'Mozilla/5.0 Tauri/2.0',
+      value: 'Mozilla/5.0 Electron/42.0',
     })
     const writeText = vi.fn().mockResolvedValue(undefined)
     Object.defineProperty(navigator, 'clipboard', {
@@ -264,32 +268,29 @@ describe('LocalRuntimeInitializer', () => {
       </LocalRuntimeInitializer>
     )
 
-    expect(screen.queryByTestId('local-runtime-slow-startup-help')).not.toBeInTheDocument()
+    expect(screen.getByTestId('local-runtime-slow-startup-help')).toHaveAttribute('aria-hidden', 'true')
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(SLOW_STARTUP_WARNING_MS)
     })
 
-    const slowStartupHelp = screen.getByTestId('local-runtime-slow-startup-help')
-    expect(slowStartupHelp).toHaveTextContent('启动时间有点久')
-    expect(slowStartupHelp.className).toContain('sm:flex-row')
-    expect(slowStartupHelp.className).toContain('bg-amber-500/10')
-    expect(
-      within(slowStartupHelp).getByTestId('local-runtime-slow-startup-icon').className
-    ).toContain('dark:text-amber-300')
-    expect(screen.getByTestId('local-runtime-copy-debug-button').className).toContain(
-      'hover:bg-muted'
-    )
+    expect(screen.getByTestId('local-runtime-slow-startup-help')).toHaveAttribute('aria-hidden', 'false')
+    expect(screen.getByText('仍在启动，请稍候。')).toBeVisible()
+    expect(screen.queryByTestId('local-runtime-copy-debug-button')).not.toBeInTheDocument()
 
     await act(async () => {
+      rejectEnsure?.(new Error('executor startup failed'))
+    })
+    const diagnostics = screen.getByText('诊断详情').closest('details')!
+    expect(diagnostics).not.toHaveAttribute('open')
+    diagnostics.open = true
+    await act(async () => {
       fireEvent.click(screen.getByTestId('local-runtime-copy-debug-button'))
-      await Promise.resolve()
-      await Promise.resolve()
     })
 
-    expect(readLogMock).toHaveBeenCalledTimes(1)
-    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('Startup phase: starting'))
-    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('Startup check: pending'))
+    expect(readLogMock).toHaveBeenCalled()
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('Startup phase: failed'))
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('Startup check: failed'))
     expect(writeText).toHaveBeenCalledWith(expect.stringContaining('IPC transport: stdio'))
     expect(writeText).toHaveBeenCalledWith(expect.stringContaining('IPC connected: false'))
     expect(writeText).toHaveBeenCalledWith(expect.stringContaining('Executor PID(s): 1234'))
@@ -326,18 +327,13 @@ describe('LocalRuntimeInitializer', () => {
     )
     expect(writeText).toHaveBeenCalledWith(expect.stringContaining('Executor log lines: last 20'))
     expect(writeText).toHaveBeenCalledWith(expect.stringContaining('executor waiting for stdio'))
-    expect(writeText).toHaveBeenCalledWith(expect.not.stringMatching(/tauri/i))
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('via Gateway runtime detail'))
     expect(screen.getByTestId('local-runtime-copy-debug-button')).toHaveTextContent('已复制')
 
-    await act(async () => {
-      resolveEnsure?.({ running: true, ready: true, deviceId: 'local-device' })
-      await Promise.resolve()
-    })
   })
 
   test('copies debug details through native app fallback when Web Clipboard is unavailable', async () => {
-    vi.useFakeTimers()
-    ensureMock.mockImplementation(() => new Promise(() => undefined))
+    ensureMock.mockRejectedValue(new Error('connect timed out'))
     readLogMock.mockResolvedValue({
       path: '~/.wegent-executor/logs/executor.log',
       content: 'executor native clipboard path',
@@ -369,14 +365,10 @@ describe('LocalRuntimeInitializer', () => {
       </LocalRuntimeInitializer>
     )
 
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(SLOW_STARTUP_WARNING_MS)
-    })
-
+    const summary = await screen.findByText('诊断详情')
+    summary.closest('details')!.open = true
     await act(async () => {
       fireEvent.click(screen.getByTestId('local-runtime-copy-debug-button'))
-      await Promise.resolve()
-      await Promise.resolve()
     })
 
     expect(copyDebugMock).toHaveBeenCalledWith(
@@ -397,11 +389,11 @@ describe('LocalRuntimeInitializer', () => {
     const dragRegion = within(screen.getByTestId('local-runtime-titlebar-drag-region')).getByTestId(
       'macos-titlebar-drag-region'
     )
-    expect(dragRegion).toHaveAttribute('data-tauri-drag-region')
+    expect(dragRegion).toHaveAttribute('data-kcoder-drag-region')
 
     fireEvent.mouseDown(dragRegion, { button: 0 })
 
-    await waitFor(() => expect(startDragging).toHaveBeenCalledTimes(1))
+    expect(dragRegion).toHaveClass('[-webkit-app-region:drag]')
   })
 
   test('does not remount children when the startup screen is dismissed', async () => {
@@ -448,6 +440,7 @@ describe('LocalRuntimeInitializer', () => {
     ensureMock
       .mockRejectedValueOnce(new Error('stdio unavailable'))
       .mockResolvedValueOnce({ running: true, ready: true, deviceId: 'local-device' })
+    readLogMock.mockRejectedValue(new Error('app-server disconnected'))
 
     render(
       <LocalRuntimeInitializer>
@@ -456,11 +449,62 @@ describe('LocalRuntimeInitializer', () => {
     )
 
     expect(await screen.findByTestId('local-runtime-error')).toHaveTextContent('stdio unavailable')
-    expect(screen.getByText('~/.wegent-executor/logs/executor.log')).toBeInTheDocument()
+    expect(screen.queryByTestId('local-runtime-log-path')).not.toBeInTheDocument()
+    expect(screen.queryByText('~/.wegent-executor/logs/executor.log')).not.toBeInTheDocument()
 
     await userEvent.click(screen.getByTestId('local-runtime-retry-button'))
 
     await waitFor(() => expect(screen.getByTestId('main-app')).toBeInTheDocument())
+  })
+
+  test('shows only the diagnostic path returned by the backend without rendering log contents', async () => {
+    ensureMock.mockRejectedValue(new Error('app-server disconnected'))
+    readLogMock.mockResolvedValue(diagnosticLog('D:\\KCoder Studio\\logs\\startup.log'))
+    render(<LocalRuntimeInitializer><div>Main app</div></LocalRuntimeInitializer>)
+    expect(await screen.findByTestId('local-runtime-log-path')).toHaveTextContent('D:\\KCoder Studio\\logs\\startup.log')
+    expect(screen.getByTestId('local-runtime-error')).toHaveTextContent('app-server disconnected')
+    expect(screen.queryByText('DIAGNOSTIC_BODY_NOT_FOR_ERROR_SCREEN')).not.toBeInTheDocument()
+  })
+
+  test.each(['', '   '])('omits an unavailable backend diagnostic path (%j)', async path => {
+    ensureMock.mockRejectedValue(new Error('app-server disconnected'))
+    readLogMock.mockResolvedValue(diagnosticLog(path))
+    render(<LocalRuntimeInitializer><div>Main app</div></LocalRuntimeInitializer>)
+    expect(await screen.findByTestId('local-runtime-error')).toHaveTextContent('app-server disconnected')
+    await waitFor(() => expect(readLogMock).toHaveBeenCalledTimes(1))
+    expect(screen.queryByTestId('local-runtime-log-path')).not.toBeInTheDocument()
+    expect(screen.queryByText('~/.wegent-executor/logs/executor.log')).not.toBeInTheDocument()
+  })
+
+  test('ignores a diagnostic path from the failed attempt after retry succeeds', async () => {
+    let resolveLog!: (log: LocalExecutorLog) => void
+    readLogMock.mockImplementation(() => new Promise(resolve => { resolveLog = resolve }))
+    ensureMock.mockRejectedValueOnce(new Error('app-server disconnected'))
+      .mockResolvedValueOnce({ running: true, ready: true, deviceId: 'local-device' })
+    render(<LocalRuntimeInitializer><div data-testid="main-app">Main app</div></LocalRuntimeInitializer>)
+    await screen.findByTestId('local-runtime-error')
+    fireEvent.click(screen.getByTestId('local-runtime-retry-button'))
+    await screen.findByTestId('main-app')
+    await act(async () => { resolveLog(diagnosticLog('D:\\old-attempt\\startup.log')) })
+    expect(screen.queryByTestId('local-runtime-log-path')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('local-runtime-initializer')).not.toBeInTheDocument()
+  })
+
+  test.each(['empty', 'failed'])('still copies diagnostics without inventing a log path when read is %s', async result => {
+    ensureMock.mockRejectedValue(new Error('executor startup failed'))
+    if (result === 'empty') readLogMock.mockResolvedValue(diagnosticLog(''))
+    else readLogMock.mockRejectedValue(new Error('app-server disconnected'))
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
+    render(<LocalRuntimeInitializer><div>Main app</div></LocalRuntimeInitializer>)
+    const summary = await screen.findByText('诊断详情')
+    summary.closest('details')!.open = true
+    await act(async () => { fireEvent.click(screen.getByTestId('local-runtime-copy-debug-button')) })
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('Startup phase: failed'))
+    expect(writeText).toHaveBeenCalledWith(expect.not.stringContaining('Executor log path:'))
+    expect(writeText).toHaveBeenCalledWith(expect.not.stringContaining('~/.wegent-executor/logs/executor.log'))
+    if (result === 'failed') expect(writeText).toHaveBeenCalledWith(expect.stringContaining('Failed to read executor log: app-server disconnected'))
+    expect(screen.getByTestId('local-runtime-copy-debug-button')).toHaveTextContent('已复制')
   })
 
   test('uses friendly local runtime status errors', async () => {
@@ -477,8 +521,8 @@ describe('LocalRuntimeInitializer', () => {
     )
   })
 
-  test('does not block non-tauri runtimes', () => {
-    delete (window as typeof window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__
+  test('does not block non-gateway runtimes', () => {
+    clearTestTransports()
 
     render(
       <LocalRuntimeInitializer>

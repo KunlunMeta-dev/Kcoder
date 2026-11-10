@@ -34,12 +34,14 @@ use std::path::{Path, PathBuf};
 use tracing::debug;
 
 mod archive_transaction;
+mod base_format;
 pub mod config;
 pub mod fingerprint;
 pub mod merge;
 pub use archive_transaction::{SpecPublicationReceipt, recover_archives};
 pub mod parse;
 mod process;
+pub mod project_knowledge;
 pub mod sync;
 
 use process::{
@@ -70,6 +72,10 @@ pub struct BundledSkillAsset {
 
 /// Metadata persisted in `.kcoder/specs/changes/<name>/.spec.yaml`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(
+    try_from = "base_format::ChangeMetadataWire",
+    into = "base_format::ChangeMetadataWire"
+)]
 pub struct ChangeMetadata {
     pub name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -79,6 +85,8 @@ pub struct ChangeMetadata {
     pub created_at: String,
     #[serde(default)]
     pub status: ChangeStatus,
+    /// Guard-bearing changes must retain a versioned base, including after interrupted creation.
+    pub requires_guarded_base: bool,
 }
 
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]

@@ -5,6 +5,7 @@ import { WikiPageHistory } from './WikiPageHistory'
 import { useEffect, useRef, useState } from 'react'
 import { ArrowLeft, FileText, LoaderCircle, X, Pencil, History } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { PAGE_CONTENT_COLUMN_MAX_WIDTH_CLASS } from '@/components/ui/page-content'
 import { AssistantMarkdown } from '@/components/chat/AssistantMarkdown'
 import { useTranslation } from '@/hooks/useTranslation'
 import { knowledgeApi, type WikiPage, type WikiSource } from '@/kcoder/knowledgeApi'
@@ -63,7 +64,7 @@ function WikiReaderPage({
   return (
     <article
       data-testid="wiki-reader"
-      className="mx-auto min-h-0 w-full max-w-3xl flex-1 overflow-y-auto pb-12"
+      className={`mx-auto min-h-0 w-full ${PAGE_CONTENT_COLUMN_MAX_WIDTH_CLASS} flex-1 overflow-y-auto pb-12`}
     >
       <div className="mb-6 flex flex-wrap items-center justify-between gap-2">
         <Button

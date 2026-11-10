@@ -8,8 +8,10 @@ import type {
 } from './types'
 import { clampContrast, isHexColor } from './color'
 import { normalizeCodeFontSize, normalizeUiFontSize } from './typography'
+import { APPEARANCE_SCHEMA_VERSION, migrateAppearanceDocument } from './migrations'
 
-const STORAGE_KEY = 'wework.appearance'
+const STORAGE_KEY = 'kcoder.appearance'
+const LEGACY_STORAGE_KEY = 'wework.appearance'
 const APPEARANCE_MODES = new Set(['light', 'dark', 'system'])
 
 function normalizeBackgroundVisibility(value: unknown): number {
@@ -85,7 +87,8 @@ export function mergeAppearance(update: AppearanceUpdate): AppearanceConfig {
           : null,
       },
     },
-    reduceMotion: update.reduceMotion === true,
+    // Retain the legacy field for stored-profile compatibility; animations stay enabled.
+    reduceMotion: false,
     mode: nextMode,
     accentColor,
     uiFont:
@@ -143,9 +146,10 @@ export function readStoredAppearance(): AppearanceConfig {
   if (typeof window === 'undefined') return defaultAppearance
 
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY)
+    const raw =
+      window.localStorage.getItem(STORAGE_KEY) ?? window.localStorage.getItem(LEGACY_STORAGE_KEY)
     if (!raw) return defaultAppearance
-    return mergeAppearance(JSON.parse(raw) as AppearanceUpdate)
+    return mergeAppearance(migrateAppearanceDocument(JSON.parse(raw)))
   } catch {
     return defaultAppearance
   }
@@ -155,7 +159,10 @@ export function writeStoredAppearance(appearance: AppearanceConfig) {
   if (typeof window === 'undefined') return true
 
   try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(appearance))
+    const existing =
+      window.localStorage.getItem(STORAGE_KEY) ?? window.localStorage.getItem(LEGACY_STORAGE_KEY)
+    if (existing) migrateAppearanceDocument(JSON.parse(existing))
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...appearance, schemaVersion: APPEARANCE_SCHEMA_VERSION }))
     return true
   } catch {
     return false
@@ -166,6 +173,7 @@ export function clearStoredAppearance() {
   if (typeof window === 'undefined') return
 
   try {
+    window.localStorage.removeItem(LEGACY_STORAGE_KEY)
     window.localStorage.removeItem(STORAGE_KEY)
   } catch {
     // Ignore storage failures.

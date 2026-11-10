@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from 'vitest'
-import { listen } from '@tauri-apps/api/event'
+import { listen } from '@/lib/runtime-events'
 import { KCoderGatewayRuntime as Runtime } from './gatewayRuntime'
 import { KCoderGatewayRuntime as InstalledRuntime } from './installGatewayRuntime'
 import { FakeGatewayClient, localGatewayServer } from './gatewayRuntime.test-support'

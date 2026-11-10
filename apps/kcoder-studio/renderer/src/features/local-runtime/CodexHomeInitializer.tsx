@@ -5,7 +5,6 @@ import type { LocalCodexHomeMigrationStatus } from '@/api/local/codexPlugins'
 import { useTranslation } from '@/hooks/useTranslation'
 import { isKCoderGatewayPage } from '@/kcoder/gatewayRpc'
 
-const CODEX_MIGRATION_DISMISSED_STORAGE_KEY = 'wework.plugins.codexMigrationDismissed'
 const SHOULD_SKIP_CODEX_HOME_INITIALIZATION =
   import.meta.env.VITE_KCODER_STUDIO_E2E === 'true' &&
   import.meta.env.VITE_KCODER_STUDIO_E2E_CODEX_HOME_INITIALIZATION !== 'true'
@@ -42,7 +41,7 @@ function CodexHomeInitializationDialog({
         {error && (
           <div
             data-testid="codex-home-initializer-error"
-            className="mt-4 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-red-500"
+            className="studio-card-spacing mt-4 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-red-500"
           >
             {error}
           </div>
@@ -90,19 +89,10 @@ function LegacyCodexHomeInitializer({ children }: { children?: ReactNode }) {
     if (SHOULD_SKIP_CODEX_HOME_INITIALIZATION) return
 
     let isCurrent = true
-    const migrationDismissed =
-      typeof window !== 'undefined' &&
-      window.localStorage.getItem(CODEX_MIGRATION_DISMISSED_STORAGE_KEY) === '1'
-
     localPluginApi
       .codexHomeMigrationStatus()
       .then(nextStatus => {
         if (!isCurrent) return
-        if (migrationDismissed && !nextStatus.shouldPromptMigration) {
-          setStatus(null)
-          setChecked(true)
-          return
-        }
         setStatus(nextStatus.shouldPromptMigration ? nextStatus : null)
         setChecked(true)
       })
@@ -130,9 +120,6 @@ function LegacyCodexHomeInitializer({ children }: { children?: ReactNode }) {
       })
       .then(() => {
         console.warn('[KCoder Studio Codex init] initialization finished')
-        if (typeof window !== 'undefined') {
-          window.localStorage.setItem(CODEX_MIGRATION_DISMISSED_STORAGE_KEY, '1')
-        }
         setStatus(null)
         setChecked(true)
       })

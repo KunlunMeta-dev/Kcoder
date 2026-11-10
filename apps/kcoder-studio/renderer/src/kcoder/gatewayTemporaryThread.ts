@@ -1,3 +1,4 @@
+import { studioCreationParams } from './studioPresentation'
 import type { GatewayClient } from './gatewayRuntimeTypes'
 import { startThreadWithReceipt } from './gatewayThreadReceipt'
 import { executionModeParams } from './gatewayExecutionModes'
@@ -24,11 +25,25 @@ export async function startTaskThread(
     recoverClient?: () => Promise<GatewayClient>
     onRecoveredClient?: (client: GatewayClient) => void
   }
-): Promise<{ thread?: { id?: string }; ephemeral?: boolean }> {
+): Promise<{
+  thread?: {
+    id?: string
+    studioWorkMode?: 'kcoder' | 'kworker'
+    agentDefinition?: import('../../../shared/generated/contracts').AgentTaskBinding
+    selectedModel?: string | null
+    model?: string | null
+  }
+  ephemeral?: boolean
+}> {
   const { serverId, workspacePath, params, model } = options
   const { sessionMode } = executionModeParams(params, client)
-  const workflowDefinitionId = typeof params.workflowDefinitionId === 'string' ? params.workflowDefinitionId : undefined
-  if (workflowDefinitionId && (sessionMode !== 'workflow_draft' || client.supportsExperimental?.('workflowConversationV1') !== true)) {
+  const workflowDefinitionId =
+    typeof params.workflowDefinitionId === 'string' ? params.workflowDefinitionId : undefined
+  if (
+    workflowDefinitionId &&
+    (sessionMode !== 'workflow_draft' ||
+      client.supportsExperimental?.('workflowConversationV1') !== true)
+  ) {
     throw new Error('Workflow conversations require workflowConversationV1 and workflow_draft mode')
   }
   const ephemeral = isTemporaryTaskCreate(params)
@@ -38,22 +53,38 @@ export async function startTaskThread(
       : undefined
   if (!ephemeral) {
     if (params.sideSource) throw new Error('临时聊天必须使用临时会话协议')
-    if (
-      settingsTemplate &&
-      client.supportsExperimental?.('settingsTemplatesV1') !== true
-    )
+    if (settingsTemplate && client.supportsExperimental?.('settingsTemplatesV1') !== true)
       throw new Error('请升级目标 KCoder 以使用会话配置模板')
+    if (
+      params.agentDefinition &&
+      (ephemeral ||
+        (sessionMode && sessionMode !== 'default') ||
+        params.studioWorkMode === 'kworker' ||
+        client.supportsExperimental?.('agentDefinitionsV1') !== true)
+    )
+      throw new Error('Expert tasks require agentDefinitionsV1 and ordinary KCoder mode')
     const startParams = {
       cwd: workspacePath,
+      ...(params.agentDefinition ? { agentDefinition: params.agentDefinition } : {}),
+      ...studioCreationParams({ ...params, sessionMode }, client),
       ...(workflowDefinitionId ? { workflowDefinitionId } : {}),
       ...(model ? { model } : {}),
       ...(sessionMode ? { sessionMode } : {}),
       ...(settingsTemplate ? { settingsTemplate } : {}),
     }
-    if (options.creationRequestId && options.recoverClient && client.supportsExperimental?.('threadCreationReceiptsV1')) {
-      const started = await startThreadWithReceipt(client, {
-        ...startParams, clientRequestId: options.creationRequestId,
-      }, options.recoverClient)
+    if (
+      options.creationRequestId &&
+      options.recoverClient &&
+      client.supportsExperimental?.('threadCreationReceiptsV1')
+    ) {
+      const started = await startThreadWithReceipt(
+        client,
+        {
+          ...startParams,
+          clientRequestId: options.creationRequestId,
+        },
+        options.recoverClient
+      )
       options.onRecoveredClient?.(started.client)
       return started.result
     }

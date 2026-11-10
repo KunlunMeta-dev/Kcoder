@@ -10,8 +10,10 @@ import test from 'node:test';
 import WebSocket, { WebSocketServer } from 'ws';
 import { startClient } from '../src/client.mjs';
 import { startRelay } from '../src/server.mjs';
+import { isolatedGatewayAuthority } from '../src/gateway-origin.mjs';
 
 const SHARED_HOST = 'relay-review.example:8451';
+const gatewayHost = id => isolatedGatewayAuthority(SHARED_HOST, id);
 
 function token() {
   return randomBytes(32).toString('hex');
@@ -43,7 +45,7 @@ function readBody(request) {
 async function startFakeGateway(id, { expiresInMs = 60_000 } = {}) {
   const state = {
     id,
-    pairingToken: token(),
+    gatewaySecret: token(),
     accessTokens: new Set(),
     rpcToken: token(),
     allowedOrigin: `https://mobile-${id}.example`,
@@ -76,7 +78,7 @@ async function startFakeGateway(id, { expiresInMs = 60_000 } = {}) {
       let payload;
       try { payload = JSON.parse((await readBody(request)).toString('utf8')); }
       catch { response.writeHead(400); response.end('bad request'); return; }
-      if (payload?.token !== state.pairingToken) {
+      if (payload?.token !== state.gatewaySecret) {
         response.writeHead(401, { 'content-type': 'application/json' });
         response.end(JSON.stringify({ error: 'unauthorized' }));
         return;
@@ -169,7 +171,7 @@ async function startFixture(t, {
   const gateways = [...fixture.gateways].map(([id, gateway]) => ({
     id,
     secret: token(),
-    pairingToken: gateway.pairingToken,
+    gatewaySecret: gateway.gatewaySecret,
     maxConnections: id === 'a' ? maxConnectionsA : maxConnectionsB,
     maxBytesPerWindow: id === 'a' ? maxBytesA : maxBytesB,
     trafficWindowMs: 60_000,
@@ -230,7 +232,7 @@ function httpThroughRelay(fixture, { id, path, method = 'GET', body, headers = {
       port: fixture.relay.proxyPort,
       method,
       path: `/g/${id}${path}`,
-      headers: { host: SHARED_HOST, ...headers },
+      headers: { host: gatewayHost(id), ...headers },
     }, response => {
       const chunks = [];
       response.on('data', chunk => chunks.push(Buffer.from(chunk)));
@@ -286,7 +288,7 @@ function streamedUploadThroughRelay(fixture, { id, path, accessToken, body, chun
       method: 'POST',
       path: `/g/${id}${path}`,
       headers: {
-        host: SHARED_HOST,
+        host: gatewayHost(id),
         authorization: `Bearer ${accessToken}`,
         'content-length': String(body.length),
       },
@@ -317,7 +319,7 @@ function streamedUploadThroughRelay(fixture, { id, path, accessToken, body, chun
 
 async function pairGateway(fixture, id) {
   const gateway = fixture.gateways.get(id);
-  const body = JSON.stringify({ token: gateway.pairingToken });
+  const body = JSON.stringify({ token: gateway.gatewaySecret });
   const response = await httpThroughRelay(fixture, {
     id,
     path: '/api/mobile/session',
@@ -333,7 +335,7 @@ function openRpc(fixture, id, session) {
   const socket = new WebSocket(endpoint, {
     handshakeTimeout: 1_500,
     perMessageDeflate: false,
-    headers: { host: SHARED_HOST, authorization: `Bearer ${session.accessToken}` },
+    headers: { host: gatewayHost(id), authorization: `Bearer ${session.accessToken}` },
   });
   fixture.sockets.add(socket);
   socket.on('error', () => {});
@@ -370,7 +372,7 @@ test('relay forwards per-tenant CORS preflights for backend Origin policy and st
     assert.equal(response.headers['access-control-allow-origin'], gateway.allowedOrigin);
     assert.deepEqual(gateway.preflights.at(-1), {
       path: '/api/mobile/session',
-      host: SHARED_HOST,
+      host: gatewayHost(id),
       origin: gateway.allowedOrigin,
     }, 'the relay must strip only the selected route prefix and preserve Host and Origin');
   }
@@ -403,7 +405,7 @@ test('aborted pairing body and truncated upstream session response settle withou
   await once(socket, 'connect');
   socket.write([
     'POST /g/a/api/mobile/session HTTP/1.1',
-    `Host: ${SHARED_HOST}`,
+    `Host: ${gatewayHost('a')}`,
     'Content-Type: application/json',
     'Content-Length: 200',
     '',
@@ -440,9 +442,9 @@ test('an aborted ordinary streamed request does not crash the Relay process', as
       return originalEmit.call(this, event, ...args);
     };
     const secret = 'relay-secret-for-abort-test-0123456789';
-    const pairingToken = 'pairing-token-for-abort-test-0123456789';
+    const gatewaySecret = 'pairing-token-for-abort-test-0123456789';
     const relay = await startRelay({
-      gateways: [{ id: 'a', secret, pairingToken, maxConnections: 4, maxBytesPerWindow: 2_000_000, trafficWindowMs: 60_000 }],
+      gateways: [{ id: 'a', secret, gatewaySecret, maxConnections: 4, maxBytesPerWindow: 2_000_000, trafficWindowMs: 60_000 }],
       sharedHosts: [${JSON.stringify(SHARED_HOST)}], controlPort: 0, proxyPort: 0, connectTimeout: 1_000,
     });
     const control = new WebSocket('ws://127.0.0.1:' + relay.controlPort + '/_relay/control', {
@@ -457,7 +459,7 @@ test('an aborted ordinary streamed request does not crash the Relay process', as
     const attack = createConnection({ host: '127.0.0.1', port: relay.proxyPort });
     attack.on('error', () => {});
     attack.once('connect', () => {
-      attack.write('POST /g/a/not-api HTTP/1.1\\r\\nHost: ${SHARED_HOST}\\r\\nContent-Length: 200\\r\\n\\r\\npartial');
+      attack.write('POST /g/a/not-api HTTP/1.1\\r\\nHost: ${gatewayHost('a')}\\r\\nContent-Length: 200\\r\\n\\r\\npartial');
     });
     const open = await Promise.race([openRequest, new Promise((_, reject) => setTimeout(() => reject(new Error('Relay did not reserve the request')), 1_000))]);
     if (open?.type !== 'open') throw new Error('unexpected control message');
@@ -512,7 +514,7 @@ test('unauthenticated pairing body reads share tenant connection capacity, time 
   await once(held, 'connect');
   held.write([
     'POST /g/a/api/mobile/session HTTP/1.1',
-    `Host: ${SHARED_HOST}`,
+    `Host: ${gatewayHost('a')}`,
     'Content-Type: application/json',
     'Content-Length: 65536',
     '',

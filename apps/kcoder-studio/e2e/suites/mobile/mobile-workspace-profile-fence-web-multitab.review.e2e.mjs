@@ -623,7 +623,7 @@ async function within(promise, milliseconds, message) {
 
 await runE2E(import.meta.url, {
   testId: "mobile-v2-workspace-profile-fence-real-web-locks-two-pages",
-  tier: "full-integration",
+  tier: "manual-live",
   modelPolicy: "no model or Provider; two same-origin Chromium pages, actual Mobile storage/fence modules, loopback scripted Gateway WebSocket only",
   retainSuccessLogs: true,
   bodyAbortTimeoutMs: 5000,

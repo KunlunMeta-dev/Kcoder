@@ -2,10 +2,14 @@
 
 use ratatui::layout::Rect;
 
-pub(crate) mod highlight;
-pub(crate) mod line_utils;
-pub(crate) mod renderable;
-pub(crate) mod wrapping;
+#[path = "highlight.rs"]
+pub mod highlight;
+#[path = "line_utils.rs"]
+pub mod line_utils;
+#[path = "renderable.rs"]
+pub mod renderable;
+#[path = "wrapping.rs"]
+pub mod wrapping;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Insets {

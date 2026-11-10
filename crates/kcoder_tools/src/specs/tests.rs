@@ -59,7 +59,7 @@ fn spec_subagent_schemas_bound_max_turns() {
 async fn spec_init_reloads_runtime_registry_and_activates_using_specs() {
     let tmp = tempfile::tempdir().unwrap();
     let registry = Arc::new(RwLock::new(
-        kcoder_skills::SkillRegistry::load(tmp.path()).unwrap(),
+        kcoder_skills::SkillRegistry::load_project_only(tmp.path()).unwrap(),
     ));
     let active = Arc::new(RwLock::new(Vec::new()));
     let ctx = ToolContext::new(AppState::new(tmp.path()))
@@ -136,7 +136,7 @@ async fn spec_init_force_update_preserves_project_config() {
         .unwrap();
     let active = Arc::new(RwLock::new(Vec::new()));
     let registry = Arc::new(RwLock::new(
-        kcoder_skills::SkillRegistry::load(tmp.path()).unwrap(),
+        kcoder_skills::SkillRegistry::load_project_only(tmp.path()).unwrap(),
     ));
     let ctx = ToolContext::new(AppState::new(tmp.path()))
         .with_skill_registry(Arc::clone(&registry))
@@ -222,7 +222,7 @@ paths:
     crate::skill_provenance::record_user_created(tmp.path(), "using-specs");
 
     let registry = Arc::new(RwLock::new(
-        kcoder_skills::SkillRegistry::load(tmp.path()).unwrap(),
+        kcoder_skills::SkillRegistry::load_project_only(tmp.path()).unwrap(),
     ));
     let ctx = ToolContext::new(AppState::new(tmp.path()))
         .with_skill_registry(registry)
@@ -279,7 +279,7 @@ async fn spec_update_regenerates_using_specs_from_config_and_reloads_registry() 
         )
         .unwrap();
     let registry = Arc::new(RwLock::new(
-        kcoder_skills::SkillRegistry::load(tmp.path()).unwrap(),
+        kcoder_skills::SkillRegistry::load_project_only(tmp.path()).unwrap(),
     ));
     let active = Arc::new(RwLock::new(Vec::new()));
     let ctx = ToolContext::new(AppState::new(tmp.path()))
@@ -762,7 +762,7 @@ async fn spec_archive_generates_lessons_skill_when_enabled() {
     complete_change_tasks(tmp.path(), "add-auth");
 
     let registry = Arc::new(RwLock::new(
-        kcoder_skills::SkillRegistry::load(tmp.path()).unwrap(),
+        kcoder_skills::SkillRegistry::load_project_only(tmp.path()).unwrap(),
     ));
     let ctx = spec_ctx_with_options(
         tmp.path(),

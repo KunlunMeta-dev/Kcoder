@@ -1,6 +1,52 @@
 use super::*;
 
 #[tokio::test]
+async fn incremental_without_gain_distills_once_and_idle_summary_makes_no_request() {
+    let provider = Arc::new(RecordingProvider::default());
+    let compactor = test_compactor(provider.clone());
+    let mut messages = vec![Message::compaction_text(format_compact_summary_message(
+        &"PRIOR_FACT ".repeat(100),
+    ))];
+    messages.extend(messages_with_summarizable_history());
+    let split = split_for_compaction(&messages);
+    let pre_tokens = TokenCounter::count(&build_compacted_messages(
+        None,
+        Some("compact ok"),
+        split.recent.clone(),
+    )) + 1;
+    let result = compactor
+        .compact(test_compaction_request(messages), pre_tokens)
+        .await
+        .unwrap();
+    assert!(result.did_compact);
+    assert_eq!(result.summary, "compact ok");
+    {
+        let requests = provider.requests.lock().unwrap();
+        assert_eq!(requests.len(), 2);
+        assert!(
+            !requests[0]
+                .messages
+                .iter()
+                .any(|message| message.preview(usize::MAX).contains("PRIOR_FACT"))
+        );
+        assert!(
+            requests[1]
+                .messages
+                .iter()
+                .any(|message| message.preview(usize::MAX).contains("PRIOR_FACT"))
+        );
+    }
+    let original = serde_json::to_value(&result.messages).unwrap();
+    let idle = compactor
+        .compact(test_compaction_request(result.messages), pre_tokens)
+        .await
+        .unwrap();
+    assert!(!idle.did_compact);
+    assert_eq!(serde_json::to_value(idle.messages).unwrap(), original);
+    assert_eq!(provider.requests.lock().unwrap().len(), 2);
+}
+
+#[tokio::test]
 async fn compact_uses_summary_model_and_token_budget() {
     let requests = Arc::new(Mutex::new(Vec::new()));
     let provider = Arc::new(RecordingProvider {
@@ -56,7 +102,7 @@ async fn compact_uses_summary_model_and_token_budget() {
 }
 
 #[tokio::test]
-async fn compact_recompresses_and_replaces_prior_summary() {
+async fn compact_retains_prior_summary_and_only_summarizes_new_history() {
     let requests = Arc::new(Mutex::new(Vec::new()));
     let provider = Arc::new(RecordingProvider {
         requests: Arc::clone(&requests),
@@ -102,11 +148,12 @@ async fn compact_recompresses_and_replaces_prior_summary() {
         .await
         .unwrap();
 
-    assert_eq!(result.summary, "compact ok");
+    assert!(result.summary.starts_with("PRIOR_ONLY summary"));
+    assert!(result.summary.contains("compact ok"));
     assert_eq!(result.messages.len(), 5);
     assert!(result.messages[0].preview(20_000).contains("compact ok"));
     assert!(
-        !result.messages[0]
+        result.messages[0]
             .preview(20_000)
             .contains("PRIOR_ONLY summary")
     );
@@ -121,173 +168,7 @@ async fn compact_recompresses_and_replaces_prior_summary() {
     let prompt = requests[0].messages[0].preview(20_000);
     assert!(prompt.contains("new old user 1"));
     assert!(prompt.contains("new old assistant 1"));
-    assert!(prompt.contains("PRIOR_ONLY summary"));
-}
-
-#[tokio::test]
-async fn ptl_retry_preserves_latest_boundary_summary_in_retry_prompt() {
-    let requests = Arc::new(Mutex::new(Vec::new()));
-    let compactor = test_compactor(Arc::new(PromptTooLongOnceProvider {
-        requests: Arc::clone(&requests),
-        failures: 1,
-    }));
-    let messages = vec![
-        Message::compaction_text(format_compact_summary_message(
-            "PRIOR_BOUNDARY_FACT that must survive PTL retry",
-        )),
-        Message::user_text("old user one"),
-        Message::assistant_text("old assistant one"),
-        Message::user_text("old user two"),
-        Message::assistant_text("old assistant two"),
-        Message::user_text("old user three"),
-        Message::assistant_text("old assistant three"),
-        Message::user_text("recent user"),
-        Message::assistant_text("recent assistant"),
-    ];
-
-    let result = compactor
-        .compact(test_compaction_request(messages), 50_000)
-        .await
-        .expect("the second compaction attempt should succeed");
-    assert_eq!(result.summary, "retry summary");
-
-    let requests = requests.lock().unwrap();
-    assert_eq!(requests.len(), 2);
-    let first_prompt = requests[0].messages[0].preview(50_000);
-    let retry_prompt = requests[1].messages[0].preview(50_000);
-    assert!(first_prompt.contains("PRIOR_BOUNDARY_FACT"));
-    assert!(
-        retry_prompt.contains("PRIOR_BOUNDARY_FACT"),
-        "PTL retry must not discard the only representation of pre-boundary history"
-    );
-}
-
-#[tokio::test]
-async fn repeated_ptl_retries_preserve_boundary_and_single_marker() {
-    let requests = Arc::new(Mutex::new(Vec::new()));
-    let compactor = test_compactor(Arc::new(PromptTooLongOnceProvider {
-        requests: Arc::clone(&requests),
-        failures: 3,
-    }));
-    let mut messages = vec![Message::compaction_text(format_compact_summary_message(
-        "BOUNDARY_SURVIVES_ALL_RETRIES",
-    ))];
-    for index in 0..8 {
-        messages.push(Message::user_text(format!("suffix user {index}")));
-        messages.push(Message::assistant_text(format!("suffix assistant {index}")));
-    }
-
-    let result = compactor
-        .compact(test_compaction_request(messages), 100_000)
-        .await
-        .expect("fourth attempt should succeed after three PTL responses");
-    assert_eq!(result.summary, "retry summary");
-
-    let requests = requests.lock().unwrap();
-    assert_eq!(requests.len(), 4);
-    for request in requests.iter() {
-        let prompt = request.messages[0].preview(100_000);
-        assert!(prompt.contains("BOUNDARY_SURVIVES_ALL_RETRIES"));
-        assert!(prompt.matches(PTL_RETRY_MARKER).count() <= 1);
-    }
-    assert!(
-        !requests[1].messages[0]
-            .preview(100_000)
-            .contains("suffix user 0")
-    );
-    assert!(
-        !requests[2].messages[0]
-            .preview(100_000)
-            .contains("suffix user 1"),
-        "the second PTL retry must drop another real suffix turn, not only recycle the marker"
-    );
-    assert!(
-        !requests[3].messages[0]
-            .preview(100_000)
-            .contains("suffix user 2"),
-        "the third PTL retry must continue making progress through the suffix"
-    );
-}
-
-#[tokio::test]
-async fn repeated_ptl_without_boundary_drops_a_real_turn_each_time() {
-    let requests = Arc::new(Mutex::new(Vec::new()));
-    let compactor = test_compactor(Arc::new(PromptTooLongOnceProvider {
-        requests: Arc::clone(&requests),
-        failures: 3,
-    }));
-    let mut messages = Vec::new();
-    for index in 0..9 {
-        messages.push(Message::user_text(format!("raw user {index}")));
-        messages.push(Message::assistant_text(format!("raw assistant {index}")));
-    }
-
-    let result = compactor
-        .compact(test_compaction_request(messages), 100_000)
-        .await
-        .expect("fourth attempt should succeed after progressive raw-history trimming");
-    assert_eq!(result.summary, "retry summary");
-    let requests = requests.lock().unwrap();
-    assert_eq!(requests.len(), 4);
-    assert!(
-        !requests[1].messages[0]
-            .preview(100_000)
-            .contains("raw user 0")
-    );
-    assert!(
-        !requests[2].messages[0]
-            .preview(100_000)
-            .contains("raw user 1")
-    );
-    assert!(
-        !requests[3].messages[0]
-            .preview(100_000)
-            .contains("raw user 2")
-    );
-    for request in requests.iter().skip(1) {
-        assert_eq!(
-            request.messages[0]
-                .preview(100_000)
-                .matches(PTL_RETRY_MARKER)
-                .count(),
-            1
-        );
-    }
-}
-
-#[tokio::test]
-async fn repeated_ptl_stops_safely_when_suffix_becomes_insufficient() {
-    let requests = Arc::new(Mutex::new(Vec::new()));
-    let compactor = test_compactor(Arc::new(PromptTooLongOnceProvider {
-        requests: Arc::clone(&requests),
-        failures: 3,
-    }));
-    let messages = vec![
-        Message::compaction_text(format_compact_summary_message("BOUNDARY_REMAINS")),
-        Message::user_text("droppable suffix one"),
-        Message::assistant_text("droppable response one"),
-        Message::user_text("droppable suffix two"),
-        Message::assistant_text("droppable response two"),
-        Message::user_text("preserved suffix three"),
-        Message::assistant_text("preserved response three"),
-        Message::user_text("recent user"),
-        Message::assistant_text("recent response"),
-    ];
-
-    let result = compactor
-        .compact(test_compaction_request(messages), 50_000)
-        .await;
-    assert!(
-        result.is_err(),
-        "PTL must fail once no further suffix group is safe to drop"
-    );
-    let requests = requests.lock().unwrap();
-    assert!(requests.len() >= 2);
-    for request in requests.iter() {
-        let prompt = request.messages[0].preview(50_000);
-        assert!(prompt.contains("BOUNDARY_REMAINS"));
-        assert!(prompt.matches(PTL_RETRY_MARKER).count() <= 1);
-    }
+    assert!(!prompt.contains("PRIOR_ONLY summary"));
 }
 
 #[tokio::test]
@@ -303,7 +184,7 @@ async fn repeated_compactions_keep_exactly_one_replacement_summary() {
             .compact(test_compaction_request(messages), 50_000)
             .await
             .expect("each compaction pass should succeed");
-        assert_eq!(result.summary, "compact ok");
+        assert!(result.summary.contains("compact ok"));
         assert!(
             result.post_compact_tokens < result.pre_compact_tokens,
             "pass {pass} must strictly reduce the reported context"
@@ -322,8 +203,8 @@ async fn repeated_compactions_keep_exactly_one_replacement_summary() {
                 .preview(50_000)
                 .matches("compact ok")
                 .count(),
-            1,
-            "pass {pass} must not concatenate the previous summary"
+            pass + 1,
+            "pass {pass} must preserve older summaries while adding the new one"
         );
         messages = result.messages;
         messages.push(Message::user_text(format!("new suffix user {pass} a")));
@@ -337,34 +218,6 @@ async fn repeated_compactions_keep_exactly_one_replacement_summary() {
     }
 
     assert_eq!(requests.lock().unwrap().len(), 3);
-}
-
-#[tokio::test]
-async fn ptl_retry_with_insufficient_suffix_fails_without_dropping_boundary() {
-    let requests = Arc::new(Mutex::new(Vec::new()));
-    let compactor = test_compactor(Arc::new(PromptTooLongOnceProvider {
-        requests: Arc::clone(&requests),
-        failures: 1,
-    }));
-    let messages = vec![
-        Message::compaction_text(format_compact_summary_message("ONLY_BOUNDARY_COPY")),
-        Message::user_text("old suffix"),
-        Message::assistant_text("old suffix response"),
-        Message::user_text("recent user"),
-        Message::assistant_text("recent response"),
-    ];
-
-    let result = compactor
-        .compact(test_compaction_request(messages), 50_000)
-        .await;
-    assert!(result.is_err(), "insufficient suffix must fail safely");
-    let requests = requests.lock().unwrap();
-    assert_eq!(requests.len(), 1);
-    assert!(
-        requests[0].messages[0]
-            .preview(50_000)
-            .contains("ONLY_BOUNDARY_COPY")
-    );
 }
 
 #[tokio::test]
@@ -513,7 +366,7 @@ impl Provider for PromptTooLongThenSummaryProvider {
 }
 
 #[tokio::test]
-async fn compact_retries_prompt_too_long_with_truncated_history() {
+async fn compact_retries_prompt_too_long_with_partitioned_history() {
     let requests = Arc::new(Mutex::new(Vec::new()));
     let provider = Arc::new(PromptTooLongThenSummaryProvider {
         requests: Arc::clone(&requests),
@@ -563,12 +416,15 @@ async fn compact_retries_prompt_too_long_with_truncated_history() {
     assert_eq!(result.summary, "retry compact ok");
     assert!(result.did_compact);
     let requests = requests.lock().unwrap();
-    assert_eq!(requests.len(), 2);
-    let retry_prompt = requests[1].messages[0].preview(20_000);
-    assert!(retry_prompt.contains(PTL_RETRY_MARKER));
-    assert!(!retry_prompt.contains("user 0"));
-    assert!(!retry_prompt.contains("assistant 1"));
-    assert!(retry_prompt.contains("user 2"));
+    assert_eq!(requests.len(), 4);
+    let fragments = requests[1..3]
+        .iter()
+        .map(|request| request.messages[0].preview(20_000))
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(fragments.contains("user 0"));
+    assert!(fragments.contains("assistant 1"));
+    assert!(fragments.contains("user 2"));
 }
 
 struct TypedSummaryFailureProvider {
@@ -711,14 +567,12 @@ async fn compact_typed_context_and_transient_budgets_remain_finite() {
                 .compact(test_compaction_request(messages), 50_000)
                 .await;
             assert!(result.is_err());
-            assert_eq!(
-                requests.lock().unwrap().len(),
-                1 + if status == 400 {
-                    MAX_PTL_RETRIES
-                } else {
-                    MAX_TRANSPORT_RETRIES
-                }
-            );
+            let count = requests.lock().unwrap().len();
+            if status == 400 {
+                assert!(count <= 1 + super::super::partitioned::MAX_RECOVERY_CALLS);
+            } else {
+                assert_eq!(count, 1 + MAX_TRANSPORT_RETRIES);
+            }
         }
     }
 }
@@ -896,7 +750,7 @@ async fn compact_typed_opaque_transient_recovers_and_waits() {
 }
 
 #[tokio::test]
-async fn compact_typed_context_code_truncates_and_unknown_api_stops() {
+async fn compact_typed_context_code_partitions_and_unknown_api_stops() {
     for at_start in [true, false] {
         for context_error in [true, false] {
             let requests = Arc::new(Mutex::new(Vec::new()));
@@ -926,12 +780,14 @@ async fn compact_typed_context_code_truncates_and_unknown_api_stops() {
             let requests = requests.lock().unwrap();
             if context_error {
                 assert!(result.is_ok(), "{result:?}");
-                assert_eq!(requests.len(), 2);
-                assert!(
-                    requests[1].messages[0]
-                        .preview(usize::MAX)
-                        .contains(PTL_RETRY_MARKER)
-                );
+                assert_eq!(requests.len(), 4);
+                let fragments = requests[1..3]
+                    .iter()
+                    .map(|request| request.messages[0].preview(usize::MAX))
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                assert!(fragments.contains("user 0"));
+                assert!(fragments.contains("assistant 3"));
             } else {
                 assert!(result.is_err());
                 assert_eq!(requests.len(), 1);

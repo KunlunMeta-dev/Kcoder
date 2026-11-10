@@ -2,6 +2,14 @@
 export { taskRuntimeTestHelpers } from "./task-runtime/connectionFactory";
 export { TaskRuntime } from "./task-runtime/core";
 export { mergeReconciledMessages } from "./task-runtime/history";
+export { listExpertVersions, listExpertsPage } from "./task-runtime/experts";
+export type {
+  ExpertCatalogClient,
+  ExpertChoice,
+  ExpertDirectoryItem,
+  ExpertDirectoryPage,
+  ExpertVersionPage,
+} from "./task-runtime/experts";
 export {
   defaultModelOption,
   listModels,
@@ -32,6 +40,14 @@ export type {
 } from "./task-runtime/threadDirectory";
 export type {
   AgentSteerResult,
+  AsyncQuestionAnswer,
+  AsyncQuestionAnswerPayload,
+  AsyncQuestionAnswerValue,
+  AsyncQuestionItem,
+  AsyncQuestionOption,
+  AsyncQuestionRecord,
+  AsyncQuestionSnapshot,
+  AsyncQuestionStatus,
   AssistantTranscriptBlock,
   ApprovalInteraction,
   ChatMessage,
@@ -56,6 +72,8 @@ export {
   forgetManagedWorktree,
   listManagedWorktrees,
   listWorkspaceOptions,
+  workspaceEntryIdentity,
+  workspaceProjectIdentity,
   openWorkspace,
   openWorkspaceWithReceipt,
   prepareManagedWorktree,

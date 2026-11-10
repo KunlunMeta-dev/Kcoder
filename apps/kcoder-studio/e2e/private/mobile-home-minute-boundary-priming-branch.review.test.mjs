@@ -4,11 +4,10 @@ import { readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
+import { readOriginalMinuteBoundarySource } from "../harness/private-mobile-minute-boundary-original-source.mjs";
 
 const directory = dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = resolve(directory, "../../../..");
-const livePath = resolve(directory, "mobile-home-minute-boundary-auth-cleanup.once.e2e.mjs");
-const candidatePath = resolve(directory, "mobile-home-minute-boundary-priming-r1.candidate.e2e.mjs");
 const baselinePath = resolve(repositoryRoot, "target/private-phone-ux-validation/home-minute-boundary-auth-cleanup-20261009/priming-static-r1/baseline-source.mjs");
 const baselineSha256 = "9c81d89b97664d62c08cfa3a7e4455445066ea84f456ab855fa7017af23c4977";
 
@@ -53,11 +52,12 @@ const commonPrime = [
   "              let initialMessageText = null;",
 ].join("\n");
 
-test("Home minute-boundary fixture priming runs after setup branch join and before exact-stage capture", async () => {
+// Current extracted launchers are checked separately by the split-contract tests.
+test("historical Home minute-boundary fixture priming runs after setup branch join and before exact-stage capture", async () => {
   const [baseline, live, candidate] = await Promise.all([
     readFile(baselinePath, "utf8"),
-    readFile(livePath, "utf8"),
-    readFile(candidatePath, "utf8"),
+    readOriginalMinuteBoundarySource(),
+    readOriginalMinuteBoundarySource(),
   ]);
   assert.equal(createHash("sha256").update(baseline).digest("hex"), baselineSha256, "the review must use the preserved exact pre-apply source bytes");
   assert.equal(baseline.split(oldBranchPrime).length - 1, 1, "baseline must contain one old Home priming block to move");

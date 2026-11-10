@@ -19,6 +19,20 @@ impl QueryEngine {
             .unwrap_or_else(|| self.session_dir().join("session"))
     }
 
+    /// Observe the State lifecycle and effective lease target without waiting.
+    /// This is not an external filesystem or source-authorization check.
+    pub fn try_matches_session_lease_target(
+        &self,
+        lifecycle: &kcoder_state::AppStateLifecycleIdentity,
+        expected_target: &std::path::Path,
+    ) -> kcoder_state::TryLifecycleAccess<()> {
+        lifecycle.try_matches_session_lease_target(
+            &self.state,
+            &self.session_storage_root,
+            expected_target,
+        )
+    }
+
     /// External transient artifact directory for an arbitrary client session.
     pub fn session_storage_dir_for(&self, session_id: &str) -> PathBuf {
         kcoder_state::session_dir_path(&self.session_storage_root, session_id)

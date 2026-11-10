@@ -13,6 +13,7 @@ const STREAM_CAPACITY: usize = 256;
 
 #[derive(Clone, Debug)]
 pub struct AgentConversationEntry {
+    pub web_sources: Vec<kcoder_types::web_sources::WebSourcesV1>,
     pub id: String,
     pub client_message_id: Option<String>,
     pub timestamp_ms: u64,
@@ -34,6 +35,16 @@ pub struct AgentConversationSnapshot {
     pub tool_inputs: HashMap<String, (String, serde_json::Value)>,
 }
 
+/// Native registered-run public tail; never reconstructed from a legacy checkpoint.
+pub struct AgentExactLiveRead {
+    pub active: bool,
+    pub revision: u64,
+    pub status: String,
+    pub content: String,
+    pub truncated: bool,
+    pub unchanged: bool,
+}
+
 #[derive(Clone, Debug)]
 pub enum AgentConversationDelta {
     Event(EngineEvent),
@@ -51,6 +62,7 @@ pub struct AgentConversationFrame {
 
 struct Conversation {
     snapshot: AgentConversationSnapshot,
+    registered_run: bool,
     sender: broadcast::Sender<AgentConversationFrame>,
     source_messages_seen: usize,
     /// Source position plus its preceding checkpoint identifies a generic user
@@ -103,6 +115,7 @@ impl AgentConversationStreams {
                 .enumerate()
                 .filter_map(|(index, message)| {
                     public_conversation_message(message).map(|message| AgentConversationEntry {
+                        web_sources: Vec::new(),
                         id: format!("{run_id}-history-{index}"),
                         client_message_id: None,
                         timestamp_ms,
@@ -120,6 +133,7 @@ impl AgentConversationStreams {
         bound_snapshot(&mut snapshot);
         let state = Arc::new(Mutex::new(Conversation {
             snapshot,
+            registered_run: true,
             sender,
             source_messages_seen: messages.len(),
             source_users: HashMap::new(),
@@ -131,6 +145,7 @@ impl AgentConversationStreams {
                 let fresh = state.lock().unwrap_or_else(|e| e.into_inner());
                 let sequence = old.snapshot.sequence;
                 old.snapshot = fresh.snapshot.clone();
+                old.registered_run = true;
                 old.snapshot.sequence = sequence;
                 old.source_messages_seen = messages.len();
                 old.source_users.clear();
@@ -189,6 +204,32 @@ impl AgentConversationStreams {
             .filter(|subscription| subscription.snapshot.run_id == run_id)
     }
 
+    pub(crate) fn subscribe_registered_run(
+        &self,
+        id: &str,
+        run_id: &str,
+    ) -> Option<AgentConversationSubscription> {
+        let state = self
+            .0
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .entries
+            .get(id)?
+            .clone();
+        let locked = state.lock().unwrap_or_else(|e| e.into_inner());
+        if !locked.registered_run || locked.snapshot.run_id != run_id {
+            return None;
+        }
+        let snapshot = locked.snapshot.clone();
+        let receiver = locked.sender.subscribe();
+        drop(locked);
+        Some(AgentConversationSubscription {
+            state,
+            snapshot,
+            receiver,
+        })
+    }
+
     pub(crate) fn finish_run(&self, id: &str, run_id: &str, status: &str) {
         let state = self
             .0
@@ -245,6 +286,7 @@ impl AgentConversationStreams {
                     .enumerate()
                     .filter_map(|(index, message)| {
                         public_conversation_message(message).map(|message| AgentConversationEntry {
+                            web_sources: Vec::new(),
                             id: format!("{run_id}-history-{index}"),
                             client_message_id: None,
                             timestamp_ms: 0,
@@ -263,6 +305,7 @@ impl AgentConversationStreams {
             let (sender, _) = broadcast::channel(STREAM_CAPACITY);
             let state = Arc::new(Mutex::new(Conversation {
                 snapshot,
+                registered_run: false,
                 sender,
                 source_messages_seen: messages.len(),
                 source_users: HashMap::new(),
@@ -350,6 +393,7 @@ impl AgentConversationWriter {
                     state.source_users.insert(index, (id.clone(), fingerprint));
                 }
                 let entry = AgentConversationEntry {
+                    web_sources: Vec::new(),
                     id,
                     client_message_id: None,
                     timestamp_ms: now_ms(),
@@ -373,6 +417,7 @@ impl AgentConversationWriter {
                 text,
             } if agent_id == &self.id => {
                 let mut entry = AgentConversationEntry {
+                    web_sources: Vec::new(),
                     id: message_id.clone(),
                     client_message_id: client_message_id.clone(),
                     timestamp_ms: now_ms(),
@@ -431,6 +476,7 @@ impl AgentConversationWriter {
                 state.snapshot.next_assistant_item += 1;
                 state.snapshot.active_assistant_item_id = Some(id.clone());
                 state.snapshot.entries.push(AgentConversationEntry {
+                    web_sources: Vec::new(),
                     id,
                     client_message_id: None,
                     timestamp_ms: now_ms(),
@@ -543,6 +589,18 @@ impl AgentConversationWriter {
                     state.snapshot.run_id, state.snapshot.sequence
                 );
                 state.snapshot.entries.push(AgentConversationEntry {
+                    web_sources: output
+                        .execution_metadata
+                        .iter()
+                        .filter_map(|metadata| match metadata {
+                            kcoder_tools::ToolExecutionMetadata::WebSources(receipt)
+                                if receipt.tool_call_id == *id =>
+                            {
+                                Some(receipt.clone())
+                            }
+                            _ => None,
+                        })
+                        .collect(),
                     id: entry_id,
                     client_message_id: None,
                     timestamp_ms: now_ms(),
@@ -564,6 +622,7 @@ impl AgentConversationWriter {
                     state.snapshot.run_id, state.snapshot.sequence
                 );
                 state.snapshot.entries.push(AgentConversationEntry {
+                    web_sources: Vec::new(),
                     id: entry_id,
                     client_message_id: None,
                     timestamp_ms: now_ms(),
@@ -742,11 +801,14 @@ fn bound_snapshot(snapshot: &mut AgentConversationSnapshot) {
             content.remove(0);
             snapshot.truncated = true;
         }
-        bytes += serde_json::to_vec(&entry.message).map_or(0, |v| v.len());
+        bytes += serde_json::to_vec(&entry.message).map_or(0, |v| v.len())
+            + serde_json::to_vec(&entry.web_sources).map_or(0, |v| v.len());
     }
     while bytes > MAX_SNAPSHOT_BYTES && snapshot.entries.len() > 1 {
+        let removed = snapshot.entries.remove(0);
         bytes = bytes.saturating_sub(
-            serde_json::to_vec(&snapshot.entries.remove(0).message).map_or(0, |v| v.len()),
+            serde_json::to_vec(&removed.message).map_or(0, |v| v.len())
+                + serde_json::to_vec(&removed.web_sources).map_or(0, |v| v.len()),
         );
         snapshot.truncated = true;
     }

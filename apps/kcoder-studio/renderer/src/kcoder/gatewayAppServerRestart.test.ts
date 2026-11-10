@@ -3,6 +3,7 @@ import { KCoderGatewayRuntime as ModularRuntime } from './gatewayRuntime'
 import { KCoderGatewayRuntime as InstalledRuntime } from './installGatewayRuntime'
 import { FakeGatewayClient } from './gatewayRuntime.test-support'
 import { KCODER_RUNTIME_METHODS } from './legacyRuntimeAbi'
+import { GatewayRpcError } from './gatewayRpc'
 
 const server = {
   id: 'local',
@@ -38,6 +39,10 @@ describe.each([
   class RestartClient extends FakeGatewayClient {
     detached = false
     connected = false
+    nativeManagementOnly = false
+    useNativeManagementTransport() {
+      this.nativeManagementOnly = true
+    }
     constructor(readonly index: number) {
       super(`thread-${index}`)
     }
@@ -49,7 +54,7 @@ describe.each([
     }
     override async request<T>(method: string, params: Record<string, unknown> = {}): Promise<T> {
       if (method === 'plugin/list') return {} as T
-      if (['skills/import', 'skills/remove', 'mcp/list', 'mcp/install', 'mcp/remove', 'mcp/logout', 'mcp/login', 'mcp/callback', 'mcp/cancel', 'gateway/mcp/login'].includes(method)) {
+      if (['skills/import', 'skills/remove', 'mcp/list', 'mcp/setEnabled', 'mcp/install', 'mcp/remove', 'mcp/logout', 'mcp/providerRevocation', 'mcp/login', 'mcp/callback', 'mcp/cancel', 'gateway/mcp/login'].includes(method)) {
         this.requests.push({ method, params })
         return { forwarded: method } as T
       }
@@ -76,8 +81,8 @@ describe.each([
     }
   }
 
-  test.each(['skills/import', 'skills/remove', 'mcp/list', 'mcp/install', 'mcp/remove', 'mcp/logout', 'mcp/login', 'mcp/callback', 'mcp/cancel', 'gateway/mcp/login'])('forwards %s through the target command client', async method => {
-    const params = method === 'mcp/logout' ? { name: 'oauth-tool', pluginId: 'test-plugin' } : {}
+  test.each(['skills/import', 'skills/remove', 'mcp/list', 'mcp/setEnabled', 'mcp/install', 'mcp/remove', 'mcp/logout', 'mcp/providerRevocation', 'mcp/login', 'mcp/callback', 'mcp/cancel', 'gateway/mcp/login'])('forwards %s through the target command client', async method => {
+    const params = method === 'mcp/logout' ? { name: 'oauth-tool', pluginId: 'test-plugin' } : method === 'mcp/providerRevocation' ? { action: 'read', requestId: 'original-provider-request', server: { name: 'oauth-tool', pluginId: 'test-plugin' } } : {}
     const result = await runtime.request('runtime.plugins.request', {
       deviceId: 'local',
       workspacePath: '/workspace',
@@ -86,6 +91,11 @@ describe.each([
     })
     expect(result).toEqual({ forwarded: method })
     expect(clients.flatMap(client => client.requests)).toContainEqual({ method, params })
+  })
+
+  test('rejects private provider revocation overrides before starting or sending through a command client', async () => {
+    await expect(runtime.request('runtime.plugins.request', {deviceId:'local',workspacePath:'/workspace',method:'mcp/providerRevocation',params:{action:'prepare',requestId:'original',server:{name:'oauth-tool'},token:'forbidden-public-field'}})).rejects.toMatchObject({code:-32602})
+    expect(clients.flatMap(client => client.requests).some(request => request.method==='mcp/providerRevocation')).toBe(false)
   })
 
   beforeEach(() => {
@@ -164,6 +174,61 @@ describe.each([
     await expect(
       runtime.request(KCODER_RUNTIME_METHODS.appServerRestart, {})
     ).resolves.toMatchObject({ restarted: false })
+  })
+
+  test('groups Windows path aliases into one backend restart', async () => {
+    await runtime.connectClient(server, 'runtime', 'C:\\workspace')
+    await runtime.connectClient(server, 'runtime', 'C:/workspace/')
+    await expect(
+      runtime.request(KCODER_RUNTIME_METHODS.appServerRestart, { serverId: server.id, ifIdle: true })
+    ).resolves.toMatchObject({ restarted: true, requiresConfirmation: false })
+    expect(events.filter(event => event.startsWith('stopped:'))).toHaveLength(1)
+    expect(events.filter(event => event.startsWith('detached:'))).toHaveLength(1)
+  })
+
+  test('reports a broker restart refusal as busy and retains the requester', async () => {
+    await runtime.status()
+    restartFailure = new GatewayRpcError('Another client is using this app-server', -32043)
+    await expect(
+      runtime.request(KCODER_RUNTIME_METHODS.appServerRestart, { serverId: server.id, ifIdle: true })
+    ).resolves.toMatchObject({ restarted: false, requiresConfirmation: true })
+    expect(clients[0].closed).toBe(false)
+    expect(clients[0].requests.filter(request => request.method === 'gateway/app-server/restart'))
+      .toEqual([{ method: 'gateway/app-server/restart', params: { confirm: true, force: false } }])
+  })
+
+  test('keeps its browser resources open when backend restart is requested', async () => {
+    await runtime.status()
+    const browser = await runtime.connectClient(server, 'browser')
+    await expect(
+      runtime.request(KCODER_RUNTIME_METHODS.appServerRestart, { serverId: server.id, ifIdle: true })
+    ).resolves.toMatchObject({ restarted: false, requiresConfirmation: true })
+    expect((browser as RestartClient).closed).toBe(false)
+    expect(events.some(event => event.startsWith('stopped:'))).toBe(false)
+  })
+
+  test.each([true, false])('releases its SDK management connection before restart with managementFirst=%s', async managementFirst => {
+    if (!managementFirst) await runtime.status()
+    await runtime.commandClient(server, undefined, true)
+    if (managementFirst) await runtime.status()
+    const management = clients.find(client => client.nativeManagementOnly)!
+    await expect(
+      runtime.request(KCODER_RUNTIME_METHODS.appServerRestart, { serverId: server.id, ifIdle: true })
+    ).resolves.toMatchObject({ restarted: true })
+    expect(management.detached).toBe(true)
+    expect(management.closed).toBe(true)
+    expect(management.requests.some(request => request.method === 'gateway/app-server/restart')).toBe(false)
+    expect(events.filter(event => event.startsWith('stopped:'))).toHaveLength(1)
+  })
+
+  test('releases a management-only connection without sending it a backend restart', async () => {
+    await runtime.commandClient(server, undefined, true)
+    await expect(
+      runtime.request(KCODER_RUNTIME_METHODS.appServerRestart, { serverId: server.id, ifIdle: true })
+    ).resolves.toMatchObject({ restarted: false })
+    expect(clients[0].detached).toBe(true)
+    expect(clients[0].closed).toBe(true)
+    expect(events.some(event => event.startsWith('stopped:'))).toBe(false)
   })
 
   test('propagates broker rejection without closing its only requester', async () => {

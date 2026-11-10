@@ -1,8 +1,41 @@
 //! Turn artifacts: extracted from the app-server connection boundary.
 
-use super::*;
+use crate::{
+    failed_turn,
+    receipts::{read_records, terminal_status},
+};
+use anyhow::{Context, Result, ensure};
+use kcoder_attachment_retention::acceptance::TurnClientMessageArtifact;
+use kcoder_cli_storage::{
+    private_files::{hex_sha256, write_private_artifact_file},
+    transcript_artifact_journal,
+};
+use kcoder_engine::QueryEngine;
+use kcoder_transcript::TurnOutcomeArtifact;
+use serde::{Deserialize, Serialize};
+use serde_json::{Value, json};
+use std::{
+    collections::HashMap,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
-pub(super) fn save_turn_outcome(
+/// The attempt that already accepted a continuation of a failed turn (R054, R056).
+///
+/// A lost response or a repeated click must learn the accepted attempt instead of
+/// starting a second one. The receipt is durable and carries the context digest it
+/// was accepted against, so a changed recovery boundary refuses it.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(crate) struct TurnContinuationArtifact {
+    version: u8,
+    thread_id: String,
+    pub(crate) turn_id: String,
+    context_hash: String,
+    accepted_at_ms: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    retry_operation_id: Option<String>,
+}
+
+pub fn save_turn_outcome(
     engine: &QueryEngine,
     thread_id: &str,
     turn_id: &str,
@@ -21,7 +54,52 @@ pub(super) fn save_turn_outcome(
     )
 }
 
-pub(super) fn save_turn_outcome_with_continuation(
+pub struct ForegroundTerminal {
+    pub status: &'static str,
+    pub error: String,
+    pub provider_failure: Option<kcoder_types::ProviderFailureDetails>,
+    pub persisted: bool,
+}
+
+pub fn persist_foreground_terminal(
+    engine: &QueryEngine,
+    thread_id: &str,
+    turn_id: &str,
+    event: &kcoder_engine::EngineEvent,
+    cancelled: bool,
+    allow_continuation: bool,
+) -> Option<ForegroundTerminal> {
+    let (status, error) =
+        kcoder_app_events::notification_projection::terminal_outcome(event, cancelled)?;
+    let provider_failure = match event {
+        kcoder_engine::EngineEvent::ProviderFailed { details, .. } => Some(details.clone()),
+        _ => None,
+    };
+    // Persist before projection so an immediate thread read can recover the failure.
+    let persisted = match save_turn_outcome_with_continuation(
+        engine,
+        thread_id,
+        turn_id,
+        status,
+        Some(&error),
+        provider_failure.as_ref(),
+        allow_continuation,
+    ) {
+        Ok(()) => true,
+        Err(error) => {
+            tracing::warn!(%error, %turn_id, "failed to persist terminal turn outcome before projection");
+            false
+        }
+    };
+    Some(ForegroundTerminal {
+        status,
+        error,
+        provider_failure,
+        persisted,
+    })
+}
+
+pub fn save_turn_outcome_with_continuation(
     engine: &QueryEngine,
     thread_id: &str,
     turn_id: &str,
@@ -70,11 +148,7 @@ pub(super) fn save_turn_outcome_with_continuation(
     )
 }
 
-pub(super) fn clear_turn_outcome(
-    engine: &QueryEngine,
-    thread_id: &str,
-    turn_id: &str,
-) -> Result<()> {
+pub fn clear_turn_outcome(engine: &QueryEngine, thread_id: &str, turn_id: &str) -> Result<()> {
     let path = engine
         .session_storage_dir_for(thread_id)
         .join("turn-outcomes")
@@ -87,7 +161,7 @@ pub(super) fn clear_turn_outcome(
     .context("failed to clear prior turn outcome")
 }
 
-pub(super) fn save_turn_client_message_id(
+pub fn save_turn_client_message_id(
     engine: &QueryEngine,
     thread_id: &str,
     turn_id: &str,
@@ -121,7 +195,7 @@ pub(super) fn save_turn_client_message_id(
 }
 
 /// Records that this turn already accepted a continuation against `context_hash`.
-pub(super) fn save_turn_continuation_receipt(
+pub fn save_turn_continuation_receipt(
     engine: &QueryEngine,
     thread_id: &str,
     turn_id: &str,
@@ -151,7 +225,7 @@ pub(super) fn save_turn_continuation_receipt(
     )
 }
 
-pub(super) fn load_turn_continuation_receipt(
+fn load_turn_continuation_receipt(
     engine: &QueryEngine,
     thread_id: &str,
     turn_id: &str,
@@ -174,7 +248,7 @@ pub(super) fn load_turn_continuation_receipt(
 ///
 /// A retry operation names one recovery, so finding it under a different failed
 /// turn means the identity is being reused rather than repeated.
-pub(super) fn turn_continuation_for_operation(
+pub(crate) fn turn_continuation_for_operation(
     engine: &QueryEngine,
     thread_id: &str,
     retry_operation_id: &str,
@@ -203,6 +277,28 @@ pub(super) fn turn_continuation_for_operation(
         })
 }
 
+/// Legacy receipt scan used by the read-only turn receipt endpoint.
+pub fn continuation_turns_for_operation(
+    engine: &QueryEngine,
+    thread_id: &str,
+    operation_id: &str,
+) -> Result<Vec<String>> {
+    let directory = engine
+        .session_storage_dir_for(thread_id)
+        .join("turn-continuations");
+    let mut turns = Vec::new();
+    for record in read_records::<TurnContinuationArtifact>(&directory)? {
+        ensure!(
+            record.version == 1 && record.thread_id == thread_id,
+            "invalid continuation receipt identity"
+        );
+        if record.retry_operation_id.as_deref() == Some(operation_id) {
+            turns.push(record.turn_id);
+        }
+    }
+    Ok(turns)
+}
+
 /// Answers a repeated continuation with the attempt that was already accepted.
 ///
 /// The receipt only applies while the committed context still matches the
@@ -214,7 +310,7 @@ pub(super) fn turn_continuation_for_operation(
 /// the full-context digest of `failed_turn` cannot be used to recognise a replay.
 /// Inputs are what a rollback, a compaction or a newer turn changes, and they are
 /// never rewritten by the attempt itself.
-pub(super) fn input_context_hash(messages: &[kcoder_types::Message]) -> Result<String> {
+pub fn input_context_hash(messages: &[kcoder_types::Message]) -> Result<String> {
     use kcoder_types::{ContentBlock, Message};
     let inputs = messages
         .iter()
@@ -232,7 +328,7 @@ pub(super) fn input_context_hash(messages: &[kcoder_types::Message]) -> Result<S
     Ok(hex_sha256(&serde_json::to_vec(&inputs)?))
 }
 
-pub(super) fn replay_accepted_continuation(
+pub(crate) fn replay_accepted_continuation(
     engine: &QueryEngine,
     thread_id: &str,
     failed_turn_id: &str,
@@ -249,7 +345,7 @@ pub(super) fn replay_accepted_continuation(
     }
     // The caller owns a fresh registration guard, so its running flag describes
     // this lookup, not the already accepted attempt. Read durable terminal evidence.
-    let status = turn_receipts::terminal_status(engine, thread_id, failed_turn_id)
+    let status = terminal_status(engine, thread_id, failed_turn_id)
         .context("accepted continuation has no verifiable terminal status; inspect the existing attempt before retrying")?;
     Ok(Some(json!({
         "turn": { "id": failed_turn_id, "status": status, "threadId": thread_id }
@@ -261,7 +357,7 @@ pub(super) fn replay_accepted_continuation(
 /// A commit is durable: the receipt is the per-turn artifact written when the
 /// turn starts, so a retry after an unknown outcome finds it even across a
 /// restart.
-pub(super) fn committed_turn_for_client_message(
+pub fn committed_turn_for_client_message(
     committed: &HashMap<String, String>,
     client_message_id: &str,
 ) -> Option<String> {
@@ -271,7 +367,7 @@ pub(super) fn committed_turn_for_client_message(
         .map(|(turn_id, _)| turn_id.clone())
 }
 
-pub(super) fn load_turn_client_message_ids(
+pub fn load_turn_client_message_ids(
     engine: &QueryEngine,
     thread_id: &str,
 ) -> HashMap<String, String> {
@@ -303,24 +399,7 @@ pub(super) fn load_turn_client_message_ids(
         .collect()
 }
 
-pub(super) fn apply_turn_client_message_ids(
-    messages: &mut [ThreadMessage],
-    client_message_ids: HashMap<String, String>,
-) {
-    for message in messages {
-        if message.role != "user" {
-            continue;
-        }
-        let Some(turn_id) = message.turn_id.as_deref() else {
-            continue;
-        };
-        if let Some(client_message_id) = client_message_ids.get(turn_id) {
-            message.client_message_id = Some(client_message_id.clone());
-        }
-    }
-}
-
-pub(super) fn clone_turn_client_message_ids(
+pub fn clone_turn_client_message_ids(
     engine: &QueryEngine,
     source_thread_id: &str,
     target_thread_id: &str,
@@ -331,7 +410,7 @@ pub(super) fn clone_turn_client_message_ids(
     Ok(())
 }
 
-pub(super) fn load_turn_outcomes(
+pub fn load_turn_outcomes(
     engine: &QueryEngine,
     thread_id: &str,
 ) -> HashMap<String, TurnOutcomeArtifact> {
@@ -360,68 +439,4 @@ pub(super) fn load_turn_outcomes(
             .then_some((artifact.turn_id.clone(), artifact))
         })
         .collect()
-}
-
-pub(super) fn apply_turn_outcomes(
-    messages: &mut Vec<ThreadMessage>,
-    outcomes: HashMap<String, TurnOutcomeArtifact>,
-) {
-    for (turn_id, outcome) in outcomes {
-        if let Some(message) = messages.iter_mut().rfind(|message| {
-            message.turn_id.as_deref() == Some(turn_id.as_str()) && message.role == "assistant"
-        }) {
-            apply_turn_outcome_to_message(message, &outcome);
-            continue;
-        }
-        let Some(index) = messages
-            .iter()
-            .rposition(|message| message.turn_id.as_deref() == Some(turn_id.as_str()))
-        else {
-            continue;
-        };
-        messages.insert(
-            index + 1,
-            ThreadMessage {
-                id: format!("turn-outcome-{}", hex_sha256(turn_id.as_bytes())),
-                client_message_id: None,
-                turn_id: Some(turn_id),
-                role: "assistant".into(),
-                content: String::new(),
-                status: None,
-                error: None,
-                error_type: None,
-                provider_failure: None,
-                attempt_id: None,
-                continued_by_attempt_id: None,
-                blocks: Vec::new(),
-                timestamp_ms: outcome.completed_at_ms,
-                content_truncated: false,
-                content_original_chars: None,
-            },
-        );
-        apply_turn_outcome_to_message(&mut messages[index + 1], &outcome);
-    }
-}
-
-pub(super) fn apply_turn_outcome_to_message(
-    message: &mut ThreadMessage,
-    outcome: &TurnOutcomeArtifact,
-) {
-    if outcome.status == "interrupted" {
-        message.status = Some("cancelled".into());
-        return;
-    }
-    message.status = Some("failed".into());
-    message.error = outcome
-        .error
-        .clone()
-        .or_else(|| Some("Task execution failed".into()));
-    message.error_type = Some(
-        outcome
-            .provider_failure
-            .as_ref()
-            .map_or("response.failed", |details| details.category.as_str())
-            .into(),
-    );
-    message.provider_failure = outcome.provider_failure.clone();
 }

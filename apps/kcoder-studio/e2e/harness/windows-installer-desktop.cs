@@ -4,7 +4,7 @@ using System.ComponentModel;
 using System.Runtime.InteropServices;
 using System.Text;
 
-public sealed class KcoderInstallerDesktop : IDisposable {
+public sealed partial class KcoderInstallerDesktop : IDisposable {
   [StructLayout(LayoutKind.Sequential)] struct SecurityAttributes { public int Length; public IntPtr Descriptor; public int Inherit; }
   [StructLayout(LayoutKind.Sequential, CharSet=CharSet.Unicode)] struct StartupInfo {
     public int Size; public string Reserved; public string Desktop; public string Title;

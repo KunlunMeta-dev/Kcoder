@@ -1,8 +1,8 @@
 import { beforeEach, expect, test, vi } from 'vitest'
-vi.mock('@/tauri/localExecutor', () => ({
+vi.mock('@/host/localExecutor', () => ({
   requestLocalExecutor: vi.fn(async () => ({ accepted: true, taskId: 'task' })),
 }))
-import { requestLocalExecutor } from '@/tauri/localExecutor'
+import { requestLocalExecutor } from '@/host/localExecutor'
 import { newerDefinition, workflowApi, type WorkflowDefinition } from './workflowApi'
 const call = vi.mocked(requestLocalExecutor)
 const draft: WorkflowDefinition = {
@@ -200,4 +200,23 @@ test('run archive preserves exact IDs/token/confirmation and archived reads are 
     { serverId: 'remote', method: 'workflow/runs/archive/list', params: { offset: 20, limit: 20 } },
     { signal }
   )
+})
+
+
+test('selected workspace stays with the original read, pending request and explicit response', async () => {
+  const workspacePath = '/ssh/non-default', controller = new AbortController()
+  call.mockResolvedValueOnce({ runId: 'original-run', revision: 1 })
+  await workflowApi.run('original-ssh', 'original-run', undefined, { workspacePath, signal: controller.signal })
+  expect(call).toHaveBeenLastCalledWith('runtime.workflows.request', {
+    serverId: 'original-ssh', workspacePath, method: 'workflow/runs/read', params: { runId: 'original-run' },
+  }, { signal: controller.signal })
+  call.mockResolvedValueOnce({ supported: true, requests: [] })
+  await workflowApi.requests('original-ssh', 'original-run', { workspacePath })
+  expect(call).toHaveBeenLastCalledWith('runtime.workflows.request', {
+    serverId: 'original-ssh', workspacePath, method: 'workflow/runs/requests', params: { runId: 'original-run' },
+  })
+  await workflowApi.respond('original-ssh', 'original-run', 'original-human', true, { workspacePath })
+  expect(call).toHaveBeenLastCalledWith('runtime.workflows.request', {
+    serverId: 'original-ssh', workspacePath, method: 'workflow/runs/respond', params: { runId: 'original-run', requestId: 'original-human', value: true },
+  })
 })

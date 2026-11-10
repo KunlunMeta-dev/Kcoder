@@ -65,13 +65,25 @@ fn default_permission_mode_is_ask() {
 }
 
 #[test]
-fn default_shell_timeout_and_foreground_budget_are_five_minutes() {
+fn default_shell_foreground_budget_is_two_minutes_with_thirty_minute_lifetime() {
     let settings = Settings::default();
 
     assert_eq!(settings.tool_timeout_ms, 300_000);
+    assert_eq!(settings.tool_limits.execution_timeout_ms["bash"], 1_800_000);
+    assert_eq!(
+        settings.tool_limits.execution_timeout_ms["PowerShell"],
+        1_800_000
+    );
     assert_eq!(
         settings.tool_limits.foreground_budget_ms.for_tool("bash"),
-        300_000
+        120_000
+    );
+    assert_eq!(
+        settings
+            .tool_limits
+            .foreground_budget_ms
+            .for_tool("PowerShell"),
+        120_000
     );
     assert_eq!(
         settings.tool_limits.task_output_timeout_ms.default_ms,
@@ -84,6 +96,46 @@ fn obsolete_tool_timeout_cap_is_not_serialized() {
     let value = serde_json::to_value(Settings::default()).unwrap();
 
     assert!(value.get("max_tool_timeout_ms").is_none());
+}
+
+#[test]
+fn explicit_execution_timeout_map_keeps_only_declared_overrides() {
+    let settings: Settings = serde_json::from_value(serde_json::json!({
+        "tool_timeout_ms": 90000,
+        "tool_limits": {"execution_timeout_ms": {"bash": 600000}}
+    }))
+    .unwrap();
+    assert_eq!(settings.tool_timeout_ms, 90000);
+    assert_eq!(settings.tool_limits.execution_timeout_ms["bash"], 600000);
+    assert!(
+        !settings
+            .tool_limits
+            .execution_timeout_ms
+            .contains_key("PowerShell")
+    );
+    crate::schema::validate_settings_schema(&serde_json::json!({
+        "tool_limits": {"execution_timeout_ms": {"bash": 600000}}
+    }))
+    .unwrap();
+}
+
+#[test]
+fn execution_timeout_config_tool_settings_roundtrip() {
+    let mut settings = Settings::default();
+    let value = serde_json::json!({"bash": 600000, "PowerShell": 900000});
+    assert!(matches!(
+        crate::tool_settings::update_setting_value(
+            "tool_limits.execution_timeout_ms",
+            &value,
+            &mut settings
+        )
+        .unwrap(),
+        crate::tool_settings::ToolSettingUpdate::Applied
+    ));
+    assert_eq!(
+        crate::tool_settings::read_setting_value("tool_limits.execution_timeout_ms", &settings),
+        Some(value)
+    );
 }
 
 #[test]
@@ -175,8 +227,24 @@ fn tdd_gate_setting_parses_and_defaults_to_auto() {
 fn luna_tool_profile_defaults_to_a_small_platform_specific_allowlist() {
     let allowed = Settings::default().tools.luna.allowed;
 
-    assert_eq!(allowed.len(), 20);
+    assert_eq!(allowed.len(), 23);
+    assert_eq!(
+        allowed
+            .iter()
+            .collect::<std::collections::HashSet<_>>()
+            .len(),
+        allowed.len()
+    );
+    assert!(!allowed.iter().any(|name| name == "ocr"));
     for required in [
+        "spawn_agent",
+        "explore_agent",
+        "SendMessage",
+        "wait",
+        "close_agent",
+        "REPL",
+        "AskUserQuestion",
+        "WebBrowser",
         "glob",
         "grep",
         "read",
@@ -186,16 +254,11 @@ fn luna_tool_profile_defaults_to_a_small_platform_specific_allowlist() {
         "TaskStop",
         "skill",
         "TodoWrite",
-        "spawn_agent",
-        "SendMessage",
-        "wait",
-        "close_agent",
         "WebSearch",
         "WebFetch",
         "DiscoverSkills",
-        "explore_agent",
-        "ocr",
         "Workflow",
+        "ContextHistory",
     ] {
         assert!(allowed.iter().any(|name| name == required));
     }

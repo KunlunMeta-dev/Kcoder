@@ -1,8 +1,12 @@
+import { getTaskGoalObservation } from './goalObservation'
+import { studioPresentationParams } from '../../studioPresentation'
 import { computerUseConsent } from '../../computerUseConsent'
 import { computerUseTurnParams } from '../../gatewayComputerUse'
 import i18n from '@/i18n'
 import { createRandomUuid } from '@/lib/random-id'
 import { agentConnection, readAgentArtifact } from './agentRequests'
+import { exactAgentConnection, requestedAgentRun, sameAgentRun, exactAgentUnavailable } from './agentRunConstraint'
+import { isAgentSteerResult } from '../../../../../shared/generated/contractGuards.mjs'
 import { sameWorkspacePath } from '@/lib/workspace-path-identity'
 import { negotiateModelSelector } from '../../../../../shared/modelSelection'
 import {
@@ -22,13 +26,46 @@ import {
   type ActiveGatewayTurn,
   EXECUTOR_EVENT,
   type GatewayTask,
-  isRetryableReadonlyTaskConnectionError,
   record,
   text,
 } from './contracts'
 import type { GatewayRuntimeCore } from './core'
+import { observeAcceptedTurnReceipt } from './turnReceiptObservation'
+import { trySteerRunningTurn } from './turnSteer'
+import { notifyRuntimeWorkChanged } from '../../runtimeWorkEvents'
+import { releaseUnviewedTaskClient } from './sessionLifetime'
 
 export async function sendTask(
+  this: GatewayRuntimeCore,
+  params: Record<string, unknown>,
+  server: GatewayServer,
+  interruptFirst: boolean
+) {
+  const address = record(params.address)
+  const taskId = this.resolveTaskId(text(params.taskId) ?? text(address.taskId))
+  if (!taskId) return sendTaskInner.call(this, params, server, interruptFirst)
+  this.pendingTaskInputs ??= new Map()
+  let pending = this.pendingTaskInputs.get(taskId)
+  if (!pending) this.pendingTaskInputs.set(taskId, pending = new Set())
+  const ticket = Symbol('task-input')
+  pending.add(ticket)
+  let unknown = false
+  try {
+    return await sendTaskInner.call(this, params, server, interruptFirst)
+  } catch (error) {
+    unknown = error instanceof TurnAcceptanceUnknownError
+    throw error
+  } finally {
+    pending.delete(ticket)
+    if (this.pendingTaskInputs.get(taskId) === pending && pending.size === 0) {
+      this.pendingTaskInputs.delete(taskId)
+      // An unknown receipt cannot prove that no turn was accepted.
+      if (!unknown) releaseUnviewedTaskClient(this, taskId)
+    }
+  }
+}
+
+async function sendTaskInner(
   this: GatewayRuntimeCore,
   params: Record<string, unknown>,
   server: GatewayServer,
@@ -59,6 +96,7 @@ export async function sendTask(
     text(record(params.modelSelection).providerId)
   if (!task) throw new Error('任务连接已失效，请重新打开或恢复任务')
   let client = await this.readyTaskClient(task)
+  studioPresentationParams(task.studioWorkMode, client)
   if (retryCurrentConfiguration && (!retryFromTurnId || !retryFromAttemptId || !explicitModel)) {
     throw new Error(i18n.t('workbench.failed_turn_current_identity_required'))
   }
@@ -169,6 +207,7 @@ export async function sendTask(
               ...(retryCurrentConfiguration ? { retryModelConfiguration: 'current' } : {}),
             }
           : turnModeParams(params, client)),
+        ...studioPresentationParams(task.studioWorkMode, client),
         ...modelSelectionModeParams(modelSelectionMode, client, selectedModel, retryFromTurnId),
         threadId,
         input: retryFromTurnId ? [] : [{ type: 'text', text: prompt }],
@@ -216,6 +255,17 @@ export async function sendTask(
   } catch (error) {
     this.pendingTurnStartByTask.delete(taskId)
     if (error instanceof TurnAcceptanceUnknownError) throw error
+    if (error instanceof GatewayRpcError && error.code === -32003) {
+      // The rejected input was not accepted; the existing turn still owns
+      // this runtime. Do not invent a terminal event or replay the input.
+      this.tasks.set(taskId, {
+        ...(this.tasks.get(taskId) ?? task),
+        running: true,
+        updatedAt: Date.now(),
+      })
+      notifyRuntimeWorkChanged()
+      throw new Error(i18n.t('workbench.runtime_turn_still_running'), { cause: error })
+    }
     if (retryFromTurnId) {
       if (
         error instanceof GatewayRpcError &&
@@ -278,7 +328,15 @@ export async function sendTask(
       })
     )
   }
-  if (!completedBeforeAcknowledgement) this.trackActiveTurn(taskId, turnId)
+  if (!completedBeforeAcknowledgement) {
+    this.trackActiveTurn(taskId, turnId)
+    observeAcceptedTurnReceipt(this, taskId, turnId, client, {
+      threadId,
+      ...(retryFromTurnId
+        ? { retryOperationId: `retry:${threadId}:${retryFromAttemptId || retryFromTurnId}${retryCurrentConfiguration ? ':current' : ''}` }
+        : { clientMessageId: clientMessageId ?? undefined }),
+    })
+  }
   if (task && !completedBeforeAcknowledgement) {
     this.tasks.set(taskId, {
       ...task,
@@ -437,6 +495,27 @@ export async function guideTask(this: GatewayRuntimeCore, params: Record<string,
     rawMessage,
     params.additionalContext ?? params.additional_context
   )
+  const guidanceId =
+    text(params.clientGuidanceId) ?? text(params.client_guidance_id) ?? createRandomUuid()
+  const running = this.activeTurnByTask.get(taskId)
+  const threadId = this.threadByTask.get(taskId)
+  const runningClient = this.clientByTask.get(taskId)
+  // Prefer steering the running turn: the guidance reaches the model after the
+  // current tool batch instead of cancelling the work in progress.
+  if (running && !running.internal && threadId && runningClient && !Array.isArray(params.attachments)) {
+    const steered = await trySteerRunningTurn(this, runningClient, {
+      taskId,
+      serverId: server.id,
+      threadId,
+      turnId: running.turnId,
+      guidanceId,
+      message: rawMessage,
+      prompt: message,
+    })
+    if (steered.kind === 'queued') {
+      return { success: true, steered: true, guidanceId, turnId: steered.turnId }
+    }
+  }
   const response = await this.sendTask(
     {
       ...params,
@@ -449,8 +528,6 @@ export async function guideTask(this: GatewayRuntimeCore, params: Record<string,
     this.activeTurnByTask.has(taskId)
   )
   const turnId = this.activeTurnByTask.get(taskId)?.turnId
-  const guidanceId =
-    text(params.clientGuidanceId) ?? text(params.client_guidance_id) ?? createRandomUuid()
   await emit(EXECUTOR_EVENT, {
     event: 'response.guidance.applied',
     payload: {
@@ -464,7 +541,12 @@ export async function guideTask(this: GatewayRuntimeCore, params: Record<string,
 }
 
 export async function steerSubagent(this: GatewayRuntimeCore, params: Record<string, unknown>) {
-  const { taskId, task, server, client, assertCurrent } = await agentConnection(this, params)
+  const expected = requestedAgentRun(params)
+  const continuation = params.continueOriginalRun === true
+  if (continuation && !expected) throw exactAgentUnavailable()
+  const { taskId, task, server, client, assertCurrent } = expected
+    ? await exactAgentConnection(this, params, expected, continuation ? 'agentExactContinuationV1' : 'agentExactControlV1')
+    : await agentConnection(this, params)
   if (client.supportsExperimental?.('agentSteering') !== true) {
     throw new Error('当前 KCoder app-server 不支持定向调整子智能体')
   }
@@ -476,17 +558,20 @@ export async function steerSubagent(this: GatewayRuntimeCore, params: Record<str
   }
   const clientMessageId =
     text(params.clientMessageId) ?? text(params.client_message_id) ?? createRandomUuid()
-  const result = await client.request<Record<string, unknown>>('agent/steer', {
+  const result = await client.request<Record<string, unknown>>(continuation ? 'agent/continue' : 'agent/steer', {
     threadId: task.threadId,
     agentId,
     message,
     clientMessageId,
+    ...(expected ? { expectedBackgroundRun: expected } : {}),
   })
   assertCurrent()
+  if (expected && (!isAgentSteerResult(result) || !sameAgentRun(result.expectedBackgroundRun, expected)
+    || result.agentId !== expected.agentId || result.clientMessageId !== clientMessageId)) throw exactAgentUnavailable()
   const status = text(result.status) ?? 'rejected'
   const messageId = text(result.messageId)
   const accepted = result.queued === true || status === 'applied'
-  await emit(EXECUTOR_EVENT, {
+  if (!expected) await emit(EXECUTOR_EVENT, {
     event: 'response.subagent.activity',
     payload: {
       taskId,
@@ -538,39 +623,8 @@ export function promptWithApplicationContext(
     : message
 }
 
-export async function getTaskGoal(this: GatewayRuntimeCore, params: Record<string, unknown>) {
-  const address = record(params.address)
-  const requestedTaskId = text(params.taskId) ?? text(address.taskId)
-  if (
-    requestedTaskId &&
-    !this.compatibility.isRuntimeTaskId(requestedTaskId) &&
-    !this.canonicalTaskByRequested.has(requestedTaskId)
-  ) {
-    return { accepted: false, taskId: requestedTaskId, goal: null }
-  }
-  const retryDelays = [0, 75, 150, 300, 600]
-  let lastError: unknown
-  for (let attempt = 0; attempt < retryDelays.length; attempt += 1) {
-    if (retryDelays[attempt] > 0) {
-      await new Promise(resolve => window.setTimeout(resolve, retryDelays[attempt]))
-    }
-    try {
-      const { taskId, task, server } = await this.taskDescriptor(params)
-      const result = await this.withTransientClient(
-        server,
-        client =>
-          client.request<{ goal?: Record<string, unknown> | null }>('thread/goal/get', {
-            threadId: task.threadId,
-          }),
-        task.workspacePath
-      )
-      return { accepted: true, taskId, goal: result.goal ?? null }
-    } catch (error) {
-      if (!isRetryableReadonlyTaskConnectionError(error)) throw error
-      lastError = error
-    }
-  }
-  throw lastError
+export async function getTaskGoal(this: GatewayRuntimeCore, params: Record<string, unknown>, options?: { signal?: AbortSignal }) {
+  return getTaskGoalObservation.call(this, params, options)
 }
 
 export async function setTaskGoal(this: GatewayRuntimeCore, params: Record<string, unknown>) {
@@ -607,12 +661,21 @@ export async function clearTaskGoal(this: GatewayRuntimeCore, params: Record<str
 }
 
 export async function cancelTask(this: GatewayRuntimeCore, params: Record<string, unknown>) {
-  const address = record(params.address)
+  const address = record(params.address ?? params)
   const taskId = this.resolveTaskId(text(params.taskId) ?? text(address.taskId))
-  const threadId = (taskId && this.threadByTask.get(taskId)) ?? text(address.threadId)
+  const threadId = taskId ? this.threadByTask.get(taskId) : undefined
+  const task = taskId ? this.tasks.get(taskId) : undefined
   const client = taskId ? this.clientByTask.get(taskId) : undefined
   const active = taskId ? this.activeTurnByTask.get(taskId) : undefined
-  if (!taskId || !threadId || !client || !active) {
+  // A retained question's Ignore action carries its original task address.
+  // Never substitute a rebound task or disconnected client before interrupting.
+  if (!taskId || !threadId || !task || !client || !active || this.disposed ||
+      this.appServerDisconnectedClients.has(client) || task.threadId !== threadId ||
+      (address.deviceId !== undefined && address.deviceId !== task.serverId) ||
+      (address.threadId != null && address.threadId !== threadId) ||
+      (address.expectedTurnId !== undefined && address.expectedTurnId !== active.turnId) ||
+      (address.workspacePath != null && (typeof address.workspacePath !== 'string' ||
+        !sameWorkspacePath(address.workspacePath, task.workspacePath)))) {
     return { accepted: false, interrupted: false, taskId }
   }
   const result = await client.request<{ interrupted?: boolean }>('turn/interrupt', {
@@ -652,6 +715,7 @@ export function trackActiveTurn(
   turnId: string,
   internal = false
 ) {
+  if (this.activeTurnByTask.get(taskId)?.turnId === turnId) return
   let complete: () => void = () => {}
   const completion = new Promise<void>(resolve => {
     complete = resolve

@@ -2,8 +2,8 @@ import { act, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, test, vi } from 'vitest'
 import { CodexInlineVisualizationHost } from './CodexInlineVisualizationHost'
 
-vi.mock('@tauri-apps/api/core', () => ({
-  convertFileSrc: (path: string) => `asset://localhost/${path.replace(/^\/+/, '')}`,
+vi.mock('@/lib/client-resource-url', () => ({
+  clientResourceUrl: (path: string) => `asset://localhost/${path.replace(/^\/+/, '')}`,
 }))
 
 afterEach(() => {
@@ -53,6 +53,7 @@ describe('CodexInlineVisualizationHost', () => {
 
     const document = await documentBlob?.text()
     expect(document).toContain('<h2>月度趋势</h2>')
+    expect(document).toContain('kcoder-inline-visualization-resize')
     expect(document).toContain('--viz-series-1: var(--primary)')
     expect(document).toContain(
       '<base href="asset://localhost/workspace/.codex/visualizations/2026/07/23/thread/">'
@@ -60,12 +61,22 @@ describe('CodexInlineVisualizationHost', () => {
     const token = document?.match(/token:(?:&quot;|")([^&"]+)/)?.[1]
     expect(token).toBeTruthy()
 
+    act(() => window.dispatchEvent(new MessageEvent('message', {
+      source: frame.contentWindow,
+      data: { type: 'kcoder-inline-visualization-resize', token: 'wrong-token', height: 900 },
+    })))
+    act(() => window.dispatchEvent(new MessageEvent('message', {
+      source: window,
+      data: { type: 'kcoder-inline-visualization-resize', token, height: 900 },
+    })))
+    expect(frame).toHaveStyle({ height: '480px' })
+
     act(() => {
       window.dispatchEvent(
         new MessageEvent('message', {
           source: frame.contentWindow,
           data: {
-            type: 'wework-inline-visualization-resize',
+            type: 'kcoder-inline-visualization-resize',
             token,
             height: 321.2,
           },
@@ -73,6 +84,11 @@ describe('CodexInlineVisualizationHost', () => {
       )
     })
     expect(frame).toHaveStyle({ height: '322px' })
+    act(() => window.dispatchEvent(new MessageEvent('message', {
+      source: frame.contentWindow,
+      data: { type: 'kcoder-inline-visualization-resize', token, height: 2400.4 },
+    })))
+    expect(frame).toHaveStyle({ height: '2401px' })
 
     unmount()
     expect(revokeObjectUrl).toHaveBeenCalledWith('blob:inline-visualization')

@@ -159,7 +159,7 @@ export function TerminalVirtualKeyboard({ latch, disabled, onInput, onPaste, onF
         <Key styles={styles} label="←" disabled={disabled} onPress={() => send("left")} />
         <Key styles={styles} label="→" disabled={disabled} onPress={() => send("right")} />
         <Key styles={styles} label="⌫" disabled={disabled} onPress={() => send("backspace")} />
-        <Key styles={styles} label="Enter" disabled={disabled} wide onPress={() => send("enter")} />
+        <Key styles={styles} testID="terminal-enter" label="Enter" disabled={disabled} wide onPress={() => send("enter")} />
         <Key styles={styles} label={t("mobile.terminal_keyboard.paste")} disabled={disabled} wide onPress={onPaste} accessibilityLabel={t("mobile.terminal_keyboard.paste_clipboard")} />
         <Key styles={styles} label="⌨" disabled={false} onPress={onFocusKeyboard} accessibilityLabel={t("mobile.terminal_keyboard.open_system_keyboard")} />
       </ScrollView>
@@ -167,8 +167,8 @@ export function TerminalVirtualKeyboard({ latch, disabled, onInput, onPaste, onF
   );
 }
 
-function Key({ styles, label, active = false, disabled, wide = false, onPress, accessibilityLabel }: { styles: ReturnType<typeof makeStyles>; label: string; active?: boolean; disabled: boolean; wide?: boolean; onPress(): void; accessibilityLabel?: string }) {
-  return <Pressable accessibilityRole="button" accessibilityLabel={accessibilityLabel ?? label} accessibilityState={{ disabled, selected: active }} disabled={disabled} onPress={onPress} style={({ pressed }) => [styles.key, wide && styles.wide, active && styles.active, disabled && styles.disabled, pressed && styles.pressed]}><Text style={[styles.keyText, active && styles.activeText]}>{label}</Text></Pressable>;
+function Key({ styles, label, active = false, disabled, wide = false, onPress, accessibilityLabel, testID }: { styles: ReturnType<typeof makeStyles>; label: string; active?: boolean; disabled: boolean; wide?: boolean; onPress(): void; accessibilityLabel?: string; testID?: string }) {
+  return <Pressable testID={testID} accessibilityRole="button" accessibilityLabel={accessibilityLabel ?? label} accessibilityState={{ disabled, selected: active }} disabled={disabled} onPress={onPress} style={({ pressed }) => [styles.key, wide && styles.wide, active && styles.active, disabled && styles.disabled, pressed && styles.pressed]}><Text style={[styles.keyText, active && styles.activeText]}>{label}</Text></Pressable>;
 }
 
 const makeStyles = (colors: ThemeColors) => StyleSheet.create({

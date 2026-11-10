@@ -1,10 +1,8 @@
 import { downloadLink } from '@/kcoder/downloadLink'
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { invoke } from '@tauri-apps/api/core'
 import { Download, X } from 'lucide-react'
 import { useTranslation } from '@/hooks/useTranslation'
-import { isNativeTauriHost } from '@/lib/runtime-environment'
 import { localPathFromMarkdownImageSrc } from './assistantMarkdownLinks'
 
 interface MarkdownImagePreviewProps {
@@ -58,6 +56,7 @@ export function MarkdownImagePreview({ src, rawSrc, alt, onError }: MarkdownImag
         ref={triggerRef}
         type="button"
         data-testid="assistant-markdown-image-button"
+        data-reading-image
         className="my-2 block max-w-full cursor-zoom-in rounded-xl p-0 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/70"
         onClick={() => setIsOpen(true)}
         aria-label={alt || filename}
@@ -132,19 +131,7 @@ function getMarkdownImageFilename(src: string, alt: string): string {
   return alt || 'image'
 }
 
-function getDownloadableLocalPath(src: string): string | null {
-  if (/^(?:asset|blob|data|https?):/i.test(src)) return null
-  const path = localPathFromMarkdownImageSrc(src)
-  return path.startsWith('/') || /^[a-zA-Z]:[\\/]/.test(path) ? path : null
-}
-
-async function downloadMarkdownImage(src: string, rawSrc: string, filename: string) {
-  const sourcePath = getDownloadableLocalPath(rawSrc)
-  if (sourcePath && isNativeTauriHost()) {
-    await invoke<string>('download_local_file_to_downloads', { sourcePath, filename })
-    return
-  }
-
+async function downloadMarkdownImage(src: string, _rawSrc: string, filename: string) {
   let downloadUrl = src
   let objectUrl: string | null = null
   if (!/^(?:blob|data):/i.test(src)) {

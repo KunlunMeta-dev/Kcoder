@@ -1,0 +1,572 @@
+{
+  "MessagingPlatform": {
+    "valid": [
+      {
+        "name": "minimal_valid",
+        "value": "feishu"
+      }
+    ],
+    "invalid": [
+      {
+        "name": "invalid_structure",
+        "value": "telegram"
+      }
+    ]
+  },
+  "ConnectionState": {
+    "valid": [
+      {
+        "name": "minimal_valid",
+        "value": "authorization_required"
+      }
+    ],
+    "invalid": [
+      {
+        "name": "invalid_structure",
+        "value": "authorized_forever"
+      }
+    ]
+  },
+  "ConnectivityConnection": {
+    "valid": [
+      {
+        "name": "minimal_valid",
+        "value": {
+          "id": "connection",
+          "revision": "1",
+          "kind": "qq",
+          "label": "QQ",
+          "enabled": false,
+          "hasCredential": false,
+          "state": "configured",
+          "configuration": {},
+          "resourceGrants": []
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "invalid_structure",
+        "value": {
+          "id": "connection",
+          "revision": "1",
+          "kind": "qq",
+          "label": "QQ",
+          "enabled": "false",
+          "hasCredential": false,
+          "state": "configured",
+          "configuration": {},
+          "resourceGrants": []
+        }
+      }
+    ]
+  },
+  "ReadinessLevel": {
+    "valid": [
+      {
+        "name": "minimal_valid",
+        "value": "L3"
+      }
+    ],
+    "invalid": [
+      {
+        "name": "invalid_structure",
+        "value": "L7"
+      }
+    ]
+  },
+  "ReadinessObservationState": {
+    "valid": [
+      {
+        "name": "minimal_valid",
+        "value": "unknown"
+      }
+    ],
+    "invalid": [
+      {
+        "name": "invalid_structure",
+        "value": "definitely_works"
+      }
+    ]
+  },
+  "ReadinessObservation": {
+    "valid": [
+      {
+        "name": "minimal_valid",
+        "value": {
+          "level": "L3",
+          "state": "unknown",
+          "reasonCode": "AUTHORIZATION_NOT_CHECKED"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "invalid_structure",
+        "value": {
+          "level": "L3",
+          "state": "unknown",
+          "reasonCode": null,
+          "toolCount": -1
+        }
+      }
+    ]
+  },
+  "ChannelDeliveryState": {
+    "valid": [
+      {
+        "name": "minimal_valid",
+        "value": "unknown"
+      }
+    ],
+    "invalid": [
+      {
+        "name": "invalid_structure",
+        "value": "delivered"
+      }
+    ]
+  },
+  "ConnectivityDelivery": {
+    "valid": [
+      {
+        "name": "minimal_valid",
+        "value": {
+          "deliveryId": "delivery",
+          "deliveryState": "pending",
+          "cancelled": false,
+          "receipt": null
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "invalid_structure",
+        "value": {
+          "deliveryId": "delivery",
+          "deliveryState": "pending",
+          "cancelled": "false",
+          "receipt": null
+        }
+      }
+    ]
+  },
+  "ConnectivityPort": {
+    "valid": [
+      {
+        "name": "minimal_valid",
+        "value": "P-CONNECTION"
+      }
+    ],
+    "invalid": [
+      {
+        "name": "invalid_structure",
+        "value": "P-ADMIN"
+      }
+    ]
+  },
+  "ConnectivityMethod": {
+    "valid": [
+      {
+        "name": "minimal_valid",
+        "value": "listConnections"
+      }
+    ],
+    "invalid": [
+      {
+        "name": "invalid_structure",
+        "value": "executeAnyTool"
+      }
+    ]
+  },
+  "ConnectivityPortCall": {
+    "valid": [
+      {
+        "name": "minimal_valid",
+        "value": {
+          "port": "P-CONNECTION",
+          "method": "listConnections",
+          "request": {
+            "contractVersion": "parallel-v1",
+            "requestId": "fixture-request",
+            "scope": {
+              "accountId": "fixture-owner",
+              "targetId": "fixture-target",
+              "workspaceId": null,
+              "identityGeneration": "1",
+              "targetRevision": "1"
+            },
+            "timeoutMs": 1000,
+            "payload": {}
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "invalid_structure",
+        "value": {
+          "port": "P-CONNECTION",
+          "method": "listConnections",
+          "request": {
+            "contractVersion": "parallel-v1",
+            "requestId": "fixture-request",
+            "scope": {
+              "accountId": "fixture-owner",
+              "targetId": "fixture-target",
+              "workspaceId": null,
+              "identityGeneration": "1",
+              "targetRevision": "1"
+            },
+            "timeoutMs": 1000,
+            "payload": {},
+            "unexpectedAuthority": true
+          }
+        }
+      }
+    ]
+  },
+  "ConnectivityDestinationRef": {
+    "valid": [
+      {
+        "name": "minimal_valid",
+        "value": {
+          "id": "destination",
+          "revision": "1"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "invalid_structure",
+        "value": {
+          "id": "destination",
+          "revision": 1
+        }
+      }
+    ]
+  },
+  "ConnectivityDeliveryContent": {
+    "valid": [
+      {
+        "name": "minimal_valid",
+        "value": {
+          "text": "Report ready",
+          "artifactRefs": []
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "invalid_structure",
+        "value": {
+          "text": false,
+          "artifactRefs": []
+        }
+      }
+    ]
+  },
+  "ConnectivityDeliverySubmit": {
+    "valid": [
+      {
+        "name": "minimal_valid",
+        "value": {
+          "deliveryId": "delivery",
+          "destinationRef": {
+            "id": "destination",
+            "revision": "1"
+          },
+          "content": {
+            "text": "Report ready",
+            "artifactRefs": []
+          },
+          "parentOperationId": "parent"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "invalid_structure",
+        "value": {
+          "deliveryId": "delivery",
+          "destination": {
+            "conversationId": "raw-platform-id"
+          },
+          "content": {
+            "text": "Report ready"
+          }
+        }
+      }
+    ]
+  },
+  "ConnectivityDeliveryAccepted": {
+    "valid": [
+      {
+        "name": "minimal_valid",
+        "value": {
+          "deliveryId": "delivery",
+          "deliveryState": "pending"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "invalid_structure",
+        "value": {
+          "deliveryId": "delivery",
+          "deliveryState": "delivered"
+        }
+      }
+    ]
+  },
+  "ConnectivityDeliveryLookup": {
+    "valid": [
+      {
+        "name": "minimal_valid",
+        "value": {
+          "deliveryId": "delivery"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "invalid_structure",
+        "value": {
+          "deliveryId": 12
+        }
+      }
+    ]
+  },
+  "ConnectivityCapabilityState": {
+    "valid": [
+      {
+        "name": "minimal_valid",
+        "value": "ready"
+      }
+    ],
+    "invalid": [
+      {
+        "name": "invalid_structure",
+        "value": "completed"
+      }
+    ]
+  },
+  "ConnectivityToolRef": {
+    "valid": [
+      {
+        "name": "minimal_valid",
+        "value": {
+          "name": "mcp__docs__read",
+          "schemaRevision": "1",
+          "sourceRevision": "source-1"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "invalid_structure",
+        "value": {
+          "name": "mcp__docs__read",
+          "schemaRevision": 1,
+          "sourceRevision": "source-1"
+        }
+      }
+    ]
+  },
+  "ConnectivityCapabilityReadiness": {
+    "valid": [
+      {
+        "name": "minimal_valid",
+        "value": {
+          "capabilityId": "document.read",
+          "state": "unknown",
+          "reasonCode": "RESOURCE_NOT_VERIFIED",
+          "toolRefs": []
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "invalid_structure",
+        "value": {
+          "capabilityId": "document.read",
+          "state": "completed",
+          "reasonCode": "RESOURCE_NOT_VERIFIED",
+          "toolRefs": []
+        }
+      }
+    ]
+  },
+  "ConnectivityReadinessRequest": {
+    "valid": [
+      {
+        "name": "minimal_valid",
+        "value": {
+          "capabilityIds": [
+            "document.read"
+          ],
+          "resourceRefs": []
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "invalid_structure",
+        "value": {
+          "capabilityIds": "document.read"
+        }
+      }
+    ]
+  },
+  "ConnectivityReadinessReport": {
+    "valid": [
+      {
+        "name": "minimal_valid",
+        "value": {
+          "id": "target",
+          "revision": "1",
+          "connectionId": null,
+          "connectionRevision": null,
+          "targetRevision": "1",
+          "identityGeneration": "1",
+          "requestRevision": "inventory-1",
+          "observedAt": "2026-10-24T00:00:00.000Z",
+          "observations": [],
+          "capabilities": []
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "invalid_structure",
+        "value": {
+          "id": "target",
+          "revision": "1",
+          "connectionId": null,
+          "connectionRevision": null,
+          "targetRevision": "1",
+          "identityGeneration": 7,
+          "requestRevision": "inventory-1",
+          "observedAt": "2026-10-24T00:00:00.000Z",
+          "observations": [],
+          "capabilities": []
+        }
+      }
+    ]
+  },
+  "ConnectivityProbeState": {
+    "valid": [
+      {
+        "name": "minimal_valid",
+        "value": "unknown"
+      }
+    ],
+    "invalid": [
+      {
+        "name": "invalid_structure",
+        "value": "completed"
+      }
+    ]
+  },
+  "ConnectivityProbeRequest": {
+    "valid": [
+      {
+        "name": "minimal_valid",
+        "value": {
+          "capabilityId": "document.read",
+          "resourceRefs": [],
+          "toolRef": {
+            "name": "native-tool",
+            "schemaRevision": "1",
+            "sourceRevision": "source-1"
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "invalid_structure",
+        "value": {
+          "capabilityId": "document.read",
+          "resourceRefs": [],
+          "toolRef": {
+            "name": "native-tool",
+            "schemaRevision": 1,
+            "sourceRevision": "source-1"
+          }
+        }
+      }
+    ]
+  },
+  "ConnectivityProbeEvidence": {
+    "valid": [
+      {
+        "name": "minimal_valid",
+        "value": {
+          "verifierId": "native-read-verifier",
+          "verifierVersion": "1",
+          "toolRef": {
+            "name": "native-tool",
+            "schemaRevision": "1",
+            "sourceRevision": "source-1"
+          },
+          "resourceRefs": [],
+          "identityGeneration": "1",
+          "targetRevision": "1",
+          "policyRevision": "policy-1",
+          "requestRevision": "request-1",
+          "inputSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "resultSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "observedAtMs": 1,
+          "checkName": "native-fixed-read-check"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "invalid_structure",
+        "value": {
+          "verifierId": "native-read-verifier",
+          "verifierVersion": "1",
+          "toolRef": {
+            "name": "native-tool",
+            "schemaRevision": "1",
+            "sourceRevision": "source-1"
+          },
+          "resourceRefs": [],
+          "identityGeneration": "1",
+          "targetRevision": "1",
+          "policyRevision": "policy-1",
+          "requestRevision": "request-1",
+          "inputSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "resultSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "observedAtMs": -1,
+          "checkName": "native-fixed-read-check"
+        }
+      }
+    ]
+  },
+  "ConnectivityProbeReport": {
+    "valid": [
+      {
+        "name": "minimal_valid",
+        "value": {
+          "capabilityId": "document.read",
+          "state": "unknown",
+          "businessValidated": false,
+          "evidence": null
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "invalid_structure",
+        "value": {
+          "capabilityId": "document.read",
+          "state": "completed",
+          "businessValidated": true,
+          "evidence": null
+        }
+      }
+    ]
+  }
+}

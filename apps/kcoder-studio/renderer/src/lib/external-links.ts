@@ -1,6 +1,4 @@
-import { isNativeTauriHost } from './runtime-environment'
-import { requestEmbeddedBrowserOpen } from './embedded-browser'
-import { getAppPreferences, type BrowserLinkTarget } from '@/tauri/appPreferences'
+import type { BrowserLinkTarget } from '@/host/appPreferences'
 
 interface OpenExternalUrlOptions {
   target?: BrowserLinkTarget
@@ -31,33 +29,12 @@ export function isLocalHttpUrl(value: string | null | undefined): value is strin
   )
 }
 
-async function preferredLinkTarget(value: string): Promise<BrowserLinkTarget> {
-  const preferences = await getAppPreferences()
-  return isLocalHttpUrl(value)
-    ? preferences.browserLocalLinkTarget
-    : preferences.browserExternalLinkTarget
-}
-
-async function openWithSystemBrowser(value: string): Promise<void> {
-  const { openUrl } = await import('@tauri-apps/plugin-opener')
-  await openUrl(value)
-}
-
 export async function openExternalUrl(
   value: string,
-  options: OpenExternalUrlOptions = {}
+  _options: OpenExternalUrlOptions = {}
 ): Promise<boolean> {
   if (!isHttpUrl(value)) {
     return false
-  }
-
-  if (isNativeTauriHost()) {
-    const target = options.target ?? (await preferredLinkTarget(value))
-    if (target === 'studio' && requestEmbeddedBrowserOpen(value)) {
-      return true
-    }
-    await openWithSystemBrowser(value)
-    return true
   }
 
   window.open(value, '_blank', 'noopener,noreferrer')

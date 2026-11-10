@@ -1,7 +1,7 @@
 //! Bounded result retention; count summaries are produced only after a complete scan.
 use super::*;
 
-pub(super) struct GrepPage<'a> {
+pub struct GrepPage<'a> {
     input: &'a GrepInput,
     mode: GrepOutputMode,
     base: &'a Path,
@@ -16,7 +16,7 @@ pub(super) struct GrepPage<'a> {
 }
 
 impl<'a> GrepPage<'a> {
-    pub(super) fn new(input: &'a GrepInput, base: &'a Path, cwd: &'a Path) -> Self {
+    pub fn new(input: &'a GrepInput, base: &'a Path, cwd: &'a Path) -> Self {
         Self {
             input,
             mode: input
@@ -44,7 +44,7 @@ impl<'a> GrepPage<'a> {
         self.input.offset.unwrap_or(0)
     }
 
-    pub(super) fn push_rg_line(&mut self, line: &str) -> std::io::Result<()> {
+    pub fn push_rg_line(&mut self, line: &str) -> std::io::Result<()> {
         match self.mode {
             GrepOutputMode::Content => self.push_content(relativize_rg_line(line, self.cwd)),
             GrepOutputMode::Count => {
@@ -112,7 +112,7 @@ impl<'a> GrepPage<'a> {
         Ok(())
     }
 
-    pub(super) fn finish(mut self) -> String {
+    pub fn finish(mut self) -> String {
         if self.mode == GrepOutputMode::FilesWithMatches {
             let offset = self.offset();
             let limit = self.limit();

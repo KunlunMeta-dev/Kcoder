@@ -1,5 +1,4 @@
-import { invoke } from '@tauri-apps/api/core'
-import { requestLocalExecutor } from '@/tauri/localExecutor'
+import { invoke } from '@/lib/runtime-commands'
 import {
   isRuntimeChatStreamDebugEnabled,
   setRuntimeChatStreamDebugEnabled,
@@ -14,17 +13,17 @@ import {
   isPerformanceDiagnosticsShortcut,
   setPerformanceDiagnosticsEnabled,
 } from './performanceDiagnostics'
-import { isTauriRuntime } from './runtime-environment'
-import { setEmbeddedBrowserOcclusion } from './embedded-browser'
+import { isGatewayRuntime } from './runtime-environment'
+import {
+  EMBEDDED_BROWSER_DEBUG_PANEL_VISIBILITY_EVENT,
+  setEmbeddedBrowserOcclusion,
+} from './embedded-browser'
 import { APP_UPDATE_SIMULATE_EVENT } from '@/features/app-update/app-update-context'
 
-const MENU_ID = 'wework-developer-command-menu'
-const DEBUG_PANEL_ID = 'wework-debug-panel'
-const DEBUG_PANEL_VISIBILITY_EVENT = 'wework:debug-panel-visibility-change'
+const MENU_ID = 'kcoder-developer-command-menu'
+const DEBUG_PANEL_ID = 'kcoder-debug-panel'
 const INSPECTOR_COMMAND = 'open_main_webview_devtools'
 const OPEN_LOG_DIRECTORY_COMMAND = 'open_app_log_directory'
-const CODEX_STREAM_DEBUG_GET_METHOD = 'runtime.codex.stream_debug.get'
-const CODEX_STREAM_DEBUG_SET_METHOD = 'runtime.codex.stream_debug.set'
 const DEVELOPER_COMMAND_MENU_OCCLUSION_ID = 'developer-command-menu'
 const DEBUG_PANEL_OCCLUSION_ID = 'debug-panel'
 
@@ -35,12 +34,6 @@ interface DeveloperCommand {
   run: () => void | Promise<void>
 }
 
-interface CodexStreamDebugState {
-  enabled: boolean
-}
-
-let codexStreamDebugEnabled: boolean | null = null
-let codexStreamDebugLoad: Promise<void> | null = null
 let collapsedDebugPanelPosition: { left: number; top: number } | null = null
 
 export function installDeveloperCommandMenu() {
@@ -91,10 +84,6 @@ function openDeveloperCommandMenu() {
     if (event.target === overlay) closeDeveloperCommandMenu()
   })
   overlay.addEventListener('keydown', handleMenuKeyDown)
-
-  void refreshCodexStreamDebugStatus(() => {
-    if (document.getElementById(MENU_ID)) renderDeveloperCommandList(list)
-  })
 }
 
 function closeDeveloperCommandMenu() {
@@ -145,8 +134,7 @@ function renderDeveloperCommandList(list: HTMLElement) {
 
 function getDeveloperCommands(): DeveloperCommand[] {
   const diagnosticsEnabled = isPerformanceDiagnosticsEnabled()
-  const streamDebugKnown = codexStreamDebugEnabled !== null
-  const streamLogsEnabled = isRuntimeChatStreamDebugEnabled() || (codexStreamDebugEnabled ?? false)
+  const streamLogsEnabled = isRuntimeChatStreamDebugEnabled()
   return [
     {
       id: 'open-debug-panel',
@@ -179,15 +167,9 @@ function getDeveloperCommands(): DeveloperCommand[] {
     },
     {
       id: 'toggle-stream-logs',
-      label: streamDebugKnown
-        ? streamLogsEnabled
-          ? 'Disable Stream Logs'
-          : 'Enable Stream Logs'
-        : 'Toggle Stream Logs',
-      description: streamDebugKnown
-        ? `Frontend stream logs and Codex executor stream logs are currently ${streamLogsEnabled ? 'enabled' : 'disabled'}.`
-        : 'Read and toggle frontend stream logs plus Codex executor stream logs.',
-      run: toggleCodexStreamDebug,
+      label: streamLogsEnabled ? 'Disable Stream Logs' : 'Enable Stream Logs',
+      description: 'Toggle frontend stream lifecycle logs.',
+      run: () => setRuntimeChatStreamDebugEnabled(!streamLogsEnabled),
     },
     {
       id: 'print-performance-snapshot',
@@ -195,24 +177,24 @@ function getDeveloperCommands(): DeveloperCommand[] {
       description: 'Print window.__KCODER_STUDIO_PERF__.snapshot() to the console.',
       run: async () => {
         if (!window.__KCODER_STUDIO_PERF__) {
-          console.warn('[Wework perf] diagnostics are not enabled.')
+          console.warn('[KCoder perf] diagnostics are not enabled.')
           return
         }
         await window.__KCODER_STUDIO_PERF__.processSnapshot()
-        console.info('[Wework perf] snapshot', JSON.stringify(window.__KCODER_STUDIO_PERF__.snapshot()))
+        console.info('[KCoder perf] snapshot', JSON.stringify(window.__KCODER_STUDIO_PERF__.snapshot()))
       },
     },
     {
       id: 'open-log-directory',
       label: 'Open Log Directory',
-      description: 'Open the folder that contains Tauri and frontend logs.',
+      description: 'Open the folder that contains Gateway and frontend logs.',
       run: async () => {
-        if (!isTauriRuntime()) {
-          console.warn('[Wework dev] Log directory is only available in the Tauri app.')
+        if (!isGatewayRuntime()) {
+          console.warn('[KCoder dev] Log directory requires an active Gateway connection.')
           return
         }
         await invoke(OPEN_LOG_DIRECTORY_COMMAND).catch(error => {
-          console.error('[Wework dev] Failed to open log directory', error)
+          console.error('[KCoder dev] Failed to open log directory', error)
         })
       },
     },
@@ -221,64 +203,16 @@ function getDeveloperCommands(): DeveloperCommand[] {
       label: 'Open Web Inspector',
       description: 'Capture JavaScript heap snapshots and allocation profiles.',
       run: async () => {
-        if (!isTauriRuntime()) {
-          console.warn('[Wework dev] Web Inspector is only available in the Tauri app.')
+        if (!isGatewayRuntime()) {
+          console.warn('[KCoder dev] Web Inspector requires an active Gateway connection.')
           return
         }
         await invoke(INSPECTOR_COMMAND).catch(error => {
-          console.error('[Wework dev] Failed to open Web Inspector', error)
+          console.error('[KCoder dev] Failed to open Web Inspector', error)
         })
       },
     },
   ]
-}
-
-async function refreshCodexStreamDebugStatus(onLoaded?: () => void) {
-  if (!isTauriRuntime()) return
-  if (!codexStreamDebugLoad) {
-    codexStreamDebugLoad = requestLocalExecutor<CodexStreamDebugState>(
-      CODEX_STREAM_DEBUG_GET_METHOD
-    )
-      .then(state => {
-        codexStreamDebugEnabled = state.enabled
-      })
-      .catch(error => {
-        console.warn('[Wework dev] Failed to read Codex stream log state', error)
-      })
-      .finally(() => {
-        codexStreamDebugLoad = null
-      })
-  }
-
-  await codexStreamDebugLoad
-  onLoaded?.()
-}
-
-async function toggleCodexStreamDebug() {
-  if (!isTauriRuntime()) {
-    setRuntimeChatStreamDebugEnabled(!isRuntimeChatStreamDebugEnabled())
-    console.info(
-      `[Wework dev] Frontend stream logs ${isRuntimeChatStreamDebugEnabled() ? 'enabled' : 'disabled'}.`
-    )
-    return
-  }
-
-  if (codexStreamDebugEnabled === null) {
-    await refreshCodexStreamDebugStatus()
-  }
-  const frontendWasEnabled = isRuntimeChatStreamDebugEnabled()
-  const enabled = !(frontendWasEnabled || (codexStreamDebugEnabled ?? false))
-  setRuntimeChatStreamDebugEnabled(enabled)
-  try {
-    const state = await requestLocalExecutor<CodexStreamDebugState>(CODEX_STREAM_DEBUG_SET_METHOD, {
-      enabled,
-    })
-    codexStreamDebugEnabled = state.enabled
-    console.info(`[Wework dev] Stream logs ${state.enabled ? 'enabled' : 'disabled'}.`)
-  } catch (error) {
-    setRuntimeChatStreamDebugEnabled(frontendWasEnabled)
-    console.error('[Wework dev] Failed to toggle Codex stream logs', error)
-  }
 }
 
 function openDebugPanel() {
@@ -366,7 +300,7 @@ function renderDebugPanelShell(root: HTMLElement, expanded: boolean) {
 function emitDebugPanelVisibility(expanded: boolean) {
   setEmbeddedBrowserOcclusion(DEBUG_PANEL_OCCLUSION_ID, expanded)
   window.dispatchEvent(
-    new CustomEvent(DEBUG_PANEL_VISIBILITY_EVENT, {
+    new CustomEvent(EMBEDDED_BROWSER_DEBUG_PANEL_VISIBILITY_EVENT, {
       detail: { expanded },
     })
   )
@@ -640,7 +574,7 @@ async function copyDebugSnapshot(snapshot: WorkbenchDebugSnapshot) {
   try {
     await navigator.clipboard.writeText(text)
   } catch (error) {
-    console.warn('[Wework dev] Failed to copy debug snapshot', error)
+    console.warn('[KCoder dev] Failed to copy debug snapshot', error)
   }
 }
 

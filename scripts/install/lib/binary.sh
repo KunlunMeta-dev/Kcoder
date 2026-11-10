@@ -12,8 +12,16 @@ kcoder_binary_is_usable() {
   [[ "$help_output" == *"--provider"* && "$auth_help_output" == *"login"* ]]
 }
 
+kcoder_cargo_target_dir() {
+  local repo_dir="$1" target_dir
+  target_dir="${KCODER_TARGET_DIR:-${CARGO_TARGET_DIR:-$repo_dir/target/cache/cargo/main}}"
+  [[ "$target_dir" == /* ]] || target_dir="$repo_dir/$target_dir"
+  printf '%s\n' "$target_dir"
+}
+
 kcoder_select_latest_binary() {
-  local defaults="$KCODER_REPO_DIR/target/release:$KCODER_REPO_DIR/.kcoder/releases"
+  local defaults
+  defaults="$(kcoder_cargo_target_dir "$KCODER_REPO_DIR")/release:$KCODER_REPO_DIR/target/release:$KCODER_REPO_DIR/.kcoder/releases"
   local roots=()
   local entry candidate root
 
@@ -40,6 +48,7 @@ kcoder_select_latest_binary() {
 
 kcoder_prepare_binary() {
   local policy="${1:-build}"
+  local target_dir
   local build_args=(build --all-features --locked)
 
   if [[ -n "${KCODER_REAL_BIN:-}" ]]; then
@@ -47,7 +56,6 @@ kcoder_prepare_binary() {
       echo "KCODER_REAL_BIN is not a usable KCoder binary: $KCODER_REAL_BIN" >&2
       return 1
     fi
-    KCODER_REAL_BIN="$KCODER_REAL_BIN"
     return
   fi
 
@@ -56,12 +64,13 @@ kcoder_prepare_binary() {
     echo "Using KCoder release binary: $KCODER_REAL_BIN" >&2
     return
   fi
+  target_dir="$(kcoder_cargo_target_dir "$KCODER_REPO_DIR")"
   case "$policy" in
     debug)
-      KCODER_REAL_BIN="$KCODER_REPO_DIR/target/debug/kcoder"
+      KCODER_REAL_BIN="$target_dir/debug/kcoder"
       ;;
     build)
-      KCODER_REAL_BIN="$KCODER_REPO_DIR/target/release/kcoder"
+      KCODER_REAL_BIN="$target_dir/release/kcoder"
       build_args+=(--release)
       ;;
     *)
@@ -73,5 +82,5 @@ kcoder_prepare_binary() {
   # Cargo tracks embedded resources, build scripts, and path dependencies as well
   # as Rust sources. Always let its incremental fingerprint check the inputs.
   echo "Checking KCoder $policy build inputs..." >&2
-  (cd "$KCODER_REPO_DIR" && cargo "${build_args[@]}")
+  (cd "$KCODER_REPO_DIR" && CARGO_TARGET_DIR="$target_dir" cargo "${build_args[@]}")
 }

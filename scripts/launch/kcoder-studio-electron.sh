@@ -20,7 +20,7 @@ profile="${KCODER_STUDIO_PROFILE:-release}"
 case "$profile" in
   dev)
     default_binary="${HOME:?HOME is required}/.local/bin/kcoder-dev"
-    default_home="${HOME:?HOME is required}/.config/kcoder-dev"
+    default_home="$repo_dir/target/home"
     ;;
   release)
     default_binary="${HOME:?HOME is required}/.local/bin/kcoder"
@@ -37,7 +37,7 @@ while (($#)); do
     --dev)
       profile=dev
       default_binary="${HOME:?HOME is required}/.local/bin/kcoder-dev"
-      default_home="${HOME:?HOME is required}/.config/kcoder-dev"
+      default_home="$repo_dir/target/home"
       shift
       ;;
     --release)
@@ -76,6 +76,7 @@ if [[ -z "${KCODER_STUDIO_KCODER_BIN:-}" && ! -x "$binary" ]]; then
   fi
 fi
 profile_home="${KCODER_STUDIO_KCODER_HOME:-${KCODER_CONFIG_DIR:-${KCODER_HOME:-$default_home}}}"
+printf 'KCoder %s Home: %s\n' "$profile" "$profile_home" >&2
 
 [[ -d "$studio_dir" && -f "$studio_dir/package.json" ]] || {
   echo "KCoder Studio checkout is missing: $studio_dir" >&2

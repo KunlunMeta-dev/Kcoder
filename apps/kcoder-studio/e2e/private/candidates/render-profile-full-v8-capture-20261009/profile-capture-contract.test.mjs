@@ -4,6 +4,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { makeCompleteCpuProfileArtifact, makeFullProfileCaptureFailureEvidence, validateProfileWindowBoundaries } from "./profile-capture-contract.mjs";
+import { readPrivateCandidateSourceClosure } from "../../../harness/private-candidate-source-closure.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const candidatePath = resolve(here, "mobile-render-profile.full-capture.candidate.mjs");
@@ -96,7 +97,7 @@ test("complete profile keeps all samples and only exact approved bundle-relative
 });
 
 test("full-capture call converts its Set-backed path allowlist to the serializer array contract", async () => {
-  const source = await readFile(candidatePath, "utf8");
+  const source = readPrivateCandidateSourceClosure("full-capture");
   assert.ok(source.includes("}, approvedScriptBaseUrl, [...approvedBundlePaths]);"), "the production call site must convert its Set-backed inventory before serialization");
   const approvedBundlePaths = new Set(["index.bundle"]);
   const artifact = makeCompleteCpuProfileArtifact(

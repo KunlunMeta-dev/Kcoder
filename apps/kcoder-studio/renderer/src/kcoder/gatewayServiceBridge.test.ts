@@ -95,31 +95,8 @@ test('removed Gateway command transport rejects as cancellation instead of invok
   }
 })
 
-test('a live browser Gateway IPC bridge still serves commands without a command transport', async () => {
-  const { invokeRuntimeCommand } = await import('./gatewayServiceBridge')
-  const descriptor = Object.getOwnPropertyDescriptor(window, '__TAURI_INTERNALS__')
-  const meta = document.createElement('meta')
-  meta.name = 'kcoder-rpc-token'
-  document.head.append(meta)
-  const invoke = vi.fn().mockResolvedValue('browser bridge')
-  Object.defineProperty(window, '__TAURI_INTERNALS__', {
-    configurable: true,
-    writable: true,
-    value: { invoke },
-  })
-  try {
-    await expect(invokeRuntimeCommand('probe')).resolves.toBe('browser bridge')
-    expect(invoke).toHaveBeenCalled()
-  } finally {
-    if (descriptor) Object.defineProperty(window, '__TAURI_INTERNALS__', descriptor)
-    else Reflect.deleteProperty(window, '__TAURI_INTERNALS__')
-    meta.remove()
-  }
-})
-
 test('native IPC cancellation releases the read caller while safely consuming a late native response', async () => {
   const { invokeRuntimeCommand } = await import('./gatewayServiceBridge')
-  const descriptor = Object.getOwnPropertyDescriptor(window, '__TAURI_INTERNALS__')
   let finish!: (value: unknown) => void
   const invoke = vi.fn(
     () =>
@@ -127,7 +104,8 @@ test('native IPC cancellation releases the read caller while safely consuming a 
         finish = resolve
       })
   )
-  Object.defineProperty(window, '__TAURI_INTERNALS__', { configurable: true, value: { invoke } })
+  const { registerGatewayCommandTransport } = await import('./gatewayServiceBridge')
+  const cleanup = registerGatewayCommandTransport(invoke)
   try {
     const controller = new AbortController()
     const pending = invokeRuntimeCommand('read-fixture', {}, { signal: controller.signal })
@@ -138,7 +116,6 @@ test('native IPC cancellation releases the read caller while safely consuming a 
     await Promise.resolve()
     expect(invoke).toHaveBeenCalledTimes(1)
   } finally {
-    if (descriptor) Object.defineProperty(window, '__TAURI_INTERNALS__', descriptor)
-    else Reflect.deleteProperty(window, '__TAURI_INTERNALS__')
+    cleanup()
   }
 })

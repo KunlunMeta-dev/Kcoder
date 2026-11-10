@@ -11,7 +11,6 @@ import {
 import {
   ActivityIndicator,
   AppState,
-  FlatList,
   type GestureResponderEvent,
   Image,
   Keyboard,
@@ -23,26 +22,30 @@ import {
   Text,
   TextInput,
   View,
+  type TextInputInstance,
 } from "react-native";
 import {
   ArrowLeft,
   ArrowRight,
   ChevronLeft,
-  File,
-  Folder,
   Globe2,
   Image as ImageIcon,
   RefreshCw,
   Save,
-  Search,
   TerminalSquare,
-  X,
 } from "lucide-react-native";
 import { writeWorkspaceFileVerified } from "@/runtime/workspace-file-write";
 import { GatewayRpcClient } from "@/gateway/rpc";
 import type { GatewayProfile, KCoderServer } from "@/gateway/types";
 import type { TaskRuntime } from "@/runtime/task-runtime";
 import type { WorkspaceFileDraft } from "@/storage/workspace-preferences";
+import {
+  rememberWorkspaceFile,
+  rememberWorkspaceFileAfterPersistence,
+  type WorkspaceFileEntry,
+} from "./workspace-file-discovery";
+import { WorkspaceFileDiscoveryPanel } from "./workspace-file-discovery-panel";
+import { workspaceFileDraftForOpen } from "./workspace-file-draft";
 import {
   getAppPreferencesSnapshot,
   subscribeAppPreferences,
@@ -58,15 +61,19 @@ import {
   classifyBrowserGesture,
   editBrowserAddressDraft,
   normalizeBrowserUrl,
+  BrowserUrlNormalizationError,
   type BrowserAddressDraftState,
   settleBrowserAddressDraft,
   type BrowserGestureMode,
+  workspaceBrowserOwnerKey,
 } from "./browser-viewport";
+import { startWorkspaceBrowserSession } from "./browser-preflight";
 import { editorScrollOffsetY } from "./editor-scroll";
 import {
   isWorkspacePath,
   joinWorkspacePath,
-  workspaceRelativePath,
+  workspacePathName,
+  workspacePathParent,
 } from "./workspace-path";
 import { radius, spacing, useTheme, useThemedStyles, type ThemeColors } from "@/theme";
 import { requestConfirmation } from "@/platform/confirmation";
@@ -373,12 +380,14 @@ export function TerminalPanel({
         <View
           style={[
             styles.connectionDot,
-            sessionId || demo ? styles.online : styles.pending,
+            terminalSnapshot.status === "running" || demo ? styles.online : styles.pending,
           ]}
         />
-        {!sessionId && !demo && taskSnapshot.connected ? (
+        {(!sessionId || terminalSnapshot.status === "error") &&
+        !demo && taskSnapshot.connected ? (
           <Pressable
             testID="terminal-restart"
+            disabled={terminalSnapshot.status === "starting"}
             accessibilityRole="button"
             accessibilityLabel={t("task.restart_terminal")}
             onPress={() => {
@@ -411,7 +420,7 @@ export function TerminalPanel({
       </View>
       <TerminalVirtualKeyboard
         latch={terminalModifiers.current}
-        disabled={!sessionId && !demo}
+        disabled={!demo && terminalSnapshot.status !== "running"}
         onInput={writeRaw}
         onPaste={pasteClipboard}
         onFocusKeyboard={() => emulatorRef.current?.focus()}
@@ -454,13 +463,18 @@ export function BrowserPanel({
   const { colors } = useTheme();
   const styles = useThemedStyles(makeStyles);
   const panelStyles = useThemedStyles(makePanelStyles);
-  const [url, setUrl] = useState(() =>
-    normalizeBrowserUrl(initialUrl ?? profile.baseUrl),
-  );
+  const ownerKey = workspaceBrowserOwnerKey(profile, server, cwd);
+  const [url, setUrl] = useState(() => {
+    const initial = initialUrl ?? profile.baseUrl;
+    try { return normalizeBrowserUrl(initial); }
+    catch { return typeof initial === "string" && initial.trim() ? initial.trim() : "https://example.com"; }
+  });
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [frame, setFrame] = useState<BrowserFrame | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [preflightWarning, setPreflightWarning] = useState<string | null>(null);
+  const panelScopeKey = JSON.stringify([demo, ownerKey]);
   const [keyboardText, setKeyboardText] = useState("");
   const [appActive, setAppActive] = useState(
     AppState.currentState !== "background" &&
@@ -474,6 +488,10 @@ export function BrowserPanel({
     operation: Promise<void>;
   } | null>(null);
   const browserClient = useRef<GatewayRpcClient | null>(null);
+  const browserClientOwner = useRef<string | null>(null);
+  const activeOwnerKey = useRef(ownerKey);
+  activeOwnerKey.current = ownerKey;
+  const panelScope = useRef(panelScopeKey);
   const browserUnsubscribe = useRef<(() => void) | null>(null);
   const browserSession = useRef<string | null>(null);
   const browserGeneration = useRef(0);
@@ -607,6 +625,17 @@ export function BrowserPanel({
   }, []);
 
   useEffect(() => {
+    if (panelScope.current === panelScopeKey) return;
+    panelScope.current = panelScopeKey;
+    setSessionId(null);
+    setFrame(null);
+    setLoading(false);
+    setError(null);
+    setPreflightWarning(null);
+    setKeyboardText("");
+  }, [panelScopeKey]);
+
+  useEffect(() => {
     if (!url.trim()) return;
     const timer = setTimeout(() => onUrlChangeRef.current?.(url.trim()), 400);
     return () => clearTimeout(timer);
@@ -631,19 +660,28 @@ export function BrowserPanel({
   useEffect(
     () => () => {
       browserGeneration.current += 1;
+      if (browserClientOwner.current !== ownerKey) return;
       browserUnsubscribe.current?.();
       browserUnsubscribe.current = null;
       const client = browserClient.current;
-      if (browserSession.current && client && !demo) {
+      const session = browserSession.current;
+      if (session && client && !demo) {
         void client
-          .request("browser/close", { session_id: browserSession.current })
+          .request("browser/close", { session_id: session })
           .catch(() => {});
       }
-      client?.close();
-      browserClient.current = null;
-      browserSession.current = null;
+      const release = () => {
+        if (browserClient.current !== client || browserClientOwner.current !== ownerKey) return;
+        client?.close();
+        browserClient.current = null;
+        browserClientOwner.current = null;
+        browserSession.current = null;
+      };
+      const pendingStart = browserStartInFlight.current;
+      if (pendingStart && client) void pendingStart.finally(release);
+      else release();
     },
-    [demo],
+    [demo, ownerKey],
   );
 
   const start = async (): Promise<void> => {
@@ -653,14 +691,25 @@ export function BrowserPanel({
       setError(t("task.enter_a_url_to_open"));
       return;
     }
-    const targetUrl = normalizeBrowserUrl(rawUrl);
+    let targetUrl: string;
+    try {
+      targetUrl = normalizeBrowserUrl(rawUrl);
+    } catch (value) {
+      if (value instanceof BrowserUrlNormalizationError) {
+        setError(t("task.browser_invalid_url"));
+        return;
+      }
+      throw value;
+    }
     const submittedDraftRevision = urlDraft.current.revision;
     setUrl(targetUrl);
     const generation = ++browserGeneration.current;
     const operation = (async () => {
       setLoading(true);
       setError(null);
+      setPreflightWarning(null);
       if (demo) {
+        browserClientOwner.current = ownerKey;
         setSessionId("demo-browser");
         return;
       }
@@ -725,11 +774,12 @@ export function BrowserPanel({
           cwd,
           "browser",
         );
-        if (generation !== browserGeneration.current) {
+        if (generation !== browserGeneration.current || activeOwnerKey.current !== ownerKey) {
           client.close();
           return;
         }
         browserClient.current = client;
+        browserClientOwner.current = ownerKey;
         browserUnsubscribe.current?.();
         browserUnsubscribe.current = client.subscribe((message) => {
           if (
@@ -742,6 +792,7 @@ export function BrowserPanel({
           browserUnsubscribe.current = null;
           browserSession.current = null;
           browserClient.current = null;
+          browserClientOwner.current = null;
           setSessionId(null);
           setFrame(null);
           setLoading(false);
@@ -749,29 +800,34 @@ export function BrowserPanel({
             t("task.the_remote_browser_disconnected_choose_open_to_reconnect"),
           );
         });
-        const viewport = browserViewportForLayout(layout);
-        const result = await client.request<{ session_id?: string }>(
-          "browser/start",
-          { url: targetUrl, ...viewport },
-          30_000,
+        const started = await startWorkspaceBrowserSession(
+          client,
+          targetUrl,
+          browserViewportForLayout(layout),
+          {
+            capabilityUnsupported: t("task.browser_capability_unsupported"),
+            preflightMethodUnsupported: t("task.browser_preflight_method_unsupported"),
+            preflightUnavailable: t("task.browser_preflight_unavailable"),
+            preflightWarning: (reason) => t("task.browser_preflight_warning", { reason }),
+            sessionIdMissing: t("task.the_appserver_returned_no_browser_session_id"),
+          },
         );
-        if (!result.session_id)
-          throw new Error(
-            t("task.the_appserver_returned_no_browser_session_id"),
-          );
+        const session = started.sessionId;
         if (
           generation !== browserGeneration.current ||
+          activeOwnerKey.current !== ownerKey ||
           browserClient.current !== client
         ) {
           await client
-            .request("browser/close", { session_id: result.session_id })
+            .request("browser/close", { session_id: session })
             .catch(() => {});
           client.close();
           return;
         }
-        browserSession.current = result.session_id;
-        setSessionId(result.session_id);
-        await screenshot(result.session_id, true, submittedDraftRevision);
+        browserSession.current = session;
+        setSessionId(session);
+        setPreflightWarning(started.preflightWarning);
+        await screenshot(session, true, submittedDraftRevision);
       } catch (value) {
         if (generation === browserGeneration.current) {
           setError(value instanceof Error ? value.message : String(value));
@@ -779,12 +835,20 @@ export function BrowserPanel({
           browserGeneration.current += 1;
           browserUnsubscribe.current?.();
           browserUnsubscribe.current = null;
-          if (browserClient.current === client) browserClient.current = null;
+          if (browserClient.current === client) {
+            browserClient.current = null;
+            browserClientOwner.current = null;
+          }
           browserSession.current = null;
           setSessionId(null);
           setFrame(null);
         }
         client?.close();
+        if (browserClient.current === client && activeOwnerKey.current !== ownerKey) {
+          browserClient.current = null;
+          browserClientOwner.current = null;
+          browserSession.current = null;
+        }
       } finally {
         if (generation === browserGeneration.current) setLoading(false);
       }
@@ -1058,6 +1122,7 @@ export function BrowserPanel({
   const scrollControls = (
     <>
       <Pressable
+        testID="browser-scroll-up"
         accessibilityLabel={t("task.scroll_up")}
         disabled={!sessionId}
         onPress={() =>
@@ -1073,6 +1138,7 @@ export function BrowserPanel({
         <Text style={styles.browserControlText}>{t("task.up")}</Text>
       </Pressable>
       <Pressable
+        testID="browser-scroll-down"
         accessibilityLabel={t("task.scroll_down")}
         disabled={!sessionId}
         onPress={() =>
@@ -1105,6 +1171,7 @@ export function BrowserPanel({
         ]}
       />
       <Pressable
+        testID="browser-send-text"
         accessibilityLabel={t("task.input")}
         disabled={!keyboardText || !sessionId}
         onPress={() => void sendKeyboardText()}
@@ -1117,6 +1184,7 @@ export function BrowserPanel({
   const specialKeyControls = (
     <>
       <Pressable
+        testID="browser-select-all"
         accessibilityLabel={t("task.select_all")}
         disabled={!sessionId}
         onPress={() =>
@@ -1127,6 +1195,7 @@ export function BrowserPanel({
         <Text style={styles.browserControlText}>Ctrl+A</Text>
       </Pressable>
       <Pressable
+        testID="browser-backspace"
         accessibilityLabel={t("task.backspace")}
         disabled={!sessionId}
         onPress={() => void runAction("key", { key: "Backspace" })}
@@ -1135,6 +1204,7 @@ export function BrowserPanel({
         <Text style={styles.browserControlText}>⌫</Text>
       </Pressable>
       <Pressable
+        testID="browser-tab-key"
         accessibilityLabel="Tab"
         disabled={!sessionId}
         onPress={() => void runAction("key", { key: "Tab" })}
@@ -1143,6 +1213,7 @@ export function BrowserPanel({
         <Text style={styles.browserControlText}>Tab</Text>
       </Pressable>
       <Pressable
+        testID="browser-escape-key"
         accessibilityLabel="Escape"
         disabled={!sessionId}
         onPress={() => void runAction("key", { key: "Escape" })}
@@ -1151,6 +1222,7 @@ export function BrowserPanel({
         <Text style={styles.browserControlText}>Esc</Text>
       </Pressable>
       <Pressable
+        testID="browser-enter-key"
         accessibilityLabel={t("task.enter")}
         disabled={!sessionId}
         onPress={() => void runAction("key", { key: "Enter" })}
@@ -1169,6 +1241,7 @@ export function BrowserPanel({
     >
       <View style={styles.browserBar}>
         <Pressable
+          testID="browser-back"
           accessibilityRole="button"
           accessibilityLabel={t("task.back")}
           aria-disabled={!sessionId || frame?.page?.canGoBack !== true}
@@ -1186,6 +1259,7 @@ export function BrowserPanel({
           <ArrowLeft size={17} color={colors.textMuted} />
         </Pressable>
         <Pressable
+          testID="browser-forward"
           accessibilityRole="button"
           accessibilityLabel={t("task.forward")}
           aria-disabled={!sessionId || frame?.page?.canGoForward !== true}
@@ -1234,6 +1308,7 @@ export function BrowserPanel({
           <RefreshCw size={17} color={colors.textMuted} />
         </Pressable>
         <Pressable
+          testID="browser-open"
           accessibilityLabel={t("task.open")}
           disabled={loading || !url.trim()}
           accessibilityState={{ disabled: loading || !url.trim() }}
@@ -1334,16 +1409,10 @@ export function BrowserPanel({
           {specialKeyControls}
         </View>
       )}
-      {error ? <Text style={styles.browserError}>{error}</Text> : null}
+      {error ? <Text testID="browser-error" accessibilityRole="alert" style={styles.browserError}>{error}</Text> : null}
+      {preflightWarning ? <Text testID="browser-preflight-warning" style={styles.browserPreflightWarning}>{preflightWarning}</Text> : null}
     </View>
   );
-}
-
-interface FileEntry {
-  name: string;
-  path: string;
-  is_directory: boolean;
-  size?: number;
 }
 
 interface OpenFile {
@@ -1365,20 +1434,25 @@ const webEditorNoWrapStyle =
     : undefined;
 
 export function FilesPanel({
+  ownerKey,
   task,
   demo,
   initialDirectory,
   initialDraft,
+  initialRecentFiles,
   openFileRequest,
   onDirtyChange,
   onDirectoryChange,
   onDraftChange,
+  onRecentFileOpened,
   onSavePendingChange,
 }: {
+  ownerKey: string;
   task: TaskRuntime;
   demo: boolean;
   initialDirectory?: string;
   initialDraft?: WorkspaceFileDraft;
+  initialRecentFiles?: string[];
   openFileRequest?: {
     path: string;
     revision: number;
@@ -1388,6 +1462,7 @@ export function FilesPanel({
   onDirtyChange?(dirty: boolean): void;
   onDirectoryChange?(path: string): void;
   onDraftChange?(draft: WorkspaceFileDraft | undefined): void;
+  onRecentFileOpened?(path: string, root: string): Promise<readonly string[]> | readonly string[];
   onSavePendingChange?(pending: boolean): void;
 }) {
   useLocale();
@@ -1395,13 +1470,23 @@ export function FilesPanel({
   const styles = useThemedStyles(makeStyles);
   const panelStyles = useThemedStyles(makePanelStyles);
   const root = task.getSnapshot().cwd;
+  const fileOperationGeneration = useRef(0);
+  const fileOwnerRef = useRef({ ownerKey, task, root });
+  if (
+    fileOwnerRef.current.ownerKey !== ownerKey ||
+    fileOwnerRef.current.task !== task ||
+    fileOwnerRef.current.root !== root
+  ) {
+    fileOperationGeneration.current += 1;
+    fileOwnerRef.current = { ownerKey, task, root };
+  }
   const initialDirectoryAtMount = useRef(initialDirectory).current;
   const safeInitialDirectory =
     initialDirectoryAtMount && isWorkspacePath(root, initialDirectoryAtMount)
       ? initialDirectoryAtMount
       : root;
   const [path, setPath] = useState(safeInitialDirectory);
-  const [entries, setEntries] = useState<FileEntry[]>(
+  const [entries, setEntries] = useState<WorkspaceFileEntry[]>(
     demo
       ? [
           {
@@ -1429,25 +1514,62 @@ export function FilesPanel({
   const [editorScrollY, setEditorScrollY] = useState(0);
   const [loading, setLoading] = useState(!demo);
   const [error, setError] = useState<string | null>(null);
+  const [recentFiles, setRecentFiles] = useState(initialRecentFiles ?? []);
+  const [recentFilesSaveError, setRecentFilesSaveError] = useState<string | null>(null);
   const [fileConflict, setFileConflict] = useState(false);
-  const [searchOpen, setSearchOpen] = useState(false);
-  const [query, setQuery] = useState("");
   const restoredDraftPath = useRef<string | null>(null);
   const lastOpenRequestRevision = useRef<number | null>(null);
   const lastLocatedRequestRevision = useRef<number | null>(null);
-  const fileEditorRef = useRef<TextInput>(null);
+  const fileEditorRef = useRef<TextInputInstance>(null);
   const pendingInitialDraft = useRef(initialDraft);
   const initialTreeLoad = useRef<Promise<void> | null>(null);
-  const fileOperationGeneration = useRef(0);
   const savePending = useRef(false);
   const onDirectoryChangeRef = useRef(onDirectoryChange);
   const onDraftChangeRef = useRef(onDraftChange);
   const onDirtyChangeRef = useRef(onDirtyChange);
   const onSavePendingChangeRef = useRef(onSavePendingChange);
+  const onRecentFileOpenedRef = useRef(onRecentFileOpened);
+  const recentFilesRef = useRef(initialRecentFiles ?? []);
   onDirectoryChangeRef.current = onDirectoryChange;
   onDraftChangeRef.current = onDraftChange;
   onDirtyChangeRef.current = onDirtyChange;
   onSavePendingChangeRef.current = onSavePendingChange;
+  onRecentFileOpenedRef.current = onRecentFileOpened;
+  useEffect(() => {
+    const next = initialRecentFiles ?? [];
+    recentFilesRef.current = next;
+    setRecentFiles(next);
+  }, [initialRecentFiles, ownerKey, root, task]);
+  useEffect(() => {
+    setRecentFilesSaveError(null);
+  }, [ownerKey, root, task]);
+  const rememberRecentFile = useCallback(
+    async (filePath: string) => {
+      const isCurrentOwner = () =>
+        fileOwnerRef.current.ownerKey === ownerKey &&
+        fileOwnerRef.current.task === task &&
+        fileOwnerRef.current.root === root;
+      if (!isCurrentOwner()) return;
+      const persist = onRecentFileOpenedRef.current;
+      try {
+        const next = persist
+          ? await rememberWorkspaceFileAfterPersistence(
+              root,
+              filePath,
+              (path) => persist(path, root),
+            )
+          : rememberWorkspaceFile(root, recentFilesRef.current, filePath);
+        if (!isCurrentOwner()) return;
+        recentFilesRef.current = next;
+        setRecentFiles(next);
+        setRecentFilesSaveError(null);
+      } catch {
+        if (isCurrentOwner())
+          setRecentFilesSaveError(t("task.recent_files_save_failed"));
+      }
+    },
+    [ownerKey, root, task],
+  );
   const dirty = Boolean(
     file && file.editable && !file.truncated && content !== file.content,
   );
@@ -1502,31 +1624,6 @@ export function FilesPanel({
       )[extension ?? ""] ?? "Text"
     );
   }, [file?.name]);
-  const visibleEntries = useMemo(() => {
-    const needle = query.trim().toLocaleLowerCase();
-    return [...entries]
-      .filter(
-        (entry) => !needle || entry.name.toLocaleLowerCase().includes(needle),
-      )
-      .sort(
-        (left, right) =>
-          Number(right.is_directory) - Number(left.is_directory) ||
-          left.name.localeCompare(right.name),
-      );
-  }, [entries, query]);
-  const breadcrumbs = useMemo(() => {
-    const rootName = root.split("/").filter(Boolean).at(-1) ?? "/";
-    const relative = workspaceRelativePath(root, path)
-      .split("/")
-      .filter(Boolean);
-    return [
-      { label: rootName, path: root },
-      ...relative.map((label, index) => ({
-        label,
-        path: joinWorkspacePath(root, relative.slice(0, index + 1).join("/")),
-      })),
-    ];
-  }, [path, root]);
   const latestFileDraftRef = useRef<{
     file: OpenFile | null;
     content: string;
@@ -1621,10 +1718,11 @@ export function FilesPanel({
         if (generation !== fileOperationGeneration.current) return;
         const stdout = record(result.stdout);
         setEntries(
-          Array.isArray(stdout.entries) ? (stdout.entries as FileEntry[]) : [],
+          Array.isArray(stdout.entries)
+            ? (stdout.entries as WorkspaceFileEntry[])
+            : [],
         );
         setPath(String(stdout.path ?? nextPath));
-        setQuery("");
         onDirectoryChangeRef.current?.(String(stdout.path ?? nextPath));
         setFile(null);
         setFileConflict(false);
@@ -1639,14 +1737,13 @@ export function FilesPanel({
   );
 
   const open = useCallback(
-    async (entry: FileEntry): Promise<boolean> => {
+    async (entry: WorkspaceFileEntry): Promise<boolean> => {
       if (entry.is_directory) {
         void loadTree(entry.path);
         return true;
       }
       const generation = ++fileOperationGeneration.current;
-      const slash = entry.path.lastIndexOf("/");
-      const parent = slash > 0 ? entry.path.slice(0, slash) : root;
+      const parent = workspacePathParent(root, entry.path);
       if (demo) {
         const opened = {
           path: entry.path,
@@ -1660,6 +1757,7 @@ export function FilesPanel({
         setFile(opened);
         setContent(opened.content);
         setEditorScrollY(0);
+        await rememberRecentFile(entry.path);
         return true;
       }
       setLoading(true);
@@ -1717,6 +1815,7 @@ export function FilesPanel({
           setCursorOffset(0);
           setEditorScrollY(0);
           setFileConflict(false);
+          await rememberRecentFile(entry.path);
           return true;
         }
         const result = await task.request<{ stdout?: unknown }>(
@@ -1747,13 +1846,10 @@ export function FilesPanel({
           truncated,
           size: typeof stdout.size === "number" ? stdout.size : undefined,
         };
-        const draft =
-          pendingInitialDraft.current?.path === opened.path
-            ? pendingInitialDraft.current
-            : undefined;
-        if (draft) {
+        const draft = workspaceFileDraftForOpen(pendingInitialDraft.current, opened);
+        if (pendingInitialDraft.current?.path === opened.path) {
+          restoredDraftPath.current = opened.path;
           pendingInitialDraft.current = undefined;
-          restoredDraftPath.current = draft.path;
         }
         setFile(draft ? { ...opened, revision: draft.revision } : opened);
         setContent(draft?.content ?? opened.content);
@@ -1766,6 +1862,7 @@ export function FilesPanel({
               : t("task.the_server_file_has_changed_your_local_draft"),
           );
         }
+        await rememberRecentFile(entry.path);
         return true;
       } catch (value) {
         if (generation === fileOperationGeneration.current)
@@ -1775,7 +1872,7 @@ export function FilesPanel({
         if (generation === fileOperationGeneration.current) setLoading(false);
       }
     },
-    [demo, loadTree, root, task],
+    [demo, loadTree, rememberRecentFile, root, task],
   );
 
   useEffect(() => {
@@ -1787,12 +1884,11 @@ export function FilesPanel({
     if (!draft || restoredDraftPath.current === draft.path) return;
     if (!isWorkspacePath(root, draft.path)) return;
     let cancelled = false;
-    const slash = draft.path.lastIndexOf("/");
     const restore = async () => {
       await initialTreeLoad.current;
       for (let attempt = 0; attempt < 3 && !cancelled; attempt += 1) {
         const opened = await open({
-          name: draft.path.slice(slash + 1),
+          name: workspacePathName(draft.path),
           path: draft.path,
           is_directory: false,
         });
@@ -1820,15 +1916,14 @@ export function FilesPanel({
     if (!isWorkspacePath(root, openFileRequest.path)) return;
     lastOpenRequestRevision.current = openFileRequest.revision;
     let cancelled = false;
-    const slash = openFileRequest.path.lastIndexOf("/");
-    const parent = slash > 0 ? openFileRequest.path.slice(0, slash) : root;
+    const parent = workspacePathParent(root, openFileRequest.path);
     const openRequestedFile = async () => {
       await initialTreeLoad.current;
       if (cancelled) return;
       await loadTree(parent);
       if (cancelled) return;
       await open({
-        name: openFileRequest.path.slice(slash + 1),
+        name: workspacePathName(openFileRequest.path),
         path: openFileRequest.path,
         is_directory: false,
       });
@@ -1836,7 +1931,7 @@ export function FilesPanel({
     if (dirty && file && file.path !== openFileRequest.path) {
       requestConfirmation({
         title: t("task.discard_changes_and_open", {
-          p0: openFileRequest.path.slice(slash + 1),
+          p0: workspacePathName(openFileRequest.path),
         }),
         message: t("task.has_unsaved_edits_the_saved_draft_will_be", {
           p0: file.name,
@@ -2156,8 +2251,7 @@ export function FilesPanel({
           <View style={styles.editorShell}>
             <View
               testID="file-line-numbers"
-              pointerEvents="none"
-              style={styles.lineNumberGutter}
+              style={[styles.lineNumberGutter, { pointerEvents: "none" }]}
             >
               <Text
                 style={[
@@ -2193,6 +2287,11 @@ export function FilesPanel({
         {error && !fileConflict ? (
           <Text style={styles.browserError}>{error}</Text>
         ) : null}
+        {recentFilesSaveError ? (
+          <Text accessibilityRole="alert" style={styles.browserError}>
+            {recentFilesSaveError}
+          </Text>
+        ) : null}
         <View style={styles.editorStatus}>
           {file.preview ? (
             <>
@@ -2227,157 +2326,21 @@ export function FilesPanel({
 
   return (
     <View testID="files-panel" style={panelStyles.root}>
-      <View style={styles.filesToolbar}>
-        <View style={styles.filesTitle}>
-          <Folder size={16} color={colors.textMuted} />
-          <Text style={styles.filesTitleText}>{t("task.files")}</Text>
-          <Text style={styles.filesCount}>{visibleEntries.length}</Text>
-        </View>
-        <Pressable
-          accessibilityLabel={
-            searchOpen ? t("task.close_file_search") : t("task.search_files")
-          }
-          onPress={() => {
-            setSearchOpen((value) => !value);
-            if (searchOpen) setQuery("");
-          }}
-          style={styles.iconTouch}
-        >
-          {searchOpen ? (
-            <X size={17} color={colors.textMuted} />
-          ) : (
-            <Search size={17} color={colors.textMuted} />
-          )}
-        </Pressable>
-        <Pressable
-          accessibilityLabel={t("task.refresh")}
-          disabled={loading}
-          onPress={() => void loadTree(path)}
-          style={styles.iconTouch}
-        >
-          <RefreshCw size={17} color={colors.textMuted} />
-        </Pressable>
-      </View>
-      {searchOpen ? (
-        <View style={styles.fileSearchRow}>
-          <Search size={15} color={colors.textDim} />
-          <TextInput
-            testID="file-search"
-            value={query}
-            onChangeText={setQuery}
-            autoFocus
-            placeholder={t("task.filter_this_directory")}
-            placeholderTextColor={colors.textDim}
-            autoCapitalize="none"
-            autoCorrect={false}
-            style={styles.fileSearchInput}
-          />
-          {query ? (
-            <Pressable
-              accessibilityLabel={t("task.clear_search")}
-              onPress={() => setQuery("")}
-              style={styles.searchClear}
-            >
-              <X size={15} color={colors.textDim} />
-            </Pressable>
-          ) : null}
-        </View>
-      ) : null}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.breadcrumbBar}
-        contentContainerStyle={styles.breadcrumbContent}
-      >
-        {breadcrumbs.map((crumb, index) => (
-          <View key={crumb.path} style={styles.breadcrumbItem}>
-            {index > 0 ? (
-              <Text style={styles.breadcrumbSeparator}>/</Text>
-            ) : null}
-            <Pressable
-              disabled={crumb.path === path}
-              onPress={() => void loadTree(crumb.path)}
-              style={styles.breadcrumbButton}
-            >
-              <Text
-                numberOfLines={1}
-                style={[
-                  styles.breadcrumbText,
-                  crumb.path === path && styles.breadcrumbActive,
-                ]}
-              >
-                {crumb.label}
-              </Text>
-            </Pressable>
-          </View>
-        ))}
-      </ScrollView>
-      {loading ? (
-        <ActivityIndicator style={styles.fileLoader} color={colors.textMuted} />
-      ) : (
-        <FlatList
-          testID="file-tree-list"
-          style={styles.fileList}
-          data={visibleEntries}
-          keyExtractor={(entry) => entry.path}
-          initialNumToRender={18}
-          maxToRenderPerBatch={18}
-          windowSize={9}
-          keyboardShouldPersistTaps="handled"
-          ListHeaderComponent={
-            path !== root ? (
-              <Pressable
-                accessibilityLabel={t("task.parent_directory")}
-                onPress={() =>
-                  void loadTree(path.slice(0, path.lastIndexOf("/")) || root)
-                }
-                style={styles.entry}
-              >
-                <Folder size={19} color={colors.textMuted} />
-                <Text style={styles.entryName}>..</Text>
-              </Pressable>
-            ) : null
-          }
-          ListEmptyComponent={
-            <EmptyState
-              icon={<Folder size={42} color={colors.textDim} />}
-              title={
-                query ? t("task.no_matching_files") : t("task.empty_directory")
-              }
-              body={
-                query
-                  ? t("task.this_directory_has_no_entries_matching", {
-                      p0: query,
-                    })
-                  : t("task.this_directory_has_no_files_to_display")
-              }
-            />
-          }
-          renderItem={({ item: entry }) => (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`${entry.is_directory ? t("task.directory") : t("task.file")} ${entry.name}`}
-              onPress={() => void open(entry)}
-              style={styles.entry}
-            >
-              {entry.is_directory ? (
-                <Folder size={19} color={colors.blue} />
-              ) : (
-                <File size={19} color={colors.textMuted} />
-              )}
-              <Text style={styles.entryName} numberOfLines={1}>
-                {entry.name}
-              </Text>
-              {!entry.is_directory && entry.size !== undefined ? (
-                <Text style={styles.entrySize}>
-                  {Math.max(1, Math.round(entry.size / 1024))} KB
-                </Text>
-              ) : null}
-            </Pressable>
-          )}
-        />
-      )}
-      {error ? <Text style={styles.browserError}>{error}</Text> : null}
+      <WorkspaceFileDiscoveryPanel
+        task={task}
+        ownerKey={ownerKey}
+        root={root}
+        path={path}
+        entries={entries}
+        loading={loading}
+        error={error}
+        recentFilesError={recentFilesSaveError}
+        demo={demo}
+        recentFiles={recentFiles}
+        onRefresh={() => void loadTree(path)}
+        onLoadTree={loadTree}
+        onOpenFile={open}
+      />
     </View>
   );
 }
@@ -2556,96 +2519,12 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     padding: spacing.sm,
     backgroundColor: colors.surfaceHover,
   },
-  filesToolbar: {
-    height: 44,
-    flexDirection: "row",
-    alignItems: "center",
-    paddingLeft: spacing.md,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
-    backgroundColor: colors.surfaceSidebar,
-  },
-  filesTitle: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-  },
-  filesTitleText: { color: colors.text, fontSize: 13, fontWeight: "700" },
-  filesCount: {
-    minWidth: 20,
-    height: 18,
-    paddingHorizontal: 5,
-    overflow: "hidden",
-    borderRadius: radius.pill,
-    color: colors.textDim,
-    backgroundColor: colors.surfaceRaised,
-    fontSize: 10,
-    lineHeight: 18,
-    textAlign: "center",
-  },
-  iconTouch: {
-    width: 44,
-    height: 44,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  fileSearchRow: {
-    height: 48,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-    margin: spacing.sm,
-    marginBottom: 0,
-    paddingLeft: spacing.md,
-    borderWidth: 1,
-    borderColor: colors.borderAccent,
-    borderRadius: radius.md,
-    backgroundColor: colors.surface,
-  },
-  fileSearchInput: {
-    flex: 1,
-    minWidth: 0,
-    height: 46,
-    color: colors.text,
+  browserPreflightWarning: {
+    color: colors.textMuted,
     fontSize: 12,
+    padding: spacing.sm,
+    backgroundColor: colors.surfaceHover,
   },
-  searchClear: {
-    width: 44,
-    height: 44,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  breadcrumbBar: {
-    flexGrow: 0,
-    height: 44,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
-  },
-  breadcrumbContent: { alignItems: "center", paddingHorizontal: spacing.sm },
-  breadcrumbItem: { flexDirection: "row", alignItems: "center" },
-  breadcrumbSeparator: { color: colors.textDim, fontSize: 12 },
-  breadcrumbButton: {
-    minHeight: 44,
-    maxWidth: 150,
-    justifyContent: "center",
-    paddingHorizontal: spacing.sm,
-  },
-  breadcrumbText: { color: colors.textDim, fontSize: 11 },
-  breadcrumbActive: { color: colors.text, fontWeight: "600" },
-  fileList: { flex: 1 },
-  fileLoader: { marginTop: spacing.xl },
-  entry: {
-    minHeight: 50,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.md,
-    paddingHorizontal: spacing.lg,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
-  },
-  entryName: { flex: 1, color: colors.text, fontSize: 14 },
-  entrySize: { color: colors.textDim, fontSize: 10 },
   fileHeader: {
     height: 56,
     flexDirection: "row",

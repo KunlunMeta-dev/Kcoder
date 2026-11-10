@@ -1,3 +1,8 @@
+import { isRuntimeDebugEnabled } from '@/lib/diagnosticPreferences'
+import { expertConversationRoute } from '@/features/experts/conversationRoutes'
+import { navigateTo } from '@/lib/navigation'
+import { runtimeThreadId } from '@/lib/runtime-thread-id'
+import { readStudioWorkMode, studioWorkMode } from './studioWorkMode'
 import { captureAccountContextRevision } from '@/kcoder/accountContextEvents'
 import { workflowApi } from '@/features/workflows/workflowApi'
 import { safeErrorDiagnostic } from '@/lib/error-diagnostics'
@@ -37,6 +42,7 @@ import type {
   RuntimeDeviceWorkspace,
   RuntimeSendRequest,
   RuntimeTaskAddress,
+  RuntimeTaskCancelRequest,
   RuntimeTaskCreateRequest,
   RuntimeSubagentSteerRequest,
   RuntimeSubagentSteerResponse,
@@ -139,15 +145,7 @@ function isLocalDeviceTarget(
   return device?.device_type === 'local'
 }
 
-export function runtimeThreadId(address?: RuntimeTaskAddress | null): string | null {
-  if (typeof address?.threadId === 'string' && address.threadId.trim()) {
-    return address.threadId
-  }
-  const handle = address?.runtimeHandle
-  if (!isRecord(handle)) return null
-  const threadId = handle.sessionId ?? handle.session_id ?? handle.threadId ?? handle.thread_id
-  return typeof threadId === 'string' && threadId.trim() ? threadId : null
-}
+export { runtimeThreadId } from '@/lib/runtime-thread-id'
 
 export function useWorkbenchRuntimeMessaging({
   state,
@@ -381,7 +379,7 @@ export function useWorkbenchRuntimeMessaging({
   )
 
   const cancelRuntimePaneTask = useCallback(
-    async (address: RuntimeTaskAddress, options?: RuntimePaneActionOptions): Promise<boolean> => {
+    async (address: RuntimeTaskCancelRequest, options?: RuntimePaneActionOptions): Promise<boolean> => {
       lifecycleStore.stopRequested(address)
       try {
         const ack = await executorClient.runtime.cancelRuntimeTask(address)
@@ -668,7 +666,27 @@ export function useWorkbenchRuntimeMessaging({
         return false
       }
 
+      const expertDraft =
+        (state.expertDraft?.projectId ?? null) === (state.currentProject?.id ?? null) &&
+        !options?.ephemeral &&
+        !options?.sideSource &&
+        state.expertDraft?.draftKey === state.standaloneChatKey &&
+        state.expertDraft.deviceId === optimisticDeviceId &&
+        state.expertDraft.workspacePath ===
+          ('workspacePath' in runtimeTaskTarget ? runtimeTaskTarget.workspacePath : undefined)
+          ? state.expertDraft
+          : null
+      const expertConversationEntry = expertDraft && expertDraft.entry !== 'task'
+      const selectedStudioMode = expertDraft
+        ? 'kcoder'
+        : options?.sessionMode && options.sessionMode !== 'default'
+          ? 'kcoder'
+          : options?.sideSource
+            ? studioWorkMode(options.sideSource.runtimeHandle?.studioWorkMode)
+            : readStudioWorkMode()
       const createRequest: RuntimeTaskCreateRequest = {
+        studioWorkMode: selectedStudioMode,
+        ...(expertDraft ? { agentDefinition: expertDraft.reference } : {}),
         ...runtimeTaskTarget,
         taskId,
         teamId: payload.team_id,
@@ -728,9 +746,11 @@ export function useWorkbenchRuntimeMessaging({
         modelOptions: summarizeModelOptions(createRequest.modelOptions),
       })
       const createModelSelection = modelSelectionFromCreateRequest(createRequest)
-      const createRuntimeHandle = createModelSelection
-        ? { modelSelection: createModelSelection }
-        : undefined
+      const createRuntimeHandle = {
+        studioWorkMode: selectedStudioMode,
+        ...(expertDraft ? { pendingAgentDefinition: expertDraft.reference } : {}),
+        ...(createModelSelection ? { modelSelection: createModelSelection } : {}),
+      }
       const optimisticAddress: RuntimeTaskAddress = {
         deviceId: optimisticDeviceId,
         taskId,
@@ -778,7 +798,9 @@ export function useWorkbenchRuntimeMessaging({
       }
       options?.onRuntimeTaskOptimisticOpen?.(optimisticAddress)
       if (options?.openInMainPane !== false) {
-        runtimeTasks.openRuntimeTaskView(optimisticAddress, runtimeProject, { navigate: true })
+        runtimeTasks.openRuntimeTaskView(optimisticAddress, runtimeProject, {
+          navigate: !expertConversationEntry,
+        })
       }
       if (optimisticWorkspace && optimisticWorkspacePath && !options?.ephemeral) {
         dispatch({
@@ -791,6 +813,7 @@ export function useWorkbenchRuntimeMessaging({
             title: createRequest.title ?? buildRuntimeTaskTitle(displayMessage, payload.title),
             runtime,
             modelSelection: createModelSelection,
+            runtimeHandle: createRuntimeHandle,
           }),
         })
       }
@@ -885,7 +908,19 @@ export function useWorkbenchRuntimeMessaging({
             previousAddress: optimisticAddress,
           })
           if (options?.openInMainPane !== false && optimisticTaskStillSelected) {
-            runtimeTasks.openRuntimeTaskView(address, runtimeProject, { navigate: true })
+            runtimeTasks.openRuntimeTaskView(address, runtimeProject, { navigate: !expertConversationEntry })
+            if (expertConversationEntry && address.workspacePath) {
+              navigateTo(
+                expertConversationRoute(
+                  {
+                    deviceId: address.deviceId,
+                    workspacePath: address.workspacePath,
+                    expertId: expertDraft.reference.id,
+                  },
+                  address
+                )
+              )
+            }
           }
         }
         lifecycleStore.sendAccepted(address)
@@ -944,6 +979,8 @@ export function useWorkbenchRuntimeMessaging({
       state.runtimeWork,
       state.selectedDeviceWorkspaceId,
       state.standaloneWorkspacePath,
+      state.expertDraft,
+      state.standaloneChatKey,
     ]
   )
 
@@ -1576,6 +1613,7 @@ function buildOptimisticRuntimeTask({
   status = 'creating',
   error,
   modelSelection,
+  runtimeHandle,
 }: {
   taskId: string
   workspacePath: string
@@ -1584,6 +1622,7 @@ function buildOptimisticRuntimeTask({
   status?: 'creating' | 'failed'
   error?: string | null
   modelSelection?: ModelSelectionConfig | null
+  runtimeHandle?: RuntimeTaskAddress['runtimeHandle']
 }): RuntimeTaskSummary {
   const now = new Date().toISOString()
   return {
@@ -1597,6 +1636,7 @@ function buildOptimisticRuntimeTask({
     running: status === 'creating',
     status,
     optimistic: true,
+    ...(runtimeHandle ? { runtimeHandle } : {}),
     ...(error ? { error } : {}),
     ...(modelSelection ? { modelSelection } : {}),
   }
@@ -1654,8 +1694,4 @@ function summarizeModelOptions(modelOptions: ModelOptions | undefined): Record<s
     summary: modelOptions.summary ?? null,
     speed: modelOptions.speed ?? modelOptions.service_tier ?? null,
   }
-}
-
-function isRuntimeDebugEnabled(): boolean {
-  return globalThis.localStorage?.getItem('wework:debug-runtime') === '1'
 }

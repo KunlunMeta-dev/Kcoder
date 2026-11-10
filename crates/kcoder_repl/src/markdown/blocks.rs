@@ -3,7 +3,7 @@
 use super::*;
 
 impl<'a> MarkdownRenderer<'a> {
-    pub(super) fn new(
+    pub fn new(
         source: &'a str,
         code_theme_name: &str,
         cwd: Option<&Path>,
@@ -46,22 +46,22 @@ impl<'a> MarkdownRenderer<'a> {
         }
     }
 
-    pub(super) fn current_style(&self) -> Style {
+    pub fn current_style(&self) -> Style {
         *self.style_stack.last().unwrap()
     }
 
-    pub(super) fn push_style(&mut self, modifier: Modifier) {
+    pub fn push_style(&mut self, modifier: Modifier) {
         let style = self.current_style().add_modifier(modifier);
         self.style_stack.push(style);
     }
 
-    pub(super) fn pop_style(&mut self) {
+    pub fn pop_style(&mut self) {
         if self.style_stack.len() > 1 {
             self.style_stack.pop();
         }
     }
 
-    pub(super) fn handle(&mut self, event: Event<'_>, range: Range<usize>) {
+    pub fn handle(&mut self, event: Event<'_>, range: Range<usize>) {
         self.prepare_for_event(&event);
         match event {
             Event::Start(tag) => self.start_tag(tag, range),
@@ -115,7 +115,7 @@ impl<'a> MarkdownRenderer<'a> {
         }
     }
 
-    pub(super) fn prepare_for_event(&mut self, event: &Event<'_>) {
+    pub fn prepare_for_event(&mut self, event: &Event<'_>) {
         if !self.pending_local_link_soft_break {
             return;
         }
@@ -127,7 +127,7 @@ impl<'a> MarkdownRenderer<'a> {
         self.flush_line();
     }
 
-    pub(super) fn start_tag(&mut self, tag: Tag<'_>, range: Range<usize>) {
+    pub fn start_tag(&mut self, tag: Tag<'_>, range: Range<usize>) {
         match tag {
             Tag::Paragraph => {
                 if self.pending_line_break {
@@ -252,7 +252,7 @@ impl<'a> MarkdownRenderer<'a> {
         }
     }
 
-    pub(super) fn end_tag(&mut self, tag: TagEnd) {
+    pub fn end_tag(&mut self, tag: TagEnd) {
         match tag {
             TagEnd::Heading(_) => {
                 self.style_stack.pop();
@@ -311,7 +311,7 @@ impl<'a> MarkdownRenderer<'a> {
         }
     }
 
-    pub(super) fn push_text(&mut self, text: &str) {
+    pub fn push_text(&mut self, text: &str) {
         if let Some(block) = self.code_block.as_mut() {
             block.content.push_str(text);
             return;
@@ -320,7 +320,7 @@ impl<'a> MarkdownRenderer<'a> {
         self.push_styled_text(text.to_string(), self.current_style());
     }
 
-    pub(super) fn push_html(&mut self, html: &str) {
+    pub fn push_html(&mut self, html: &str) {
         if let Some(block) = self.code_block.as_mut() {
             block.content.push_str(html);
             return;
@@ -349,7 +349,7 @@ impl<'a> MarkdownRenderer<'a> {
         }
     }
 
-    pub(super) fn push_styled_text(&mut self, text: String, style: Style) {
+    pub fn push_styled_text(&mut self, text: String, style: Style) {
         if self.suppressing_local_link_label() {
             return;
         }
@@ -359,7 +359,7 @@ impl<'a> MarkdownRenderer<'a> {
         self.append_styled_text_with_links(text, style, destination.as_deref(), annotate_bare_urls);
     }
 
-    pub(super) fn push_code_text(&mut self, text: String) {
+    pub fn push_code_text(&mut self, text: String) {
         if self.suppressing_local_link_label() {
             return;
         }
@@ -369,11 +369,11 @@ impl<'a> MarkdownRenderer<'a> {
         self.append_styled_text_with_links(text, style, destination.as_deref(), false);
     }
 
-    pub(super) fn append_styled_text(&mut self, text: String, style: Style) {
+    pub fn append_styled_text(&mut self, text: String, style: Style) {
         self.append_styled_text_with_links(text, style, None, false);
     }
 
-    pub(super) fn append_styled_text_with_links(
+    pub fn append_styled_text_with_links(
         &mut self,
         text: String,
         style: Style,
@@ -395,13 +395,13 @@ impl<'a> MarkdownRenderer<'a> {
             .push(text, style, destination, annotate_bare_urls);
     }
 
-    pub(super) fn link_web_destination(&self) -> Option<String> {
+    pub fn link_web_destination(&self) -> Option<String> {
         self.link
             .as_ref()
             .and_then(|link| web_destination(&link.destination))
     }
 
-    pub(super) fn start_link(&mut self, destination: String) {
+    pub fn start_link(&mut self, destination: String) {
         let local_target_display = if is_local_path_like_link(&destination) {
             render_local_link_target(&destination, self.cwd.as_deref())
         } else {
@@ -419,7 +419,7 @@ impl<'a> MarkdownRenderer<'a> {
         });
     }
 
-    pub(super) fn style_link_label(&mut self, text: &str, style: Style) -> Style {
+    pub fn style_link_label(&mut self, text: &str, style: Style) -> Style {
         let Some(link) = self.link.as_mut() else {
             return style;
         };
@@ -432,7 +432,7 @@ impl<'a> MarkdownRenderer<'a> {
         style.patch(self.styles.link)
     }
 
-    pub(super) fn end_link(&mut self) {
+    pub fn end_link(&mut self) {
         if let Some(link) = self.link.take() {
             if let Some(local_target_display) = link.local_target_display {
                 let style = self.current_style().patch(self.styles.inline_code);
@@ -454,21 +454,21 @@ impl<'a> MarkdownRenderer<'a> {
         }
     }
 
-    pub(super) fn suppressing_local_link_label(&self) -> bool {
+    pub fn suppressing_local_link_label(&self) -> bool {
         self.link
             .as_ref()
             .and_then(|link| link.local_target_display.as_ref())
             .is_some()
     }
 
-    pub(super) fn in_table_cell(&self) -> bool {
+    pub fn in_table_cell(&self) -> bool {
         self.table
             .as_ref()
             .and_then(|table_state| table_state.current_cell.as_ref())
             .is_some()
     }
 
-    pub(super) fn render_code_block(&mut self, lang: &str, content: &str, indent: &str) {
+    pub fn render_code_block(&mut self, lang: &str, content: &str, indent: &str) {
         let lang = code_fence_language_token(lang);
         for line in highlight_code_to_lines_with_theme(content, lang, &self.code_theme) {
             let mut spans = Vec::new();
@@ -480,21 +480,21 @@ impl<'a> MarkdownRenderer<'a> {
         }
     }
 
-    pub(super) fn start_table(&mut self, alignments: Vec<Alignment>) {
+    pub fn start_table(&mut self, alignments: Vec<Alignment>) {
         if !self.current.is_empty() {
             self.flush_line();
         }
         self.table = Some(TableState::new(alignments));
     }
 
-    pub(super) fn start_table_head(&mut self) {
+    pub fn start_table_head(&mut self) {
         if let Some(table_state) = self.table.as_mut() {
             table_state.in_header = true;
             table_state.current_row = Some(Vec::new());
         }
     }
 
-    pub(super) fn end_table_head(&mut self) {
+    pub fn end_table_head(&mut self) {
         if let Some(table_state) = self.table.as_mut() {
             if let Some(row) = table_state.current_row.take() {
                 table_state.header = Some(row);
@@ -503,7 +503,7 @@ impl<'a> MarkdownRenderer<'a> {
         }
     }
 
-    pub(super) fn start_table_row(&mut self, source_range: Range<usize>) {
+    pub fn start_table_row(&mut self, source_range: Range<usize>) {
         let has_table_pipe_syntax = self.has_table_row_boundary_pipe(source_range);
         if let Some(table_state) = self.table.as_mut() {
             if table_state.in_header && table_state.current_row.is_some() {
@@ -514,7 +514,7 @@ impl<'a> MarkdownRenderer<'a> {
         }
     }
 
-    pub(super) fn has_table_row_boundary_pipe(&self, source_range: Range<usize>) -> bool {
+    pub fn has_table_row_boundary_pipe(&self, source_range: Range<usize>) -> bool {
         let Some(source) = self.source.get(source_range) else {
             return false;
         };
@@ -522,7 +522,7 @@ impl<'a> MarkdownRenderer<'a> {
         source.starts_with('|') || source.ends_with('|')
     }
 
-    pub(super) fn end_table_row(&mut self) {
+    pub fn end_table_row(&mut self) {
         if let Some(table_state) = self.table.as_mut()
             && let Some(row) = table_state.current_row.take()
         {
@@ -538,13 +538,13 @@ impl<'a> MarkdownRenderer<'a> {
         }
     }
 
-    pub(super) fn start_table_cell(&mut self) {
+    pub fn start_table_cell(&mut self) {
         if let Some(table_state) = self.table.as_mut() {
             table_state.current_cell = Some(TableCell::default());
         }
     }
 
-    pub(super) fn end_table_cell(&mut self) {
+    pub fn end_table_cell(&mut self) {
         if let Some(table_state) = self.table.as_mut()
             && let Some(cell) = table_state.current_cell.take()
             && let Some(row) = table_state.current_row.as_mut()
@@ -553,14 +553,14 @@ impl<'a> MarkdownRenderer<'a> {
         }
     }
 
-    pub(super) fn end_table(&mut self) {
+    pub fn end_table(&mut self) {
         let Some(table_state) = self.table.take() else {
             return;
         };
         self.render_table(table_state);
     }
 
-    pub(super) fn render_table(&mut self, table_state: TableState) {
+    pub fn render_table(&mut self, table_state: TableState) {
         let column_count = table_column_count(&table_state);
         if column_count == 0 {
             return;
@@ -662,28 +662,28 @@ impl<'a> MarkdownRenderer<'a> {
         self.push_table_line(HyperlinkLine::new(Line::from("")));
     }
 
-    pub(super) fn preformatted_context_prefix(&self) -> String {
+    pub fn preformatted_context_prefix(&self) -> String {
         self.line_context_prefix(true)
     }
 
-    pub(super) fn table_content_width(&self) -> Option<usize> {
+    pub fn table_content_width(&self) -> Option<usize> {
         let prefix = self.preformatted_context_prefix();
         let prefix_width = unicode_width::UnicodeWidthStr::width(prefix.as_str());
         self.width
             .map(|width| width.saturating_sub(prefix_width).max(1))
     }
 
-    pub(super) fn push_table_lines(&mut self, lines: Vec<HyperlinkLine>) {
+    pub fn push_table_lines(&mut self, lines: Vec<HyperlinkLine>) {
         for line in lines {
             self.push_table_line(line);
         }
     }
 
-    pub(super) fn push_table_line(&mut self, line: HyperlinkLine) {
+    pub fn push_table_line(&mut self, line: HyperlinkLine) {
         self.push_preformatted_line(line);
     }
 
-    pub(super) fn push_preformatted_line(&mut self, mut line: HyperlinkLine) {
+    pub fn push_preformatted_line(&mut self, mut line: HyperlinkLine) {
         self.apply_blockquote_style(&mut line);
         let prefix = self.preformatted_context_prefix();
         if prefix.is_empty() {
@@ -701,7 +701,7 @@ impl<'a> MarkdownRenderer<'a> {
         self.emit_line(line);
     }
 
-    pub(super) fn flush_line(&mut self) {
+    pub fn flush_line(&mut self) {
         if self.table.is_some() {
             return;
         }
@@ -743,7 +743,7 @@ impl<'a> MarkdownRenderer<'a> {
         }
     }
 
-    pub(super) fn pop_context(&mut self, matches_context: impl Fn(MarkdownContext) -> bool) {
+    pub fn pop_context(&mut self, matches_context: impl Fn(MarkdownContext) -> bool) {
         if let Some(index) = self
             .context_stack
             .iter()
@@ -753,7 +753,7 @@ impl<'a> MarkdownRenderer<'a> {
         }
     }
 
-    pub(super) fn context_prefix_style(&self) -> Style {
+    pub fn context_prefix_style(&self) -> Style {
         if self.blockquote_depth > 0 {
             self.styles.blockquote_prefix
         } else {
@@ -762,7 +762,7 @@ impl<'a> MarkdownRenderer<'a> {
     }
 
     /// Blockquotes use a full-row semantic color; explicit accents for code, links, headings, and table headers still override it.
-    pub(super) fn apply_blockquote_style(&self, line: &mut HyperlinkLine) {
+    pub fn apply_blockquote_style(&self, line: &mut HyperlinkLine) {
         if self.blockquote_depth == 0 {
             return;
         }
@@ -774,7 +774,7 @@ impl<'a> MarkdownRenderer<'a> {
         }
     }
 
-    pub(super) fn line_context_prefix(&self, include_list_prefix: bool) -> String {
+    pub fn line_context_prefix(&self, include_list_prefix: bool) -> String {
         let last_list_context = include_list_prefix
             .then(|| {
                 self.context_stack
@@ -798,12 +798,12 @@ impl<'a> MarkdownRenderer<'a> {
         prefix
     }
 
-    pub(super) fn emit_line(&mut self, line: HyperlinkLine) {
+    pub fn emit_line(&mut self, line: HyperlinkLine) {
         self.emitted_line_count += 1;
         self.lines.push(line);
     }
 
-    pub(super) fn finish(mut self) -> Vec<HyperlinkLine> {
+    pub fn finish(mut self) -> Vec<HyperlinkLine> {
         if !self.current.is_empty() {
             self.flush_line();
         }

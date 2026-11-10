@@ -1,5 +1,6 @@
-import { captureWorkspaceProfileIdentity, startWorkspaceProfileRpc, withWorkspaceProfileWrite, WorkspaceProfileFenceError, type WorkspaceProfileIdentity } from "./workspace-profile-fence";
+import { captureWorkspaceProfileIdentity, startWorkspaceProfileRpc, withWorkspaceProfileWrite, withWorkspaceProfileMetadata, WorkspaceProfileFenceError, type WorkspaceProfileIdentity } from "./workspace-profile-fence";
 import { withLocalIdentityLock } from "./context-lock";
+import { metadataStorage } from "./metadata-authority";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { MobileRpcError } from "@/gateway/rpc";
 import type { GatewayProfile, KCoderServer } from "@/gateway/types";
@@ -176,14 +177,14 @@ export async function loadConfirmedWorkspaceOperationReceipt(
   if (isProfileStateRemovalPending(profile.id) || !["open", "create", "worktree"].includes(locator.kind) || !locator.receiptId || !locator.sourcePath || !expectedResult) return null;
   const authorization = captureWorkspaceProfileIdentity(profile);
   const key = operationKey(profile, server, locator.sourcePath, locator.kind);
-  return withWorkspaceOperationLock(key, () => withWorkspaceProfileWrite(authorization, async () => {
-    const raw = await AsyncStorage.getItem(key);
+  return withWorkspaceProfileMetadata(authorization, async authority => {
+    const raw = await metadataStorage(authority).getItem(key);
     if (!raw) return null;
     const record = JSON.parse(raw) as WorkspaceOperationRecord;
     if (record.id !== locator.receiptId || record.result !== expectedResult || typeof record.intent !== "string" || typeof record.completedAt !== "number" || !record.completedAt) return null;
     assertProfilePresent(profile.id);
     return confirmed(authorization, key, record).receipt;
-  }));
+  });
 }
 
 /** V2 first verifies current remote scope; consumption remains exact local bookkeeping. */
@@ -194,21 +195,21 @@ export async function acknowledgeConfirmedWorkspaceOperation(
   if (receipt.version === 2) return acknowledgeWorkspaceOperationV2(receipt, context);
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
-      return await withWorkspaceOperationLock(receipt.key, () => withWorkspaceProfileWrite(receipt.authorization, async () => {
-        const raw = await AsyncStorage.getItem(receipt.key);
+      return await withWorkspaceProfileMetadata(receipt.authorization, async authority => {
+        const raw = await metadataStorage(authority).getItem(receipt.key);
         if (!raw) return "superseded" as const;
         const current = JSON.parse(raw) as WorkspaceOperationRecord;
         if (current.id !== receipt.id || current.intent !== receipt.intent || current.result !== receipt.result || current.completedAt !== receipt.completedAt) return "superseded" as const;
         assertProfilePresent(receipt.profileId);
         if (!current.consumed) {
           const writes = pendingRecordWrites.get(receipt.profileId) ?? new Set<Promise<void>>();
-          const write = Promise.resolve().then(() => { assertProfilePresent(receipt.profileId); return AsyncStorage.setItem(receipt.key, JSON.stringify({ ...current, consumed: true })); });
+          const write = Promise.resolve().then(() => { assertProfilePresent(receipt.profileId); return metadataStorage(authority).setItem(receipt.key, JSON.stringify({ ...current, consumed: true })); });
           writes.add(write); pendingRecordWrites.set(receipt.profileId, writes);
           try { await write; }
           finally { writes.delete(write); if (!writes.size && pendingRecordWrites.get(receipt.profileId) === writes) pendingRecordWrites.delete(receipt.profileId); }
         }
         return "consumed" as const;
-      }));
+      });
     } catch (error) {
       if (error instanceof WorkspaceProfileFenceError) return "superseded";
       // No remote request, new operation ID, or timer is created by this retry.

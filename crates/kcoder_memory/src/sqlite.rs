@@ -188,6 +188,7 @@ impl StructuredMemoryStore {
         }
         let conn = Connection::open(path)
             .with_context(|| format!("failed to open memory sqlite database {:?}", path))?;
+        crate::migrations::validate_version(&conn)?;
         let store = Self { conn };
         store.configure()?;
         store.ensure_schema()?;
@@ -339,277 +340,9 @@ impl StructuredMemoryStore {
         Ok(moved)
     }
 
+    /// Upgrade the authoritative schema and restore its rebuildable search projection.
     pub fn ensure_schema(&self) -> Result<()> {
-        self.conn
-            .execute_batch(
-                r#"
-                CREATE TABLE IF NOT EXISTS memory_sessions (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    session_id TEXT NOT NULL UNIQUE,
-                    project_key TEXT NOT NULL,
-                    cwd TEXT NOT NULL,
-                    started_at_epoch INTEGER NOT NULL,
-                    ended_at_epoch INTEGER,
-                    status TEXT NOT NULL DEFAULT 'active'
-                );
-
-                CREATE INDEX IF NOT EXISTS idx_memory_sessions_project_time
-                    ON memory_sessions(project_key, started_at_epoch DESC);
-
-                CREATE TABLE IF NOT EXISTS memory_prompts (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    session_id TEXT NOT NULL,
-                    prompt_number INTEGER NOT NULL,
-                    prompt_text TEXT NOT NULL,
-                    created_at_epoch INTEGER NOT NULL,
-                    UNIQUE(session_id, prompt_number)
-                );
-
-                CREATE INDEX IF NOT EXISTS idx_memory_prompts_session_time
-                    ON memory_prompts(session_id, created_at_epoch DESC);
-
-                CREATE TABLE IF NOT EXISTS memory_observations (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    session_id TEXT NOT NULL,
-                    project_key TEXT NOT NULL,
-                    prompt_number INTEGER,
-                    type TEXT NOT NULL,
-                    title TEXT,
-                    subtitle TEXT,
-                    narrative TEXT,
-                    facts_json TEXT NOT NULL DEFAULT '[]',
-                    concepts_json TEXT NOT NULL DEFAULT '[]',
-                    files_read_json TEXT NOT NULL DEFAULT '[]',
-                    files_modified_json TEXT NOT NULL DEFAULT '[]',
-                    tool_name TEXT,
-                    tool_call_id TEXT,
-                    source TEXT NOT NULL,
-                    generated_by_model TEXT,
-                    content_hash TEXT NOT NULL,
-                    created_at_epoch INTEGER NOT NULL,
-                    hidden_at_epoch INTEGER,
-                    UNIQUE(project_key, content_hash)
-                );
-
-                CREATE INDEX IF NOT EXISTS idx_memory_observations_project_time
-                    ON memory_observations(project_key, created_at_epoch DESC);
-                CREATE INDEX IF NOT EXISTS idx_memory_observations_type_time
-                    ON memory_observations(type, created_at_epoch DESC);
-                CREATE INDEX IF NOT EXISTS idx_memory_observations_session_time
-                    ON memory_observations(session_id, created_at_epoch DESC);
-
-                CREATE TABLE IF NOT EXISTS memory_summaries (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    session_id TEXT NOT NULL,
-                    project_key TEXT NOT NULL,
-                    prompt_number INTEGER,
-                    request TEXT,
-                    investigated TEXT,
-                    learned TEXT,
-                    completed TEXT,
-                    next_steps TEXT,
-                    notes TEXT,
-                    created_at_epoch INTEGER NOT NULL,
-                    hidden_at_epoch INTEGER
-                );
-
-                CREATE INDEX IF NOT EXISTS idx_memory_summaries_project_time
-                    ON memory_summaries(project_key, created_at_epoch DESC);
-                CREATE INDEX IF NOT EXISTS idx_memory_summaries_session_time
-                    ON memory_summaries(session_id, created_at_epoch DESC);
-
-                CREATE TABLE IF NOT EXISTS memory_sources (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    memory_kind TEXT NOT NULL,
-                    memory_id INTEGER NOT NULL,
-                    source_type TEXT NOT NULL,
-                    source_ref TEXT,
-                    metadata_json TEXT NOT NULL DEFAULT '{}',
-                    created_at_epoch INTEGER NOT NULL
-                );
-
-                CREATE INDEX IF NOT EXISTS idx_memory_sources_memory
-                    ON memory_sources(memory_kind, memory_id);
-
-                CREATE VIRTUAL TABLE IF NOT EXISTS memory_observations_fts USING fts5(
-                    observation_id UNINDEXED,
-                    project_key UNINDEXED,
-                    title,
-                    subtitle,
-                    narrative,
-                    facts,
-                    concepts,
-                    tokenize = 'unicode61'
-                );
-
-                CREATE VIRTUAL TABLE IF NOT EXISTS memory_summaries_fts USING fts5(
-                    summary_id UNINDEXED,
-                    project_key UNINDEXED,
-                    session_id UNINDEXED,
-                    request,
-                    investigated,
-                    learned,
-                    completed,
-                    next_steps,
-                    notes,
-                    tokenize = 'unicode61'
-                );
-
-                CREATE TRIGGER IF NOT EXISTS memory_observations_ai
-                    AFTER INSERT ON memory_observations
-                BEGIN
-                    INSERT INTO memory_observations_fts(
-                        rowid, observation_id, project_key, title, subtitle, narrative, facts, concepts
-                    )
-                    VALUES (
-                        new.id,
-                        new.id,
-                        new.project_key,
-                        COALESCE(new.title, ''),
-                        COALESCE(new.subtitle, ''),
-                        COALESCE(new.narrative, ''),
-                        COALESCE(new.facts_json, ''),
-                        COALESCE(new.concepts_json, '')
-                    );
-                END;
-
-                CREATE TRIGGER IF NOT EXISTS memory_observations_ad
-                    AFTER DELETE ON memory_observations
-                BEGIN
-                    DELETE FROM memory_observations_fts WHERE rowid = old.id;
-                END;
-
-                CREATE TRIGGER IF NOT EXISTS memory_observations_au
-                    AFTER UPDATE ON memory_observations
-                BEGIN
-                    DELETE FROM memory_observations_fts WHERE rowid = old.id;
-                    INSERT INTO memory_observations_fts(
-                        rowid, observation_id, project_key, title, subtitle, narrative, facts, concepts
-                    )
-                    VALUES (
-                        new.id,
-                        new.id,
-                        new.project_key,
-                        COALESCE(new.title, ''),
-                        COALESCE(new.subtitle, ''),
-                        COALESCE(new.narrative, ''),
-                        COALESCE(new.facts_json, ''),
-                        COALESCE(new.concepts_json, '')
-                    );
-                END;
-
-                CREATE TRIGGER IF NOT EXISTS memory_summaries_ai
-                    AFTER INSERT ON memory_summaries
-                BEGIN
-                    INSERT INTO memory_summaries_fts(
-                        rowid, summary_id, project_key, session_id, request,
-                        investigated, learned, completed, next_steps, notes
-                    )
-                    VALUES (
-                        new.id,
-                        new.id,
-                        new.project_key,
-                        new.session_id,
-                        COALESCE(new.request, ''),
-                        COALESCE(new.investigated, ''),
-                        COALESCE(new.learned, ''),
-                        COALESCE(new.completed, ''),
-                        COALESCE(new.next_steps, ''),
-                        COALESCE(new.notes, '')
-                    );
-                END;
-
-                CREATE TRIGGER IF NOT EXISTS memory_summaries_ad
-                    AFTER DELETE ON memory_summaries
-                BEGIN
-                    DELETE FROM memory_summaries_fts WHERE rowid = old.id;
-                END;
-
-                CREATE TRIGGER IF NOT EXISTS memory_summaries_au
-                    AFTER UPDATE ON memory_summaries
-                BEGIN
-                    DELETE FROM memory_summaries_fts WHERE rowid = old.id;
-                    INSERT INTO memory_summaries_fts(
-                        rowid, summary_id, project_key, session_id, request,
-                        investigated, learned, completed, next_steps, notes
-                    )
-                    VALUES (
-                        new.id,
-                        new.id,
-                        new.project_key,
-                        new.session_id,
-                        COALESCE(new.request, ''),
-                        COALESCE(new.investigated, ''),
-                        COALESCE(new.learned, ''),
-                        COALESCE(new.completed, ''),
-                        COALESCE(new.next_steps, ''),
-                        COALESCE(new.notes, '')
-                    );
-                END;
-
-                -- Derived indexes can be absent or incomplete after restoring
-                -- a database. Preserve source rows and rebuild only missing
-                -- observation entries, just as for summaries below.
-                INSERT INTO memory_observations_fts(
-                    rowid, observation_id, project_key, title, subtitle, narrative, facts, concepts
-                )
-                SELECT
-                    o.id, o.id, o.project_key,
-                    COALESCE(o.title, ''), COALESCE(o.subtitle, ''),
-                    COALESCE(o.narrative, ''), COALESCE(o.facts_json, ''),
-                    COALESCE(o.concepts_json, '')
-                FROM memory_observations o
-                WHERE NOT EXISTS (
-                    SELECT 1 FROM memory_observations_fts f WHERE f.rowid = o.id
-                );
-
-                INSERT INTO memory_summaries_fts(
-                    rowid, summary_id, project_key, session_id, request,
-                    investigated, learned, completed, next_steps, notes
-                )
-                SELECT
-                    s.id,
-                    s.id,
-                    s.project_key,
-                    s.session_id,
-                    COALESCE(s.request, ''),
-                    COALESCE(s.investigated, ''),
-                    COALESCE(s.learned, ''),
-                    COALESCE(s.completed, ''),
-                    COALESCE(s.next_steps, ''),
-                    COALESCE(s.notes, '')
-                FROM memory_summaries s
-                WHERE NOT EXISTS (
-                    SELECT 1 FROM memory_summaries_fts f WHERE f.rowid = s.id
-                );
-                "#,
-            )
-            .context("failed to initialize structured memory schema")?;
-
-        self.ensure_column("memory_observations", "hidden_at_epoch", "INTEGER")?;
-        self.ensure_column("memory_summaries", "hidden_at_epoch", "INTEGER")?;
-
-        Ok(())
-    }
-
-    fn ensure_column(&self, table: &str, column: &str, definition: &str) -> Result<()> {
-        let mut stmt = self
-            .conn
-            .prepare(&format!("PRAGMA table_info({table})"))
-            .with_context(|| format!("failed to inspect sqlite table {table}"))?;
-        let rows = stmt
-            .query_map([], |row| row.get::<_, String>("name"))?
-            .collect::<rusqlite::Result<Vec<_>>>()?;
-        if rows.iter().any(|name| name == column) {
-            return Ok(());
-        }
-        self.conn
-            .execute(
-                &format!("ALTER TABLE {table} ADD COLUMN {column} {definition}"),
-                [],
-            )
-            .with_context(|| format!("failed to add sqlite column {table}.{column}"))?;
-        Ok(())
+        crate::migrations::upgrade(&self.conn)
     }
 
     pub fn upsert_session(&self, input: &MemorySessionInput) -> Result<i64> {
@@ -716,6 +449,13 @@ impl StructuredMemoryStore {
     }
 
     pub fn insert_observation(&self, input: &MemoryObservationInput) -> Result<i64> {
+        self.insert_observation_with_status(input).map(|(id, _)| id)
+    }
+
+    pub(crate) fn insert_observation_with_status(
+        &self,
+        input: &MemoryObservationInput,
+    ) -> Result<(i64, bool)> {
         let facts_json = serde_json::to_string(&input.facts)?;
         let concepts_json = serde_json::to_string(&input.concepts)?;
         let files_read_json = serde_json::to_string(&input.files_read)?;
@@ -767,7 +507,7 @@ impl StructuredMemoryStore {
             .context("failed to insert memory observation")?;
 
         if inserted > 0 {
-            return Ok(self.conn.last_insert_rowid());
+            return Ok((self.conn.last_insert_rowid(), true));
         }
 
         self.conn
@@ -776,18 +516,24 @@ impl StructuredMemoryStore {
                 params![input.project_key.as_str(), content_hash.as_str()],
                 |row| row.get(0),
             )
+            .map(|id| (id, false))
             .context("failed to fetch existing memory observation id")
     }
 
     pub fn add_source(&self, input: &MemorySourceInput) -> Result<i64> {
         let created_at_epoch = u64_to_i64_saturating(input.created_at_epoch);
-        self.conn
+        let inserted = self
+            .conn
             .execute(
                 r#"
                 INSERT INTO memory_sources (
                     memory_kind, memory_id, source_type, source_ref, metadata_json, created_at_epoch
                 )
-                VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+                SELECT ?1, ?2, ?3, ?4, ?5, ?6
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM memory_sources WHERE memory_kind = ?1 AND memory_id = ?2
+                    AND source_type = ?3 AND source_ref IS ?4 AND metadata_json = ?5
+                )
                 "#,
                 params![
                     input.memory_kind.as_str(),
@@ -799,7 +545,14 @@ impl StructuredMemoryStore {
                 ],
             )
             .context("failed to insert memory source")?;
-        Ok(self.conn.last_insert_rowid())
+        if inserted > 0 {
+            return Ok(self.conn.last_insert_rowid());
+        }
+        self.conn.query_row(
+            "SELECT id FROM memory_sources WHERE memory_kind = ?1 AND memory_id = ?2 AND source_type = ?3 AND source_ref IS ?4 AND metadata_json = ?5 ORDER BY id LIMIT 1",
+            params![input.memory_kind, input.memory_id, input.source_type, input.source_ref, input.metadata_json],
+            |row| row.get(0),
+        ).context("failed to fetch existing memory source")
     }
 
     pub fn sources_for_memory(
@@ -1682,6 +1435,35 @@ mod tests {
 
         assert_eq!(concept_results.len(), 1);
         assert_eq!(concept_results[0].observation_type, "feature");
+    }
+
+    #[test]
+    fn repeated_observations_and_sources_keep_identity_without_counting_new_writes() {
+        let store = StructuredMemoryStore::in_memory().unwrap();
+        let input = observation("repeat safely");
+        let (id, inserted) = store.insert_observation_with_status(&input).unwrap();
+        assert!(inserted);
+        assert_eq!(
+            store.insert_observation_with_status(&input).unwrap(),
+            (id, false)
+        );
+        let mut source = MemorySourceInput {
+            memory_kind: "observation".into(),
+            memory_id: id,
+            source_type: "tool_observation".into(),
+            source_ref: Some("tool-1".into()),
+            metadata_json: "{}".into(),
+            created_at_epoch: 1000,
+        };
+        let first = store.add_source(&source).unwrap();
+        source.created_at_epoch += 1;
+        assert_eq!(store.add_source(&source).unwrap(), first);
+        source.source_ref = Some("tool-2".into());
+        assert_ne!(store.add_source(&source).unwrap(), first);
+        assert_eq!(
+            store.sources_for_memory("observation", id).unwrap().len(),
+            2
+        );
     }
 
     #[test]

@@ -5,6 +5,7 @@ import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { basename, dirname, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { checkClientVersion } from './client-version.mjs';
 
 export const repository = resolve(fileURLToPath(new URL('../..', import.meta.url)));
 export const manifestName = 'kcoder-release-manifest.json';
@@ -71,11 +72,29 @@ export async function inventory(root, { files, inspectAsar = asarEntries } = {})
   }
   return result;
 }
+export function cargoPackageVersion(packageSource, workspaceSource) {
+  const table = (source, name) => source.split(/\r?\n/).reduce((state, line) => {
+    const header = /^\s*\[([^\]]+)\]\s*(?:#.*)?$/.exec(line);
+    if (header) state.active = header[1] === name;
+    else if (state.active) state.lines.push(line);
+    return state;
+  }, { active: false, lines: [] }).lines.join('\n');
+  const pkg = table(packageSource, 'package');
+  const explicit = /^\s*version\s*=\s*["']([^"']+)["']\s*(?:#.*)?$/m.exec(pkg)?.[1];
+  if (explicit) return explicit;
+  if (/^\s*version\.workspace\s*=\s*true\s*(?:#.*)?$/m.test(pkg)
+      || /^\s*version\s*=\s*\{\s*workspace\s*=\s*true\s*\}\s*(?:#.*)?$/m.test(pkg)) {
+    const inherited = /^\s*version\s*=\s*["']([^"']+)["']\s*(?:#.*)?$/m.exec(table(workspaceSource, 'workspace.package'))?.[1];
+    if (inherited) return inherited;
+  }
+  throw new Error('Cannot resolve the CLI package version from Cargo manifests');
+}
 export async function releaseIdentity(root = repository) {
   const json = async path => JSON.parse(await readFile(resolve(root, path), 'utf8'));
   const cargo = await readFile(resolve(root, 'Cargo.toml'), 'utf8');
+  const cliCargo = await readFile(resolve(root, 'crates/kcoder_cli/Cargo.toml'), 'utf8');
   const protocol = await readFile(resolve(root, 'crates/kcoder_app_protocol/src/lib.rs'), 'utf8');
-  const git = args => execFileSync('git', args, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+  const git = args => execFileSync('git', args, { cwd: root, env: { ...process.env, GIT_OPTIONAL_LOCKS: '0' }, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
   const capabilityFiles = (await readdir(resolve(root, 'crates/kcoder_app_protocol/src'))).filter(name => name.endsWith('.rs')).sort();
   const declared = new Set(['approvals', 'questions', 'threadResume']);
   const contract = [];
@@ -84,15 +103,23 @@ export async function releaseIdentity(root = repository) {
     for (const match of text.matchAll(/pub const [A-Z0-9_]*CAPABILITY[A-Z0-9_]*:\s*&str\s*=\s*"([A-Za-z0-9]+)"/g)) declared.add(match[1]);
     contract.push({ path: file, sha256: createHash('sha256').update(text).digest('hex') });
   }
-  const capabilityOwner = 'crates/kcoder_cli/src/app_server/connection_state.rs';
-  const serverSource = await readFile(resolve(root, capabilityOwner), 'utf8');
-  const serverDeclaration = /fn server_capabilities\([\s\S]*?\n}\n/.exec(serverSource)?.[0];
-  if (!serverDeclaration) throw new Error('Cannot locate the app-server capability declaration');
-  for (const match of serverDeclaration.matchAll(/"([A-Za-z][A-Za-z0-9]+)"\.to_string\(\)/g)) declared.add(match[1]);
-  for (const match of serverSource.matchAll(/capabilities\s*\.\s*experimental\s*\.\s*insert\s*\(\s*"([A-Za-z0-9]+)"/g)) declared.add(match[1]);
-  contract.push({ path: '../kcoder_cli/src/app_server/connection_state.rs', sha256: createHash('sha256').update(serverSource).digest('hex') });
+  const capabilityDeclaration = 'crates/kcoder_cli/src/internal/host_transport/metadata/capabilities.rs';
+  for (const path of [
+    'crates/kcoder_cli/src/app_server/connection_state.rs',
+    capabilityDeclaration,
+    'crates/kcoder_cli/src/internal/host_transport/metadata/negotiation.rs',
+  ]) {
+    const source = await readFile(resolve(root, path), 'utf8');
+    if (path === capabilityDeclaration) {
+      const declaration = /fn server_capabilities\([\s\S]*?\n}\n/.exec(source)?.[0];
+      if (!declaration) throw new Error('Cannot locate the app-server capability declaration');
+      for (const match of declaration.matchAll(/"([A-Za-z][A-Za-z0-9]+)"\.to_string\(\)/g)) declared.add(match[1]);
+    }
+    for (const match of source.matchAll(/capabilities\s*\.\s*experimental\s*\.\s*insert\s*\(\s*"([A-Za-z0-9]+)"/g)) declared.add(match[1]);
+    contract.push({ path: path.replace('crates/', '../'), sha256: createHash('sha256').update(source).digest('hex') });
+  }
   return {
-    versions: { cli: /^version\s*=\s*"([^"]+)"/m.exec(cargo)?.[1], studio: (await json('apps/kcoder-studio/package.json')).version, mobile: (await json('apps/kcoder-studio/mobile/package.json')).version },
+    versions: { cli: cargoPackageVersion(cliCargo, cargo), studio: (await json('apps/kcoder-studio/package.json')).version, mobile: (await json('apps/kcoder-studio/mobile/package.json')).version },
     packagingSource: { commit: git(['rev-parse', 'HEAD']), dirty: Boolean(git(['status', '--porcelain', '--untracked-files=no'])) },
     protocol: { version: /pub const PROTOCOL_VERSION:\s*&str\s*=\s*"([^"]+)"/.exec(protocol)?.[1], sourceDeclaredCapabilities: [...declared].sort(), contract,
       note: 'Source contract declarations are not runtime negotiation. Verify initialize capabilities and embedded CLI build identity on the target using the packaged smoke gate.' },
@@ -117,6 +144,7 @@ export async function verifyManifest(root, options = {}) {
   return manifest;
 }
 export async function npmManifest(root, kind) {
+  await checkClientVersion();
   // Ask npm for its real allowlist including its mandatory files; never run lifecycle scripts recursively.
   const args = ['pack', '--dry-run', '--json', '--ignore-scripts'];
   const npmCli = /^npm-cli\.[cm]?js$/.test(basename(process.env.npm_execpath ?? "")) ? process.env.npm_execpath : null;

@@ -6,7 +6,8 @@
     "private_files::bounded_count_tests::count_low_descriptor_child",
     "context::compact::tests::history::compaction_prompt_build_benchmark",
     "context::micro_compact::tests::micro_compaction_benchmark",
-    "context::tokens::tests::token_estimation_benchmark",
+    "token_counter::tests::token_estimation_benchmark",
+    "tests::powershell_read_only_snapshot_overhead_measurement",
     "request_assembly_measurements::allocation_meter_counts_real_heap_and_excludes_another_thread",
     "request_assembly_measurements::fork_snapshot_handle_measurement",
     "request_assembly_measurements::inactive_skill_injection_does_not_snapshot_history",
@@ -40,6 +41,20 @@
     "web_search::exa::tests::live_search_returns_relevant_primary_documentation",
     "web_search::exa::tests::live_search_user_reported_topics_have_relevant_results",
     "web_search::tests::live_bing_search_returns_results",
-    "measure_store_write_scope_and_lock_boundaries"
-  ]
+    "measure_store_write_scope_and_lock_boundaries",
+    "archive_500_mib_with_one_oversized_record_uses_bounded_memory",
+    "batch_creation_owned_crash_child",
+    "instruction_snapshot_child_process",
+    "large_history_normalization_keeps_memory_bounded",
+    "owned_history_execution_helper",
+    "settings_templates::recovery_tests::process_worker",
+    "external_history::lifecycle::derived_recovery::crash_tests::sealed_projection_writer_child",
+    "integrations::core::input_continuation::tests::ct85_owned_dispatch"
+  ],
+  "reviewNotes": {
+    "tests::powershell_read_only_snapshot_overhead_measurement": "Already present and ignored at baseline 705a3fda9; the prior roster omitted it. Creates an isolated 6000-file workspace for metadata-scan measurement. Explicit Linux execution passed during inventory review; this does not measure a PowerShell process or Windows latency.",
+    "external_history::lifecycle::derived_recovery::crash_tests::sealed_projection_writer_child": "Owned child helper invoked only by its sealed-cache crash parent regression. It writes the exact synthetic projection and waits to be killed; never execute standalone or count its ignored status as a pass. Parent passed on Linux and two Windows hosts; old recovery/security guards remain.",
+    "private_files::bounded_count_tests::count_low_descriptor_child": "Moved unchanged from kcoder_config to kcoder_fs during the 2026-11-04 crate split. This remains the same isolated child helper, invoked by its parent test; no new skip was added.",
+    "markdown::tests::active_markdown_streaming_benchmark": "Moved unchanged from kcoder_repl to kcoder_tui_render during the 2026-11-04 crate split. Its opt-in benchmark status and exact test name remain unchanged."
+  }
 }

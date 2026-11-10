@@ -1,0 +1,329 @@
+{
+  "BrowserProfilePurpose": {
+    "valid": [
+      {
+        "name": "current",
+        "value": "business"
+      }
+    ],
+    "invalid": [
+      {
+        "name": "invalid",
+        "value": "unknown"
+      }
+    ]
+  },
+  "BrowserAccountProfileDraft": {
+    "valid": [
+      {
+        "name": "current",
+        "value": {
+          "id": "office",
+          "label": "Office account",
+          "accountLabel": null,
+          "purpose": "business"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "invalid",
+        "value": {
+          "id": "office",
+          "label": "Office account",
+          "accountLabel": null,
+          "purpose": "business",
+          "profilePath": "/outside"
+        }
+      }
+    ]
+  },
+  "BrowserAccountProfile": {
+    "valid": [
+      {
+        "name": "current",
+        "value": {
+          "draft": {
+            "id": "office",
+            "label": "Office account",
+            "accountLabel": null,
+            "purpose": "business"
+          },
+          "revision": 1,
+          "archived": false
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "invalid",
+        "value": {
+          "draft": {
+            "id": "office",
+            "label": "Office account",
+            "accountLabel": null,
+            "purpose": "business"
+          },
+          "revision": "one",
+          "archived": false
+        }
+      }
+    ]
+  },
+  "BrowserAccountProfilePage": {
+    "valid": [
+      {
+        "name": "current",
+        "value": {
+          "items": [
+            {
+              "draft": {
+                "id": "office",
+                "label": "Office account",
+                "accountLabel": null,
+                "purpose": "business"
+              },
+              "revision": 1,
+              "archived": false
+            }
+          ],
+          "nextCursor": null
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "invalid",
+        "value": {
+          "items": {},
+          "nextCursor": null
+        }
+      }
+    ]
+  },
+  "BrowserProfilesMethod": {
+    "valid": [
+      {
+        "name": "current",
+        "value": "integrations/browserProfiles/list"
+      }
+    ],
+    "invalid": [
+      {
+        "name": "invalid",
+        "value": "integrations/browserProfiles/execute"
+      }
+    ]
+  },
+  "BrowserProfilesListParams": {
+    "valid": [
+      {
+        "name": "current",
+        "value": {}
+      }
+    ],
+    "invalid": [
+      {
+        "name": "invalid",
+        "value": {
+          "profilePath": "/outside"
+        }
+      }
+    ]
+  },
+  "BrowserProfilesSaveParams": {
+    "valid": [
+      {
+        "name": "current",
+        "value": {
+          "draft": {
+            "id": "office",
+            "label": "Office account",
+            "accountLabel": null,
+            "purpose": "business"
+          },
+          "expectedRevision": 0
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "invalid",
+        "value": {
+          "draft": {
+            "id": "office",
+            "label": "Office account",
+            "accountLabel": null,
+            "purpose": "business"
+          }
+        }
+      }
+    ]
+  },
+  "BrowserProfilesArchiveParams": {
+    "valid": [
+      {
+        "name": "current",
+        "value": {
+          "profileId": "office",
+          "expectedRevision": 1,
+          "archived": true
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "invalid",
+        "value": {
+          "profileId": "office",
+          "expectedRevision": 1,
+          "archived": "yes"
+        }
+      }
+    ]
+  },
+  "BrowserProfileSelection": {
+    "valid": [
+      {
+        "name": "explicit-owner-bound-selection",
+        "value": {
+          "scope": {
+            "accountId": "a",
+            "targetId": "t",
+            "workspaceId": null,
+            "identityGeneration": "g",
+            "targetRevision": "r"
+          },
+          "profileId": "office",
+          "expectedRevision": 1,
+          "operationId": "start-1"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "private-path-not-a-selection",
+        "value": {
+          "scope": {
+            "accountId": "a",
+            "targetId": "t",
+            "workspaceId": null,
+            "identityGeneration": "g",
+            "targetRevision": "r"
+          },
+          "profileId": "office",
+          "expectedRevision": 1,
+          "operationId": "start-1",
+          "path": "/private/profile"
+        }
+      }
+    ]
+  },
+  "BrowserControlMode": {
+    "valid": [
+      {
+        "name": "current",
+        "value": "human"
+      }
+    ],
+    "invalid": [
+      {
+        "name": "invalid",
+        "value": "other"
+      }
+    ]
+  },
+  "BrowserHandoffParams": {
+    "valid": [
+      {
+        "name": "current",
+        "value": {
+          "sessionId": "s",
+          "expectedRevision": 1,
+          "mode": "human"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "invalid",
+        "value": {
+          "sessionId": "s",
+          "expectedRevision": 1,
+          "mode": "other"
+        }
+      }
+    ]
+  },
+  "BrowserHandoffState": {
+    "valid": [
+      {
+        "name": "current",
+        "value": {
+          "sessionId": "s",
+          "revision": 2,
+          "mode": "human",
+          "observedUrl": "http://fixture.test/"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "invalid",
+        "value": {
+          "sessionId": "s",
+          "revision": "two",
+          "mode": "human",
+          "observedUrl": "http://fixture.test/"
+        }
+      }
+    ]
+  },
+  "BrowserHumanActionParams": {
+    "valid": [
+      {
+        "name": "current",
+        "value": {
+          "expectedRevision": 2,
+          "action": {
+            "session_id": "s",
+            "action": "click",
+            "x": 1,
+            "y": 2
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "invalid",
+        "value": {
+          "expectedRevision": 2,
+          "action": {
+            "session_id": "s",
+            "action": "unknown"
+          }
+        }
+      }
+    ]
+  },
+  "BrowserControlReadParams": {
+    "valid": [
+      {
+        "name": "original-session",
+        "value": {
+          "session_id": "s"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "no-path",
+        "value": {
+          "session_id": "s",
+          "path": "/other"
+        }
+      }
+    ]
+  }
+}

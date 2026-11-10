@@ -1,3 +1,4 @@
+import fixtures from '../../../shared/generated/examples.web-sources.json'
 import { describe, expect, it } from 'vitest'
 import { reduceWorkbenchMessages } from '@wegent/chat-core'
 import { SubagentConversationProjection } from './subagentConversationProjection'
@@ -427,4 +428,13 @@ describe('ordinary conversation projection for a child stream', () => {
       rawStatus: 'result_unrecorded',
     })
   })
+})
+
+it('keeps native child source identity in the normal tool projection', () => {
+  const projection = new SubagentConversationProjection(address)
+  let messages = apply([], projection, 'item/started', { item: { id: 'search-1', type: 'toolCall', name: 'WebSearch', input: { query: 'docs' } } })
+  const sample = fixtures.WebSourcesToolResultV1.find(value => value.name === 'native-summary')!.value.webSources
+  const webSources = { ...sample, identity: { threadId: 'child-thread', turnId: 'child-turn', attemptId: 'child-attempt' } }
+  messages = apply(messages, projection, 'item/completed', { item: { id: 'search-1', type: 'toolCall', name: 'WebSearch', status: 'completed', output: 'Search result', webSources } })
+  expect(messages[0].blocks?.[0]).toMatchObject({ type: 'tool', status: 'done', webSources })
 })

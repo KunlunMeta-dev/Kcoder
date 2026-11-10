@@ -39,6 +39,7 @@ export interface CodexOfficialModelProvider {
 
 export interface CodexOfficialModelList {
   supportsModelSelectionMode?: boolean
+  supportsTurnModelSwitch?: boolean
   providers: CodexOfficialModelProvider[]
   models: CodexOfficialModel[]
 }
@@ -217,6 +218,7 @@ export function normalizeCodexOfficialModelList(value: unknown): CodexOfficialMo
       providers,
       models: providers.flatMap(provider => provider.models).map(enrich),
       supportsModelSelectionMode: record.supportsModelSelectionMode === true,
+      supportsTurnModelSwitch: record.supportsTurnModelSwitch === true,
     }
   }
 
@@ -238,6 +240,7 @@ export function normalizeCodexOfficialModelList(value: unknown): CodexOfficialMo
     providers: fallbackModels.length > 0 ? [{ ...fallbackProvider, models: fallbackModels }] : [],
     models: fallbackModels.map(enrich),
     supportsModelSelectionMode: record.supportsModelSelectionMode === true,
+    supportsTurnModelSwitch: record.supportsTurnModelSwitch === true,
   }
 }
 

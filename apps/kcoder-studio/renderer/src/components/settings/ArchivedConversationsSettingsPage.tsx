@@ -276,6 +276,8 @@ export function ArchivedConversationsSettingsPage({
   const { t } = useTranslation('common')
   const [items, setItems] = useState<ArchivedConversationItem[]>([])
   const [loading, setLoading] = useState(true)
+  // Refetches after unarchive/delete keep the list visible.
+  const [hasLoaded, setHasLoaded] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [source, setSource] = useState<ArchivedSourceFilter>('all')
@@ -312,6 +314,7 @@ export function ArchivedConversationsSettingsPage({
       )
     } finally {
       setLoading(false)
+      setHasLoaded(true)
     }
   }, [api, t])
 
@@ -630,7 +633,7 @@ export function ArchivedConversationsSettingsPage({
       {lastUnarchived && (
         <div
           data-testid="archived-unarchive-success"
-          className="mt-4 flex items-center justify-between gap-3 rounded-lg border border-primary/20 bg-primary/10 px-4 py-3 text-sm text-text-primary"
+          className="studio-card-spacing mt-4 flex items-center justify-between gap-3 rounded-lg border border-primary/20 bg-primary/10 px-4 py-3 text-sm text-text-primary"
         >
           <span>{t('workbench.archived_unarchive_success', { title: lastUnarchived.title })}</span>
           {onOpenRuntimeTask && (
@@ -650,7 +653,7 @@ export function ArchivedConversationsSettingsPage({
       {bulkDeleteProgress && (
         <div
           data-testid="archived-bulk-delete-background-progress"
-          className="mt-4 rounded-lg border border-border bg-surface px-4 py-3 text-sm text-text-secondary"
+          className="studio-card-spacing mt-4 rounded-lg border border-border bg-surface px-4 py-3 text-sm text-text-secondary"
         >
           <div className="flex flex-wrap items-center justify-between gap-3">
             <span>
@@ -689,7 +692,7 @@ export function ArchivedConversationsSettingsPage({
       {operationError && (
         <div
           data-testid="archived-operation-error"
-          className="mt-4 rounded-lg border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-600"
+          className="studio-card-spacing mt-4 rounded-lg border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-600"
         >
           {operationError}
         </div>
@@ -710,7 +713,7 @@ export function ArchivedConversationsSettingsPage({
       )}
 
       <div className="mt-3">
-        {loading ? (
+        {loading && !hasLoaded ? (
           <div
             data-testid="archived-loading"
             className="flex h-40 items-center justify-center text-text-secondary"
@@ -728,7 +731,7 @@ export function ArchivedConversationsSettingsPage({
         ) : visibleItems.length === 0 ? (
           <div
             data-testid="archived-empty"
-            className="rounded-xl border border-border bg-surface/40 px-5 py-6 text-sm text-text-primary"
+            className="studio-card-spacing rounded-xl border border-border bg-surface/40 text-sm text-text-primary"
           >
             {hasArchivedItems
               ? t('workbench.archived_no_matches', '没有匹配的已归档任务。')

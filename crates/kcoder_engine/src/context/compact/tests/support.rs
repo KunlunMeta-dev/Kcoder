@@ -79,47 +79,6 @@ impl Provider for FixedEventsProvider {
     }
 }
 
-#[derive(Debug)]
-pub(super) struct PromptTooLongOnceProvider {
-    pub(super) requests: Arc<Mutex<Vec<MessagesRequest>>>,
-    pub(super) failures: usize,
-}
-
-impl Provider for PromptTooLongOnceProvider {
-    fn name(&self) -> &'static str {
-        "prompt-too-long-once"
-    }
-
-    fn stream_messages(
-        &self,
-        request: MessagesRequest,
-    ) -> std::result::Result<kcoder_api::ProviderStream, kcoder_api::ApiErrorKind> {
-        let attempt = {
-            let mut requests = self.requests.lock().unwrap();
-            requests.push(request);
-            requests.len()
-        };
-        let failures = self.failures;
-        let stream = async_stream::stream! {
-            if attempt <= failures {
-                yield Ok(StreamEvent::Error {
-                    error: StreamApiError {
-                        error_type: "invalid_request_error".to_string(),
-                        message: "prompt is too long".to_string(),
-                    },
-                });
-            } else {
-                for event in complete_text_events(
-                    "<analysis>checked</analysis><summary>retry summary</summary>",
-                ) {
-                    yield Ok(event);
-                }
-            }
-        };
-        Ok(Box::pin(stream))
-    }
-}
-
 pub(super) fn fixed_text_events(text: impl Into<String>) -> Vec<StreamEvent> {
     vec![
         StreamEvent::ContentBlockStart {

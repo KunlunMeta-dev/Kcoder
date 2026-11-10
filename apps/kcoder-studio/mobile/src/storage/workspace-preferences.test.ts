@@ -23,6 +23,7 @@ describe("workspace preferences", () => {
       composerDraft: "下一条消息",
       browserUrl: "https://example.com/docs",
       directoryPath: "/workspace/src",
+      recentFiles: ["/workspace/src/a.ts", "relative", "/workspace/src/a.ts"],
       fileDraft: { path: "/workspace/src/a.ts", revision: "rev-1", content: "changed", updatedAt: 42 },
     })).toEqual({
       activeTab: "files",
@@ -31,6 +32,7 @@ describe("workspace preferences", () => {
       composerDraft: "下一条消息",
       browserUrl: "https://example.com/docs",
       directoryPath: "/workspace/src",
+      recentFiles: ["/workspace/src/a.ts"],
       fileDraft: { path: "/workspace/src/a.ts", revision: "rev-1", content: "changed", updatedAt: 42 },
     });
     expect(normalizeWorkspaceViewState({ activeTab: "bad", model: " ", reasoningEffort: "../../bad", browserUrl: "javascript:alert(1)", directoryPath: "relative" }))
@@ -64,6 +66,32 @@ describe("workspace preferences", () => {
     );
   });
 
+  it("normalizes recent file history for Windows drive and UNC roots", () => {
+    expect(normalizeWorkspaceViewState({ recentFiles: [
+      "C:\\workspace\\src\\main.ts",
+      "\\\\server\\share\\workspace\\docs\\guide.md",
+      "relative.txt",
+      "C:\\workspace\\bad\u0001name.ts",
+    ] }).recentFiles).toEqual([
+      "C:\\workspace\\src\\main.ts",
+      "\\\\server\\share\\workspace\\docs\\guide.md",
+    ]);
+  });
+
+  it("restores Windows drive and UNC current directories at workspace and files-panel scope", () => {
+    const state = normalizeWorkspaceViewState({
+      directoryPath: "C:\\workspace\\src",
+      panels: [
+        { id: "agent", kind: "agent", title: "智能体" },
+        { id: "files-1", kind: "files", title: "Files", directoryPath: "\\\\server\\share\\workspace\\docs" },
+      ],
+    });
+
+    expect(state.directoryPath).toBe("C:\\workspace\\src");
+    expect(state.panels?.find((panel) => panel.id === "files-1")?.directoryPath)
+      .toBe("\\\\server\\share\\workspace\\docs");
+  });
+
   it("恢复允许范围内的大附件队列并拒绝超过 50 MiB 的伪造记录", () => {
     const state = normalizeWorkspaceViewState({
       queuedMessages: [{
@@ -74,8 +102,10 @@ describe("workspace preferences", () => {
           { filename: "large.bin", mimeType: "application/octet-stream", path: "/tmp/large.bin", fileSize: 300 * 1024 },
           { filename: "too-large.bin", mimeType: "application/octet-stream", path: "/tmp/too-large.bin", fileSize: MAX_ATTACHMENT_BYTES + 1 },
         ],
+        permissionMode: "bypass",
       }],
     });
+    expect(state.queuedMessages?.[0]?.permissionMode).toBe("bypass");
     expect(state.queuedMessages?.[0]?.attachments).toEqual([
       { filename: "large.bin", mimeType: "application/octet-stream", path: "/tmp/large.bin", fileSize: 300 * 1024 },
     ]);
@@ -89,6 +119,7 @@ describe("workspace preferences", () => {
       outcome: "failed",
       retrying: true,
       error: "网络暂时不可用",
+      permissionMode: "accept_edits",
       attachments: [
         {
           filename: "notes.txt",
@@ -109,6 +140,7 @@ describe("workspace preferences", () => {
         createdAt: failed.createdAt,
         outcome: "failed",
         error: failed.error,
+        permissionMode: "accept_edits",
         attachments: [
           {
             filename: "notes.txt",
@@ -124,6 +156,23 @@ describe("workspace preferences", () => {
         JSON.parse(JSON.stringify(state)),
       ).failedSubmissions,
     ).toEqual(state.failedSubmissions);
+  });
+
+  it("兼容旧队列权限字段并将损坏的已冻结模式收敛到服务器默认", () => {
+    const legacy = {
+      id: "queued-legacy",
+      content: "old queued text",
+      createdAt: 1,
+      attachments: [],
+    };
+    const corrupted = {
+      ...legacy,
+      id: "queued-corrupt",
+      permissionMode: "made_up",
+    };
+    const state = normalizeWorkspaceViewState({ queuedMessages: [legacy, corrupted] });
+    expect(state.queuedMessages?.[0]).not.toHaveProperty("permissionMode");
+    expect(state.queuedMessages?.[1]?.permissionMode).toBe("default");
   });
 
   it("丢弃路径无效或字段不完整的失败记录", () => {
@@ -160,5 +209,24 @@ describe("workspace preferences", () => {
       workspaceStateStorageKey("gateway-a", "local", "thread-1"),
       workspaceTabStorageKey("gateway-a", "ssh", "thread-2"),
     ]);
+  });
+});
+
+
+describe("accepted submission observation compatibility", () => {
+  const base = { id: "composer-accepted", content: "original", attachments: [], createdAt: 42, outcome: "unknown" };
+  const acceptedTurn = { threadId: "thread-1", turnId: "turn-2", attemptId: "attempt-3" };
+  it("roundtrips an accepted observation without changing the old unknown outcome", () => {
+    const state = normalizeWorkspaceViewState({ failedSubmissions: [{ ...base, acceptedTurn }] });
+    expect(state.failedSubmissions).toEqual([{ ...base, acceptedTurn }]);
+    expect(normalizeWorkspaceViewState(JSON.parse(JSON.stringify(state))).failedSubmissions).toEqual(state.failedSubmissions);
+    expect(normalizeWorkspaceViewState({ failedSubmissions: [base] }).failedSubmissions).toEqual([base]);
+  });
+  it.each([null, {}, { threadId: "thread-1" }, { ...acceptedTurn, turnId: " " }, { ...acceptedTurn, attemptId: "" }, { ...acceptedTurn, extra: true }, { ...acceptedTurn, threadId: "x".repeat(513) }, { ...acceptedTurn, turnId: "bad\u0085id" }])(
+    "retains the unknown recovery row when optional accepted metadata is malformed (%j)", value => {
+      expect(normalizeWorkspaceViewState({ failedSubmissions: [{ ...base, acceptedTurn: value }] }).failedSubmissions).toEqual([base]);
+    });
+  it("does not turn a failed row into an accepted observation", () => {
+    expect(normalizeWorkspaceViewState({ failedSubmissions: [{ ...base, outcome: "failed", acceptedTurn }] }).failedSubmissions).toEqual([{ ...base, outcome: "failed" }]);
   });
 });

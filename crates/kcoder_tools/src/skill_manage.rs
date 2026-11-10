@@ -1,4 +1,4 @@
-use crate::{Tool, ToolContext, ToolError, ToolOutput, clean_schema, parse_input};
+use crate::{Tool, ToolContext, ToolError, ToolOutput};
 use async_trait::async_trait;
 use chrono::Utc;
 use kcoder_skills::{
@@ -7,8 +7,8 @@ use kcoder_skills::{
     SkillMutation, SkillMutationActor, SkillOperationKind, SkillPackage, SkillPackageFile,
     SkillRevision, SkillStore, SkillStoreCommitStatus, SkillStoreError,
 };
-use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
+pub use kcoder_tool_input::builtin::skill_manage::{SkillManageAction, SkillManageInput};
+use serde::Serialize;
 use serde_json::Value;
 use std::collections::BTreeMap;
 use std::path::{Component, Path, PathBuf};
@@ -23,50 +23,6 @@ const SUPPORTING_DIRS: &[&str] = &["references", "templates", "scripts", "assets
 /// Manage project skills under `.kcoder/skills/`.
 #[derive(Debug, Default)]
 pub struct SkillManageTool;
-
-#[derive(Debug, Clone, Copy, Deserialize, JsonSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum SkillManageAction {
-    List,
-    View,
-    Create,
-    Edit,
-    Patch,
-    WriteFile,
-    RemoveFile,
-}
-
-#[derive(Debug, Deserialize, JsonSchema)]
-pub struct SkillManageInput {
-    /// Action to perform.
-    pub action: SkillManageAction,
-    /// Skill name. Required except for `list`.
-    #[serde(default)]
-    pub name: Option<String>,
-    /// Full SKILL.md content. Required for `create` and `edit`.
-    #[serde(default)]
-    pub content: Option<String>,
-    /// Supporting file path under references/, templates/, scripts/, or assets/.
-    /// For `patch`, omit this or use SKILL.md to patch the main skill file.
-    #[serde(default)]
-    pub file_path: Option<String>,
-    /// Full supporting file content. Required for `write_file`.
-    #[serde(default)]
-    pub file_content: Option<String>,
-    /// Text to find. Required for `patch`.
-    #[serde(default)]
-    pub old_string: Option<String>,
-    /// Replacement text. Required for `patch`; use an empty string to delete.
-    #[serde(default)]
-    pub new_string: Option<String>,
-    /// Replace all matches for `patch`; otherwise replace exactly one match.
-    #[serde(default)]
-    pub replace_all: bool,
-    /// Revision returned by `view`. Required for race-safe updates; omission is
-    /// temporarily accepted for one compatibility release and emits a warning.
-    #[serde(default)]
-    pub expected_revision: Option<String>,
-}
 
 #[derive(Debug, Serialize)]
 struct SkillManageResult {
@@ -119,7 +75,7 @@ impl Tool for SkillManageTool {
     }
 
     fn input_schema(&self) -> Value {
-        clean_schema(schemars::schema_for!(SkillManageInput))
+        SkillManageInput::schema()
     }
 
     fn is_concurrency_safe(&self, _input: &Value) -> bool {
@@ -127,7 +83,7 @@ impl Tool for SkillManageTool {
     }
 
     async fn call(&self, input: Value, ctx: &ToolContext) -> Result<ToolOutput, ToolError> {
-        let input: SkillManageInput = parse_input(&input)?;
+        let input: SkillManageInput = SkillManageInput::parse(&input)?;
         let action = input.action;
         let root = project_skills_root(&ctx.state.cwd());
         let result = match action {

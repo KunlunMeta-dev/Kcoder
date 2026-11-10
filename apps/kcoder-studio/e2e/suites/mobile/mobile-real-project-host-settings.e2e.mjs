@@ -3,10 +3,8 @@ import { access, mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import { startChromium } from "../../harness/chromium.mjs";
 import { startGateway } from "../../harness/gateway.mjs";
-import { appRoot, runE2E } from "../../harness/run-context.mjs";
-
-const mobileDist = resolve(appRoot, "mobile/dist");
-await access(resolve(mobileDist, "index.html"));
+import { exportMobileWeb } from "../../harness/mobile-web-export.mjs";
+import { runE2E } from "../../harness/run-context.mjs";
 
 await runE2E(import.meta.url, {
   testId: "mobile-web-real-project-host-settings",
@@ -14,6 +12,12 @@ await runE2E(import.meta.url, {
   modelPolicy: "model-independent real Gateway and app-server workspace APIs",
   retainSuccessLogs: true,
 }, async context => {
+  const mobileWeb = await exportMobileWeb(context, {
+    label: "mobile-project-host-settings-export",
+    outputName: "mobile-project-host-settings-web",
+    dependencyRoot: process.env.KCODER_E2E_MOBILE_DEPENDENCY_ROOT || undefined,
+    timeoutMs: 10 * 60 * 1000,
+  });
   const workspace = context.pathInState("workspace");
   const createdWorkspace = resolve(workspace, "created-from-mobile");
   await mkdir(workspace, { recursive: true });
@@ -21,9 +25,12 @@ await runE2E(import.meta.url, {
     auth: true,
     label: "mobile-project-host-settings-gateway",
     workspace,
-    env: { KCODER_STUDIO_SCENARIO: "full-turn", KCODER_STUDIO_WEB_ROOT: mobileDist },
+    env: { KCODER_STUDIO_SCENARIO: "full-turn", KCODER_STUDIO_WEB_ROOT: mobileWeb.path },
   });
-  const chromium = await startChromium(context, { label: "mobile-project-host-settings-chromium" });
+  const chromium = await startChromium(context, {
+    label: "mobile-project-host-settings-chromium",
+    startTimeoutMs: 60_000,
+  });
   const page = await chromium.browser.contexts()[0].newPage();
   await page.setViewportSize({ width: 390, height: 844 });
   const diagnostics = [];
@@ -80,20 +87,52 @@ await runE2E(import.meta.url, {
     && request.params?.workspacePath === createdWorkspace), "重新打开登记项目必须调用真实 runtime.workspaces.open");
 
   await page.goto(`${gateway.baseUrl}/settings`, { waitUntil: "domcontentloaded" });
-  await page.getByTestId("diagnostics-settings").waitFor({ state: "visible", timeout: 30_000 });
+  await page.getByTestId("settings-home").waitFor({ state: "visible", timeout: 30_000 });
   await page.getByTestId("diagnostics-settings").click();
   const english = await page.locator("html").getAttribute("lang") === "en";
-  const diagnosticDialog = page.getByRole("dialog", { name: english ? "Connection diagnostics" : "连接诊断", exact: true });
-  await diagnosticDialog.waitFor({ state: "visible", timeout: 30_000 });
-  assert.equal(await diagnosticDialog.count(), 1, "Settings must expose one named active diagnostics dialog");
-  await diagnosticDialog.getByText(gateway.baseUrl, { exact: true }).waitFor({ state: "visible" });
-  await diagnosticDialog.getByText(/Local app-server/).waitFor({ state: "visible" });
+  const diagnosticsScreen = page.getByTestId("settings-diagnostics-screen").and(page.locator(":visible"));
+  await diagnosticsScreen.waitFor({ state: "visible", timeout: 30_000 });
+  await page.getByTestId("settings-diagnostics-title").waitFor({ state: "visible", timeout: 10_000 });
+  assert.equal(new URL(page.url()).pathname, "/settings-diagnostics");
+  assert.equal(await diagnosticsScreen.count(), 1, "Settings must expose one active diagnostics screen");
+  await diagnosticsScreen.getByText(gateway.baseUrl, { exact: true }).waitFor({ state: "visible" });
+  await diagnosticsScreen.getByText(/Local app-server/).waitFor({ state: "visible" });
   const statusRequestsBeforeDiagnosticRefresh = countApi(apiRequests, "/api/servers/status");
-  await diagnosticDialog.getByLabel(english ? "Run diagnostics again" : "重新运行诊断", { exact: true }).click();
+  await diagnosticsScreen.getByLabel(english ? "Run diagnostics again" : "重新运行诊断", { exact: true }).click();
   await waitFor(() => countApi(apiRequests, "/api/servers/status") > statusRequestsBeforeDiagnosticRefresh,
     30_000, "Settings 诊断刷新");
-  await diagnosticDialog.getByLabel(english ? "Close" : "关闭", { exact: true }).click();
+  await page.getByTestId("settings-detail-back").click();
+  await page.getByTestId("settings-home").waitFor({ state: "visible", timeout: 10_000 });
 
+  const placeholders = english
+    ? [
+      "Notifications",
+      "Waiting for system push channel",
+      "Voice & dictation",
+      "Waiting for app-server voice stream protocol",
+      "Schedules",
+      "Waiting for app-server scheduling API",
+    ]
+    : [
+      "通知",
+      "等待系统推送通道",
+      "语音与听写",
+      "等待 app-server 语音流协议",
+      "计划任务",
+      "等待 app-server 调度 API",
+    ];
+  for (const placeholder of placeholders) {
+    assert.equal(await page.getByText(placeholder, { exact: true }).count(), 0,
+      `Settings should hide the unfinished placeholder: ${placeholder}`);
+  }
+  await page.screenshot({ path: context.pathInArtifacts("settings-main.png"), animations: "disabled" });
+  await page.getByTestId("settings-manage-connections").click();
+  const connectionsScreen = page.getByTestId("settings-connections-screen").and(page.locator(":visible"));
+  await connectionsScreen.waitFor({ state: "visible", timeout: 10_000 });
+  await page.getByTestId("settings-connections-title").waitFor({ state: "visible", timeout: 10_000 });
+  assert.equal(new URL(page.url()).pathname, "/settings-connections");
+  await page.getByTestId("settings-host-local").waitFor({ state: "visible", timeout: 10_000 });
+  await page.screenshot({ path: context.pathInArtifacts("settings-connections.png"), animations: "disabled" });
   await page.getByTestId("settings-host-local").click();
   await page.getByTestId("host-details-route").waitFor({ state: "visible", timeout: 30_000 });
   await page.getByText("已连接", { exact: true }).waitFor({ state: "visible", timeout: 30_000 });
@@ -117,6 +156,12 @@ await runE2E(import.meta.url, {
     workspaceOpenRequests: rpcRequests.filter(request => request.method === "runtime.workspaces.open"),
     statusApiRequests: apiRequests.filter(request => request.path === "/api/servers/status"),
     diagnostics,
+  });
+  await context.writeArtifactJson("mobile-settings-screenshot-policy.json", {
+    reason: "Retain the Settings home and full-screen connection page for review.",
+    evidence: ["settings-main.png", "settings-connections.png"],
+    runtime: "current-source Expo Web export served by this run's isolated Gateway in Chromium",
+    credentialsIncluded: false,
   });
   assert.deepEqual(diagnostics, []);
   return {

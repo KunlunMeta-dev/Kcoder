@@ -1,0 +1,5 @@
+{"type":"session_meta","payload":{"id":"44444444-4444-4444-8444-444444444444","timestamp":"2026-10-18T00:00:00Z","cwd":"/synthetic/project","originator":"codex_cli_rs","cli_version":"0.104.0","source":"cli","model_provider":"synthetic-provider","base_instructions":null}}
+{"type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"Review the report without modifying it."}]}}
+{"type":"response_item","payload":{"type":"function_call","call_id":"read-1","name":"read_file","arguments":"{\"path\":\"report.txt\"}"}}
+{"type":"response_item","payload":{"type":"function_call_output","call_id":"read-1","output":"Synthetic archived report."}}
+{"type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"The archived report is available for review."}]}}

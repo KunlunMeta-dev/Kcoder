@@ -87,11 +87,19 @@ def prepare(prefix, source_root):
     prefix = trusted_directory(prefix)
     for directory in [prefix / "lib", prefix / "bin"]:
         trusted_directory(directory)
-    modules = ["studio_account_files.py", "studio_accounts.py", "studio_account_runtime.py", "studio_account_sessions.py", "studio_account_knowledge.py"]
+    modules = ["studio_account_files.py", "studio_accounts.py", "studio_account_runtime.py", "studio_account_sessions.py", "studio_account_knowledge.py",
+               "studio_organization.py", "studio_organization_directory.py", "studio_organization_channel.py",
+               "studio_organization_execution.py", "studio_organization_budget.py", "studio_organization_workspace.py",
+               "studio_organization_publications.py",
+               "studio_organization_publication_directory.py",
+               "studio_organization_oidc.py", "studio_organization_oidc_provider.py", "studio_organization_oidc_logout.py", "studio_organization_oidc_resume.py"]
     for name in modules:
         write_root_file(prefix / "lib" / name, (source_root / "lib" / name).read_bytes(), 0o600)
     for name in ["studio-account.py", "studio-account-entry.py"]:
         write_root_file(prefix / "bin" / name, (source_root / "installers" / name).read_bytes(), 0o700)
+    trusted_directory(prefix / "oidc")
+    for name in ["requirements.in", "requirements.lock", "dependencies.json", "README.md"]:
+        write_root_file(prefix / "oidc" / name, (source_root / "oidc" / name).read_bytes(), 0o600)
     return {"prepared": str(prefix), "administratorCommand": shlex.join(["/usr/bin/python3", "-I", str(prefix / "bin/studio-account.py")])}
 
 

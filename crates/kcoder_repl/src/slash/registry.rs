@@ -7,15 +7,15 @@ use super::{
     ContextCommand, CopyCommand, CuratorCommand, DebugCommand, DenyCommand, DiffCommand,
     ExportCommand, GoalCommand, GoalProCommand, HelpCommand, HistoryCommand, HooksCommand,
     ImportCommand, InitCommand, JumpCommand, KeysCommand, LearnCommand, LunaCommand, McpCommand,
-    MemoriesCommand, MentionCommand, MoaCommand, MoaPlanCommand, ModelCommand, NewCommand,
-    OcrCommand, OrchestrateCommand, OrchestrateWorkCommand, OutlineCommand, PermissionCommand,
-    PlanCommand, PlanStatusCommand, PluginsCommand, PsCommand, QueueCommand, QuitCommand,
-    RawCommand, RememberCommand, RenameCommand, ResumeCommand, ReviewCommand, RewindCommand,
-    RolloutCommand, RosterCommand, SessionsCommand, SetCommand, SettingsCommand,
-    SkillBundledSyncCommand, SkillCommand, SkillTelemetryCommand, SkillsCommand, SkillsHubCommand,
-    SpecCommand, StatusCommand, StopCommand, TasksCommand, ThemeCommand, TodosCommand,
-    ToolsCommand, UltGoalCommand, UndoCommand, UnplanCommand, UsageCommand, WikiCommand,
-    WorkflowCommand,
+    MemoriesCommand, MentionCommand, MigrateCommand, MigrationCommand, MoaCommand, MoaPlanCommand,
+    ModelCommand, NewCommand, OcrCommand, OrchestrateCommand, OrchestrateWorkCommand,
+    OutlineCommand, PermissionCommand, PlanCommand, PlanStatusCommand, PluginsCommand, PsCommand,
+    QueueCommand, QuitCommand, RawCommand, RememberCommand, RenameCommand, ResumeCommand,
+    ReviewCommand, RewindCommand, RolloutCommand, RosterCommand, SessionsCommand, SetCommand,
+    SettingsCommand, SkillBundledSyncCommand, SkillCommand, SkillTelemetryCommand, SkillsCommand,
+    SkillsHubCommand, SpecCommand, StatusCommand, StopCommand, TasksCommand, ThemeCommand,
+    TodosCommand, ToolsCommand, UltGoalCommand, UndoCommand, UnplanCommand, UsageCommand,
+    WikiCommand, WorkflowCommand,
 };
 
 /// Result of executing a slash command.
@@ -36,6 +36,10 @@ pub enum SlashResult {
     StartSideQuestion(String),
     /// Start the foreground MoA plan operation.
     StartMoaPlan(String),
+    /// Run a local migration command, without submitting its arguments to a model.
+    StartMigration(Vec<String>),
+    /// Run a local configuration/asset migration or its guided question transport.
+    StartMigrate(Vec<String>),
     /// Exit the REPL.
     Quit,
 }
@@ -125,6 +129,8 @@ impl SlashRegistry {
             .register::<PsCommand>()
             .register::<StopCommand>()
             .register::<WorkflowCommand>()
+            .register::<MigrationCommand>()
+            .register::<MigrateCommand>()
             .register::<WikiCommand>()
             .register::<McpCommand>()
             .register::<PlanCommand>()

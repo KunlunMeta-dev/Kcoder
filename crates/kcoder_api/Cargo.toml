@@ -7,6 +7,9 @@ license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 
+[features]
+token-count-test-hooks = []
+
 [dependencies]
 kcoder_config = { path = "../kcoder_config" }
 kcoder_types = { path = "../kcoder_types" }
@@ -24,6 +27,7 @@ chrono = { workspace = true }
 dirs = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+sha2.workspace = true
 thiserror = { workspace = true }
 futures = { workspace = true }
 tracing = { workspace = true }
@@ -31,5 +35,6 @@ anyhow = { workspace = true }
 genai = { workspace = true }
 
 [dev-dependencies]
+kcoder_config = { path = "../kcoder_config", features = ["provider-test-fixtures"] }
 tokio = { workspace = true }
 tokio-rustls = { version = "0.26", default-features = false, features = ["ring"] }

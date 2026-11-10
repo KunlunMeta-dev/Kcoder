@@ -1,7 +1,9 @@
 use anyhow::{Context, Result};
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64_STANDARD};
 use kcoder_types::{ContentBlock, ImageSource, Message};
+use std::io::Read;
 use std::path::{Path, PathBuf};
+use tokio_util::sync::CancellationToken;
 
 use crate::clipboard_image::ClipboardImage;
 
@@ -47,6 +49,14 @@ impl SubmittedMessage {
     }
 
     pub(crate) fn to_model_message(&self, text: String) -> Result<Message> {
+        self.to_model_message_cancellable(text, &CancellationToken::new())
+    }
+
+    pub(crate) fn to_model_message_cancellable(
+        &self,
+        text: String,
+        cancel: &CancellationToken,
+    ) -> Result<Message> {
         let mut content = Vec::new();
         if !text.is_empty() {
             content.push(ContentBlock::Text { text: text.clone() });
@@ -57,14 +67,41 @@ impl SubmittedMessage {
             .iter()
             .filter(|image| text.contains(&image.placeholder))
         {
-            let bytes = std::fs::read(&image.path)
+            anyhow::ensure!(!cancel.is_cancelled(), "input preparation cancelled");
+            let mut options = std::fs::OpenOptions::new();
+            options.read(true);
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::OpenOptionsExt;
+                options.custom_flags(libc::O_NONBLOCK);
+            }
+            let mut file = options
+                .open(&image.path)
                 .with_context(|| format!("failed to read image {}", image.path.display()))?;
-            if bytes.len() as u64 > MAX_IMAGE_BYTES {
-                anyhow::bail!(
-                    "image {} is larger than {} MB",
-                    image.path.display(),
-                    MAX_IMAGE_BYTES / 1024 / 1024
-                );
+            let metadata = file.metadata()?;
+            anyhow::ensure!(metadata.is_file(), "image is not a regular file");
+            anyhow::ensure!(
+                metadata.len() <= MAX_IMAGE_BYTES,
+                "image {} is larger than {} MB",
+                image.path.display(),
+                MAX_IMAGE_BYTES / 1024 / 1024
+            );
+            let mut bytes = Vec::new();
+            let mut chunk = [0_u8; 64 * 1024];
+            loop {
+                anyhow::ensure!(!cancel.is_cancelled(), "input preparation cancelled");
+                let count = file.read(&mut chunk)?;
+                if count == 0 {
+                    break;
+                }
+                if bytes.len().saturating_add(count) as u64 > MAX_IMAGE_BYTES {
+                    anyhow::bail!(
+                        "image {} is larger than {} MB",
+                        image.path.display(),
+                        MAX_IMAGE_BYTES / 1024 / 1024
+                    );
+                }
+                bytes.extend_from_slice(&chunk[..count]);
             }
             content.push(ContentBlock::Image {
                 source: ImageSource::base64(

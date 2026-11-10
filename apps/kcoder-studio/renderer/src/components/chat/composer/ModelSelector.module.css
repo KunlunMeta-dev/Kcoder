@@ -48,11 +48,3 @@
     transform: translate3d(0, 0, 0) scaleY(1);
   }
 }
-
-:global(html[data-reduce-motion='true']) {
-  .mainMenu,
-  .submenu,
-  .advancedPanel {
-    animation: none;
-  }
-}

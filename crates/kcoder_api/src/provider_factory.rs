@@ -2,7 +2,7 @@ use crate::providers::{
     AnthropicProvider, GeminiProvider, GenAiProvider, GrokProvider, OpenAiProvider, Provider,
 };
 use anyhow::{Context, Result};
-use kcoder_config::{ApiFormat, DEFAULT_LOCAL_ENDPOINT, Settings, default_provider_endpoint};
+use kcoder_config::{ApiFormat, Settings};
 use std::sync::Arc;
 use tracing::warn;
 
@@ -139,7 +139,7 @@ impl<'a> ProviderFactory<'a> {
         if let Some(provider) = env_provider {
             return Ok(provider);
         }
-        Ok(ProviderKind::from_settings(settings)?.unwrap_or(ProviderKind::Anthropic))
+        ProviderKind::from_settings(settings)?.context("No model Provider is configured")
     }
 
     pub fn build_default(&self, model: &str) -> Result<(ProviderKind, Arc<dyn Provider>)> {
@@ -199,6 +199,13 @@ impl<'a> ProviderFactory<'a> {
             settings.apply_discovered_model(provider_name, model)?;
             return Ok(settings);
         }
+        // A legacy slot that explicitly references the current Provider may
+        // reuse its configured endpoint and protocol.
+        if settings.active_provider.is_none() && settings.provider.as_deref() == Some(provider_name)
+        {
+            settings.model = model.into();
+            return Ok(settings);
+        }
         let kind = ProviderKind::parse(provider_name)
             .with_context(|| format!("unknown provider or profile '{provider_name}'"))?;
         settings.active_provider = None;
@@ -213,6 +220,7 @@ impl<'a> ProviderFactory<'a> {
     }
 
     pub fn build(&self, kind: ProviderKind, model: &str) -> Result<Arc<dyn Provider>> {
+        anyhow::ensure!(!model.trim().is_empty(), "No model is configured");
         kcoder_config::validate_extra_body(&self.settings.provider_extra_body)?;
         self.settings.validate_model_reasoning_policy()?;
         if self
@@ -249,13 +257,18 @@ impl<'a> ProviderFactory<'a> {
                 _ => {}
             }
         }
+        // Transport constructors have protocol-specific URLs. Product routing
+        // requires an explicit endpoint before constructing any model client.
+        let endpoint = self.endpoint_override(kind).with_context(|| {
+            format!("No endpoint is configured for Provider '{}'", kind.as_str())
+        })?;
         let provider = match kind {
-            ProviderKind::Anthropic => self.build_anthropic(),
-            ProviderKind::Openai => self.build_openai(model),
-            ProviderKind::Local => self.build_local(),
-            ProviderKind::Gemini => self.build_gemini(model),
-            ProviderKind::Grok => self.build_grok(model),
-            ProviderKind::Kunlunmeta => self.build_kunlunmeta(),
+            ProviderKind::Anthropic => self.build_anthropic(endpoint),
+            ProviderKind::Openai => self.build_openai(model, endpoint),
+            ProviderKind::Local => self.build_local(endpoint),
+            ProviderKind::Gemini => self.build_gemini(model, endpoint),
+            ProviderKind::Grok => self.build_grok(model, endpoint),
+            ProviderKind::Kunlunmeta => self.build_kunlunmeta(endpoint),
         }?;
         self.with_response_limits(provider, model)
     }
@@ -271,19 +284,19 @@ impl<'a> ProviderFactory<'a> {
         }))
     }
 
-    pub fn local_base_url(&self) -> String {
+    pub fn local_base_url(&self) -> Option<String> {
         self.local_endpoint_resolution(
             std::env::var("VLLM_BASE_URL").ok(),
             std::env::var("SGLANG_BASE_URL").ok(),
         )
-        .0
+        .map(|(endpoint, _)| endpoint)
     }
 
     fn local_endpoint_resolution(
         &self,
         vllm: Option<String>,
         sglang: Option<String>,
-    ) -> (String, &'static str) {
+    ) -> Option<(String, &'static str)> {
         endpoint_candidate([
             (self.overrides.local_base_url.clone(), "cli_environment"),
             (vllm, "environment"),
@@ -297,7 +310,6 @@ impl<'a> ProviderFactory<'a> {
                 "configuration",
             ),
         ])
-        .unwrap_or_else(|| (DEFAULT_LOCAL_ENDPOINT.to_owned(), "default"))
     }
 
     pub fn local_api_key(&self) -> Option<String> {
@@ -311,7 +323,7 @@ impl<'a> ProviderFactory<'a> {
         )
     }
 
-    fn build_anthropic(&self) -> Result<Arc<dyn Provider>> {
+    fn build_anthropic(&self, endpoint: String) -> Result<Arc<dyn Provider>> {
         let api_key = self
             .resolve_api_key(ProviderKind::Anthropic, self.overrides.api_key.clone())
             .ok_or_else(|| {
@@ -321,16 +333,14 @@ impl<'a> ProviderFactory<'a> {
                     "--api-key",
                 )
             })?;
-        let mut provider =
-            AnthropicProvider::new(api_key).context("failed to create Anthropic provider")?;
-        if let Some(url) = self.endpoint_override(ProviderKind::Anthropic) {
-            provider = provider.with_base_url(url);
-        }
+        let mut provider = AnthropicProvider::new(api_key)
+            .context("failed to create Anthropic provider")?
+            .with_base_url(endpoint);
         provider = self.configure_anthropic(provider)?;
         Ok(Arc::new(provider))
     }
 
-    fn build_openai(&self, model: &str) -> Result<Arc<dyn Provider>> {
+    fn build_openai(&self, model: &str, endpoint: String) -> Result<Arc<dyn Provider>> {
         let api_key = self
             .resolve_api_key(ProviderKind::Openai, self.overrides.openai_api_key.clone())
             .ok_or_else(|| {
@@ -344,26 +354,21 @@ impl<'a> ProviderFactory<'a> {
             .settings
             .api_format
             .unwrap_or(ApiFormat::OpenaiChatCompletions);
-        let endpoint = self.endpoint_override(ProviderKind::Openai);
         let minimax = api_format == ApiFormat::OpenaiChatCompletions
             && match self.settings.provider_chat_protocol {
                 kcoder_types::ChatProtocol::Minimax => true,
                 kcoder_types::ChatProtocol::Standard => false,
-                kcoder_types::ChatProtocol::Auto => {
-                    endpoint.as_deref().is_some_and(is_minimax_endpoint)
-                }
+                kcoder_types::ChatProtocol::Auto => is_minimax_endpoint(&endpoint),
             };
         if api_format == ApiFormat::OpenaiChatCompletions && !minimax {
-            return self.build_genai_openai(api_key);
+            return self.build_genai_openai(api_key, endpoint);
         }
         let mut provider = OpenAiProvider::new(api_key, model)
             .context("failed to create OpenAI provider")?
-            .with_api_format(api_format);
+            .with_api_format(api_format)
+            .with_base_url(endpoint);
         if minimax {
             provider = provider.with_minimax_protocol();
-        }
-        if let Some(url) = self.endpoint_override(ProviderKind::Openai) {
-            provider = provider.with_base_url(url);
         }
         if let Some(user_agent) = first_non_empty([
             self.overrides.openai_user_agent.clone(),
@@ -426,12 +431,10 @@ impl<'a> ProviderFactory<'a> {
         Ok(Arc::new(provider))
     }
 
-    fn build_genai_openai(&self, api_key: String) -> Result<Arc<dyn Provider>> {
-        let mut provider =
-            GenAiProvider::new(api_key).context("failed to create genai OpenAI provider")?;
-        if let Some(url) = self.endpoint_override(ProviderKind::Openai) {
-            provider = provider.with_base_url(url);
-        }
+    fn build_genai_openai(&self, api_key: String, endpoint: String) -> Result<Arc<dyn Provider>> {
+        let mut provider = GenAiProvider::new(api_key)
+            .context("failed to create genai OpenAI provider")?
+            .with_base_url(endpoint);
         if let Some(user_agent) = first_non_empty([
             self.overrides.openai_user_agent.clone(),
             self.settings.openai_user_agent.clone(),
@@ -457,10 +460,10 @@ impl<'a> ProviderFactory<'a> {
         Ok(Arc::new(provider))
     }
 
-    fn build_local(&self) -> Result<Arc<dyn Provider>> {
+    fn build_local(&self, endpoint: String) -> Result<Arc<dyn Provider>> {
         let mut provider = OpenAiProvider::local_compatible()
             .context("failed to create local OpenAI-compatible provider")?
-            .with_base_url(self.local_base_url())
+            .with_base_url(endpoint)
             .with_optional_api_key(self.local_api_key())
             .with_stream_options(false)
             .with_provider_name("local");
@@ -495,7 +498,7 @@ impl<'a> ProviderFactory<'a> {
         Ok(Arc::new(provider))
     }
 
-    fn build_gemini(&self, model: &str) -> Result<Arc<dyn Provider>> {
+    fn build_gemini(&self, model: &str, endpoint: String) -> Result<Arc<dyn Provider>> {
         let api_key = self
             .resolve_api_key(ProviderKind::Gemini, self.overrides.gemini_api_key.clone())
             .ok_or_else(|| {
@@ -505,11 +508,9 @@ impl<'a> ProviderFactory<'a> {
                     "--gemini-api-key",
                 )
             })?;
-        let mut provider =
-            GeminiProvider::new(api_key, model).context("failed to create Gemini provider")?;
-        if let Some(url) = self.endpoint_override(ProviderKind::Gemini) {
-            provider = provider.with_base_url(url);
-        }
+        let mut provider = GeminiProvider::new(api_key, model)
+            .context("failed to create Gemini provider")?
+            .with_base_url(endpoint);
         provider = provider.with_extra_body(self.settings.provider_extra_body.clone());
         provider = provider.with_no_proxy(self.settings.provider_no_proxy)?;
         provider = provider.with_proxy_url(self.settings.provider_proxy_url.clone())?;
@@ -519,7 +520,7 @@ impl<'a> ProviderFactory<'a> {
         Ok(Arc::new(provider))
     }
 
-    fn build_grok(&self, model: &str) -> Result<Arc<dyn Provider>> {
+    fn build_grok(&self, model: &str, endpoint: String) -> Result<Arc<dyn Provider>> {
         let api_key = self
             .resolve_api_key(ProviderKind::Grok, self.overrides.grok_api_key.clone())
             .ok_or_else(|| {
@@ -530,9 +531,7 @@ impl<'a> ProviderFactory<'a> {
                 .api_format
                 .unwrap_or(ApiFormat::OpenaiChatCompletions),
         );
-        if let Some(url) = self.endpoint_override(ProviderKind::Grok) {
-            provider = provider.with_base_url(url);
-        }
+        provider = provider.with_base_url(endpoint);
         provider = provider.with_extra_body(self.settings.provider_extra_body.clone());
         provider = provider.with_no_proxy(self.settings.provider_no_proxy)?;
         provider = provider.with_proxy_url(self.settings.provider_proxy_url.clone())?;
@@ -546,7 +545,7 @@ impl<'a> ProviderFactory<'a> {
         Ok(Arc::new(provider))
     }
 
-    fn build_kunlunmeta(&self) -> Result<Arc<dyn Provider>> {
+    fn build_kunlunmeta(&self, endpoint: String) -> Result<Arc<dyn Provider>> {
         let api_key = self
             .resolve_api_key(ProviderKind::Kunlunmeta, self.overrides.api_key.clone())
             .ok_or_else(|| {
@@ -556,17 +555,9 @@ impl<'a> ProviderFactory<'a> {
                     "--api-key",
                 )
             })?;
-        let base_url = self
-            .endpoint_override(ProviderKind::Kunlunmeta)
-        .or_else(|| default_provider_endpoint("kunlunmeta"))
-        .ok_or_else(|| {
-            anyhow::anyhow!(
-                "KunlunMeta deployment endpoint is not configured; add providers.kunlunmeta.endpoint to settings.json"
-            )
-        })?;
         let provider = AnthropicProvider::new(api_key)
             .context("failed to create KunlunMeta provider")?
-            .with_base_url(base_url)
+            .with_base_url(endpoint)
             .with_provider_name("kunlunmeta");
         Ok(Arc::new(self.configure_anthropic(provider)?))
     }
@@ -644,10 +635,10 @@ impl<'a> ProviderFactory<'a> {
                     "configuration",
                 ),
             ]),
-            ProviderKind::Local => Some(self.local_endpoint_resolution(
+            ProviderKind::Local => self.local_endpoint_resolution(
                 std::env::var("VLLM_BASE_URL").ok(),
                 std::env::var("SGLANG_BASE_URL").ok(),
-            )),
+            ),
         }
     }
 
@@ -922,10 +913,7 @@ mod tests {
             ProviderFactory::resolve_kind(None, None, &settings).unwrap(),
             ProviderKind::Grok
         );
-        assert_eq!(
-            ProviderFactory::resolve_kind(None, None, &Settings::default()).unwrap(),
-            ProviderKind::Kunlunmeta
-        );
+        assert!(ProviderFactory::resolve_kind(None, None, &Settings::default()).is_err());
     }
 
     #[test]
@@ -941,7 +929,24 @@ mod tests {
             ..ProviderBuildOverrides::default()
         });
 
-        assert_eq!(factory.local_base_url(), "https://cli.example/v1");
+        assert_eq!(
+            factory.local_base_url().as_deref(),
+            Some("https://cli.example/v1")
+        );
+    }
+
+    #[test]
+    fn product_routing_requires_an_explicit_endpoint_and_model() {
+        let settings = Settings::default();
+        let factory = ProviderFactory::new(&settings);
+        assert!(factory.local_endpoint_resolution(None, None).is_none());
+        let error = factory
+            .build(ProviderKind::Openai, "explicit-model")
+            .err()
+            .unwrap();
+        assert!(error.to_string().contains("No endpoint is configured"));
+        let error = factory.build(ProviderKind::Openai, "").err().unwrap();
+        assert!(error.to_string().contains("No model is configured"));
     }
 
     #[test]
@@ -1060,18 +1065,18 @@ mod tests {
         });
         assert_eq!(
             factory.local_endpoint_resolution(Some(" http://vllm.example/v1 ".into()), None),
-            ("http://vllm.example/v1".into(), "environment")
+            Some(("http://vllm.example/v1".into(), "environment"))
         );
         assert_eq!(
             factory.local_endpoint_resolution(
                 Some(" ".into()),
                 Some("http://sglang.example/v1".into())
             ),
-            ("http://sglang.example/v1".into(), "environment")
+            Some(("http://sglang.example/v1".into(), "environment"))
         );
         assert_eq!(
             factory.local_endpoint_resolution(None, None),
-            ("http://cli.example/v1".into(), "cli_environment")
+            Some(("http://cli.example/v1".into(), "cli_environment"))
         );
         let explicit = ProviderFactory::new(&settings).with_overrides(ProviderBuildOverrides {
             local_base_url: Some("http://explicit.example/v1".into()),
@@ -1079,7 +1084,7 @@ mod tests {
         });
         assert_eq!(
             explicit.local_endpoint_resolution(Some("http://env.example/v1".into()), None),
-            ("http://explicit.example/v1".into(), "cli_environment")
+            Some(("http://explicit.example/v1".into(), "cli_environment"))
         );
     }
 
@@ -1114,32 +1119,33 @@ mod tests {
     }
 
     #[test]
-    fn kunlunmeta_provider_uses_its_default_profile() {
-        // KUNLUNMETA_BASE_URL overrides the default endpoint in build_kunlunmeta.
-        // This test asserts the default profile, so isolate the variable and restore it afterward.
-        let saved_base_url = std::env::var("KUNLUNMETA_BASE_URL").ok();
-        unsafe {
-            std::env::remove_var("KUNLUNMETA_BASE_URL");
-        }
-        let settings = Settings {
-            active_provider: None,
-            api_format: Some(ApiFormat::AnthropicMessages),
-            provider_no_proxy: true,
-            kunlunmeta_api_key: Some("test-key".to_string()),
-            ..Settings::default()
-        };
+    fn kunlunmeta_provider_requires_an_explicit_deployment() {
+        let clean = Settings::default();
+        assert!(clean.providers.is_empty());
+        assert!(clean.model.is_empty());
+        assert!(
+            ProviderFactory::new(&clean)
+                .build_profile("kunlunmeta")
+                .is_err()
+        );
+
+        let mut settings = clean;
+        settings.providers.insert(
+            "kunlunmeta".into(),
+            kcoder_config::default_active_provider_config(),
+        );
+        settings.apply_provider(Some("kunlunmeta")).unwrap();
+        settings.kunlunmeta_api_key = Some("test-key".into());
         let provider = ProviderFactory::new(&settings)
+            .with_overrides(ProviderBuildOverrides {
+                base_url: Some("http://127.0.0.1:8000".into()),
+                ..ProviderBuildOverrides::default()
+            })
             .build(ProviderKind::Kunlunmeta, "MiniMax-M3")
             .unwrap();
-
         assert_eq!(provider.name(), "kunlunmeta");
         assert_eq!(provider.endpoint(), Some("http://127.0.0.1:8000"));
         assert_eq!(provider.api_key_configured(), Some(true));
-        if let Some(saved_base_url) = saved_base_url {
-            unsafe {
-                std::env::set_var("KUNLUNMETA_BASE_URL", saved_base_url);
-            }
-        }
     }
 
     #[test]
@@ -1211,6 +1217,7 @@ mod tests {
         let settings = Settings {
             api_format: Some(ApiFormat::OpenaiResponses),
             grok_api_key: Some("test-key".to_string()),
+            grok_base_url: Some("https://fixture.invalid/v1".into()),
             ..Settings::default()
         };
 

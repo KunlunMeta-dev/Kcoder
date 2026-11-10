@@ -10,25 +10,23 @@ describe('browser URL helpers', () => {
     expect(normalizeBrowserUrl('ftp://example.com')).toBeNull()
   })
 
-  test('allows application assets only from the current Tauri origin', () => {
+  test('rejects retired application schemes even when the origin matches', () => {
     expect(
       normalizeBrowserUrl(
-        'tauri://localhost/extension-page.html?sessionId=123e4567-e89b-42d3-a456-426614174000',
-        'tauri://localhost/'
+        'retired-app://localhost/extension-page.html?sessionId=123e4567-e89b-42d3-a456-426614174000',
+        'retired-app://localhost/'
       )
-    ).toBe('tauri://localhost/extension-page.html?sessionId=123e4567-e89b-42d3-a456-426614174000')
+    ).toBeNull()
     expect(
-      normalizeBrowserUrl('tauri://other-host/extension-page.html', 'tauri://localhost/')
+      normalizeBrowserUrl('retired-app://other-host/extension-page.html', 'retired-app://localhost/')
     ).toBe(null)
     expect(
-      normalizeBrowserUrl('custom://localhost/extension-page.html', 'tauri://localhost/')
+      normalizeBrowserUrl('custom://localhost/extension-page.html', 'retired-app://localhost/')
     ).toBe(null)
   })
 
-  test('allows local asset protocol URLs for browser previews', () => {
-    expect(normalizeBrowserUrl('asset://localhost/Users/me/workspace/chart.html')).toBe(
-      'asset://localhost/Users/me/workspace/chart.html'
-    )
+  test('rejects retired native asset protocol URLs', () => {
+    expect(normalizeBrowserUrl('asset://localhost/Users/me/workspace/chart.html')).toBeNull()
     expect(normalizeBrowserUrl('asset://other-host/Users/me/workspace/chart.html')).toBeNull()
   })
 })

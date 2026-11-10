@@ -1,0 +1,32 @@
+[package]
+name = "kcoder_application_host_runtime"
+description = "Owned application host processes and private parent boundaries."
+version = { workspace = true }
+edition = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+rust-version = { workspace = true }
+publish = false
+
+[lib]
+path = "../../src/internal/application_host_runtime/lib.rs"
+test = false
+
+[dependencies]
+uuid = { workspace = true }
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+futures = { workspace = true }
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+serde_json = { workspace = true }
+kcoder_app_protocol = { path = "../../../kcoder_app_protocol" }
+kcoder_app_rpc_codec = { path = "../../../kcoder_app_protocol/internal/app_rpc_codec" }
+kcoder_host_transport = { path = "../host_transport" }
+kcoder_native_scope = { path = "../native_scope" }
+kcoder_native_service_runtime = { path = "../native_service_runtime" }
+kcoder_types = { path = "../../../kcoder_types" }
+
+[target."cfg(windows)".dependencies]
+ring = "0.17"

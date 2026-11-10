@@ -349,13 +349,14 @@ fn indexed_transcript_many_pages_match_legacy_without_source_reads() {
     assert_eq!(unique.len(), indexed.len());
     // One huge input is an explicit preview. Many individually bounded blocks
     // still exercise response-budget overflow and its compatible cursor.
-    for kib in [1100usize, 1600] {
+    const TRANSCRIPT_PAGE_BUDGET: usize = 1_750_000;
+    for kib in [1100usize, 1750] {
         let mut file = std::fs::OpenOptions::new()
             .append(true)
             .open(&source)
             .unwrap();
         let payload_bytes = if kib == 1100 { kib * 1024 } else { 58 * 1024 };
-        let block_count = if kib == 1100 { 1 } else { 28 };
+        let block_count = if kib == 1100 { 1 } else { 30 };
         let ids: Vec<_> = (0..block_count)
             .map(|index| if index == 0 { "large-call".to_owned() } else { format!("large-call-{index}") })
             .collect();
@@ -371,7 +372,7 @@ fn indexed_transcript_many_pages_match_legacy_without_source_reads() {
             json!({"role":"user","content":outputs}),
             json!({"role":"assistant","content":[{"type":"text","text":"large fixture complete"}]}),
         ];
-        if kib == 1600 {
+        if kib == 1750 {
             records.extend([
                 json!({"role":"user","content":[{"type":"text","text":"after oversized row"}]}),
                 json!({"role":"assistant","content":[{"type":"text","text":"small tail"}]}),
@@ -412,14 +413,14 @@ fn indexed_transcript_many_pages_match_legacy_without_source_reads() {
                 "over-budget row anywhere in history must use the compatible cursor"
             );
             let scope = serde_json::to_string(&(
-                "final-transcript-v1",
+                "final-transcript-v3",
                 oversized["result"]["thread"]["cwd"].as_str().unwrap(),
                 &thread,
             ))
             .unwrap();
             let index_root = fixture_transcript_index_root(temp.path()).unwrap();
             let visible_scope = serde_json::to_string(&(
-                "final-transcript-v7",
+                "final-transcript-v12",
                 oversized["result"]["thread"]["cwd"].as_str().unwrap(),
                 &thread,
             ))
@@ -440,7 +441,7 @@ fn indexed_transcript_many_pages_match_legacy_without_source_reads() {
                 .unwrap()
                 .unwrap();
                 store
-                    .declined_generation(receipt.proof(), 1_500_000 - 4096)
+                    .declined_generation(receipt.proof(), TRANSCRIPT_PAGE_BUDGET - 4096)
                     .unwrap()
             };
             let generation = declined().expect("verified row limit should be remembered");
@@ -520,7 +521,7 @@ fn indexed_transcript_many_pages_match_legacy_without_source_reads() {
             assert_eq!(tool["tool_input_original_bytes"], payload_bytes + 14);
             assert!(tool["tool_input"]["_preview"].as_str().unwrap().starts_with("{\"payload\":\"xxx"));
         } else {
-            assert!(projected_bytes > 1_500_000);
+            assert!(projected_bytes > TRANSCRIPT_PAGE_BUDGET);
             let payload = tool["tool_input"]["payload"].as_str().unwrap();
             assert_eq!(payload.len(), payload_bytes);
             assert!(payload.bytes().all(|byte| byte == b'x'));

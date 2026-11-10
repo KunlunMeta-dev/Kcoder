@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-vi.mock('@/tauri/localExecutor', () => ({
+vi.mock('@/host/localExecutor', () => ({
   requestLocalExecutor: vi.fn(async () => ({})),
 }))
 
-import { requestLocalExecutor } from '@/tauri/localExecutor'
+import { requestLocalExecutor } from '@/host/localExecutor'
 import { cleanStorage, disableDebugLog, readStorageReport } from '@/kcoder/storageDiagnostics'
 
 const request = vi.mocked(requestLocalExecutor)

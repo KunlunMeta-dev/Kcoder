@@ -6,219 +6,92 @@ use super::*;
 #[path = "runtime_wiring_tests.rs"]
 mod instruction_startup_tests;
 
-impl Provider for SignedOutProvider {
-    fn name(&self) -> &'static str {
-        self.name
+fn owned_command_program() -> Result<Option<PathBuf>> {
+    #[cfg(target_os = "linux")]
+    if kcoder_process_supervisor::linux_stdio::command_owner_available() {
+        return Ok(Some(std::env::current_exe()?));
     }
+    Ok(None)
+}
 
-    fn api_key_configured(&self) -> Option<bool> {
-        Some(false)
-    }
-
-    fn stream_messages(&self, _request: MessagesRequest) -> Result<ProviderStream, ApiErrorKind> {
-        Err(ApiErrorKind::Api {
-            error_type: "missing_api_key".to_string(),
-            message: self.error_message.clone(),
+fn migration_source_launch(
+    command: Option<&Commands>,
+    account_root: &std::path::Path,
+    retention: Option<&app_server::RetentionLaunchConfiguration>,
+) -> Result<Option<app_server::RetentionLaunchConfiguration>> {
+    let requested = matches!(
+        command,
+        Some(Commands::AppServer {
+            migration_source_parent_local_v1: true,
+            ..
         })
+    );
+    if !requested {
+        return Ok(None);
     }
+    ensure!(
+        retention.is_none(),
+        "migration source-only parent cannot replace an existing private parent"
+    );
+    Ok(Some(app_server::RetentionLaunchConfiguration {
+        parent: kcoder_app_protocol::RetentionParentLaunchV1::LocalOs,
+        account_root: account_root.into(),
+        optional: false,
+        revocation_verifier: None,
+    }))
 }
 
-#[async_trait::async_trait]
-impl PermissionPrompt for HeadlessPermissionPrompt {
-    async fn ask(
-        &self,
-        tool_name: &str,
-        _description: String,
-        _input: &serde_json::Value,
-    ) -> PermissionResponse {
-        match self.mode {
-            PermissionMode::Bypass
-            | PermissionMode::Yolo
-            | PermissionMode::Auto
-            | PermissionMode::AcceptEdits => PermissionResponse::AllowOnce,
-            PermissionMode::Ask | PermissionMode::DontAsk => {
-                eprintln!(
-                    "\n[Permission required in headless mode: {} — denied]",
-                    tool_name
-                );
-                PermissionResponse::DenyOnce
-            }
-        }
-    }
-}
+pub(crate) use kcoder_plugin_rpc::runtime_snapshot::{
+    runtime_plugin_snapshot, runtime_plugin_snapshot_with_profile,
+};
 
-#[async_trait]
-impl UserQuestioner for HeadlessUserQuestioner {
-    async fn ask(&self, request: UserQuestionRequest) -> Result<UserQuestionResponse, String> {
-        let mut answers = std::collections::HashMap::new();
-        for question in request.questions {
-            eprintln!("\n[Question] {}", question.question);
-            for (i, opt) in question.options.iter().enumerate() {
-                eprintln!("  {}. {} - {}", i + 1, opt.label, opt.description);
-            }
-            eprint!(
-                "Enter choice number{}: ",
-                if question.multi_select {
-                    "s (comma-separated)"
-                } else {
-                    ""
-                }
-            );
-            let _ = std::io::stderr().flush();
-            let mut line = String::new();
-            match std::io::stdin().read_line(&mut line) {
-                Ok(_) => {
-                    let indices: Vec<usize> = line
-                        .split(',')
-                        .filter_map(|s| s.trim().parse::<usize>().ok())
-                        .filter(|&n| n > 0 && n <= question.options.len())
-                        .collect();
-                    let selected: Vec<String> = indices
-                        .iter()
-                        .map(|&n| question.options[n - 1].label.clone())
-                        .collect();
-                    if selected.is_empty() {
-                        return Err("no valid option selected".to_string());
-                    }
-                    answers.insert(question.question, selected.join(", "));
-                }
-                Err(e) => return Err(format!("failed to read answer: {}", e)),
-            }
-        }
-        Ok(UserQuestionResponse {
-            questions: Vec::new(),
-            answers,
-            annotations: None,
-        })
-    }
-}
-
-impl ProviderKind {
-    pub(crate) fn from_env() -> Option<ApiProviderKind> {
-        ApiProviderKind::from_env()
-    }
-
-    #[cfg(test)]
-    pub(crate) fn parse_settings_value(value: &str) -> Option<ApiProviderKind> {
-        ApiProviderKind::parse(value)
-    }
-
-    pub(crate) fn from_settings(settings: &Settings) -> Result<Option<ApiProviderKind>> {
-        ApiProviderKind::from_settings(settings)
-    }
-}
-
-pub(crate) fn builtin_tools_for_settings(cli: &Cli, settings: &Settings) -> ToolRegistry {
-    let tools = match cli.tool_profile.effective(settings.tools.profile) {
-        kcoder_config::ToolProfile::Full => default_registry(),
-        kcoder_config::ToolProfile::Core => core_registry(),
-        kcoder_config::ToolProfile::Nano => nano_registry(),
-        kcoder_config::ToolProfile::None => return ToolRegistry::new(),
-    };
-    let tools = tools.register(ConfigTool);
-    let tools = if settings.knowledge.can_retrieve() {
-        tools.register(kcoder_tools::wiki::WikiTool)
-    } else {
-        tools
-    };
-    if settings.knowledge.can_organize() {
-        tools.register(kcoder_tools::wiki_manage::WikiManageTool)
-    } else {
-        tools
-    }
-}
-
-pub(crate) fn runtime_plugin_snapshot(
-    cwd: &std::path::Path,
-    folder_trusted: bool,
-    settings: &Settings,
-) -> Result<kcoder_plugins::EffectivePluginSnapshot> {
-    if settings.training_mode {
-        return Ok(kcoder_plugins::EffectivePluginSnapshot::default());
-    }
-    #[cfg(windows)]
-    if kcoder_plugins::computer_use_policy_allows(&settings.plugins)
-        && !kcoder_plugins::computer_use_requires_explicit_enable(
-            &settings.plugins,
-            &settings.mcp_servers,
-        )
-        && std::env::current_exe()
-            .ok()
-            .and_then(|exe| {
-                exe.parent()?
-                    .parent()
-                    .map(|root| root.join("computer-use/runtime-manifest.json"))
-            })
-            .is_some_and(|path| path.is_file())
-    {
-        let id = kcoder_plugins::PluginId::new("kcoder-windows-computer-use", "kcoder-bundled")?;
-        if kcoder_plugins::PluginStore::open_default()?
-            .read(&id)?
-            .is_none_or(|record| kcoder_plugins::computer_use_guidance_needs_update(&record.source))
-        {
-            let manager =
-                kcoder_plugins::PluginManager::open_default_for_cwd_with_effective_settings(
-                    cwd,
-                    settings.plugins.clone(),
-                )?;
-            manager.install_from_marketplace(
-                cwd,
-                false,
-                "kcoder-bundled",
-                "kcoder-windows-computer-use",
-            )?;
-        }
-    }
-    let credentials_path = kcoder_config::ConfigPaths::discover(cwd)?.credentials;
-    runtime_plugin_snapshot_with_profile(cwd, folder_trusted, settings, &credentials_path)
-}
-
-pub(crate) fn runtime_plugin_snapshot_with_profile(
-    cwd: &std::path::Path,
-    folder_trusted: bool,
-    settings: &Settings,
-    credentials_path: &std::path::Path,
-) -> Result<kcoder_plugins::EffectivePluginSnapshot> {
-    if settings.training_mode {
-        return Ok(kcoder_plugins::EffectivePluginSnapshot::default());
-    }
-    let manager = kcoder_plugins::PluginManager::open_default_for_cwd_with_effective_settings(
-        cwd,
-        settings.plugins.clone(),
-    )?;
-    let values = crate::plugin_credentials::by_operation(
-        credentials_path,
-        settings.credential_store,
-        &manager,
-    )?;
-    manager.effective_snapshot_with_credentials(cwd, folder_trusted, &values)
-}
-
-pub(crate) fn apply_training_skill_isolation(settings: &Settings, registry: &mut SkillRegistry) {
-    if settings.training_mode {
-        registry.remove_named("kcoder-settings");
-    }
-}
-
-pub(crate) fn optional_runtime_name(value: Option<&str>) -> Option<String> {
-    let value = value?.trim();
-    if value.is_empty()
-        || value.eq_ignore_ascii_case("current")
-        || value.eq_ignore_ascii_case("default")
-        || value.eq_ignore_ascii_case("none")
-    {
-        None
-    } else {
-        Some(value.to_string())
-    }
-}
-
-#[tokio::main]
-pub(crate) async fn run(
-    bootstrap_outcome: Option<internal_bootstrap::BootstrapOutcome>,
+pub(crate) fn run(
     inherited_parent: Option<kcoder_app_protocol::RetentionParentLaunchV1>,
+    inherited_verifier: Option<kcoder_app_protocol::PrivateRetentionVerifierV1>,
+    inherited_office: Option<std::ffi::OsString>,
+    inherited_connectivity: Option<std::ffi::OsString>,
+    runners: CliRunners,
+) -> Result<()> {
+    #[cfg(target_os = "linux")]
+    if inherited_connectivity.is_some()
+        && inherited_parent.is_some()
+        && inherited_verifier.is_some()
+    {
+        // The former carrier applied this before starting the task process.
+        // Apply it before Tokio creates any threads for the verified launch.
+        ensure!(
+            unsafe { libc::prctl(libc::PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) } == 0,
+            "SERVICE_ACCOUNT_RESTRICTION_UNAVAILABLE"
+        );
+    }
+    // Nested verifier/Engine futures exceed Tokio's default worker stack in
+    // normal app-server execution. Reserve bounded native stack space here;
+    // model/tool authorization and the original runtime shutdown stay intact.
+    tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .thread_stack_size(16 * 1024 * 1024)
+        .build()
+        .context("failed to build the CLI runtime")?
+        .block_on(run_async(
+            inherited_parent,
+            inherited_verifier,
+            inherited_office,
+            inherited_connectivity,
+            runners,
+        ))
+}
+
+async fn run_async(
+    inherited_parent: Option<kcoder_app_protocol::RetentionParentLaunchV1>,
+    inherited_verifier: Option<kcoder_app_protocol::PrivateRetentionVerifierV1>,
+    inherited_office: Option<std::ffi::OsString>,
+    inherited_connectivity: Option<std::ffi::OsString>,
+    runners: CliRunners,
 ) -> Result<()> {
     let cli = Cli::parse();
+    if matches!(cli.command, Some(Commands::Acp)) {
+        bail!("The ACP adapter must run from its isolated stdio entry");
+    }
     let interactive_tui =
         cli.prompt.is_none() && matches!(cli.command, None | Some(Commands::TuiDev { .. }));
     init_tracing(interactive_tui);
@@ -229,26 +102,6 @@ pub(crate) async fn run(
         .or_else(|| std::env::current_dir().ok())
         .unwrap_or_else(|| PathBuf::from("."));
     let cwd = canonicalize_cli_cwd(cwd);
-    if let Some(outcome) = bootstrap_outcome {
-        eprintln!(
-            "Initialized bundled company configuration (settings: {}, credentials: {}, .env: {}).",
-            if outcome.settings_written {
-                "written"
-            } else {
-                "kept"
-            },
-            if outcome.credentials_written {
-                "written"
-            } else {
-                "kept"
-            },
-            if outcome.dotenv_written {
-                "written"
-            } else {
-                "kept"
-            }
-        );
-    }
     let include_bundled_providers =
         std::env::var("KCODER_INCLUDE_BUNDLED_PROFILES").is_ok_and(|value| {
             matches!(
@@ -338,10 +191,16 @@ pub(crate) async fn run(
                 parent,
                 account_root: loaded_settings.paths.config_dir.clone(),
                 optional,
+                revocation_verifier: inherited_verifier,
             })
         }
         _ => None,
     };
+    let migration_launch = migration_source_launch(
+        cli.command.as_ref(),
+        &loaded_settings.paths.config_dir,
+        retention_launch.as_ref(),
+    )?;
     let mut settings = loaded_settings.settings.clone();
     apply_cli_settings_overrides(&mut settings, &cli)?;
     if let Some(path) = cli.credential_env_file.as_deref() {
@@ -352,8 +211,19 @@ pub(crate) async fn run(
     let provider_kind = cli_provider_kind(&cli, ProviderKind::from_env(), &settings)?;
 
     match cli.command.clone() {
+        Some(Commands::Migrate { .. }) => {
+            bail!("Migration commands must run from their isolated startup entry");
+        }
+        Some(Commands::Acp) => unreachable!("ACP handled before runtime wiring"),
         Some(Commands::Doctor) => {
-            return run_doctor(&provider_kind, &cli, &settings, &cwd, &loaded_settings);
+            return run_doctor(
+                diagnostics::print_cli_build_identity,
+                provider_kind,
+                &cli,
+                &settings,
+                &cwd,
+                &loaded_settings,
+            );
         }
         Some(Commands::MoaPlan { .. }) => {}
         Some(Commands::Auth { action }) => {
@@ -372,10 +242,11 @@ pub(crate) async fn run(
                 settings,
                 scenario,
                 loaded_settings.paths.user_settings.clone(),
+                runners.repl,
             )
             .await;
         }
-        Some(Commands::Mcp { action }) => return run_mcp(action, &cwd).await,
+        Some(Commands::Mcp { action }) => return run_mcp(action, &cwd, &settings).await,
         Some(Commands::Daemon { action }) => return daemon::run(action).await,
         Some(Commands::AppServer {
             listen, scenario, ..
@@ -390,6 +261,9 @@ pub(crate) async fn run(
                     scenario,
                     loaded_settings.paths.user_settings.clone(),
                     retention_launch,
+                    migration_launch,
+                    inherited_office,
+                    inherited_connectivity,
                 )
                 .await;
             }
@@ -426,39 +300,59 @@ pub(crate) async fn run(
         .transpose()?;
 
     let model = settings.model.clone();
-    let provider_result = ProviderFactory::new(&settings)
-        .with_overrides(provider_overrides_from_cli(&cli))
-        .build(provider_kind, &model);
-    let (provider, signed_out_notice): (Arc<dyn Provider>, Option<String>) = match provider_result {
-        Ok(provider) => (provider, None),
-        Err(error)
-            if cli.prompt.is_none()
-                && !cli.json
-                && !matches!(cli.command, Some(Commands::MoaPlan { .. }))
-                && error.downcast_ref::<MissingApiKeyError>().is_some() =>
-        {
-            let error_message = error.to_string();
-            let notice = format!(
-                "Not signed in for {}. Run `kcoder auth login --provider {}` and restart. You can enter KCoder now, but model requests require an API key.",
-                provider_kind.as_str(),
-                provider_kind.as_str()
-            );
-            (
-                Arc::new(SignedOutProvider {
-                    name: provider_kind.as_str(),
-                    error_message,
-                }),
-                Some(notice),
-            )
-        }
-        Err(error) => return Err(error),
-    };
-
+    let can_open_without_model =
+        cli.prompt.is_none() && !cli.json && !matches!(cli.command, Some(Commands::MoaPlan { .. }));
     let model_configuration = Arc::new(model_configuration::ModelConfiguration::new(
         settings_loader.clone().freeze_overlays()?,
         cli.clone(),
     ));
-    let provider = model_configuration.with_live_credentials(&settings, provider_kind, provider)?;
+    let (provider, signed_out_notice): (Arc<dyn Provider>, Option<String>) = match provider_kind
+        .filter(|_| !model.trim().is_empty())
+    {
+        Some(kind) => {
+            let provider = ProviderFactory::new(&settings)
+                .with_overrides(provider_overrides_from_cli(&cli))
+                .build(kind, &model);
+            match provider {
+                Ok(provider) => (
+                    model_configuration.with_live_credentials(&settings, kind, provider)?,
+                    None,
+                ),
+                Err(error)
+                    if can_open_without_model
+                        && error.downcast_ref::<MissingApiKeyError>().is_some() =>
+                {
+                    let notice = format!(
+                        "Not signed in for {}. Run `kcoder auth login --provider {}` and restart.",
+                        kind.as_str(),
+                        kind.as_str()
+                    );
+                    (
+                        Arc::new(SignedOutProvider {
+                            name: kind.as_str(),
+                            error_type: "missing_api_key",
+                            error_message: error.to_string(),
+                        }),
+                        Some(notice),
+                    )
+                }
+                Err(error) => return Err(error),
+            }
+        }
+        None if can_open_without_model => {
+            // Keep settings and history accessible without choosing a transport.
+            let notice = "No model is configured. Select a model Provider in settings.";
+            (
+                Arc::new(SignedOutProvider {
+                    name: "unconfigured",
+                    error_type: "model_not_configured",
+                    error_message: notice.into(),
+                }),
+                Some(notice.into()),
+            )
+        }
+        None => bail!("No model is configured. Select a model Provider in settings."),
+    };
 
     info!("starting KCoder rust prototype");
 
@@ -525,127 +419,17 @@ pub(crate) async fn run(
             warn!("failed to load plugin contribution snapshot: {error:#}");
             kcoder_plugins::EffectivePluginSnapshot::default()
         });
-    let configured_mcp_server_count = settings.mcp_servers.len();
-    settings
-        .mcp_servers
-        .extend(plugin_snapshot.mcp_configs.iter().cloned());
-    settings.runtime_plugin_mcp_count = plugin_snapshot.mcp_configs.len();
-
-    let plugin_manager =
-        kcoder_plugins::PluginManager::open_default_for_cwd_with_effective_settings(
-            &cwd,
-            settings.plugins.clone(),
-        )?;
-    let private_plugin_values = crate::plugin_credentials::by_operation(
-        &loaded_settings.paths.credentials,
-        settings.credential_store,
-        &plugin_manager,
-    )?;
-    let effective_tool_profile = cli.tool_profile.effective(settings.tools.profile);
-    let mut tools = builtin_tools_for_settings(&cli, &settings);
+    let (tools, mcp_snapshot_complete) = kcoder_session_configuration::configure_startup_tools(
+        &cli,
+        &mut settings,
+        &loaded_settings.paths,
+        &cwd,
+        &trust_store_config_dir,
+        &project_mcp_names,
+        &plugin_snapshot,
+    )
+    .await?;
     let is_app_server = matches!(cli.command, Some(Commands::AppServer { .. }));
-    // Optional services must leave room for the Gateway's 12-second initialize handshake.
-    let mcp_startup_deadline =
-        is_app_server.then(|| tokio::time::Instant::now() + std::time::Duration::from_secs(8));
-    let mut mcp_snapshot_complete = true;
-    if !matches!(effective_tool_profile, kcoder_config::ToolProfile::None) {
-        for (server_index, server) in settings.mcp_servers.iter().enumerate() {
-            let plugin_source = if server_index < configured_mcp_server_count {
-                None
-            } else if let Some(source) = plugin_snapshot
-                .mcp_config_sources
-                .get(server_index - configured_mcp_server_count)
-            {
-                Some(source)
-            } else {
-                let diagnostic = format!(
-                    "MCP server {:?} rejected: plugin contribution has no source identity",
-                    server.name
-                );
-                warn!("{diagnostic}");
-                eprintln!("[kcoder] {diagnostic}");
-                continue;
-            };
-            let private = kcoder_mcp::tool::PrivateValues::new(
-                plugin_source
-                    .and_then(|source| plugin_snapshot.managed_operations.get(&source.plugin_id))
-                    .and_then(|operation| private_plugin_values.get(operation))
-                    .into_iter()
-                    .flat_map(|values| values.values().cloned()),
-            )?;
-            let connected = if let Some(deadline) = mcp_startup_deadline {
-                tokio::time::timeout_at(
-                    deadline,
-                    mcp_connection::connect_private(server, Arc::clone(&private)),
-                )
-                .await
-                .context("optional MCP startup deadline exceeded")
-                .and_then(std::convert::identity)
-            } else {
-                mcp_connection::connect_private(server, Arc::clone(&private)).await
-            };
-            match connected {
-                Ok((handle, mut defs)) => {
-                    if let Some(source) = plugin_source {
-                        defs.retain(|definition| source.tool_policy.allows(&definition.name));
-                    }
-                    info!(
-                        "MCP server '{}' connected with {} tools",
-                        server.name,
-                        defs.len()
-                    );
-                    let conflicts = tools.extend(defs.into_iter().filter_map(|definition| {
-                        let tool = McpTool::new(&server.name, Arc::clone(&handle), definition);
-                        let tool = match plugin_source {
-                            Some(source) => {
-                                let tool = tool.with_plugin_source(&source.plugin_id);
-                                match tool.with_private_values(Arc::clone(&private)) {
-                                    Ok(tool) => tool,
-                                    Err(_) => return None,
-                                }
-                            }
-                            None => tool,
-                        };
-                        let required_trust = plugin_source
-                            .and_then(|source| source.required_trust_directory.as_deref())
-                            .or_else(|| {
-                                project_mcp_names
-                                    .contains(&server.name)
-                                    .then_some(cwd.as_path())
-                            });
-                        let tool = match required_trust {
-                            Some(directory) => {
-                                tool.with_folder_trust(directory, &trust_store_config_dir)
-                            }
-                            None => tool,
-                        };
-                        Some(Arc::new(tool) as Arc<dyn kcoder_tools::Tool>)
-                    }));
-                    for conflict in conflicts {
-                        warn!("{conflict}");
-                        eprintln!("[kcoder] {conflict}");
-                    }
-                }
-                Err(e) => {
-                    mcp_snapshot_complete = false;
-                    if plugin_source
-                        .and_then(|source| {
-                            plugin_snapshot.managed_operations.get(&source.plugin_id)
-                        })
-                        .and_then(|operation| private_plugin_values.get(operation))
-                        .is_some_and(|values| !values.is_empty())
-                    {
-                        warn!(server = %server.name, code = "mcp_unavailable", "Private plugin MCP connection failed");
-                    } else {
-                        warn!("failed to connect MCP server '{}': {e:#}", server.name);
-                    }
-                }
-            }
-        }
-    }
-    if !settings.tools.disabled.is_empty() {
-        tools = tools.filtered_out_by_patterns(&settings.tools.disabled);
-    }
     let mut permissions = PermissionEngine::from_settings(&settings);
     let permission_mode = settings.permission_mode;
     permissions.mode = permission_mode;
@@ -690,6 +474,7 @@ pub(crate) async fn run(
     let history_directory = state
         .history_path()
         .and_then(|path| path.parent().map(Path::to_path_buf));
+    let command_owner = owned_command_program()?;
     let (mut engine, app_server_factory) = if is_app_server {
         let workspace_services =
             WorkspaceRuntimeServices::try_new_for_client(&cwd, &state.session_id())?;
@@ -708,11 +493,8 @@ pub(crate) async fn run(
             Some(loaded_settings.paths.user_settings.clone()),
             Settings::config_dir()?.join("session-ids"),
         )
-        .with_session_configuration(
-            settings_loader.clone(),
-            cli.clone(),
-            mcp_snapshot_complete,
-        )?;
+        .with_session_configuration(settings_loader.clone(), cli.clone(), mcp_snapshot_complete)?
+        .with_owned_command_program(command_owner.clone());
         let engine = factory
             .build_with_state(state, Arc::new(DenyAllUserQuestioner))
             .context("failed to initialize app-server client session storage")?;
@@ -731,7 +513,9 @@ pub(crate) async fn run(
                 cwd,
                 plugin_snapshot,
             )?
+            .with_owned_command_program(command_owner)
             .with_settings_persistence_path(loaded_settings.paths.user_settings.clone())
+            .with_bundled_search_backend(Arc::new(kcoder_mcp::web_search::BundledWebSearch::new()))
             .with_client_model_configuration(model_configuration),
             None,
         )
@@ -752,11 +536,16 @@ pub(crate) async fn run(
     };
 
     if is_app_server {
-        app_server::run_with_retention_parent(
+        let factory =
+            app_server_factory.expect("app-server factory is constructed with its engine");
+        app_server::run_with_native_launches(
             engine,
-            app_server_factory.expect("app-server factory is constructed with its engine"),
+            factory,
             permission_mode,
             retention_launch,
+            migration_launch,
+            inherited_office,
+            inherited_connectivity,
         )
         .await
     } else if let Some(Commands::MoaPlan { prompt: request }) = cli.command.clone() {
@@ -807,17 +596,17 @@ pub(crate) async fn run(
         Ok(())
     } else if let Some(prompt) = cli.prompt {
         engine.set_user_questioner(Arc::new(HeadlessUserQuestioner));
-        let prompt_cb = HeadlessPermissionPrompt {
-            mode: permission_mode,
-        };
-        headless::run(&engine, prompt, &prompt_cb, cli.json, startup_events).await
+        let prompt_cb = HeadlessPermissionPrompt::new(permission_mode);
+        let headless = runners.headless;
+        headless(&engine, prompt, &prompt_cb, cli.json, startup_events).await
     } else {
         let startup_notice = [signed_out_notice, hook_startup_notice(&startup_events)]
             .into_iter()
             .flatten()
             .collect::<Vec<_>>();
         let startup_notice = (!startup_notice.is_empty()).then(|| startup_notice.join("\n"));
-        kcoder_repl::run_repl_with_engine(engine, startup_notice).await
+        let repl = runners.repl;
+        repl(engine, startup_notice).await
     }
 }
 
@@ -826,6 +615,7 @@ pub(crate) async fn run_tui_dev(
     mut settings: Settings,
     scenario: TuiDevScenario,
     settings_persistence_path: PathBuf,
+    repl: ReplRunner,
 ) -> Result<()> {
     let (engine, _) =
         build_tui_dev_engine(cli, &mut settings, scenario, settings_persistence_path)?;
@@ -834,15 +624,22 @@ pub(crate) async fn run_tui_dev(
         scenario.as_str(),
         scenario.startup_description()
     ));
-    kcoder_repl::run_repl_with_engine(engine, startup_notice).await
+    repl(engine, startup_notice).await
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Keep independent inherited host resources and native parent launches explicit"
+)]
 pub(crate) async fn run_app_server_dev(
     cli: &Cli,
     mut settings: Settings,
     scenario: TuiDevScenario,
     settings_persistence_path: PathBuf,
     retention_launch: Option<app_server::RetentionLaunchConfiguration>,
+    migration_launch: Option<app_server::RetentionLaunchConfiguration>,
+    inherited_office: Option<std::ffi::OsString>,
+    inherited_connectivity: Option<std::ffi::OsString>,
 ) -> Result<()> {
     let cwd = cli
         .cwd
@@ -855,11 +652,15 @@ pub(crate) async fn run_app_server_dev(
     let (engine, factory) =
         build_tui_dev_engine(cli, &mut settings, scenario, settings_persistence_path)?;
     engine.activate_client_session();
-    app_server::run_with_retention_parent(
+    let factory = factory.context("app-server dev engine requires a factory")?;
+    app_server::run_with_native_launches(
         engine,
-        factory.context("app-server dev engine requires a factory")?,
+        factory,
         permission_mode,
         retention_launch,
+        migration_launch,
+        inherited_office,
+        inherited_connectivity,
     )
     .await
 }
@@ -870,6 +671,7 @@ pub(crate) fn build_tui_dev_engine(
     scenario: TuiDevScenario,
     settings_persistence_path: PathBuf,
 ) -> Result<(QueryEngine, Option<app_server::AppServerEngineFactory>)> {
+    let command_owner = owned_command_program()?;
     settings.model = "tui-dev-mock".to_string();
     settings.permission_mode = PermissionMode::Bypass;
     settings.auto_skill_review_enabled = false;
@@ -949,7 +751,8 @@ pub(crate) fn build_tui_dev_engine(
             workspace_services,
             Some(settings_persistence_path),
             Settings::config_dir()?.join("session-ids"),
-        );
+        )
+        .with_owned_command_program(command_owner.clone());
         let engine = factory
             .build_with_state(state, Arc::new(DenyAllUserQuestioner))
             .context("failed to initialize tui-dev app-server client session storage")?;
@@ -968,123 +771,9 @@ pub(crate) fn build_tui_dev_engine(
                 cwd,
                 plugin_snapshot,
             )?
+            .with_owned_command_program(command_owner)
             .with_settings_persistence_path(settings_persistence_path),
             None,
         ))
-    }
-}
-
-pub(crate) fn history_dir_for_session(
-    settings: &Settings,
-    cwd: &std::path::Path,
-) -> Result<PathBuf> {
-    if settings.history_directory.is_some() || std::env::var_os("KCODER_HISTORY_DIR").is_some() {
-        settings.history_dir()
-    } else {
-        Settings::project_data_dir(cwd)
-    }
-}
-
-pub(crate) fn history_dirs_for_read(
-    settings: &Settings,
-    cwd: &std::path::Path,
-) -> Result<Vec<PathBuf>> {
-    if settings.history_directory.is_some() || std::env::var_os("KCODER_HISTORY_DIR").is_some() {
-        return settings.history_dir().map(|dir| vec![dir]);
-    }
-    Settings::project_data_dirs_for_read(cwd)
-}
-
-pub(crate) fn apply_cli_orchestrate_mode(
-    state: &AppState,
-    requested: bool,
-    resumed: bool,
-) -> Result<()> {
-    if !requested {
-        return Ok(());
-    }
-    if resumed && state.session_mode().is_default() {
-        bail!(
-            "cannot combine --orchestrate with a resumed default session; start a new session or resume an existing Orchestrate session without the flag"
-        );
-    }
-    if state.session_mode().is_orchestrate() {
-        return Ok(());
-    }
-    state.enter_orchestrate_before_first_message()?;
-    Ok(())
-}
-
-pub(crate) fn resolve_resume_history_path(
-    settings: &Settings,
-    cwd: &std::path::Path,
-    resume: &str,
-) -> Result<PathBuf> {
-    let history_dirs = history_dirs_for_read(settings, cwd)?;
-    if resume == "latest" {
-        let mut sessions = Vec::new();
-        for history_dir in &history_dirs {
-            sessions.extend(kcoder_state::recent_sessions(history_dir, 1)?);
-        }
-        sessions.sort_by_key(|(_, path, _)| {
-            std::fs::metadata(path)
-                .and_then(|metadata| metadata.modified())
-                .ok()
-        });
-        return sessions
-            .last()
-            .map(|(_, path, _)| path.clone())
-            .ok_or_else(|| {
-                anyhow::anyhow!(
-                    "no sessions found in {}",
-                    history_dirs
-                        .iter()
-                        .map(|path| path.display().to_string())
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                )
-            });
-    }
-    for history_dir in &history_dirs {
-        let direct = history_dir.join(format!(
-            "{}.jsonl",
-            kcoder_state::artifact_id_path_component(resume)
-        ));
-        if direct.is_file() {
-            return Ok(direct);
-        }
-    }
-    let mut sessions = Vec::new();
-    for history_dir in &history_dirs {
-        sessions.extend(kcoder_state::recent_sessions(history_dir, 100)?);
-    }
-    let matches: Vec<_> = sessions
-        .iter()
-        .filter(|(id, _, _)| id.starts_with(resume))
-        .collect();
-    match matches.len() {
-        1 => Ok(matches[0].1.clone()),
-        0 => anyhow::bail!(
-            "no session matching '{resume}' in {}",
-            history_dirs
-                .iter()
-                .map(|path| path.display().to_string())
-                .collect::<Vec<_>>()
-                .join(", ")
-        ),
-        n => anyhow::bail!("session prefix '{resume}' is ambiguous ({n} matches)"),
-    }
-}
-
-pub(crate) fn configure_history_path(settings: &Settings, state: &AppState) {
-    if settings.history_enabled
-        && let Ok(history_dir) = history_dir_for_session(settings, &state.cwd())
-    {
-        let session_id = state.session_id();
-        let history_path = history_dir.join(format!(
-            "{}.jsonl",
-            kcoder_state::artifact_id_path_component(&session_id)
-        ));
-        state.with_history_path(history_path);
     }
 }

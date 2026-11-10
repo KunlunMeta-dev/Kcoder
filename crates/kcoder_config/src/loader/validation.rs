@@ -2,45 +2,9 @@
 
 use super::*;
 
-pub(super) fn normalize_config_version(document: &mut Value) -> Result<()> {
-    let Some(root) = document.as_object_mut() else {
-        return Ok(());
-    };
-    let meta = root
-        .entry("meta")
-        .or_insert_with(|| Value::Object(Map::new()));
-    let Some(meta) = meta.as_object_mut() else {
-        bail!("settings meta must be an object");
-    };
-    let Some(version_value) = meta.get("config_version") else {
-        meta.insert(
-            "config_version".to_string(),
-            Value::from(CURRENT_CONFIG_VERSION),
-        );
-        return Ok(());
-    };
-    let Some(version) = version_value.as_u64() else {
-        bail!("settings meta.config_version must be integer v1");
-    };
-    if version > CURRENT_CONFIG_VERSION {
-        bail!(
-            "unsupported future settings meta.config_version={version}; current supported version is v{}",
-            CURRENT_CONFIG_VERSION
-        );
-    }
-    if version < CURRENT_CONFIG_VERSION {
-        bail!(
-            "unsupported settings meta.config_version={version}; current supported version is v{}",
-            CURRENT_CONFIG_VERSION
-        );
-    }
-    Ok(())
-}
-
 pub(super) fn validate_settings_document(value: &Value) -> Result<()> {
     let mut normalized_value = value.clone();
-    normalize_config_version(&mut normalized_value)?;
-    normalize_legacy_settings_document(&mut normalized_value);
+    migrate_settings_document(&mut normalized_value)?;
     crate::schema::validate_settings_schema(&normalized_value)
         .map_err(|error| anyhow::anyhow!("settings failed embedded schema validation: {error}"))?;
     let complete_providers = normalized_value
@@ -91,11 +55,9 @@ pub(super) fn validate_settings_document(value: &Value) -> Result<()> {
             *profile = complete;
         }
     }
-    let content = serde_json::to_string(&validation_value)
-        .context("failed to serialize settings for validation")?;
-    let mut deserializer = serde_json::Deserializer::from_str(&content);
     let mut unknown = Vec::new();
-    let settings: Settings = serde_ignored::deserialize(&mut deserializer, |path| {
+    // Reuse parsed JSON for typed validation while retaining unknown-field tracking.
+    let settings: Settings = serde_ignored::deserialize(&validation_value, |path| {
         let path = path.to_string();
         // The `hooks` top-level field is owned by the hooks subsystem
         // (kcoder_hooks reads the same settings files); it is not part of the
@@ -110,6 +72,15 @@ pub(super) fn validate_settings_document(value: &Value) -> Result<()> {
         unknown.dedup();
         bail!("unknown setting field(s): {}", unknown.join(", "));
     }
+    settings
+        .web
+        .validate_fields()
+        .context("invalid web settings")?;
+    settings
+        .integrations
+        .office
+        .validate()
+        .context("invalid integrations.office settings")?;
     if let (Some(total), Some(output)) = (
         settings.context_window_tokens,
         settings.context_output_headroom,
@@ -371,7 +342,7 @@ pub(super) fn validate_orchestrate_settings(settings: &Settings) -> Result<()> {
                     .as_deref()
                     .map(str::trim)
                     .filter(|value| !value.is_empty())
-                    .unwrap_or("kunlunmeta");
+                    .context("This model policy requires an explicit active_provider")?;
                 let main = settings.providers.get(main_name).ok_or_else(|| {
                     anyhow::anyhow!(
                         "orchestrate.roster.{name}.context_mode=full requires active Provider '{main_name}'"
@@ -429,7 +400,7 @@ pub(super) fn validate_goal_pro_model_escalation(settings: &Settings) -> Result<
         .as_deref()
         .map(str::trim)
         .filter(|value| !value.is_empty())
-        .unwrap_or("kunlunmeta");
+        .context("This model policy requires an explicit active_provider")?;
     let main = settings.providers.get(main_name).ok_or_else(|| {
         anyhow::anyhow!(
             "goal_pro.model_escalation requires the active Provider '{main_name}' to be declared in providers"

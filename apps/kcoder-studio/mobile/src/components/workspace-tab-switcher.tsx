@@ -192,7 +192,7 @@ export function WorkspaceTabSwitcher({
                       <Check size={17} color={colors.accentBright} />
                     ) : null}
                   </Pressable>
-                  {panel.kind !== "agent" && panel.kind !== "changes" ? <Pressable accessibilityLabel={t("mobile.workspace_tab.close_panel", { panel: panel.title })} accessibilityHint={savePending ? t("mobile.workspace_tab.save_before_close") : undefined} accessibilityState={{ disabled: savePending }} disabled={savePending} onPress={() => onClose(panel.id)} style={[styles.close, savePending && styles.closeDisabled]}><X size={16} color={colors.textDim} /></Pressable> : null}
+                  {panel.kind !== "agent" && panel.kind !== "changes" ? <Pressable testID={`workspace-close-panel-${panel.id}`} accessibilityLabel={t("mobile.workspace_tab.close_panel", { panel: panel.title })} accessibilityHint={savePending ? t("mobile.workspace_tab.save_before_close") : undefined} accessibilityState={{ disabled: savePending }} disabled={savePending} onPress={() => onClose(panel.id)} style={[styles.close, savePending && styles.closeDisabled]}><X size={16} color={colors.textDim} /></Pressable> : null}
                 </View>
               );
             })}
@@ -261,7 +261,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     borderLeftColor: colors.border,
   },
   overlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: colors.overlay,
   },
   sheet: {

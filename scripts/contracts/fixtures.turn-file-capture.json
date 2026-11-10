@@ -1,0 +1,228 @@
+{
+  "TurnFileChangesCapture": {
+    "valid": [
+      {
+        "name": "capturing",
+        "value": {
+          "version": 1,
+          "captureId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "threadId": "thread-1",
+          "turnId": "turn-1",
+          "attemptId": "turn-1",
+          "state": "capturing",
+          "base": null,
+          "head": null,
+          "limitations": [],
+          "artifactId": null
+        }
+      },
+      {
+        "name": "changed",
+        "value": {
+          "version": 1,
+          "captureId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "threadId": "thread-1",
+          "turnId": "turn-1",
+          "attemptId": "turn-1",
+          "state": "changed",
+          "base": {
+            "startedAtMs": 1,
+            "completedAtMs": 2
+          },
+          "head": {
+            "startedAtMs": 4,
+            "completedAtMs": 5
+          },
+          "limitations": [],
+          "artifactId": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        }
+      },
+      {
+        "name": "unchanged",
+        "value": {
+          "version": 1,
+          "captureId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "threadId": "thread-1",
+          "turnId": "turn-1",
+          "attemptId": "turn-1",
+          "state": "unchanged",
+          "base": {
+            "startedAtMs": 1,
+            "completedAtMs": 2
+          },
+          "head": {
+            "startedAtMs": 4,
+            "completedAtMs": 5
+          },
+          "limitations": [],
+          "artifactId": null
+        }
+      },
+      {
+        "name": "disabled",
+        "value": {
+          "version": 1,
+          "captureId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "threadId": "thread-1",
+          "turnId": "turn-1",
+          "attemptId": "turn-1",
+          "state": "disabled",
+          "base": null,
+          "head": null,
+          "limitations": [],
+          "artifactId": null
+        }
+      },
+      {
+        "name": "partial",
+        "value": {
+          "version": 1,
+          "captureId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "threadId": "thread-1",
+          "turnId": "turn-1",
+          "attemptId": "turn-1",
+          "state": "partial",
+          "base": {
+            "startedAtMs": 1,
+            "completedAtMs": 2
+          },
+          "head": {
+            "startedAtMs": 4,
+            "completedAtMs": 5
+          },
+          "limitations": [
+            "policyExclusions"
+          ],
+          "artifactId": null
+        }
+      },
+      {
+        "name": "failed",
+        "value": {
+          "version": 1,
+          "captureId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "threadId": "thread-1",
+          "turnId": "turn-1",
+          "attemptId": "turn-1",
+          "state": "failed",
+          "base": null,
+          "head": null,
+          "limitations": [
+            "captureFailed"
+          ],
+          "artifactId": null
+        }
+      },
+      {
+        "name": "cancelled",
+        "value": {
+          "version": 1,
+          "captureId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "threadId": "thread-1",
+          "turnId": "turn-1",
+          "attemptId": "turn-1",
+          "state": "cancelled",
+          "base": null,
+          "head": null,
+          "limitations": [],
+          "artifactId": null
+        }
+      },
+      {
+        "name": "unknown",
+        "value": {
+          "version": 1,
+          "captureId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "threadId": "thread-1",
+          "turnId": "turn-1",
+          "attemptId": "turn-1",
+          "state": "unknown",
+          "base": null,
+          "head": null,
+          "limitations": [],
+          "artifactId": null
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing_identity",
+        "value": {
+          "state": "failed"
+        }
+      },
+      {
+        "name": "unknown_state",
+        "value": {
+          "version": 1,
+          "captureId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "threadId": "thread-1",
+          "turnId": "turn-1",
+          "attemptId": "turn-1",
+          "state": "successful",
+          "base": null,
+          "head": null,
+          "limitations": [
+            "captureFailed"
+          ],
+          "artifactId": null
+        }
+      },
+      {
+        "name": "unknown_limitation",
+        "value": {
+          "version": 1,
+          "captureId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "threadId": "thread-1",
+          "turnId": "turn-1",
+          "attemptId": "turn-1",
+          "state": "failed",
+          "base": null,
+          "head": null,
+          "limitations": [
+            "no_problem"
+          ],
+          "artifactId": null
+        }
+      },
+      {
+        "name": "forged_authority",
+        "value": {
+          "version": 1,
+          "captureId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "threadId": "thread-1",
+          "turnId": "turn-1",
+          "attemptId": "turn-1",
+          "state": "failed",
+          "base": null,
+          "head": null,
+          "limitations": [
+            "captureFailed"
+          ],
+          "artifactId": null,
+          "owner": "trusted"
+        }
+      },
+      {
+        "name": "invalid_window",
+        "value": {
+          "version": 1,
+          "captureId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "threadId": "thread-1",
+          "turnId": "turn-1",
+          "attemptId": "turn-1",
+          "state": "failed",
+          "base": {
+            "startedAtMs": "yesterday",
+            "completedAtMs": 2
+          },
+          "head": null,
+          "limitations": [
+            "captureFailed"
+          ],
+          "artifactId": null
+        }
+      }
+    ]
+  }
+}

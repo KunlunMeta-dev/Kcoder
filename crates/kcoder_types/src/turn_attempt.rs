@@ -5,6 +5,7 @@ const MAX_STATUS_UTF8_BYTES: usize = 256;
 /// One execution attempt of a logical turn. Shared by recovery and model snapshots.
 /// The server chooses attempt_id; credentials are never part of this identity.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "json-schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "camelCase")]
 pub struct TurnAttemptIdentity {
     pub thread_id: String,

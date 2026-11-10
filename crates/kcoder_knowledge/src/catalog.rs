@@ -3,7 +3,7 @@ pub use kcoder_types::knowledge::KnowledgeLibrary as Library;
 use rusqlite::{Connection, OptionalExtension, params};
 use std::{path::Path, time::Duration};
 
-const SCHEMA_VERSION: i64 = 18;
+pub(crate) use crate::migrations::SCHEMA_VERSION;
 
 /// Host-only identity. Deliberately not deserializable from model or RPC input.
 #[derive(Debug, Clone)]
@@ -38,7 +38,7 @@ pub struct KnowledgeCatalog {
 
 impl KnowledgeCatalog {
     pub fn open(path: &Path) -> Result<Self> {
-        let mut connection = Connection::open(path).context("open knowledge catalog")?;
+        let connection = Connection::open(path).context("open knowledge catalog")?;
         connection.busy_timeout(Duration::from_secs(5))?;
         let current: i64 = connection.query_row("PRAGMA user_version", [], |row| row.get(0))?;
         ensure!(
@@ -46,6 +46,21 @@ impl KnowledgeCatalog {
             "unsupported future knowledge schema version {current}"
         );
         let objects = crate::objects::ObjectStore::open(path.with_extension("objects"))?;
+        Self::initialize_owned_connection(connection, objects)
+    }
+
+    /// Reuse schema initialization on an already authenticated, handle-owned connection.
+    /// Call only from an explicitly authorized writer, never an observation path.
+    pub(crate) fn initialize_owned_connection(
+        mut connection: Connection,
+        objects: crate::objects::ObjectStore,
+    ) -> Result<Self> {
+        connection.busy_timeout(Duration::from_secs(5))?;
+        let current: i64 = connection.query_row("PRAGMA user_version", [], |row| row.get(0))?;
+        ensure!(
+            current <= SCHEMA_VERSION,
+            "unsupported future knowledge schema version {current}"
+        );
         if current == SCHEMA_VERSION {
             return Ok(Self {
                 connection,
@@ -53,95 +68,7 @@ impl KnowledgeCatalog {
             });
         }
 
-        let transaction =
-            connection.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
-        let version: i64 = transaction.query_row("PRAGMA user_version", [], |r| r.get(0))?;
-        ensure!(
-            version <= SCHEMA_VERSION,
-            "unsupported future knowledge schema version {version}"
-        );
-        if version == 0 {
-            transaction.execute_batch(
-                "CREATE TABLE libraries (
-                    id TEXT PRIMARY KEY,
-                    principal TEXT NOT NULL,
-                    target TEXT NOT NULL,
-                    name TEXT NOT NULL,
-                    purpose TEXT NOT NULL,
-                    archived INTEGER NOT NULL DEFAULT 0 CHECK(archived IN (0,1)),
-                    request_key TEXT NOT NULL,
-                    UNIQUE(principal, target, request_key)
-                );
-                CREATE INDEX libraries_scope ON libraries(principal, target, id);
-                PRAGMA user_version = 1;",
-            )?;
-        }
-        if version < 2 {
-            transaction.execute_batch(
-                "CREATE VIRTUAL TABLE knowledge_fts USING fts5(
-                    library_id UNINDEXED, document_id UNINDEXED, revision_id UNINDEXED,
-                    display_title UNINDEXED, original_body UNINDEXED,
-                    title_terms, body_terms, tokenize='unicode61'
-                );
-                PRAGMA user_version = 2;",
-            )?;
-        }
-        if version < 3 {
-            transaction.execute_batch(include_str!("schema_v3.sql"))?;
-        }
-        if version < 4 {
-            transaction.execute_batch("CREATE TABLE knowledge_defaults(principal TEXT NOT NULL,target TEXT NOT NULL,library_id TEXT NOT NULL,PRIMARY KEY(principal,target)); PRAGMA user_version=4;")?;
-        }
-        if version < 5 {
-            transaction.execute_batch(include_str!("schema_v5.sql"))?;
-        }
-        if version < 6 {
-            transaction.execute_batch("CREATE TABLE knowledge_review_receipts(library_id TEXT NOT NULL,job_id TEXT NOT NULL,token TEXT NOT NULL,commit_key TEXT NOT NULL,payload_hash TEXT NOT NULL,accepted INTEGER NOT NULL,checkpoint_json TEXT NOT NULL,PRIMARY KEY(library_id,job_id,token)); PRAGMA user_version=6;")?;
-        }
-        if version < 7 {
-            transaction.execute_batch(
-                "ALTER TABLE knowledge_jobs ADD COLUMN error_detail TEXT; PRAGMA user_version=7;",
-            )?;
-        }
-        if version < 8 {
-            transaction.execute_batch(include_str!("schema_v8.sql"))?;
-        }
-        if version < 9 {
-            transaction.execute_batch("ALTER TABLE libraries ADD COLUMN metadata_revision INTEGER NOT NULL DEFAULT 1; PRAGMA user_version=9;")?;
-        }
-        if version < 10 {
-            transaction.execute_batch("ALTER TABLE knowledge_chunks ADD COLUMN page INTEGER; CREATE TABLE knowledge_originals(library_id TEXT NOT NULL, source_id TEXT NOT NULL, revision_id TEXT NOT NULL, raw_hash TEXT NOT NULL, format TEXT NOT NULL, PRIMARY KEY(library_id,source_id,revision_id)); PRAGMA user_version=10;")?;
-        }
-        if version < 11 {
-            transaction.execute_batch("CREATE TABLE knowledge_archive_receipts(principal TEXT NOT NULL,target TEXT NOT NULL,request_key TEXT NOT NULL,payload_hash TEXT NOT NULL,library_id TEXT NOT NULL,PRIMARY KEY(principal,target,request_key)); PRAGMA user_version=11;")?;
-        }
-        if version < 12 {
-            transaction.execute_batch("CREATE TABLE knowledge_source_lifecycle(library_id TEXT NOT NULL,source_id TEXT NOT NULL,current_revision TEXT NOT NULL,removed INTEGER NOT NULL DEFAULT 0 CHECK(removed IN (0,1)),PRIMARY KEY(library_id,source_id)); INSERT INTO knowledge_source_lifecycle(library_id,source_id,current_revision) SELECT library_id,source_id,revision_id FROM knowledge_sources WHERE rowid IN (SELECT MAX(rowid) FROM knowledge_sources GROUP BY library_id,source_id); PRAGMA user_version=12;")?;
-        }
-        if version < 13 {
-            transaction.execute_batch("CREATE TABLE knowledge_job_budgets(library_id TEXT NOT NULL,job_id TEXT NOT NULL,call_limit INTEGER NOT NULL CHECK(call_limit BETWEEN 1 AND 4096),PRIMARY KEY(library_id,job_id)); CREATE TABLE knowledge_job_calls(library_id TEXT NOT NULL,job_id TEXT NOT NULL,call_id TEXT NOT NULL,lease_token TEXT NOT NULL,completed INTEGER NOT NULL CHECK(completed IN (0,1)),input_tokens INTEGER CHECK(input_tokens>=0),output_tokens INTEGER CHECK(output_tokens>=0),PRIMARY KEY(library_id,job_id,call_id),CHECK((input_tokens IS NULL)=(output_tokens IS NULL))); PRAGMA user_version=13;")?;
-        }
-        if version < 14 {
-            transaction.execute_batch("CREATE TABLE knowledge_stage_cache(library_id TEXT NOT NULL,job_id TEXT NOT NULL,request_hash TEXT NOT NULL,body_hash TEXT NOT NULL,PRIMARY KEY(library_id,job_id,request_hash)); PRAGMA user_version=14;")?;
-        }
-        if version < 15 {
-            transaction.execute_batch("CREATE TABLE knowledge_source_extractions(library_id TEXT NOT NULL,source_id TEXT NOT NULL,revision_id TEXT NOT NULL,summary_json TEXT NOT NULL,PRIMARY KEY(library_id,source_id,revision_id)); PRAGMA user_version=15;")?;
-        }
-        if version < 16 {
-            transaction.execute_batch("ALTER TABLE knowledge_jobs ADD COLUMN progress_json TEXT;
-                ALTER TABLE knowledge_job_calls ADD COLUMN stage TEXT NOT NULL DEFAULT 'unspecified';
-                ALTER TABLE knowledge_job_calls ADD COLUMN after_chunk INTEGER NOT NULL DEFAULT 0;
-                ALTER TABLE knowledge_job_calls ADD COLUMN input_estimate INTEGER;
-                ALTER TABLE knowledge_stage_cache ADD COLUMN body_json TEXT;
-                PRAGMA user_version=16;")?;
-        }
-        if version < 17 {
-            transaction.execute_batch(include_str!("schema_v17.sql"))?;
-        }
-        if version < 18 {
-            transaction.execute_batch(include_str!("schema_v18.sql"))?;
-        }
-        transaction.commit()?;
+        crate::migrations::upgrade(&mut connection)?;
         Ok(Self {
             connection,
             objects,

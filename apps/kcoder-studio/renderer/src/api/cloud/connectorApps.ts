@@ -51,7 +51,6 @@ function client(apiBaseUrl: string, token: string) {
   return createHttpClient({
     baseUrl: apiBaseUrl,
     getToken: () => token,
-    redirectOnUnauthorized: false,
   })
 }
 

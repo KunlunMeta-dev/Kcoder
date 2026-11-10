@@ -52,13 +52,13 @@ export class StagedAttachmentConsumers {
   private current(): void {
     if (this.signal?.aborted || !this.context.isCurrent() || !this.client.matchesRetainedAttachmentOwner(this.context.profile, this.context.server, this.context.workspacePath) || !this.client.getAttachmentUploadAdmission()) throw new AttachmentStoreConflict();
   }
-  async prepare(localAttachmentIds: readonly string[], threadId: string, clientMessageId: string): Promise<RetentionConsumerBatchHandle> {
+  async prepare(localAttachmentIds: readonly string[], threadId: string, clientMessageId: string, draftId?: string): Promise<RetentionConsumerBatchHandle> {
     this.current();
     const rows = await Promise.all(localAttachmentIds.map(id => this.store.load(this.guardedContext, id)));
     this.current();
     if (rows.some(row => !row)) throw new AttachmentStoreConflict();
     // Atomic all-row CAS, including original message and r1, precedes any RPC.
-    const batch = await this.store.prepareConsumerBatch(this.guardedContext, rows.map(row => row!), threadId, clientMessageId);
+    const batch = await this.store.prepareConsumerBatch(this.guardedContext, rows.map(row => row!), threadId, clientMessageId, draftId);
     return handleOf(batch);
   }
   async listUnresolved(): Promise<RetentionConsumerBatchHandle[]> {

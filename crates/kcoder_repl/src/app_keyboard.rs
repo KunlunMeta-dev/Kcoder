@@ -7,6 +7,9 @@ impl ReplApp {
         if !matches!(key.kind, KeyEventKind::Press | KeyEventKind::Repeat) {
             return None;
         }
+        if key.code != KeyCode::Esc && !is_ctrl_c_key(&key) {
+            self.clear_transcript_selection();
+        }
         if self.copy_view.is_some() {
             self.handle_copy_key(key);
             return None;
@@ -137,6 +140,11 @@ impl ReplApp {
                 }
                 return Some(action);
             }
+        }
+        if key.code == KeyCode::Esc && key.modifiers.is_empty() && self.can_return_to_bottom() {
+            self.jump_transcript("latest");
+            self.last_scroll_to_bottom_area = None;
+            return None;
         }
         if key.code == KeyCode::Esc
             && key.modifiers.is_empty()

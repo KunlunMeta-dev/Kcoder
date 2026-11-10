@@ -3,21 +3,21 @@
 use super::*;
 
 #[derive(Clone, Debug)]
-pub(super) struct StyledCell {
-    pub(super) ch: char,
-    pub(super) width: usize,
-    pub(super) style: Style,
-    pub(super) source_columns: Range<usize>,
+pub struct StyledCell {
+    pub ch: char,
+    pub width: usize,
+    pub style: Style,
+    pub source_columns: Range<usize>,
 }
 
 #[derive(Clone, Debug)]
-pub(super) struct BodyWord {
-    pub(super) cells: Vec<StyledCell>,
-    pub(super) width: usize,
-    pub(super) url_like: bool,
+pub struct BodyWord {
+    pub cells: Vec<StyledCell>,
+    pub width: usize,
+    pub url_like: bool,
 }
 
-pub(super) fn wrap_markdown_hyperlink_lines(
+pub fn wrap_markdown_hyperlink_lines(
     lines: Vec<HyperlinkLine>,
     width: usize,
 ) -> Vec<HyperlinkLine> {
@@ -30,17 +30,13 @@ pub(super) fn wrap_markdown_hyperlink_lines(
 }
 
 #[derive(Default)]
-pub(super) struct MarkdownLineWrapper {
-    pub(super) pending_wrapped_list_indent: Option<usize>,
-    pub(super) last_navigation_source: Option<usize>,
+pub struct MarkdownLineWrapper {
+    pub pending_wrapped_list_indent: Option<usize>,
+    pub last_navigation_source: Option<usize>,
 }
 
 impl MarkdownLineWrapper {
-    pub(super) fn wrap_line(
-        &mut self,
-        line: HyperlinkLine,
-        width: usize,
-    ) -> (Vec<HyperlinkLine>, usize) {
+    pub fn wrap_line(&mut self, line: HyperlinkLine, width: usize) -> (Vec<HyperlinkLine>, usize) {
         let width = width.max(1);
         let mut wrapped = Vec::new();
         let mut original_start = 0;
@@ -65,7 +61,7 @@ impl MarkdownLineWrapper {
     }
 }
 
-pub(super) fn markdown_list_marker_indent(text: &str) -> Option<usize> {
+pub fn markdown_list_marker_indent(text: &str) -> Option<usize> {
     let indent = text.bytes().take_while(|byte| *byte == b' ').count();
     let rest = &text[indent..];
     if rest.starts_with("- ") {
@@ -83,7 +79,7 @@ pub(super) fn markdown_list_marker_indent(text: &str) -> Option<usize> {
     }
 }
 
-pub(super) fn should_skip_markdown_width_wrap(text: &str) -> bool {
+pub fn should_skip_markdown_width_wrap(text: &str) -> bool {
     let trimmed = text.trim_start();
     matches!(trimmed.chars().next(), Some('├' | '┌' | '└' | '┼'))
         || trimmed
@@ -91,7 +87,7 @@ pub(super) fn should_skip_markdown_width_wrap(text: &str) -> bool {
             .all(|ch| matches!(ch, '=' | '-' | '━' | '─' | ' '))
 }
 
-pub(super) fn wrap_hyperlink_line_preserving_indent(
+pub fn wrap_hyperlink_line_preserving_indent(
     line: HyperlinkLine,
     width: usize,
     preserve_url_like_tokens: bool,
@@ -196,7 +192,7 @@ pub(super) fn wrap_hyperlink_line_preserving_indent(
         .collect()
 }
 
-pub(super) fn split_long_body_word(cells: Vec<StyledCell>, width: usize) -> Vec<Vec<StyledCell>> {
+pub fn split_long_body_word(cells: Vec<StyledCell>, width: usize) -> Vec<Vec<StyledCell>> {
     let width = width.max(1);
     let mut chunks = Vec::new();
     let mut current = Vec::new();
@@ -226,7 +222,7 @@ pub(super) fn split_long_body_word(cells: Vec<StyledCell>, width: usize) -> Vec<
     chunks
 }
 
-pub(super) fn preferred_path_split_index(cells: &[StyledCell]) -> Option<usize> {
+pub fn preferred_path_split_index(cells: &[StyledCell]) -> Option<usize> {
     cells.iter().enumerate().rev().find_map(|(idx, cell)| {
         is_path_split_boundary(cell.ch)
             .then_some(idx + 1)
@@ -234,15 +230,15 @@ pub(super) fn preferred_path_split_index(cells: &[StyledCell]) -> Option<usize> 
     })
 }
 
-pub(super) fn is_path_split_boundary(ch: char) -> bool {
+pub fn is_path_split_boundary(ch: char) -> bool {
     matches!(ch, '/' | '\\')
 }
 
-pub(super) fn cells_width(cells: &[StyledCell]) -> usize {
+pub fn cells_width(cells: &[StyledCell]) -> usize {
     cells.iter().map(|cell| cell.width).sum()
 }
 
-pub(super) fn styled_cells(line: &HyperlinkLine) -> Vec<StyledCell> {
+pub fn styled_cells(line: &HyperlinkLine) -> Vec<StyledCell> {
     let mut cells = Vec::new();
     let mut column = 0usize;
     for span in &line.line.spans {
@@ -260,7 +256,7 @@ pub(super) fn styled_cells(line: &HyperlinkLine) -> Vec<StyledCell> {
     cells
 }
 
-pub(super) fn take_prefix_cells(cells: &[StyledCell], prefix_cols: usize) -> Vec<StyledCell> {
+pub fn take_prefix_cells(cells: &[StyledCell], prefix_cols: usize) -> Vec<StyledCell> {
     cells
         .iter()
         .filter(|cell| cell.source_columns.end <= prefix_cols)
@@ -268,7 +264,7 @@ pub(super) fn take_prefix_cells(cells: &[StyledCell], prefix_cols: usize) -> Vec
         .collect()
 }
 
-pub(super) fn body_words(cells: Vec<StyledCell>) -> Vec<BodyWord> {
+pub fn body_words(cells: Vec<StyledCell>) -> Vec<BodyWord> {
     let mut words = Vec::new();
     let mut current = Vec::new();
     for cell in cells {
@@ -282,7 +278,7 @@ pub(super) fn body_words(cells: Vec<StyledCell>) -> Vec<BodyWord> {
     words
 }
 
-pub(super) fn push_body_word(words: &mut Vec<BodyWord>, current: &mut Vec<StyledCell>) {
+pub fn push_body_word(words: &mut Vec<BodyWord>, current: &mut Vec<StyledCell>) {
     if current.is_empty() {
         return;
     }
@@ -296,7 +292,7 @@ pub(super) fn push_body_word(words: &mut Vec<BodyWord>, current: &mut Vec<Styled
     });
 }
 
-pub(super) fn markdown_body_prefix_width(text: &str) -> usize {
+pub fn markdown_body_prefix_width(text: &str) -> usize {
     let mut prefix = 0usize;
     let mut rest = text;
 
@@ -334,7 +330,7 @@ pub(super) fn markdown_body_prefix_width(text: &str) -> usize {
     0
 }
 
-pub(super) fn markdown_continuation_prefix(text: &str, prefix_cols: usize) -> String {
+pub fn markdown_continuation_prefix(text: &str, prefix_cols: usize) -> String {
     if prefix_cols == 0 {
         return String::new();
     }
@@ -362,7 +358,7 @@ pub(super) fn markdown_continuation_prefix(text: &str, prefix_cols: usize) -> St
     }
 }
 
-pub(super) fn build_wrapped_hyperlink_line(
+pub fn build_wrapped_hyperlink_line(
     prefix: Vec<Span<'static>>,
     body: Vec<StyledCell>,
     source: &HyperlinkLine,
@@ -419,7 +415,7 @@ pub(super) fn build_wrapped_hyperlink_line(
     }
 }
 
-pub(super) fn cells_to_spans(cells: &[StyledCell]) -> Vec<Span<'static>> {
+pub fn cells_to_spans(cells: &[StyledCell]) -> Vec<Span<'static>> {
     let mut spans = Vec::new();
     for cell in cells {
         push_styled_span_char(&mut spans, cell.ch, cell.style);
@@ -427,7 +423,7 @@ pub(super) fn cells_to_spans(cells: &[StyledCell]) -> Vec<Span<'static>> {
     spans
 }
 
-pub(super) fn push_styled_span_char(spans: &mut Vec<Span<'static>>, ch: char, style: Style) {
+pub fn push_styled_span_char(spans: &mut Vec<Span<'static>>, ch: char, style: Style) {
     if let Some(last) = spans.last_mut()
         && last.style == style
     {
@@ -437,7 +433,7 @@ pub(super) fn push_styled_span_char(spans: &mut Vec<Span<'static>>, ch: char, st
     spans.push(Span::styled(ch.to_string(), style));
 }
 
-pub(super) fn space_cell() -> StyledCell {
+pub fn space_cell() -> StyledCell {
     StyledCell {
         ch: ' ',
         width: 1,
@@ -446,7 +442,7 @@ pub(super) fn space_cell() -> StyledCell {
     }
 }
 
-pub(super) fn hyperlink_line_text(line: &HyperlinkLine) -> String {
+pub fn hyperlink_line_text(line: &HyperlinkLine) -> String {
     line.line
         .spans
         .iter()

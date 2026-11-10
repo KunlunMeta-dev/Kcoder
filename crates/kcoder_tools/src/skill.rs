@@ -11,6 +11,9 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+mod selected_entry;
+pub use selected_entry::SelectedExpertSkillLoad;
+
 const EXTERNAL_GUARD_SUPPORTING_DIRS: &[&str] = &["references", "templates", "scripts"];
 const MAX_EXTERNAL_GUARD_BYTES: usize = 5 * 1_048_576;
 
@@ -79,7 +82,7 @@ impl Tool for SkillTool {
             ToolError::Execution("active skills list is not available".to_string())
         })?;
 
-        let (skill_name, skill_description, skill_source, skill_prompt) = {
+        let (skill_name, skill_description, skill_source, skill_prompt, resource_context) = {
             let registry = registry.read().unwrap();
             if registry.is_trust_denied(&skill_name_input) {
                 return Err(ToolError::Execution(
@@ -93,6 +96,12 @@ impl Tool for SkillTool {
                         "Unknown skill: {skill_name_input}. Use discovery if attached, then retry with the exact skill name."
                     ))
                 })?;
+            if skill.requires_inline_widgets() && !ctx.inline_widgets_authorized() {
+                return Err(ToolError::Execution(format!(
+                    "Skill '{}' requires inline visualization support in the current Studio turn.",
+                    skill.name
+                )));
+            }
             (
                 skill.name.clone(),
                 skill.description.clone(),
@@ -107,6 +116,7 @@ impl Tool for SkillTool {
                         .as_deref()
                         .unwrap_or(&[]),
                 ),
+                skill.resource_context(),
             )
         };
 
@@ -159,6 +169,9 @@ impl Tool for SkillTool {
         {
             msg.push_str(&format!(" with args: {}", args));
         }
+        // Repeated activation also locates resources for restored, older skill context.
+        msg.push_str("\n\n");
+        msg.push_str(&resource_context);
         if let Some(notice) = external_notice {
             msg.push_str("\n\n");
             msg.push_str(&notice.warning);
@@ -196,7 +209,8 @@ fn external_skill_notice(
     name: &str,
     source: &Path,
 ) -> Result<Option<ExternalSkillNotice>, ToolError> {
-    let requires_confirmation = !ctx.trust_external_skills;
+    let requires_confirmation =
+        !ctx.trust_external_skills && !ctx.selected_expert_skill_load_approved(name, source)?;
     if let Some(record) = skill_provenance_for_source(ctx, name, source) {
         match record.origin {
             SkillOrigin::HubInstalled => {
@@ -794,7 +808,9 @@ mod tests {
         )
         .unwrap();
 
-        let registry = Arc::new(RwLock::new(SkillRegistry::load(tmp.path()).unwrap()));
+        let registry = Arc::new(RwLock::new(
+            SkillRegistry::load_project_only(tmp.path()).unwrap(),
+        ));
         let active = Arc::new(RwLock::new(Vec::new()));
         let ctx = ToolContext::new(AppState::new(tmp.path()))
             .with_skill_registry(registry)
@@ -920,6 +936,74 @@ mod tests {
 
         assert!(err.to_string().contains("unavailable in the current mode"));
         assert!(active.read().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn inline_only_skill_requires_the_bound_studio_tool_context() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path().join(".kcoder/skills/custom-chart");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("SKILL.md"),
+            "---\nname: custom-chart\ndescription: Interactive chart\nmetadata:\n  kcoder:\n    requires_tools: [show_widget]\n---\nCHART_BODY"
+        ).unwrap();
+        let registry = Arc::new(RwLock::new(
+            SkillRegistry::load_project_only(tmp.path()).unwrap(),
+        ));
+        let active = Arc::new(RwLock::new(Vec::new()));
+        let ctx = ToolContext::new(AppState::new(tmp.path()))
+            .with_skill_registry(registry)
+            .with_active_skills(Arc::clone(&active));
+        let error = SkillTool
+            .call(serde_json::json!({"skill":"custom-chart"}), &ctx)
+            .await
+            .unwrap_err();
+        assert!(error.to_string().contains("inline visualization support"));
+        assert!(active.read().unwrap().is_empty());
+        let ctx = ctx.with_inline_widgets_authorized(true);
+        let output = SkillTool
+            .call(serde_json::json!({"skill":"custom-chart"}), &ctx)
+            .await
+            .unwrap();
+        assert!(
+            serde_json::to_string(&output.user_context)
+                .unwrap()
+                .contains("CHART_BODY")
+        );
+        assert_eq!(active.read().unwrap().as_slice(), ["custom-chart"]);
+    }
+
+    #[tokio::test]
+    async fn repeated_skill_activation_locates_resources_without_reinjecting_old_body() {
+        let root = tempfile::tempdir().unwrap();
+        let base = root.path().join(".kcoder/skills/resource-notes");
+        std::fs::create_dir_all(&base).unwrap();
+        let entry = base.join("SKILL.md");
+        std::fs::write(
+            &entry,
+            "---\nname: resource-notes\n---\nRead references/notes.md.",
+        )
+        .unwrap();
+        let registry = Arc::new(RwLock::new(
+            SkillRegistry::load_project_only(root.path()).unwrap(),
+        ));
+        let state = AppState::new(root.path());
+        state.add_message(kcoder_types::Message::runtime_text(
+            "<skill_content name=\"resource-notes\">\nOLD_BODY_WITHOUT_LOCATION\n</skill_content>",
+        ));
+        let original = state.messages();
+        let context = ToolContext::new(state.clone())
+            .with_skill_registry(registry)
+            .with_active_skills(Arc::new(RwLock::new(vec!["resource-notes".into()])))
+            .with_project_skill_telemetry(false);
+        let loaded = SkillTool
+            .call(serde_json::json!({"skill":"resource-notes"}), &context)
+            .await
+            .unwrap();
+        assert!(!loaded.is_error);
+        assert!(loaded.user_context.is_empty());
+        assert!(output_text(&loaded).contains(&serde_json::to_string(&entry).unwrap()));
+        assert!(output_text(&loaded).contains(&serde_json::to_string(&base).unwrap()));
+        assert_eq!(state.messages(), original);
     }
 
     #[tokio::test]

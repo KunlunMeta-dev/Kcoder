@@ -22,6 +22,8 @@ pub struct ConnectionAuthorization {
 struct StoredConnection {
     version: u32,
     endpoint: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    account: Option<String>,
     resource: String,
     client_id: String,
     redirect_uri: String,
@@ -33,6 +35,7 @@ pub struct OAuthConnectionLease {
     lock: File,
     name: String,
     endpoint: Url,
+    account: Option<String>,
 }
 
 impl Drop for OAuthConnectionLease {
@@ -46,11 +49,15 @@ impl OAuthTokenStore {
     pub async fn acquire_connection(&self, endpoint: &Url) -> Result<OAuthConnectionLease> {
         validate_endpoint(endpoint)?;
         let name = format!(
-            "connection-{:x}",
-            Sha256::digest(endpoint.as_str().as_bytes())
+            "connection-{}",
+            crate::authorization_store::scoped_key(
+                self.account.as_deref(),
+                endpoint.as_str().as_bytes()
+            )
         );
         let directory = Arc::clone(&self.directory);
         let endpoint = endpoint.clone();
+        let account = self.account.clone();
         tokio::task::spawn_blocking(move || {
             let lock = acquire_lock(&directory, &name)?;
             Ok(OAuthConnectionLease {
@@ -58,6 +65,7 @@ impl OAuthTokenStore {
                 lock,
                 name: format!("{name}.json"),
                 endpoint,
+                account,
             })
         })
         .await
@@ -147,7 +155,10 @@ impl OAuthConnectionLease {
         };
         let record: StoredConnection = serde_json::from_slice(&bytes)
             .map_err(|_| anyhow::anyhow!("Invalid OAuth connection association"))?;
-        if record.version != 1 || record.endpoint != self.endpoint.as_str() {
+        if record.version != 1
+            || record.endpoint != self.endpoint.as_str()
+            || record.account != self.account
+        {
             bail!("OAuth connection association does not match this endpoint");
         }
         let parse = |value: &str| {
@@ -172,6 +183,7 @@ impl OAuthConnectionLease {
         let record = StoredConnection {
             version: 1,
             endpoint: self.endpoint.as_str().into(),
+            account: self.account.clone(),
             resource: connection.binding.resource.as_str().into(),
             client_id: connection.binding.client_id.clone(),
             redirect_uri: connection.redirect_uri.as_str().into(),
@@ -389,3 +401,5 @@ mod tests {
         assert!(!format!("{error:?}").contains("private-corrupt-value"));
     }
 }
+
+pub mod observe;
